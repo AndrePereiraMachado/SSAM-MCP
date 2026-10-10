@@ -89,10 +89,16 @@ export class AgentExecutor {
 
   // The ODC bridge version this customer's agent carries, when the server accepts it (kernel.json odcBridge or
   // odcBridgeAccepted, 2026-10-08): a bridge bump keeps serving customers still on the previous agent package.
+  // SSAM-MCP (2026-10-10, Docker rehearsal of server/Dockerfile): a server whose tree has no built ODC bridge (the Linux
+  // image: .dockerignore leaves studio/bridge out) gets bridgeVersion() null and asked every pipe for version null, which
+  // the agent refuses (BRIDGE_VERSION_MISMATCH "the server asked for null"). An odc.pipe that names version null asks for
+  // the kernel's odcBridge (kernel.json, pinned by the owner on that server). odc.attach names no version and is unchanged.
   bridgeVersionFor(params) {
-    if (!params || typeof params.version !== 'string') return params;
+    if (!params) return params;
     let info = null; try { info = this.link?.info?.() ?? null; } catch { info = null; }
     const carried = info?.pack?.odcBridge, kernel = info?.kernel ?? {};
+    if (params.version === null && typeof kernel.odcBridge === 'string' && kernel.odcBridge) params = { ...params, version: kernel.odcBridge };
+    if (typeof params.version !== 'string') return params;
     const accepted = [kernel.odcBridge, ...(kernel.odcBridgeAccepted ?? [])].filter(Boolean);
     return carried && carried !== params.version && accepted.includes(carried) ? { ...params, version: carried } : params;
   }
