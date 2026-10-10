@@ -128,6 +128,10 @@ RUN pnpm install --frozen-lockfile --prod && mkdir -p node_modules \
  && test -f node_modules/@modelcontextprotocol/client/package.json && test -f node_modules/@modelcontextprotocol/server/package.json
 
 # ---- .NET build base: the kernel sources once, NuGet packages in a build cache ---------------------------------------------------
+# One NuGet cache per stage (id=ssam-nuget-<stage>, sharing=locked): BuildKit runs the three .NET stages in parallel, and
+# with one shared cache their restores extract the same package at the same time (seen in the first build on Docker
+# Desktop: "Could not find file '/root/.nuget/packages/microsoft.aspnetcore.app.ref/8.0.31/<tmp>'"). NuGet's own lock
+# lives in each container's /tmp, so it cannot coordinate them.
 FROM ${DOTNET_SDK_IMAGE} AS sdk
 ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
 WORKDIR /src
@@ -136,14 +140,14 @@ COPY kernel/ kernel/
 # ---- O11 kernel (anvil.dll), against /studio/o11 -----------------------------------------------------------------------------------
 FROM sdk AS kernel-o11
 RUN --mount=type=bind,from=studio-o11,source=/studio/o11,target=/studio/o11 \
-    --mount=type=cache,target=/root/.nuget/packages \
+    --mount=type=cache,id=ssam-nuget-kernel-o11,sharing=locked,target=/root/.nuget/packages \
     dotnet build kernel/src/Anvil.Cli -c Release -nologo -v q -nodeReuse:false \
       -p:SSDir=/studio/o11 -o /out/kernel/.local/cli
 
 # ---- ODC kernel (anvil-odc.dll), against /studio/odc ------------------------------------------------------------------------------
 FROM sdk AS kernel-odc
 RUN --mount=type=bind,from=studio-odc,source=/studio/odc,target=/studio/odc \
-    --mount=type=cache,target=/root/.nuget/packages \
+    --mount=type=cache,id=ssam-nuget-kernel-odc,sharing=locked,target=/root/.nuget/packages \
     dotnet build kernel/src/Anvil.Cli.Odc -c Release -nologo -v q -nodeReuse:false \
       -p:OdcInstall=/studio/odc -o /out/kernel/.local/lane-odc/cli
 
@@ -152,7 +156,7 @@ FROM sdk AS builder-odc
 # The builder links a few kernel sources (CandidateReceipt.cs, SecurityWarnings.cs) so both judge alike.
 COPY platforms/odc/studio/ platforms/odc/studio/
 RUN --mount=type=bind,from=studio-odc,source=/studio/odc,target=/studio/odc \
-    --mount=type=cache,target=/root/.nuget/packages \
+    --mount=type=cache,id=ssam-nuget-builder-odc,sharing=locked,target=/root/.nuget/packages \
     dotnet build platforms/odc/studio/builder/Builder.csproj -c Release -nologo -v q -nodeReuse:false \
       -p:OdcInstall=/studio/odc \
  && mkdir -p /out/platforms/odc/studio/builder/bin/Release \
