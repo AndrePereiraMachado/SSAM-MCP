@@ -1,0 +1,30 @@
+{
+ "description": "O layout automatico (depois das ops, fora de qualquer uma) com conectores que ele nao pode seguir (cobertura testada, fase 2). (1) O duplicate de um Switch: o getter da condicao copiada caia com NullReferenceException (SwitchCondition.TargetNode, O11) e o job abortava sem indice de op. (2) Um comentario de processo ligado ao End: IActionConnector.Target caia com InvalidCastException ('to type IActionNode'). O layout ignora alvo nulo e conector cujo alvo nao e no de logica; o resto do desenho fica igual. Verify sem mensagens novas.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "LayoutSwitchCopy", "as": "$act"},
+  {"op": "set", "target": "$act", "prop": "Public", "value": true},
+  {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$s"},
+  {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$e"},
+  {"op": "create", "parent": "$act", "type": "ISwitchNode", "as": "$sw"},
+  {"op": "create", "parent": "$sw", "type": "ISwitchCondition", "as": "$c1"},
+  {"op": "set", "target": "$c1", "prop": "Value", "value": "True"},
+  {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$e1"},
+  {"op": "link", "from": "$c1", "to": "$e1"},
+  {"op": "link", "from": "$s", "to": "$sw"},
+  {"op": "link", "from": "$sw", "connector": "OtherwiseTarget", "to": "$e"},
+  {"op": "duplicate", "target": "$sw", "as": "$copy"},
+  {"op": "link", "from": "$sw", "connector": "OtherwiseTarget", "to": "$copy"},
+  {"op": "link", "from": "$copy", "connector": "OtherwiseTarget", "to": "$e"},
+
+  {"op": "create", "parent": "@espace", "type": "IProcess", "name": "LayoutCommentProcess", "as": "$proc"},
+  {"op": "set", "target": "$proc", "prop": "Detail", "value": "\"Proof\""},
+  {"op": "create", "parent": "$proc", "type": "IStartNode", "as": "$ps"},
+  {"op": "create", "parent": "$proc", "type": "IEndNode", "as": "$pe"},
+  {"op": "link", "from": "$ps", "to": "$pe"},
+  {"op": "create", "parent": "$proc", "type": "ICommentNode", "as": "$note"},
+  {"op": "create", "parent": "$note", "type": "OutSystems.Model.Processes.Nodes.ICommentConnector", "args": {"target": "$pe"}}
+ ]
+}

@@ -1,0 +1,939 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-10-02",
+  "target": "odc3",
+  "scope": "Evidence-backed capability discovery, not a claim of complete tenant coverage or live authorization.",
+  "publicSourceCommit": "fb015a80ad9d1396800eca69836aef08297a0efb",
+  "accessPaths": {
+    "studio-web": "Portal window inside the user's own ODC Studio (bridge v32 portal-session fetch, runtime/studio-portal.mjs): each screenservice runs as a same-origin call of the page, with its own cookies and CSRF token, which never reach the facade. The user signs in once with odc_portal_login (SSO/MFA included). Used whenever the Studio holds a session on the tenant.",
+    "vault": "odc3 broker (runtime/odc3-context.mjs) signed in with the Portal account of the Windows vault entry SSAM/ODC3/<host>/Portal; password sign-in only, no SSO/MFA. Used with no ODC Studio open, or with auth:\"portal-credential\"."
+  },
+  "capabilities": [
+    {
+      "id": "public.asset-configurations",
+      "title": "App, library and agent settings",
+      "keywords": "Configurações settings timers integrations SMTP traces",
+      "kind": "public",
+      "publicApiIds": [
+        "asset-configurations-api-v1"
+      ],
+      "publicCoverage": "contract",
+      "implementation": "public_runtime",
+      "offlineEvidence": "tests/contracts.test.mjs",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "api_client_oauth_client_credentials",
+      "limitations": [
+        "Generic settings keys must be discovered with an authorized read; no dedicated runtime trace query."
+      ]
+    },
+    {
+      "id": "public.asset-repository",
+      "title": "Apps, libraries, versions and source packages",
+      "keywords": "versões versionamento revisões bibliotecas download upload",
+      "kind": "public",
+      "publicApiIds": [
+        "asset-repository-api-v1"
+      ],
+      "publicCoverage": "contract",
+      "implementation": "public_runtime",
+      "offlineEvidence": "tests/contracts.test.mjs",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "api_client_oauth_client_credentials",
+      "limitations": [
+        "Repository/source operations are not Studio visual editing."
+      ]
+    },
+    {
+      "id": "public.builds",
+      "title": "Builds, compilation logs and generated code",
+      "keywords": "build compilação logs erros código",
+      "kind": "public",
+      "publicApiIds": [
+        "build-operations-api-v1"
+      ],
+      "publicCoverage": "contract",
+      "implementation": "public_runtime",
+      "offlineEvidence": "tests/contracts.test.mjs",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "api_client_oauth_client_credentials",
+      "limitations": [
+        "Build log messages are not application runtime errors."
+      ]
+    },
+    {
+      "id": "public.code-quality",
+      "title": "Code quality analyses, findings and metrics",
+      "keywords": "qualidade padrões findings métricas",
+      "kind": "public",
+      "publicApiIds": [
+        "code-quality-api-v1"
+      ],
+      "publicCoverage": "contract",
+      "implementation": "public_runtime",
+      "offlineEvidence": "tests/contracts.test.mjs",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "api_client_oauth_client_credentials",
+      "limitations": [
+        "Quality metrics are not runtime analytics."
+      ]
+    },
+    {
+      "id": "public.dependencies",
+      "title": "Dependencies and deployment/deletion impact",
+      "keywords": "dependências producers consumers grafo impacto",
+      "kind": "public",
+      "publicApiIds": [
+        "dependency-management-api-v1"
+      ],
+      "publicCoverage": "contract",
+      "implementation": "public_runtime",
+      "offlineEvidence": "tests/contracts.test.mjs",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "api_client_oauth_client_credentials",
+      "limitations": [
+        "Analysis POST operations remain governed by write policy."
+      ]
+    },
+    {
+      "id": "public.deployments",
+      "title": "Deployments, publishes and job messages",
+      "keywords": "deploy publicar publicação mensagens logs",
+      "kind": "public",
+      "publicApiIds": [
+        "deployments-api-v1"
+      ],
+      "publicCoverage": "contract",
+      "implementation": "public_runtime",
+      "offlineEvidence": "tests/contracts.test.mjs",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "api_client_oauth_client_credentials",
+      "limitations": [
+        "Deployment messages are not application runtime errors."
+      ]
+    },
+    {
+      "id": "public.environment",
+      "title": "Domains, IP filters and private gateway",
+      "keywords": "ambiente domains domínios rede filtros gateway",
+      "kind": "public",
+      "publicApiIds": [
+        "environment-configurations-api-v1"
+      ],
+      "publicCoverage": "contract",
+      "implementation": "public_runtime",
+      "offlineEvidence": "tests/contracts.test.mjs",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "api_client_oauth_client_credentials",
+      "limitations": [
+        "Only operations defined by the pinned contract are supported."
+      ]
+    },
+    {
+      "id": "public.external-libraries",
+      "title": "External .NET library generation",
+      "keywords": "biblioteca externa dotnet geração logs",
+      "kind": "public",
+      "publicApiIds": [
+        "external-library-generation-api-v1"
+      ],
+      "publicCoverage": "contract",
+      "implementation": "public_runtime",
+      "offlineEvidence": "tests/contracts.test.mjs",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "api_client_oauth_client_credentials",
+      "limitations": [
+        "This is not external database connection management."
+      ]
+    },
+    {
+      "id": "public.native-mobile",
+      "title": "Native mobile builds and signing settings",
+      "keywords": "mobile celular iOS Android assinatura logs",
+      "kind": "public",
+      "publicApiIds": [
+        "native-application-orchestration-service-api-v1"
+      ],
+      "publicCoverage": "contract",
+      "implementation": "public_runtime",
+      "offlineEvidence": "tests/contracts.test.mjs",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "api_client_oauth_client_credentials",
+      "limitations": [
+        "Signing material is sensitive; mobile build logs are not runtime logs."
+      ]
+    },
+    {
+      "id": "public.organization",
+      "title": "Organization metadata and domains",
+      "keywords": "organização tenant domínio",
+      "kind": "public",
+      "publicApiIds": [
+        "organization-api-v1"
+      ],
+      "publicCoverage": "contract",
+      "implementation": "public_runtime",
+      "offlineEvidence": "tests/contracts.test.mjs",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "api_client_oauth_client_credentials",
+      "limitations": [
+        "Read permissions do not imply edit rights."
+      ]
+    },
+    {
+      "id": "public.portfolio-legacy",
+      "title": "Legacy portfolio inventory",
+      "keywords": "portfolio legado stages ambientes",
+      "kind": "public",
+      "publicApiIds": [
+        "portfolio-api-v1"
+      ],
+      "publicCoverage": "contract",
+      "implementation": "public_runtime",
+      "offlineEvidence": "tests/contracts.test.mjs",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "api_client_oauth_client_credentials",
+      "limitations": [
+        "All operations in Portfolio v1 are deprecated; prefer v2."
+      ]
+    },
+    {
+      "id": "public.portfolio",
+      "title": "Portfolios, stages and deployed assets",
+      "keywords": "portfolio stages ambientes publicados",
+      "kind": "public",
+      "publicApiIds": [
+        "portfolio-api-v2"
+      ],
+      "publicCoverage": "contract",
+      "implementation": "public_runtime",
+      "offlineEvidence": "tests/contracts.test.mjs",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "api_client_oauth_client_credentials",
+      "limitations": [
+        "Do not infer stage creation/deletion beyond actual contract operations."
+      ]
+    },
+    {
+      "id": "public.subscription",
+      "title": "Entitlements, consumption and subscription configuration",
+      "keywords": "assinatura consumo licença entitlement",
+      "kind": "public",
+      "publicApiIds": [
+        "subscription-api-v1"
+      ],
+      "publicCoverage": "contract",
+      "implementation": "public_runtime",
+      "offlineEvidence": "tests/contracts.test.mjs",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "api_client_oauth_client_credentials",
+      "limitations": [
+        "Usage is not runtime telemetry or commercial contract administration."
+      ]
+    },
+    {
+      "id": "public.identity",
+      "title": "Users, groups, roles and permissions",
+      "keywords": "users usuários grupos papéis roles permissões acesso",
+      "kind": "public",
+      "publicApiIds": [
+        "user-access-management-api-v1"
+      ],
+      "publicCoverage": "contract",
+      "implementation": "public_runtime",
+      "offlineEvidence": "tests/contracts.test.mjs",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "api_client_oauth_client_credentials",
+      "limitations": [
+        "Identity-provider administration and API-client administration are separate partial/gap capabilities."
+      ]
+    },
+    {
+      "id": "portal.runtime-logs",
+      "access": {
+        "tools": ["odc_portal_read"],
+        "paths": ["studio-web", "vault"],
+        "reads": ["monitoring.stages", "monitoring.applications", "monitoring.logs", "monitoring.errors", "monitoring.detail"],
+        "offlineTests": ["tests/access.test.mjs", "tests/studio-portal.test.mjs", "tests/portal-read.test.mjs"],
+        "liveEvidence": "not_verified"
+      },
+      "localAdapter": {
+        "file": "runtime/portal-read.mjs",
+        "operations": ["monitoring.stages", "monitoring.applications", "monitoring.logs", "monitoring.errors"],
+        "offlineTests": "tests/portal-read.test.mjs",
+        "hostWiring": "odc3_registered_final_broker_reload_required",
+        "liveEvidence": "not_verified"
+      },
+      "title": "Application runtime logs and errors",
+      "keywords": "logs erros execução stacktrace GetPropertyDetails GetToken",
+      "kind": "internal",
+      "publicCoverage": "not_found_in_reviewed_contracts",
+      "implementation": "implemented_source",
+      "authentication": "host_managed_portal_session",
+      "currentLiveEvidence": "not_verified",
+      "legacyEvidence": {
+        "repository": "GitSSAM",
+        "commit": "6672508d58bac7ece9e52ed00546134a91b15397",
+        "status": "historical_read_matrix",
+        "description": "Aug 2026 bounded authenticated Portal read matrix reported; not current ODC3 evidence.",
+        "references": [
+          {
+            "path": "ssam-declarative/ssam_declarative/_odc_portal.py",
+            "line": 4492
+          },
+          {
+            "path": "ssam-declarative/tests/test_odc_portal.py",
+            "line": 2298
+          },
+          {
+            "path": "docs/tasks/2026-08-08-odc-monitoring-screenservice-recovery-budget.md",
+            "line": 1
+          }
+        ],
+        "methods": [
+          "monitoring_stages",
+          "monitoring_applications",
+          "runtime_logs",
+          "error_logs",
+          "log_detail",
+          "correlate_operation_logs"
+        ]
+      },
+      "limitations": [
+        "User Portal session, matching CSRF and current screenservice versions; Studio Bearer is not interchangeable.",
+        "Existing GitSSAM source is evidence, not copied or imported by this module. ODC1 proof does not authorize or prove ODC3 access."
+      ]
+    },
+    {
+      "id": "portal.trace-correlation",
+      "access": {
+        "tools": ["odc_portal_read"],
+        "paths": ["studio-web", "vault"],
+        "reads": ["monitoring.detail", "monitoring.traceLogs"],
+        "offlineTests": ["tests/access.test.mjs", "tests/portal-read.test.mjs"],
+        "liveEvidence": "not_verified"
+      },
+      "localAdapter": {
+        "file": "runtime/portal-read.mjs",
+        "operations": ["monitoring.detail"],
+        "offlineTests": "tests/portal-read.test.mjs",
+        "hostWiring": "odc3_registered_final_broker_reload_required",
+        "liveEvidence": "not_verified"
+      },
+      "title": "Trace identifiers attached to logs",
+      "keywords": "trace traces span correlação stack",
+      "kind": "internal",
+      "publicCoverage": "not_found_in_reviewed_contracts",
+      "implementation": "partial_source",
+      "authentication": "host_managed_portal_session",
+      "currentLiveEvidence": "not_verified",
+      "legacyEvidence": {
+        "repository": "GitSSAM",
+        "commit": "6672508d58bac7ece9e52ed00546134a91b15397",
+        "status": "historical_detail_skipped",
+        "description": "Existing trace.read registry maps log_detail; full span tree is not implemented by this mapping.",
+        "references": [
+          {
+            "path": "ssam-declarative/ssam_declarative/_odc_portal.py",
+            "line": 4812
+          },
+          {
+            "path": "ssam_agent_runtime/credential_operation_catalog.py",
+            "line": 416
+          }
+        ],
+        "methods": [
+          "log_detail"
+        ]
+      },
+      "limitations": [
+        "Log access and detail do not establish access to complete trace timelines.",
+        "Existing GitSSAM source is evidence, not copied or imported by this module. ODC1 proof does not authorize or prove ODC3 access."
+      ]
+    },
+    {
+      "id": "portal.connection-discovery",
+      "access": {
+        "tools": ["odc_portal_read", "odc_external_db_connection"],
+        "paths": ["studio-web", "vault"],
+        "reads": ["connections.providers", "connections.list", "connections.settings"],
+        "offlineTests": ["tests/access.test.mjs", "tests/portal-read.test.mjs"],
+        "liveEvidence": "not_verified"
+      },
+      "localAdapter": {
+        "file": "runtime/portal-read.mjs",
+        "operations": ["connections.providers", "connections.list"],
+        "offlineTests": "tests/portal-read.test.mjs",
+        "hostWiring": "odc3_registered_final_broker_reload_required",
+        "liveEvidence": "not_verified"
+      },
+      "title": "External connection/provider inventory",
+      "keywords": "connections conexões provedores external DB",
+      "kind": "internal",
+      "publicCoverage": "not_found_in_reviewed_contracts",
+      "implementation": "implemented_source",
+      "authentication": "host_managed_portal_session",
+      "currentLiveEvidence": "not_verified",
+      "legacyEvidence": {
+        "repository": "GitSSAM",
+        "commit": "6672508d58bac7ece9e52ed00546134a91b15397",
+        "status": "historical_live_report",
+        "description": "May 2026 report lists 19 providers; needs ODC3 compatibility validation.",
+        "references": [
+          {
+            "path": "ssam-declarative/ssam_declarative/_odc_portal.py",
+            "line": 1098
+          },
+          {
+            "path": "ssam-declarative/ssam_declarative/_odc_portal.py",
+            "line": 1130
+          },
+          {
+            "path": "ssam-declarative/tests/test_odc_portal.py",
+            "line": 1227
+          }
+        ],
+        "methods": [
+          "connection_providers",
+          "connections"
+        ]
+      },
+      "limitations": [
+        "Do not expose decrypted settings/secrets while listing metadata.",
+        "Existing GitSSAM source is evidence, not copied or imported by this module. ODC1 proof does not authorize or prove ODC3 access."
+      ]
+    },
+    {
+      "id": "portal.external-db-management",
+      "access": {
+        "tools": ["odc_external_db_connection", "odc_portal_read", "odc_portal_write"],
+        "paths": ["studio-web", "vault"],
+        "reads": ["connections.testStatus", "connections.relationalNameAvailability", "connections.connection", "connections.entities", "connections.selectedEntities", "connections.entityAttributes"],
+        "writes": ["connections.relationalTest", "connections.relationalSave", "connections.importEntities"],
+        "unmapped": ["connections.delete"],
+        "secrets": "The database user and password live only in the Windows vault entry SSAM/ODC3/<host>/DB/<name> (private prompt). They reach the request as secretRefs: only on the studio-web path, where the bridge reads the entry inside the ODC Studio right before the page's call (a bridge without secretRefs refuses and nothing is sent). The vault path refuses test/create/save (STUDIO_REQUIRED): a secret value never enters the facade process.",
+        "offlineTests": ["tests/access.test.mjs", "tests/studio-portal.test.mjs", "tests/bridge-agreement.test.mjs"],
+        "liveEvidence": "not_verified"
+      },
+      "title": "External database test, create and entity import",
+      "keywords": "database banco conexão SQL Server PostgreSQL entidades import",
+      "kind": "internal",
+      "publicCoverage": "not_found_in_reviewed_contracts",
+      "implementation": "implemented_source",
+      "authentication": "host_managed_portal_session",
+      "currentLiveEvidence": "not_verified",
+      "legacyEvidence": {
+        "repository": "GitSSAM",
+        "commit": "6672508d58bac7ece9e52ed00546134a91b15397",
+        "status": "historical_live_report",
+        "description": "SQL Server was live validated; other provider mutations explicitly blocked/plan-only. Canonical migration runner has additional receipt/reconciliation gates.",
+        "references": [
+          {
+            "path": "ssam-declarative/ssam_declarative/_odc_portal.py",
+            "line": 1636
+          },
+          {
+            "path": "ssam-declarative/ssam_declarative/_odc_portal.py",
+            "line": 1794
+          },
+          {
+            "path": "ssam-declarative/ssam_declarative/_odc_portal.py",
+            "line": 2050
+          },
+          {
+            "path": "ssam-declarative/ssam_declarative/_odc_portal.py",
+            "line": 2432
+          },
+          {
+            "path": "ssam-declarative/tests/test_odc_portal.py",
+            "line": 1401
+          }
+        ],
+        "methods": [
+          "test_external_db_connection",
+          "create_external_db_connection",
+          "import_odc_external_db_entities",
+          "provision_odc_external_db_connection"
+        ]
+      },
+      "limitations": [
+        "Mutating tests and provisioning require separate authorization; not enabled by discovery.",
+        "Existing GitSSAM source is evidence, not copied or imported by this module. ODC1 proof does not authorize or prove ODC3 access."
+      ]
+    },
+    {
+      "id": "portal.agent-connections",
+      "access": {
+        "tools": ["odc_portal_read", "odc_portal_write"],
+        "paths": ["studio-web", "vault"],
+        "reads": ["connections.mcpNameAvailability", "connections.mcpAuthenticationTypes", "connections.mcpTransportTypes", "connections.mcpAuthenticationSchemes", "connections.mcpKeyLocations", "connections.actions", "connections.selectedActions"],
+        "writes": ["connections.mcpTest", "connections.mcpSave"],
+        "unmapped": ["connections.delete"],
+        "secrets": "Only MCP servers without a secret: secretRefs name database entries only (password|username), and secret-named input fields are refused as arguments.",
+        "offlineTests": ["tests/access.test.mjs", "tests/studio-portal.test.mjs"],
+        "liveEvidence": "not_verified"
+      },
+      "title": "MCP and agent connection configuration",
+      "keywords": "agent connections MCP tools ferramentas",
+      "kind": "internal",
+      "publicCoverage": "not_found_in_reviewed_contracts",
+      "implementation": "partial_source",
+      "authentication": "host_managed_portal_session",
+      "currentLiveEvidence": "not_verified",
+      "legacyEvidence": {
+        "repository": "GitSSAM",
+        "commit": "6672508d58bac7ece9e52ed00546134a91b15397",
+        "status": "historical_partial_live_report",
+        "description": "MCP connection create/test/save reported PASS; tool import historically blocked with empty action list/object-reference error.",
+        "references": [
+          {
+            "path": "ssam-declarative/ssam_declarative/_odc_portal.py",
+            "line": 1165
+          },
+          {
+            "path": "ssam-declarative/ssam_declarative/_odc_portal.py",
+            "line": 1304
+          },
+          {
+            "path": "ssam-declarative/ssam_declarative/_odc_portal.py",
+            "line": 2751
+          },
+          {
+            "path": "docs/tasks/odc-rich-agent-builders-evidence/M09_mcp_import_blocked.md",
+            "line": 1
+          }
+        ],
+        "methods": [
+          "agent_connection_providers",
+          "mcp_connection_options",
+          "create_mcp_connection",
+          "mcp_connection_readiness",
+          "import_mcp_tools"
+        ]
+      },
+      "limitations": [
+        "Existing decrypted-secret endpoint is not an LLM tool and must not be exposed.",
+        "Existing GitSSAM source is evidence, not copied or imported by this module. ODC1 proof does not authorize or prove ODC3 access."
+      ]
+    },
+    {
+      "id": "portal.agent-evaluations",
+      "access": {
+        "tools": ["odc_portal_read", "odc_portal_write"],
+        "paths": ["studio-web", "vault"],
+        "reads": ["agents.evaluationsAvailable", "agents.datasets", "agents.evaluations", "agents.evaluationRuns", "agents.agenticApps", "agents.serviceActions", "agents.datasetTemplate", "agents.judges", "agents.evaluationRunStatus", "agents.evaluationRun"],
+        "writes": ["agents.datasetCreate", "agents.evaluationCreate", "agents.evaluationRunCreate"],
+        "offlineTests": ["tests/access.test.mjs"],
+        "liveEvidence": "not_verified"
+      },
+      "title": "Agent evaluation datasets, evaluations and runs",
+      "keywords": "agent evaluation avaliação dataset judges score",
+      "kind": "internal",
+      "publicCoverage": "not_found_in_reviewed_contracts",
+      "implementation": "implemented_source",
+      "authentication": "host_managed_portal_session",
+      "currentLiveEvidence": "not_verified",
+      "legacyEvidence": {
+        "repository": "GitSSAM",
+        "commit": "6672508d58bac7ece9e52ed00546134a91b15397",
+        "status": "historical_live_report",
+        "description": "June 6 2026 dataset/create/run/per-case result reported PASS on odc1, not ODC3 today.",
+        "references": [
+          {
+            "path": "ssam-declarative/ssam_declarative/_odc_portal.py",
+            "line": 2849
+          },
+          {
+            "path": "ssam-declarative/ssam_declarative/_odc_portal.py",
+            "line": 3513
+          },
+          {
+            "path": "docs/tasks/odc-rich-agent-builders-evidence/M12_evaluation_dataset.md",
+            "line": 1
+          }
+        ],
+        "methods": [
+          "agent_evaluations_available",
+          "agent_evaluation_apps",
+          "agent_evaluation_service_actions",
+          "agent_evaluation_judges",
+          "agent_evaluation_dataset_template",
+          "agent_evaluation_validate_dataset",
+          "agent_evaluation_create_dataset",
+          "agent_evaluation_datasets",
+          "agent_evaluation_create",
+          "agent_evaluations",
+          "agent_evaluation_run",
+          "agent_evaluation_run_details",
+          "agent_evaluation_runs"
+        ]
+      },
+      "limitations": [
+        "Parent screen context is required for block calls; launching an evaluation is a mutation.",
+        "Existing GitSSAM source is evidence, not copied or imported by this module. ODC1 proof does not authorize or prove ODC3 access."
+      ]
+    },
+    {
+      "id": "portal.agent-guardrails",
+      "access": {
+        "tools": ["odc_portal_read", "odc_portal_write"],
+        "paths": ["studio-web", "vault"],
+        "reads": ["agents.stages", "agents.latestRevision", "agents.elements", "agents.guardrails"],
+        "writes": ["agents.guardrailsSave"],
+        "offlineTests": ["tests/access.test.mjs", "tests/studio-portal.test.mjs"],
+        "liveEvidence": "not_verified"
+      },
+      "title": "Per-agent guardrail read and configuration",
+      "keywords": "agent guardrails proteção segurança PII",
+      "kind": "internal",
+      "publicCoverage": "not_found_in_reviewed_contracts",
+      "implementation": "implemented_source",
+      "authentication": "host_managed_portal_session",
+      "currentLiveEvidence": "not_verified",
+      "legacyEvidence": {
+        "repository": "GitSSAM",
+        "commit": "6672508d58bac7ece9e52ed00546134a91b15397",
+        "status": "historical_live_report",
+        "description": "June 6 2026 agent-level save/readback and runtime reported PASS; baseline/admin save was deliberately not mapped.",
+        "references": [
+          {
+            "path": "ssam-declarative/ssam_declarative/_odc_portal.py",
+            "line": 3693
+          },
+          {
+            "path": "ssam-declarative/ssam_declarative/_odc_portal.py",
+            "line": 3758
+          },
+          {
+            "path": "docs/tasks/odc-rich-agent-builders-evidence/M13_guardrails.md",
+            "line": 1
+          }
+        ],
+        "methods": [
+          "agent_guardrail_read",
+          "agent_guardrail_configure_agent",
+          "agent_guardrail_exception_signature"
+        ]
+      },
+      "limitations": [
+        "Do not weaken global baseline or infer regional availability.",
+        "Existing GitSSAM source is evidence, not copied or imported by this module. ODC1 proof does not authorize or prove ODC3 access."
+      ]
+    },
+    {
+      "id": "portal.external-library-publish",
+      "access": {
+        "tools": ["odc_external_library", "odc_portal_write"],
+        "paths": ["studio-web", "vault"],
+        "writes": ["externalLibraries.publishJob"],
+        "offlineTests": ["tests/external-library.test.mjs", "tests/access.test.mjs"],
+        "liveEvidence": "not_verified"
+      },
+      "title": "External Library publish of a generated job",
+      "keywords": "biblioteca externa external library publicar publish job revisão",
+      "kind": "internal",
+      "publicApiIds": [
+        "external-library-generation-api-v1",
+        "asset-repository-api-v1"
+      ],
+      "publicCoverage": "partial",
+      "implementation": "implemented_source",
+      "authentication": "host_managed_portal_session",
+      "currentLiveEvidence": "not_verified",
+      "legacyEvidence": {
+        "repository": "GitSSAM",
+        "status": "historical_live_report",
+        "description": "The External Library wizard's publish action turned a ReadyForReview generation job into a library revision; the revision became consumable after its release tag.",
+        "references": [
+          {
+            "path": "ssam-declarative/ssam_declarative/_odc_external_library.py",
+            "line": 1892
+          },
+          {
+            "path": "ssam-declarative/docs/tasks/2026-07-07-odc-external-library-auto-release-tag.md",
+            "line": 1
+          }
+        ],
+        "methods": [
+          "publish_ready_for_review_job",
+          "release_library_revision"
+        ]
+      },
+      "limitations": [
+        "The public contracts generate a job (POST generation-operations) and tag a revision (PATCH asset revision) but do not publish the job; the publish runs through this internal route.",
+        "odc_external_library runs the whole deploy (build, upload, generation, publish, tag, readback) in one call; odc_portal_write runs only the publish of an existing job.",
+        "Existing GitSSAM source is evidence, not copied or imported by this module."
+      ]
+    },
+    {
+      "id": "portal.guardrails-baseline",
+      "title": "Global/admin guardrail baseline",
+      "keywords": "guardrails baseline admin",
+      "kind": "internal",
+      "publicCoverage": "not_found_in_reviewed_contracts",
+      "implementation": "plan_only",
+      "authentication": "host_managed_portal_session",
+      "currentLiveEvidence": "not_verified",
+      "legacyEvidence": {
+        "repository": "GitSSAM",
+        "commit": "6672508d58bac7ece9e52ed00546134a91b15397",
+        "status": "not_proven",
+        "description": "Existing helper returns a non-live-ready plan; no supported save mapped.",
+        "references": [
+          {
+            "path": "ssam-declarative/ssam_declarative/_odc_portal.py",
+            "line": 3869
+          }
+        ],
+        "methods": [
+          "agent_guardrail_configure_baseline"
+        ]
+      },
+      "limitations": [
+        "Execution must remain unavailable, not advertised as an implemented mutation.",
+        "Existing GitSSAM source is evidence, not copied or imported by this module. ODC1 proof does not authorize or prove ODC3 access."
+      ]
+    },
+    {
+      "id": "portal.runtime-traces",
+      "access": {
+        "tools": ["odc_portal_read"],
+        "paths": ["studio-web", "vault"],
+        "reads": ["monitoring.traces", "monitoring.traceSummary", "monitoring.trace", "monitoring.traceLogs"],
+        "offlineTests": ["tests/access.test.mjs", "tests/trace-result.test.mjs", "tests/trace-metadata-result.test.mjs"],
+        "liveEvidence": "not_verified"
+      },
+      "title": "Full runtime trace and span hierarchy",
+      "keywords": "trace traces spans timeline",
+      "kind": "internal",
+      "publicCoverage": "not_found_in_reviewed_contracts",
+      "implementation": "current_contract_mapped",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "managed_portal_session",
+      "localAdapter": {
+        "module": "runtime/portal-read.mjs",
+        "operation": "monitoring.trace",
+        "normalizer": "runtime/trace-result.mjs",
+        "hostWiring": "odc3_registered_final_broker_reload_required"
+      },
+      "sources": [
+        "https://github.com/OutSystems/docs-odc/blob/fb015a80ad9d1396800eca69836aef08297a0efb/src/eap/monitor-and-troubleshoot/traces/intro.md"
+      ],
+      "limitations": [
+        "Current Portal assets expose DataActionGetSpans in traces.TreeView_multipleRoots, discovered through traces.trace; this is an internal contract, not a documented public REST API.",
+        "Processing states, missing parents/roots, cycles and truncation must remain explicit. A TraceId or a log detail is not a full trace.",
+        "Authenticated tenant execution remains unverified until a schema-validated read; no span pagination or automatic broad crawling is assumed."
+      ]
+    },
+    {
+      "id": "portal.timers",
+      "access": {
+        "tools": ["odc_portal_read", "odc_configurations"],
+        "paths": ["studio-web", "vault"],
+        "reads": ["monitoring.traces"],
+        "unmapped": ["timers.run", "timers.pause", "timers.resume"],
+        "offlineTests": ["tests/access.test.mjs"],
+        "liveEvidence": "not_verified"
+      },
+      "title": "Timers: schedule, executions, run now, pause and resume",
+      "keywords": "timers timer agendamento schedule rodar executar run pausar pause suspender resume retomar",
+      "kind": "internal",
+      "publicApiIds": [
+        "asset-configurations-api-v1"
+      ],
+      "publicCoverage": "partial_contract",
+      "implementation": "partial_source",
+      "authentication": "studio_session_or_vault",
+      "currentLiveEvidence": "not_verified",
+      "limitations": [
+        "The schedule is part of the app configuration (asset-configurations timers[], odc_configurations set); which timer keys exist is known only after a read.",
+        "Executions are traces whose entry span is a Timer (monitoring.traces with span types Timer).",
+        "Run now, pause and resume have no captured Portal route (the Studio opens the page apps/timer?appid=<app>&id=<timer>&stageid=<stage>): refused as PORTAL_ROUTE_UNMAPPED until the live proof captures them; the instruction comes with the refusal and with this capability."
+      ]
+    },
+    {
+      "id": "portal.runtime-analytics",
+      "title": "Runtime performance and usage analytics",
+      "keywords": "analytics métricas health performance requests duração",
+      "kind": "gap",
+      "publicCoverage": "not_found_in_reviewed_contracts",
+      "implementation": "not_integrated",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "not_established",
+      "sources": [
+        "https://github.com/OutSystems/docs-odc/blob/fb015a80ad9d1396800eca69836aef08297a0efb/src/eap/monitor-and-troubleshoot/monitor-apps.md"
+      ],
+      "limitations": [
+        "Subscription consumption and Code Quality metrics are different datasets.",
+        "Absence is scoped to the contracts and repository methods examined, not a claim that no endpoint can exist."
+      ]
+    },
+    {
+      "id": "portal.agent-monitoring",
+      "title": "Agent monitoring and quality signals",
+      "keywords": "agent agentes monitoring analytics quality",
+      "kind": "gap",
+      "publicCoverage": "not_found_in_reviewed_contracts",
+      "implementation": "not_integrated",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "not_established",
+      "sources": [
+        "https://github.com/OutSystems/docs-odc/blob/fb015a80ad9d1396800eca69836aef08297a0efb/src/eap/monitor-and-troubleshoot/agent-monitoring/agent-monitoring-overview.md"
+      ],
+      "limitations": [
+        "Agent evaluation result helpers do not establish coverage of all monitoring views.",
+        "Absence is scoped to the contracts and repository methods examined, not a claim that no endpoint can exist."
+      ]
+    },
+    {
+      "id": "portal.analytics-streams",
+      "title": "Analytics Stream administration and external telemetry",
+      "keywords": "stream OTLP APM S3 observabilidade",
+      "kind": "gap",
+      "publicCoverage": "not_found_in_reviewed_contracts",
+      "implementation": "not_integrated",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "not_established",
+      "sources": [
+        "https://github.com/OutSystems/docs-odc/blob/fb015a80ad9d1396800eca69836aef08297a0efb/src/eap/monitor-and-troubleshoot/stream-app-analytics/stream-app-analytics-overview.md"
+      ],
+      "limitations": [
+        "Documented supported export path; configuring requires entitlement/permission. Ingest endpoints belong to the external destination, not an ODC history-query API.",
+        "Absence is scoped to the contracts and repository methods examined, not a claim that no endpoint can exist."
+      ]
+    },
+    {
+      "id": "portal.audit-trail",
+      "title": "Platform audit trail and audit streaming",
+      "keywords": "audit auditoria ações administrativas SIEM",
+      "kind": "gap",
+      "publicCoverage": "not_found_in_reviewed_contracts",
+      "implementation": "not_integrated",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "not_established",
+      "sources": [
+        "https://github.com/OutSystems/docs-odc/blob/fb015a80ad9d1396800eca69836aef08297a0efb/src/eap/monitor-and-troubleshoot/audit-trail/audit-trail.md"
+      ],
+      "limitations": [
+        "Separate from runtime logs and Analytics Stream; requires own permission/entitlement.",
+        "Absence is scoped to the contracts and repository methods examined, not a claim that no endpoint can exist."
+      ]
+    },
+    {
+      "id": "portal.api-client-administration",
+      "title": "API-client provisioning and secret rotation",
+      "keywords": "api client cliente oauth secret rotação",
+      "kind": "gap",
+      "publicCoverage": "not_found_in_reviewed_contracts",
+      "implementation": "not_integrated",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "not_established",
+      "sources": [
+        "https://success.outsystems.com/documentation/outsystems_developer_cloud/odc_rest_apis/api_authentication_and_authorization/about_the_api_client/"
+      ],
+      "limitations": [
+        "OAuth token acquisition is supported; provisioning the API client is not mapped by the reviewed contracts.",
+        "Absence is scoped to the contracts and repository methods examined, not a claim that no endpoint can exist."
+      ]
+    },
+    {
+      "id": "portal.platform-updates",
+      "title": "Infrastructure/platform update maintenance",
+      "keywords": "platform atualizações infraestrutura manutenção",
+      "kind": "gap",
+      "publicCoverage": "not_found_in_reviewed_contracts",
+      "implementation": "not_integrated",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "not_established",
+      "sources": [
+        "https://github.com/OutSystems/docs-odc/blob/fb015a80ad9d1396800eca69836aef08297a0efb/src/eap/manage-platform-app-lifecycle/self-service-db-operations.md"
+      ],
+      "limitations": [
+        "Not equivalent to app deployments.",
+        "Absence is scoped to the contracts and repository methods examined, not a claim that no endpoint can exist."
+      ]
+    },
+    {
+      "id": "portal.identity-provider-administration",
+      "title": "Identity-provider creation, editing and assignment",
+      "keywords": "identity provider IdP SSO provedor identidade",
+      "kind": "gap",
+      "publicCoverage": "partial",
+      "publicApiIds": [
+        "user-access-management-api-v1"
+      ],
+      "implementation": "not_integrated",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "not_established",
+      "sources": [
+        "https://github.com/OutSystems/docs-odc/blob/fb015a80ad9d1396800eca69836aef08297a0efb/src/eap/manage-platform-app-lifecycle/external-idps/manage-external-idps.md"
+      ],
+      "limitations": [
+        "Public identity API has provider GETs and group claim mapping removal, not full Portal IdP administration.",
+        "Absence is scoped to the contracts and repository methods examined, not a claim that no endpoint can exist."
+      ]
+    },
+    {
+      "id": "portal.trace-configuration",
+      "title": "Runtime trace configuration toggle",
+      "keywords": "tracing traces configuração ativar desativar",
+      "kind": "gap",
+      "publicCoverage": "partial",
+      "publicApiIds": ["asset-configurations-api-v1"],
+      "implementation": "not_integrated",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "api_client_oauth_client_credentials",
+      "limitations": ["Generic configuration maps exist, but the exact tracing keys and their accepted values need authorized discovery. No hardcoded toggle or dedicated endpoint is claimed."]
+    },
+    {
+      "id": "portal.visual-authoring",
+      "title": "Mentor Web and visual application authoring",
+      "keywords": "Mentor criação visual telas UI",
+      "kind": "gap",
+      "publicCoverage": "not_found_in_reviewed_contracts",
+      "implementation": "not_integrated",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "not_established",
+      "sources": [
+        "https://github.com/OutSystems/docs-odc/blob/fb015a80ad9d1396800eca69836aef08297a0efb/src/eap/getting-started/overview-portal-studio.md"
+      ],
+      "limitations": [
+        "Asset upload/download is not an authoring API. Studio tools remain a distinct capability.",
+        "Absence is scoped to the contracts and repository methods examined, not a claim that no endpoint can exist."
+      ]
+    },
+    {
+      "id": "portal.knowledge-bases",
+      "title": "Knowledge bases and non-MCP connector authoring",
+      "keywords": "knowledge bases conhecimento conectores",
+      "kind": "gap",
+      "publicCoverage": "not_found_in_reviewed_contracts",
+      "implementation": "not_integrated",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "not_established",
+      "sources": [
+        "https://github.com/OutSystems/docs-odc/blob/fb015a80ad9d1396800eca69836aef08297a0efb/src/eap/getting-started/overview-portal-studio.md"
+      ],
+      "limitations": [
+        "Provider discovery is not proof of CRUD/import support for every connector.",
+        "Absence is scoped to the contracts and repository methods examined, not a claim that no endpoint can exist."
+      ]
+    },
+    {
+      "id": "portal.user-security-administration",
+      "title": "Password, MFA and session administration",
+      "keywords": "password senha MFA sessões convite",
+      "kind": "gap",
+      "publicCoverage": "not_found_in_reviewed_contracts",
+      "implementation": "not_integrated",
+      "currentLiveEvidence": "not_verified",
+      "authentication": "not_established",
+      "sources": [
+        "https://github.com/OutSystems/docs-odc/blob/fb015a80ad9d1396800eca69836aef08297a0efb/src/eap/getting-started/overview-portal-studio.md"
+      ],
+      "limitations": [
+        "Do not infer password reset, MFA policy, invitation or session revocation from generic user CRUD.",
+        "Absence is scoped to the contracts and repository methods examined, not a claim that no endpoint can exist."
+      ]
+    }
+  ]
+}

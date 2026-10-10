@@ -1,0 +1,42 @@
+{
+ "description": "SQL por verbos: ISQLNode com Statement ({Entidade} e @Parametro), ISQLInputParameter com DataType, ISQLOutput em structure PUBLICA (args.entityOrStructure; action Public exige structure Public), argumento ligado ao input da action ($sql/arg:Nome), output da action `<Structure> List` preenchido com SearchProducts.List. O unico aviso e SQL_Enumeration (sugestao: enumerar todas as colunas equivale a {Product}.*)",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "SQL_Enumeration",
+   "element": "Product_Search (ServerAction) / SearchProducts (SQLNode)",
+   "why": "Enumeracao explicita intencional para demonstrar o mapeamento dos atributos SQL para a structure de saida."
+  }
+ ],
+ "ops": [
+  {"op": "spec", "data": {
+   "entities": [{"name": "Product", "attributes": [{"name": "Name", "type": "Text", "mandatory": true, "length": 100}, {"name": "Price", "type": "Decimal"}]}],
+   "structures": [{"name": "ProductRow", "public": true, "attributes": [{"name": "Id", "type": "Long Integer"}, {"name": "Name", "type": "Text"}, {"name": "Price", "type": "Decimal"}]}]
+  }},
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "Product_Search", "as": "$act"},
+  {"op": "set", "target": "$act", "prop": "Public", "value": true},
+  {"op": "create", "parent": "$act", "type": "IInputParameter", "name": "MinPrice", "as": "$in"},
+  {"op": "set", "target": "$in", "prop": "DataType", "value": "Decimal"},
+  {"op": "create", "parent": "$act", "type": "IOutputParameter", "name": "Products", "as": "$out"},
+  {"op": "set", "target": "$out", "prop": "DataType", "value": "ProductRow List"},
+  {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$s0"},
+  {"op": "create", "parent": "$act", "type": "ISQLNode", "name": "SearchProducts", "as": "$sql"},
+  {"op": "set", "target": "$sql", "prop": "Statement", "value": "SELECT {Product}.[Id], {Product}.[Name], {Product}.[Price] FROM {Product} WHERE {Product}.[Price] >= @MinPrice ORDER BY {Product}.[Name]"},
+  {"op": "create", "parent": "$sql", "type": "ISQLInputParameter", "name": "MinPrice", "as": "$p"},
+  {"op": "set", "target": "$p", "prop": "DataType", "value": "Decimal"},
+  {"op": "create", "parent": "$sql", "type": "ISQLOutput", "name": "List", "args": {"entityOrStructure": "ProductRow"}, "as": "$o"},
+  {"op": "set", "target": "$sql/arg:MinPrice", "prop": "Value", "value": "MinPrice"},
+  {"op": "create", "parent": "$act", "type": "IAssignNode", "name": "SetOutput", "as": "$asg"},
+  {"op": "set", "target": "$asg", "prop": "Label", "value": "SetOutput"},
+  {"op": "create", "parent": "$asg", "type": "IAssignment", "as": "$a1"},
+  {"op": "set", "target": "$a1", "prop": "Variable", "value": "Products"},
+  {"op": "set", "target": "$a1", "prop": "Value", "value": "SearchProducts.List"},
+  {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$s9"},
+  {"op": "link", "from": "$s0", "to": "$sql"},
+  {"op": "link", "from": "$sql", "to": "$asg"},
+  {"op": "link", "from": "$asg", "to": "$s9"},
+  {"op": "layout", "target": "$act"},
+  {"op": "get", "target": "$sql"}
+ ]
+}

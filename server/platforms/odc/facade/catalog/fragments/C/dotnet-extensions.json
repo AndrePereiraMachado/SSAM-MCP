@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "ssam-discovery-fragment/1",
+  "contract": "ssam-catalog-contribution/1",
+  "front": "C",
+  "title": "O11 .NET extensions (XIF) without Integration Studio: read the current spec, create or edit and publish in one call through the connected Service Studio's session, delete with the consumers named (o11_extension)",
+  "reviewedAt": "2026-10-07",
+  "synonyms": {
+    "extension": [
+      "extensao",
+      "extensão",
+      "extensoes",
+      "extensões",
+      "xif",
+      "integration studio",
+      "dotnet extension",
+      "extensao net",
+      "codigo c#"
+    ]
+  },
+  "capabilities": [
+    {
+      "id": "integration.dotnet-extension-o11",
+      "lanes": ["o11"],
+      "category": "integration",
+      "title": ".NET extension (XIF, O11)",
+      "keywords": [
+        ".net extension",
+        "dotnet extension",
+        "c# extension",
+        "xif",
+        "integration studio",
+        "create extension",
+        "publish extension",
+        "delete extension",
+        "extensao .net",
+        "extensao dotnet",
+        "criar extensao",
+        "publicar extensao",
+        "apagar extensao"
+      ],
+      "summary": ".NET extension (XIF): o11_extension.",
+      "route": {
+        "kind": "operations",
+        "operation": "o11_extension {action:\"publish\", host:\"<env-host>\", spec:{\"name\":\"ZZHybridXifLab\",\"structures\":[{\"name\":\"Pair\",\"attributes\":[{\"name\":\"Left\",\"type\":\"Integer\"},{\"name\":\"Right\",\"type\":\"Integer\"}]}],\"sources\":[{\"path\":\"Arith.cs\",\"text\":\"namespace OutSystems.NssZZHybridXifLab { internal static class Arith { public static int Add(int a, int b) { return checked(a + b); } } }\"}],\"actions\":[{\"name\":\"Add\",\"inputs\":[{\"name\":\"Left\",\"type\":\"Integer\"},{\"name\":\"Right\",\"type\":\"Integer\"}],\"outputs\":[{\"name\":\"Result\",\"type\":\"Integer\"}],\"body\":\"Result = Arith.Add(Left, Right);\"}]}, words:\"<user's words naming ZZHybridXifLab>\"}; then reference it from a consumer with ssam_job {lane:\"o11\", job, captureProducers:[\"ZZHybridXifLab\"]} (the answer's continuation) and o11_deliver/o11_publish"
+      },
+      "contract": [],
+      "guidance": "o11_extension {action:\"publish\", host, spec, words} builds an O11 .NET extension here and publishes it through the connected Service Studio's own session (no Integration Studio login, no credential file): the spec (I9: name, structures, actions with inputs, outputs, isFunction and a C# body that uses the declared names) is checked with every problem at once, the installed Integration Studio saves the model, the environment returns the source stubs and the platform DLLs (IntegrationStudio.asmx, read-only), the kernel merges the bodies and compiles for .NET Framework 4.7.2, and one UploadAndPublishExtension sends it. The answer is created, updated, already-running or uncertain (never sent again). read {host, extension} gives the current spec with keys and consumers; delete {host, extension, words} removes it after the dependency check. Read first (o11_extension read) to edit: the spec names what it creates or updates in place by name (keys kept); what it does not name stays; remove {actions, structures, resources} lists what goes. Types: Text, Integer, LongInteger, Decimal, Boolean, Date, DateTime, Time, Currency, Email, PhoneNumber, BinaryData, Object, a declared structure or '<Structure> List' (no list of a basic type). A body may use the declared names (Left) or the Integration Studio ones (ssLeft). Helper C#: sources [{path:'Helpers.cs', text:'...'}] (inline) or {path, file} (absolute file), compiled with the stubs so bodies call its classes. Third-party DLLs (a NuGet package's lib/net4x DLL): references ['C:\\...\\Lib.dll'], absolute, with every DLL they need (XIF_SPEC_REFERENCE_CLOSURE); they ship in Bin as Binaries; a package name is not resolved and a platform-named DLL is refused. XIF_ENGINE_FAILED is a defect of SSAM's engine, never of the spec: do not change the spec for it. An edit that breaks the public contract (an action, input or attribute removed or retyped, a new mandatory input) needs words naming every consumer (EXTENSION_BREAKS_CONSUMERS); a standing grant covers additive publications only and never a delete. The bridge needs sc_api:integration-studio (BRIDGE_TOO_OLD otherwise: reopen the Studio through the SSAM shortcut) and the Integration Studio engine built by setup-dev (XIF_ENGINE_UNAVAILABLE otherwise). The route spec (a structure, an inline helper source, inputs and outputs with distinct names) is built offline on the installed Integration Studio by kernel/tests/Anvil.Tests/Pa3K1XifTests.cs; sources, references or resources given as one object are taken as a list of one (specNormalized).",
+      "platforms": {
+        "o11": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "Seen live on 2026-10-07: four extensions created by a client migration through o11_extension, and from the 15th release the extension DLL deployed as Binaries (consumers compile against it). Still the owner's live proof: the first publish of the route spec (ZZHybridXifLab with Pair and Arith.cs), UploadNeeded on a rerun of an unchanged spec, an edit with a breaking change and its consumers, and the delete. Proven offline on 2026-10-07: the route spec passes parse and the model and final stages on the installed Integration Studio (11.14.25.134).",
+              "origin": "kernel/tests/Anvil.Tests/Pa3K1XifTests.cs (TheCatalogRouteSpecBuildsOnTheInstalledEngine); docs/INTEGRACOES-GITSSAM.md section 7 (live proofs, lane xif); kernel/docs/tasks/2026-10-06-xif-motor-construtor.md"
+            },
+            {
+              "text": "Out of scope here: extensions with external database entities, the Java stack, lists of basic types in XIF, the Integration Studio PKCE login and the XIF to ODC migration.",
+              "origin": "docs/INTEGRACOES-GITSSAM.md section 6"
+            }
+          ]
+        }
+      },
+      "depends": [],
+      "recommends": ["reference.producer-import"],
+      "alternatives": []
+    }
+  ]
+}

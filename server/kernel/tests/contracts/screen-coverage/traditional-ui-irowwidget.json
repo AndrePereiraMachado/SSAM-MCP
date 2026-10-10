@@ -1,0 +1,57 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "native-widget",
+    "web:IRowWidget"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Table",
+            "type": "ITableWidget",
+            "properties": {},
+            "children": [
+              {
+                "name": "Subject",
+                "type": "IRowWidget",
+                "properties": {},
+                "children": [
+                  {
+                    "name": "Part3",
+                    "type": "ICellWidget",
+                    "properties": {},
+                    "children": [
+                      {
+                        "name": "Part2",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Content"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "mutation": {
+    "target": "IWebScreen:Coverage/Table/#IRowWidget/#ICellWidget/#ITextWidget",
+    "prop": "Text",
+    "value": "Changed"
+  }
+}

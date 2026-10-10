@@ -1,0 +1,71 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.Logic.IOnSyncSystemEvent (odc) em ctxMobileScreen. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/blank-mobile.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "NoErrorHandlingInFlow",
+   "element": "CovBlankMobile (ESpace) / MainFlow (MobileFlow)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "CovBlankMobile (ESpace) / OnSync (OnSyncSystemEvent) / Context (InputParameter)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IMobileFlow",
+   "name": "MainFlow",
+   "as": "$flow"
+  },
+  {
+   "op": "create",
+   "parent": "$flow",
+   "type": "IMobileScreen",
+   "name": "CovSScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IOnSyncSystemEvent",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IStartNode",
+   "as": "$a_s"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IEndNode",
+   "as": "$a_e"
+  },
+  {
+   "op": "link",
+   "from": "$a_s",
+   "to": "$a_e"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  }
+ ]
+}

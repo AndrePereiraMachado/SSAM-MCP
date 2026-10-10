@@ -1,0 +1,60 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.UI.Web.Widgets.IInputFilenameWidget (o11) em webContainer. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnsubmitableInputs_NoLinks",
+   "element": "HeadlessTrad_UI (ESpace) / MainFlow (WebFlow) / CovSWebScreen (WebScreen)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IWebFlow:MainFlow",
+   "type": "IWebScreen",
+   "name": "CovSWebScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IWebBlockInstanceWidget/MainContent",
+   "type": "IContainerWidget",
+   "name": "CovSBox",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IInputFilenameWidget",
+   "name": "CovAInputFilenameWidget",
+   "as": "$a"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "MarginLeft",
+   "value": "8px"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRInputFilenameWidget"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "move",
+   "target": "$b",
+   "first": true
+  }
+ ]
+}

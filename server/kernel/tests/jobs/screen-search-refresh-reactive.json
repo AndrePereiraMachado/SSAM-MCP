@@ -1,0 +1,310 @@
+{
+ "description": "cold-b: tela Reactive UserSearch com input ligado a variavel local Search, aggregate GetUsers sobre User filtrado por nome (like), Table nativa com Name/Email, botao Refresh -> screen action RefreshUsers (IRefreshDataNode sobre o aggregate) e botao New -> tela UserNew (so titulo) (escrito por uma LLM sem contexto na sessao fria B de 2026-09-04, passou a primeira)",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "UserNew",
+   "as": "$new"
+  },
+  {
+   "op": "set",
+   "target": "$new/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$new/#IMobileBlockInstanceWidget/Title",
+   "type": "IExpression",
+   "as": "$newTitle"
+  },
+  {
+   "op": "set",
+   "target": "$newTitle",
+   "prop": "Value",
+   "value": "\"New User\""
+  },
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "UserSearch",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/Title",
+   "type": "IExpression",
+   "as": "$title"
+  },
+  {
+   "op": "set",
+   "target": "$title",
+   "prop": "Value",
+   "value": "\"User Search\""
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "ILocalVariable",
+   "name": "Search",
+   "as": "$v"
+  },
+  {
+   "op": "set",
+   "target": "$v",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAggregate",
+   "name": "GetUsers",
+   "as": "$agg"
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IEntitySignature:User"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IFilter",
+   "args": {
+    "condition": "User.Name like \"%\" + Search + \"%\""
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IInput",
+   "name": "SearchInput",
+   "as": "$in"
+  },
+  {
+   "op": "set",
+   "target": "$in",
+   "prop": "Variable",
+   "value": "Search"
+  },
+  {
+   "op": "set",
+   "target": "$in",
+   "prop": "Prompt",
+   "value": "\"Search by name\""
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "ITableRecords",
+   "name": "UserTable",
+   "as": "$tbl",
+   "empty": true
+  },
+  {
+   "op": "set",
+   "target": "$tbl",
+   "prop": "Source",
+   "value": "GetUsers.List"
+  },
+  {
+   "op": "create",
+   "parent": "$tbl/HeaderRow",
+   "type": "IHeaderCell",
+   "name": "NameHeader",
+   "as": "$h1"
+  },
+  {
+   "op": "create",
+   "parent": "$h1",
+   "type": "IExpression",
+   "as": "$h1e"
+  },
+  {
+   "op": "set",
+   "target": "$h1e",
+   "prop": "Value",
+   "value": "\"Name\""
+  },
+  {
+   "op": "create",
+   "parent": "$tbl/HeaderRow",
+   "type": "IHeaderCell",
+   "name": "EmailHeader",
+   "as": "$h2"
+  },
+  {
+   "op": "create",
+   "parent": "$h2",
+   "type": "IExpression",
+   "as": "$h2e"
+  },
+  {
+   "op": "set",
+   "target": "$h2e",
+   "prop": "Value",
+   "value": "\"Email\""
+  },
+  {
+   "op": "create",
+   "parent": "$tbl/Row",
+   "type": "IRowCell",
+   "name": "NameCell",
+   "as": "$c1"
+  },
+  {
+   "op": "create",
+   "parent": "$c1",
+   "type": "IExpression",
+   "as": "$c1e"
+  },
+  {
+   "op": "set",
+   "target": "$c1e",
+   "prop": "Value",
+   "value": "GetUsers.List.Current.User.Name"
+  },
+  {
+   "op": "create",
+   "parent": "$tbl/Row",
+   "type": "IRowCell",
+   "name": "EmailCell",
+   "as": "$c2"
+  },
+  {
+   "op": "create",
+   "parent": "$c2",
+   "type": "IExpression",
+   "as": "$c2e"
+  },
+  {
+   "op": "set",
+   "target": "$c2e",
+   "prop": "Value",
+   "value": "GetUsers.List.Current.User.Email"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAction",
+   "name": "RefreshUsers",
+   "as": "$act"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IStartNode",
+   "as": "$a0"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IRefreshDataNode",
+   "name": "RefreshGetUsers",
+   "as": "$rf"
+  },
+  {
+   "op": "set",
+   "target": "$rf",
+   "prop": "DataSource",
+   "value": "$agg"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IEndNode",
+   "as": "$a9"
+  },
+  {
+   "op": "link",
+   "from": "$a0",
+   "to": "$rf"
+  },
+  {
+   "op": "link",
+   "from": "$rf",
+   "to": "$a9"
+  },
+  {
+   "op": "layout",
+   "target": "$act"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IContainer",
+   "name": "ButtonsContainer",
+   "as": "$cb"
+  },
+  {
+   "op": "create",
+   "parent": "$cb",
+   "type": "IButton",
+   "name": "RefreshButton",
+   "as": "$btnR"
+  },
+  {
+   "op": "set",
+   "target": "$btnR/#ITextWidget",
+   "prop": "Text",
+   "value": "Refresh"
+  },
+  {
+   "op": "set",
+   "target": "$btnR/OnClick",
+   "prop": "Destination",
+   "value": "$act"
+  },
+  {
+   "op": "create",
+   "parent": "$cb",
+   "type": "IButton",
+   "name": "NewButton",
+   "as": "$btnN"
+  },
+  {
+   "op": "set",
+   "target": "$btnN/#ITextWidget",
+   "prop": "Text",
+   "value": "New"
+  },
+  {
+   "op": "set",
+   "target": "$btnN/OnClick",
+   "prop": "Destination",
+   "value": "IMobileScreen:UserNew"
+  },
+  {
+   "op": "get",
+   "target": "$rf"
+  },
+  {
+   "op": "get",
+   "target": "$btnR/OnClick"
+  },
+  {
+   "op": "get",
+   "target": "$btnN/OnClick"
+  },
+  {
+   "op": "dump",
+   "target": "$scr",
+   "depth": 6
+  }
+ ]
+}

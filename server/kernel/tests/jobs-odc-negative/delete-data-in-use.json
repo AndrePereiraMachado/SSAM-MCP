@@ -1,0 +1,49 @@
+﻿{
+ "description": "ODC: a RECUSA do delete de dados. O atributo WfProofNotice.Body e usado pelo filtro de um aggregate e pela expressao de um Assign. Sem force o delete tem de ser recusado E a mensagem tem de nomear os consumidores. Roda automaticamente em OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane, o espelho do NegativeJobTests da faixa O11. O caminho limpo esta em tests/jobs-odc/delete-data-consumers.json.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectError": [
+  "delete: refused",
+  "IEntityAttribute 'Body' is used by 2 consumer(s)",
+  "IAggregateNode:ReadNotices/DataTable/ICombineSourcesOperation:WfProofNotices/IFilter",
+  "IServerAction:WfProof_Digest/IAssignNode/IAssignment",
+  "pass \"force\": true to break them"
+ ],
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "entities": [
+     {
+      "name": "WfProofNotice",
+      "attributes": [
+       {"name": "Title", "type": "Text", "mandatory": true, "length": 100},
+       {"name": "Body", "type": "Text", "length": 500}
+      ]
+     }
+    ]
+   }
+  },
+
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfProof_Digest", "as": "$dig"},
+  {"op": "create", "parent": "$dig", "type": "IOutputParameter", "name": "Summary", "as": "$digOut"},
+  {"op": "set", "target": "$digOut", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$dig", "type": "IStartNode", "as": "$d0"},
+  {"op": "create", "parent": "$dig", "type": "IAggregateNode", "name": "ReadNotices", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "$WfProofNotice"}},
+  {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "WfProofNotice.Body <> \"\""}, "as": "$flt"},
+  {"op": "create", "parent": "$dig", "type": "IAssignNode", "as": "$dAs"},
+  {"op": "set", "target": "$dAs", "prop": "Label", "value": "SetSummary"},
+  {"op": "create", "parent": "$dAs", "type": "IAssignment", "as": "$dA1"},
+  {"op": "set", "target": "$dA1", "prop": "Variable", "value": "Summary"},
+  {"op": "set", "target": "$dA1", "prop": "Value", "value": "ReadNotices.List.Current.WfProofNotice.Body"},
+  {"op": "create", "parent": "$dig", "type": "IEndNode", "as": "$d9"},
+  {"op": "link", "from": "$d0", "to": "$agg"},
+  {"op": "link", "from": "$agg", "to": "$dAs"},
+  {"op": "link", "from": "$dAs", "to": "$d9"},
+  {"op": "layout", "target": "$dig"},
+
+  {"op": "usages", "target": "$WfProofNotice.Body"},
+  {"op": "delete", "target": "$WfProofNotice.Body"}
+ ]
+}

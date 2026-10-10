@@ -1,0 +1,14 @@
+{
+ "description": "InputWithIcon do OSUI: o Input de exemplo do placeholder Input ganha a variavel.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "InputWithIconDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Query", "as": "$vQuery"},
+  {"op": "set", "target": "$vQuery", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "InputWithIcon1", "source": "IMobileBlock:InputWithIcon", "as": "$iw"},
+  {"op": "set", "target": "$iw/Input/#IInput", "prop": "Variable", "value": "Query"}
+ ]
+}

@@ -1,0 +1,151 @@
+using System.Collections.Generic;
+using System.Linq;
+using Anvil.Authoring;
+
+namespace ColdQueryProjection;
+
+[Entity]
+public sealed record Account(
+    Id<Account> Id,
+    string Code,
+    string Name,
+    string? Region,
+    bool IsActive);
+
+[Entity]
+public sealed record Invoice(
+    Id<Invoice> Id,
+    Id<Account> AccountId,
+    string ExternalCode,
+    decimal NetAmount,
+    decimal? CreditAmount,
+    decimal? PaidAmount,
+    bool IsDisputed,
+    string? Reference);
+
+public sealed record AccountCard(long AccountId, string Code, string Name, string Region);
+
+public sealed record InvoiceBalance(
+    long InvoiceId,
+    string InvoiceCode,
+    long AccountId,
+    string AccountCode,
+    string AccountName,
+    string Region,
+    decimal NetAmount,
+    decimal AppliedCredit,
+    decimal AppliedPayment,
+    decimal Balance,
+    string? Reference);
+
+public sealed record RegionTotal(string Region, int InvoiceCount, decimal Balance);
+
+public static class ReceivablesQueries
+{
+    [ServerAction]
+    public static List<string> ActiveAccountCodes(
+        IDataSession data, string excludedCode, int skip, int take)
+    {
+        return data.Query<Account>()
+            .Where(account => account.IsActive)
+            .Select(account => account.Code)
+            .Where(code => code != excludedCode)
+            .OrderBy(code => code)
+            .Skip(skip)
+            .Take(take)
+            .ToList();
+    }
+
+    [ServerAction]
+    public static List<AccountCard> AccountCards(
+        IDataSession data, string region, int skip, int take)
+    {
+        return data.Query<Account>()
+            .Where(account => account.IsActive)
+            .Select(account => new AccountCard(
+                account.Id.Value,
+                account.Code,
+                account.Name,
+                account.Region ?? "Unassigned"))
+            .Where(card => card.Region == region)
+            .OrderBy(card => card.Name)
+            .ThenBy(card => card.Code)
+            .Skip(skip)
+            .Take(take)
+            .ToList();
+    }
+
+    [ServerAction]
+    public static List<InvoiceBalance> OpenInvoices(
+        IDataSession data, decimal minimumBalance, int skip, int take)
+    {
+        return data.Query<Invoice>()
+            .Where(invoice => !invoice.IsDisputed)
+            .Join(
+                data.Query<Account>().Where(account => account.IsActive),
+                invoice => invoice.AccountId,
+                account => account.Id,
+                (invoice, account) => new InvoiceBalance(
+                    invoice.Id.Value,
+                    invoice.ExternalCode,
+                    account.Id.Value,
+                    account.Code,
+                    account.Name,
+                    account.Region ?? "Unassigned",
+                    invoice.NetAmount,
+                    invoice.CreditAmount ?? 0m,
+                    invoice.PaidAmount ?? 0m,
+                    invoice.NetAmount - (invoice.CreditAmount ?? 0m) - (invoice.PaidAmount ?? 0m),
+                    invoice.Reference))
+            .Where(balance => balance.Balance > 0m && balance.Balance >= minimumBalance)
+            .OrderByDescending(balance => balance.Balance)
+            .ThenBy(balance => balance.AccountCode)
+            .ThenBy(balance => balance.InvoiceId)
+            .Skip(skip)
+            .Take(take)
+            .ToList();
+    }
+
+    [ServerAction]
+    public static List<RegionTotal> RegionTotals(
+        IDataSession data, int minimumInvoiceCount, decimal minimumBalance, int skip, int take)
+    {
+        return data.Query<Invoice>()
+            .Where(invoice => !invoice.IsDisputed)
+            .Join(
+                data.Query<Account>().Where(account => account.IsActive),
+                invoice => invoice.AccountId,
+                account => account.Id,
+                (invoice, account) => new
+                {
+                    Region = account.Region ?? "Unassigned",
+                    Balance = invoice.NetAmount - (invoice.CreditAmount ?? 0m) - (invoice.PaidAmount ?? 0m)
+                })
+            .Where(item => item.Balance > 0m)
+            .GroupBy(item => item.Region)
+            .Select(group => new RegionTotal(
+                group.Key,
+                group.Count(),
+                group.Sum(item => item.Balance)))
+            .Where(total => total.InvoiceCount >= minimumInvoiceCount && total.Balance >= minimumBalance)
+            .OrderByDescending(total => total.Balance)
+            .ThenBy(total => total.Region)
+            .Skip(skip)
+            .Take(take)
+            .ToList();
+    }
+
+    [ServerAction]
+    public static List<string?> NullableReferences(
+        IDataSession data, decimal minimumNetAmount, string excludedReference, int skip, int take)
+    {
+        return data.Query<Invoice>()
+            .Where(invoice => !invoice.IsDisputed && invoice.NetAmount >= minimumNetAmount)
+            .Select(invoice => invoice.Reference)
+            .Where(reference => reference == null || reference != excludedReference)
+            .OrderBy(reference => reference)
+            .Skip(skip)
+            .Take(take)
+            .ToList();
+    }
+}

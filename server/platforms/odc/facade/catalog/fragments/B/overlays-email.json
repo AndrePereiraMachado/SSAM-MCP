@@ -1,0 +1,352 @@
+{
+ "schemaVersion": "ssam-discovery-fragment/1",
+ "contract": "ssam-catalog-contribution/1",
+ "front": "B",
+ "title": "Emails (Reactive/Mobile context), popovers, popups and widget metadata",
+ "reviewedAt": "2026-09-23",
+ "synonyms": {},
+ "capabilities": [
+  {
+   "id": "ui.email-popover",
+   "supersedes": [
+    "ui.email-popover"
+   ],
+   "category": "ui",
+   "title": "Emails, popovers, popups and widget metadata",
+   "keywords": [
+    "email",
+    "send email",
+    "email template",
+    "popover",
+    "popup",
+    "modal",
+    "tooltip menu",
+    "metadata",
+    "show popup"
+   ],
+   "summary": "IMobileEmail lives in the Emails UI flow (`IMobileFlow:Emails`, EmailTheme) and is sent by an ISendEmailNode in a server action (logic); IPopover is born complete (TopContent/BottomContent); IPopup is shown by its ShowPopup expression (a boolean variable toggled by screen actions); ITextMetadata hangs on a screen aggregate with managedBy. Traditional Web emails are IWebEmail (ui.traditional-screen).",
+   "route": {
+    "kind": "job",
+    "operation": "create IMobileEmail in IMobileFlow:Emails; create IPopover | IPopup under a screen container; set ShowPopup/Subject; ISendEmailNode in a server action (logic)"
+   },
+   "contract": [
+    "verbs.verbs.create",
+    "verbs.verbs.set",
+    "logic.nativeNodes.ISendEmailNode"
+   ],
+   "depends": [],
+   "alternatives": [],
+   "guidance": "The email body is a screen-like tree of widgets; its inputs are parameters (logic). A popup needs the variable that ShowPopup reads and the actions that change it.",
+   "example": {
+    "ops": [
+     "create",
+     "set",
+     "link"
+    ],
+    "max": 20
+   },
+   "elements": [
+    {
+     "role": "email",
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.UI.Mobile.IMobileEmail",
+       "jobType": "IMobileEmail",
+       "address": "IMobileEmail:<Name>"
+      }
+     }
+    },
+    {
+     "role": "popover",
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IPopover",
+       "jobType": "IPopover",
+       "address": "<parent path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IPopover",
+       "jobType": "IPopover",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "popup",
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IPopup",
+       "jobType": "IPopup",
+       "address": "<parent path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IPopup",
+       "jobType": "IPopup",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "text metadata",
+     "child": true,
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.ITextMetadata",
+       "jobType": "ITextMetadata",
+       "address": "<aggregate path>/#ITextMetadata"
+      },
+      "o11": {
+       "native": "OutSystems.Model.ITextMetadata",
+       "jobType": "ITextMetadata",
+       "address": "<aggregate path>/#ITextMetadata"
+      }
+     }
+    }
+   ],
+   "operations": {
+    "create": {
+     "route": "create {parent, type}",
+     "preconditions": [
+      "IMobileEmail is created in the Emails UI flow"
+     ],
+     "roles": {
+      "email": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "email-popover-metadata"
+        ],
+        "scope": "an email with Subject in IMobileFlow:Emails, sent by a server action"
+       }
+      },
+      "popover": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "email-popover-metadata"
+        ]
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-flow-comment-popover"
+        ],
+        "scope": "cat-b-flow-comment-popover: create (op 20)"
+       }
+      },
+      "popup": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-widget-gallery"
+        ],
+        "scope": "cat-b-widget-gallery: create (op 63)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ],
+        "scope": "IPopup with ShowPopup bound to a variable"
+       }
+      },
+      "text metadata": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "email-popover-metadata"
+        ],
+        "scope": "managedBy metadata on a screen aggregate (Value, Hidden)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-flow-comment-popover"
+        ],
+        "scope": "cat-b-flow-comment-popover: create (op 16)"
+       }
+      }
+     }
+    },
+    "set": {
+     "route": "set {target, prop, value}",
+     "preconditions": [],
+     "roles": {
+      "email": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "email-popover-metadata"
+        ],
+        "scope": "Subject, Description"
+       }
+      },
+      "popover": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "email-popover-metadata"
+        ],
+        "scope": "PopoverWidth, Width"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-flow-comment-popover"
+        ],
+        "scope": "cat-b-flow-comment-popover: set PopoverWidth, Style (ops 21-22)"
+       }
+      },
+      "popup": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-widget-gallery"
+        ],
+        "scope": "cat-b-widget-gallery: set ShowPopup (op 64)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ],
+        "scope": "ShowPopup"
+       }
+      },
+      "text metadata": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "email-popover-metadata"
+        ],
+        "scope": "Value, Hidden"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-flow-comment-popover"
+        ],
+        "scope": "cat-b-flow-comment-popover: set Hidden, Value (op 18)"
+       }
+      }
+     }
+    },
+    "read": {
+     "route": "get/dump by path",
+     "preconditions": [],
+     "roles": {
+      "email": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "email-popover-metadata"
+        ],
+        "scope": "dump/get of the email after Subject"
+       }
+      },
+      "popover": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "email-popover-metadata"
+        ],
+        "scope": "get of the popover after Width/PopoverWidth"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-flow-comment-popover"
+        ],
+        "scope": "cat-b-flow-comment-popover: get/dump (ops 28, 30)"
+       }
+      },
+      "text metadata": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "email-popover-metadata"
+        ],
+        "scope": "get of the metadata after Hidden/Value"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-flow-comment-popover"
+        ],
+        "scope": "cat-b-flow-comment-popover: get (op 27)"
+       }
+      },
+      "popup": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-widget-gallery"
+        ],
+        "scope": "cat-b-widget-gallery: get (op 74)"
+       }
+      }
+     }
+    },
+    "usages": {
+     "route": "usages {target}",
+     "preconditions": [],
+     "roles": {
+      "email": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "email-popover-metadata"
+        ],
+        "scope": "the ISendEmailNode that sends it"
+       }
+      }
+     }
+    }
+   },
+   "platforms": {
+    "odc": {
+     "proofs": [
+      "email-popover-metadata",
+      "cat-b-widget-gallery"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileFlow"
+      ]
+     },
+     "limits": [
+      {
+       "text": "Emails exist on ODC as IMobileEmail in the Emails UI flow (the older kernel/AGENTS.md line that calls email 'Traditional only' is outdated for ODC).",
+       "origin": "job:email-popover-metadata; kernel/AGENTS.md:235"
+      }
+     ],
+     "differences": []
+    },
+    "o11": {
+     "proofs": [
+      "gallery-native-reactive",
+      "cat-b-flow-comment-popover"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileFlow"
+      ]
+     },
+     "limits": [
+      {
+       "text": "The O11 runtime (Service Studio 11.55.87) loads no OutSystems.Model.UI.Mobile.IMobileEmail: emails of O11 modules are Traditional IWebEmail (ui.traditional-screen; jobs email-traditional, email-digest-foreach-traditional).",
+       "origin": "api --op native --type OutSystems.Model.UI.Mobile.IMobileEmail on the O11 lane CLI (2026-09-23): no candidate; kernel/tests/jobs"
+      }
+     ],
+     "differences": [
+      "no Reactive/Mobile email type in the O11 runtime: the email role exists on ODC only"
+     ]
+    }
+   }
+  }
+ ],
+ "unavailable": [],
+ "coverage": []
+}

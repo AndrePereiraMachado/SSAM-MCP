@@ -1,0 +1,14 @@
+{
+  "openapi": "3.0.1",
+  "info": { "title": "Orders with an external schema (synthetic)", "version": "1.0.0", "description": "The Order schema lives in another document that is not bundled: the import must refuse it before any network call." },
+  "servers": [ { "url": "https://example.invalid/api" } ],
+  "paths": {
+    "/orders/{orderId}": {
+      "get": {
+        "operationId": "getOrder",
+        "parameters": [ { "name": "orderId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int32" } } ],
+        "responses": { "200": { "description": "The order", "content": { "application/json": { "schema": { "$ref": "https://example.invalid/schemas/order.json#/Order" } } } } }
+      }
+    }
+  }
+}

@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ssam-hybrid.invalid/schemas/ssam-release-1.schema.json",
+  "title": "SSAM release manifest (ssam-release/1)",
+  "description": "release.json at the root of releases\\<version>\\ (docs/DISTRIBUICAO.md). It describes layout and version only: deleting it never turns a release into a checkout (the mode is the bundle constant RELEASE and the build switch SSAM_RELEASE). Its integrity comes from release.sig.jws (payload {typ: 'ssam-release/1', iat, version, files: [{path, size, sha256}]}, signed by the 'release' intermediate), checked by the O11 hook h1, ssam_update and ssam_doctor.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "version", "builtAt", "sourceCommit", "distributable", "runtimes", "baseline", "supported", "bridges", "kernelSha256", "files"],
+  "properties": {
+    "schema": { "const": "ssam-release/1" },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]{4}\\.[0-9]{1,2}\\.[0-9]+$",
+      "description": "AAAA.M.N. The same version is embedded in every .NET binary as the constant Ssam.Lic.Build.Release (generated/Build.g.cs); the license gates compare that embedded constant with minRelease of the lease and of the CRL and never read this field."
+    },
+    "builtAt": { "type": "string", "format": "date-time" },
+    "sourceCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "distributable": {
+      "type": "boolean",
+      "description": "false when the build used the test roots (no publisher/roots.pub.json from the root ceremony, D-PLANO-3). A release with false is never distributed. The test twin (SSAM_LICENSE_TEST) is never packaged at all."
+    },
+    "o11Lane": {
+      "type": "string",
+      "enum": ["ss4", "ss5"],
+      "description": "Optional. The O11 lane name the facade reports (workspace.mjs); default ss4. A release has one installed Service Studio, located at run time."
+    },
+    "runtimes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node", "dotnet"],
+      "properties": {
+        "node": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$", "description": "runtime\\node\\node.exe of this release (P17)" },
+        "dotnet": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+", "description": "Microsoft.NETCore.App in runtime\\dotnet" }
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["o11", "odc"],
+      "description": "The Studio versions the release was compiled against (D2: the oldest supported).",
+      "properties": {
+        "o11": { "$ref": "#/$defs/studioVersion" },
+        "odc": { "$ref": "#/$defs/studioVersion" }
+      }
+    },
+    "supported": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["o11", "odc"],
+      "description": "Base or newer, always behind the static check of Anvil.Connect before an attach.",
+      "properties": {
+        "o11": { "type": "object", "additionalProperties": false, "required": ["min"], "properties": { "min": { "$ref": "#/$defs/studioVersion" } } },
+        "odc": { "type": "object", "additionalProperties": false, "required": ["min"], "properties": { "min": { "$ref": "#/$defs/studioVersion" } } }
+      }
+    },
+    "bridges": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["o11", "odc"],
+      "properties": {
+        "o11": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "hook", "protocolVersion", "surface"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^b[0-9]+$", "description": "bridgeId and AssemblyLoadContext name (anvil-bridge-<id>)" },
+            "hook": { "type": "string", "pattern": "^h[0-9]+$", "description": "Anvil.Hook.<hook>.dll; a new hook gets a new name, never a replaced file" },
+            "protocolVersion": { "type": "integer", "minimum": 1 },
+            "surface": { "$ref": "#/$defs/relativePath" }
+          }
+        },
+        "odc": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "surface"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^v[0-9]+$", "description": "ODC3.Bridge.<id>.dll (D-DONOS-5): the version in the AssemblyName of platforms/odc/studio/bridge/Bridge.csproj at the build (a new id at every bridge bump)" },
+            "surface": { "$ref": "#/$defs/relativePath" }
+          }
+        }
+      }
+    },
+    "kernelSha256": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["o11", "odc"],
+      "description": "sha256 of the final (obfuscated) Anvil.Core.dll and Anvil.Core.Odc.dll: the kernel identity of the stamped proofs.",
+      "properties": {
+        "o11": { "$ref": "#/$defs/sha256" },
+        "odc": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "obfuscated": {
+      "type": "object",
+      "description": "Optional: assembly file name -> false when it ships without renaming (D-PLANO-4). Absent means every .NET assembly was obfuscated.",
+      "additionalProperties": { "type": "boolean" }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Every file of the release except release.json and release.sig.jws, with relative paths. No OutSystems file is ever listed.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "size", "sha256"],
+        "properties": {
+          "path": {
+            "allOf": [
+              { "$ref": "#/$defs/relativePath" },
+              { "not": { "pattern": "(^|/)(OutSystems\\.|ServiceStudio|StudioToolkit|Identity\\.)[^/]*$" } }
+            ]
+          },
+          "size": { "type": "integer", "minimum": 0 },
+          "sha256": { "$ref": "#/$defs/sha256" },
+          "authenticode": { "enum": ["Valid", "NotSigned"], "description": "D1: NotSigned while there is no certificate" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "studioVersion": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+){2,3}$" },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![/\\\\])(?![A-Za-z]:)(?!.*(^|/)\\.\\.(/|$))[^\\\\]+$",
+      "description": "Relative to the release folder, with '/', never absolute, never '..', no backslash"
+    }
+  }
+}

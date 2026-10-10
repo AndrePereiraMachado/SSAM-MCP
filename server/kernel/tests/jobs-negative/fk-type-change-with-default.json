@@ -1,0 +1,9 @@
+{
+ "description": "A RECUSA de mudar o DataType de uma FK que tem DefaultValue (Entities.Status.Active): a plataforma aceitava a escrita e o proprio Verify do Studio lancava depois 'Condition is false' (medido nas duas faixas em 2026-09-23). Desde o lote de dados da fase 3 o kernel recusa antes de escrever e diz a saida: limpar o DefaultValue primeiro e so depois mudar o tipo, ou substituir o atributo por um novo com replace. O caminho que passa esta em tests/jobs/entity-refactor.json.",
+ "base": "job:spec-data",
+ "expectValid": true,
+ "expectError": ["set DataType on IEntityAttribute 'StatusId': the attribute has a DefaultValue (Entities.Status.Active) typed by an identifier", "clear it first (set DefaultValue \"\")"],
+ "ops": [
+  {"op": "set", "target": "IServerEntity:Contact/StatusId", "prop": "DataType", "value": "Long Integer"}
+ ]
+}

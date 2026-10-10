@@ -1,0 +1,60 @@
+{
+ "description": "ODC (cobertura T): STRUCTURE ANONIMA e LIST TYPE, os dois tipos de dados que nenhum job nomeia porque a plataforma os cria sozinha. Espelha tests/jobs/aggregate-sum-calc.json: um aggregate com group by, agregacao Count e coluna calculada devolve linhas de uma STRUCTURE ANONIMA (IAnonymousStructure, por IESpace.GetOrCreateAnonymousStructure) - por isso se le GetX.List.Current.<Coluna> sem o alias da entidade; e uma variavel e um output de tipo '<Structure> List' fazem o kernel pedir o LIST TYPE (IESpace.GetOrCreateListType) que ainda nao existia no modulo. No ODC o Count do aggregate e Long Integer, por isso a coluna de destino tambem e.",
+ "base": "job:data-full-model",
+ "expectValid": true,
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCovProject_Rollup (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfCovProject_Rollup", "as": "$act"},
+  {"op": "create", "parent": "$act", "type": "IOutputParameter", "name": "Summaries", "as": "$out"},
+  {"op": "set", "target": "$out", "prop": "DataType", "value": "WfCovProjectSummary List", "_why": "aqui nasce o LIST TYPE: o modulo ainda nao tinha lista desta structure"},
+  {"op": "create", "parent": "$act", "type": "ILocalVariable", "name": "Row", "as": "$row"},
+  {"op": "set", "target": "$row", "prop": "DataType", "value": "WfCovProjectSummary"},
+
+  {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$s0"},
+
+  {"op": "create", "parent": "$act", "type": "IAggregateNode", "name": "GetTaskRollup", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:WfCovTask"}},
+  {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "WfCovTask.IsDone = False"}},
+  {"op": "create", "parent": "$agg", "type": "IGroupByAttribute", "name": "ProjectId", "as": "$groupBy"},
+  {"op": "set", "target": "$groupBy", "prop": "Attribute", "value": "WfCovTask.ProjectId"},
+  {"op": "create", "parent": "$agg", "type": "IAggregatedAttribute", "name": "OpenCount", "as": "$count", "_why": "NOME DIFERENTE do SS11: la o tipo e IAggregateAttribute, no ODC e IAggregatedAttribute (o DisplayName 'Aggregate Attribute' e o mesmo nas duas)"},
+  {"op": "set", "target": "$count", "prop": "Attribute", "value": "WfCovTask.Id"},
+  {"op": "set", "target": "$count", "prop": "AggregationType", "value": "Count"},
+  {"op": "create", "parent": "$agg", "type": "ICalculatedAttribute", "name": "ProjectLabel", "as": "$calc", "_why": "a coluna calculada entra no ICombineSourcesOperation, que corre ANTES do group by: por isso ela NAO aparece na linha agrupada (ler GetTaskRollup.List.Current.ProjectLabel da Error ExpressionUnknownObject) e o IGroupByOperation nao tem Create para ela. O job do SS11 (aggregate-sum-calc) tambem so le as colunas agregadas"},
+  {"op": "set", "target": "$calc", "prop": "Value", "value": "\"Task: \" + WfCovTask.Title"},
+  {"op": "set", "target": "$agg", "prop": "MaxRecords", "value": "100"},
+
+  {"op": "create", "parent": "$act", "type": "IForEachNode", "as": "$each"},
+  {"op": "set", "target": "$each", "prop": "Label", "value": "EachGroup"},
+  {"op": "set", "target": "$each", "prop": "RecordList", "value": "GetTaskRollup.List"},
+
+  {"op": "create", "parent": "$act", "type": "IAssignNode", "as": "$fill"},
+  {"op": "set", "target": "$fill", "prop": "Label", "value": "FillRow"},
+  {"op": "create", "parent": "$fill", "type": "IAssignment", "as": "$f1"},
+  {"op": "set", "target": "$f1", "prop": "Variable", "value": "Row.ProjectName"},
+  {"op": "set", "target": "$f1", "prop": "Value", "value": "\"Project #\" + LongIntegerToText(GetTaskRollup.List.Current.ProjectId)", "_why": "COM group by le-se a coluna direto (ProjectId), sem o alias WfCovTask.: e a structure anonima da linha"},
+  {"op": "create", "parent": "$fill", "type": "IAssignment", "as": "$f2"},
+  {"op": "set", "target": "$f2", "prop": "Variable", "value": "Row.OpenTasks"},
+  {"op": "set", "target": "$f2", "prop": "Value", "value": "GetTaskRollup.List.Current.OpenCount", "_why": "no ODC o Count do aggregate e Long Integer, por isso OpenTasks e Long Integer"},
+
+  {"op": "create", "parent": "$act", "type": "IExecuteServerActionNode", "name": "AppendRow", "as": "$append"},
+  {"op": "set", "target": "$append", "prop": "Action", "value": "IServerActionSignature:ListAppend", "_why": "no ODC o ListAppend existe como IClientActionSignature E como IServerActionSignature; 'IActionSignature:ListAppend' (a forma do job do SS11) acerta na do cliente e o IExecuteServerActionNode recusa-a"},
+  {"op": "set", "target": "$append/List", "prop": "Value", "value": "Summaries"},
+  {"op": "set", "target": "$append/Element", "prop": "Value", "value": "Row"},
+
+  {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$s9"},
+  {"op": "link", "from": "$s0", "to": "$agg"},
+  {"op": "link", "from": "$agg", "to": "$each"},
+  {"op": "link", "from": "$each", "connector": "CycleTarget", "to": "$fill"},
+  {"op": "link", "from": "$fill", "to": "$append"},
+  {"op": "link", "from": "$append", "to": "$each"},
+  {"op": "link", "from": "$each", "to": "$s9"},
+  {"op": "layout", "target": "$act"},
+
+  {"op": "get", "target": "$out", "_why": "prova o output tipado pelo LIST TYPE recem-criado"},
+  {"op": "get", "target": "$count", "_why": "prova o tipo do Count do aggregate: no ODC e Long Integer, no SS11 e Integer"},
+  {"op": "dump", "target": "$agg", "depth": 4, "_why": "prova as colunas da structure anonima: group by, Count (IAggregatedAttribute) e coluna calculada"},
+  {"op": "usages", "target": "IStructure:WfCovProjectSummary", "_why": "prova o LIST TYPE: a structure e consumida pela variavel local (registo) E pelo output (lista), e a lista so existe porque o kernel a pediu ao GetOrCreateListType neste job"},
+  {"op": "dump", "target": "$append", "depth": 3, "_why": "prova o ListAppend com a lista e o elemento do tipo certo"}
+ ]
+}

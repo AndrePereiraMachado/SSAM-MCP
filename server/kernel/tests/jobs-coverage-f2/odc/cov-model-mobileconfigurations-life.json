@@ -1,0 +1,17 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.IMobileConfigurations (odc) em ctxMobileModule. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/blank-mobile.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IMobileConfigurations",
+   "as": "$a"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  }
+ ]
+}

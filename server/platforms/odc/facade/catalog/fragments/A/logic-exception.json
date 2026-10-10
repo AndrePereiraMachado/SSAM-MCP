@@ -1,0 +1,400 @@
+{
+  "schemaVersion": "ssam-discovery-fragment/1",
+  "contract": "ssam-catalog-contribution/1",
+  "front": "A",
+  "title": "Exceptions: user exceptions, raise, exception handlers and the On Exception (global handler) action of a UI flow",
+  "reviewedAt": "2026-09-23",
+  "synonyms": {
+    "exception": ["excecao", "excecoes", "exceptions"],
+    "user exception": ["excecao de usuario", "excecao do usuario", "excecao personalizada", "custom exception"],
+    "raise": [
+      "throw", "throw exception", "lancar excecao", "lancar uma excecao", "lanca excecao", "lance uma excecao", "levantar excecao", "levantar uma exceção",
+      "disparar excecao", "raise exception", "raise node"
+    ],
+    "handler": [
+      "exception handler", "handler de excecao", "tratador de excecao", "tratadores de exceção", "tratamento de excecao", "tratamento de exceções",
+      "tratar excecao", "capturar excecao", "catch exception", "global exception handler", "on exception action", "tratador global de excecao",
+      "tratamento global de excecoes"
+    ],
+    "global": ["global exception handler", "on exception action", "tratador global de excecao", "tratamento global de excecoes", "handler global de excecao"]
+  },
+  "capabilities": [
+    {
+      "id": "logic.exception",
+      "supersedes": ["logic.exception"],
+      "category": "logic",
+      "title": "UserException, RaiseException, ExceptionHandler (IOnExceptionAction)",
+      "keywords": [
+        "user exception", "custom exception", "excecao de usuario", "raise exception", "raise node", "throw exception", "lancar excecao", "exception handler",
+        "tratador de excecao", "tratamento de excecao", "tratar excecao", "global exception handler", "on exception action", "abort transaction",
+        "tratador global de excecao", "handle the exception", "exception handling"
+      ],
+      "summary": "User exception at @espace (IUserException:<Name>); raise = compact raise step or raw IRaiseExceptionNode (terminal, no outgoing link); handler = IExceptionHandlerNode (Exception, AbortTransaction, LogError), proven in a UI flow On Exception action. Consumers follow a rename by key.",
+      "route": {
+        "kind": "job",
+        "operation": "create IUserException at @espace; logic step {\"raise\":\"<Exception>\",\"message\":\"\\\"...\\\"\"} or raw create IRaiseExceptionNode + set Exception/ExceptionMessage; create IOnExceptionAction under a UI flow, IExceptionHandlerNode under it + set Exception/AbortTransaction/LogError; rename/replace/usages/delete on IUserException:<Name>"
+      },
+      "contract": ["logic.steps.raise", "logic.handler", "verbs.verbs.create", "verbs.verbs.set", "verbs.verbs.replace", "verbs.verbs.delete"],
+      "guidance": "Retire an exception in this order: set Exception on each handler, replace the raisers, check usages = 0, then delete without force. Literal messages (ExceptionMessage, message nodes) never follow a rename or replace. The compact `handlers` key is accepted by the compiler but no suite job runs it on either lane: raw verbs are the proven path (ODC).",
+      "example": { "ops": ["create", "set", "link", "move", "replace"], "max": 24 },
+      "depends": [],
+      "recommends": [
+        { "id": "ui.screen", "when": "the UI flow that owns the On Exception action, or its screens, does not exist yet or must change" },
+        { "id": "logic.flow", "when": "placing a raise on a branch (link If TrueTarget/FalseTarget to it) or editing the nodes after a handler" },
+        { "id": "logic.native-nodes", "when": "the handler shows a message (message role)" },
+        { "id": "logic.server-action", "when": "the action that raises the exception, and its callers" }
+      ],
+      "alternatives": [],
+      "elements": [
+        {
+          "role": "user exception",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.IUserException", "jobType": "IUserException", "address": "IUserException:<Name> (created under @espace)" },
+            "o11": { "native": "OutSystems.Model.Logic.IUserException", "jobType": "IUserException", "address": "IUserException:<Name> (created under @espace)" }
+          }
+        },
+        {
+          "role": "raise",
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.Logic.Nodes.IRaiseExceptionNode",
+              "jobType": "IRaiseExceptionNode",
+              "address": "<Action>/#IRaiseExceptionNode[n] or an alias (the create name is discarded)"
+            },
+            "o11": {
+              "native": "OutSystems.Model.Logic.Nodes.IRaiseExceptionNode",
+              "jobType": "IRaiseExceptionNode",
+              "address": "<Action>/#IRaiseExceptionNode[n] or an alias"
+            }
+          }
+        },
+        {
+          "role": "exception handler",
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.Logic.Nodes.IExceptionHandlerNode",
+              "jobType": "IExceptionHandlerNode",
+              "address": "IOnExceptionAction:<Name>/<Handler>"
+            },
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.IExceptionHandlerNode", "jobType": "IExceptionHandlerNode", "address": "<Owner>/<Handler>" }
+          }
+        },
+        {
+          "role": "global exception handler",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.UI.IOnExceptionAction", "jobType": "IOnExceptionAction", "address": "IOnExceptionAction:<Name> (child of a UI flow)" },
+            "o11": { "native": "OutSystems.Model.UI.IOnExceptionAction", "jobType": "IOnExceptionAction", "address": "IOnExceptionAction:<Name> (child of a UI flow)" }
+          }
+        }
+      ],
+      "operations": {
+        "read": {
+          "route": "get/dump by path; find by name",
+          "preconditions": [],
+          "roles": {
+            "user exception": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["exception-lifecycle"],
+                "scope": "find by name after rename and delete; the ledger does not type a find, so the engine reports it declared-not-proven"
+              },
+              "o11": { "status": "undetermined", "note": "no O11 job reads an exception" }
+            },
+            "raise": {
+              "odc": { "status": "applicable", "proofs": ["exception-lifecycle"], "scope": "get of a repointed raise: Exception changed, literal message kept" },
+              "o11": { "status": "applicable", "proofs": ["cat-a-reset-typed-values"], "scope": "get of the raise that ends an If branch, before and after a call is spliced in front of it" }
+            },
+            "exception handler": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["switch-exception-handler", "exception-lifecycle"],
+                "scope": "Exception, AbortTransaction, LogError, Key and Target"
+              },
+              "o11": { "status": "undetermined", "note": "no O11 suite job" }
+            },
+            "global exception handler": {
+              "odc": { "status": "applicable", "proofs": ["exception-lifecycle"], "scope": "dump depth 2: handler, message and End" },
+              "o11": { "status": "undetermined", "note": "no O11 job" }
+            }
+          }
+        },
+        "usages": {
+          "route": "usages IUserException:<Name> lists handlers and raisers",
+          "preconditions": [],
+          "roles": {
+            "user exception": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["switch-exception-handler", "exception-lifecycle", "security-settings", "service-action"],
+                "scope": "handlers and raise nodes counted as consumers (1 -> 3 -> 2 -> 0 across edits)"
+              },
+              "o11": { "status": "undetermined", "note": "no O11 job calls usages on an exception" }
+            }
+          }
+        },
+        "create": {
+          "route": "create IUserException at @espace; compact raise step or raw create IRaiseExceptionNode in an action; create IOnExceptionAction under a UI flow, then IExceptionHandlerNode under it",
+          "preconditions": [
+            "the raised exception must exist first (IUserException, or an imported signature for the compact step); the message defaults to the quoted exception name",
+            "a raise is terminal: no outgoing connector", "an On Exception action has no Start node: each handler node starts a flow"
+          ],
+          "roles": {
+            "user exception": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["exception-lifecycle", "switch-exception-handler", "logic-steps", "security-settings", "service-action"],
+                "scope": "create under @espace; nothing else set"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["smoke-data-logic", "service-action", "tickets-01-data", "hire-business-actions"],
+                "scope": "create under @espace (hire-business-actions has no stamped result)"
+              }
+            },
+            "raise": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["exception-lifecycle", "service-action", "logic-steps", "security-settings"],
+                "scope": "raw create on an If branch of a server/service action; compact raise step"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["smoke-data-logic", "service-action", "logic-spec-services"],
+                "scope": "raw create on an If branch; compact raise"
+              }
+            },
+            "exception handler": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["switch-exception-handler"],
+                "scope": "raw create inside an On Exception action; not proven inside a server/client action"
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "no suite job creates one with front-A verbs; the compact handlers key in a server/service action is covered by a unit contract only (see limits)"
+              }
+            },
+            "global exception handler": {
+              "odc": { "status": "applicable", "proofs": ["switch-exception-handler"], "scope": "create under a new UI flow (IUIFlow.CreateOnExceptionHandler)" },
+              "o11": { "status": "undetermined", "note": "no O11 job" }
+            }
+          }
+        },
+        "set": {
+          "route": "raise: set Exception, ExceptionMessage; handler: set Exception, AbortTransaction, LogError; link <handler> -> next node",
+          "preconditions": ["an exception reference is a value: IUserException:<Name> or an alias"],
+          "roles": {
+            "user exception": {
+              "odc": { "status": "not-applicable", "note": "no settable property besides Name (use rename): no Description", "alternative": "rename" },
+              "o11": {
+                "status": "undetermined",
+                "note": "no O11 job sets a property on an exception; the A-runtime writable list shows Name and audit fields only (no Description), which is metadata, not a proof"
+              }
+            },
+            "raise": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["exception-lifecycle", "service-action"],
+                "props": ["Exception", "ExceptionMessage"],
+                "scope": "Exception and literal ExceptionMessage of a new raise"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["smoke-data-logic", "service-action"],
+                "props": ["Exception", "ExceptionMessage"],
+                "scope": "Exception and ExceptionMessage of a new raise"
+              }
+            },
+            "exception handler": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["switch-exception-handler", "exception-lifecycle"],
+                "props": ["Exception", "AbortTransaction", "LogError"],
+                "scope": "Exception, AbortTransaction and LogError of a new handler; exception-lifecycle also changes Exception of an existing handler, read back by get, but the engine does not verify that set"
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "html-dashboard-reactive/-update set them only on the handler the html expansion generates, with fixed values (AllExceptions, true, true); no job sets them on an authored handler"
+              }
+            },
+            "global exception handler": {
+              "odc": {
+                "status": "undetermined",
+                "note": "no property of the action is set; repointing IESpace.GlobalExceptionHandler was avoided on purpose (see limits)"
+              },
+              "o11": { "status": "undetermined", "note": "no O11 job" }
+            }
+          }
+        },
+        "rename": {
+          "route": "rename <path> <newName>; consumers are bound by key",
+          "preconditions": ["literal texts that cite the old name are not rewritten"],
+          "roles": {
+            "user exception": {
+              "odc": { "status": "applicable", "proofs": ["exception-lifecycle"], "scope": "the handler follows without a set (consumers 1)" },
+              "o11": { "status": "undetermined", "note": "no O11 job" }
+            },
+            "exception handler": {
+              "odc": { "status": "applicable", "proofs": ["exception-lifecycle"], "scope": "rename of an existing handler node: same Key" },
+              "o11": { "status": "undetermined", "note": "no O11 job" }
+            },
+            "global exception handler": {
+              "odc": { "status": "undetermined", "note": "not exercised (only its UI flow is renamed)" },
+              "o11": { "status": "undetermined", "note": "no O11 job" }
+            }
+          }
+        },
+        "replace": {
+          "route": "replace from IUserException:<Old> to IUserException:<New> repoints every raise",
+          "preconditions": ["a handler is repointed by set Exception, not by the replace in the proof"],
+          "roles": {
+            "user exception": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["exception-lifecycle"],
+                "scope": "two raise nodes repointed by one replace; old usages 0; ExceptionMessage untouched"
+              },
+              "o11": { "status": "undetermined", "note": "no O11 job" }
+            }
+          }
+        },
+        "move": {
+          "route": "move {target, x, y} positions a node of an On Exception action",
+          "preconditions": [],
+          "roles": {
+            "exception handler": {
+              "odc": { "status": "applicable", "proofs": ["switch-exception-handler"], "scope": "x/y of a handler node in an On Exception action" },
+              "o11": { "status": "undetermined", "note": "no O11 job" }
+            }
+          }
+        },
+        "delete": {
+          "route": "delete IUserException:<Name> after its consumers were edited or repointed",
+          "preconditions": ["usages must be 0 for a delete without force: set Exception on the handlers and replace the raisers first"],
+          "roles": {
+            "user exception": {
+              "odc": {
+                "status": "conditional",
+                "proofs": ["exception-lifecycle"],
+                "scope": "0 consumers: accepted without force, brokenConsumers 0; no job refuses it with consumers"
+              },
+              "o11": { "status": "undetermined", "note": "no O11 job" }
+            },
+            "raise": { "odc": { "status": "undetermined", "note": "not exercised" }, "o11": { "status": "undetermined", "note": "not exercised" } },
+            "exception handler": { "odc": { "status": "undetermined", "note": "not exercised" }, "o11": { "status": "undetermined", "note": "not exercised" } }
+          }
+        }
+      },
+      "platforms": {
+        "odc": {
+          "proofs": ["exception-lifecycle", "switch-exception-handler", "logic-steps", "security-settings", "service-action"],
+          "negative": [],
+          "context": { "kinds": ["UserException"], "signatures": [] },
+          "limits": [
+            {
+              "text": "Do not repoint IESpace.GlobalExceptionHandler on an app that already has one: it adds three warnings (the flow that lost the role and each flow left uncovered).",
+              "origin": "job:switch-exception-handler description"
+            },
+            {
+              "text": "An On Exception action has no Start: its nodes were positioned with move x/y because layout required a Start; the kernel now falls back to a handler node (FlowLayout.cs:41) but no job runs layout there.",
+              "origin": "job:switch-exception-handler (move ops); kernel/src/Anvil.Core/Kernel/FlowLayout.cs:41"
+            },
+            {
+              "text": "No suite job creates or edits a handler inside a server/client action with front-A verbs: handlers are proven only in a UI flow On Exception action. A client action that already has a handler is only dumped and laid out (untyped read, not a proof); the compact handlers key is unproven.",
+              "origin": "matrix a-matrix.json (IExceptionHandlerNode: switch-exception-handler, exception-lifecycle); job:action-edit-lifecycle ops 9, 70-71; kernel/src/Anvil.Core/Kernel/LogicExpander.cs:285"
+            },
+            {
+              "text": "A user exception has no writable Description (Name and audit fields only).",
+              "origin": "job:exception-lifecycle op 41 _why; job:service-action op 53 _why"
+            },
+            {
+              "text": "Rename and replace never rewrite literals: ExceptionMessage and message texts keep the old name.",
+              "origin": "job:exception-lifecycle ops 4-7, 49, 52-53"
+            }
+          ],
+          "differences": []
+        },
+        "o11": {
+          "proofs": ["smoke-data-logic", "service-action", "tickets-01-data", "hire-business-actions", "logic-spec-services"],
+          "negative": [],
+          "context": { "kinds": ["UserException"], "signatures": [] },
+          "limits": [
+            {
+              "text": "Only creating user exceptions and raise nodes (with Exception/ExceptionMessage) is proven; usages, rename, replace and delete of an exception have no O11 job.",
+              "origin": "matrix a-matrix.json lanes.o11 IUserException, IRaiseExceptionNode"
+            },
+            {
+              "text": "No O11 job creates or edits an exception handler with front-A verbs: the compact handlers key (name, exception, abortTransaction, logError, steps) in a server/service action is proven by a unit contract only (Verify, reload, merge); a generated screen data action gets one from html state:true, untyped and static, not a proof.",
+              "origin": "kernel/tests/Anvil.Tests/NativeFlowPolicyTests.cs:129; kernel/src/Anvil.Core/Kernel/HtmlExpander.cs:411; job:html-dashboard-reactive op 9 (static in the matrix)"
+            },
+            {
+              "text": "The A-runtime (11.55.87) lists Name and audit fields only as writable on IUserException (no Description); no O11 job sets one.",
+              "origin": "api --op native OutSystems.Model.Logic.IUserException (A-runtime writable)"
+            },
+            { "text": "The On Exception action of a UI flow has no O11 job.", "origin": "matrix a-matrix.json lanes.o11 UI.IOnExceptionAction (no evidence)" }
+          ],
+          "differences": []
+        }
+      }
+    }
+  ],
+  "unavailable": [],
+  "coverage": [
+    {
+      "type": "odc:OutSystems.Model.Logic.IException",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface; its concrete implementers are accounted (user exception role; system and role exceptions below)",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.IException",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface; its concrete implementers are accounted",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.ISystemException",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "platform-defined exception a handler can reference; no factory creates it and no job reads it. Unknown: whether @espace/AllExceptions (used by kernel handlers) is this type, and its address on each lane",
+      "origin": "inventory kindClass undetermined (no factory); kernel/src/Anvil.Core/Kernel/HtmlExpander.cs:411"
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.ISystemException",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "platform-defined exception a handler can reference; no factory creates it and no job reads it: address and read route unknown",
+      "origin": "inventory kindClass undetermined (no factory); kernel/src/Anvil.CSharp/LogicModel.cs:109"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.IRoleException",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "platform-defined (no factory); presumably tied to roles, not verified; no job, reader or contract step names it",
+      "origin": "inventory kindClass undetermined (no factory)"
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.IRoleException",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "platform-defined (no factory); presumably tied to roles, not verified; no job, reader or contract step names it",
+      "origin": "inventory kindClass undetermined (no factory)"
+    },
+    {
+      "type": "odc:OutSystems.Model.UI.IOnExceptionActionSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read or called in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.UI.IOnExceptionActionSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read or called in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    }
+  ]
+}

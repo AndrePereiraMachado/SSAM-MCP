@@ -1,0 +1,21 @@
+{
+ "description": "Base mobile dos exemplos O11: tela vazia Showcase no modulo Mobile (bloco Layout, placeholder Content) e os mesmos dados de apoio de ex-base (static Priority e entidade Task). Para os blocos que so o template Mobile referencia (ActionSheet, BottomSheet, BottomBarItem).",
+ "base": "mobile-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {
+   "static": [{"name": "Priority", "records": [{"name": "Low"}, {"name": "Medium"}, {"name": "High"}]}],
+   "entities": [{"name": "Task", "description": "Tarefa de exemplo", "attributes": [
+    {"name": "Title", "type": "Text", "mandatory": true, "length": 100},
+    {"name": "Notes", "type": "Text", "length": 500},
+    {"name": "DueDate", "type": "Date"},
+    {"name": "Done", "type": "Boolean"},
+    {"name": "Estimate", "type": "Decimal"},
+    {"name": "PriorityId", "type": "Priority Identifier"}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "Showcase", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:Layout"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Showcase\""}
+ ]
+}

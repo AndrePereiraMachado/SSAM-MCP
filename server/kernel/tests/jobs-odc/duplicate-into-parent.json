@@ -1,0 +1,28 @@
+{
+ "description": "duplicate e o destino nativo da colagem (faixa ODC). (1) `parent` = outro IContainer: a copia vai para o placeholder `content` dele. (2) `parent` = outro UI flow: a tela copiada nasce nesse flow. (3) Sem `parent`: o outcome de uma decisao de processo vive num Flows.Decision que o Model API esconde debaixo do IDecisionNode; o IDecisionNode nao aceita o tipo e a copia vai para esse contentor (antes: 'The clipboard objects cannot be pasted into this target'). A copia do outcome e apagada a seguir porque um outcome solto nao tem conector de entrada.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "DupParentScreen", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "DupBoxFrom", "as": "$boxFrom"},
+  {"op": "create", "parent": "$boxFrom", "type": "IContainer", "name": "DupInner", "as": "$inner"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "DupBoxInto", "as": "$boxInto"},
+  {"op": "duplicate", "target": "$inner", "parent": "$boxInto", "as": "$innerCopy", "_why": "parent e o IContainer; a colagem vai para o placeholder content dele"},
+  {"op": "get", "target": "$boxInto/**IContainer", "_why": "prova o destino: o unico IContainer dentro de DupBoxInto e a copia"},
+
+  {"op": "create", "parent": "@espace", "type": "IMobileFlow", "name": "DupOtherFlow", "as": "$otherFlow"},
+  {"op": "duplicate", "target": "$scr", "parent": "$otherFlow", "as": "$scrCopy", "_why": "a tela copiada, com o conteudo, nasce noutro UI flow"},
+  {"op": "get", "target": "$otherFlow/#IMobileScreen", "_why": "prova o destino"},
+
+  {"op": "create", "parent": "@espace", "type": "IProcess", "name": "DupProcess", "as": "$process"},
+  {"op": "set", "target": "$process", "prop": "Detail", "value": "\"Dup\""},
+  {"op": "create", "parent": "$process", "type": "IStartNode", "as": "$start"},
+  {"op": "create", "parent": "$process", "type": "IEndNode", "as": "$end"},
+  {"op": "create", "parent": "$process", "type": "IDecisionNode", "name": "DupDecision", "as": "$decision"},
+  {"op": "link", "from": "$start", "to": "$decision"},
+  {"op": "create", "parent": "$decision", "type": "IDecisionConnector", "name": "DupYes", "args": {"target": "$end"}, "as": "$yes"},
+  {"op": "duplicate", "target": "$decision/#IDecisionOutcomeNode", "as": "$outcomeCopy", "_why": "sem parent: cola no Flows.Decision escondido, o dono nativo do outcome"},
+  {"op": "delete", "target": "$outcomeCopy", "_why": "um outcome solto fica sem conector de entrada; a prova e a colagem ter passado"}
+ ]
+}

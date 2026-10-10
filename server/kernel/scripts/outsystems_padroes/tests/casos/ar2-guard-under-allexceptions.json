@@ -1,0 +1,29 @@
+{
+ "description": "NEG AR2 (OutSystems padroes): guarda de acesso numa action publica que tem handler AllExceptions (a excecao da guarda e engolida).",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IUserException", "name": "NegNotAuthorized", "as": "$exNeg"},
+  {"op": "spec", "data": {"entities": [
+   {"name": "NegPackage", "public": true, "description": "Pacote de trabalho de teste do controle negativo AR2.",
+    "attributes": [{"name": "IsApproved", "type": "Boolean", "description": "Marca o pacote aprovado pelo controle AR2."}]}
+  ]}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "ApproveWorkPackage", "kind": "server", "public": true,
+    "description": "Aprova um pacote com a guarda de login sob um handler AllExceptions (violacao proposital da AR2).",
+    "inputs": [{"name": "PackageId", "type": "NegPackage Identifier", "description": "Pacote que o usuario quer aprovar."}],
+    "vars": [{"name": "Package", "type": "NegPackage", "description": "Registro lido e marcado como aprovado."}],
+    "steps": [
+     {"if": "GetUserId() = NullIdentifier()", "label": "Is the user anonymous?",
+      "then": [{"raise": "NegNotAuthorized", "message": "\"Login required\""}]},
+     {"get": "NegPackage", "as": "GetPackage", "where": "NegPackage.Id = PackageId", "max": 1},
+     {"assign": {"Package": "GetPackage.List.Current.NegPackage", "Package.IsApproved": "True"}, "as": "Mark the package approved"},
+     {"update": "NegPackage", "record": "Package", "as": "UpdatePackage"}
+    ],
+    "handlers": [
+     {"name": "HandleAnyFailure", "exception": "@espace/AllExceptions", "abortTransaction": true, "logError": true, "steps": []}
+    ]}
+  ]}}
+ ]
+}

@@ -1,0 +1,30 @@
+{
+ "description": "DatePicker do OSUI: formato da data, botao Hoje, e o OnSelected grava a data e recarrega as entregas desse dia.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Delivery", "attributes": [{"name": "Address", "type": "Text", "length": 200, "mandatory": true}, {"name": "DeliverOn", "type": "Date"}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "DeliveryDate", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Delivery date\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "PickedDate", "as": "$vPickedDate"},
+  {"op": "set", "target": "$vPickedDate", "prop": "DataType", "value": "Date"},
+  {"op": "set", "target": "$vPickedDate", "prop": "DefaultValue", "value": "#2026-10-07#"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "LoadDeliveries", "as": "$LoadDeliveries"},
+  {"op": "create", "parent": "$LoadDeliveries", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Delivery"}},
+  {"op": "create", "parent": "$LoadDeliveries", "type": "IFilter", "args": {"condition": "Delivery.DeliverOn = PickedDate"}},
+  {"op": "logic", "data": {"actions": [{"name": "DatePicked", "kind": "screen", "owner": "IMobileScreen:DeliveryDate", "inputs": [{"name": "SelectedDateTime", "type": "Date Time"}], "steps": [{"assign": {"PickedDate": "DateTimeToDate(SelectedDateTime)"}, "as": "Keep"}, {"node": "IRefreshDataNode", "as": "Reload", "properties": {"DataSource": "IMobileScreen:DeliveryDate/LoadDeliveries"}}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "DatePicker1", "source": "IMobileBlock:DatePicker", "as": "$dp"},
+  {"op": "set", "target": "$dp/DateFormat", "prop": "Value", "value": "\"yyyy-MM-dd\""},
+  {"op": "set", "target": "$dp/ShowTodayButton", "prop": "Value", "value": "True"},
+  {"op": "set", "target": "$dp/Datepicker/#IInput", "prop": "Variable", "value": "PickedDate"},
+  {"op": "set", "target": "$dp/OnSelected", "prop": "Handler", "value": "IMobileScreen:DeliveryDate/DatePicked"},
+  {"op": "set", "target": "$dp/OnSelected/SelectedDateTime", "prop": "Value", "value": "SelectedDateTime"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "DeliveryList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "LoadDeliveries.List"},
+  {"op": "create", "parent": "$list", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "LoadDeliveries.List.Current.Delivery.Address"}
+ ]
+}

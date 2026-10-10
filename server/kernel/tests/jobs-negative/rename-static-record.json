@@ -1,0 +1,13 @@
+{
+ "description": "O11: a RECUSA do verbo rename num registo de static entity quando o nome novo ja e de outro registo. O OutSystems.Model.Data.IRecord do SS11 (classe ServiceStudio.Model.StaticRecord) nao publica Name: o nome do registo e a propriedade gravavel Identifier, e e por ela que o rename escreve (desde 2026-10-03; antes recusava com \"IRecord 'Active' has no Name\"). Como no set Identifier, o kernel confere AbstractObject.NameClash antes de escrever, porque o setter nativo sufixaria em SILENCIO (Inactive -> Inactive2). O caminho positivo, com os consumidores reescritos e o contrato a aferir Identifier, esta em tests/jobs/rename-name-property.json; o mesmo via set Identifier em tests/jobs/static-entity-lifecycle.json e set-identifier-clash.json. Medido com a base job:spec-data.",
+ "base": "job:spec-data",
+ "expectValid": true,
+ "expectError": [
+  "rename Inactive",
+  "rename: 'Inactive' clashes with an existing name in that scope (the Studio would use 'Inactive2'); pick another name"
+ ],
+ "ops": [
+  {"op": "get", "target": "IStaticEntity:Status/Inactive", "_why": "o nome que ja existe no mesmo escopo: Identifier = Inactive."},
+  {"op": "rename", "target": "IStaticEntity:Status/Active", "name": "Inactive", "_why": "recusado: o rename escreve Identifier, e Inactive ja e de outro registo da Status."}
+ ]
+}

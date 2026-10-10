@@ -1,0 +1,7 @@
+{
+ "description": "Job composto: jobs concatena os ops das partes, na ordem, numa unica transacao (um merge so na entrega). O base das partes e ignorado; cada parte continua provada sozinha.",
+ "base": "reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "jobs": ["job:ex-base", "job:wid-input-typical"]
+}

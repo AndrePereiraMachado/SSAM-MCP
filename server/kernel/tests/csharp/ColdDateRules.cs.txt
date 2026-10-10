@@ -1,0 +1,190 @@
+using System.Globalization;
+
+namespace ColdDateCorpus;
+
+public enum ExpiryStatus { Fresh, ExpiringSoon, ExpiresToday, Expired }
+
+public sealed record ShelfLifeRequest(
+    DateOnly ProducedOn,
+    int ShelfLifeDays,
+    DateOnly AsOf,
+    int WarningDays,
+    DateOnly? OpenedOn = null,
+    int? OpenShelfLifeDays = null);
+
+public sealed record ShelfLifeResult(
+    DateOnly ProducedOn,
+    DateOnly NominalExpiresOn,
+    DateOnly EffectiveExpiresOn,
+    DateOnly AsOf,
+    DateOnly? OpenedOn,
+    int? OpenShelfLifeDays,
+    int DaysRemaining,
+    bool LimitedByOpening,
+    ExpiryStatus Status,
+    string ExpiryLabel);
+
+public static class FoodExpiry
+{
+    // A zero-day shelf life expires on the production date. The expiry date
+    // remains usable through that civil day; it becomes expired the next day.
+    public static ShelfLifeResult Calculate(ShelfLifeRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.ShelfLifeDays < 0)
+            throw new ArgumentOutOfRangeException(nameof(request.ShelfLifeDays), "Shelf life cannot be negative.");
+        if (request.WarningDays < 0)
+            throw new ArgumentOutOfRangeException(nameof(request.WarningDays), "Warning days cannot be negative.");
+        if (request.OpenedOn.HasValue != request.OpenShelfLifeDays.HasValue)
+            throw new ArgumentException("OpenedOn and OpenShelfLifeDays must be supplied together.");
+        if (request.OpenShelfLifeDays < 0)
+            throw new ArgumentOutOfRangeException(nameof(request.OpenShelfLifeDays), "Open shelf life cannot be negative.");
+        if (request.OpenedOn < request.ProducedOn)
+            throw new ArgumentException("OpenedOn cannot precede ProducedOn.");
+
+        var nominalExpiry = AddShelfDays(request.ProducedOn, request.ShelfLifeDays);
+        var effectiveExpiry = nominalExpiry;
+        if (request.OpenedOn is DateOnly openedOn && request.OpenShelfLifeDays is int openDays)
+        {
+            var openExpiry = AddShelfDays(openedOn, openDays);
+            if (openExpiry < effectiveExpiry)
+                effectiveExpiry = openExpiry;
+        }
+
+        int remaining = effectiveExpiry.DayNumber - request.AsOf.DayNumber;
+        var status = remaining < 0 ? ExpiryStatus.Expired
+            : remaining == 0 ? ExpiryStatus.ExpiresToday
+            : remaining <= request.WarningDays ? ExpiryStatus.ExpiringSoon
+            : ExpiryStatus.Fresh;
+
+        return new ShelfLifeResult(request.ProducedOn, nominalExpiry, effectiveExpiry,
+            request.AsOf, request.OpenedOn, request.OpenShelfLifeDays, remaining,
+            effectiveExpiry < nominalExpiry, status,
+            effectiveExpiry.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+    }
+
+    private static DateOnly AddShelfDays(DateOnly startingOn, int days)
+    {
+        if (days > DateOnly.MaxValue.DayNumber - startingOn.DayNumber)
+            throw new ArgumentOutOfRangeException(nameof(days), "Expiry exceeds the representable civil date range.");
+        return startingOn.AddDays(days);
+    }
+}
+
+public sealed record TravelRequest(
+    DateTimeOffset DepartureUtc,
+    int OffsetMinutes,
+    int? ArrivalWindowMinutes = null);
+
+public sealed record TravelResult(
+    DateTimeOffset DepartureUtc,
+    int OffsetMinutes,
+    DateTimeOffset ScheduledUtc,
+    DateTimeOffset? WindowEndsUtc,
+    DateOnly ScheduledDate,
+    TimeOnly ScheduledTime,
+    int CalendarDayDelta,
+    string ScheduledStamp);
+
+public static class TravelScheduling
+{
+    // Signed offsets support bringing a departure forward or postponing it.
+    // UTC is a contract, not inferred from the machine's local time zone.
+    public static TravelResult Schedule(TravelRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.DepartureUtc.Offset != TimeSpan.Zero)
+            throw new ArgumentException("DepartureUtc must have a zero UTC offset.");
+        if (request.ArrivalWindowMinutes < 0)
+            throw new ArgumentOutOfRangeException(nameof(request.ArrivalWindowMinutes), "Arrival window cannot be negative.");
+
+        var scheduled = ShiftMinutes(request.DepartureUtc, request.OffsetMinutes);
+        DateTimeOffset? windowEnd = request.ArrivalWindowMinutes is int windowMinutes
+            ? ShiftMinutes(scheduled, windowMinutes) : null;
+        var originalDate = DateOnly.FromDateTime(request.DepartureUtc.UtcDateTime);
+        var scheduledDate = DateOnly.FromDateTime(scheduled.UtcDateTime);
+
+        return new TravelResult(request.DepartureUtc, request.OffsetMinutes, scheduled,
+            windowEnd, scheduledDate, TimeOnly.FromDateTime(scheduled.UtcDateTime),
+            scheduledDate.DayNumber - originalDate.DayNumber,
+            scheduled.ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'", CultureInfo.InvariantCulture));
+    }
+
+    private static DateTimeOffset ShiftMinutes(DateTimeOffset value, int minutes)
+    {
+        long deltaTicks = (long)minutes * TimeSpan.TicksPerMinute;
+        if (deltaTicks < DateTimeOffset.MinValue.Ticks - value.Ticks ||
+            deltaTicks > DateTimeOffset.MaxValue.Ticks - value.Ticks)
+            throw new ArgumentOutOfRangeException(nameof(minutes), "Scheduled instant exceeds the representable UTC range.");
+        return value.AddMinutes(minutes);
+    }
+}
+
+public sealed record OperationRequest(
+    TimeOnly OpensAt,
+    TimeOnly ClosesAt,
+    bool EndsNextDay,
+    TimeOnly? BreakStartsAt = null,
+    TimeOnly? BreakEndsAt = null,
+    TimeOnly? ObservedAt = null);
+
+public sealed record OperationResult(
+    TimeOnly OpensAt,
+    TimeOnly ClosesAt,
+    bool EndsNextDay,
+    TimeOnly? BreakStartsAt,
+    TimeOnly? BreakEndsAt,
+    TimeOnly? ObservedAt,
+    TimeSpan GrossDuration,
+    TimeSpan BreakDuration,
+    TimeSpan NetDuration,
+    bool? IsOperatingAtObservedTime);
+
+public static class CivilOperation
+{
+    // Intervals are [open, close), and breaks are [start, end). Equal clocks
+    // mean a full day only when EndsNextDay is explicitly true.
+    public static OperationResult Calculate(OperationRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var gross = request.ClosesAt.ToTimeSpan() - request.OpensAt.ToTimeSpan();
+        if (request.EndsNextDay)
+            gross += TimeSpan.FromDays(1);
+        if (gross <= TimeSpan.Zero || gross > TimeSpan.FromDays(1))
+            throw new ArgumentException("Operation must last more than zero and no more than 24 hours.");
+        if (request.BreakStartsAt.HasValue != request.BreakEndsAt.HasValue)
+            throw new ArgumentException("BreakStartsAt and BreakEndsAt must be supplied together.");
+
+        var breakDuration = TimeSpan.Zero;
+        TimeSpan? breakStart = null;
+        TimeSpan? breakEnd = null;
+        if (request.BreakStartsAt is TimeOnly starts && request.BreakEndsAt is TimeOnly ends)
+        {
+            breakStart = OffsetFromOpening(starts, request.OpensAt, request.EndsNextDay);
+            breakEnd = OffsetFromOpening(ends, request.OpensAt, request.EndsNextDay);
+            if (request.EndsNextDay && ends == request.OpensAt)
+                breakEnd = TimeSpan.FromDays(1);
+            if (breakStart < TimeSpan.Zero || breakEnd > gross || breakEnd <= breakStart)
+                throw new ArgumentException("Break must be a positive interval contained in the operation.");
+            breakDuration = breakEnd.Value - breakStart.Value;
+        }
+
+        bool? operating = null;
+        if (request.ObservedAt is TimeOnly observed)
+        {
+            var offset = OffsetFromOpening(observed, request.OpensAt, request.EndsNextDay);
+            operating = offset >= TimeSpan.Zero && offset < gross &&
+                !(breakStart.HasValue && offset >= breakStart.Value && offset < breakEnd!.Value);
+        }
+
+        return new OperationResult(request.OpensAt, request.ClosesAt, request.EndsNextDay,
+            request.BreakStartsAt, request.BreakEndsAt, request.ObservedAt,
+            gross, breakDuration, gross - breakDuration, operating);
+    }
+
+    private static TimeSpan OffsetFromOpening(TimeOnly value, TimeOnly opening, bool endsNextDay)
+    {
+        var offset = value.ToTimeSpan() - opening.ToTimeSpan();
+        return endsNextDay && offset < TimeSpan.Zero ? offset + TimeSpan.FromDays(1) : offset;
+    }
+}

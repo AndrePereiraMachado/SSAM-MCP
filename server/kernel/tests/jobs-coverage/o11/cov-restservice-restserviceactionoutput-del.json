@@ -1,0 +1,43 @@
+{
+ "description": "Cobertura testada (fase 1, medir): del de ServiceStudio.Plugin.RESTService.IRestServiceActionOutput (o11) em restServiceAction. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IRestService",
+   "name": "CovSRest",
+   "as": "$svc"
+  },
+  {
+   "op": "create",
+   "parent": "$svc",
+   "type": "IRestServiceAction",
+   "name": "CovSMethod",
+   "as": "$p"
+  },
+  {
+   "op": "set",
+   "target": "$p",
+   "prop": "HTTPMethod",
+   "value": "POST"
+  },
+  {
+   "op": "link",
+   "from": "$p/#IStartNode",
+   "to": "$p/#IEndNode"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IRestServiceActionOutput",
+   "name": "CovARestServiceActionOutput",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

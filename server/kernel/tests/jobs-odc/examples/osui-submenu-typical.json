@@ -1,0 +1,26 @@
+{
+ "description": "Submenu do OSUI: titulo no Menu, dois links no Items e o OnToggle guardando se esta aberto.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "AccountMenu", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Account\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "IsSubmenuOpen", "as": "$vIsSubmenuOpen"},
+  {"op": "set", "target": "$vIsSubmenuOpen", "prop": "DataType", "value": "Boolean"},
+  {"op": "logic", "data": {"actions": [{"name": "SubmenuToggled", "kind": "screen", "owner": "IMobileScreen:AccountMenu", "inputs": [{"name": "IsOpened", "type": "Boolean"}], "steps": [{"assign": {"IsSubmenuOpen": "IsOpened"}, "as": "Remember"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Submenu1", "source": "IMobileBlock:Submenu", "empty": true, "as": "$sm"},
+  {"op": "set", "target": "$sm/OnToggle", "prop": "Handler", "value": "IMobileScreen:AccountMenu/SubmenuToggled"},
+  {"op": "set", "target": "$sm/OnToggle/IsOpened", "prop": "Value", "value": "IsOpened"},
+  {"op": "create", "parent": "$sm/Menu", "type": "ITextWidget", "as": "$text1"},
+  {"op": "set", "target": "$text1", "prop": "Text", "value": "Account"},
+  {"op": "create", "parent": "$sm/Items", "type": "ILink", "name": "ProfileLink", "as": "$lProfileLink"},
+  {"op": "set", "target": "$lProfileLink/#ITextWidget", "prop": "Text", "value": "Profile"},
+  {"op": "set", "target": "$lProfileLink/OnClick", "prop": "Destination", "value": "IMobileScreen:UserProfile"},
+  {"op": "create", "parent": "$sm/Items", "type": "ILink", "name": "PasswordLink", "as": "$lPasswordLink"},
+  {"op": "set", "target": "$lPasswordLink/#ITextWidget", "prop": "Text", "value": "Change password"},
+  {"op": "set", "target": "$lPasswordLink/OnClick", "prop": "Destination", "value": "IMobileScreen:ChangePassword"}
+ ]
+}

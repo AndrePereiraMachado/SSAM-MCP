@@ -1,0 +1,5 @@
+{
+ "ok": false,
+ "error": "op #0 (create Probe): InvalidOperationException: create: unknown key(s) 'bogus'; required: parent, type; optional: name, args, as, source, empty (api --op verbs)",
+ "data": null
+}

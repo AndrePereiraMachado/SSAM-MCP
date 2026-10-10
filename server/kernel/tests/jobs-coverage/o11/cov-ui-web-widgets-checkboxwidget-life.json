@@ -1,0 +1,98 @@
+{
+ "description": "Cobertura testada (fase 1, medir): life de OutSystems.Model.UI.Web.Widgets.ICheckBoxWidget (o11) em webContainer. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnsubmitableInputs_NoLinks",
+   "element": "HeadlessTrad_UI (ESpace) / MainFlow (WebFlow) / CovSWebScreen (WebScreen)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "HeadlessTrad_UI (ESpace) / MainFlow (WebFlow) / CovSWebScreen (WebScreen) / CovSVar (LocalVariable)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IWebFlow:MainFlow",
+   "type": "IWebScreen",
+   "name": "CovSWebScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IWebBlockInstanceWidget/MainContent",
+   "type": "IContainerWidget",
+   "name": "CovSBox",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "ICheckBoxWidget",
+   "name": "CovACheckBoxWidget",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "ILocalVariable",
+   "name": "CovSVar",
+   "as": "$hv"
+  },
+  {
+   "op": "set",
+   "target": "$hv",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Variable",
+   "value": "CovSVar"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "ILocalVariable",
+   "name": "CovSBoolean",
+   "as": "$ht"
+  },
+  {
+   "op": "set",
+   "target": "$ht",
+   "prop": "DataType",
+   "value": "Boolean"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Variable",
+   "value": "CovSBoolean"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "MarginLeft",
+   "value": "8px"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRCheckBoxWidget"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "first": true
+  }
+ ]
+}

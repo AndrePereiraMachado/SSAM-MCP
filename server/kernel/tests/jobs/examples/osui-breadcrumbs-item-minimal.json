@@ -1,0 +1,10 @@
+{
+ "description": "BreadcrumbsItem (OutSystemsUI, Navigation) minimo: instancia como o Studio cria ao arrastar o bloco; dentro de um Breadcrumbs vazio (placeholder Content).",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "BreadcrumbsDemo", "source": "IMobileBlock:Breadcrumbs", "empty": true,"as": "$parent"},
+  {"op": "create", "parent": "$parent/Content", "type": "IMobileBlockInstanceWidget", "name": "BreadcrumbsItemDemo", "source": "IMobileBlock:BreadcrumbsItem", "as": "$b"}
+ ]
+}

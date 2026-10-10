@@ -1,0 +1,49 @@
+{
+ "description": "Cobertura testada (fase 1, medir): del de ServiceStudio.Plugin.RESTService.IRestServiceAuthenticationFlowInput (odc) em restServiceAuth. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IRestService",
+   "name": "CovSRest",
+   "as": "$svc"
+  },
+  {
+   "op": "create",
+   "parent": "$svc",
+   "type": "IRestServiceAction",
+   "name": "CovSMethod",
+   "as": "$sm"
+  },
+  {
+   "op": "set",
+   "target": "$sm",
+   "prop": "HTTPMethod",
+   "value": "GET"
+  },
+  {
+   "op": "link",
+   "from": "$sm/#IStartNode",
+   "to": "$sm/#IEndNode"
+  },
+  {
+   "op": "set",
+   "target": "$svc",
+   "prop": "Authentication",
+   "value": "Custom"
+  },
+  {
+   "op": "create",
+   "parent": "$svc/OnAuthentication",
+   "type": "IRestServiceAuthenticationFlowInput",
+   "name": "CovARestServiceAuthenticationFlowInput",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

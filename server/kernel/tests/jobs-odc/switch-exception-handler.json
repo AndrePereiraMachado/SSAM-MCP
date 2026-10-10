@@ -1,0 +1,83 @@
+{
+ "description": "ODC (cobertura C): SWITCH e ON EXCEPTION, tres tipos que nunca tinham passado pela faixa ODC, nos verbos crus para que os nomes das interfaces fiquem no proprio job. (1) ISwitchNode e ISwitchCondition: o Switch e um no de action como o If, mas os ramos nao sao propriedades: cada ramo E um ISwitchCondition, que ja e o proprio conector (IActionConnector), por isso o `link` de uma condicao usa o conector default Target e nao ha connector com o nome do caso. O ramo Otherwise, esse sim, e a propriedade OtherwiseTarget do no, e e OBRIGATORIO: sem ele o Verify devolve InvalidFlow_NoOtherwise. (2) IOnExceptionAction: o handler global de UI, que e filho de um UI FLOW (IUIFlow.CreateOnExceptionHandler) e nao do espaco, nao tem IStartNode nenhum (cada IExceptionHandlerNode e um inicio) e e o unico sitio, com ISystemEvent, onde um IMessageNode e permitido. Por nao ter Start, um handler tambem nao aceita `layout` (FlowLayout exige um Start): as posicoes vao a mao, com move x/y. De proposito NAO se mexe em IESpace.GlobalExceptionHandler: a propriedade e gravavel, mas repontar o handler global de uma app que ja tem um custa tres avisos novos (AllExceptionsInNonGlobalFlow no flow que perdeu o posto e NoErrorHandlingForAllExceptions em cada flow que ficou descoberto), ou seja, partir o tratamento de erros da fixture.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCov_Task_Bucket (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfCov_Task_Bucket", "as": "$act"},
+  {"op": "set", "target": "$act", "prop": "Description", "value": "Cobertura C: classifica o atraso de uma tarefa num de tres baldes, com um Switch nativo"},
+  {"op": "create", "parent": "$act", "type": "IInputParameter", "name": "DaysLate", "as": "$in"},
+  {"op": "set", "target": "$in", "prop": "DataType", "value": "Integer"},
+  {"op": "create", "parent": "$act", "type": "IOutputParameter", "name": "Bucket", "as": "$out"},
+  {"op": "set", "target": "$out", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$n0"},
+
+  {"op": "create", "parent": "$act", "type": "ISwitchNode", "name": "NomeDescartado", "as": "$sw", "_why": "de proposito com name: em If, Assign, ForEach e Switch o name do create e descartado pelo runtime; o que aparece no fluxo e o Label, provado pelo get no fim"},
+  {"op": "set", "target": "$sw", "prop": "Label", "value": "BucketByLateness"},
+
+  {"op": "create", "parent": "$act", "type": "IAssignNode", "as": "$aOnTime"},
+  {"op": "set", "target": "$aOnTime", "prop": "Label", "value": "OnTime"},
+  {"op": "create", "parent": "$aOnTime", "type": "IAssignment", "as": "$asgOnTime"},
+  {"op": "set", "target": "$asgOnTime", "prop": "Variable", "value": "Bucket"},
+  {"op": "set", "target": "$asgOnTime", "prop": "Value", "value": "\"OnTime\""},
+
+  {"op": "create", "parent": "$act", "type": "IAssignNode", "as": "$aLate"},
+  {"op": "set", "target": "$aLate", "prop": "Label", "value": "Late"},
+  {"op": "create", "parent": "$aLate", "type": "IAssignment", "as": "$asgLate"},
+  {"op": "set", "target": "$asgLate", "prop": "Variable", "value": "Bucket"},
+  {"op": "set", "target": "$asgLate", "prop": "Value", "value": "\"Late\""},
+
+  {"op": "create", "parent": "$act", "type": "IAssignNode", "as": "$aCritical"},
+  {"op": "set", "target": "$aCritical", "prop": "Label", "value": "Critical"},
+  {"op": "create", "parent": "$aCritical", "type": "IAssignment", "as": "$asgCritical"},
+  {"op": "set", "target": "$asgCritical", "prop": "Variable", "value": "Bucket"},
+  {"op": "set", "target": "$asgCritical", "prop": "Value", "value": "\"Critical\""},
+
+  {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$endBucket"},
+  {"op": "link", "from": "$n0", "to": "$sw"},
+
+  {"op": "create", "parent": "$sw", "type": "ISwitchCondition", "as": "$c1", "_why": "ISwitchCondition nao nasce de um CreateNode: o kernel encontra sozinho ISwitchNode.CreateCondition(), que nao recebe nome"},
+  {"op": "set", "target": "$c1", "prop": "Value", "value": "DaysLate <= 0", "_why": "Value e ExpressionProperty booleana: texto OutSystems, so funcoes de docs/functions.md"},
+  {"op": "link", "from": "$c1", "to": "$aOnTime", "_why": "a condicao E o conector (ISwitchCondition : IActionConnector, Target gravavel), por isso liga pelo connector default Target; nao existe um connector chamado Case1 no Switch"},
+
+  {"op": "create", "parent": "$sw", "type": "ISwitchCondition", "as": "$c2"},
+  {"op": "set", "target": "$c2", "prop": "Value", "value": "DaysLate <= 7"},
+  {"op": "link", "from": "$c2", "to": "$aLate"},
+
+  {"op": "link", "from": "$sw", "connector": "OtherwiseTarget", "to": "$aCritical", "_why": "o Otherwise e a UNICA saida do Switch que e propriedade (IActionNode OtherwiseTarget {get;set;}), e e obrigatorio: sem ele o Verify devolve Error InvalidFlow_NoOtherwise"},
+
+  {"op": "link", "from": "$aOnTime", "to": "$endBucket"},
+  {"op": "link", "from": "$aLate", "to": "$endBucket"},
+  {"op": "link", "from": "$aCritical", "to": "$endBucket"},
+
+  {"op": "move", "target": "$c1", "first": true, "_why": "a ordem de avaliacao dos casos e a ordem dos CONECTORES, nao a da declaracao; estes dois move sao literalmente o que o LogicExpander emite no fim de cada switch para repor a ordem escrita"},
+  {"op": "move", "target": "$c2", "after": "$c1"},
+  {"op": "layout", "target": "$act"},
+
+  {"op": "create", "parent": "@espace", "type": "IUserException", "name": "WfCovUiFailure", "as": "$exc"},
+  {"op": "create", "parent": "@espace", "type": "IMobileFlow", "name": "WfCovErrorFlow", "as": "$flow", "_why": "IESpace.CreateMobileFlow(name): um UI Flow novo nasce sem Theme e sem telas e continua valido; e o dono possivel de um On Exception proprio, sem tocar no MainFlow da fixture"},
+  {"op": "create", "parent": "$flow", "type": "IOnExceptionAction", "name": "WfCovOnException", "as": "$oeh", "_why": "IUIFlow.CreateOnExceptionHandler(name): o On Exception e filho do FLOW, nao do @espace"},
+
+  {"op": "create", "parent": "$oeh", "type": "IExceptionHandlerNode", "name": "HandleAll", "as": "$eh", "_why": "um IOnExceptionAction NAO leva IStartNode: cada IExceptionHandlerNode e um inicio de fluxo, e criar um Start daria InvalidFlow"},
+  {"op": "set", "target": "$eh", "prop": "Exception", "value": "IUserException:WfCovUiFailure"},
+  {"op": "set", "target": "$eh", "prop": "AbortTransaction", "value": true},
+  {"op": "set", "target": "$eh", "prop": "LogError", "value": true},
+
+  {"op": "create", "parent": "$oeh", "type": "IMessageNode", "name": "ShowError", "as": "$msg", "_why": "IMessageNode so existe dentro de um IOnExceptionAction ou de um ISystemEvent; numa server action o create e recusado"},
+  {"op": "set", "target": "$msg", "prop": "Message", "value": "\"WfCovErrorFlow could not complete the operation\"", "_why": "Message e propriedade-expressao obrigatoria (sem ela: Error RequiredPropertyValue_Property)"},
+  {"op": "set", "target": "$msg", "prop": "Type", "value": "Error", "_why": "MessageType pelo nome: Info, Success, Warning ou Error"},
+
+  {"op": "create", "parent": "$oeh", "type": "IEndNode", "as": "$endHandler"},
+  {"op": "link", "from": "$eh", "to": "$msg"},
+  {"op": "link", "from": "$msg", "to": "$endHandler"},
+  {"op": "move", "target": "$eh", "x": 3200, "y": 800, "_why": "o `layout` NAO serve aqui: FlowLayout.Apply exige um IStartNode e um IOnExceptionAction nao tem nenhum (devolve 'flow without Start'). Num handler as posicoes sao escritas a mao, com move x/y, na mesma grelha do layout (X0=3200, RowStep=1600)"},
+  {"op": "move", "target": "$msg", "x": 3200, "y": 2400},
+  {"op": "move", "target": "$endHandler", "x": 3200, "y": 4000},
+
+  {"op": "get", "target": "$sw", "_why": "le de volta o Switch: Label BucketByLateness (o name do create nao ficou) e OtherwiseTarget preenchido"},
+  {"op": "dump", "target": "$act", "depth": 3, "_why": "le de volta o fluxo inteiro: as duas ISwitchCondition na ordem escrita, com as suas expressoes, e os tres Assign"},
+  {"op": "get", "target": "$eh", "_why": "le de volta o handler: Exception, AbortTransaction e LogError"},
+  {"op": "usages", "target": "$exc", "_why": "prova que a excecao de usuario e mesmo consumida pelo IExceptionHandlerNode"},
+  {"op": "find", "name": "WfCovOnException"}
+ ]
+}

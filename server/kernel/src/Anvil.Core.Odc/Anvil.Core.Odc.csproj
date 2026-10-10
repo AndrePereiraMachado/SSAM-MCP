@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Anvil.Core.Odc (WS1): the same kernel sources as Anvil.Core (linked, never copied) compiled against the ODC
+    Studio assemblies, plus the ODC platform adapter (Adapters.ODC). Adapters.SS11 is not compiled here, so
+    StudioAdapter discovers OdcRuntime as the only IStudioRuntime. The DLLs of the ODC Studio are referenced from
+    the installation (Private=false) and resolved at runtime by StudioAssembliesOdc.Bind; none is copied.
+    Excluded kernel files: MergeProbe.cs and ReferenceSignatureMerge.cs (headless 3-way merge over the SS11
+    MatchTree; in ODC the merge is the bridge's native CompareAndMerge, WS2) and Delivery/CSharpRuntimeDelivery.cs
+    (Service Center session and C# extensions: O11-only).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RollForward>Major</RollForward>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <RootNamespace>Anvil.Core</RootNamespace>
+    <AssemblyName>Anvil.Core.Odc</AssemblyName>
+    <NoWarn>$(NoWarn);CS0618</NoWarn>
+    <OdcInstall Condition="'$(OdcInstall)' == ''">$(ProgramFiles)\OutSystems\ODC Studio\ODC Studio</OdcInstall>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../Anvil.Core/Kernel/**/*.cs" Exclude="../Anvil.Core/Kernel/MergeProbe.cs;../Anvil.Core/Kernel/ReferenceSignatureMerge.cs" />
+    <Compile Include="../Anvil.Core/Delivery/**/*.cs" Exclude="../Anvil.Core/Delivery/CSharpRuntimeDelivery.cs" />
+    <Compile Include="../Anvil.Core/Hosting/**/*.cs" />
+    <Compile Include="../Anvil.Core/Properties/**/*.cs" />
+    <Compile Include="Adapters.ODC/**/*.cs" />
+    <EmbeddedResource Include="../Anvil.Core/Kernel/ScreenVocabulary.json" LogicalName="Anvil.Core.Kernel.ScreenVocabulary.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="OutSystems.Model"><HintPath>$(OdcInstall)\OutSystems.Model.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Model.V1"><HintPath>$(OdcInstall)\OutSystems.Model.V1.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Model.Implementation"><HintPath>$(OdcInstall)\OutSystems.Model.Implementation.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.ModelAPILoader"><HintPath>$(OdcInstall)\OutSystems.ModelAPILoader.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Model.Plugin.NRWidgets"><HintPath>$(OdcInstall)\OutSystems.Model.Plugin.NRWidgets.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Model.Versioning"><HintPath>$(OdcInstall)\OutSystems.Model.Versioning.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Model.Concurrency"><HintPath>$(OdcInstall)\OutSystems.Model.Concurrency.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Model.DependencyProviders"><HintPath>$(OdcInstall)\OutSystems.Model.DependencyProviders.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.RuntimeCommon"><HintPath>$(OdcInstall)\OutSystems.RuntimeCommon.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.MetaModel"><HintPath>$(OdcInstall)\OutSystems.MetaModel.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Communication"><HintPath>$(OdcInstall)\OutSystems.Communication.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.FrameworkExtensions"><HintPath>$(OdcInstall)\OutSystems.FrameworkExtensions.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.C5"><HintPath>$(OdcInstall)\OutSystems.C5.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.ServiceStudio.PluginAPI"><HintPath>$(OdcInstall)\OutSystems.ServiceStudio.PluginAPI.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.ServiceStudio.CrashAPI"><HintPath>$(OdcInstall)\OutSystems.ServiceStudio.CrashAPI.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.ServiceStudio.Observability"><HintPath>$(OdcInstall)\OutSystems.ServiceStudio.Observability.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Framework"><HintPath>$(OdcInstall)\ServiceStudio.Framework.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Common"><HintPath>$(OdcInstall)\ServiceStudio.Common.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Presenter"><HintPath>$(OdcInstall)\ServiceStudio.Presenter.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.ServerCommunications"><HintPath>$(OdcInstall)\ServiceStudio.ServerCommunications.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.ServerCommunications.API"><HintPath>$(OdcInstall)\ServiceStudio.ServerCommunications.API.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Telemetry"><HintPath>$(OdcInstall)\ServiceStudio.Telemetry.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.UserSettings"><HintPath>$(OdcInstall)\ServiceStudio.UserSettings.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Identity"><HintPath>$(OdcInstall)\ServiceStudio.Identity.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="System.Collections.Immutable"><HintPath>$(OdcInstall)\System.Collections.Immutable.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Esprima" Version="3.0.6" />
+    <ProjectReference Include="../Anvil.CSharp/Anvil.CSharp.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,38 @@
+{
+ "description": "Tabs do OutSystems UI tipico: duas abas (cabecalho + conteudo), aba inicial vinda de uma variavel, OnTabChange guarda a aba ativa; a primeira aba tem a tabela de tarefas e a segunda o total por estado.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "ActiveTabIndex", "as": "$vTab"},
+  {"op": "set", "target": "$vTab", "prop": "DataType", "value": "Integer"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetAllTasks", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "TaskTabsChanged", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda a aba ativa",
+    "inputs": [{"name": "ActiveTab", "type": "Integer"}],
+    "steps": [{"assign": {"ActiveTabIndex": "ActiveTab"}, "as": "KeepTab"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "TaskTabs", "source": "IMobileBlock:Tabs", "empty": true, "as": "$tabs"},
+  {"op": "set", "target": "$tabs/StartingTab", "prop": "Value", "value": "ActiveTabIndex"},
+  {"op": "set", "target": "$tabs/OnTabChange", "prop": "Handler", "value": "IScreenAction:TaskTabsChanged"},
+  {"op": "set", "target": "$tabs/OnTabChange/ActiveTab", "prop": "Value", "value": "ActiveTab"},
+  {"op": "create", "parent": "$tabs/Header", "type": "IMobileBlockInstanceWidget", "name": "ListTabHeader", "source": "IMobileBlock:TabsHeaderItem", "as": "$h1"},
+  {"op": "create", "parent": "$h1/Title", "type": "IExpression", "as": "$h1t"},
+  {"op": "set", "target": "$h1t", "prop": "Value", "value": "\"Tasks\""},
+  {"op": "create", "parent": "$tabs/Header", "type": "IMobileBlockInstanceWidget", "name": "SummaryTabHeader", "source": "IMobileBlock:TabsHeaderItem", "as": "$h2"},
+  {"op": "create", "parent": "$h2/Title", "type": "IExpression", "as": "$h2t"},
+  {"op": "set", "target": "$h2t", "prop": "Value", "value": "\"Summary\""},
+  {"op": "create", "parent": "$tabs/Content", "type": "IMobileBlockInstanceWidget", "name": "ListTabContent", "source": "IMobileBlock:TabsContentItem", "as": "$c1"},
+  {"op": "create", "parent": "$c1/Content", "type": "ITableRecords", "name": "TaskTable", "as": "$tbl", "empty": true},
+  {"op": "set", "target": "$tbl", "prop": "Source", "value": "GetAllTasks.List"},
+  {"op": "create", "parent": "$tbl/HeaderRow", "type": "IHeaderCell", "name": "TitleHeader", "as": "$th"},
+  {"op": "create", "parent": "$th", "type": "IExpression", "as": "$tht"},
+  {"op": "set", "target": "$tht", "prop": "Value", "value": "\"Title\""},
+  {"op": "create", "parent": "$tbl/Row", "type": "IRowCell", "name": "TitleCell", "as": "$tc"},
+  {"op": "create", "parent": "$tc", "type": "IExpression", "as": "$tct"},
+  {"op": "set", "target": "$tct", "prop": "Value", "value": "GetAllTasks.List.Current.Task.Title"},
+  {"op": "create", "parent": "$tabs/Content", "type": "IMobileBlockInstanceWidget", "name": "SummaryTabContent", "source": "IMobileBlock:TabsContentItem", "as": "$c2"},
+  {"op": "create", "parent": "$c2/Content", "type": "IExpression", "as": "$total"},
+  {"op": "set", "target": "$total", "prop": "Value", "value": "GetAllTasks.Count + \" task(s)\""}
+ ]
+}

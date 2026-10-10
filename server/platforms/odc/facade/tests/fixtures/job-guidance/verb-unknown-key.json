@@ -1,0 +1,1 @@
+{"description":"scratch: unknown key on create","base":"tests/fixtures/blank-service.oml","expectValid":true,"expectedMessages":[],"ops":[{"op":"create","parent":"@espace","type":"IStructure","name":"Probe","bogus":1}]}

@@ -1,0 +1,28 @@
+#nullable enable
+public sealed class Counter {
+    public int Value;
+    public int Add(int amount) { Value += amount; return Value; }
+    public Counter Self() => this;
+    public Counter AddTwice(Counter other) { Increment(1); other.Add(2); return this; }
+    private void Increment(int amount) { this.Value += amount; }
+    public int Ignore(int argument) => argument;
+    public int Count(int remaining) { if (remaining == 0) return Value; Value += 1; return Count(remaining - 1); }
+    public int Names(int AvThis, int AvContextIn, int AvResult) => AvThis + AvContextIn * 10 + AvResult * 100;
+    public int Fail(int amount) { Value += amount; throw new InvalidOperationException("instance"); }
+}
+public sealed class State { public Counter? Current; public Counter? Replacement; public int Trace; }
+public static class Rules {
+    public static Counter Alias(Counter value) => value.AddTwice(value);
+    public static Counter Self(Counter value) => value.Self();
+    public static int Swap(State state) => Pick(state).Add(Argument(state));
+    public static int NullReceiver(State state) => Pick(state).Ignore(Argument(state));
+    public static int ArgumentFails(State state) => Pick(state).Ignore(ThrowArgument(state));
+    public static int ReceiverFails(State state) => ThrowReceiver(state).Ignore(Argument(state));
+    public static int Recurse(Counter value, int count) => value.Count(count);
+    public static int Names(Counter value) => value.Names(AvResult: 3, AvThis: 1, AvContextIn: 2);
+    public static int Fail(Counter value) => value.Fail(7);
+    private static Counter Pick(State state) { state.Trace = state.Trace * 10 + 1; return state.Current!; }
+    private static int Argument(State state) { state.Trace = state.Trace * 10 + 2; state.Current = state.Replacement; return 3; }
+    private static int ThrowArgument(State state) { state.Trace = state.Trace * 10 + 2; throw new InvalidOperationException("argument"); }
+    private static Counter ThrowReceiver(State state) { state.Trace = state.Trace * 10 + 1; throw new InvalidOperationException("receiver"); }
+}

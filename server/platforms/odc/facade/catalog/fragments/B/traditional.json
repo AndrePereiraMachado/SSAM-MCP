@@ -1,0 +1,1153 @@
+{
+ "schemaVersion": "ssam-discovery-fragment/1",
+ "contract": "ssam-catalog-contribution/1",
+ "front": "B",
+ "title": "Traditional Web context (O11 only): web screens, web flows, web blocks and instances, web emails, web widgets and their events",
+ "reviewedAt": "2026-09-23",
+ "synonyms": {
+  "traditional": [
+   "traditional web",
+   "web tradicional",
+   "webresponsive",
+   "web responsive"
+  ]
+ },
+ "capabilities": [
+  {
+   "id": "ui.traditional-screen",
+   "lanes": [
+    "o11"
+   ],
+   "category": "ui",
+   "title": "Traditional Web context (WebResponsive modules): IWebScreen, IWebFlow, IWebBlock and instances, IWebEmail",
+   "keywords": [
+    "traditional",
+    "traditional web",
+    "webresponsive",
+    "web screen",
+    "web flow",
+    "web block",
+    "web email",
+    "traditional screen",
+    "osui web",
+    "web block instance",
+    "tela web tradicional",
+    "tela tradicional"
+   ],
+   "summary": "In a Traditional Web module (WebResponsive) a screen is `IWebScreen` in `IWebFlow:MainFlow`, born with its layout web block instance (`$scr/#IWebBlockInstanceWidget/Title|MainContent`); its data is fetched in the Preparation (a logic element), not by lifecycle events; widgets are the web widgets (ui.traditional-widget); a button OnClick has a Destination (a screen action or a screen) and a link OnClick also has a Method. Library blocks (OutSystemsUIWeb) are instanced with `create IWebBlockInstanceWidget` + `source: IWebBlock:<Name>` + `empty`. Emails are IWebEmail. Nothing here applies to Reactive/Mobile or to ODC.",
+   "route": {
+    "kind": "job",
+    "operation": "create IWebScreen in IWebFlow:<Flow>; create IPreparation (logic) under it; create web widgets under $scr/#IWebBlockInstanceWidget/<Placeholder>; set <widget>/OnClick Destination; create IWebBlockInstanceWidget {source, empty}; create IWebEmail + set Subject"
+   },
+   "contract": [
+    "verbs.verbs.create",
+    "verbs.verbs.set",
+    "verbs.verbs.link",
+    "verbs.verbs.dump",
+    "verbs.references"
+   ],
+   "depends": [],
+   "alternatives": [],
+   "guidance": "Choose the context from the module type: a WebResponsive (Traditional) module takes IWebScreen and web widgets; the compact routes `screen` (archetypes) and `html` refuse it, so author with the raw verbs. Traditional screens query in their Preparation (the module-specification `queries` section is refused in the web context).",
+   "example": {
+    "ops": [
+     "create",
+     "set",
+     "link"
+    ],
+    "max": 24
+   },
+   "elements": [
+    {
+     "role": "web screen",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.IWebScreen",
+       "jobType": "IWebScreen",
+       "address": "IWebScreen:<Name>"
+      }
+     }
+    },
+    {
+     "role": "web flow",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.IWebFlow",
+       "jobType": "IWebFlow",
+       "address": "IWebFlow:<Name>"
+      }
+     }
+    },
+    {
+     "role": "web block",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.IWebBlock",
+       "jobType": "IWebBlock",
+       "address": "IWebBlock:<Name>"
+      }
+     }
+    },
+    {
+     "role": "web block instance",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.IWebBlockInstanceWidget",
+       "jobType": "IWebBlockInstanceWidget",
+       "address": "<parent path>/<Name> | $scr/#IWebBlockInstanceWidget (the layout)"
+      }
+     }
+    },
+    {
+     "role": "referenced web block",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.IWebBlockSignature",
+       "jobType": "IWebBlock (resolved through the signature)",
+       "address": "IWebBlock:<Name>"
+      }
+     }
+    },
+    {
+     "role": "web placeholder",
+     "child": true,
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.IPlaceholderWidget",
+       "jobType": "IPlaceholderWidget",
+       "address": "IWebBlock:<Block>/<path>/<Placeholder>"
+      }
+     }
+    },
+    {
+     "role": "web placeholder content",
+     "child": true,
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.IPlaceholderContentWidget",
+       "jobType": "(born with the instance)",
+       "address": "<instance path>/<Placeholder>"
+      }
+     }
+    },
+    {
+     "role": "web email",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.IWebEmail",
+       "jobType": "IWebEmail",
+       "address": "IWebEmail:<Name>"
+      }
+     }
+    },
+    {
+     "role": "web theme",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.IWebTheme",
+       "jobType": "IWebTheme",
+       "address": "IWebTheme:<Name>"
+      }
+     }
+    },
+    {
+     "role": "web click event",
+     "child": true,
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Events.IBuiltinEvent",
+       "jobType": "(born with the widget)",
+       "address": "<button path>/OnClick"
+      }
+     }
+    },
+    {
+     "role": "link click event",
+     "child": true,
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Events.ILinkOnClick",
+       "jobType": "(born with the link)",
+       "address": "<link path>/OnClick"
+      }
+     }
+    }
+   ],
+   "operations": {
+    "create": {
+     "route": "create {parent, type, name?, as, source?, empty?}",
+     "preconditions": [
+      "the module is WebResponsive (Traditional Web): the kernel refuses web types in a CrossDevice/Mobile module (context check)",
+      "IWebScreen goes in IWebFlow:<Flow>; its layout block instance is born with it",
+      "IWebEmail goes in a UI flow and is sent by ISendEmailNode (logic)"
+     ],
+     "roles": {
+      "web screen": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-crud-traditional",
+         "osui-web-patterns"
+        ],
+        "scope": "list and detail CRUD screens with Preparation (screen-crud-traditional); a screen of OutSystemsUIWeb patterns (osui-web-patterns)"
+       }
+      },
+      "web flow": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: create (op 0)"
+       }
+      },
+      "web block": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: create (op 1)"
+       }
+      },
+      "web block instance": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "osui-web-patterns"
+        ],
+        "scope": "OutSystemsUIWeb Columns2, Card, Accordion, AccordionItem instanced with source + empty, nested through placeholders"
+       }
+      },
+      "web email": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "email-traditional",
+         "email-digest-foreach-traditional"
+        ],
+        "scope": "IWebEmail with inputs and Subject sent by a server action (email-traditional) and by a timer loop (email-digest-foreach-traditional)"
+       }
+      },
+      "web click event": {
+       "o11": {
+        "status": "not-applicable",
+        "note": "born with the widget",
+        "alternative": "set <widget>/OnClick Destination"
+       }
+      },
+      "link click event": {
+       "o11": {
+        "status": "not-applicable",
+        "note": "born with the link",
+        "alternative": "set <link>/OnClick Method/Destination"
+       }
+      },
+      "referenced web block": {
+       "o11": {
+        "status": "not-applicable",
+        "note": "authored in its producer (OutSystemsUIWeb or another module); the consumer only instances it",
+        "alternative": "change the block in its producer, then refresh the reference (C: reference.*)"
+       }
+      }
+     }
+    },
+    "set": {
+     "route": "set {target, prop, value}",
+     "preconditions": [
+      "a Destination names an element that already exists at that op"
+     ],
+     "roles": {
+      "web email": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "email-traditional"
+        ],
+        "scope": "Subject"
+       }
+      },
+      "web click event": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-crud-traditional"
+        ],
+        "scope": "button OnClick Destination -> screen action Save (screen-crud-traditional op 54)",
+        "note": "the O11 catalog 11.55.69 types IButtonWidget.OnClick as Web.Events.IBuiltinEvent (IOnClick is the OnClick of IContainerWidget); no stamped O11 result records the runtime interface, and on the Reactive side the runtime interface differs from the declared one"
+       }
+      },
+      "link click event": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-crud-traditional"
+        ],
+        "scope": "link OnClick Method + Destination -> detail screen, with its ContactId argument",
+        "note": "not stamped (static job)"
+       }
+      },
+      "web screen": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-crud-traditional"
+        ],
+        "scope": "link list screen -> detail screen: the UI flow connector the Studio draws when a navigation destination is set is written explicitly by a headless job"
+       }
+      }
+     }
+    },
+    "read": {
+     "route": "dump/get by path",
+     "preconditions": [],
+     "roles": {
+      "web screen": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-crud-traditional"
+        ],
+        "scope": "dump of the created screens"
+       }
+      },
+      "link click event": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-crud-traditional"
+        ],
+        "scope": "get <link>/OnClick after setting Method and Destination (op 82)"
+       }
+      },
+      "web flow": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: get (op 108)"
+       }
+      },
+      "web block": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: get (op 109)"
+       }
+      }
+     }
+    },
+    "usages": {
+     "route": "usages {target}",
+     "preconditions": [],
+     "roles": {
+      "web block": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: usages (op 114), consumers 1"
+       }
+      }
+     }
+    }
+   },
+   "platforms": {
+    "o11": {
+     "proofs": [
+      "screen-crud-traditional",
+      "osui-web-patterns",
+      "email-traditional",
+      "email-digest-foreach-traditional",
+      "process-expense-traditional",
+      "cat-b-traditional-gallery"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "WebScreen",
+       "WebFlow"
+      ],
+      "signatures": [
+       "WebBlockSignature"
+      ]
+     },
+     "limits": [
+      {
+       "text": "No Traditional Web job is stamped by the O11 suite (tests/provenance-o11.json): every statement here is C-suite (static) evidence; no Traditional negative job exists.",
+       "origin": "kernel/tests/provenance-o11.json; kernel/tests/jobs-negative (scan 2026-09-23)"
+      },
+      {
+       "text": "The compact routes refuse Traditional: `screen` archetypes and `html` answer 'only Reactive and Mobile screens are supported'; the module-specification tree accepts IWebScreen/IWebBlock but refuses `queries` in the web context (use the Preparation).",
+       "origin": "kernel/src/Anvil.Core/Kernel/ScreenExpander.cs:33; HtmlExpander.cs:68; ScreenSpecification.cs:11,53,89"
+      },
+      {
+       "text": "Traditional web widget contract tests (tests/contracts/screen-coverage/traditional-ui-*, 44 cases with native Verify, reload, 3-way merge and a rejected mutation) exist outside the job suites; their evidence is historical (not stamped).",
+       "origin": "kernel/tests/Anvil.Tests/ScreenCoverageTests.cs; kernel/.local/screen-coverage (2026-09-22)"
+      },
+      {
+       "text": "The native-import mechanism of the UI source route (outsystems:Module/Flow/Block) only resolves Reactive/Mobile blocks; the discovery `instanceSource` of a capture signature is mapped for MobileBlock only.",
+       "origin": "kernel/src/Anvil.Core/Kernel/UiNativeImports.cs:9-51; platforms/odc/facade/discovery.mjs signatureOf"
+      },
+      {
+       "text": "In a Traditional UI flow the connector between two web screens (list -> detail) is created by the Studio when a destination is set, not by the headless kernel: the job links the screens explicitly (link {from: <list screen>, to: <detail screen>}).",
+       "origin": "job:screen-crud-traditional (_why of the link between  and ; stamped)"
+      }
+     ],
+     "differences": [
+      "Preparation instead of lifecycle events",
+      "IWebEmail instead of IMobileEmail",
+      "OutSystemsUIWeb blocks instead of OutSystemsUI"
+     ]
+    }
+   },
+   "recommends": [
+    {
+     "id": "logic.screen-action",
+     "when": "the screen action a web button or link OnClick points at (its body)"
+    },
+    {
+     "id": "logic.preparation",
+     "when": "the Preparation of a web screen (aggregates and assignments before render)"
+    }
+   ]
+  },
+  {
+   "id": "ui.traditional-widget",
+   "lanes": [
+    "o11"
+   ],
+   "category": "ui",
+   "title": "Traditional Web widgets (WebResponsive modules)",
+   "keywords": [
+    "web widget",
+    "traditional widget",
+    "web table records",
+    "edit record widget",
+    "show record widget",
+    "list records widget",
+    "combo box",
+    "input password",
+    "input filename",
+    "editable table",
+    "web form"
+   ],
+   "summary": "The widgets of the Traditional Web context (namespace OutSystems.Model.UI.Web.Widgets and ServiceStudio.Plugin.Widgets): IContainerWidget, IExpressionWidget (Value), IInputWidget (Variable, Mandatory, MaxLength), IButtonWidget (Label; OnClick is a web click event), ILinkWidget (OnClick Method + Destination), ITableRecordsWidget (SourceRecordList) with ICellWidget columns; the other web widgets (password/filename inputs, checkbox, combo box, radio button, list/edit/show records, table/row, text, If, editable table, form, label) are accepted by the generic verbs but not exercised by the job suites.",
+   "route": {
+    "kind": "job",
+    "operation": "create {parent: $scr/#IWebBlockInstanceWidget/<Placeholder> | <web widget path>, type: I<...>Widget}; set Value/Variable/Label/SourceRecordList; set <widget>/OnClick Destination"
+   },
+   "contract": [
+    "verbs.verbs.create",
+    "verbs.verbs.set",
+    "verbs.references"
+   ],
+   "depends": [
+    {
+     "id": "ui.traditional-screen",
+     "unless": "the web screen already exists (address it by path)"
+    }
+   ],
+   "alternatives": [],
+   "guidance": "Read the property names of each web widget from the native contract (--expand ui.traditional-widget:native). Web and Reactive widgets are different types even when the short name matches (ITextWidget, IIfWidget, IContent): never reuse a Reactive statement for a web widget.",
+   "example": {
+    "ops": [
+     "create",
+     "set"
+    ],
+    "max": 24
+   },
+   "elements": [
+    {
+     "role": "container widget",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.IContainerWidget",
+       "jobType": "IContainerWidget",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "expression widget",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.IExpressionWidget",
+       "jobType": "IExpressionWidget",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "input widget",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.IInputWidget",
+       "jobType": "IInputWidget",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "button widget",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.IButtonWidget",
+       "jobType": "IButtonWidget",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "link widget",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.ILinkWidget",
+       "jobType": "ILinkWidget",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "table records widget",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.ITableRecordsWidget",
+       "jobType": "ITableRecordsWidget",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "cell widget",
+     "child": true,
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.ICellWidget",
+       "jobType": "ICellWidget",
+       "address": "<table path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "input password widget",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.IInputPasswordWidget",
+       "jobType": "IInputPasswordWidget",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "input filename widget",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.IInputFilenameWidget",
+       "jobType": "IInputFilenameWidget",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "checkbox widget",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.ICheckBoxWidget",
+       "jobType": "ICheckBoxWidget",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "combo box widget",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.IComboBoxWidget",
+       "jobType": "IComboBoxWidget",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "radio button widget",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.IRadioButtonWidget",
+       "jobType": "IRadioButtonWidget",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "list records widget",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.IListRecordsWidget",
+       "jobType": "IListRecordsWidget",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "edit record widget",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.IEditRecordWidget",
+       "jobType": "IEditRecordWidget",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "show record widget",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.IShowRecordWidget",
+       "jobType": "IShowRecordWidget",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "table widget",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.ITableWidget",
+       "jobType": "ITableWidget",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "row widget",
+     "child": true,
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.IRowWidget",
+       "jobType": "IRowWidget",
+       "address": "<table path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "web text",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.ITextWidget",
+       "jobType": "OutSystems.Model.UI.Web.Widgets.ITextWidget",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "web if",
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.IIfWidget",
+       "jobType": "OutSystems.Model.UI.Web.Widgets.IIfWidget",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "web if branch",
+     "child": true,
+     "platforms": {
+      "o11": {
+       "native": "OutSystems.Model.UI.Web.Widgets.IIfBranchWidget",
+       "jobType": "(born with the If)",
+       "address": "<if path>/TrueBranch | FalseBranch"
+      }
+     }
+    },
+    {
+     "role": "editable table",
+     "platforms": {
+      "o11": {
+       "native": "ServiceStudio.Plugin.Widgets.IEditableTable",
+       "jobType": "IEditableTable",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "editable table cell",
+     "child": true,
+     "platforms": {
+      "o11": {
+       "native": "ServiceStudio.Plugin.Widgets.IEditableTableCell",
+       "jobType": "IEditableTableCell",
+       "address": "<editable table path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "web form",
+     "platforms": {
+      "o11": {
+       "native": "ServiceStudio.Plugin.Widgets.IForm",
+       "jobType": "ServiceStudio.Plugin.Widgets.IForm",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "web label",
+     "platforms": {
+      "o11": {
+       "native": "ServiceStudio.Plugin.Widgets.ILabel",
+       "jobType": "ServiceStudio.Plugin.Widgets.ILabel",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    }
+   ],
+   "operations": {
+    "create": {
+     "route": "create {parent, type, name?, as}",
+     "preconditions": [
+      "the parent is a placeholder of the web layout instance or another web widget of a Traditional screen"
+     ],
+     "roles": {
+      "container widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-crud-traditional"
+        ]
+       }
+      },
+      "expression widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-crud-traditional"
+        ]
+       }
+      },
+      "input widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-crud-traditional"
+        ]
+       }
+      },
+      "button widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-crud-traditional"
+        ]
+       }
+      },
+      "link widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-crud-traditional"
+        ]
+       }
+      },
+      "table records widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-crud-traditional"
+        ]
+       }
+      },
+      "cell widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-crud-traditional"
+        ],
+        "scope": "header and row cells of a table records"
+       }
+      },
+      "input password widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: create (op 34)"
+       }
+      },
+      "input filename widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: create (op 40)"
+       }
+      },
+      "checkbox widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: create (op 41)"
+       }
+      },
+      "combo box widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: create (op 43)"
+       }
+      },
+      "radio button widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: create (ops 48, 51)"
+       }
+      },
+      "list records widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: create (op 66)"
+       }
+      },
+      "edit record widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: create (op 79)"
+       }
+      },
+      "show record widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: create (op 70)"
+       }
+      },
+      "table widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: create (op 61)"
+       }
+      },
+      "row widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: create (ops 62, 72, 81)"
+       }
+      },
+      "web text": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: create (ops 2, 32, 56, 58, 64, 74, 83, 86, 91, 97, 100)"
+       }
+      },
+      "web if": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: create (op 54)"
+       }
+      },
+      "web if branch": {
+       "o11": {
+        "status": "not-applicable",
+        "note": "born with the If widget (True/False branch)",
+        "alternative": "create widgets under <if path>/TrueBranch or FalseBranch"
+       }
+      },
+      "editable table": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: create (op 93)"
+       }
+      },
+      "editable table cell": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: create (ops 96, 99)"
+       }
+      },
+      "web form": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: create (op 88)"
+       }
+      },
+      "web label": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: create (op 37)"
+       }
+      }
+     }
+    },
+    "set": {
+     "route": "set {target, prop, value}",
+     "preconditions": [
+      "Variable names an existing variable or record attribute; SourceRecordList names a query output of the Preparation"
+     ],
+     "roles": {
+      "expression widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-crud-traditional"
+        ],
+        "scope": "Value"
+       }
+      },
+      "input widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-crud-traditional"
+        ],
+        "scope": "Variable, Mandatory, MaxLength"
+       }
+      },
+      "button widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-crud-traditional"
+        ],
+        "scope": "Label (the OnClick is a web click event of ui.traditional-screen)"
+       }
+      },
+      "table records widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-crud-traditional"
+        ],
+        "scope": "SourceRecordList"
+       }
+      },
+      "checkbox widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: set Variable (qualified ledger)"
+       }
+      },
+      "combo box widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: set SourceEntity, SourceAttribute, IsMandatory, Variable (ops 45-47)"
+       }
+      },
+      "edit record widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: set SourceRecord (qualified ledger)"
+       }
+      },
+      "web if": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: set Condition (op 55)"
+       }
+      },
+      "input password widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: set Mandatory, Variable (op 36)"
+       }
+      },
+      "list records widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: set SourceRecordList (qualified ledger)"
+       }
+      },
+      "radio button widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: set Value, Variable (qualified ledger)"
+       }
+      },
+      "show record widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: set SourceRecord (qualified ledger)"
+       }
+      },
+      "web text": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: set Text (qualified ledger)"
+       }
+      },
+      "editable table": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: set IsEditable, SourceRecordList (qualified ledger)"
+       }
+      },
+      "web form": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: set IsEditable, SourceRecord (qualified ledger)"
+       }
+      },
+      "web label": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: set TargetWidget, Text (op 38)"
+       }
+      }
+     }
+    },
+    "read": {
+     "route": "get/dump by path",
+     "preconditions": [],
+     "roles": {
+      "combo box widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: get (op 110)"
+       }
+      },
+      "web label": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: get (op 111)"
+       }
+      },
+      "editable table": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: get (op 112)"
+       }
+      },
+      "edit record widget": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-traditional-gallery"
+        ],
+        "scope": "cat-b-traditional-gallery: get (op 113)"
+       }
+      }
+     }
+    }
+   },
+   "platforms": {
+    "o11": {
+     "proofs": [
+      "screen-crud-traditional",
+      "osui-web-patterns",
+      "email-traditional",
+      "cat-b-traditional-gallery"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "WebScreen"
+      ]
+     },
+     "limits": [
+      {
+       "text": "Only screen-crud-traditional (and the web expressions of the email and pattern jobs) exercises web widgets; none is stamped; no negative job exists for the Traditional context.",
+       "origin": "kernel/tests/jobs; kernel/tests/provenance-o11.json (scan 2026-09-23)"
+      },
+      {
+       "text": "Web and Reactive widgets share short names (ITextWidget, IIfWidget, IContent, IPlaceholderWidget): jobs of a Traditional module resolve the web type, of a Reactive module the mobile one.",
+       "origin": "docs/evidence/descoberta-cobertura-fase1 inventory (name collisions)"
+      }
+     ],
+     "differences": []
+    }
+   }
+  }
+ ],
+ "unavailable": [],
+ "coverage": []
+}

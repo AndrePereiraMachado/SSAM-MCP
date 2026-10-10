@@ -1,0 +1,3176 @@
+{
+ "description": "Tickets: comentarios, anexos, watchers, tags e respostas prontas",
+ "base": "job:tickets-03-lifecycle",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Comment_Add",
+   "as": "$Comment_Add"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add",
+   "prop": "Description",
+   "value": "Comentario publico ou interno; primeiro comentario de agente preenche FirstRespondedOn"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IInputParameter",
+   "name": "TicketId",
+   "as": "$Comment_Add_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_in1",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IInputParameter",
+   "name": "AuthorId",
+   "as": "$Comment_Add_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_in2",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IInputParameter",
+   "name": "Body",
+   "as": "$Comment_Add_in3"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_in3",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IInputParameter",
+   "name": "IsInternal",
+   "as": "$Comment_Add_in4"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_in4",
+   "prop": "DataType",
+   "value": "Boolean"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IOutputParameter",
+   "name": "CommentId",
+   "as": "$Comment_Add_out5"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_out5",
+   "prop": "DataType",
+   "value": "TicketComment Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "ILocalVariable",
+   "name": "C",
+   "as": "$Comment_Add_var6"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_var6",
+   "prop": "DataType",
+   "value": "TicketComment"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "ILocalVariable",
+   "name": "T",
+   "as": "$Comment_Add_var7"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_var7",
+   "prop": "DataType",
+   "value": "Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IStartNode",
+   "as": "$Comment_Add_start8"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IAggregateNode",
+   "name": "GetTicket",
+   "as": "$Comment_Add_agg9"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add_agg9",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add_agg9",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.Id = TicketId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_agg9",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IIfNode",
+   "name": "TicketFound",
+   "as": "$Comment_Add_if10"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_if10",
+   "prop": "Label",
+   "value": "TicketFound"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_if10",
+   "prop": "Condition",
+   "value": "not GetTicket.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseTicketNotFound",
+   "as": "$Comment_Add_raise11"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_raise11",
+   "prop": "Exception",
+   "value": "IUserException:NotFound"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_raise11",
+   "prop": "ExceptionMessage",
+   "value": "\"Ticket not found\""
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Add_if10",
+   "to": "$Comment_Add_raise11",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IIfNode",
+   "name": "IsInternalComment",
+   "as": "$Comment_Add_if12"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_if12",
+   "prop": "Label",
+   "value": "IsInternalComment"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_if12",
+   "prop": "Condition",
+   "value": "IsInternal"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IExecuteServerActionNode",
+   "name": "AssertTeam",
+   "as": "$Comment_Add_call13"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call13",
+   "prop": "Action",
+   "value": "IServerAction:Ticket_AssertAccess"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call13/ViewerId",
+   "prop": "Value",
+   "value": "AuthorId"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call13/TicketId",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call13/Operation",
+   "prop": "Value",
+   "value": "\"comment internally on\""
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IAssignNode",
+   "name": "FillComment",
+   "as": "$Comment_Add_asg14"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_asg14",
+   "prop": "Label",
+   "value": "FillComment"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add_asg14",
+   "type": "IAssignment",
+   "as": "$Comment_Add_a15"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_a15",
+   "prop": "Variable",
+   "value": "C.TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_a15",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add_asg14",
+   "type": "IAssignment",
+   "as": "$Comment_Add_a16"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_a16",
+   "prop": "Variable",
+   "value": "C.AuthorId"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_a16",
+   "prop": "Value",
+   "value": "AuthorId"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add_asg14",
+   "type": "IAssignment",
+   "as": "$Comment_Add_a17"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_a17",
+   "prop": "Variable",
+   "value": "C.Body"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_a17",
+   "prop": "Value",
+   "value": "Body"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add_asg14",
+   "type": "IAssignment",
+   "as": "$Comment_Add_a18"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_a18",
+   "prop": "Variable",
+   "value": "C.IsInternal"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_a18",
+   "prop": "Value",
+   "value": "IsInternal"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add_asg14",
+   "type": "IAssignment",
+   "as": "$Comment_Add_a19"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_a19",
+   "prop": "Variable",
+   "value": "C.CreatedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_a19",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IExecuteServerActionNode",
+   "name": "CreateComment",
+   "as": "$Comment_Add_call20"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call20",
+   "prop": "Action",
+   "value": "IEntityActionSignature:CreateTicketComment"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call20/Source",
+   "prop": "Value",
+   "value": "C"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IAssignNode",
+   "name": "SetOutput",
+   "as": "$Comment_Add_asg21"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_asg21",
+   "prop": "Label",
+   "value": "SetOutput"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add_asg21",
+   "type": "IAssignment",
+   "as": "$Comment_Add_a22"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_a22",
+   "prop": "Variable",
+   "value": "CommentId"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_a22",
+   "prop": "Value",
+   "value": "CreateComment.Id"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IIfNode",
+   "name": "IsFirstResponse",
+   "as": "$Comment_Add_if23"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_if23",
+   "prop": "Label",
+   "value": "IsFirstResponse"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_if23",
+   "prop": "Condition",
+   "value": "not IsInternal and GetTicket.List.Current.Ticket.FirstRespondedOn = NullDate() and AuthorId <> GetTicket.List.Current.Ticket.RequesterId"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IAssignNode",
+   "name": "MarkFirstResponse",
+   "as": "$Comment_Add_asg24"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_asg24",
+   "prop": "Label",
+   "value": "MarkFirstResponse"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add_asg24",
+   "type": "IAssignment",
+   "as": "$Comment_Add_a25"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_a25",
+   "prop": "Variable",
+   "value": "T"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_a25",
+   "prop": "Value",
+   "value": "GetTicket.List.Current.Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add_asg24",
+   "type": "IAssignment",
+   "as": "$Comment_Add_a26"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_a26",
+   "prop": "Variable",
+   "value": "T.FirstRespondedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_a26",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add_asg24",
+   "type": "IAssignment",
+   "as": "$Comment_Add_a27"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_a27",
+   "prop": "Variable",
+   "value": "T.UpdatedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_a27",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IExecuteServerActionNode",
+   "name": "UpdateTicket",
+   "as": "$Comment_Add_call28"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call28",
+   "prop": "Action",
+   "value": "IEntityActionSignature:UpdateTicket"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call28/Source",
+   "prop": "Value",
+   "value": "T"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IExecuteServerActionNode",
+   "name": "WriteComment",
+   "as": "$Comment_Add_call29"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call29",
+   "prop": "Action",
+   "value": "IServerAction:Event_Write"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call29/TicketId",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call29/EventTypeId",
+   "prop": "Value",
+   "value": "Entities.TicketEventType.CommentAdded"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call29/ActorId",
+   "prop": "Value",
+   "value": "AuthorId"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call29/FromValue",
+   "prop": "Value",
+   "value": "\"\""
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call29/ToValue",
+   "prop": "Value",
+   "value": "If(IsInternal, \"internal\", \"public\")"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call29/Note",
+   "prop": "Value",
+   "value": "\"\""
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IIfNode",
+   "name": "IsPublic",
+   "as": "$Comment_Add_if30"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_if30",
+   "prop": "Label",
+   "value": "IsPublic"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_if30",
+   "prop": "Condition",
+   "value": "not IsInternal"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "ILocalVariable",
+   "name": "Recipients",
+   "as": "$Comment_Add_var31"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_var31",
+   "prop": "DataType",
+   "value": "User Identifier List"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IAggregateNode",
+   "name": "GetWatchers",
+   "as": "$Comment_Add_agg32"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add_agg32",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:TicketWatcher"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add_agg32",
+   "type": "IFilter",
+   "args": {
+    "condition": "TicketWatcher.TicketId = TicketId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IForEachNode",
+   "name": "EachWatcher",
+   "as": "$Comment_Add_fe33"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_fe33",
+   "prop": "Label",
+   "value": "EachWatcher"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_fe33",
+   "prop": "RecordList",
+   "value": "GetWatchers.List"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IExecuteServerActionNode",
+   "name": "AppendWatcher",
+   "as": "$Comment_Add_call34"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call34",
+   "prop": "Action",
+   "value": "IActionSignature:ListAppend"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call34/List",
+   "prop": "Value",
+   "value": "Recipients"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call34/Element",
+   "prop": "Value",
+   "value": "GetWatchers.List.Current.TicketWatcher.UserId"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IExecuteServerActionNode",
+   "name": "NotifyWatchers",
+   "as": "$Comment_Add_call35"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call35",
+   "prop": "Action",
+   "value": "IServerAction:Notification_Create"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call35/UserIds",
+   "prop": "Value",
+   "value": "Recipients"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call35/TicketId",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call35/Title",
+   "prop": "Value",
+   "value": "\"New comment on \" + GetTicket.List.Current.Ticket.Number"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Add_call35/Body",
+   "prop": "Value",
+   "value": "Body"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Add_agg32",
+   "to": "$Comment_Add_fe33"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Add_fe33",
+   "to": "$Comment_Add_call34",
+   "connector": "CycleTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Add_call34",
+   "to": "$Comment_Add_fe33"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Add_fe33",
+   "to": "$Comment_Add_call35"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Add",
+   "type": "IEndNode",
+   "as": "$Comment_Add_end36"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Add_start8",
+   "to": "$Comment_Add_agg9"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Add_agg9",
+   "to": "$Comment_Add_if10"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Add_if10",
+   "to": "$Comment_Add_if12",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Add_if12",
+   "to": "$Comment_Add_call13",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Add_call13",
+   "to": "$Comment_Add_asg14"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Add_if12",
+   "to": "$Comment_Add_asg14",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Add_asg14",
+   "to": "$Comment_Add_call20"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Add_call20",
+   "to": "$Comment_Add_asg21"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Add_asg21",
+   "to": "$Comment_Add_if23"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Add_if23",
+   "to": "$Comment_Add_asg24",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Add_asg24",
+   "to": "$Comment_Add_call28"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Add_call28",
+   "to": "$Comment_Add_call29"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Add_if23",
+   "to": "$Comment_Add_call29",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Add_call29",
+   "to": "$Comment_Add_if30"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Add_if30",
+   "to": "$Comment_Add_agg32",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Add_if30",
+   "to": "$Comment_Add_end36",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Add_call35",
+   "to": "$Comment_Add_end36"
+  },
+  {
+   "op": "layout",
+   "target": "$Comment_Add"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Comment_Edit",
+   "as": "$Comment_Edit"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit",
+   "prop": "Description",
+   "value": "So o autor, ate 24 h"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Edit",
+   "type": "IInputParameter",
+   "name": "CommentId",
+   "as": "$Comment_Edit_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_in1",
+   "prop": "DataType",
+   "value": "TicketComment Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Edit",
+   "type": "IInputParameter",
+   "name": "AuthorId",
+   "as": "$Comment_Edit_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_in2",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Edit",
+   "type": "IInputParameter",
+   "name": "Body",
+   "as": "$Comment_Edit_in3"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_in3",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Edit",
+   "type": "ILocalVariable",
+   "name": "C",
+   "as": "$Comment_Edit_var4"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_var4",
+   "prop": "DataType",
+   "value": "TicketComment"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Edit",
+   "type": "IStartNode",
+   "as": "$Comment_Edit_start5"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Edit",
+   "type": "IAggregateNode",
+   "name": "GetComment",
+   "as": "$Comment_Edit_agg6"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Edit_agg6",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:TicketComment"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Edit_agg6",
+   "type": "IFilter",
+   "args": {
+    "condition": "TicketComment.Id = CommentId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_agg6",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Edit",
+   "type": "IIfNode",
+   "name": "CommentFound",
+   "as": "$Comment_Edit_if7"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_if7",
+   "prop": "Label",
+   "value": "CommentFound"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_if7",
+   "prop": "Condition",
+   "value": "not GetComment.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Edit",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseCommentNotFound",
+   "as": "$Comment_Edit_raise8"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_raise8",
+   "prop": "Exception",
+   "value": "IUserException:NotFound"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_raise8",
+   "prop": "ExceptionMessage",
+   "value": "\"Comment not found\""
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Edit_if7",
+   "to": "$Comment_Edit_raise8",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Edit",
+   "type": "IIfNode",
+   "name": "IsAuthor",
+   "as": "$Comment_Edit_if9"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_if9",
+   "prop": "Label",
+   "value": "IsAuthor"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_if9",
+   "prop": "Condition",
+   "value": "GetComment.List.Current.TicketComment.AuthorId = AuthorId"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Edit",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseNotAuthor",
+   "as": "$Comment_Edit_raise10"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_raise10",
+   "prop": "Exception",
+   "value": "IUserException:NotAllowed"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_raise10",
+   "prop": "ExceptionMessage",
+   "value": "\"Only the author can edit\""
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Edit",
+   "type": "IIfNode",
+   "name": "Within24h",
+   "as": "$Comment_Edit_if11"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_if11",
+   "prop": "Label",
+   "value": "Within24h"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_if11",
+   "prop": "Condition",
+   "value": "DiffHours(GetComment.List.Current.TicketComment.CreatedOn, CurrDateTime()) <= 24"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Edit",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseTooLate",
+   "as": "$Comment_Edit_raise12"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_raise12",
+   "prop": "Exception",
+   "value": "IUserException:NotAllowed"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_raise12",
+   "prop": "ExceptionMessage",
+   "value": "\"Comments can only be edited within 24 hours\""
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Edit",
+   "type": "IAssignNode",
+   "name": "Apply",
+   "as": "$Comment_Edit_asg13"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_asg13",
+   "prop": "Label",
+   "value": "Apply"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Edit_asg13",
+   "type": "IAssignment",
+   "as": "$Comment_Edit_a14"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_a14",
+   "prop": "Variable",
+   "value": "C"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_a14",
+   "prop": "Value",
+   "value": "GetComment.List.Current.TicketComment"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Edit_asg13",
+   "type": "IAssignment",
+   "as": "$Comment_Edit_a15"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_a15",
+   "prop": "Variable",
+   "value": "C.Body"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_a15",
+   "prop": "Value",
+   "value": "Body"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Edit_asg13",
+   "type": "IAssignment",
+   "as": "$Comment_Edit_a16"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_a16",
+   "prop": "Variable",
+   "value": "C.EditedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_a16",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Edit",
+   "type": "IExecuteServerActionNode",
+   "name": "UpdateComment",
+   "as": "$Comment_Edit_call17"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_call17",
+   "prop": "Action",
+   "value": "IEntityActionSignature:UpdateTicketComment"
+  },
+  {
+   "op": "set",
+   "target": "$Comment_Edit_call17/Source",
+   "prop": "Value",
+   "value": "C"
+  },
+  {
+   "op": "create",
+   "parent": "$Comment_Edit",
+   "type": "IEndNode",
+   "as": "$Comment_Edit_end18"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Edit_start5",
+   "to": "$Comment_Edit_agg6"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Edit_agg6",
+   "to": "$Comment_Edit_if7"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Edit_if7",
+   "to": "$Comment_Edit_if9",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Edit_if9",
+   "to": "$Comment_Edit_raise10",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Edit_if9",
+   "to": "$Comment_Edit_if11",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Edit_if11",
+   "to": "$Comment_Edit_raise12",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Edit_if11",
+   "to": "$Comment_Edit_asg13",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Edit_asg13",
+   "to": "$Comment_Edit_call17"
+  },
+  {
+   "op": "link",
+   "from": "$Comment_Edit_call17",
+   "to": "$Comment_Edit_end18"
+  },
+  {
+   "op": "layout",
+   "target": "$Comment_Edit"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Attachment_Add",
+   "as": "$Attachment_Add"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add",
+   "prop": "Description",
+   "value": "Anexo com limite de tamanho e extensoes bloqueadas (site properties)"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add",
+   "type": "IInputParameter",
+   "name": "TicketId",
+   "as": "$Attachment_Add_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_in1",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add",
+   "type": "IInputParameter",
+   "name": "CommentId",
+   "as": "$Attachment_Add_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_in2",
+   "prop": "DataType",
+   "value": "TicketComment Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_in2",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add",
+   "type": "IInputParameter",
+   "name": "FileName",
+   "as": "$Attachment_Add_in3"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_in3",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add",
+   "type": "IInputParameter",
+   "name": "MimeType",
+   "as": "$Attachment_Add_in4"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_in4",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_in4",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add",
+   "type": "IInputParameter",
+   "name": "Content",
+   "as": "$Attachment_Add_in5"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_in5",
+   "prop": "DataType",
+   "value": "Binary Data"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add",
+   "type": "IInputParameter",
+   "name": "SizeBytes",
+   "as": "$Attachment_Add_in6"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_in6",
+   "prop": "DataType",
+   "value": "Long Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add",
+   "type": "IInputParameter",
+   "name": "UploaderId",
+   "as": "$Attachment_Add_in7"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_in7",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add",
+   "type": "IOutputParameter",
+   "name": "AttachmentId",
+   "as": "$Attachment_Add_out8"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_out8",
+   "prop": "DataType",
+   "value": "TicketAttachment Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add",
+   "type": "ILocalVariable",
+   "name": "A",
+   "as": "$Attachment_Add_var9"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_var9",
+   "prop": "DataType",
+   "value": "TicketAttachment"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add",
+   "type": "IStartNode",
+   "as": "$Attachment_Add_start10"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add",
+   "type": "IAggregateNode",
+   "name": "GetTicket",
+   "as": "$Attachment_Add_agg11"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add_agg11",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add_agg11",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.Id = TicketId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_agg11",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add",
+   "type": "IIfNode",
+   "name": "TicketFound",
+   "as": "$Attachment_Add_if12"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_if12",
+   "prop": "Label",
+   "value": "TicketFound"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_if12",
+   "prop": "Condition",
+   "value": "not GetTicket.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseTicketNotFound",
+   "as": "$Attachment_Add_raise13"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_raise13",
+   "prop": "Exception",
+   "value": "IUserException:NotFound"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_raise13",
+   "prop": "ExceptionMessage",
+   "value": "\"Ticket not found\""
+  },
+  {
+   "op": "link",
+   "from": "$Attachment_Add_if12",
+   "to": "$Attachment_Add_raise13",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add",
+   "type": "IIfNode",
+   "name": "SizeOk",
+   "as": "$Attachment_Add_if14"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_if14",
+   "prop": "Label",
+   "value": "SizeOk"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_if14",
+   "prop": "Condition",
+   "value": "SizeBytes <= Site.MaxAttachmentMB * 1048576"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseTooBig",
+   "as": "$Attachment_Add_raise15"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_raise15",
+   "prop": "Exception",
+   "value": "IUserException:ValidationFailed"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_raise15",
+   "prop": "ExceptionMessage",
+   "value": "\"File exceeds \" + IntegerToText(Site.MaxAttachmentMB) + \" MB\""
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add",
+   "type": "IIfNode",
+   "name": "ExtensionOk",
+   "as": "$Attachment_Add_if16"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_if16",
+   "prop": "Label",
+   "value": "ExtensionOk"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_if16",
+   "prop": "Condition",
+   "value": "Index(Site.BlockedExtensions, ToLower(Substr(FileName, Length(FileName) - 4, 4))) < 0"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseBlocked",
+   "as": "$Attachment_Add_raise17"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_raise17",
+   "prop": "Exception",
+   "value": "IUserException:ValidationFailed"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_raise17",
+   "prop": "ExceptionMessage",
+   "value": "\"File type not allowed\""
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add",
+   "type": "IAssignNode",
+   "name": "FillAttachment",
+   "as": "$Attachment_Add_asg18"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_asg18",
+   "prop": "Label",
+   "value": "FillAttachment"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add_asg18",
+   "type": "IAssignment",
+   "as": "$Attachment_Add_a19"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_a19",
+   "prop": "Variable",
+   "value": "A.TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_a19",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add_asg18",
+   "type": "IAssignment",
+   "as": "$Attachment_Add_a20"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_a20",
+   "prop": "Variable",
+   "value": "A.CommentId"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_a20",
+   "prop": "Value",
+   "value": "CommentId"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add_asg18",
+   "type": "IAssignment",
+   "as": "$Attachment_Add_a21"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_a21",
+   "prop": "Variable",
+   "value": "A.FileName"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_a21",
+   "prop": "Value",
+   "value": "FileName"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add_asg18",
+   "type": "IAssignment",
+   "as": "$Attachment_Add_a22"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_a22",
+   "prop": "Variable",
+   "value": "A.MimeType"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_a22",
+   "prop": "Value",
+   "value": "MimeType"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add_asg18",
+   "type": "IAssignment",
+   "as": "$Attachment_Add_a23"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_a23",
+   "prop": "Variable",
+   "value": "A.SizeBytes"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_a23",
+   "prop": "Value",
+   "value": "SizeBytes"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add_asg18",
+   "type": "IAssignment",
+   "as": "$Attachment_Add_a24"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_a24",
+   "prop": "Variable",
+   "value": "A.Content"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_a24",
+   "prop": "Value",
+   "value": "Content"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add_asg18",
+   "type": "IAssignment",
+   "as": "$Attachment_Add_a25"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_a25",
+   "prop": "Variable",
+   "value": "A.UploadedById"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_a25",
+   "prop": "Value",
+   "value": "UploaderId"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add_asg18",
+   "type": "IAssignment",
+   "as": "$Attachment_Add_a26"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_a26",
+   "prop": "Variable",
+   "value": "A.UploadedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_a26",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add",
+   "type": "IExecuteServerActionNode",
+   "name": "CreateAttachment",
+   "as": "$Attachment_Add_call27"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_call27",
+   "prop": "Action",
+   "value": "IEntityActionSignature:CreateTicketAttachment"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_call27/Source",
+   "prop": "Value",
+   "value": "A"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add",
+   "type": "IAssignNode",
+   "name": "SetOutput",
+   "as": "$Attachment_Add_asg28"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_asg28",
+   "prop": "Label",
+   "value": "SetOutput"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add_asg28",
+   "type": "IAssignment",
+   "as": "$Attachment_Add_a29"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_a29",
+   "prop": "Variable",
+   "value": "AttachmentId"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_a29",
+   "prop": "Value",
+   "value": "CreateAttachment.Id"
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add",
+   "type": "IExecuteServerActionNode",
+   "name": "WriteAttachment",
+   "as": "$Attachment_Add_call30"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_call30",
+   "prop": "Action",
+   "value": "IServerAction:Event_Write"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_call30/TicketId",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_call30/EventTypeId",
+   "prop": "Value",
+   "value": "Entities.TicketEventType.AttachmentAdded"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_call30/ActorId",
+   "prop": "Value",
+   "value": "UploaderId"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_call30/FromValue",
+   "prop": "Value",
+   "value": "\"\""
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_call30/ToValue",
+   "prop": "Value",
+   "value": "FileName"
+  },
+  {
+   "op": "set",
+   "target": "$Attachment_Add_call30/Note",
+   "prop": "Value",
+   "value": "\"\""
+  },
+  {
+   "op": "create",
+   "parent": "$Attachment_Add",
+   "type": "IEndNode",
+   "as": "$Attachment_Add_end31"
+  },
+  {
+   "op": "link",
+   "from": "$Attachment_Add_start10",
+   "to": "$Attachment_Add_agg11"
+  },
+  {
+   "op": "link",
+   "from": "$Attachment_Add_agg11",
+   "to": "$Attachment_Add_if12"
+  },
+  {
+   "op": "link",
+   "from": "$Attachment_Add_if12",
+   "to": "$Attachment_Add_if14",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Attachment_Add_if14",
+   "to": "$Attachment_Add_raise15",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Attachment_Add_if14",
+   "to": "$Attachment_Add_if16",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Attachment_Add_if16",
+   "to": "$Attachment_Add_raise17",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Attachment_Add_if16",
+   "to": "$Attachment_Add_asg18",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Attachment_Add_asg18",
+   "to": "$Attachment_Add_call27"
+  },
+  {
+   "op": "link",
+   "from": "$Attachment_Add_call27",
+   "to": "$Attachment_Add_asg28"
+  },
+  {
+   "op": "link",
+   "from": "$Attachment_Add_asg28",
+   "to": "$Attachment_Add_call30"
+  },
+  {
+   "op": "link",
+   "from": "$Attachment_Add_call30",
+   "to": "$Attachment_Add_end31"
+  },
+  {
+   "op": "layout",
+   "target": "$Attachment_Add"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Watcher_Add",
+   "as": "$Watcher_Add"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Add",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Add",
+   "prop": "Description",
+   "value": "Idempotente"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Add",
+   "type": "IInputParameter",
+   "name": "TicketId",
+   "as": "$Watcher_Add_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Add_in1",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Add",
+   "type": "IInputParameter",
+   "name": "UserId",
+   "as": "$Watcher_Add_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Add_in2",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Add",
+   "type": "ILocalVariable",
+   "name": "W",
+   "as": "$Watcher_Add_var3"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Add_var3",
+   "prop": "DataType",
+   "value": "TicketWatcher"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Add",
+   "type": "IStartNode",
+   "as": "$Watcher_Add_start4"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Add",
+   "type": "IAggregateNode",
+   "name": "GetWatcher",
+   "as": "$Watcher_Add_agg5"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Add_agg5",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:TicketWatcher"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Add_agg5",
+   "type": "IFilter",
+   "args": {
+    "condition": "TicketWatcher.TicketId = TicketId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Add_agg5",
+   "type": "IFilter",
+   "args": {
+    "condition": "TicketWatcher.UserId = UserId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Add_agg5",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Add",
+   "type": "IIfNode",
+   "name": "Exists",
+   "as": "$Watcher_Add_if6"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Add_if6",
+   "prop": "Label",
+   "value": "Exists"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Add_if6",
+   "prop": "Condition",
+   "value": "not GetWatcher.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Add",
+   "type": "IAssignNode",
+   "name": "Fill",
+   "as": "$Watcher_Add_asg7"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Add_asg7",
+   "prop": "Label",
+   "value": "Fill"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Add_asg7",
+   "type": "IAssignment",
+   "as": "$Watcher_Add_a8"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Add_a8",
+   "prop": "Variable",
+   "value": "W.TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Add_a8",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Add_asg7",
+   "type": "IAssignment",
+   "as": "$Watcher_Add_a9"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Add_a9",
+   "prop": "Variable",
+   "value": "W.UserId"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Add_a9",
+   "prop": "Value",
+   "value": "UserId"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Add_asg7",
+   "type": "IAssignment",
+   "as": "$Watcher_Add_a10"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Add_a10",
+   "prop": "Variable",
+   "value": "W.AddedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Add_a10",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Add",
+   "type": "IExecuteServerActionNode",
+   "name": "CreateWatcher",
+   "as": "$Watcher_Add_call11"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Add_call11",
+   "prop": "Action",
+   "value": "IEntityActionSignature:CreateTicketWatcher"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Add_call11/Source",
+   "prop": "Value",
+   "value": "W"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Add",
+   "type": "IEndNode",
+   "as": "$Watcher_Add_end12"
+  },
+  {
+   "op": "link",
+   "from": "$Watcher_Add_start4",
+   "to": "$Watcher_Add_agg5"
+  },
+  {
+   "op": "link",
+   "from": "$Watcher_Add_agg5",
+   "to": "$Watcher_Add_if6"
+  },
+  {
+   "op": "link",
+   "from": "$Watcher_Add_if6",
+   "to": "$Watcher_Add_end12",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Watcher_Add_if6",
+   "to": "$Watcher_Add_asg7",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Watcher_Add_asg7",
+   "to": "$Watcher_Add_call11"
+  },
+  {
+   "op": "link",
+   "from": "$Watcher_Add_call11",
+   "to": "$Watcher_Add_end12"
+  },
+  {
+   "op": "layout",
+   "target": "$Watcher_Add"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Watcher_Remove",
+   "as": "$Watcher_Remove"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Remove",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Remove",
+   "prop": "Description",
+   "value": "Idempotente; o requester nunca sai"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Remove",
+   "type": "IInputParameter",
+   "name": "TicketId",
+   "as": "$Watcher_Remove_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Remove_in1",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Remove",
+   "type": "IInputParameter",
+   "name": "UserId",
+   "as": "$Watcher_Remove_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Remove_in2",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Remove",
+   "type": "IStartNode",
+   "as": "$Watcher_Remove_start3"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Remove",
+   "type": "IAggregateNode",
+   "name": "GetTicket",
+   "as": "$Watcher_Remove_agg4"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Remove_agg4",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Remove_agg4",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.Id = TicketId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Remove_agg4",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Remove",
+   "type": "IIfNode",
+   "name": "TicketFound",
+   "as": "$Watcher_Remove_if5"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Remove_if5",
+   "prop": "Label",
+   "value": "TicketFound"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Remove_if5",
+   "prop": "Condition",
+   "value": "not GetTicket.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Remove",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseTicketNotFound",
+   "as": "$Watcher_Remove_raise6"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Remove_raise6",
+   "prop": "Exception",
+   "value": "IUserException:NotFound"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Remove_raise6",
+   "prop": "ExceptionMessage",
+   "value": "\"Ticket not found\""
+  },
+  {
+   "op": "link",
+   "from": "$Watcher_Remove_if5",
+   "to": "$Watcher_Remove_raise6",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Remove",
+   "type": "IIfNode",
+   "name": "IsRequester",
+   "as": "$Watcher_Remove_if7"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Remove_if7",
+   "prop": "Label",
+   "value": "IsRequester"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Remove_if7",
+   "prop": "Condition",
+   "value": "GetTicket.List.Current.Ticket.RequesterId = UserId"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Remove",
+   "type": "IAggregateNode",
+   "name": "GetWatcher",
+   "as": "$Watcher_Remove_agg8"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Remove_agg8",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:TicketWatcher"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Remove_agg8",
+   "type": "IFilter",
+   "args": {
+    "condition": "TicketWatcher.TicketId = TicketId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Remove_agg8",
+   "type": "IFilter",
+   "args": {
+    "condition": "TicketWatcher.UserId = UserId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Remove_agg8",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Remove",
+   "type": "IIfNode",
+   "name": "Exists",
+   "as": "$Watcher_Remove_if9"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Remove_if9",
+   "prop": "Label",
+   "value": "Exists"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Remove_if9",
+   "prop": "Condition",
+   "value": "not GetWatcher.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Remove",
+   "type": "IExecuteServerActionNode",
+   "name": "DeleteWatcher",
+   "as": "$Watcher_Remove_call10"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Remove_call10",
+   "prop": "Action",
+   "value": "IEntityActionSignature:DeleteTicketWatcher"
+  },
+  {
+   "op": "set",
+   "target": "$Watcher_Remove_call10/Id",
+   "prop": "Value",
+   "value": "GetWatcher.List.Current.TicketWatcher.Id"
+  },
+  {
+   "op": "create",
+   "parent": "$Watcher_Remove",
+   "type": "IEndNode",
+   "as": "$Watcher_Remove_end11"
+  },
+  {
+   "op": "link",
+   "from": "$Watcher_Remove_start3",
+   "to": "$Watcher_Remove_agg4"
+  },
+  {
+   "op": "link",
+   "from": "$Watcher_Remove_agg4",
+   "to": "$Watcher_Remove_if5"
+  },
+  {
+   "op": "link",
+   "from": "$Watcher_Remove_if5",
+   "to": "$Watcher_Remove_if7",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Watcher_Remove_if7",
+   "to": "$Watcher_Remove_end11",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Watcher_Remove_if7",
+   "to": "$Watcher_Remove_agg8",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Watcher_Remove_agg8",
+   "to": "$Watcher_Remove_if9"
+  },
+  {
+   "op": "link",
+   "from": "$Watcher_Remove_if9",
+   "to": "$Watcher_Remove_call10",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Watcher_Remove_if9",
+   "to": "$Watcher_Remove_end11",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Watcher_Remove_call10",
+   "to": "$Watcher_Remove_end11"
+  },
+  {
+   "op": "layout",
+   "target": "$Watcher_Remove"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Tag_Apply",
+   "as": "$Tag_Apply"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Apply",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Apply",
+   "prop": "Description",
+   "value": "So tags ativas; idempotente"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Apply",
+   "type": "IInputParameter",
+   "name": "TicketId",
+   "as": "$Tag_Apply_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Apply_in1",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Apply",
+   "type": "IInputParameter",
+   "name": "TagId",
+   "as": "$Tag_Apply_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Apply_in2",
+   "prop": "DataType",
+   "value": "Tag Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Apply",
+   "type": "ILocalVariable",
+   "name": "TT",
+   "as": "$Tag_Apply_var3"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Apply_var3",
+   "prop": "DataType",
+   "value": "TicketTag"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Apply",
+   "type": "IStartNode",
+   "as": "$Tag_Apply_start4"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Apply",
+   "type": "IAggregateNode",
+   "name": "GetTag",
+   "as": "$Tag_Apply_agg5"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Apply_agg5",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Tag"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Apply_agg5",
+   "type": "IFilter",
+   "args": {
+    "condition": "Tag.Id = TagId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Apply_agg5",
+   "type": "IFilter",
+   "args": {
+    "condition": "Tag.IsActive"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Apply_agg5",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Apply",
+   "type": "IIfNode",
+   "name": "TagActive",
+   "as": "$Tag_Apply_if6"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Apply_if6",
+   "prop": "Label",
+   "value": "TagActive"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Apply_if6",
+   "prop": "Condition",
+   "value": "not GetTag.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Apply",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseTag",
+   "as": "$Tag_Apply_raise7"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Apply_raise7",
+   "prop": "Exception",
+   "value": "IUserException:ValidationFailed"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Apply_raise7",
+   "prop": "ExceptionMessage",
+   "value": "\"Tag not found or inactive\""
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Apply",
+   "type": "IAggregateNode",
+   "name": "GetTicketTag",
+   "as": "$Tag_Apply_agg8"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Apply_agg8",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:TicketTag"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Apply_agg8",
+   "type": "IFilter",
+   "args": {
+    "condition": "TicketTag.TicketId = TicketId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Apply_agg8",
+   "type": "IFilter",
+   "args": {
+    "condition": "TicketTag.TagId = TagId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Apply_agg8",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Apply",
+   "type": "IIfNode",
+   "name": "Exists",
+   "as": "$Tag_Apply_if9"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Apply_if9",
+   "prop": "Label",
+   "value": "Exists"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Apply_if9",
+   "prop": "Condition",
+   "value": "not GetTicketTag.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Apply",
+   "type": "IAssignNode",
+   "name": "Fill",
+   "as": "$Tag_Apply_asg10"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Apply_asg10",
+   "prop": "Label",
+   "value": "Fill"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Apply_asg10",
+   "type": "IAssignment",
+   "as": "$Tag_Apply_a11"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Apply_a11",
+   "prop": "Variable",
+   "value": "TT.TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Apply_a11",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Apply_asg10",
+   "type": "IAssignment",
+   "as": "$Tag_Apply_a12"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Apply_a12",
+   "prop": "Variable",
+   "value": "TT.TagId"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Apply_a12",
+   "prop": "Value",
+   "value": "TagId"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Apply",
+   "type": "IExecuteServerActionNode",
+   "name": "CreateTicketTag",
+   "as": "$Tag_Apply_call13"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Apply_call13",
+   "prop": "Action",
+   "value": "IEntityActionSignature:CreateTicketTag"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Apply_call13/Source",
+   "prop": "Value",
+   "value": "TT"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Apply",
+   "type": "IEndNode",
+   "as": "$Tag_Apply_end14"
+  },
+  {
+   "op": "link",
+   "from": "$Tag_Apply_start4",
+   "to": "$Tag_Apply_agg5"
+  },
+  {
+   "op": "link",
+   "from": "$Tag_Apply_agg5",
+   "to": "$Tag_Apply_if6"
+  },
+  {
+   "op": "link",
+   "from": "$Tag_Apply_if6",
+   "to": "$Tag_Apply_raise7",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Tag_Apply_if6",
+   "to": "$Tag_Apply_agg8",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Tag_Apply_agg8",
+   "to": "$Tag_Apply_if9"
+  },
+  {
+   "op": "link",
+   "from": "$Tag_Apply_if9",
+   "to": "$Tag_Apply_end14",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Tag_Apply_if9",
+   "to": "$Tag_Apply_asg10",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Tag_Apply_asg10",
+   "to": "$Tag_Apply_call13"
+  },
+  {
+   "op": "link",
+   "from": "$Tag_Apply_call13",
+   "to": "$Tag_Apply_end14"
+  },
+  {
+   "op": "layout",
+   "target": "$Tag_Apply"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Tag_Remove",
+   "as": "$Tag_Remove"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Remove",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Remove",
+   "prop": "Description",
+   "value": "Idempotente"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Remove",
+   "type": "IInputParameter",
+   "name": "TicketId",
+   "as": "$Tag_Remove_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Remove_in1",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Remove",
+   "type": "IInputParameter",
+   "name": "TagId",
+   "as": "$Tag_Remove_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Remove_in2",
+   "prop": "DataType",
+   "value": "Tag Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Remove",
+   "type": "IStartNode",
+   "as": "$Tag_Remove_start3"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Remove",
+   "type": "IAggregateNode",
+   "name": "GetTicketTag",
+   "as": "$Tag_Remove_agg4"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Remove_agg4",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:TicketTag"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Remove_agg4",
+   "type": "IFilter",
+   "args": {
+    "condition": "TicketTag.TicketId = TicketId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Remove_agg4",
+   "type": "IFilter",
+   "args": {
+    "condition": "TicketTag.TagId = TagId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Remove_agg4",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Remove",
+   "type": "IIfNode",
+   "name": "Exists",
+   "as": "$Tag_Remove_if5"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Remove_if5",
+   "prop": "Label",
+   "value": "Exists"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Remove_if5",
+   "prop": "Condition",
+   "value": "not GetTicketTag.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Remove",
+   "type": "IExecuteServerActionNode",
+   "name": "DeleteTicketTag",
+   "as": "$Tag_Remove_call6"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Remove_call6",
+   "prop": "Action",
+   "value": "IEntityActionSignature:DeleteTicketTag"
+  },
+  {
+   "op": "set",
+   "target": "$Tag_Remove_call6/Id",
+   "prop": "Value",
+   "value": "GetTicketTag.List.Current.TicketTag.Id"
+  },
+  {
+   "op": "create",
+   "parent": "$Tag_Remove",
+   "type": "IEndNode",
+   "as": "$Tag_Remove_end7"
+  },
+  {
+   "op": "link",
+   "from": "$Tag_Remove_start3",
+   "to": "$Tag_Remove_agg4"
+  },
+  {
+   "op": "link",
+   "from": "$Tag_Remove_agg4",
+   "to": "$Tag_Remove_if5"
+  },
+  {
+   "op": "link",
+   "from": "$Tag_Remove_if5",
+   "to": "$Tag_Remove_call6",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Tag_Remove_if5",
+   "to": "$Tag_Remove_end7",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Tag_Remove_call6",
+   "to": "$Tag_Remove_end7"
+  },
+  {
+   "op": "layout",
+   "target": "$Tag_Remove"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "CannedResponse_Render",
+   "as": "$CannedResponse_Render"
+  },
+  {
+   "op": "set",
+   "target": "$CannedResponse_Render",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$CannedResponse_Render",
+   "prop": "Description",
+   "value": "Substitui {RequesterName}, {TicketNumber} e {AgentName}"
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render",
+   "type": "IInputParameter",
+   "name": "CannedResponseId",
+   "as": "$CannedResponse_Render_in1"
+  },
+  {
+   "op": "set",
+   "target": "$CannedResponse_Render_in1",
+   "prop": "DataType",
+   "value": "CannedResponse Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render",
+   "type": "IInputParameter",
+   "name": "TicketId",
+   "as": "$CannedResponse_Render_in2"
+  },
+  {
+   "op": "set",
+   "target": "$CannedResponse_Render_in2",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render",
+   "type": "IOutputParameter",
+   "name": "Body",
+   "as": "$CannedResponse_Render_out3"
+  },
+  {
+   "op": "set",
+   "target": "$CannedResponse_Render_out3",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render",
+   "type": "IStartNode",
+   "as": "$CannedResponse_Render_start4"
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render",
+   "type": "IAggregateNode",
+   "name": "GetCanned",
+   "as": "$CannedResponse_Render_agg5"
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render_agg5",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:CannedResponse"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render_agg5",
+   "type": "IFilter",
+   "args": {
+    "condition": "CannedResponse.Id = CannedResponseId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$CannedResponse_Render_agg5",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render",
+   "type": "IIfNode",
+   "name": "CannedResponseFound",
+   "as": "$CannedResponse_Render_if6"
+  },
+  {
+   "op": "set",
+   "target": "$CannedResponse_Render_if6",
+   "prop": "Label",
+   "value": "CannedResponseFound"
+  },
+  {
+   "op": "set",
+   "target": "$CannedResponse_Render_if6",
+   "prop": "Condition",
+   "value": "not GetCanned.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseCannedResponseNotFound",
+   "as": "$CannedResponse_Render_raise7"
+  },
+  {
+   "op": "set",
+   "target": "$CannedResponse_Render_raise7",
+   "prop": "Exception",
+   "value": "IUserException:NotFound"
+  },
+  {
+   "op": "set",
+   "target": "$CannedResponse_Render_raise7",
+   "prop": "ExceptionMessage",
+   "value": "\"CannedResponse not found\""
+  },
+  {
+   "op": "link",
+   "from": "$CannedResponse_Render_if6",
+   "to": "$CannedResponse_Render_raise7",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render",
+   "type": "IAggregateNode",
+   "name": "GetTicket",
+   "as": "$CannedResponse_Render_agg8"
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render_agg8",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render_agg8",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.Id = TicketId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$CannedResponse_Render_agg8",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render",
+   "type": "IIfNode",
+   "name": "TicketFound",
+   "as": "$CannedResponse_Render_if9"
+  },
+  {
+   "op": "set",
+   "target": "$CannedResponse_Render_if9",
+   "prop": "Label",
+   "value": "TicketFound"
+  },
+  {
+   "op": "set",
+   "target": "$CannedResponse_Render_if9",
+   "prop": "Condition",
+   "value": "not GetTicket.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseTicketNotFound",
+   "as": "$CannedResponse_Render_raise10"
+  },
+  {
+   "op": "set",
+   "target": "$CannedResponse_Render_raise10",
+   "prop": "Exception",
+   "value": "IUserException:NotFound"
+  },
+  {
+   "op": "set",
+   "target": "$CannedResponse_Render_raise10",
+   "prop": "ExceptionMessage",
+   "value": "\"Ticket not found\""
+  },
+  {
+   "op": "link",
+   "from": "$CannedResponse_Render_if9",
+   "to": "$CannedResponse_Render_raise10",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render",
+   "type": "IAggregateNode",
+   "name": "GetRequester",
+   "as": "$CannedResponse_Render_agg11"
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render_agg11",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IEntitySignature:User"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render_agg11",
+   "type": "IFilter",
+   "args": {
+    "condition": "User.Id = GetTicket.List.Current.Ticket.RequesterId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$CannedResponse_Render_agg11",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render",
+   "type": "IAggregateNode",
+   "name": "GetAgent",
+   "as": "$CannedResponse_Render_agg12"
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render_agg12",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IEntitySignature:User"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render_agg12",
+   "type": "IFilter",
+   "args": {
+    "condition": "User.Id = GetTicket.List.Current.Ticket.AssigneeId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$CannedResponse_Render_agg12",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render",
+   "type": "IAssignNode",
+   "name": "Render",
+   "as": "$CannedResponse_Render_asg13"
+  },
+  {
+   "op": "set",
+   "target": "$CannedResponse_Render_asg13",
+   "prop": "Label",
+   "value": "Render"
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render_asg13",
+   "type": "IAssignment",
+   "as": "$CannedResponse_Render_a14"
+  },
+  {
+   "op": "set",
+   "target": "$CannedResponse_Render_a14",
+   "prop": "Variable",
+   "value": "Body"
+  },
+  {
+   "op": "set",
+   "target": "$CannedResponse_Render_a14",
+   "prop": "Value",
+   "value": "Replace(Replace(Replace(GetCanned.List.Current.CannedResponse.Body, \"{RequesterName}\", If(GetRequester.List.Empty, \"\", GetRequester.List.Current.User.Name)), \"{TicketNumber}\", GetTicket.List.Current.Ticket.Number), \"{AgentName}\", If(GetAgent.List.Empty, \"\", GetAgent.List.Current.User.Name))"
+  },
+  {
+   "op": "create",
+   "parent": "$CannedResponse_Render",
+   "type": "IEndNode",
+   "as": "$CannedResponse_Render_end15"
+  },
+  {
+   "op": "link",
+   "from": "$CannedResponse_Render_start4",
+   "to": "$CannedResponse_Render_agg5"
+  },
+  {
+   "op": "link",
+   "from": "$CannedResponse_Render_agg5",
+   "to": "$CannedResponse_Render_if6"
+  },
+  {
+   "op": "link",
+   "from": "$CannedResponse_Render_if6",
+   "to": "$CannedResponse_Render_agg8",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$CannedResponse_Render_agg8",
+   "to": "$CannedResponse_Render_if9"
+  },
+  {
+   "op": "link",
+   "from": "$CannedResponse_Render_if9",
+   "to": "$CannedResponse_Render_agg11",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$CannedResponse_Render_agg11",
+   "to": "$CannedResponse_Render_agg12"
+  },
+  {
+   "op": "link",
+   "from": "$CannedResponse_Render_agg12",
+   "to": "$CannedResponse_Render_asg13"
+  },
+  {
+   "op": "link",
+   "from": "$CannedResponse_Render_asg13",
+   "to": "$CannedResponse_Render_end15"
+  },
+  {
+   "op": "layout",
+   "target": "$CannedResponse_Render"
+  }
+ ]
+}

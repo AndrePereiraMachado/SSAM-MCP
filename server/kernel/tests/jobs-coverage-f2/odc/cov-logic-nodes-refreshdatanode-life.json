@@ -1,0 +1,161 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.Logic.Nodes.IRefreshDataNode (odc) em lgScreenActionFlowData. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedAction",
+   "element": "WrightFlood (ESpace) / MainFlow (MobileFlow) / CovSScreen (MobileScreen) / CovSAction (ScreenAction)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "CovSScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IDataAction",
+   "name": "CovSData",
+   "as": "$da"
+  },
+  {
+   "op": "set",
+   "target": "$da/Out1",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$da",
+   "type": "IStartNode",
+   "as": "$ds0"
+  },
+  {
+   "op": "create",
+   "parent": "$da",
+   "type": "IEndNode",
+   "as": "$ds9"
+  },
+  {
+   "op": "create",
+   "parent": "$da",
+   "type": "IAssignNode",
+   "as": "$dsa"
+  },
+  {
+   "op": "set",
+   "target": "$dsa",
+   "prop": "Label",
+   "value": "CovSAssign"
+  },
+  {
+   "op": "create",
+   "parent": "$dsa",
+   "type": "IAssignment",
+   "as": "$dsg"
+  },
+  {
+   "op": "set",
+   "target": "$dsg",
+   "prop": "Variable",
+   "value": "Out1"
+  },
+  {
+   "op": "set",
+   "target": "$dsg",
+   "prop": "Value",
+   "value": "\"x\""
+  },
+  {
+   "op": "link",
+   "from": "$ds0",
+   "to": "$dsa"
+  },
+  {
+   "op": "link",
+   "from": "$dsa",
+   "to": "$ds9"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAction",
+   "name": "CovSAction",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IRefreshDataNode",
+   "as": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "DataSource",
+   "value": "$da"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$a"
+  },
+  {
+   "op": "link",
+   "from": "$a",
+   "connector": "Target",
+   "to": "$fe"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "link",
+   "from": "$a",
+   "connector": "Target",
+   "to": "$b"
+  },
+  {
+   "op": "link",
+   "from": "$b",
+   "connector": "Target",
+   "to": "$fe"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "x": 600,
+   "y": 400
+  }
+ ]
+}

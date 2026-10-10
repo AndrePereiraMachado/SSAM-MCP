@@ -1,0 +1,616 @@
+{
+ "schemaVersion": "ssam-discovery-fragment/1",
+ "contract": "ssam-catalog-contribution/1",
+ "front": "B",
+ "title": "Themes (CSS halves), scripts, resources and module images",
+ "reviewedAt": "2026-09-23",
+ "synonyms": {},
+ "capabilities": [
+  {
+   "id": "ui.theme-css",
+   "supersedes": [
+    "ui.theme-css"
+   ],
+   "category": "ui",
+   "title": "Theme CSS (three halves) and the theme of a UI flow",
+   "keywords": [
+    "css",
+    "theme",
+    "stylesheet",
+    "style",
+    "theme editor",
+    "base theme"
+   ],
+   "summary": "`set StyleSheet` on a theme writes the author half (the Theme Editor CSS is a separate half; the effective sheet is generated + author): read the three halves with get first. A theme is created with a BaseTheme and assigned to a UI flow (`set $flow Theme`). Screens and blocks have their own StyleSheet (ui.screen, ui.block).",
+   "route": {
+    "kind": "job",
+    "operation": "get IMobileTheme:X (three halves) then set StyleSheet with the whole author text; create IMobileTheme + set BaseTheme; set IMobileFlow:<Flow> Theme"
+   },
+   "contract": [
+    "verbs.verbs.set",
+    "verbs.verbs.get",
+    "verbs.verbs.create"
+   ],
+   "depends": [],
+   "alternatives": [
+    {
+     "id": "ui.html-visual",
+     "when": "the CSS belongs to a fragment: `<style>` is installed under the fragment class"
+    }
+   ],
+   "guidance": "Prefer the classes the theme and OutSystemsUI already provide (Style on widgets) and keep custom CSS in the author half or in the screen/block StyleSheet; this is a recommendation, not a platform rule.",
+   "example": {
+    "ops": [
+     "get",
+     "set"
+    ],
+    "max": 4
+   },
+   "elements": [
+    {
+     "role": "theme",
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.UI.Mobile.IMobileTheme",
+       "jobType": "IMobileTheme",
+       "address": "IMobileTheme:<Name>"
+      },
+      "o11": {
+       "native": "OutSystems.Model.UI.Mobile.IMobileTheme",
+       "jobType": "IMobileTheme",
+       "address": "IMobileTheme:<Name>"
+      }
+     }
+    }
+   ],
+   "operations": {
+    "create": {
+     "route": "create {parent: @espace, type: IMobileTheme, name}; set BaseTheme",
+     "preconditions": [],
+     "roles": {
+      "theme": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "theme-script-resource"
+        ],
+        "scope": "a theme based on the module theme, assigned to a new flow"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-theme-resource"
+        ],
+        "scope": "cat-b-theme-resource: create (op 0)"
+       }
+      }
+     }
+    },
+    "set": {
+     "route": "set {target: IMobileTheme:<Name>, prop: StyleSheet|BaseTheme|Description, value}",
+     "preconditions": [
+      "StyleSheet replaces the whole author half: read it first and append"
+     ],
+     "roles": {
+      "theme": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "theme-css-halves",
+         "theme-script-resource"
+        ],
+        "scope": "StyleSheet of the author half (theme-css-halves); BaseTheme, Description and StyleSheet of a new theme (theme-script-resource)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-theme-resource"
+        ],
+        "scope": "cat-b-theme-resource: set BaseTheme, StyleSheet, Description (ops 2-3)"
+       }
+      }
+     }
+    },
+    "read": {
+     "route": "get IMobileTheme:<Name> (the three CSS halves)",
+     "preconditions": [],
+     "roles": {
+      "theme": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "theme-css-halves"
+        ],
+        "scope": "generated, Theme Editor and author halves read back"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "html-visual-alert"
+        ],
+        "scope": "get of the module theme (html-visual-alert); the O11 fixture theme has no Theme Editor CSS"
+       }
+      }
+     }
+    },
+    "usages": {
+     "route": "usages {target}",
+     "preconditions": [],
+     "roles": {
+      "theme": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "theme-script-resource"
+        ],
+        "scope": "usages of a new theme: 1 real consumer, the UI flow whose Theme was set"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-theme-resource"
+        ],
+        "scope": "cat-b-theme-resource: usages (op 25), consumers 1"
+       }
+      }
+     }
+    }
+   },
+   "platforms": {
+    "odc": {
+     "proofs": [
+      "theme-css-halves",
+      "theme-css-reload",
+      "theme-script-resource",
+      "screen-block-edit"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "Theme"
+      ]
+     },
+     "limits": [
+      {
+       "text": "Writing StyleSheet replaces the author CSS: read the three halves first to append. A CSS-only feature must still carry an element stamped by the snapshot author or the manifest gate refuses (audit T1 CSS episode).",
+       "origin": "kernel/docs/NAO-DA.md 'CSS do tema (set de StyleSheet)' (line 1006); PrepareManifest.cs gate"
+      }
+     ],
+     "differences": []
+    },
+    "o11": {
+     "proofs": [
+      "html-visual-alert",
+      "cat-b-theme-resource"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "Theme"
+      ]
+     },
+     "limits": [
+      {
+       "text": "The theme CSS is stored the same way on O11 and ODC (NAO-DA); the O11 fixture theme has no Theme Editor CSS and no O11 suite job writes a theme StyleSheet.",
+       "origin": "kernel/docs/NAO-DA.md 'CSS do tema (set de StyleSheet)' (line 1006); kernel/docs/tasks/2026-09-17-ws1-diferencas.md:34-38"
+      }
+     ],
+     "differences": []
+    }
+   }
+  },
+  {
+   "id": "ui.script-resource",
+   "supersedes": [
+    "ui.script-resource"
+   ],
+   "category": "ui",
+   "title": "Scripts (JS files), resources, required scripts and module images",
+   "keywords": [
+    "script",
+    "javascript file",
+    "resource",
+    "required scripts",
+    "static file",
+    "asset",
+    "module image"
+   ],
+   "summary": "IScript with JavaScript (linked to screens by `link $scr RequiredScripts $script`), IResource with TargetDirectory/DeployAction (its binary content is read-only), module images (IImage) referenced by name; RuntimePath is derived and follows renames. A JavaScript node inside a client action is logic, not a script file.",
+   "route": {
+    "kind": "job",
+    "operation": "create IScript|IResource; set JavaScript/TargetDirectory/DeployAction; link <screen> RequiredScripts <script>; rename/replace/delete by path"
+   },
+   "contract": [
+    "verbs.verbs.create",
+    "verbs.verbs.set",
+    "verbs.verbs.link",
+    "verbs.verbs.rename",
+    "verbs.verbs.replace",
+    "verbs.verbs.delete",
+    "verbs.verbs.usages"
+   ],
+   "depends": [],
+   "alternatives": [],
+   "guidance": "Prefer a native widget or an OutSystemsUI pattern over custom JavaScript when one exists; custom JS stays in a script or a client action JavaScript node with declared inputs (a recommendation, not a platform rule).",
+   "example": {
+    "ops": [
+     "create",
+     "set"
+    ],
+    "max": 12
+   },
+   "elements": [
+    {
+     "role": "script",
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.UI.IScript",
+       "jobType": "IScript",
+       "address": "IScript:<Name>"
+      },
+      "o11": {
+       "native": "OutSystems.Model.UI.IScript",
+       "jobType": "IScript",
+       "address": "IScript:<Name>"
+      }
+     }
+    },
+    {
+     "role": "resource",
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.Data.IResource",
+       "jobType": "IResource",
+       "address": "IResource:<Name>"
+      },
+      "o11": {
+       "native": "OutSystems.Model.Data.IResource",
+       "jobType": "IResource",
+       "address": "IResource:<Name>"
+      }
+     }
+    },
+    {
+     "role": "module image",
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.UI.IImage",
+       "jobType": "IImage",
+       "address": "IImage:<Name>"
+      },
+      "o11": {
+       "native": "OutSystems.Model.UI.IImage",
+       "jobType": "IImage",
+       "address": "IImage:<Name>"
+      }
+     }
+    }
+   ],
+   "operations": {
+    "create": {
+     "route": "create {parent: @espace, type: IScript|IResource, name}",
+     "preconditions": [
+      "IResource: write TargetDirectory after DeployAction or the platform discards it"
+     ],
+     "roles": {
+      "script": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "theme-script-resource"
+        ]
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "rename-logic-propagation"
+        ]
+       }
+      },
+      "resource": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "theme-script-resource"
+        ],
+        "scope": "an empty resource (no binary content) with TargetDirectory and DeployAction"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-theme-resource"
+        ],
+        "scope": "cat-b-theme-resource: create (op 7)"
+       }
+      },
+      "module image": {
+       "odc": {
+        "status": "not-applicable",
+        "note": "IImage creation needs binary content (byte[] overloads) the kernel does not expose: limit of the kernel on both lanes (kernel/docs/NAO-DA.md IImage)",
+        "alternative": "import the image in the Studio and reference it by name (html-visual <img src>, image widget)"
+       },
+       "o11": {
+        "status": "not-applicable",
+        "note": "kernel limit on both lanes (kernel/docs/NAO-DA.md IImage)",
+        "alternative": "import the image in the Studio and reference it by name"
+       }
+      }
+     }
+    },
+    "set": {
+     "route": "set {target, prop: JavaScript|Description|Public|TargetDirectory|DeployAction, value}; link {from: <screen>, connector: RequiredScripts, to: <script>}",
+     "preconditions": [
+      "ResourceContent is read-only in the Model API V1"
+     ],
+     "roles": {
+      "script": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "theme-script-resource",
+         "resource-script-lifecycle"
+        ],
+        "scope": "JavaScript, Description (theme-script-resource); Public (resource-script-lifecycle)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "rename-logic-propagation"
+        ],
+        "scope": "JavaScript, Description"
+       }
+      },
+      "resource": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "theme-script-resource",
+         "resource-script-lifecycle"
+        ],
+        "scope": "DeployAction, TargetDirectory, Description (theme-script-resource); Public (resource-script-lifecycle)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-theme-resource"
+        ],
+        "scope": "cat-b-theme-resource: set DeployAction, TargetDirectory, Description, Public (ops 9-10, 29, 31, 33)"
+       }
+      }
+     }
+    },
+    "read": {
+     "route": "get/dump by path",
+     "preconditions": [],
+     "roles": {
+      "script": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "theme-script-resource",
+         "resource-script-lifecycle"
+        ],
+        "scope": "get of the script after create and after rename/replace (theme-script-resource, resource-script-lifecycle)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "rename-logic-propagation"
+        ],
+        "scope": "get of the script after rename"
+       }
+      },
+      "resource": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "resource-script-lifecycle",
+         "theme-script-resource"
+        ],
+        "scope": "get of the resource (DeployAction, TargetDirectory) after the writes"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-theme-resource"
+        ],
+        "scope": "cat-b-theme-resource: get (ops 26, 30, 32, 35, 37, 60)"
+       }
+      }
+     }
+    },
+    "usages": {
+     "route": "usages {target}",
+     "preconditions": [],
+     "roles": {
+      "script": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "resource-script-lifecycle",
+         "theme-script-resource"
+        ],
+        "scope": "screens that require the script"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "rename-logic-propagation"
+        ],
+        "scope": "idem"
+       }
+      },
+      "resource": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "resource-script-lifecycle"
+        ]
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-theme-resource"
+        ],
+        "scope": "cat-b-theme-resource: usages (ops 27, 38), consumers 0 -> 0"
+       }
+      }
+     }
+    },
+    "rename": {
+     "route": "rename {target, name}",
+     "preconditions": [],
+     "roles": {
+      "script": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "resource-script-lifecycle",
+         "rename-logic-propagation"
+        ],
+        "scope": "RequiredScripts consumers follow by key; RuntimePath is derived"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "rename-logic-propagation"
+        ],
+        "scope": "idem"
+       }
+      },
+      "resource": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "resource-script-lifecycle"
+        ]
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-theme-resource"
+        ],
+        "scope": "cat-b-theme-resource: rename (op 36)"
+       }
+      }
+     }
+    },
+    "replace": {
+     "route": "replace {from: <script>, to: <script>}",
+     "preconditions": [],
+     "roles": {
+      "script": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "resource-script-lifecycle"
+        ],
+        "scope": "RequiredScripts consumers repointed"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-theme-resource"
+        ],
+        "scope": "cat-b-theme-resource: replace (op 52)"
+       }
+      }
+     }
+    },
+    "delete": {
+     "route": "usages then delete",
+     "preconditions": [],
+     "roles": {
+      "script": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "resource-script-lifecycle"
+        ],
+        "scope": "after the replace, without consumers"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-theme-resource"
+        ],
+        "scope": "cat-b-theme-resource: delete (op 55), no force, brokenConsumers 0"
+       }
+      }
+     }
+    }
+   },
+   "platforms": {
+    "odc": {
+     "proofs": [
+      "theme-script-resource",
+      "resource-script-lifecycle",
+      "rename-logic-propagation"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "Script",
+       "Resource"
+      ]
+     },
+     "limits": [
+      {
+       "text": "ResourceContent is read-only in the Model API V1 (binary content cannot be written by jobs); write TargetDirectory after DeployAction or the platform discards it. Module images (IImage) are not created by jobs.",
+       "origin": "job:resource-script-lifecycle description; job:theme-script-resource; kernel/docs/NAO-DA.md"
+      }
+     ],
+     "differences": []
+    },
+    "o11": {
+     "proofs": [
+      "rename-logic-propagation",
+      "client-js-reactive",
+      "cat-b-theme-resource"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "Script",
+       "Resource"
+      ]
+     },
+     "limits": [
+      {
+       "text": "IResource.ResourceContent is read-only and module images need binary content: both are imported in the Studio (kernel limit on both lanes).",
+       "origin": "kernel/docs/NAO-DA.md IResource.ResourceContent, IImage"
+      }
+     ],
+     "differences": []
+    }
+   }
+  }
+ ],
+ "unavailable": [
+  {
+   "id": "module-image",
+   "supersedes": [
+    "module-image"
+   ],
+   "lanes": [
+    "odc",
+    "o11"
+   ],
+   "keywords": [
+    "image",
+    "imagem",
+    "picture",
+    "logo",
+    "icon file"
+   ],
+   "reason": "Module images (IImage) are not created by jobs: the Model API needs the binary content (byte[] overloads) and the kernel does not expose it; IResource.ResourceContent is read-only. Stated as a kernel limit on both lanes.",
+   "evidence": "kernel/docs/NAO-DA.md IImage (limite-do-kernel, both lanes); tests/jobs-odc/theme-script-resource.json description",
+   "negative": {
+    "odc": [],
+    "o11": []
+   },
+   "alternative": "import the image in the Studio and reference it by name (html-visual <img src>, image widget)"
+  }
+ ],
+ "coverage": []
+}

@@ -1,0 +1,43 @@
+{
+ "description": "ODC (cobertura C): o logic-spec-services.json espelhado na faixa ODC sobre o modelo do data-full-model. Uma action publica com TODAS as formas de passo (get com where e sort, if com raise, foreach com assign, save e call, assign final) e a helper que ela chama, para provar tambem a ordem por dependencia do compilador.",
+ "base": "job:data-full-model",
+ "expectValid": true,
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCov_Project_CloseOpenTasks (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IUserException", "name": "WfCovNotFound", "as": "$exc"},
+  {"op": "logic", "data": {"actions": [
+   {
+    "name": "WfCov_Project_CloseOpenTasks",
+    "kind": "server",
+    "description": "Cobertura C: fecha as tarefas abertas de um projeto (todas as formas de passo da spec de logica)",
+    "inputs": [{"name": "ProjectId", "type": "WfCovProject Identifier"}],
+    "outputs": [{"name": "Summary", "type": "WfCovProjectSummary"}],
+    "vars": [{"name": "T", "type": "WfCovTask"}],
+    "steps": [
+     {"get": "WfCovProject", "as": "GetProject", "where": "WfCovProject.Id = ProjectId", "max": 1},
+     {"if": "GetProject.List.Empty", "as": "ProjectExists", "then": [{"raise": "WfCovNotFound", "message": "\"Project not found\""}]},
+     {"get": "WfCovTask", "as": "GetOpenOfProject", "where": ["WfCovTask.ProjectId = ProjectId", "WfCovTask.IsDone = False"], "sort": ["WfCovTask.DueOn", "Ascending"]},
+     {"foreach": "GetOpenOfProject.List", "as": "EachOpen", "do": [
+      {"assign": {"T": "GetOpenOfProject.List.Current.WfCovTask", "T.IsDone": "True"}, "as": "CloseTask"},
+      {"save": "WfCovTask", "record": "T", "as": "SaveTask"},
+      {"call": "WfCov_Task_Describe", "as": "Describe", "args": {"TaskId": "GetOpenOfProject.List.Current.WfCovTask.Id"}}
+     ]},
+     {"assign": {"Summary.ProjectName": "GetProject.List.Current.WfCovProject.Name", "Summary.OpenTasks": "GetOpenOfProject.Count"}, "as": "SetSummary"}
+    ]
+   },
+   {
+    "name": "WfCov_Task_Describe",
+    "kind": "server",
+    "description": "Cobertura C: helper chamada pelo foreach; prova a ordem por dependencia (declarada depois de quem a chama)",
+    "inputs": [{"name": "TaskId", "type": "WfCovTask Identifier"}],
+    "outputs": [{"name": "Title", "type": "Text"}, {"name": "Found", "type": "Boolean"}],
+    "steps": [
+     {"get": "WfCovTask", "as": "GetTask", "where": "WfCovTask.Id = TaskId", "max": 1},
+     {"if": "GetTask.List.Empty", "as": "TaskExists", "then": [{"assign": {"Found": "False", "Title": "\"\""}, "as": "NotFound"}], "else": [{"assign": {"Found": "True", "Title": "GetTask.List.Current.WfCovTask.Title"}, "as": "Describe"}]}
+    ]
+   }
+  ]}},
+  {"op": "find", "name": "WfCov_Project_CloseOpenTasks"},
+  {"op": "usages", "target": "IServerAction:WfCov_Task_Describe", "_why": "a helper tem de ter o consumidor criado dentro do foreach"}
+ ]
+}

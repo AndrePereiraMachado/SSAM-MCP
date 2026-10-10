@@ -1,0 +1,19 @@
+{
+ "description": "ChatMessage (OutSystemsUI, Content) tipico; inputs obrigatorios MessageStatus ligados a variaveis da tela; placeholders Image, Content com dados do aggregate de tarefas.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "MessageStatusValue", "as": "$vMessageStatusValue"},
+  {"op": "set", "target": "$vMessageStatusValue", "prop": "DataType", "value": "MessageStatus Identifier"},
+  {"op": "set", "target": "$vMessageStatusValue", "prop": "DefaultValue", "value": "Entities.MessageStatus.Received"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetShowcaseTasks", "as": "$tasks"},
+  {"op": "create", "parent": "$tasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ChatMessageDemo", "source": "IMobileBlock:ChatMessage", "as": "$b"},
+  {"op": "set", "target": "$b/MessageStatus", "prop": "Value", "value": "MessageStatusValue"},
+  {"op": "create", "parent": "$b/Image", "type": "IExpression", "as": "$ph1"},
+  {"op": "set", "target": "$ph1", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/Content", "type": "IExpression", "as": "$ph2"},
+  {"op": "set", "target": "$ph2", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""}
+ ]
+}

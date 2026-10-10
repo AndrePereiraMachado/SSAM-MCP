@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    CLI da faixa ODC: os mesmos subcomandos finos do `anvil` (um JSON por comando), mas sobre Anvil.Core.Odc, ou seja,
+    o mesmo kernel compilado contra o ODC Studio. Nunca escreve na instalacao do Studio. O `anvil` (SS11) nao serve
+    aqui: o seu Program.cs usa tipos so-SS11 (HeadlessSession, Publisher, BridgeClient, MergeProbe).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>anvil-odc</AssemblyName>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Anvil.Core.Odc\Anvil.Core.Odc.csproj" />
+  </ItemGroup>
+</Project>

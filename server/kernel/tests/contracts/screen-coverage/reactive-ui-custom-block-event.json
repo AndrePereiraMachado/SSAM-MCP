@@ -1,0 +1,142 @@
+{
+  "fixture": "reactive-ui",
+  "features": [
+    "custom-block",
+    "block-input",
+    "block-event",
+    "event-argument",
+    "forward-owner"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Host",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "vars": [
+          {
+            "name": "SelectedValue",
+            "type": "Integer"
+          }
+        ],
+        "widgets": [
+          {
+            "name": "Counter1",
+            "type": "IMobileBlockInstanceWidget",
+            "source": "IMobileBlock:ContractCounter",
+            "args": {
+              "Value": "7"
+            },
+            "events": {
+              "Selected": {
+                "destination": "IMobileScreen:Host/CounterSelected",
+                "args": {
+                  "Value": "Value"
+                }
+              }
+            }
+          },
+          {
+            "name": "SelectedText",
+            "type": "IExpression",
+            "properties": {
+              "Value": "SelectedValue"
+            }
+          }
+        ]
+      },
+      {
+        "name": "ContractCounter",
+        "type": "IMobileBlock",
+        "flow": "MainFlow",
+        "inputs": [
+          {
+            "name": "Value",
+            "type": "Integer",
+            "default": "0"
+          }
+        ],
+        "blockEvents": [
+          {
+            "name": "Selected",
+            "mandatory": true,
+            "inputs": [
+              {
+                "name": "Value",
+                "type": "Integer"
+              }
+            ]
+          }
+        ],
+        "widgets": [
+          {
+            "name": "Choose",
+            "type": "IButton",
+            "children": [
+              {
+                "name": "Text",
+                "type": "IExpression",
+                "properties": {
+                  "Value": "Value"
+                }
+              }
+            ],
+            "events": {
+              "OnClick": {
+                "destination": "IMobileBlock:ContractCounter/CounterPressed"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "name": "CounterPressed",
+          "kind": "screen",
+          "owner": "IMobileBlock:ContractCounter",
+          "steps": [
+            {
+              "node": "ITriggerNode",
+              "as": "Notify",
+              "properties": {
+                "Event": "IMobileBlock:ContractCounter/Selected",
+                "Description": ""
+              },
+              "args": {
+                "Value": "Value"
+              }
+            }
+          ]
+        },
+        {
+          "name": "CounterSelected",
+          "kind": "screen",
+          "owner": "IMobileScreen:Host",
+          "inputs": [
+            {
+              "name": "Value",
+              "type": "Integer"
+            }
+          ],
+          "steps": [
+            {
+              "assign": {
+                "SelectedValue": "Value"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IMobileScreen:Host/Counter1/Value",
+    "prop": "Value",
+    "value": "9"
+  }
+}

@@ -1,0 +1,30 @@
+{
+ "description": "DropdownServerSideItem (OutSystemsUI, Advanced) tipico; inputs obrigatorios ItemId ligados a variaveis da tela; criado vazio e preenchido com conteudo proprio; placeholders DropdownItemContent com dados do aggregate de tarefas; eventos OnSelected, Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "ItemIdValue", "as": "$vItemIdValue"},
+  {"op": "set", "target": "$vItemIdValue", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$vItemIdValue", "prop": "DefaultValue", "value": "\"1\""},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastDropdownServerSideItemId", "as": "$vLastDropdownServerSideItemId"},
+  {"op": "set", "target": "$vLastDropdownServerSideItemId", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastItemOptionId", "as": "$vLastItemOptionId"},
+  {"op": "set", "target": "$vLastItemOptionId", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastDropdownServerSideId", "as": "$vLastDropdownServerSideId"},
+  {"op": "set", "target": "$vLastDropdownServerSideId", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetShowcaseTasks", "as": "$tasks"},
+  {"op": "create", "parent": "$tasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "logic", "data": {"actions": [{"name": "DropdownServerSideItemDemoOnSelected", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de OnSelected", "inputs": [{"name": "DropdownServerSideItemId", "type": "Text"}, {"name": "ItemOptionId", "type": "Text"}, {"name": "DropdownServerSideId", "type": "Text"}],"steps": [{"assign": {"LastDropdownServerSideItemId": "DropdownServerSideItemId", "LastItemOptionId": "ItemOptionId", "LastDropdownServerSideId": "DropdownServerSideId"},"as": "KeepOnSelected"}]}, {"name": "DropdownServerSideItemDemoInitialized", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de Initialized", "inputs": [{"name": "DropdownServerSideItemId", "type": "Text"}],"steps": [{"assign": {"LastDropdownServerSideItemId": "DropdownServerSideItemId"},"as": "KeepInitialized"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "DropdownServerSideItemDemo", "source": "IMobileBlock:DropdownServerSideItem", "empty": true,"as": "$b"},
+  {"op": "set", "target": "$b/ItemId", "prop": "Value", "value": "ItemIdValue"},
+  {"op": "set", "target": "$b/OnSelected", "prop": "Handler", "value": "IScreenAction:DropdownServerSideItemDemoOnSelected"},
+  {"op": "set", "target": "$b/OnSelected/DropdownServerSideItemId", "prop": "Value", "value": "DropdownServerSideItemId"},
+  {"op": "set", "target": "$b/OnSelected/ItemOptionId", "prop": "Value", "value": "ItemOptionId"},
+  {"op": "set", "target": "$b/OnSelected/DropdownServerSideId", "prop": "Value", "value": "DropdownServerSideId"},
+  {"op": "set", "target": "$b/Initialized", "prop": "Handler", "value": "IScreenAction:DropdownServerSideItemDemoInitialized"},
+  {"op": "set", "target": "$b/Initialized/DropdownServerSideItemId", "prop": "Value", "value": "DropdownServerSideItemId"},
+  {"op": "create", "parent": "$b/DropdownItemContent", "type": "IExpression", "as": "$ph1"},
+  {"op": "set", "target": "$ph1", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""}
+ ]
+}

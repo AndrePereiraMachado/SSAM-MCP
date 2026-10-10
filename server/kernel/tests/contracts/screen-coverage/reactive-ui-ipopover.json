@@ -1,0 +1,56 @@
+{
+  "fixture": "reactive-ui",
+  "features": [
+    "native-widget",
+    "mobile:IPopover"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Subject",
+            "type": "IPopover",
+            "properties": {
+              "Style": "\"coverage\""
+            },
+            "slots": {
+              "TopContent": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Top"
+                  }
+                }
+              ],
+              "BottomContent": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Bottom"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "mutation": {
+    "target": "IMobileScreen:Coverage/Subject",
+    "prop": "Style",
+    "value": "\"changed\""
+  }
+}

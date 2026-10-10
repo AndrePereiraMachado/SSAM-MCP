@@ -1,0 +1,58 @@
+{
+ "description": "Cobertura testada (fase 2): move into (copy of OutSystems.Model.UI.Mobile.IComment) de OutSystems.Model.UI.Mobile.ICommentConnector (odc) em lgMobileFlowComment. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "CovSScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "OutSystems.Model.UI.Mobile.IComment",
+   "as": "$p"
+  },
+  {
+   "op": "set",
+   "target": "$p",
+   "prop": "Text",
+   "value": "CovS"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "OutSystems.Model.UI.Mobile.ICommentConnector",
+   "args": {
+    "target": "$scr"
+   },
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "OutSystems.Model.UI.Mobile.IComment",
+   "as": "$p_mv"
+  },
+  {
+   "op": "set",
+   "target": "$p_mv",
+   "prop": "Text",
+   "value": "CovS"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "into": "$p_mv"
+  }
+ ]
+}

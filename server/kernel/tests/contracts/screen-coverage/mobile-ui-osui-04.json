@@ -1,0 +1,297 @@
+{
+  "fixture": "mobile-ui",
+  "features": [
+    "OutSystemsUI",
+    "OutSystemsUI:Card",
+    "OutSystemsUI:CardBackground",
+    "OutSystemsUI:CardItem",
+    "OutSystemsUI:CardSectioned",
+    "OutSystemsUI:Carousel"
+  ],
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "tests/fixtures/outsystems-ui.oml",
+      "elements": [
+        "IMobileBlock:Card",
+        "IMobileBlock:CardBackground",
+        "IMobileBlock:CardItem",
+        "IMobileBlock:CardSectioned",
+        "IMobileBlock:Carousel"
+      ]
+    }
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Ui15_Card",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:Card",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui16_CardBackground",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:CardBackground",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "BackgroundImage": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui17_CardItem",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:CardItem",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Left": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Right": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Icon2"
+                  }
+                }
+              ],
+              "Title": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Content": [
+                {
+                  "name": "Part5",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui18_CardSectioned",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:CardSectioned",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Image": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Title": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Content": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Footer": [
+                {
+                  "name": "Part5",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui19_Carousel",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:Carousel",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "CarouselItems": [
+                {
+                  "name": "Part3",
+                  "type": "IList",
+                  "properties": {
+                    "Source": "Value1"
+                  },
+                  "children": [
+                    {
+                      "name": "Part2",
+                      "type": "ITextWidget",
+                      "properties": {
+                        "Text": "Component content"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value1",
+            "type": "Text List"
+          }
+        ]
+      }
+    ]
+  },
+  "mutations": [
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui15_Card/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Card"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui16_CardBackground/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "CardBackground"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui17_CardItem/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "CardItem"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui18_CardSectioned/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "CardSectioned"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui19_Carousel/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Carousel"
+    }
+  ]
+}

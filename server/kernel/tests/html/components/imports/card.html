@@ -1,0 +1,19 @@
+<component name="Card">
+  <script type="module">
+    export const inputs = { title: 'string' };
+    export let count = 0;
+    export function increment() { count += 1; }
+  </script>
+  <style>
+    article { padding:24px; border:1px solid #dce3ed; border-radius:16px; background:white; }
+    h2 { margin:0 0 20px; font-size:20px; }
+    .count { margin:12px 0; font-size:48px; font-weight:700; color:#4758df; }
+    button { padding:10px 18px; border:0; border-radius:8px; background:#4758df; color:white; }
+    footer { margin-top:20px; color:#68778c; font-size:14px; }
+  </style>
+  <article>
+    <h2>{{ title }}</h2><p class="count">{{ count }}</p>
+    <button id="Increment" onclick="increment()">Incrementar</button>
+    <footer><slot name="Footer"></slot></footer>
+  </article>
+</component>

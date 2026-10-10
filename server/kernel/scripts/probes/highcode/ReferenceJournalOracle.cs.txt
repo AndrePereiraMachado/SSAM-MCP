@@ -1,0 +1,84 @@
+using System.Globalization;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Text.Json;
+
+internal static class ReferenceJournalOracle
+{
+    private static object Error(Exception error) => new {
+        type = error.GetType().FullName, message = error.Message,
+        paramName = (error as ArgumentException)?.ParamName,
+        hResult = error.HResult, stackTrace = error.StackTrace, fullText = error.ToString(),
+        innerException = error.InnerException == null ? null : Error(error.InnerException)
+    };
+
+    public static int Main()
+    {
+        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+        CultureInfo.CurrentUICulture = CultureInfo.InvariantCulture;
+        if (Environment.Version.Major != 8) throw new Exception("Oracle requires ordinary .NET 8 execution.");
+        var cases = new List<object>();
+        var expected = new List<object>();
+        var details = new List<object>();
+        var methods = typeof(JournalRules).GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
+        object Schema(Type type) => new { kind = type == typeof(int) ? "int" : type == typeof(bool) ? "bool" : throw new Exception("Unexpected scalar type") };
+        void Case(string id, string name, params object[] args)
+        {
+            var method = methods.Single(item => item.Name == name);
+            cases.Add(new { id, method = name, arguments = method.GetParameters().Select((parameter, index) => (parameter.Name!, args[index])).ToDictionary(pair => pair.Item1, pair => pair.Item2) });
+            try { expected.Add(new { id, result = method.Invoke(null, args), error = (object?)null }); }
+            catch (TargetInvocationException invocation) when (invocation.InnerException != null)
+            {
+                var error = invocation.InnerException;
+                expected.Add(new { id, result = (object?)null, error = new { type = error.GetType().FullName, message = error.Message } });
+                details.Add(new { id, exception = Error(error) });
+            }
+        }
+        var amounts = new[] { -2, 0, 1, 42, int.MaxValue, int.MinValue };
+        for (int i = 0; i < amounts.Length; i++)
+        {
+            Case("run_success_" + i, "Run", false, amounts[i]);
+            Case("run_failure_" + i, "Run", true, amounts[i]);
+        }
+        Case("same_shared", "Same", true);
+        Case("same_independent", "Same", false);
+        Case("fresh", "Fresh");
+        Case("rebind", "Rebind");
+        Case("null_required", "NullRequired");
+
+        // A separate observation boundary invokes the unchanged private method.
+        // It retains the actual object and list after the same invocation throws.
+        var apply = typeof(JournalRules).GetMethod("Apply", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var observations = new List<object>();
+        foreach (int amount in new[] { -2, 0, 42 })
+        foreach (bool fail in new[] { false, true })
+        {
+            var journal = new PostingJournal();
+            var alias = journal;
+            var entries = journal.Entries;
+            Exception? failure = null;
+            try { apply.Invoke(null, new object[] { journal, alias, entries, amount, fail }); }
+            catch (TargetInvocationException invocation) when (invocation.InnerException != null) { failure = invocation.InnerException; }
+            observations.Add(new {
+                id = "observe_" + amount + "_" + (fail ? "failure" : "success"),
+                method = "RunState", arguments = new { fail, amount },
+                evidenceScope = "internal same-invocation state; CLR calls original private Apply; native calls SourceMap implementation of Run",
+                expected = new {
+                    total = journal.Total, trace = entries.ToArray(),
+                    failure = failure == null ? null : new { type = failure.GetType().FullName, message = failure.Message, paramName = (failure as ArgumentException)?.ParamName }
+                },
+                clrException = failure == null ? null : Error(failure),
+                aliasChecks = new { sameJournal = object.ReferenceEquals(journal, alias), sameEntries = object.ReferenceEquals(entries, journal.Entries) }
+            });
+        }
+        var descriptors = methods.OrderBy(method => method.Name).Select(method => new {
+            source = "JournalRules." + method.Name, method = method.Name,
+            inputs = method.GetParameters().Select(parameter => new { name = parameter.Name, schema = Schema(parameter.ParameterType) }), output = Schema(method.ReturnType)
+        });
+        Console.Write(JsonSerializer.Serialize(new {
+            runtime = new { framework = RuntimeInformation.FrameworkDescription, version = Environment.Version.ToString(), culture = CultureInfo.CurrentCulture.Name, newline = Environment.NewLine, architecture = RuntimeInformation.ProcessArchitecture.ToString(), os = RuntimeInformation.OSDescription, coreLibrary = typeof(object).Assembly.Location },
+            methods = descriptors, cases, expected, observations, exceptionDetails = details
+        }, new JsonSerializerOptions { WriteIndented = true }));
+        return 0;
+    }
+}

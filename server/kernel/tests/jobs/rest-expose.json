@@ -1,0 +1,155 @@
+{
+ "description": "REST exposto: IRestService com IRestServiceAction GET (nasce com Start/End), input na URL, output Body structure, Assign (job da investigacao REST de 2026-09-04)",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IRestService",
+   "name": "CepService",
+   "as": "$svc"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IStructure",
+   "name": "CepInfo",
+   "as": "$st"
+  },
+  {
+   "op": "create",
+   "parent": "$st",
+   "type": "IStructureAttribute",
+   "name": "Cep",
+   "as": "$s1"
+  },
+  {
+   "op": "set",
+   "target": "$s1",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$st",
+   "type": "IStructureAttribute",
+   "name": "Uf",
+   "as": "$s2"
+  },
+  {
+   "op": "set",
+   "target": "$s2",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$svc",
+   "type": "IRestServiceAction",
+   "name": "GetCep",
+   "as": "$m"
+  },
+  {
+   "op": "set",
+   "target": "$m",
+   "prop": "HTTPMethod",
+   "value": "GET"
+  },
+  {
+   "op": "set",
+   "target": "$m",
+   "prop": "URLPath",
+   "value": "/GetCep/{Cep}"
+  },
+  {
+   "op": "create",
+   "parent": "$m",
+   "type": "IRestServiceActionInput",
+   "name": "Cep",
+   "as": "$in"
+  },
+  {
+   "op": "set",
+   "target": "$in",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$in",
+   "prop": "ReceiveIn",
+   "value": "URL"
+  },
+  {
+   "op": "set",
+   "target": "$in",
+   "prop": "IsMandatory",
+   "value": true
+  },
+  {
+   "op": "create",
+   "parent": "$m",
+   "type": "IRestServiceActionOutput",
+   "name": "Info",
+   "as": "$out"
+  },
+  {
+   "op": "set",
+   "target": "$out",
+   "prop": "DataType",
+   "value": "CepInfo"
+  },
+  {
+   "op": "set",
+   "target": "$out",
+   "prop": "SendIn",
+   "value": "Body"
+  },
+  {
+   "op": "create",
+   "parent": "$m",
+   "type": "IAssignNode",
+   "name": "SetOut",
+   "as": "$assign"
+  },
+  {
+   "op": "set",
+   "target": "$assign",
+   "prop": "Label",
+   "value": "SetOut"
+  },
+  {
+   "op": "create",
+   "parent": "$assign",
+   "type": "IAssignment",
+   "as": "$a1"
+  },
+  {
+   "op": "set",
+   "target": "$a1",
+   "prop": "Variable",
+   "value": "Info.Cep"
+  },
+  {
+   "op": "set",
+   "target": "$a1",
+   "prop": "Value",
+   "value": "Cep"
+  },
+  {
+   "op": "link",
+   "from": "$m/#IStartNode",
+   "to": "$assign"
+  },
+  {
+   "op": "link",
+   "from": "$assign",
+   "to": "$m/#IEndNode"
+  },
+  {
+   "op": "layout",
+   "target": "$m"
+  }
+ ]
+}

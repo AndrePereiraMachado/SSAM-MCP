@@ -1,0 +1,18 @@
+{
+ "description": "If widget: Condition sobre uma variavel Boolean e um texto em cada ramo (TrueBranch e FalseBranch nascem com o If).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "IfDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "IsOpen", "as": "$open"},
+  {"op": "set", "target": "$open", "prop": "DataType", "value": "Boolean"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IIfWidget", "name": "StoreStatus", "as": "$if"},
+  {"op": "set", "target": "$if", "prop": "Condition", "value": "IsOpen"},
+  {"op": "create", "parent": "$if/TrueBranch", "type": "IExpression", "as": "$yes"},
+  {"op": "set", "target": "$yes", "prop": "Value", "value": "\"We are open\""},
+  {"op": "create", "parent": "$if/FalseBranch", "type": "IExpression", "as": "$no"},
+  {"op": "set", "target": "$no", "prop": "Value", "value": "\"We are closed\""}
+ ]
+}

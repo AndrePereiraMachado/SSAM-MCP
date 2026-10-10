@@ -1,0 +1,25 @@
+{
+ "description": "Submenu (OutSystemsUI, Navigation) tipico; criado vazio e preenchido com conteudo proprio; placeholders Menu, Items com dados do aggregate de tarefas; eventos Initialized, OnToggle tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastSubmenuId", "as": "$vLastSubmenuId"},
+  {"op": "set", "target": "$vLastSubmenuId", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastIsOpened", "as": "$vLastIsOpened"},
+  {"op": "set", "target": "$vLastIsOpened", "prop": "DataType", "value": "Boolean"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetShowcaseTasks", "as": "$tasks"},
+  {"op": "create", "parent": "$tasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "logic", "data": {"actions": [{"name": "SubmenuDemoInitialized", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de Initialized", "inputs": [{"name": "SubmenuId", "type": "Text"}],"steps": [{"assign": {"LastSubmenuId": "SubmenuId"},"as": "KeepInitialized"}]}, {"name": "SubmenuDemoOnToggle", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de OnToggle", "inputs": [{"name": "SubmenuId", "type": "Text"}, {"name": "IsOpened", "type": "Boolean"}],"steps": [{"assign": {"LastSubmenuId": "SubmenuId", "LastIsOpened": "IsOpened"},"as": "KeepOnToggle"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "SubmenuDemo", "source": "IMobileBlock:Submenu", "empty": true,"as": "$b"},
+  {"op": "set", "target": "$b/Initialized", "prop": "Handler", "value": "IScreenAction:SubmenuDemoInitialized"},
+  {"op": "set", "target": "$b/Initialized/SubmenuId", "prop": "Value", "value": "SubmenuId"},
+  {"op": "set", "target": "$b/OnToggle", "prop": "Handler", "value": "IScreenAction:SubmenuDemoOnToggle"},
+  {"op": "set", "target": "$b/OnToggle/SubmenuId", "prop": "Value", "value": "SubmenuId"},
+  {"op": "set", "target": "$b/OnToggle/IsOpened", "prop": "Value", "value": "IsOpened"},
+  {"op": "create", "parent": "$b/Menu", "type": "IExpression", "as": "$ph1"},
+  {"op": "set", "target": "$ph1", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/Items", "type": "IExpression", "as": "$ph2"},
+  {"op": "set", "target": "$ph2", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""}
+ ]
+}

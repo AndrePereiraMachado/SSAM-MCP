@@ -1,0 +1,89 @@
+{
+  "date": "2026-09-06",
+  "scope": "Native reusable components from HTML/CSS/module JavaScript, laboratory only",
+  "lane": "ss5",
+  "module": "ZZHtmlDashboardReview_UI",
+  "delivery": {
+    "taskId": "fe4bf92772c54f67aafcfc9f71cc29ab",
+    "delivered": true,
+    "elapsedMs": 24504
+  },
+  "publish": {
+    "module": "ZZHtmlDashboardReview_UI",
+    "published": true,
+    "lastUploadDateTime": "2026-09-06T04:39:35",
+    "state": null,
+    "isValid": true,
+    "elapsedMs": 8982
+  },
+  "browser": {
+    "checks": [
+      "onInitialize sets component state",
+      "two instances hold independent state",
+      "input change invokes onParametersChanged without resetting state",
+      "conditional unmount calls onDestroy; remount resets only that instance",
+      "mobile 390px without horizontal overflow",
+      "nested block relays typed event and projects a slot through two block levels; parent CSS stays outside child",
+      "multiple native events from one JS handler retain 3,1,2 order",
+      "native labels, input, textarea, checkbox, disabled expression and JS state update"
+    ],
+    "errors": [],
+    "destroy": 1,
+    "gallery": "Componentes reutilizáveis\n\nUm block nativo, duas instâncias independentes.\n\nMudar títuloMostrar/ocultar primeiro\n\nTítulo atualizado\n0\n\nPronto · atualizações: 0\n\nIncrementarEmitir sequência\nInstância A · estado independente\nEquipe de operações\n1\n\nPronto · atualizações: 0\n\nIncrementarEmitir sequência\nInstância B · mesmo componente\n\nÚltimo evento recebido: 1\n\nSequência: 1,2,1,",
+    "detail": "O mesmo block em outra tela\nAtendimento prioritário\n1\n\nPronto · atualizações: 0\n\nIncrementarEmitir sequência\nConteúdo fornecido pela tela de detalhe\n\nValor recebido: 1",
+    "eventOrder": "Sequência: 3,1,2,",
+    "ok": true
+  },
+  "source": {
+    "path": "tests/html/components/gallery.html",
+    "sha256": "efe6e458c85b4f281fb8e372d93b68c58ece20ffedfe1bf99c193003f9e03f0a"
+  },
+  "regression": {
+    "passed": 626,
+    "failed": 0,
+    "uiCases": 147,
+    "pythonProtocolPassed": 9,
+    "command": "ANVIL_LANE=ss5 dotnet test tests/Anvil.Tests --no-build",
+    "trxSha256": "56686cc967bfec1bbda0310fab9428f37f80d15133bec2a7361e4f8f9dd8af6f",
+    "durationMinutes": 37.0919
+  },
+  "productModulesChanged": false,
+  "normalLaneCliInstalled": true,
+  "limits": [
+    "No cross-module source imports",
+    "No high-code arrays/record state or list repetition yet",
+    "No high-code asynchronous server calls yet",
+    "Legacy Dashboard frontend has not yet converged to uiSource"
+  ],
+  "nativePlaceholderMove": {
+    "nativeMoveSupported": false,
+    "rejection": "Clone not allowed: Condition is false",
+    "unchangedPlaceholderKey": "Mif02PxcH0K7KiABEHTwMg*g8uQcoHuj0ma8B1qiAPaFQ",
+    "localConsumerCaptionsPreserved": true,
+    "isValid": true,
+    "externalConsumerProven": false
+  },
+  "compiler": {
+    "coreSha256": "fb042f94d07f087c60b74f30af26424a2eb7ed2002828e74069e4133d7a078b2",
+    "path": ".local/review/cli/Anvil.Core.dll"
+  },
+  "installed": {
+    "ss4": {
+      "coreSha256": "c575fefeee5242a9091b3c093df838d25bfa9dfe8df0e1e8b6c64ce78cd3d897",
+      "workerPid": 43512,
+      "authenticatedBridge": false,
+      "note": "Awaiting confirmation that unsaved changes are safe before restarting SS4"
+    },
+    "ss5": {
+      "coreSha256": "c575fefeee5242a9091b3c093df838d25bfa9dfe8df0e1e8b6c64ce78cd3d897",
+      "workerPid": 71904,
+      "authenticatedBridge": true,
+      "delivery": {
+        "taskId": "8c5d18a7dc8842c5b54242e5c02e6ee8",
+        "delivered": true,
+        "unchanged": true,
+        "elapsedMs": 20143
+      }
+    }
+  }
+}

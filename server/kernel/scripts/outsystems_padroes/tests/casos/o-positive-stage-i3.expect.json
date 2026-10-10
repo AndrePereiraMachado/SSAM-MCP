@@ -1,0 +1,25 @@
+{
+ "_leia": "expectedSiteProperties por estagio: com --plan-stage I3 a site property ausente e erro E3.",
+ "stage": "oml",
+ "mode": "autor",
+ "oml": "positive-conforming.oml",
+ "planStage": "I3",
+ "configOverride": {
+  "expectedSiteProperties": {
+   "Headless_CS": [
+    {
+     "name": "PosRequiredSwitch",
+     "fromStage": "I3"
+    }
+   ]
+  }
+ },
+ "exitCode": 1,
+ "mustFind": [
+  {
+   "rule": "E3",
+   "severity": "erro",
+   "contains": "PosRequiredSwitch"
+  }
+ ]
+}

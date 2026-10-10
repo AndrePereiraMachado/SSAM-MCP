@@ -1,0 +1,77 @@
+{
+ "description": "Cobertura testada (fase 2): move into (copy of IMobileScreen) de OutSystems.Model.UI.Mobile.IScreenAggregate (odc) em mobileScreenEntity. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedScreenData",
+   "element": "WrightFlood (ESpace) / MainFlow (MobileFlow) / CovSScreenMv (MobileScreen) / CovAScreenAggregate (ScreenAggregate)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "entities": [
+     {
+      "name": "CovSEntity",
+      "attributes": [
+       {
+        "name": "Title",
+        "type": "Text",
+        "length": 50
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "CovSScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAggregate",
+   "name": "CovAScreenAggregate",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "$CovSEntity"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "CovSScreenMv",
+   "as": "$scr_mv"
+  },
+  {
+   "op": "set",
+   "target": "$scr_mv/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "into": "$scr_mv"
+  }
+ ]
+}

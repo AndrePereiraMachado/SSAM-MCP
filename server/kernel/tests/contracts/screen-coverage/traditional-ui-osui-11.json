@@ -1,0 +1,233 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "OutSystemsUI",
+    "OutSystemsUIWeb:LayoutMenuSide",
+    "OutSystemsUIWeb:LayoutMenuTop",
+    "OutSystemsUIWeb:LayoutPopup",
+    "OutSystemsUIWeb:LayoutSimple",
+    "OutSystemsUIWeb:LayoutWidgets"
+  ],
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "tests/fixtures/outsystems-ui-web.oml",
+      "elements": [
+        "IWebBlock:LayoutMenuSide",
+        "IWebBlock:LayoutMenuTop",
+        "IWebBlock:LayoutPopup",
+        "IWebBlock:LayoutSimple",
+        "IWebBlock:LayoutWidgets"
+      ]
+    }
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Ui50_LayoutMenuSide",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:LayoutMenuSide",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Navigation": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Header": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Content": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui51_LayoutMenuTop",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:LayoutMenuTop",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Header": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Content": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui52_LayoutPopup",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:LayoutPopup",
+            "args": {},
+            "slots": {
+              "MainContent": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui53_LayoutSimple",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:LayoutSimple",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui54_LayoutWidgets",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:LayoutWidgets",
+            "args": {},
+            "slots": {}
+          }
+        ],
+        "vars": []
+      }
+    ]
+  },
+  "mutations": [
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui50_LayoutMenuSide/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "LayoutMenuSide"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui51_LayoutMenuTop/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "LayoutMenuTop"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui52_LayoutPopup/Part1/MainContent/Part2",
+      "prop": "Text",
+      "value": "Changed",
+      "element": "LayoutPopup"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui53_LayoutSimple/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "LayoutSimple"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui54_LayoutWidgets/Part1",
+      "prop": "Name",
+      "value": "RenamedSubject",
+      "element": "LayoutWidgets"
+    }
+  ]
+}

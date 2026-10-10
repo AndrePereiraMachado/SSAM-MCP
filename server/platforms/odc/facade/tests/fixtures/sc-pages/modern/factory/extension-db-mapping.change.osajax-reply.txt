@@ -1,0 +1,2 @@
+/* SSAM SYNTHETIC OsAjax reply to the combo Change. Only the "__OSVSTATE","<state>" token is evidenced (GSC:1020); envelope invented. */
+OsAjaxReply_v1(["__OSVSTATE","U1NBTS1TWU5USEVUSUMtT1NWU1RBVEUvZXh0ZW5zaW9uLWVkaXQtMjAyLXN0YWdlZA=="],[]);

@@ -1,0 +1,14 @@
+{
+ "description": "AnimatedLabel do OSUI: o Input de exemplo do placeholder Input ganha a variavel (sem ela o Verify da erro).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "AnimatedLabelDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "City", "as": "$vCity"},
+  {"op": "set", "target": "$vCity", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "AnimatedLabel1", "source": "IMobileBlock:AnimatedLabel", "as": "$al"},
+  {"op": "set", "target": "$al/Input/#IInput", "prop": "Variable", "value": "City", "_why": "o bloco traz um Input de exemplo: enderece-o por tipo"}
+ ]
+}

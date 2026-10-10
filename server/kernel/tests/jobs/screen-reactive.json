@@ -1,0 +1,84 @@
+{
+ "description": "Tela Reactive com layout, aggregate e lista de entidades.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "HomeList",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAggregate",
+   "name": "GetUsers",
+   "as": "$agg"
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IEntitySignature:User"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/Title",
+   "type": "IExpression",
+   "as": "$title"
+  },
+  {
+   "op": "set",
+   "target": "$title",
+   "prop": "Value",
+   "value": "\"Home list\""
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IContainer",
+   "name": "MainBox",
+   "as": "$box"
+  },
+  {
+   "op": "create",
+   "parent": "$box",
+   "type": "IList",
+   "name": "UserList",
+   "as": "$list"
+  },
+  {
+   "op": "set",
+   "target": "$list",
+   "prop": "Source",
+   "value": "GetUsers.List"
+  },
+  {
+   "op": "create",
+   "parent": "$list",
+   "type": "IExpression",
+   "as": "$name"
+  },
+  {
+   "op": "set",
+   "target": "$name",
+   "prop": "Value",
+   "value": "GetUsers.List.Current.User.Name"
+  },
+  {
+   "op": "dump",
+   "target": "$scr",
+   "depth": 6
+  }
+ ]
+}

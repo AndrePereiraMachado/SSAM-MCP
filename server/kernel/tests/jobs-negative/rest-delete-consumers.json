@@ -1,0 +1,8 @@
+{
+ "description": "Op rest com remove de um metodo que tem chamador: recusada com DELETE_HAS_CONSUMERS nomeando o caminho do chamador, nada apagado (o chamador sai antes no mesmo job, ou breaks o nomeia).",
+ "base": "job:rest-consume-call",
+ "expectError": ["delete: refused", "GetAddressByCep", "Cep_Lookup", "breaks"],
+ "ops": [
+  {"op": "rest", "data": {"client": {"name": "ViaCepApi"}, "remove": ["GetAddressByCep"]}}
+ ]
+}

@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Anvil.Authoring/Anvil.Authoring.csproj" />
+    <Project Path="src/Anvil.CSharp/Anvil.CSharp.csproj" />
+    <Project Path="src/Anvil.Bridge/Anvil.Bridge.csproj" />
+    <Project Path="src/Anvil.Bridge.Thin/Anvil.Bridge.Thin.csproj" />
+    <Project Path="src/Anvil.Cli/Anvil.Cli.csproj" />
+    <Project Path="src/Anvil.Core/Anvil.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Anvil.Tests/Anvil.Tests.csproj" />
+    <Project Path="tests/Anvil.Bridge.Thin.Tests/Anvil.Bridge.Thin.Tests.csproj" />
+    <Project Path="tests/Anvil.CSharp.Tests/Anvil.CSharp.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Anvil.Inject/Anvil.Inject.csproj" />
+  </Folder>
+</Solution>

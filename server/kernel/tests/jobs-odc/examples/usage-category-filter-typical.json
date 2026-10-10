@@ -1,0 +1,45 @@
+{
+ "description": "Filtro por categoria: um Dropdown sobre a static entity Category grava a escolha numa variavel e o OnChange faz Refresh Data do aggregate de produtos filtrado por ela.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {
+   "static": [{"name": "Category", "records": [{"name": "Books"}, {"name": "Games"}, {"name": "Music"}]}],
+   "entities": [{"name": "Product", "attributes": [
+    {"name": "Name", "type": "Text", "length": 100, "mandatory": true},
+    {"name": "CategoryId", "type": "Category Identifier"}]}]}},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductsByCategory", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "CategoryFilter", "as": "$filter"},
+  {"op": "set", "target": "$filter", "prop": "DataType", "value": "Category Identifier"},
+
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetCategories", "as": "$cats", "_why": "as opcoes do Dropdown: os registros da static entity, na ordem dela"},
+  {"op": "create", "parent": "$cats", "type": "IAliasedSource", "args": {"dataSource": "IStaticEntity:Category"}},
+  {"op": "create", "parent": "$cats", "type": "ISort", "as": "$catSort"},
+  {"op": "set", "target": "$catSort", "prop": "Attribute", "value": "Category.Order"},
+
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$prods"},
+  {"op": "create", "parent": "$prods", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "create", "parent": "$prods", "type": "IFilter", "args": {"condition": "CategoryFilter = NullIdentifier() or Product.CategoryId = CategoryFilter"}, "_why": "variavel vazia = todas as categorias"},
+
+  {"op": "logic", "data": {"actions": [
+   {"name": "ApplyCategoryFilter", "kind": "screen", "owner": "IMobileScreen:ProductsByCategory",
+    "steps": [{"node": "IRefreshDataNode", "as": "RefreshProducts", "properties": {"DataSource": "IMobileScreen:ProductsByCategory/GetProducts"}}]}]}},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IDropdown", "name": "CategoryDropdown", "as": "$dd"},
+  {"op": "set", "target": "$dd", "prop": "Variable", "value": "CategoryFilter"},
+  {"op": "set", "target": "$dd", "prop": "List", "value": "GetCategories.List"},
+  {"op": "set", "target": "$dd", "prop": "Values", "value": "Category.Id", "_why": "Values e Labels leem a linha da List pelo nome da entidade"},
+  {"op": "set", "target": "$dd", "prop": "Labels", "value": "Category.Label"},
+  {"op": "set", "target": "$dd/OnChange", "prop": "Destination", "value": "IMobileScreen:ProductsByCategory/ApplyCategoryFilter"},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "ProductList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetProducts.List"},
+  {"op": "create", "parent": "$list", "type": "IExpression", "as": "$name"},
+  {"op": "set", "target": "$name", "prop": "Value", "value": "GetProducts.List.Current.Product.Name"},
+
+  {"op": "get", "target": "$dd"}
+ ]
+}

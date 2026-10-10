@@ -1,0 +1,30 @@
+{
+  "ok": true,
+  "module": "InsuranceApp",
+  "moduleKey": "zd+K_z1D9E2+7T74jXyUNQ",
+  "kind": "CrossDevice",
+  "sha256": "7529B2AD588E217E583C0BEB2D5510F2D728715265AB40939D18589FF101F7D1",
+  "createdBy": "scripts/anonymize-odc-fixture.mjs (kernel rename/set ops over a capture of sha256 EB15CA882B9D6406B5D7C4024C2920BAC4D30EA8B42922369FA4DA6E9319D975)",
+  "capturedAt": "2026-09-16T11:01:00.0610517+00:00",
+  "developerId": "anvil@ssam-hybrid.local",
+  "host": null,
+  "modified": false,
+  "dependencies": [
+    {
+      "Name": "OutSystemsCharts",
+      "Revision": "10"
+    },
+    {
+      "Name": "OutSystemsMaps",
+      "Revision": "17"
+    },
+    {
+      "Name": "(System)",
+      "Revision": "2"
+    },
+    {
+      "Name": "OutSystemsUI",
+      "Revision": "100"
+    }
+  ]
+}

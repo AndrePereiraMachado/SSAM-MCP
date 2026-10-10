@@ -1,0 +1,17 @@
+{
+ "description": "TabsContentItem do OSUI: o conteudo de uma aba, no Content de um Tabs vazio, ao lado do seu cabecalho.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "TabsContentDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Tabs1", "source": "IMobileBlock:Tabs", "empty": true, "as": "$tabs"},
+  {"op": "create", "parent": "$tabs/Header", "type": "IMobileBlockInstanceWidget", "name": "TabsHeaderItem1", "source": "IMobileBlock:TabsHeaderItem", "as": "$h"},
+  {"op": "create", "parent": "$h/Title", "type": "ITextWidget", "as": "$text1"},
+  {"op": "set", "target": "$text1", "prop": "Text", "value": "Details"},
+  {"op": "create", "parent": "$tabs/Content", "type": "IMobileBlockInstanceWidget", "name": "TabsContentItem1", "source": "IMobileBlock:TabsContentItem", "as": "$c"},
+  {"op": "create", "parent": "$c/Content", "type": "ITextWidget", "as": "$text2"},
+  {"op": "set", "target": "$text2", "prop": "Text", "value": "Details of the product"}
+ ]
+}

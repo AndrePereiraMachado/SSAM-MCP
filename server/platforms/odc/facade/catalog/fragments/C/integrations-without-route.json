@@ -1,0 +1,147 @@
+{
+  "schemaVersion": "ssam-discovery-fragment/1",
+  "contract": "ssam-catalog-contribution/1",
+  "front": "C",
+  "title": "Integrations and assets present in the Model API without a public route: AI agents and connections, semantic search, SAP, REST callbacks and authentication flows, global events (declared gaps with origin; nothing here is implemented). SOAP is the capability integration.soap (soap.json); ODC external libraries are integration.external-library-odc",
+  "reviewedAt": "2026-10-06",
+  "synonyms": {
+    "agent": [
+      "agents",
+      "agente",
+      "agentes",
+      "ai agent",
+      "agente de ia"
+    ],
+    "global event": [
+      "global events",
+      "evento global",
+      "eventos globais",
+      "cross-app event"
+    ]
+  },
+  "capabilities": [],
+  "unavailable": [
+    {
+      "id": "ai.semantic-search",
+      "lanes": [
+        "odc"
+      ],
+      "keywords": [
+        "semantic search",
+        "busca semantica",
+        "searchable attribute",
+        "search service",
+        "vector search",
+        "embedding search"
+      ],
+      "reason": "ISearchableAttribute, ISearchServiceConnection and ISemanticSearchNode exist in the ODC Model API (IModelServices.CreateSearchServiceConnection + IESpace.AddDependency) but no job or feature exercises them.",
+      "evidence": "platforms/odc/docs/model-api/OutSystems.Model.V1.md (CreateSearchServiceConnection, AddDependency); no job in kernel/tests (declared, not executed)",
+      "negative": {
+        "odc": []
+      },
+      "alternative": "none on a public route"
+    },
+    {
+      "id": "integration.sap",
+      "lanes": [
+        "o11"
+      ],
+      "keywords": [
+        "sap",
+        "bapi",
+        "rfc",
+        "sap connector",
+        "sap integration"
+      ],
+      "reason": "SAP integration types (ISapClient through the generic IESpace.CreateIntegration<T>, ISapAction, inputs/outputs, structures, callback flow input) have creators in the O11 catalog (the callback flow itself has none) but no job exercises them.",
+      "evidence": "kernel/catalog/model-api-11.55.69.json (ServiceStudio.Plugin.SAP.*); no SAP job in kernel/tests/jobs or jobs-negative (declared, not executed)",
+      "negative": {
+        "o11": []
+      },
+      "alternative": "none on a public route; the SAP connection is authored by the user in Service Studio"
+    },
+    {
+      "id": "integration.rest-callbacks",
+      "keywords": [
+        "on before request",
+        "on after request",
+        "rest callback",
+        "onbeforerequest",
+        "onafterrequest",
+        "on request callback",
+        "on response callback",
+        "rest authentication flow",
+        "custom authentication"
+      ],
+      "reason": "REST callbacks (consumed: OnBefore/OnAfterRequest[Advanced]; exposed: OnRequest/OnResponse on ODC) and the exposed-REST authentication flow have no job; the four consumed-callback creators are ambiguous for the generic create (the first assignable factory would win), and the authentication flow has no creator in either catalog.",
+      "evidence": "platforms/odc/docs/model-api/OutSystems.Model.Plugin.REST.md (Create*Callback); OutSystems.Model.Plugin.RESTService.md (CreateOnRequest/ResponseCallback, ODC only); kernel/src/Anvil.Core/Kernel/Verbs.cs FindCreateCore (first assignable factory); no job (declared, not executed)",
+      "negative": {
+        "odc": [],
+        "o11": []
+      },
+      "alternative": "integration.rest-consume / integration.rest-expose without callbacks; a callback is authored by the user in the Studio"
+    },
+    {
+      "id": "event.global-events",
+      "lanes": [
+        "odc"
+      ],
+      "keywords": [
+        "global event",
+        "evento global",
+        "trigger global event",
+        "global event handler",
+        "cross-app event",
+        "publish event"
+      ],
+      "reason": "ODC global events (IGlobalEvent, IGlobalEventHandler, ITriggerGlobalNode) have no proven job route: the generic create could reach IESpace.CreateGlobalEvent, untested. The C# builder has a primitive that creates and deletes a global event (AuthoringMisc), proven headless only; the handler and the trigger node have no primitive.",
+      "evidence": "platforms/odc/docs/model-api/OutSystems.Model.V1.md:353 (CreateGlobalEvent); platforms/odc/studio/shared/AuthoringMisc.cs:23-28; platforms/odc/studio/builder/features/LabMisc.cs:32-64; platforms/odc/docs/HANDOFF.md (global events 'P H': primitive ready, headless proof only; handler missing); no job in kernel/tests/jobs-odc (declared, not executed)",
+      "negative": {
+        "odc": []
+      },
+      "alternative": "deliver.feature with the AuthoringMisc global event primitive (headless proof only, no live receipt in this repository); handlers and triggers are authored by the user"
+    },
+    {
+      "id": "ai.agents-o11",
+      "lanes": [
+        "o11"
+      ],
+      "keywords": [
+        "agent",
+        "agente",
+        "ai agent",
+        "llm agent",
+        "ai model",
+        "mcp server",
+        "knowledge base",
+        "semantic search"
+      ],
+      "reason": "The O11 model has no agent, AI model, MCP, knowledge-base or semantic-search element: none of these interfaces exists in the O11 catalog.",
+      "evidence": "kernel/catalog/model-api-11.55.69.json (470 interfaces; no Agent/AI/MCP/Knowledge/Search interface); catalog 11.55.69 against Service Studio 11.55.87 of the lane (reconciliation pending, integrator M1)",
+      "negative": {
+        "o11": []
+      },
+      "alternative": "none in the O11 model; these are ODC features (see ai.agents on the ODC lane)"
+    },
+    {
+      "id": "event.global-events-o11",
+      "lanes": [
+        "o11"
+      ],
+      "keywords": [
+        "global event",
+        "evento global",
+        "trigger global event",
+        "global event handler",
+        "cross-app event"
+      ],
+      "reason": "The O11 model has no global (cross-app) event element: IGlobalEvent, IGlobalEventHandler and ITriggerGlobalNode do not exist in the O11 catalog.",
+      "evidence": "kernel/catalog/model-api-11.55.69.json (no GlobalEvent/TriggerGlobal interface); catalog 11.55.69 against Service Studio 11.55.87 of the lane",
+      "negative": {
+        "o11": []
+      },
+      "alternative": "none in the O11 model"
+    }
+  ],
+  "coverage": []
+}

@@ -1,0 +1,14 @@
+{
+ "description": "Accordion (OutSystemsUI, Content) tipico; eventos Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastAccordionId", "as": "$vLastAccordionId"},
+  {"op": "set", "target": "$vLastAccordionId", "prop": "DataType", "value": "Text"},
+  {"op": "logic", "data": {"actions": [{"name": "AccordionDemoInitialized", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de Initialized", "inputs": [{"name": "AccordionId", "type": "Text"}],"steps": [{"assign": {"LastAccordionId": "AccordionId"},"as": "KeepInitialized"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "AccordionDemo", "source": "IMobileBlock:Accordion", "as": "$b"},
+  {"op": "set", "target": "$b/Initialized", "prop": "Handler", "value": "IScreenAction:AccordionDemoInitialized"},
+  {"op": "set", "target": "$b/Initialized/AccordionId", "prop": "Value", "value": "AccordionId"}
+ ]
+}

@@ -1,0 +1,311 @@
+{
+ "description": "Widgets Reactive menos comuns numa tela com variaveis locais: Container, Checkbox, Switch, TextArea, Dropdown ligado a aggregate, Icon, Label com TargetWidget, RadioGroup, ButtonGroup com itens",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "Widgets",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/Title",
+   "type": "IExpression",
+   "as": "$title"
+  },
+  {
+   "op": "set",
+   "target": "$title",
+   "prop": "Value",
+   "value": "\"Widgets\""
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "ILocalVariable",
+   "name": "IsActive",
+   "as": "$vActive"
+  },
+  {
+   "op": "set",
+   "target": "$vActive",
+   "prop": "DataType",
+   "value": "Boolean"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "ILocalVariable",
+   "name": "Note",
+   "as": "$vNote"
+  },
+  {
+   "op": "set",
+   "target": "$vNote",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "ILocalVariable",
+   "name": "SelectedUserId",
+   "as": "$vUser"
+  },
+  {
+   "op": "set",
+   "target": "$vUser",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "ILocalVariable",
+   "name": "Choice",
+   "as": "$vChoice"
+  },
+  {
+   "op": "set",
+   "target": "$vChoice",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAggregate",
+   "name": "GetUsers",
+   "as": "$agg"
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IEntitySignature:User"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IContainer",
+   "name": "Box",
+   "as": "$box"
+  },
+  {
+   "op": "set",
+   "target": "$box",
+   "prop": "Style",
+   "value": "\"padding-m\""
+  },
+  {
+   "op": "create",
+   "parent": "$box",
+   "type": "ICheckbox",
+   "name": "ActiveCheck",
+   "as": "$chk"
+  },
+  {
+   "op": "set",
+   "target": "$chk",
+   "prop": "Variable",
+   "value": "IsActive"
+  },
+  {
+   "op": "create",
+   "parent": "$box",
+   "type": "ILabel",
+   "name": "ActiveLabel",
+   "as": "$lbl"
+  },
+  {
+   "op": "set",
+   "target": "$lbl",
+   "prop": "TargetWidget",
+   "value": "$chk"
+  },
+  {
+   "op": "create",
+   "parent": "$lbl",
+   "type": "IExpression",
+   "as": "$lblText"
+  },
+  {
+   "op": "set",
+   "target": "$lblText",
+   "prop": "Value",
+   "value": "\"Active\""
+  },
+  {
+   "op": "create",
+   "parent": "$box",
+   "type": "ISwitch",
+   "name": "ActiveSwitch",
+   "as": "$sw"
+  },
+  {
+   "op": "set",
+   "target": "$sw",
+   "prop": "Variable",
+   "value": "IsActive"
+  },
+  {
+   "op": "create",
+   "parent": "$box",
+   "type": "ITextArea",
+   "name": "NoteArea",
+   "as": "$ta"
+  },
+  {
+   "op": "set",
+   "target": "$ta",
+   "prop": "Variable",
+   "value": "Note"
+  },
+  {
+   "op": "set",
+   "target": "$ta",
+   "prop": "TextLines",
+   "value": 3
+  },
+  {
+   "op": "set",
+   "target": "$ta",
+   "prop": "Prompt",
+   "value": "\"Notes\""
+  },
+  {
+   "op": "create",
+   "parent": "$box",
+   "type": "IDropdown",
+   "name": "UserDropdown",
+   "as": "$dd"
+  },
+  {
+   "op": "set",
+   "target": "$dd",
+   "prop": "List",
+   "value": "GetUsers.List"
+  },
+  {
+   "op": "set",
+   "target": "$dd",
+   "prop": "Values",
+   "value": "User.Id"
+  },
+  {
+   "op": "set",
+   "target": "$dd",
+   "prop": "Labels",
+   "value": "User.Name"
+  },
+  {
+   "op": "set",
+   "target": "$dd",
+   "prop": "Variable",
+   "value": "SelectedUserId"
+  },
+  {
+   "op": "set",
+   "target": "$dd",
+   "prop": "EmptyValue",
+   "value": "\"Pick a user\""
+  },
+  {
+   "op": "create",
+   "parent": "$box",
+   "type": "IIcon",
+   "name": "UserIcon",
+   "as": "$icon"
+  },
+  {
+   "op": "set",
+   "target": "$icon",
+   "prop": "Icon",
+   "value": "user"
+  },
+  {
+   "op": "create",
+   "parent": "$box",
+   "type": "IButtonGroup",
+   "name": "ChoiceGroup",
+   "as": "$bg",
+   "empty": true
+  },
+  {
+   "op": "set",
+   "target": "$bg",
+   "prop": "Variable",
+   "value": "Choice"
+  },
+  {
+   "op": "create",
+   "parent": "$bg",
+   "type": "IButtonGroupItem",
+   "name": "ChoiceA",
+   "as": "$bgA"
+  },
+  {
+   "op": "set",
+   "target": "$bgA",
+   "prop": "Value",
+   "value": "\"A\""
+  },
+  {
+   "op": "create",
+   "parent": "$bgA",
+   "type": "IExpression",
+   "as": "$bgAText"
+  },
+  {
+   "op": "set",
+   "target": "$bgAText",
+   "prop": "Value",
+   "value": "\"Option A\""
+  },
+  {
+   "op": "create",
+   "parent": "$bg",
+   "type": "IButtonGroupItem",
+   "name": "ChoiceB",
+   "as": "$bgB"
+  },
+  {
+   "op": "set",
+   "target": "$bgB",
+   "prop": "Value",
+   "value": "\"B\""
+  },
+  {
+   "op": "create",
+   "parent": "$bgB",
+   "type": "IExpression",
+   "as": "$bgBText"
+  },
+  {
+   "op": "set",
+   "target": "$bgBText",
+   "prop": "Value",
+   "value": "\"Option B\""
+  },
+  {
+   "op": "get",
+   "target": "$dd"
+  },
+  {
+   "op": "dump",
+   "target": "$box",
+   "depth": 3
+  }
+ ]
+}

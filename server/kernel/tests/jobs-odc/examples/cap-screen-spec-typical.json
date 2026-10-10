@@ -1,0 +1,32 @@
+{
+ "description": "Tres telas por arquetipo numa op screen: tabela com busca e filtro por categoria e botao Novo, detalhe com abas e formulario de edicao (cards fica de fora: falha no ODC).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {
+   "static": [{"name": "Category", "records": [{"name": "Books"}, {"name": "Games"}]}],
+   "entities": [{"name": "Product", "attributes": [
+    {"name": "Title", "type": "Text", "length": 120, "mandatory": true},
+    {"name": "Description", "type": "Text", "length": 500},
+    {"name": "Price", "type": "Currency"},
+    {"name": "InStock", "type": "Boolean"},
+    {"name": "CategoryId", "type": "Category Identifier"}]}]}},
+  {"op": "screen", "_why": "as telas de uma op nascem antes das navegacoes, em qualquer ordem", "data": {"screens": [
+   {"name": "ProductTable", "kind": "table", "title": "Products",
+    "source": {"entity": "Product", "as": "GetProducts", "sort": [["Product.Title", "Ascending"]]},
+    "search": {"field": "Title", "label": "Search products"},
+    "filters": [{"field": "CategoryId", "from": "Category", "label": "All categories"}],
+    "columns": [{"field": "Title", "label": "Product"}, {"field": "Price"}, {"field": "InStock", "label": "In stock"}],
+    "actions": [{"name": "NewProduct", "label": "New product", "destination": "ProductForm", "args": {"ProductId": "NullIdentifier()"}}]},
+   {"name": "ProductDetail", "kind": "detail", "title": "Product",
+    "inputs": [{"name": "ProductId", "type": "Product Identifier", "mandatory": true}],
+    "source": {"entity": "Product", "as": "GetProduct", "where": "Product.Id = ProductId"},
+    "tabs": [{"title": "Overview", "fields": [{"field": "Title"}, {"field": "Description"}]},
+             {"title": "Pricing", "fields": [{"field": "Price"}, {"field": "InStock"}]}]},
+   {"name": "ProductForm", "kind": "form", "title": "Edit product",
+    "inputs": [{"name": "ProductId", "type": "Product Identifier"}],
+    "source": {"entity": "Product", "as": "GetProductForEdit", "where": "Product.Id = ProductId"},
+    "fields": [{"field": "Title"}, {"field": "Description", "kind": "textarea"}, {"field": "Price"}, {"field": "InStock", "kind": "checkbox"}]}]}}
+ ]
+}

@@ -1,0 +1,26 @@
+{
+ "description": "ProviderLoginButton do OSUI: dois botoes (Google e Apple), so icone no segundo, forma arredondada e o OnClick de cada um guardando o provedor escolhido.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "SocialLogin", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Sign in\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "ChosenProvider", "as": "$vChosenProvider"},
+  {"op": "set", "target": "$vChosenProvider", "prop": "DataType", "value": "Text"},
+  {"op": "logic", "data": {"actions": [{"name": "GoogleClicked", "kind": "screen", "owner": "IMobileScreen:SocialLogin", "steps": [{"assign": {"ChosenProvider": "\"Google\""}, "as": "Keep"}]}]}},
+  {"op": "logic", "data": {"actions": [{"name": "AppleClicked", "kind": "screen", "owner": "IMobileScreen:SocialLogin", "steps": [{"assign": {"ChosenProvider": "\"Apple\""}, "as": "Keep"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "GoogleLogin", "source": "IMobileBlock:ProviderLoginButton", "as": "$g"},
+  {"op": "set", "target": "$g/IdentityProvider", "prop": "Value", "value": "Entities.IdentityProvider.Google"},
+  {"op": "set", "target": "$g/Shape", "prop": "Value", "value": "Entities.Shape.Rounded"},
+  {"op": "set", "target": "$g/OnClick", "prop": "Handler", "value": "IMobileScreen:SocialLogin/GoogleClicked"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "AppleLogin", "source": "IMobileBlock:ProviderLoginButton", "as": "$a"},
+  {"op": "set", "target": "$a/IdentityProvider", "prop": "Value", "value": "Entities.IdentityProvider.Apple"},
+  {"op": "set", "target": "$a/IconOnly", "prop": "Value", "value": "True"},
+  {"op": "set", "target": "$a/OnClick", "prop": "Handler", "value": "IMobileScreen:SocialLogin/AppleClicked"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "If(ChosenProvider = \"\", \"\", \"Signing in with \" + ChosenProvider)"}
+ ]
+}

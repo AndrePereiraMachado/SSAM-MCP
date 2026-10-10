@@ -1,0 +1,14 @@
+<style>
+  :root { padding: 8px; }
+  .wf-row { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid #e5e7eb; }
+  .wf-row-name { font-weight: 600; }
+</style>
+<div id="UserPanel" class="wf-users">
+  <h2>Users</h2>
+  <div id="UserList" list="GetUsers.List" as="Row" class="wf-list">
+    <div class="wf-row">
+      <span class="wf-row-name">{{ Row.User.Name }}</span>
+      <span class="wf-row-mail">{{ Row.User.Email }}</span>
+    </div>
+  </div>
+</div>

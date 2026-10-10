@@ -1,0 +1,14 @@
+{
+ "description": "Checkbox: um ICheckbox ligado a uma variavel Boolean da tela.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CheckboxDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "AcceptTerms", "as": "$accept"},
+  {"op": "set", "target": "$accept", "prop": "DataType", "value": "Boolean"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "ICheckbox", "name": "AcceptTermsCheckbox", "as": "$cb"},
+  {"op": "set", "target": "$cb", "prop": "Variable", "value": "AcceptTerms"}
+ ]
+}

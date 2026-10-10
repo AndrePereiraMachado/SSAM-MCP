@@ -1,0 +1,21 @@
+{
+  "date": "2026-09-05",
+  "scope": "Incidents_CS / Incidents_UI",
+  "summary": "Fechamento tela a tela do help desk.",
+  "validations": [
+    "Server-side: permissao de atribuicao, CRUD protegido de categorias, metricas SQL, filtros de incidentes abertos e proximos 30 minutos, ordenacao por SLA.",
+    "UI: Dashboard com periodo e cards, IncidentList com filtros de rota, paginacao, ordenacao e mobile; IncidentCreate com validacao/SLA e responsavel protegido; IncidentDetail com operacoes, comentarios e historico.",
+    "Entregas com Verify 0 erros, merge automatico confirmado e check-delivery aceito; aplicacao nao publicada."
+  ],
+  "receipts": [
+    ".local/work/deliver/16baeeb9737b410c87f84ea62c4c1b4a/result.json",
+    ".local/work/deliver/c36941916907486e87dbb3f875b054a5/result.json",
+    ".local/work/deliver/92cc56da7aca44309c1a5d1d4278c229/result.json",
+    ".local/work/deliver/4e40a61851e14a668f32db136f461d2d/result.json",
+    ".local/work/deliver/40a10e88dea84e31afb0e20c41f3e156/result.json",
+    ".local/work/deliver/d8dbc46aa85f4cbd96e7d54ba77fbabd/result.json",
+    ".local/work/deliver/b0866b2c0c8a4660a540f91241e9fd0f/result.json",
+    ".local/work/deliver/4a82fb94b09d4391b7bc505a96683ea0/result.json"
+  ],
+  "note": "Sem publicacao no Service Studio."
+}

@@ -1,0 +1,59 @@
+{
+ "description": "Cobertura testada (fase 1, medir): life de ServiceStudio.Plugin.SOAP.ISOAPStaticEntityAttributePolymorphic (o11) em soapStaticPoly. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISOAPClient",
+   "name": "CovSSoap",
+   "as": "$c"
+  },
+  {
+   "op": "create",
+   "parent": "$c",
+   "type": "ISOAPStaticEntityPolymorphic",
+   "name": "CovSStaticP",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "ISOAPStaticEntityAttributePolymorphic",
+   "name": "CovASOAPStaticEntityAttributePolymorphic",
+   "as": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Length",
+   "value": 50
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRSOAPStaticEntityAttributePolymorphic"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "move",
+   "target": "$b",
+   "first": true
+  }
+ ]
+}

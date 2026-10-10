@@ -1,0 +1,7 @@
+{
+ "description": "Loja inteira numa transacao: o job composto junta as quatro partes (dados, carrinho, detalhe, catalogo) sobre o fixture, como uma entrega de um merge so.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "jobs": ["job:ecommerce-01-data", "job:ecommerce-02-cart", "job:ecommerce-03-detail", "job:ecommerce-04-catalog"]
+}

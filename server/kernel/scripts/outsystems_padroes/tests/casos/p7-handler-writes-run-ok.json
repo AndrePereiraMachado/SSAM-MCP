@@ -1,0 +1,27 @@
+{
+ "description": "POSITIVO P7 (OutSystems padroes): um handler de tool (padrao Handle<X>Tool de config.p7.entryPatterns) grava ProtectedRunExcerpt, isenta por config.p7.allowedEntities; o lint nao acusa. Uma escrita em ProtectedNegDecision no mesmo handler continua proibida.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [
+   {"name": "ProtectedRunExcerpt", "public": true, "description": "Excerto que o run leu; os handlers de tool gravam esta evidencia.",
+    "attributes": [{"name": "ExcerptCode", "type": "Text", "length": 60, "description": "Codigo do excerto lido pelo run."}]},
+   {"name": "ProtectedNegDecision", "public": true, "description": "Entrada decidida por humano; nenhuma tool pode grava-la (controle P7).",
+    "attributes": [{"name": "Text", "type": "Text", "length": 200, "description": "Texto decidido pelo revisor."}]}
+  ]}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "HandleGetExcerptTool", "kind": "server", "public": true,
+    "description": "Registra o excerto lido pelo run (permitido) e grava uma entrada humana (proibido) para o lint separar os dois casos.",
+    "inputs": [{"name": "ExcerptCode", "type": "Text", "description": "Codigo do excerto pedido pelo modelo."}],
+    "vars": [
+     {"name": "Excerpt", "type": "ProtectedRunExcerpt", "description": "Registro de evidencia do excerto lido."},
+     {"name": "Entry", "type": "ProtectedNegDecision", "description": "Registro humano que a tool nao pode gravar."}],
+    "steps": [
+     {"assign": {"Excerpt.ExcerptCode": "ExcerptCode", "Entry.Text": "ExcerptCode"}, "as": "Fill the excerpt and entry records"},
+     {"create": "ProtectedRunExcerpt", "record": "Excerpt", "as": "CreateRunExcerpt"},
+     {"create": "ProtectedNegDecision", "record": "Entry", "as": "CreateDecisionEntry"}
+    ]}
+  ]}}
+ ]
+}

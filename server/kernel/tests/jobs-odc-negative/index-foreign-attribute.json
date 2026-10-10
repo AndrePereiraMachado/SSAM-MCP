@@ -1,0 +1,22 @@
+{
+ "description": "ODC: a RECUSA de um indice sobre um atributo de OUTRA entidade. O caminho limpo esta em tests/jobs-odc/entity-lifecycle.json (lote de dados, fase 3).",
+ "base": "job:data-full-model",
+ "expectValid": true,
+ "expectError": [
+  "EntityIndex attributes must belong to its parent entity"
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IServerEntity:WfCovTask",
+   "type": "EntityIndex",
+   "name": "IX_Bad",
+   "args": {
+    "unique": false,
+    "attributes": [
+     "IServerEntity:WfCovProject/Name"
+    ]
+   }
+  }
+ ]
+}

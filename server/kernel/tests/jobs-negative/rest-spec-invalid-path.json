@@ -1,0 +1,13 @@
+{
+ "description": "Op rest recusada antes de qualquer mudanca, com todos os problemas numa recusa so: caminho sem '/', {CEP} sem input na URL e corpo em GET.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectError": ["[REST_URLPATH_INVALID]", "[REST_PATH_PARAM_WITHOUT_INPUT]", "[REST_BODY_ON_GET]", "\"path\": \"/ws/json\""],
+ "ops": [
+  {"op": "rest", "data": {
+    "client": {"name": "BrokenApi", "baseUrl": "https://example.invalid"},
+    "structures": [{"name": "Payload", "attributes": [{"name": "Id", "type": "Integer", "json": "id"}]}],
+    "methods": [{"name": "NoSlash", "http": "GET", "path": "ws/json"},
+                {"name": "NoInput", "http": "GET", "path": "/x/{CEP}"},
+                {"name": "BodyOnGet", "http": "GET", "path": "/get", "request": {"structure": "Payload"}}]}}
+ ]
+}

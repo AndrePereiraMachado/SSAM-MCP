@@ -1,0 +1,89 @@
+{
+ "description": "Cobertura testada (fase 2): life de ServiceStudio.Plugin.NRWidgets.ILink (odc) em mobileContainer. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "CovSScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IContainer",
+   "name": "CovSBox",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "ILink",
+   "name": "CovALink",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAction",
+   "name": "CovSHandler",
+   "as": "$h"
+  },
+  {
+   "op": "create",
+   "parent": "$h",
+   "type": "IStartNode",
+   "as": "$h0"
+  },
+  {
+   "op": "create",
+   "parent": "$h",
+   "type": "IEndNode",
+   "as": "$h9"
+  },
+  {
+   "op": "link",
+   "from": "$h0",
+   "to": "$h9"
+  },
+  {
+   "op": "set",
+   "target": "$a/OnClick",
+   "prop": "Destination",
+   "value": "$h"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "CustomStyle",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRLink"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "move",
+   "target": "$b",
+   "first": true
+  }
+ ]
+}

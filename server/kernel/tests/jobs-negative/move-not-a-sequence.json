@@ -1,0 +1,23 @@
+{
+ "description": "A outra recusa do move: nem tudo o que esta dentro de um pai tem ORDEM de autor. As screen actions de uma tela sao listadas pelo proprio Studio, nao por uma sequencia do modelo, e por isso nao ha ordem para mudar. A mensagem diz isso e lista as sequencias que aquele pai tem de facto, para o job saber o que pode reordenar. O caminho limpo (atributos, widgets, parametros de entrada e variaveis de tela) esta em tests/jobs/refactor-move.json.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectError": [
+  "move: IMobileScreen 'MoveNoOrder' does not keep IScreenAction 'Alfa' in an ordered sequence",
+  "Sequences of this parent:",
+  "LocalVariables"
+ ],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "MoveNoOrder", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "Beta", "as": "$beta"},
+  {"op": "create", "parent": "$beta", "type": "IStartNode", "as": "$b0"},
+  {"op": "create", "parent": "$beta", "type": "IEndNode", "as": "$b9"},
+  {"op": "link", "from": "$b0", "to": "$b9"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "Alfa", "as": "$alfa"},
+  {"op": "create", "parent": "$alfa", "type": "IStartNode", "as": "$f0"},
+  {"op": "create", "parent": "$alfa", "type": "IEndNode", "as": "$f9"},
+  {"op": "link", "from": "$f0", "to": "$f9"},
+  {"op": "move", "target": "$alfa", "first": true}
+ ]
+}

@@ -1,0 +1,22 @@
+{
+ "description": "O11: a RECUSA do rename num tipo que nao tem nome nenhum. O filtro de um aggregate (IFilter) nao tem Name, Label nem Identifier, nem na interface nem na classe concreta (ServiceStudio.Model.Filter so tem DisplayName e o Name herdado, so de leitura); o mesmo vale para Sort, Join, GroupBy, Assignment, Start, End, Raise Exception e os itens de agenda. O rename recusa com uma frase curta, em vez do antigo \"Cannot find handler for object CovSEntity.Title <> \"\" of type Filter\". Os internos de aggregate que TEM nome (a fonte IAliasedSource, colunas calculadas e agrupadas) renomeiam-se por Name: tests/jobs/rename-name-property.json.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectError": [
+  "rename RnOnlyTitled",
+  "rename: IFilter has no name (the Studio shows no Name, Label or Identifier for it)"
+ ],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "RnNote", "attributes": [{"name": "Title", "type": "Text", "length": 50}]}]}},
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "RnFlow", "as": "$fp"},
+  {"op": "set", "target": "$fp", "prop": "Public", "value": true},
+  {"op": "create", "parent": "$fp", "type": "IStartNode", "as": "$fs"},
+  {"op": "create", "parent": "$fp", "type": "IEndNode", "as": "$fe"},
+  {"op": "create", "parent": "$fp", "type": "IAggregateNode", "name": "GetNotes", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "$RnNote"}},
+  {"op": "link", "from": "$fs", "to": "$agg"},
+  {"op": "link", "from": "$agg", "to": "$fe"},
+  {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "RnNote.Title <> \"\""}, "as": "$filter"},
+  {"op": "rename", "target": "$filter", "name": "RnOnlyTitled", "_why": "recusado: um filtro e uma condicao, nao tem nome"}
+ ]
+}

@@ -1,0 +1,18 @@
+{
+ "description": "A RECUSA do delete de uma entidade usada so pelo tipo gerado `DelListItem List`: a variavel local Items da action DelListUse e desse tipo. O tipo lista (como o registo anonimo `X Record`) e mantido pela plataforma e so deixa de contar enquanto ninguem o usa (tests/jobs/delete-generated-companions.json); aqui ha quem o use, e a recusa nomeia a VARIAVEL, nao o tipo. Cobertura testada, fase 2.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectError": [
+  "delete: refused, IServerEntity 'DelListItem' is used by 1 consumer(s)",
+  "IServerAction:DelListUse/ILocalVariable:Items",
+  "pass \"force\": true to break them"
+ ],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "DelListItem", "attributes": [{"name": "Title", "type": "Text"}]}]}},
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "DelListUse", "as": "$act"},
+  {"op": "create", "parent": "$act", "type": "ILocalVariable", "name": "Items", "as": "$items"},
+  {"op": "set", "target": "$items", "prop": "DataType", "value": "DelListItem List"},
+  {"op": "usages", "target": "$DelListItem", "_why": "o IListType 'DelListItem List' aparece com derived false: a variavel usa-o"},
+  {"op": "delete", "target": "$DelListItem"}
+ ]
+}

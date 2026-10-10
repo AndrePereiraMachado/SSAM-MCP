@@ -1,0 +1,20 @@
+{
+ "description": "DropdownServerSideItem do OSUI: ItemId obrigatorio, o evento obrigatorio OnSelected e o texto do item, com empty (o exemplo cita um GetData inexistente).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ServerItemDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Chosen", "as": "$vChosen"},
+  {"op": "set", "target": "$vChosen", "prop": "DataType", "value": "Text"},
+  {"op": "logic", "data": {"actions": [{"name": "Picked", "kind": "screen", "owner": "IMobileScreen:ServerItemDemo", "inputs": [{"name": "ItemOptionId", "type": "Text"}], "steps": [{"assign": {"Chosen": "ItemOptionId"}, "as": "Keep"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "DropdownServerSide1", "source": "IMobileBlock:DropdownServerSide", "empty": true, "as": "$ds"},
+  {"op": "create", "parent": "$ds/BalloonContent", "type": "IMobileBlockInstanceWidget", "name": "DropdownServerSideItem1", "source": "IMobileBlock:DropdownServerSideItem", "empty": true, "as": "$item"},
+  {"op": "set", "target": "$item/ItemId", "prop": "Value", "value": "\"books\""},
+  {"op": "set", "target": "$item/OnSelected", "prop": "Handler", "value": "IMobileScreen:ServerItemDemo/Picked"},
+  {"op": "set", "target": "$item/OnSelected/ItemOptionId", "prop": "Value", "value": "ItemOptionId"},
+  {"op": "create", "parent": "$item/DropdownItemContent", "type": "ITextWidget", "as": "$text1"},
+  {"op": "set", "target": "$text1", "prop": "Text", "value": "Books"}
+ ]
+}

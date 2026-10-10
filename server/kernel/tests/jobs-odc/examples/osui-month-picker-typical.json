@@ -1,0 +1,24 @@
+{
+ "description": "MonthPicker do OSUI: formato MM/YYYY e o OnSelected grava o mes e o ano escolhidos e mostra o texto do periodo.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "BillingMonth", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Billing\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "MonthText", "as": "$vMonthText"},
+  {"op": "set", "target": "$vMonthText", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Picked", "as": "$vPicked"},
+  {"op": "set", "target": "$vPicked", "prop": "DataType", "value": "MonthOrderYear"},
+  {"op": "logic", "data": {"actions": [{"name": "MonthPicked", "kind": "screen", "owner": "IMobileScreen:BillingMonth", "inputs": [{"name": "SelectedMonth", "type": "MonthOrderYear"}], "steps": [{"assign": {"Picked": "SelectedMonth"}, "as": "Keep"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "MonthPicker1", "source": "IMobileBlock:MonthPicker", "as": "$mp"},
+  {"op": "set", "target": "$mp/DateFormat", "prop": "Value", "value": "\"MM/YYYY\""},
+  {"op": "set", "target": "$mp/MonthPicker/#IInput", "prop": "Variable", "value": "MonthText"},
+  {"op": "set", "target": "$mp/OnSelected", "prop": "Handler", "value": "IMobileScreen:BillingMonth/MonthPicked"},
+  {"op": "set", "target": "$mp/OnSelected/SelectedMonth", "prop": "Value", "value": "SelectedMonth"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "\"Billing period: \" + Picked.Month + \"/\" + Picked.Year"}
+ ]
+}

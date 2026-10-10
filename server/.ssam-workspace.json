@@ -1,0 +1,7 @@
+{
+  "schema": "ssam-workspace/1",
+  "kernel": "kernel",
+  "odc": "platforms/odc",
+  "o11Lane": "ss4",
+  "workers": { "o11ss4": 18517, "o11ss5": 18537, "odc": 18547, "poolStep": 100 }
+}

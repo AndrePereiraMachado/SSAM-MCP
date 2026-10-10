@@ -1,0 +1,38 @@
+{
+  "fixture": "mobile-ui",
+  "features": [
+    "native-widget",
+    "mobile:IImage"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Subject",
+            "type": "IImage",
+            "properties": {
+              "Type": "External",
+              "Url": "\"https://example.com/image.png\"",
+              "Style": "\"coverage\""
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "mutation": {
+    "target": "IMobileScreen:Coverage/Subject",
+    "prop": "Style",
+    "value": "\"changed\""
+  }
+}

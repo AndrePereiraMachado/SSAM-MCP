@@ -1,0 +1,126 @@
+#nullable enable
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text.Json;
+
+internal static class ColdReferenceJournalOracle
+{
+    private static string Sha256(string path) => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant();
+
+    private static object? Scalar(JsonElement value, Type type)
+    {
+        if (type == typeof(int)) return value.GetInt32();
+        if (type == typeof(bool)) return value.GetBoolean();
+        if (type == typeof(string)) return value.ValueKind == JsonValueKind.Null ? null : value.GetString();
+        throw new InvalidOperationException("Unsupported oracle argument type: " + type.FullName);
+    }
+
+    private static object ExceptionRecord(Exception exception)
+    {
+        List<object> data = new List<object>();
+        foreach (DictionaryEntry item in exception.Data)
+            data.Add(new { key = item.Key?.ToString(), value = item.Value?.ToString() });
+        return new
+        {
+            type = exception.GetType().FullName,
+            message = exception.Message,
+            hResult = exception.HResult,
+            hResultHex = "0x" + exception.HResult.ToString("X8", CultureInfo.InvariantCulture),
+            paramName = (exception as ArgumentException)?.ParamName,
+            actualValue = (exception as ArgumentOutOfRangeException)?.ActualValue,
+            source = exception.Source,
+            targetSite = exception.TargetSite?.ToString(),
+            stackTrace = exception.StackTrace,
+            fullText = exception.ToString(),
+            helpLink = exception.HelpLink,
+            data,
+            innerException = exception.InnerException == null ? null : ExceptionRecord(exception.InnerException)
+        };
+    }
+
+    public static int Main(string[] args)
+    {
+        if (args.Length != 4)
+            throw new ArgumentException("Expected corpus source, oracle source, frozen inputs, and output path.");
+        CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
+        CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
+        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+        CultureInfo.CurrentUICulture = CultureInfo.InvariantCulture;
+        if (Environment.Version.Major != 8)
+            throw new InvalidOperationException("Oracle requires real .NET 8. Actual runtime: " + RuntimeInformation.FrameworkDescription);
+
+        using JsonDocument input = JsonDocument.Parse(File.ReadAllText(args[2]));
+        List<object> results = new List<object>();
+        int successful = 0;
+        int thrown = 0;
+        foreach (JsonElement test in input.RootElement.GetProperty("cases").EnumerateArray())
+        {
+            string methodName = test.GetProperty("method").GetString()!;
+            MethodInfo method = typeof(ColdReferenceJournal).GetMethod(methodName, BindingFlags.Public | BindingFlags.Static)
+                ?? throw new InvalidOperationException("Missing corpus method: " + methodName);
+            ParameterInfo[] parameters = method.GetParameters();
+            JsonElement[] rawArguments = test.GetProperty("arguments").EnumerateArray().ToArray();
+            if (parameters.Length != rawArguments.Length)
+                throw new InvalidOperationException("Argument count mismatch for " + methodName);
+            object?[] values = parameters.Select((parameter, i) => Scalar(rawArguments[i], parameter.ParameterType)).ToArray();
+            object outcome;
+            try
+            {
+                object? result = method.Invoke(null, values);
+                outcome = new { kind = "return", value = result, exception = (object?)null };
+                successful++;
+            }
+            catch (TargetInvocationException invocation) when (invocation.InnerException != null)
+            {
+                outcome = new { kind = "throw", value = (object?)null, exception = ExceptionRecord(invocation.InnerException) };
+                thrown++;
+            }
+            results.Add(new
+            {
+                id = test.GetProperty("id").GetString(),
+                method = methodName,
+                arguments = rawArguments,
+                returnType = method.ReturnType.FullName,
+                parameterTypes = parameters.Select(parameter => parameter.ParameterType.FullName).ToArray(),
+                expected = outcome
+            });
+        }
+
+        string coreLib = typeof(object).Assembly.Location;
+        object report = new
+        {
+            schema = "cold-reference-journal-oracle-v1",
+            runtime = new
+            {
+                framework = RuntimeInformation.FrameworkDescription,
+                environmentVersion = Environment.Version.ToString(),
+                coreLibrary = coreLib,
+                coreLibraryVersion = typeof(object).Assembly.GetName().Version?.ToString(),
+                coreLibrarySha256 = Sha256(coreLib),
+                targetFramework = Assembly.GetExecutingAssembly().GetCustomAttribute<System.Runtime.Versioning.TargetFrameworkAttribute>()?.FrameworkName,
+                os = RuntimeInformation.OSDescription,
+                processArchitecture = RuntimeInformation.ProcessArchitecture.ToString(),
+                culture = CultureInfo.CurrentCulture.Name,
+                uiCulture = CultureInfo.CurrentUICulture.Name
+            },
+            sources = new
+            {
+                corpus = new { path = Path.GetFullPath(args[0]), sha256 = Sha256(args[0]) },
+                oracle = new { path = Path.GetFullPath(args[1]), sha256 = Sha256(args[1]) },
+                inputs = new { path = Path.GetFullPath(args[2]), sha256 = Sha256(args[2]) }
+            },
+            counts = new { methods = results.Select(result => result.GetType().GetProperty("method")!.GetValue(result)).Distinct().Count(), cases = results.Count, successful, thrown },
+            cases = results
+        };
+        File.WriteAllText(args[3], JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }) + "\n");
+        Console.WriteLine("CLR=" + RuntimeInformation.FrameworkDescription + " cases=" + results.Count + " returns=" + successful + " throws=" + thrown);
+        return 0;
+    }
+}

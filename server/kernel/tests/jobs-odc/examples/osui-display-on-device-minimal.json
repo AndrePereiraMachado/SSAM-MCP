@@ -1,0 +1,11 @@
+{
+ "description": "DisplayOnDevice do OSUI: a instancia com os tres placeholders vazios.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "DeviceDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "DisplayOnDevice1", "source": "IMobileBlock:DisplayOnDevice", "as": "$dev"}
+ ]
+}

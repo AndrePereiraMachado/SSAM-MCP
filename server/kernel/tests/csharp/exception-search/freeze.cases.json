@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "frozenBeforeFirstExecution": true,
+  "frozenAtUtc": "2026-09-08T04:23:19.7307664Z",
+  "sourceCorpusSha256": "227d381e440e1cbd6516b080754ec4bd04427e695ca3cb452147cd272eafa126",
+  "sourceCorpusHashEncoding": "SHA-256 of UTF-8, ordinal filename-sorted filename + space + lowercase file SHA-256 lines, joined by LF with no trailing LF",
+  "files": {
+    "01-caller-filter.cs.txt": "6ae11efba7eec906f9e8e094ae57e228f1be45ae3d04ca83e546990f9344b5fc",
+    "02-captured-scalar.cs.txt": "222a0b633b2645a2c09dca97bd8680be45638d241870bd32f9453400b67e1bdd",
+    "03-finally-replacement.cs.txt": "9697b542a672c859c10523949f6325a6bbe83f7433109723b13c0a1052e3d9d8",
+    "04-filter-helper-throws.cs.txt": "94bfffe784f9e036cbf1ba35a96feccce7dd067eb477b64214d0a213313b1348",
+    "05-reassigned-catch-rethrow.cs.txt": "c0f453af10a73fa8081260300137e83a5f967055c8ce88a6026f4d1f4b952b88",
+    "06-recursive-activations.cs.txt": "56f71e551f91ec2b586b24e0201c7dfd8667b8fa12fc69cebe0aa7136056962d",
+    "expected.cases.json": "cee12b9456afa016e351638697fa5f1bf794bd294c19c283cecebb3c68df344b",
+    "OracleProgram.cs.txt": "528ce5a46b5a39e3c8bc8c8f711e858d1801bb20887db1f9e0ed84e82c2b0d8e"
+  }
+}

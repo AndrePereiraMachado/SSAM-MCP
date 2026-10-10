@@ -1,0 +1,28 @@
+{
+  "kind": "sc_web.fetch request (Web Forms postback)",
+  "request": {
+    "host": "sc.example.test",
+    "action": "fetch",
+    "method": "POST",
+    "path": "/ServiceCenter/Solution_Edit.aspx?_ts=0",
+    "form": {
+      "__OSVSTATE": "U1NBTS1TWU5USEVUSUMtT1NWU1RBVEUvc29sdXRpb24tMTE=",
+      "__VIEWSTATE": "",
+      "__VIEWSTATEGENERATOR": "A1B2C3D4",
+      "wt9$wtHeader$wt129$wt275$wtSearchInput": "",
+      "wt9$wtHeader$wt129$wt275$wt12": "",
+      "wt9$wt7$wt1$wtButtonNameField": "",
+      "wt9$wt7$wt1$wtScreenNameField": "",
+      "wt9$wtContentTop$wtDownloadVersion": "__ossli_0",
+      "wt9$wtContentMain$wtAddComponent$wtComponentInput": "SampleShared",
+      "wt9$wtContentMain$wtAddComponent$wtAutoComplete$wttxtAutoCompleteValue": "",
+      "wt9$wtContentMain$wtAddComponent$wtAutoComplete$wttxtAutoCompleteAux": "",
+      "__EVENTTARGET": "wt9_wtContentMain_wtAddComponent_wtAutoComplete",
+      "__AJAXEVENT": "Notify",
+      "__AJAX": "1024,768,,0,0,0,0,0,0,SampleShared%"
+    },
+    "accept": "html"
+  },
+  "expectedResponseFixture": "web/solutions/solution-component-lookup.osajax-reply.txt",
+  "notes": "Autocomplete lookup (OsAjax Notify) to resolve the component label -> value pair before Associate."
+}

@@ -1,0 +1,46 @@
+namespace ExceptionSearchOracle;
+
+internal static class FinallyReplacement
+{
+    internal static OracleResult Run()
+    {
+        var result = new OracleResult("finally-replacement-restarts-outer-filter-search");
+        var original = new InvalidOperationException("original");
+        var replacement = new ApplicationException("replacement");
+        var state = 0;
+        var filterCount = 0;
+
+        bool Filter(Exception exception)
+        {
+            filterCount++;
+            result.Events.Add($"outer.filter:{Identity.Of(exception, original, replacement)}:state={state}");
+            return true;
+        }
+
+        try
+        {
+            try
+            {
+                result.Events.Add("body.throw:original");
+                throw original;
+            }
+            finally
+            {
+                result.Events.Add($"body.finally.enter:state={state}");
+                state = 1;
+                result.Events.Add($"body.finally.throw:replacement:state={state}");
+                throw replacement;
+            }
+        }
+        catch (Exception exception) when (Filter(exception))
+        {
+            result.CaughtException = Identity.Of(exception, original, replacement);
+            result.Events.Add($"outer.catch:{result.CaughtException}:state={state}");
+            result.ReturnValue = "caught-replacement";
+        }
+
+        result.State["state"] = state.ToString();
+        result.State["filterCount"] = filterCount.ToString();
+        return result;
+    }
+}

@@ -1,0 +1,43 @@
+using System.Linq;
+using System.ComponentModel.DataAnnotations;
+using Anvil.Authoring;
+
+public enum CatalogStage { Pending = 10, Working = 40, Done = 90 }
+[Entity, Index(nameof(Code), Unique = true)]
+public record EnumRow(Id<EnumRow> Id, [property: MaxLength(32)] string Code, CatalogStage Stage, CatalogStage? Previous);
+
+public static class EnumRuntime
+{
+    public static bool EnumSeed(IDataSession database)
+    {
+        foreach (var old in database.Query<EnumRow>().Where(row => row.Code == "CSharpEnumA" || row.Code == "CSharpEnumB").ToList())
+            database.Delete(old.Id);
+        database.Insert(new EnumRow(default, "CSharpEnumA", CatalogStage.Pending, null));
+        database.Insert(new EnumRow(default, "CSharpEnumB", CatalogStage.Done, CatalogStage.Working));
+        return database.Query<EnumRow>().Count(row => row.Stage == CatalogStage.Pending) == 1
+            && database.Query<EnumRow>().Count(row => row.Previous == CatalogStage.Working) == 1;
+    }
+    public static bool EnumChange(IDataSession database)
+    {
+        var a = database.Query<EnumRow>().Single(row => row.Code == "CSharpEnumA");
+        var b = database.Query<EnumRow>().Single(row => row.Code == "CSharpEnumB");
+        if (a.Stage != CatalogStage.Pending || a.Previous != null || b.Previous != CatalogStage.Working) return false;
+        database.Update(a with { Stage = CatalogStage.Done, Previous = CatalogStage.Pending });
+        database.Update(b with { Stage = CatalogStage.Working, Previous = null });
+        return true;
+    }
+    public static bool EnumReadDelete(IDataSession database)
+    {
+        var rows = database.Query<EnumRow>().OrderBy(row => row.Stage).ToList();
+        var materialized = 0;
+        for (var i = 0; i < 3; i++)
+        {
+            var matches = database.Query<EnumRow>().Where(row => row.Stage == CatalogStage.Done).ToList();
+            materialized += matches.Count;
+        }
+        var correct = materialized == 3 && rows.Count == 2 && rows[0].Code == "CSharpEnumB" && rows[0].Previous == null
+            && rows[1].Code == "CSharpEnumA" && rows[1].Previous == CatalogStage.Pending;
+        foreach (var row in rows) database.Delete(row.Id);
+        return correct && !database.Query<EnumRow>().Any();
+    }
+}

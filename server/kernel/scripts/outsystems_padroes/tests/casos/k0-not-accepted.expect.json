@@ -1,0 +1,15 @@
+{
+ "_leia": "K0: run_job nao aceito (accepted=false, policyMessages) -> exit 1.",
+ "stage": "truechange",
+ "mode": "autor",
+ "module": "Integration_CS",
+ "result": "k0-not-accepted.result.json",
+ "exitCode": 1,
+ "mustFind": [
+  {
+   "rule": "K0",
+   "severity": "erro",
+   "contains": "accepted=False"
+  }
+ ]
+}

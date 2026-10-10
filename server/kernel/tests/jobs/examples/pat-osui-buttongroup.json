@@ -1,0 +1,34 @@
+{
+ "description": "Button Group do OutSystems UI (no Reactive O11 e o widget nativo IButtonGroup): tres itens ligados a uma variavel Integer de periodo; OnChange refaz o aggregate de tarefas filtrado pelo periodo escolhido.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "DaysAhead", "as": "$days"},
+  {"op": "set", "target": "$days", "prop": "DataType", "value": "Integer"},
+  {"op": "set", "target": "$days", "prop": "DefaultValue", "value": "7"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetTasksDueSoon", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "Task.DueDate <= DateTimeToDate(AddDays(CurrDate(), DaysAhead))"}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "PeriodChanged", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Novo periodo: refaz a consulta",
+    "steps": [{"node": "IRefreshDataNode", "as": "RefreshDueSoon", "properties": {"DataSource": "IScreenAggregate:GetTasksDueSoon"}}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IButtonGroup", "name": "PeriodGroup", "as": "$bg", "empty": true},
+  {"op": "set", "target": "$bg", "prop": "Variable", "value": "DaysAhead"},
+  {"op": "set", "target": "$bg/OnChange", "prop": "Destination", "value": "IScreenAction:PeriodChanged"},
+  {"op": "create", "parent": "$bg", "type": "IButtonGroupItem", "name": "WeekItem", "as": "$i7"},
+  {"op": "set", "target": "$i7", "prop": "Value", "value": "7"},
+  {"op": "create", "parent": "$i7", "type": "IExpression", "as": "$i7t"},
+  {"op": "set", "target": "$i7t", "prop": "Value", "value": "\"7 days\""},
+  {"op": "create", "parent": "$bg", "type": "IButtonGroupItem", "name": "MonthItem", "as": "$i30"},
+  {"op": "set", "target": "$i30", "prop": "Value", "value": "30"},
+  {"op": "create", "parent": "$i30", "type": "IExpression", "as": "$i30t"},
+  {"op": "set", "target": "$i30t", "prop": "Value", "value": "\"30 days\""},
+  {"op": "create", "parent": "$bg", "type": "IButtonGroupItem", "name": "QuarterItem", "as": "$i90"},
+  {"op": "set", "target": "$i90", "prop": "Value", "value": "90"},
+  {"op": "create", "parent": "$i90", "type": "IExpression", "as": "$i90t"},
+  {"op": "set", "target": "$i90t", "prop": "Value", "value": "\"90 days\""},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$count"},
+  {"op": "set", "target": "$count", "prop": "Value", "value": "GetTasksDueSoon.Count + \" task(s) due\""}
+ ]
+}

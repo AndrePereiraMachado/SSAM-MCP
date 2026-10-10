@@ -1,0 +1,32 @@
+{
+ "description": "RangeSlider do OSUI como filtro de preco maximo: o OnValueChange grava o valor e faz Refresh Data dos produtos ate esse preco.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [{"name": "Name", "type": "Text", "length": 100, "mandatory": true}, {"name": "Price", "type": "Currency"}, {"name": "ImageUrl", "type": "Text", "length": 500}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "MaxPriceFilter", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Max price\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "MaxPrice", "as": "$vMaxPrice"},
+  {"op": "set", "target": "$vMaxPrice", "prop": "DataType", "value": "Decimal"},
+  {"op": "set", "target": "$vMaxPrice", "prop": "DefaultValue", "value": "100"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "LoadProducts", "as": "$LoadProducts"},
+  {"op": "create", "parent": "$LoadProducts", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "create", "parent": "$LoadProducts", "type": "IFilter", "args": {"condition": "Product.Price <= MaxPrice"}},
+  {"op": "create", "parent": "$LoadProducts", "type": "ISort", "as": "$LoadProductsSort"},
+  {"op": "set", "target": "$LoadProductsSort", "prop": "Attribute", "value": "Product.Price"},
+  {"op": "logic", "data": {"actions": [{"name": "MaxChanged", "kind": "screen", "owner": "IMobileScreen:MaxPriceFilter", "inputs": [{"name": "Value", "type": "Decimal"}], "steps": [{"assign": {"MaxPrice": "Value"}, "as": "Keep"}, {"node": "IRefreshDataNode", "as": "Reload", "properties": {"DataSource": "IMobileScreen:MaxPriceFilter/LoadProducts"}}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "RangeSlider1", "source": "IMobileBlock:RangeSlider", "as": "$rs"},
+  {"op": "set", "target": "$rs/MinValue", "prop": "Value", "value": "0"},
+  {"op": "set", "target": "$rs/MaxValue", "prop": "Value", "value": "500"},
+  {"op": "set", "target": "$rs/StartingValue", "prop": "Value", "value": "MaxPrice"},
+  {"op": "set", "target": "$rs/OnValueChange", "prop": "Handler", "value": "IMobileScreen:MaxPriceFilter/MaxChanged"},
+  {"op": "set", "target": "$rs/OnValueChange/Value", "prop": "Value", "value": "Value"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "ProductList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "LoadProducts.List"},
+  {"op": "create", "parent": "$list", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "LoadProducts.List.Current.Product.Name"}
+ ]
+}

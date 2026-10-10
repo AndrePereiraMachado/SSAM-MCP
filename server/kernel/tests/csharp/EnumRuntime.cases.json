@@ -1,0 +1,5 @@
+[
+  {"method":"EnumSeed","arguments":[],"expected":true},
+  {"method":"EnumChange","arguments":[],"expected":true},
+  {"method":"EnumReadDelete","arguments":[],"expected":true}
+]

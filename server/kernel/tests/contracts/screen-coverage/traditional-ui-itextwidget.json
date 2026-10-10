@@ -1,0 +1,37 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "native-widget",
+    "web:ITextWidget"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Subject",
+            "type": "ITextWidget",
+            "properties": {
+              "Text": "Original",
+              "StyleClasses": "coverage"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "mutation": {
+    "target": "IWebScreen:Coverage/Subject",
+    "prop": "StyleClasses",
+    "value": "changed"
+  }
+}

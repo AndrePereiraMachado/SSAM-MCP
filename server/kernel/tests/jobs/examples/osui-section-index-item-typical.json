@@ -1,0 +1,23 @@
+{
+ "description": "SectionIndexItem (OutSystemsUI, Navigation) tipico; dentro de um SectionIndex vazio (placeholder Content); inputs obrigatorios ScrollToWidgetId ligados ao Id de um Container da tela; placeholders Content com dados do aggregate de tarefas; eventos Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "SectionIndexItemTarget", "as": "$target"},
+  {"op": "create", "parent": "$target", "type": "IExpression", "as": "$targetText"},
+  {"op": "set", "target": "$targetText", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s): touch or move here\""},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastSectionIndexItemId", "as": "$vLastSectionIndexItemId"},
+  {"op": "set", "target": "$vLastSectionIndexItemId", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetShowcaseTasks", "as": "$tasks"},
+  {"op": "create", "parent": "$tasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "logic", "data": {"actions": [{"name": "SectionIndexItemDemoInitialized", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de Initialized", "inputs": [{"name": "SectionIndexItemId", "type": "Text"}],"steps": [{"assign": {"LastSectionIndexItemId": "SectionIndexItemId"},"as": "KeepInitialized"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "SectionIndexDemo", "source": "IMobileBlock:SectionIndex", "empty": true,"as": "$parent"},
+  {"op": "create", "parent": "$parent/Content", "type": "IMobileBlockInstanceWidget", "name": "SectionIndexItemDemo", "source": "IMobileBlock:SectionIndexItem", "as": "$b"},
+  {"op": "set", "target": "$b/ScrollToWidgetId", "prop": "Value", "value": "SectionIndexItemTarget.Id"},
+  {"op": "set", "target": "$b/Initialized", "prop": "Handler", "value": "IScreenAction:SectionIndexItemDemoInitialized"},
+  {"op": "set", "target": "$b/Initialized/SectionIndexItemId", "prop": "Value", "value": "SectionIndexItemId"},
+  {"op": "create", "parent": "$b/Content", "type": "IExpression", "as": "$ph1"},
+  {"op": "set", "target": "$ph1", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""}
+ ]
+}

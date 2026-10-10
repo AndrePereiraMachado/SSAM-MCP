@@ -1,0 +1,33 @@
+# O que NAO entra no historico, e porque.
+#
+# Medido em 2026-09-18, antes do primeiro commit: o repositorio tinha 1548 MB, dos quais 1475 MB eram 283
+# ficheiros .oml. Versionar OMLs faria um repositorio que ninguem consegue clonar e que nao se sabe ler em diff
+# -- sao binarios. O que se versiona e o que os PRODUZ.
+
+# Modulos OutSystems: binarios, e sao a saida do trabalho, nao a fonte.
+*.oml
+*.oap
+*.osp
+
+# Candidatos, evidencia e instantaneos: reproduzem-se correndo outra vez.
+lab/
+snapshots/
+journal/
+output/
+tmp/
+
+# Copias de seguranca feitas a mao antes de mexer em ficheiros partilhados.
+.backup-*/
+
+# Compilacao
+bin/
+obj/
+node_modules/
+*.dll
+*.pdb
+*.user
+
+# Sistema
+Thumbs.db
+desktop.ini
+.DS_Store

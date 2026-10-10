@@ -1,0 +1,96 @@
+{
+ "description": "Cobertura testada (fase 2): life de ServiceStudio.Plugin.NRWidgets.IButtonGroup (odc) em mobileContainer. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "CovSScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IContainer",
+   "name": "CovSBox",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IButtonGroup",
+   "name": "CovAButtonGroup",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "ILocalVariable",
+   "name": "CovSChoice",
+   "as": "$hv"
+  },
+  {
+   "op": "set",
+   "target": "$hv",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Variable",
+   "value": "CovSChoice"
+  },
+  {
+   "op": "set",
+   "target": "$a/**IButtonGroupItem[1]",
+   "prop": "Value",
+   "value": "\"A\""
+  },
+  {
+   "op": "set",
+   "target": "$a/**IButtonGroupItem[2]",
+   "prop": "Value",
+   "value": "\"B\""
+  },
+  {
+   "op": "set",
+   "target": "$a/**IButtonGroupItem[3]",
+   "prop": "Value",
+   "value": "\"C\""
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "CustomStyle",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRButtonGroup"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "move",
+   "target": "$b",
+   "first": true
+  }
+ ]
+}

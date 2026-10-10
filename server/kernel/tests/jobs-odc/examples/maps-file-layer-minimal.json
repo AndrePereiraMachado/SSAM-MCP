@@ -1,0 +1,13 @@
+{
+ "description": "FileLayer do OutSystemsMaps: LayerURL (obrigatorio) de um arquivo de camada, no AddOns_Placeholder de um LeafletMap.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "FileLayerDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "LeafletMap1", "source": "IMobileBlock:LeafletMap", "as": "$map"},
+  {"op": "create", "parent": "$map/AddOns_Placeholder", "type": "IMobileBlockInstanceWidget", "name": "FileLayer1", "source": "IMobileBlock:FileLayer", "as": "$shape"},
+  {"op": "set", "target": "$shape/LayerURL", "prop": "Value", "value": "\"https://example.com/zones.kml\""}
+ ]
+}

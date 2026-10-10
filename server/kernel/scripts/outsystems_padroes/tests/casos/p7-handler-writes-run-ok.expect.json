@@ -1,0 +1,24 @@
+{
+ "_leia": "P7: Handle<X>Tool gravando ProtectedRunExcerpt (isenta por config.p7.allowedEntities) nao e acusado; a escrita em ProtectedNegDecision e.",
+ "stage": "job",
+ "mode": "autor",
+ "module": "Domain_CS",
+ "exitCode": 1,
+ "mustFind": [
+  {
+   "rule": "P7",
+   "severity": "erro",
+   "contains": "ProtectedNegDecision"
+  }
+ ],
+ "mustNotFind": [
+  {
+   "rule": "P7",
+   "contains": "ProtectedRunExcerpt"
+  },
+  {
+   "rule": "N1",
+   "contains": "HandleGetExcerptTool não começa por verbo"
+  }
+ ]
+}

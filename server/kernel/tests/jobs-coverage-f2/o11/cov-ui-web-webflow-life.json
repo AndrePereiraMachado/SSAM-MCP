@@ -1,0 +1,34 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.UI.Web.IWebFlow (o11) em espaceWeb. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IWebFlow",
+   "name": "CovAWebFlow",
+   "as": "$a"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRWebFlow"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  }
+ ]
+}

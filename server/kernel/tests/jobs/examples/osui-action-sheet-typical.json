@@ -1,0 +1,29 @@
+{
+ "description": "ActionSheet (OutSystemsUI, Interaction) tipico; inputs obrigatorios IsOpen ligados a variaveis da tela; placeholders Button1, Button2, Button3, Button4, Button5 com dados do aggregate de tarefas; eventos OnClose tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base-mobile",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "IsOpenValue", "as": "$vIsOpenValue"},
+  {"op": "set", "target": "$vIsOpenValue", "prop": "DataType", "value": "Boolean"},
+  {"op": "set", "target": "$vIsOpenValue", "prop": "DefaultValue", "value": "False"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "OnCloseCount", "as": "$vOnCloseCount"},
+  {"op": "set", "target": "$vOnCloseCount", "prop": "DataType", "value": "Integer"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetShowcaseTasks", "as": "$tasks"},
+  {"op": "create", "parent": "$tasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "logic", "data": {"actions": [{"name": "ActionSheetDemoOnClose", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Conta as vezes que OnClose disparou", "inputs": [],"steps": [{"assign": {"OnCloseCount": "OnCloseCount + 1"},"as": "KeepOnClose"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/Content", "type": "IMobileBlockInstanceWidget", "name": "ActionSheetDemo", "source": "IMobileBlock:ActionSheet", "as": "$b"},
+  {"op": "set", "target": "$b/IsOpen", "prop": "Value", "value": "IsOpenValue"},
+  {"op": "set", "target": "$b/OnClose", "prop": "Handler", "value": "IScreenAction:ActionSheetDemoOnClose"},
+  {"op": "create", "parent": "$b/Button1", "type": "IExpression", "as": "$ph1"},
+  {"op": "set", "target": "$ph1", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/Button2", "type": "IExpression", "as": "$ph2"},
+  {"op": "set", "target": "$ph2", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/Button3", "type": "IExpression", "as": "$ph3"},
+  {"op": "set", "target": "$ph3", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/Button4", "type": "IExpression", "as": "$ph4"},
+  {"op": "set", "target": "$ph4", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/Button5", "type": "IExpression", "as": "$ph5"},
+  {"op": "set", "target": "$ph5", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""}
+ ]
+}

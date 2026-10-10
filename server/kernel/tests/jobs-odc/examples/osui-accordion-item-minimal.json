@@ -1,0 +1,16 @@
+{
+ "description": "AccordionItem do OSUI: um item com Title e Content dentro de um Accordion vazio.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "AccordionItemDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Accordion1", "source": "IMobileBlock:Accordion", "empty": true, "as": "$acc"},
+  {"op": "create", "parent": "$acc/Content", "type": "IMobileBlockInstanceWidget", "name": "AccordionItem1", "source": "IMobileBlock:AccordionItem", "as": "$item"},
+  {"op": "create", "parent": "$item/Title", "type": "ITextWidget", "as": "$text1"},
+  {"op": "set", "target": "$text1", "prop": "Text", "value": "Shipping"},
+  {"op": "create", "parent": "$item/Content", "type": "ITextWidget", "as": "$text2"},
+  {"op": "set", "target": "$text2", "prop": "Text", "value": "Ships in 3 days."}
+ ]
+}

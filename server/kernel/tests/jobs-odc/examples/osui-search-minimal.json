@@ -1,0 +1,14 @@
+{
+ "description": "Search do OSUI: o Input de exemplo do placeholder Input ganha a variavel.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "SearchDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "SearchText", "as": "$vSearchText"},
+  {"op": "set", "target": "$vSearchText", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Search1", "source": "IMobileBlock:Search", "as": "$s"},
+  {"op": "set", "target": "$s/Input/#IInput", "prop": "Variable", "value": "SearchText"}
+ ]
+}

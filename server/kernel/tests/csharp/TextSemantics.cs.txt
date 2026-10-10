@@ -1,0 +1,10 @@
+public static class TextRules
+{
+    public static bool IsBlank(string? value) => string.IsNullOrWhiteSpace(value);
+    public static bool IsEmpty(string? value) => string.IsNullOrEmpty(value);
+    public static string Clean(string value) => value.Trim();
+    public static string CleanStart(string value) => value.TrimStart();
+    public static string CleanEnd(string value) => value.TrimEnd();
+    public static string Echo(string value) => value;
+    public static string CarriageReturn() => "\r";
+}

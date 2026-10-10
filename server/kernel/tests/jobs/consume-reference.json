@@ -1,0 +1,150 @@
+{
+ "description": "Adicionar referencias novas headless (Manage Dependencies sem Studio): o modulo Reactive passa a referenciar a entidade Product e a action Product_GetById do produtor (job producer-public) via IESpace.RefreshDependencies, e usa-as numa tela",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "reference",
+   "producer": "job:producer-public",
+   "elements": [
+    "IServerEntity:Product",
+    "IServerAction:Product_GetById"
+   ],
+   "as": "$ref"
+  },
+  {
+   "op": "find",
+   "type": "IReference",
+   "max": 20
+  },
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "Products",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAggregate",
+   "name": "GetProducts",
+   "as": "$agg"
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IEntitySignature:Product"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IList",
+   "name": "ProductList",
+   "as": "$list"
+  },
+  {
+   "op": "set",
+   "target": "$list",
+   "prop": "Source",
+   "value": "GetProducts.List"
+  },
+  {
+   "op": "create",
+   "parent": "$list",
+   "type": "IExpression",
+   "as": "$ex"
+  },
+  {
+   "op": "set",
+   "target": "$ex",
+   "prop": "Value",
+   "value": "GetProducts.List.Current.Product.Name"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAction",
+   "name": "LoadSummary",
+   "as": "$sa"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IStartNode",
+   "as": "$s0"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IExecuteServerActionNode",
+   "name": "Product_GetById",
+   "as": "$call"
+  },
+  {
+   "op": "set",
+   "target": "$call",
+   "prop": "Action",
+   "value": "IActionSignature:Product_GetById"
+  },
+  {
+   "op": "set",
+   "target": "$call/ProductId",
+   "prop": "Value",
+   "value": "GetProducts.List.Current.Product.Id"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IEndNode",
+   "as": "$s9"
+  },
+  {
+   "op": "link",
+   "from": "$s0",
+   "to": "$call"
+  },
+  {
+   "op": "link",
+   "from": "$call",
+   "to": "$s9"
+  },
+  {
+   "op": "layout",
+   "target": "$sa"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/Actions",
+   "type": "IButton",
+   "name": "LoadButton",
+   "as": "$btn"
+  },
+  {
+   "op": "set",
+   "target": "$btn/#ITextWidget",
+   "prop": "Text",
+   "value": "Load summary"
+  },
+  {
+   "op": "set",
+   "target": "$btn/OnClick",
+   "prop": "Destination",
+   "value": "$sa"
+  },
+  {
+   "op": "dump",
+   "target": "$scr",
+   "depth": 3
+  }
+ ]
+}

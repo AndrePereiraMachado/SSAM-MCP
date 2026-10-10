@@ -1,0 +1,136 @@
+{
+ "description": "Cobertura testada (fase 2): life de ServiceStudio.Plugin.REST.IRestStructure (o11) em restClientValid. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedCustomStructure",
+   "element": "Headless_CS (ESpace) / CovSApi (RestClient) / CovRRestStructure (RestStructure)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  },
+  {
+   "id": "UnusedCustomStructure",
+   "element": "Headless_CS (ESpace) / CovSApi (RestClient) / CovRRestStructure2 (RestStructure)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IRestClient",
+   "name": "CovSApi",
+   "as": "$api"
+  },
+  {
+   "op": "set",
+   "target": "$api",
+   "prop": "BaseURL",
+   "value": "https://example.com"
+  },
+  {
+   "op": "create",
+   "parent": "$api",
+   "type": "IRestStructure",
+   "name": "CovSRestBody",
+   "as": "$body"
+  },
+  {
+   "op": "create",
+   "parent": "$body",
+   "type": "IRestStructureAttribute",
+   "name": "CovSTitle",
+   "as": "$bodyt"
+  },
+  {
+   "op": "set",
+   "target": "$bodyt",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$api",
+   "type": "IRestAction",
+   "name": "CovSGet",
+   "as": "$m"
+  },
+  {
+   "op": "set",
+   "target": "$m",
+   "prop": "HTTPMethod",
+   "value": "GET"
+  },
+  {
+   "op": "set",
+   "target": "$m",
+   "prop": "URLPath",
+   "value": "/cov"
+  },
+  {
+   "op": "set",
+   "target": "$m",
+   "prop": "ResponseFormat",
+   "value": "JSON"
+  },
+  {
+   "op": "create",
+   "parent": "$m",
+   "type": "IRestActionOutput",
+   "name": "Response",
+   "as": "$mout"
+  },
+  {
+   "op": "set",
+   "target": "$mout",
+   "prop": "DataType",
+   "value": "CovSRestBody"
+  },
+  {
+   "op": "set",
+   "target": "$mout",
+   "prop": "OutputPlacement",
+   "value": "BodyPlacement"
+  },
+  {
+   "op": "create",
+   "parent": "$api",
+   "type": "IRestStructure",
+   "name": "CovARestStructure",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IRestStructureAttribute",
+   "name": "Title",
+   "as": "$aat"
+  },
+  {
+   "op": "set",
+   "target": "$aat",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRRestStructure"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  }
+ ]
+}

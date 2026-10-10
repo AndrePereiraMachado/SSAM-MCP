@@ -1,0 +1,146 @@
+{
+  "description": "Screen spec screen-spec-form-reactive: public block contracts, fixture-owned data, zero new messages.",
+  "base": "reactive-ui.oml",
+  "expectValid": true,
+  "ops": [
+    {
+      "op": "spec",
+      "data": {
+        "static": [
+          {
+            "name": "ShowcaseGenre",
+            "records": [
+              {
+                "name": "Adventure"
+              },
+              {
+                "name": "Strategy"
+              }
+            ]
+          }
+        ],
+        "entities": [
+          {
+            "name": "ShowcaseGame",
+            "public": true,
+            "attributes": [
+              {
+                "name": "Title",
+                "type": "Text",
+                "mandatory": true,
+                "length": 120
+              },
+              {
+                "name": "Description",
+                "type": "Text",
+                "length": 500
+              },
+              {
+                "name": "Price",
+                "type": "Currency"
+              },
+              {
+                "name": "Rating",
+                "type": "Decimal"
+              },
+              {
+                "name": "ImageUrl",
+                "type": "Text",
+                "length": 500
+              },
+              {
+                "name": "Active",
+                "type": "Boolean"
+              },
+              {
+                "name": "GenreId",
+                "type": "ShowcaseGenre Identifier"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "logic",
+      "data": {
+        "actions": [
+          {
+            "name": "ShowcaseGame_Save",
+            "public": true,
+            "inputs": [
+              {
+                "name": "Game",
+                "type": "ShowcaseGame"
+              }
+            ],
+            "steps": [
+              {
+                "save": "ShowcaseGame",
+                "record": "Game",
+                "as": "SaveGame"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "screen",
+      "data": {
+        "screens": [
+          {
+            "name": "GameForm",
+            "kind": "form",
+            "title": "Edit game",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "ShowcaseGame Identifier"
+              }
+            ],
+            "source": {
+              "entity": "ShowcaseGame",
+              "as": "GetGame",
+              "where": "ShowcaseGame.Id = GameId"
+            },
+            "fields": [
+              {
+                "field": "Title",
+                "label": "Title"
+              },
+              {
+                "field": "Description",
+                "label": "Description",
+                "kind": "textarea"
+              },
+              {
+                "field": "Price",
+                "label": "Price"
+              },
+              {
+                "field": "Active",
+                "label": "Active"
+              }
+            ],
+            "actions": [
+              {
+                "name": "Save",
+                "label": "Save game",
+                "call": "ShowcaseGame_Save",
+                "args": {
+                  "Game": "GetGame.List.Current.ShowcaseGame"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "find",
+      "type": "IMobileBlockInstanceWidget",
+      "max": 100
+    }
+  ]
+}

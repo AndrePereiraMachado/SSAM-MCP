@@ -1,0 +1,456 @@
+{
+  "description": "Compila a pagina HTML/CSS autorada tests/html/incidents-dashboard.html (sha256 97bc37134bc9) outra vez sobre a tela ja criada (delta: identidade da tela e variaveis preservadas, sem duplicar); gerado por scripts/gen_html_job.py --target update.",
+  "base": "job:html-dashboard-reactive",
+  "expectValid": true,
+  "expectedMessages": [],
+  "ops": [
+    {
+      "op": "html",
+      "data": {
+        "screen": "Dashboard",
+        "title": "Visão geral",
+        "vars": [
+          {
+            "name": "DashboardStartDate",
+            "type": "Date Time",
+            "default": "NullDate()"
+          },
+          {
+            "name": "DashboardEndDate",
+            "type": "Date Time",
+            "default": "NullDate()"
+          }
+        ],
+        "sources": [
+          {
+            "action": "GetDashboardMetricsForPeriod",
+            "as": "LoadDashboard",
+            "args": {
+              "StartDate": "DashboardStartDate",
+              "EndDate": "DashboardEndDate"
+            },
+            "state": true
+          },
+          {
+            "action": "GetIncidentsNearDue",
+            "as": "LoadNearDue",
+            "args": {
+              "StartDate": "DashboardStartDate",
+              "EndDate": "DashboardEndDate"
+            },
+            "state": true,
+            "paging": {
+              "offset": "NearDueOffset",
+              "size": 10,
+              "total": "Total"
+            }
+          },
+          {
+            "action": "GetIncidentList",
+            "as": "LoadMine",
+            "args": {
+              "Search": "\"\"",
+              "StatusId": "NullIdentifier()",
+              "PriorityId": "NullIdentifier()",
+              "AssigneeId": "GetUserId()",
+              "OnlyMine": "False",
+              "OnlyOverdue": "False",
+              "StartDate": "DashboardStartDate",
+              "EndDate": "DashboardEndDate",
+              "OnlyOpen": "True"
+            },
+            "state": true,
+            "paging": {
+              "offset": "MineOffset",
+              "size": 10,
+              "total": "Total"
+            }
+          },
+          {
+            "action": "GetIncidentList",
+            "as": "LoadRecent",
+            "args": {
+              "Search": "SearchText",
+              "StatusId": "NullIdentifier()",
+              "PriorityId": "Filter_PriorityId",
+              "AssigneeId": "NullIdentifier()",
+              "OnlyMine": "False",
+              "OnlyOverdue": "False",
+              "StartDate": "DashboardStartDate",
+              "EndDate": "DashboardEndDate"
+            },
+            "state": true,
+            "paging": {
+              "offset": "RecentOffset",
+              "size": 20,
+              "total": "Total"
+            }
+          }
+        ],
+        "search": {
+          "key": "search",
+          "label": "Título do chamado"
+        },
+        "filters": [
+          {
+            "key": "filter.priority",
+            "from": "IncidentPriority",
+            "variable": "Filter_PriorityId",
+            "label": "Todas as prioridades"
+          }
+        ],
+        "derived": [
+          {
+            "name": "StatusMax",
+            "type": "Integer",
+            "source": "LoadDashboard",
+            "output": "IncidentsByStatus",
+            "max": "Total"
+          }
+        ],
+        "scripts": [
+          {
+            "name": "SlaCountdown",
+            "inputs": [
+              {
+                "name": "Due",
+                "type": "Date Time"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Text",
+                "type": "Text"
+              }
+            ],
+            "code": "var due = $parameters.Due instanceof Date ? $parameters.Due : new Date($parameters.Due); var minutes = Math.round((due.getTime() - Date.now()) / 60000); $parameters.Text = minutes < 0 ? \"vencido há \" + (-minutes) + \" min\" : \"vence em \" + minutes + \" min\";"
+          }
+        ],
+        "bindings": {
+          "nav.incidents": {
+            "kind": "navigate",
+            "destination": "IncidentList"
+          },
+          "refresh": {
+            "kind": "refresh"
+          },
+          "new": {
+            "kind": "navigate",
+            "destination": "IncidentCreate"
+          },
+          "period.start": {
+            "kind": "date",
+            "variable": "DashboardStartDate",
+            "format": "DD/MM/YYYY"
+          },
+          "period.end": {
+            "kind": "date",
+            "variable": "DashboardEndDate",
+            "format": "DD/MM/YYYY"
+          },
+          "metric.open": {
+            "kind": "text",
+            "value": "LoadDashboard.TotalOpen"
+          },
+          "metric.mine": {
+            "kind": "text",
+            "value": "IntegerToText(LoadDashboard.MyOpenIncidents) + \" atribuídos a você\""
+          },
+          "open.open": {
+            "kind": "navigate",
+            "destination": "IncidentList",
+            "args": {
+              "StartDate": "DashboardStartDate",
+              "EndDate": "DashboardEndDate",
+              "OnlyOpen": "True"
+            }
+          },
+          "metric.overdue": {
+            "kind": "text",
+            "value": "LoadDashboard.TotalOverdue"
+          },
+          "open.overdue": {
+            "kind": "navigate",
+            "destination": "IncidentList",
+            "args": {
+              "OnlyOverdue": "True",
+              "StartDate": "DashboardStartDate",
+              "EndDate": "DashboardEndDate"
+            }
+          },
+          "metric.critical": {
+            "kind": "text",
+            "value": "LoadDashboard.TotalCritical"
+          },
+          "open.critical": {
+            "kind": "navigate",
+            "destination": "IncidentList",
+            "args": {
+              "PriorityId": "Entities.IncidentPriority.Critical",
+              "StartDate": "DashboardStartDate",
+              "EndDate": "DashboardEndDate",
+              "OnlyOpen": "True"
+            }
+          },
+          "metric.resolved": {
+            "kind": "text",
+            "value": "LoadDashboard.TotalResolvedToday"
+          },
+          "open.resolved": {
+            "kind": "navigate",
+            "destination": "IncidentList",
+            "args": {
+              "StatusId": "Entities.IncidentStatus.Resolved",
+              "OnlyResolvedToday": "True"
+            }
+          },
+          "status.bars": {
+            "kind": "list",
+            "source": "LoadDashboard",
+            "output": "IncidentsByStatus"
+          },
+          "status.label": {
+            "kind": "field",
+            "field": "Label"
+          },
+          "status.fill": {
+            "kind": "style",
+            "value": "\"width:\" + If(StatusMax = 0, \"0\", DecimalToText(LoadDashboard.IncidentsByStatus.Current.Total * 100 / StatusMax)) + \"%\""
+          },
+          "status.total": {
+            "kind": "field",
+            "field": "Total"
+          },
+          "priority.caption": {
+            "kind": "text",
+            "value": "IntegerToText(LoadDashboard.TotalOpen) + \" abertos\""
+          },
+          "priority.items": {
+            "kind": "list",
+            "source": "LoadDashboard",
+            "output": "IncidentsByPriority"
+          },
+          "priority.dot": {
+            "kind": "style",
+            "value": "\"background-color:\" + If(LoadDashboard.IncidentsByPriority.Current.PriorityId = Entities.IncidentPriority.Critical, \"#d87171\", If(LoadDashboard.IncidentsByPriority.Current.PriorityId = Entities.IncidentPriority.High, \"#e7ab62\", If(LoadDashboard.IncidentsByPriority.Current.PriorityId = Entities.IncidentPriority.Medium, \"#7189e8\", \"#6dad93\")))"
+          },
+          "priority.label": {
+            "kind": "field",
+            "field": "Label"
+          },
+          "priority.total": {
+            "kind": "field",
+            "field": "Total"
+          },
+          "notice": {
+            "kind": "text",
+            "value": "If(LoadNearDue.IsDataFetched and LoadNearDue.FetchSucceeded, LongIntegerToText(LoadNearDue.Total) + \" incidentes vencem nos próximos 30 minutos.\", \"\")"
+          },
+          "recent": {
+            "kind": "list",
+            "source": "LoadRecent",
+            "output": "Incidents"
+          },
+          "recent.title": {
+            "kind": "field",
+            "field": "Title"
+          },
+          "recent.code": {
+            "kind": "text",
+            "value": "\"INC-\" + LongIntegerToText(LoadRecent.Incidents.Current.Id)"
+          },
+          "recent.priority": {
+            "kind": "text",
+            "value": "If(LoadRecent.Incidents.Current.PriorityId = Entities.IncidentPriority.Critical, \"Crítica\", If(LoadRecent.Incidents.Current.PriorityId = Entities.IncidentPriority.High, \"Alta\", If(LoadRecent.Incidents.Current.PriorityId = Entities.IncidentPriority.Medium, \"Média\", \"Baixa\")))"
+          },
+          "recent.status": {
+            "kind": "text",
+            "value": "If(LoadRecent.Incidents.Current.StatusId = Entities.IncidentStatus.Resolved, \"Resolvido\", If(LoadRecent.Incidents.Current.StatusId = Entities.IncidentStatus.InProgress, \"Em andamento\", If(LoadRecent.Incidents.Current.StatusId = Entities.IncidentStatus.InAnalysis, \"Em análise\", If(LoadRecent.Incidents.Current.StatusId = Entities.IncidentStatus.Reopened, \"Reaberto\", \"Novo\"))))"
+          },
+          "recent.owner": {
+            "kind": "text",
+            "value": "If(LoadRecent.Incidents.Current.AssigneeId = NullIdentifier(), \"Não atribuído\", \"Usuário #\" + LongIntegerToText(LoadRecent.Incidents.Current.AssigneeId))"
+          },
+          "recent.empty": {
+            "kind": "visible",
+            "condition": "LoadRecent.Incidents.Empty"
+          },
+          "recent.count": {
+            "kind": "text",
+            "value": "IntegerToText(LoadRecent.Total) + \" incidentes\""
+          },
+          "neardue": {
+            "kind": "list",
+            "source": "LoadNearDue",
+            "output": "Incidents"
+          },
+          "neardue.title": {
+            "kind": "field",
+            "field": "Title"
+          },
+          "neardue.sla": {
+            "kind": "text",
+            "value": "SlaCountdown(LoadNearDue.Incidents.Current.SlaDueAt)"
+          },
+          "neardue.status": {
+            "kind": "text",
+            "value": "If(LoadNearDue.Incidents.Current.StatusId = Entities.IncidentStatus.InProgress, \"Em andamento\", If(LoadNearDue.Incidents.Current.StatusId = Entities.IncidentStatus.InAnalysis, \"Em análise\", If(LoadNearDue.Incidents.Current.StatusId = Entities.IncidentStatus.Reopened, \"Reaberto\", \"Novo\")))"
+          },
+          "neardue.empty": {
+            "kind": "visible",
+            "condition": "LoadNearDue.Incidents.Empty"
+          },
+          "mine": {
+            "kind": "list",
+            "source": "LoadMine",
+            "output": "Incidents"
+          },
+          "mine.title": {
+            "kind": "field",
+            "field": "Title"
+          },
+          "mine.sla": {
+            "kind": "field",
+            "field": "SlaDueAt"
+          },
+          "mine.status": {
+            "kind": "text",
+            "value": "If(LoadMine.Incidents.Current.StatusId = Entities.IncidentStatus.InProgress, \"Em andamento\", If(LoadMine.Incidents.Current.StatusId = Entities.IncidentStatus.InAnalysis, \"Em análise\", If(LoadMine.Incidents.Current.StatusId = Entities.IncidentStatus.Reopened, \"Reaberto\", \"Novo\")))"
+          },
+          "mine.empty": {
+            "kind": "visible",
+            "condition": "LoadMine.Incidents.Empty"
+          },
+          "dashboard.loading": {
+            "kind": "visible",
+            "condition": "not LoadDashboard.IsDataFetched"
+          },
+          "dashboard.error": {
+            "kind": "visible",
+            "condition": "LoadDashboard.IsDataFetched and not LoadDashboard.FetchSucceeded"
+          },
+          "dashboard.ready": {
+            "kind": "visible",
+            "condition": "LoadDashboard.IsDataFetched and LoadDashboard.FetchSucceeded"
+          },
+          "dashboard.retry": {
+            "kind": "refresh",
+            "sources": [
+              "LoadDashboard"
+            ]
+          },
+          "recent.loading": {
+            "kind": "visible",
+            "condition": "not LoadRecent.IsDataFetched"
+          },
+          "recent.error": {
+            "kind": "visible",
+            "condition": "LoadRecent.IsDataFetched and not LoadRecent.FetchSucceeded"
+          },
+          "recent.ready": {
+            "kind": "visible",
+            "condition": "LoadRecent.IsDataFetched and LoadRecent.FetchSucceeded"
+          },
+          "recent.retry": {
+            "kind": "refresh",
+            "sources": [
+              "LoadRecent"
+            ]
+          },
+          "mine.loading": {
+            "kind": "visible",
+            "condition": "not LoadMine.IsDataFetched"
+          },
+          "mine.error": {
+            "kind": "visible",
+            "condition": "LoadMine.IsDataFetched and not LoadMine.FetchSucceeded"
+          },
+          "mine.ready": {
+            "kind": "visible",
+            "condition": "LoadMine.IsDataFetched and LoadMine.FetchSucceeded"
+          },
+          "mine.retry": {
+            "kind": "refresh",
+            "sources": [
+              "LoadMine"
+            ]
+          },
+          "neardue.loading": {
+            "kind": "visible",
+            "condition": "not LoadNearDue.IsDataFetched"
+          },
+          "neardue.error": {
+            "kind": "visible",
+            "condition": "LoadNearDue.IsDataFetched and not LoadNearDue.FetchSucceeded"
+          },
+          "neardue.ready": {
+            "kind": "visible",
+            "condition": "LoadNearDue.IsDataFetched and LoadNearDue.FetchSucceeded"
+          },
+          "neardue.retry": {
+            "kind": "refresh",
+            "sources": [
+              "LoadNearDue"
+            ]
+          },
+          "recent.previous": {
+            "kind": "page",
+            "source": "LoadRecent",
+            "direction": "previous"
+          },
+          "recent.next": {
+            "kind": "page",
+            "source": "LoadRecent",
+            "direction": "next"
+          },
+          "recent.page": {
+            "kind": "text",
+            "value": "If(LoadRecent.Total = 0, \"0\", IntegerToText(RecentOffset + 1)) + \"–\" + IntegerToText(RecentOffset + LoadRecent.Incidents.Length) + \" de \" + IntegerToText(LoadRecent.Total)"
+          },
+          "mine.previous": {
+            "kind": "page",
+            "source": "LoadMine",
+            "direction": "previous"
+          },
+          "mine.next": {
+            "kind": "page",
+            "source": "LoadMine",
+            "direction": "next"
+          },
+          "mine.page": {
+            "kind": "text",
+            "value": "If(LoadMine.Total = 0, \"0\", IntegerToText(MineOffset + 1)) + \"–\" + IntegerToText(MineOffset + LoadMine.Incidents.Length) + \" de \" + IntegerToText(LoadMine.Total)"
+          },
+          "neardue.previous": {
+            "kind": "page",
+            "source": "LoadNearDue",
+            "direction": "previous"
+          },
+          "neardue.next": {
+            "kind": "page",
+            "source": "LoadNearDue",
+            "direction": "next"
+          },
+          "neardue.page": {
+            "kind": "text",
+            "value": "If(LoadNearDue.Total = 0, \"0\", IntegerToText(NearDueOffset + 1)) + \"–\" + IntegerToText(NearDueOffset + LoadNearDue.Incidents.Length) + \" de \" + LongIntegerToText(LoadNearDue.Total)"
+          },
+          "account": {
+            "kind": "block",
+            "block": "UserInfo"
+          },
+          "access.required": {
+            "kind": "visible",
+            "condition": "GetUserId() = NullIdentifier()"
+          },
+          "access.authenticated": {
+            "kind": "visible",
+            "condition": "GetUserId() <> NullIdentifier()"
+          }
+        },
+        "layout": "blank",
+        "html": "<!doctype html>\n<html lang=\"pt-BR\">\n<head>\n<meta charset=\"utf-8\">\n<title>Visão geral · Incidents</title>\n<style>\n/* Referência de autoria do Incidents_UI/Dashboard: a página inteira é escrita em HTML/CSS; dados, filtros, eventos e a função\n   cliente vêm do manifesto tests/html/incidents-dashboard.bindings.json. O compilador escopa estas regras sob .av-dashboard\n   e as instala no tema do módulo. Sem seletores por id: o OutSystems reserva o atributo. */\n:root{font-family:Inter,\"Segoe UI\",system-ui,sans-serif;color:#192b40;background:#f4f6fa;--line:#e1e7ef;--muted:#6b7a90;--accent:#315ddc}\n*{box-sizing:border-box}\nheader{height:72px;background:white;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 max(24px,calc((100vw - 1160px)/2));gap:24px}\n.brand{display:flex;align-items:center;gap:12px;font-weight:700}\n.brand-mark{background:var(--accent);color:white;border-radius:11px;width:34px;height:34px;display:grid;place-items:center}\n.nav{white-space:nowrap;display:flex;gap:28px;color:var(--muted);font-size:14px}\n.nav strong{color:var(--accent)}\n.nav a{color:inherit;text-decoration:none}\n.profile{width:34px;height:34px;border-radius:50%;background:#edf0fc;display:grid;place-items:center;color:#4263b4;font-size:12px;font-weight:700}\nmain{max-width:1208px;margin:auto;padding:32px 24px}\n.heading{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:28px}\n.heading-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}\n.heading-actions a{width:auto;white-space:nowrap}\nh1{font-size:28px;letter-spacing:-.7px;margin:0 0 7px}\np{margin:0;color:var(--muted);font-size:14px}\n.primary,.secondary{border:0;border-radius:8px;padding:11px 17px;font-weight:600;font-size:14px;cursor:pointer}\n.primary{background:var(--accent);color:#fff}\n.secondary{background:#fff;border:1px solid var(--line);color:#40536b}\n.period{display:flex;align-items:flex-end;gap:12px;margin-bottom:24px}\n.period .field{width:200px}\n.period .caption{padding-bottom:12px}\n.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:24px}\n.metric,.panel{background:white;border:1px solid var(--line);border-radius:12px}\n.metric{padding:21px 23px}\n.metric-label{font-size:13px;color:var(--muted);margin-bottom:13px}\n.metric-value{font-size:32px;font-weight:700;letter-spacing:-1px}\n.metric-note{font-size:12px;margin-top:8px;color:#64816f}\n.metric.warn .metric-value{color:#ce7230}\n.metric .more{display:inline-block;margin-top:12px;font-size:12px;color:var(--accent);text-decoration:none}\n.middle{display:grid;grid-template-columns:1.3fr 1fr;gap:24px;margin-bottom:24px}\n.middle.lists{grid-template-columns:1fr 1fr}\n.panel{padding:23px}\n.panel h2{font-size:16px;margin:0}\n.panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:23px;gap:12px}\n.caption{font-size:12px;color:var(--muted)}\n.bars{display:grid;gap:17px}\n.bar{display:grid;grid-template-columns:96px 1fr 24px;align-items:center;gap:15px;font-size:12px;color:#556781}\n.track{height:9px;background:#eef2f8;border-radius:8px;overflow:hidden}\n.fill{height:100%;background:#6a85e9;border-radius:8px;width:0}\n.priority{display:grid;gap:18px}\n.priority-item{display:flex;justify-content:space-between;align-items:center;font-size:13px}\n.priority-item span{display:flex;align-items:center;gap:10px}\n.dot{width:9px;height:9px;border-radius:50%;background:#7189e8}\n.notice{margin-top:22px;background:#fff7e9;border:1px solid #fae8c8;border-radius:7px;padding:12px 14px;font-size:12px;color:#946124}\n.list-panel{padding:0;overflow:hidden}\n.list-panel .panel-head{padding:22px 23px 0}\n.toolbar{display:flex;gap:12px;padding:0 23px 18px}\n.field{display:grid;gap:7px;min-width:0}\n.field label{font-size:12px;font-weight:600;color:#53647c}\n.field .control,.field .control input{width:100%;border:1px solid #d8e0eb;border-radius:7px;background:white;padding:10px 12px;color:#21364e;outline:none;min-height:40px}\n.field .osui-datepicker.control{padding:0;border:0;min-height:0;background:transparent}\n.field .control:focus,.field .control input:focus{border-color:#7294ef;box-shadow:0 0 0 3px #eaf0ff}\n.search{flex:1}\n.select{width:170px}\ntable{border-collapse:collapse;width:100%;text-align:left;font-size:13px}\nth{padding:12px 23px;background:#f9fafc;color:#7b889b;font-weight:500;font-size:11px;letter-spacing:.3px}\ntd{padding:17px 23px;border-top:1px solid #edf0f5}\ntd strong{display:block;font-weight:600;margin-bottom:5px}\n.code{color:#8390a1;font-size:11px}\n.pill{display:inline-block;border-radius:5px;padding:5px 8px;font-size:11px;background:#edf2ff;color:#526cc5}\n.list-footer{padding:15px 23px;border-top:1px solid var(--line);display:flex;justify-content:space-between;color:var(--muted);font-size:12px}\n.empty{padding:36px;text-align:center;color:var(--muted)}\nfooter{font-size:11px;color:#8b96a7;padding:22px;text-align:center}\n@media(max-width:760px){header{height:auto;padding:16px;gap:16px;flex-wrap:wrap}.nav{white-space:nowrap;display:flex;order:3;width:100%;gap:20px}main{padding:24px 16px}.heading{align-items:flex-start}h1{font-size:23px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.metric{padding:17px}.middle,.middle.lists{grid-template-columns:1fr;gap:16px}.period{flex-wrap:wrap}.period .field{width:100%}.toolbar{flex-wrap:wrap}.select{width:100%}.table-wrap{overflow:auto}td,th{padding:14px 17px}.heading .primary{white-space:nowrap}.caption{font-size:11px}}\n@media(max-width:430px){.heading{flex-direction:column;gap:15px}.heading-actions{width:100%}.metrics{gap:10px}.metric-value{font-size:27px}.metric-label{font-size:12px}.panel{padding:18px}.list-panel{padding:0}}\n.data-state{padding:28px;text-align:center;color:var(--muted)}\n.error-state{border:1px solid #efc9c9;border-radius:10px;background:#fff8f8}.error-state p{margin-bottom:14px}.pager{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.pager button{width:auto}.pager button:disabled{opacity:.45;cursor:default}\n.account{font-size:13px;white-space:nowrap}.account a{width:auto}.nav a{width:auto}\n</style>\n</head>\n<body>\n<header>\n  <div class=\"brand\"><span class=\"brand-mark\">i</span> Incidents</div>\n  <nav class=\"nav\" aria-label=\"Navegação principal\"><strong>Visão geral</strong><a href=\"#\" data-av=\"nav.incidents\">Incidentes</a></nav>\n  <div class=\"account\" data-av=\"account\"></div>\n</header>\n<main>\n  <div class=\"heading\">\n    <div>\n      <h1>Visão geral</h1>\n      <p>Acompanhe os chamados e os prazos da sua equipe.</p>\n    </div>\n    <div class=\"heading-actions\">\n      <button class=\"secondary\" data-av=\"refresh\">Atualizar</button>\n      <button class=\"primary\" data-av=\"new\">＋ Novo incidente</button>\n    </div>\n  </div>\n\n  <section class=\"period\" aria-label=\"Período\">\n    <div class=\"field\"><label for=\"start\">Início do período</label><input type=\"date\" class=\"control\" id=\"start\" data-av=\"period.start\"></div>\n    <div class=\"field\"><label for=\"end\">Fim do período</label><input type=\"date\" class=\"control\" id=\"end\" data-av=\"period.end\"></div>\n    <p class=\"caption\">O período filtra a data de criação. Resolvidos hoje considera a data de resolução.</p>\n  </section>\n\n<div class=\"data-state\" hidden data-av=\"access.required\" role=\"status\">Entre na sua conta pelo botão Login no cabeçalho para visualizar os incidentes.</div>\n<div data-av=\"access.authenticated\">\n<div class=\"data-state\" hidden data-av=\"dashboard.loading\" role=\"status\">Carregando dados…</div>\n<div class=\"data-state error-state\" hidden data-av=\"dashboard.error\" role=\"alert\"><p>Não foi possível carregar os dados.</p><button class=\"secondary\" data-av=\"dashboard.retry\">Tentar novamente</button></div>\n<div data-av=\"dashboard.ready\">\n  <section class=\"metrics\" aria-label=\"Indicadores\">\n    <article class=\"metric\">\n      <div class=\"metric-label\">Incidentes abertos</div>\n      <div class=\"metric-value\" data-av=\"metric.open\">24</div>\n      <div class=\"metric-note\" data-av=\"metric.mine\">8 atribuídos a você</div>\n      <a href=\"#\" class=\"more\" data-av=\"open.open\">Ver incidentes abertos</a>\n    </article>\n    <article class=\"metric warn\">\n      <div class=\"metric-label\">Prazo de SLA vencido</div>\n      <div class=\"metric-value\" data-av=\"metric.overdue\">3</div>\n      <div class=\"metric-note\">Precisam de atenção</div>\n      <a href=\"#\" class=\"more\" data-av=\"open.overdue\">Ver incidentes vencidos</a>\n    </article>\n    <article class=\"metric\">\n      <div class=\"metric-label\">Prioridade crítica</div>\n      <div class=\"metric-value\" data-av=\"metric.critical\">2</div>\n      <div class=\"metric-note\">Em atendimento</div>\n      <a href=\"#\" class=\"more\" data-av=\"open.critical\">Ver prioridade crítica</a>\n    </article>\n    <article class=\"metric\">\n      <div class=\"metric-label\">Resolvidos hoje</div>\n      <div class=\"metric-value\" data-av=\"metric.resolved\">12</div>\n      <div class=\"metric-note\">Fechados no dia</div>\n      <a href=\"#\" class=\"more\" data-av=\"open.resolved\">Ver resolvidos</a>\n    </article>\n  </section>\n\n  <section class=\"middle\">\n    <article class=\"panel\">\n      <div class=\"panel-head\"><h2>Incidentes por status</h2><span class=\"caption\">Período selecionado</span></div>\n      <div class=\"bars\" data-av=\"status.bars\">\n        <div class=\"bar\">\n          <span data-av=\"status.label\">Novos</span>\n          <div class=\"track\"><div class=\"fill\" data-av=\"status.fill\"></div></div>\n          <b data-av=\"status.total\">8</b>\n        </div>\n      </div>\n    </article>\n    <article class=\"panel\">\n      <div class=\"panel-head\"><h2>Prioridades da equipe</h2><span class=\"caption\" data-av=\"priority.caption\">24 abertos</span></div>\n      <div class=\"priority\" data-av=\"priority.items\">\n        <div class=\"priority-item\">\n          <span><i class=\"dot\" data-av=\"priority.dot\"></i><span data-av=\"priority.label\">Crítica</span></span>\n          <strong data-av=\"priority.total\">2</strong>\n        </div>\n      </div>\n      <div class=\"notice\" data-av=\"notice\">3 incidentes vencem nos próximos 30 minutos.</div>\n    </article>\n  </section>\n\n  <section class=\"panel list-panel\">\n    <div class=\"panel-head\"><h2>Incidentes recentes</h2><span class=\"caption\">Acompanhamento operacional</span></div>\n    <div class=\"toolbar\">\n      <div class=\"field search\"><label for=\"search\">Pesquisar incidente</label><input class=\"control\" id=\"search\" placeholder=\"Título do chamado\" data-av=\"search\"></div>\n      <div class=\"field select\"><label for=\"priority\">Prioridade</label><select class=\"control\" id=\"priority\" data-av=\"filter.priority\"><option value=\"\">Todas as prioridades</option></select></div>\n    </div>\n<div class=\"data-state\" hidden data-av=\"recent.loading\" role=\"status\">Carregando dados…</div>\n<div class=\"data-state error-state\" hidden data-av=\"recent.error\" role=\"alert\"><p>Não foi possível carregar os dados.</p><button class=\"secondary\" data-av=\"recent.retry\">Tentar novamente</button></div>\n<div data-av=\"recent.ready\">\n    <div class=\"table-wrap\">\n      <table data-av=\"recent\">\n        <thead><tr><th>INCIDENTE</th><th>PRIORIDADE</th><th>STATUS</th><th>RESPONSÁVEL</th></tr></thead>\n        <tbody>\n          <tr>\n            <td><strong data-av=\"recent.title\">Acesso indisponível ao sistema financeiro</strong><span class=\"code\" data-av=\"recent.code\">INC-1042</span></td>\n            <td><span class=\"pill\" data-av=\"recent.priority\">Alta</span></td>\n            <td><span class=\"pill\" data-av=\"recent.status\">Em andamento</span></td>\n            <td data-av=\"recent.owner\">Ana Costa</td>\n          </tr>\n        </tbody>\n      </table>\n    </div>\n    <div class=\"empty\" hidden data-av=\"recent.empty\">Nenhum incidente encontrado para esses filtros.</div>\n    <div class=\"list-footer\"><span data-av=\"recent.count\">0 incidentes</span><nav class=\"pager\" aria-label=\"Páginas de incidentes recentes\"><button class=\"secondary\" data-av=\"recent.previous\">Anterior</button><span data-av=\"recent.page\">0 de 0</span><button class=\"secondary\" data-av=\"recent.next\">Próxima</button></nav></div></div>\n  </section>\n\n  <section class=\"middle lists\">\n    <article class=\"panel list-panel\">\n      <div class=\"panel-head\"><h2>Próximos do vencimento</h2><span class=\"caption\">SLA nos próximos 30 minutos</span></div>\n<div class=\"data-state\" hidden data-av=\"neardue.loading\" role=\"status\">Carregando dados…</div>\n<div class=\"data-state error-state\" hidden data-av=\"neardue.error\" role=\"alert\"><p>Não foi possível carregar os dados.</p><button class=\"secondary\" data-av=\"neardue.retry\">Tentar novamente</button></div>\n<div data-av=\"neardue.ready\">\n      <div class=\"table-wrap\">\n        <table data-av=\"neardue\">\n          <thead><tr><th>INCIDENTE</th><th>SLA</th><th>STATUS</th></tr></thead>\n          <tbody><tr><td data-av=\"neardue.title\">Falha na conexão com a rede</td><td data-av=\"neardue.sla\">05/09/2026 22:40</td><td data-av=\"neardue.status\">Em análise</td></tr></tbody>\n        </table>\n      </div>\n      <div class=\"empty\" hidden data-av=\"neardue.empty\">Nenhum incidente vence nos próximos 30 minutos.</div><nav class=\"pager list-footer\" aria-label=\"Páginas dos incidentes próximos do vencimento\"><button class=\"secondary\" data-av=\"neardue.previous\">Anterior</button><span data-av=\"neardue.page\">0 de 0</span><button class=\"secondary\" data-av=\"neardue.next\">Próxima</button></nav></div>\n    </article>\n    <article class=\"panel list-panel\">\n      <div class=\"panel-head\"><h2>Meus incidentes</h2><span class=\"caption\">Atribuídos a você</span></div>\n<div class=\"data-state\" hidden data-av=\"mine.loading\" role=\"status\">Carregando dados…</div>\n<div class=\"data-state error-state\" hidden data-av=\"mine.error\" role=\"alert\"><p>Não foi possível carregar os dados.</p><button class=\"secondary\" data-av=\"mine.retry\">Tentar novamente</button></div>\n<div data-av=\"mine.ready\">\n      <div class=\"table-wrap\">\n        <table data-av=\"mine\">\n          <thead><tr><th>INCIDENTE</th><th>SLA</th><th>STATUS</th></tr></thead>\n          <tbody><tr><td data-av=\"mine.title\">Configuração de novo notebook</td><td data-av=\"mine.sla\">06/09/2026 10:00</td><td data-av=\"mine.status\">Novo</td></tr></tbody>\n        </table>\n      </div>\n      <div class=\"empty\" hidden data-av=\"mine.empty\">Nenhum incidente atribuído a você.</div><nav class=\"pager list-footer\" aria-label=\"Páginas dos meus incidentes\"><button class=\"secondary\" data-av=\"mine.previous\">Anterior</button><span data-av=\"mine.page\">0 de 0</span><button class=\"secondary\" data-av=\"mine.next\">Próxima</button></nav></div>\n    </article>\n  </section>\n</div>\n</div>\n</main>\n</body>\n</html>\n"
+      }
+    }
+  ]
+}

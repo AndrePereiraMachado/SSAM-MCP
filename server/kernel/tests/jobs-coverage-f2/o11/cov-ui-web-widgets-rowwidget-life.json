@@ -1,0 +1,54 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.UI.Web.Widgets.IRowWidget (o11) em uiWebTable. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IWebFlow:MainFlow",
+   "type": "IWebScreen",
+   "name": "CovSWebScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IWebBlockInstanceWidget/MainContent",
+   "type": "IContainerWidget",
+   "name": "CovSBox",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "ITableWidget",
+   "name": "CovSLayout",
+   "as": "$tbl"
+  },
+  {
+   "op": "create",
+   "parent": "$tbl",
+   "type": "IRowWidget",
+   "as": "$a"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "CustomStyle",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRRowWidget"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "first": true
+  }
+ ]
+}

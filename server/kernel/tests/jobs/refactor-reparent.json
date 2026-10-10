@@ -1,0 +1,60 @@
+{
+ "description": "O verbo move com `into` MUDA O PAI, pelos dois caminhos do arrastar do Studio. (1) Widget para outro contentor, antes de um irmao: o move nativo da plataforma (IModelServices.MoveObject) recria o widget e os filhos no pai novo e religa os consumidores; a expressao `RpDentro.Id + RpNeto.Id` continua a citar os dois, e a CHAVE muda (key.preserved false, keysChanged conta a subarvore). (2) Tela para outro UI flow: o botao que navega para ela segue-a, e a Description escrita antes continua cobrada pelo contrato de dados, agora na chave nova. (3) Bloco privado para outro UI flow: a instancia que o usa segue-o. (4) Atributo para outra entidade, depois de um irmao. (5) Client action para uma pasta de Client Actions e de volta para a raiz (`into: @espace`): so a propriedade Folder muda, a chave e os consumidores ficam iguais (key.preserved true). Cada move devolve consumidores antes/religados e as chaves antes/depois; o conjunto final de consumidores e conferido de novo depois de gravar e recarregar (refactorProof). As recusas (destino incompativel, consumidor fora de alcance) estao em tests/jobs-negative/move-into-incompatible.json e tests/jobs-negative/move-into-out-of-reach.json.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "RpScreen", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Reparent\""},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "RpBoxA", "as": "$a"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "RpBoxB", "as": "$b"},
+  {"op": "create", "parent": "$b", "type": "IContainer", "name": "RpJa", "as": "$ja"},
+  {"op": "create", "parent": "$a", "type": "IContainer", "name": "RpDentro", "as": "$dentro"},
+  {"op": "create", "parent": "$dentro", "type": "IContainer", "name": "RpNeto", "as": "$neto"},
+  {"op": "create", "parent": "$b", "type": "IExpression", "as": "$usa"},
+  {"op": "set", "target": "$usa", "prop": "Value", "value": "RpDentro.Id + RpNeto.Id"},
+  {"op": "usages", "target": "$dentro", "_why": "(1) ANTES: 1 consumidor, a expressao em RpBoxB"},
+  {"op": "move", "target": "$dentro", "into": "$b", "before": "$ja", "_why": "(1) consumers.rewired 2 (RpDentro e RpNeto), order RpDentro, RpJa, <IExpression>"},
+  {"op": "usages", "target": "$dentro", "_why": "(1) DEPOIS: o mesmo consumidor, agora do objeto movido (o alias segue o objeto)"},
+  {"op": "usages", "target": "$neto"},
+
+  {"op": "create", "parent": "@espace", "type": "IMobileFlow", "name": "RpOtherFlow", "as": "$flow"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "RpTarget", "as": "$target"},
+  {"op": "set", "target": "$target/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$target/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$t2"},
+  {"op": "set", "target": "$t2", "prop": "Value", "value": "\"Target\""},
+  {"op": "set", "target": "$target", "prop": "Description", "value": "written before the move; the data contract follows the new key"},
+  {"op": "create", "parent": "$b", "type": "IButton", "name": "RpGoTarget", "as": "$btn"},
+  {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "Target"},
+  {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$target"},
+  {"op": "move", "target": "$target", "into": "$flow", "_why": "(2) o OnClick do botao segue a tela; keysChanged conta a tela e o que ela tem dentro"},
+  {"op": "usages", "target": "$target"},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "RpBlock", "as": "$block"},
+  {"op": "create", "parent": "$block", "type": "IExpression", "as": "$bt"},
+  {"op": "set", "target": "$bt", "prop": "Value", "value": "\"Block\""},
+  {"op": "create", "parent": "$a", "type": "IMobileBlockInstanceWidget", "source": "IMobileBlock:RpBlock", "as": "$inst"},
+  {"op": "move", "target": "$block", "into": "$flow", "_why": "(3) a instancia em RpBoxA segue o bloco"},
+  {"op": "get", "target": "$inst"},
+
+  {"op": "spec", "data": {"entities": [
+   {"name": "RpFrom", "attributes": [{"name": "Title", "type": "Text", "length": 50}, {"name": "Travels", "type": "Integer"}]},
+   {"name": "RpTo", "attributes": [{"name": "Label", "type": "Text", "length": 50}]}
+  ]}},
+  {"op": "move", "target": "IServerEntity:RpFrom/Travels", "into": "IServerEntity:RpTo", "after": "IServerEntity:RpTo/Label", "_why": "(4) order Id, Label, Travels"},
+
+  {"op": "create", "parent": "@espace", "type": "IFolder", "name": "RpClientFolder", "args": {"parentFolder": "ClientActions"}, "as": "$folder"},
+  {"op": "logic", "data": {"actions": [
+   {"name": "RpClientAction", "kind": "client", "steps": []},
+   {"name": "RpRunClient", "kind": "screen", "owner": "IMobileScreen:RpScreen", "steps": [{"call": "RpClientAction", "as": "CallIt"}]}
+  ]}},
+  {"op": "create", "parent": "$b", "type": "IButton", "name": "RpRun", "as": "$run"},
+  {"op": "set", "target": "$run/#ITextWidget", "prop": "Text", "value": "Run"},
+  {"op": "set", "target": "$run/OnClick", "prop": "Destination", "value": "IMobileScreen:RpScreen/RpRunClient"},
+  {"op": "move", "target": "IClientAction:RpClientAction", "into": "$folder", "_why": "(5) moved folder: key.preserved true, consumers 1 antes e 1 depois (o no CallIt)"},
+  {"op": "get", "target": "IClientAction:RpClientAction"},
+  {"op": "move", "target": "IClientAction:RpClientAction", "into": "@espace", "_why": "(5) de volta para a raiz: Folder null, a mesma chave"},
+  {"op": "usages", "target": "IClientAction:RpClientAction"}
+ ]
+}

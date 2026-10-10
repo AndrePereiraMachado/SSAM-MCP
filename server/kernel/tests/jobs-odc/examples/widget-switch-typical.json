@@ -1,0 +1,25 @@
+{
+ "description": "Switch com evento: liga o modo escuro, fica desabilitado sem permissao (Enabled) e o OnChange guarda a preferencia numa client variable.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IClientVariable", "name": "PrefersDarkMode", "as": "$pref", "_why": "client variable: sobrevive a navegacao"},
+  {"op": "set", "target": "$pref", "prop": "DataType", "value": "Boolean"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "Preferences", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "DarkMode", "as": "$dark"},
+  {"op": "set", "target": "$dark", "prop": "DataType", "value": "Boolean"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "CanChange", "as": "$can"},
+  {"op": "set", "target": "$can", "prop": "DataType", "value": "Boolean"},
+  {"op": "set", "target": "$can", "prop": "DefaultValue", "value": "True"},
+  {"op": "logic", "data": {"actions": [
+   {"name": "DarkModeChanged", "kind": "screen", "owner": "IMobileScreen:Preferences",
+    "steps": [{"assign": {"Client.PrefersDarkMode": "DarkMode"}, "as": "RememberChoice"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "ISwitch", "name": "DarkModeSwitch", "as": "$sw"},
+  {"op": "set", "target": "$sw", "prop": "Variable", "value": "DarkMode"},
+  {"op": "set", "target": "$sw", "prop": "Enabled", "value": "CanChange"},
+  {"op": "set", "target": "$sw/OnChange", "prop": "Destination", "value": "IMobileScreen:Preferences/DarkModeChanged"},
+  {"op": "get", "target": "$sw"}
+ ]
+}

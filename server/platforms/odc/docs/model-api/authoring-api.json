@@ -1,0 +1,146 @@
+[
+  {
+    "key": "b5DnU3_iK0um\u002Bn0\u002BTg9J6Q",
+    "kind": "OutSystems.Model.Logic.IAppRole",
+    "methods": [
+      "System.String get_CreatedBy()",
+      "System.String get_LastMergedBy()",
+      "System.DateTime get_LastMergedDate()",
+      "System.String get_LastModifiedBy()",
+      "System.DateTime get_LastModifiedDate()",
+      "OutSystems.Model.Logic.IAppRoleSignatureDescriptor get_Descriptor()",
+      "System.String get_Description()",
+      "OutSystems.Model.IFolderSignature get_Folder()",
+      "Boolean get_IsPersistent()",
+      "System.String get_Name()",
+      "Void set_Name(System.String)",
+      "OutSystems.Model.ISequence\u00601[OutSystems.Model.IMetadata] get_Metadata()",
+      "OutSystems.Model.Logic.IActionSignature get_CheckRoleAction()",
+      "OutSystems.Model.Logic.IActionSignature get_CheckRoleClientSideAction()",
+      "OutSystems.Model.Logic.IActionSignature get_GrantRoleAction()",
+      "OutSystems.Model.Logic.IActionSignature get_RevokeRoleAction()",
+      "T CreateMetadata[T](System.String, System.String, OutSystems.Model.IKey)",
+      "OutSystems.Model.Logic.IRoleSignatureDescriptor get_Descriptor()",
+      "OutSystems.Model.IKey get_ObjectKey()",
+      "OutSystems.Model.IESpace GetESpace()",
+      "Boolean get_IsValid()",
+      "System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.IValidationMessage] GetValidationMessages(Boolean)",
+      "System.Collections.Generic.IEnumerable\u00601[T] GetAllDescendantsOfType[T]()",
+      "System.String get_Digest()",
+      "Void ReplaceReferences(OutSystems.Model.IObjectSignature, OutSystems.Model.IObjectSignature)",
+      "System.String get_ReadableIdentifier()",
+      "Boolean get_IsSystemObject()",
+      "OutSystems.Model.IObjectSignatureDescriptor get_Descriptor()",
+      "System.String get_DisplayName()",
+      "OutSystems.Model.IKey get_Key()",
+      "OutSystems.Model.IGlobalKey get_GlobalKey()",
+      "OutSystems.Model.MetaModel.IClassDescriptor get_Descriptor()",
+      "OutSystems.Model.MetaModel.IChildCollection get_CollectionDescriptor()",
+      "System.Type GetInterface()",
+      "OutSystems.Model.IModelObject get_Parent()",
+      "Int64 get_Generation()",
+      "System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.IModelObject] get_Children()",
+      "Void Delete()",
+      "Boolean get_WasDeleted()",
+      "System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.IModelObject] get_Referrers()",
+      "Boolean get_IsDetached()",
+      "OutSystems.Model.Versioning.ITransactionsManager get_TransactionsManager()",
+      "Int64 get_Generation()",
+      "Void Delete()",
+      "Boolean get_WasDeleted()",
+      "System.String get_Description()",
+      "Void set_Description(System.String)",
+      "OutSystems.Model.IFolder get_Folder()",
+      "Void set_Folder(OutSystems.Model.IFolder)",
+      "Boolean get_IsPersistent()",
+      "Void set_IsPersistent(Boolean)",
+      "OutSystems.Model.Logic.IRoleDescriptor get_Descriptor()",
+      "OutSystems.Model.IObjectSignature Copy(OutSystems.Model.IObjectSignature)",
+      "System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.IObjectSignature] Copy(System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.IObjectSignature])",
+      "OutSystems.Model.Expressions.IEnvironment GetEnvironment(OutSystems.Model.MetaModel.IExpressionProperty)",
+      "T CreateSibling[T](System.String, OutSystems.Model.IKey)",
+      "OutSystems.Model.IModelObject CreateSibling(System.Type, System.String, OutSystems.Model.IKey)",
+      "OutSystems.Model.IObjectSignature Duplicate(OutSystems.Model.IObjectSignature)",
+      "System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.IObjectSignature] Duplicate(System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.IObjectSignature])",
+      "Void MoveToEnd()",
+      "Void MoveBefore()",
+      "Void MoveAfter()",
+      "Void MoveToNewAbsoluteIndex(Int32)",
+      "Void MoveAfterSibling(OutSystems.Model.IObject)",
+      "Void MoveBeforeSibling(OutSystems.Model.IObject)",
+      "Void MoveToNewRelativeIndex(Int32)",
+      "Int32 get_IndexInParent()",
+      "Boolean get_CanMoveBefore()",
+      "Boolean get_CanMoveAfter()",
+      "Boolean CanMoveToNewAbsoluteIndex(Int32)",
+      "Boolean CanMoveToNewRelativeIndex(Int32)",
+      "OutSystems.Model.IObjectDescriptor get_Descriptor()",
+      "System.String get_CreatedBy()",
+      "Void set_CreatedBy(System.String)",
+      "System.String get_LastModifiedBy()",
+      "Void set_LastModifiedBy(System.String)",
+      "System.DateTime get_LastModifiedDate()",
+      "Void set_LastModifiedDate(System.DateTime)",
+      "Boolean get_Public()",
+      "Void set_Public(Boolean)",
+      "Boolean get_Shareable()",
+      "Void set_Shareable(Boolean)",
+      "System.Collections.Generic.IEnumerable\u00601[System.String] get_TextResourcesIds()",
+      "System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.ITextResource] get_TextResources()",
+      "Void CreateOrUpdateTranslation(OutSystems.Model.Enumerations.Culture, System.String, System.String)",
+      "System.Collections.Generic.IEnumerable\u00601[System.String] GetTextResourcesIdsForText(System.String)",
+      "Void SetTranslationBehavior(System.String, OutSystems.Model.Enumerations.TranslationBehavior)",
+      "OutSystems.Model.Logic.IAppRoleDescriptor get_Descriptor()"
+    ],
+    "properties": [
+      {
+        "name": "CreatedBy",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.Logic.IAppRole,System.String]"
+      },
+      {
+        "name": "Description",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.Logic.IAppRole,System.String]"
+      },
+      {
+        "name": "Folder",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.Logic.IAppRole,OutSystems.Model.IFolder]"
+      },
+      {
+        "name": "IsPersistent",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.Logic.IAppRole,System.Boolean]"
+      },
+      {
+        "name": "LastMergedBy",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.Logic.IAppRole,System.String]"
+      },
+      {
+        "name": "LastMergedDate",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.Logic.IAppRole,System.DateTime]"
+      },
+      {
+        "name": "LastModifiedBy",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.Logic.IAppRole,System.String]"
+      },
+      {
+        "name": "LastModifiedDate",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.Logic.IAppRole,System.DateTime]"
+      },
+      {
+        "name": "Name",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.Logic.IAppRole,System.String]"
+      },
+      {
+        "name": "Public",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.Logic.IAppRole,System.Boolean]"
+      },
+      {
+        "name": "Shareable",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.Logic.IAppRole,System.Boolean]"
+      },
+      {
+        "name": "ReadableIdentifier",
+        "type": "OutSystems.Model.MetaModel.Property\u00602[OutSystems.Model.Logic.IAppRole,System.String]"
+      }
+    ]
+  }
+]

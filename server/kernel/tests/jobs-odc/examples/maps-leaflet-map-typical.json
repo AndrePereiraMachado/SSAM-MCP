@@ -1,0 +1,29 @@
+{
+ "description": "LeafletMap do OutSystemsMaps com dados: centro e altura, um Marker por loja (List no AddOns_Placeholder) com Position vinda do registro e o OnClick do Marker guardando a loja.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Store", "attributes": [{"name": "Name", "type": "Text", "length": 100, "mandatory": true}, {"name": "Location", "type": "Text", "length": 100}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "StoreMap", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Stores\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "ClickedStore", "as": "$vClickedStore"},
+  {"op": "set", "target": "$vClickedStore", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetStores", "as": "$GetStores"},
+  {"op": "create", "parent": "$GetStores", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Store"}},
+  {"op": "logic", "data": {"actions": [{"name": "StoreClicked", "kind": "screen", "owner": "IMobileScreen:StoreMap", "inputs": [{"name": "StoreName", "type": "Text"}], "steps": [{"assign": {"ClickedStore": "StoreName"}, "as": "Keep"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "LeafletMap1", "source": "IMobileBlock:LeafletMap", "as": "$map"},
+  {"op": "set", "target": "$map/Center", "prop": "Value", "value": "\"38.7223, -9.1393\""},
+  {"op": "set", "target": "$map/Height", "prop": "Value", "value": "\"400px\""},
+  {"op": "create", "parent": "$map/AddOns_Placeholder", "type": "IList", "name": "StoreMarkers", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetStores.List"},
+  {"op": "create", "parent": "$list", "type": "IMobileBlockInstanceWidget", "name": "StoreMarker", "source": "IMobileBlock:Marker", "as": "$mk"},
+  {"op": "set", "target": "$mk/Position", "prop": "Value", "value": "GetStores.List.Current.Store.Location"},
+  {"op": "set", "target": "$mk/OnClick", "prop": "Handler", "value": "IMobileScreen:StoreMap/StoreClicked"},
+  {"op": "set", "target": "$mk/OnClick/StoreName", "prop": "Value", "value": "GetStores.List.Current.Store.Name"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "If(ClickedStore = \"\", \"Click a store\", ClickedStore)"}
+ ]
+}

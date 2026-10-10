@@ -1,0 +1,31 @@
+{
+ "description": "Cobertura testada (fase 1, medir): del de OutSystems.Model.UI.Mobile.IMobileScreen (o11) em uiMobileFlowScreen. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "CovSScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "CovAMobileScreen",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

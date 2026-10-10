@@ -1,0 +1,11 @@
+{
+ "description": "LeafletMap do OutSystemsMaps: a instancia do mapa (Leaflet nao pede chave de API).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "LeafletDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "LeafletMap1", "source": "IMobileBlock:LeafletMap", "as": "$map"}
+ ]
+}

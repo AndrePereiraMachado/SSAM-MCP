@@ -1,0 +1,14 @@
+{
+  "ok": false,
+  "source": "kernel-job",
+  "until": "preview",
+  "steps": [
+    {"step": "snapshot", "seconds": 0.731, "ok": true},
+    {"step": "build", "seconds": 24.543, "ok": false}
+  ],
+  "merged": false,
+  "publishInvoked": false,
+  "failed": "build",
+  "error": "InvalidOperationException: No change carries the snapshot author and nothing was deleted; rebuild with the snapshot developerId (studio_deliver does this automatically).",
+  "totalSeconds": 25.275
+}

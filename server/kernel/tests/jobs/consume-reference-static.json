@@ -1,0 +1,38 @@
+{
+  "description": "Consume a public static entity and use its named record in an expression.",
+  "base": "reactive-ui.oml",
+  "expectValid": true,
+  "ops": [
+    {
+      "op": "reference",
+      "producer": "job:producer-static-public",
+      "elements": [
+        "IStaticEntity:ReferenceStatus"
+      ]
+    },
+    {
+      "op": "logic",
+      "data": {
+        "actions": [
+          {
+            "name": "ReferenceStatus_Default",
+            "public": true,
+            "outputs": [
+              {
+                "name": "StatusId",
+                "type": "ReferenceStatus Identifier"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "StatusId": "Entities.ReferenceStatus.Active"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

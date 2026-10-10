@@ -1,0 +1,42 @@
+{
+ "description": "Cobertura testada (fase 2): move into (folder:SessionVariables) de OutSystems.Model.Data.ISessionVariable (o11) em espaceWeb. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedElement",
+   "element": "HeadlessTrad_UI (ESpace) / CovASessionVariable (SessionVariable)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISessionVariable",
+   "name": "CovASessionVariable",
+   "as": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IFolder",
+   "name": "CovSMvFolder",
+   "args": {
+    "parentFolder": "SessionVariables"
+   },
+   "as": "$mvp"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "into": "$mvp"
+  }
+ ]
+}

@@ -1,0 +1,22 @@
+{
+ "description": "NEG L6 (OutSystems padroes): JSONSerialize para passar uma structure como texto dentro do app.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"structures": [
+   {"name": "NegPayload", "public": true, "description": "Estrutura tipada usada pelo controle negativo L6.",
+    "attributes": [{"name": "Code", "type": "Text", "description": "Codigo do item que o controle serializa sem necessidade."}]}
+  ]}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "BuildPayloadText", "kind": "server", "public": true,
+    "description": "Serializa uma structure para outra action ler como texto (violacao proposital da L6).",
+    "inputs": [{"name": "Payload", "type": "NegPayload", "description": "Dados tipados que deveriam seguir como structure."}],
+    "outputs": [{"name": "PayloadText", "type": "Text", "description": "Texto devolvido ao chamador no lugar da structure."}],
+    "steps": [
+     {"node": "IJSONSerializeNode", "as": "SerializePayload", "properties": {"Data": "Payload", "DateFormat": "ISO", "SerializeDefaultValues": true}},
+     {"assign": {"PayloadText": "SerializePayload.JSON"}, "as": "Return the serialized text"}
+    ]}
+  ]}}
+ ]
+}

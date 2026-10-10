@@ -1,0 +1,48 @@
+{
+ "description": "Cobertura testada (fase 1, medir): life de ServiceStudio.Plugin.SOAP.ISOAPDynamicUsernameInput (o11) em soapAction. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISOAPClient",
+   "name": "CovSSoap",
+   "as": "$c"
+  },
+  {
+   "op": "create",
+   "parent": "$c",
+   "type": "ISOAPAction",
+   "name": "CovSOp",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "ISOAPDynamicUsernameInput",
+   "name": "CovASOAPDynamicUsernameInput",
+   "as": "$a"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRSOAPDynamicUsernameInput"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  }
+ ]
+}

@@ -1,0 +1,162 @@
+{
+  "description": "Screen spec screen-spec-cards-mobile: public block contracts, fixture-owned data, zero new messages.",
+  "base": "mobile-ui.oml",
+  "expectValid": true,
+  "ops": [
+    {
+      "op": "spec",
+      "data": {
+        "static": [
+          {
+            "name": "ShowcaseGenre",
+            "records": [
+              {
+                "name": "Adventure"
+              },
+              {
+                "name": "Strategy"
+              }
+            ]
+          }
+        ],
+        "entities": [
+          {
+            "name": "ShowcaseGame",
+            "public": true,
+            "attributes": [
+              {
+                "name": "Title",
+                "type": "Text",
+                "mandatory": true,
+                "length": 120
+              },
+              {
+                "name": "Description",
+                "type": "Text",
+                "length": 500
+              },
+              {
+                "name": "Price",
+                "type": "Currency"
+              },
+              {
+                "name": "Rating",
+                "type": "Decimal"
+              },
+              {
+                "name": "ImageUrl",
+                "type": "Text",
+                "length": 500
+              },
+              {
+                "name": "Active",
+                "type": "Boolean"
+              },
+              {
+                "name": "GenreId",
+                "type": "ShowcaseGenre Identifier"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "screen",
+      "data": {
+        "screens": [
+          {
+            "name": "MobileCatalog",
+            "kind": "cards",
+            "title": "Game catalog",
+            "source": {
+              "entity": "ShowcaseGame",
+              "as": "GetGames",
+              "sort": [
+                [
+                  "ShowcaseGame.Title",
+                  "Ascending"
+                ]
+              ]
+            },
+            "search": {
+              "field": "Title",
+              "label": "Search games"
+            },
+            "filters": [
+              {
+                "field": "GenreId",
+                "from": "ShowcaseGenre",
+                "label": "All genres"
+              }
+            ],
+            "card": {
+              "title": "Title",
+              "description": "Description",
+              "price": "Price",
+              "rating": "Rating",
+              "image": "ImageUrl",
+              "destination": "MobileGameDetail",
+              "args": {
+                "GameId": "GetGames.List.Current.ShowcaseGame.Id"
+              },
+              "layout": "carousel"
+            }
+          },
+          {
+            "name": "MobileGameDetail",
+            "kind": "detail",
+            "title": "Game details",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "ShowcaseGame Identifier",
+                "mandatory": true
+              }
+            ],
+            "source": {
+              "entity": "ShowcaseGame",
+              "as": "GetGame",
+              "where": "ShowcaseGame.Id = GameId"
+            },
+            "fields": [
+              {
+                "field": "Title",
+                "label": "Title"
+              }
+            ],
+            "tabs": [
+              {
+                "title": "Overview",
+                "fields": [
+                  {
+                    "field": "Description",
+                    "label": "Description"
+                  }
+                ]
+              },
+              {
+                "title": "Pricing",
+                "fields": [
+                  {
+                    "field": "Price",
+                    "label": "Price"
+                  },
+                  {
+                    "field": "Rating",
+                    "label": "Rating"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "find",
+      "type": "IMobileBlockInstanceWidget",
+      "max": 100
+    }
+  ]
+}

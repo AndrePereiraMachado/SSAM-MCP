@@ -1,0 +1,347 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "OutSystemsUI",
+    "OutSystemsUIWeb:CharacterCount",
+    "OutSystemsUIWeb:ChatMessage",
+    "OutSystemsUIWeb:Columns2",
+    "OutSystemsUIWeb:Columns3",
+    "OutSystemsUIWeb:Columns4"
+  ],
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "tests/fixtures/outsystems-ui-web.oml",
+      "elements": [
+        "IWebBlock:CharacterCount",
+        "IWebBlock:ChatMessage",
+        "IWebBlock:Columns2",
+        "IWebBlock:Columns3",
+        "IWebBlock:Columns4",
+        "IWebBlock:UserInitials"
+      ]
+    }
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Ui20_CharacterCount",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part2",
+            "type": "IInputWidget",
+            "properties": {
+              "Variable": "Value1"
+            }
+          },
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:CharacterCount",
+            "args": {
+              "InputWidgetId": "Part2.Id",
+              "Limit": "1"
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "Part4",
+            "type": "IButtonWidget",
+            "properties": {
+              "Label": "\"Submit\""
+            },
+            "events": {
+              "OnClick": {
+                "destination": "IWebScreen:Ui20_CharacterCount/Ui20_CharacterCount_Submit"
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value1",
+            "type": "Text"
+          }
+        ]
+      },
+      {
+        "name": "Ui21_ChatMessage",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:ChatMessage",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Image": [
+                {
+                  "name": "Part2",
+                  "type": "IWebBlockInstanceWidget",
+                  "properties": {},
+                  "source": "IWebBlock:UserInitials",
+                  "args": {
+                    "ExtendedClass": "\"coverage\""
+                  },
+                  "slots": {}
+                }
+              ],
+              "Actions": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "InlineExpression"
+                  }
+                },
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Icon"
+                  }
+                }
+              ],
+              "Name": [
+                {
+                  "name": "Part5",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Text"
+                  }
+                }
+              ],
+              "Content": [
+                {
+                  "name": "Part6",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Text"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui22_Columns2",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:Columns2",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Column1": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Column2": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui23_Columns3",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:Columns3",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Column1": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Column2": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Column3": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui24_Columns4",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:Columns4",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Column1": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Column2": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Column3": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Column4": [
+                {
+                  "name": "Part5",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "name": "Ui20_CharacterCount_Submit",
+          "kind": "screen",
+          "owner": "IWebScreen:Ui20_CharacterCount",
+          "steps": []
+        }
+      ]
+    }
+  },
+  "mutations": [
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui20_CharacterCount/Part1/Content/Part3",
+      "prop": "Text",
+      "value": "Changed",
+      "element": "CharacterCount"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui21_ChatMessage/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "ChatMessage"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui22_Columns2/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Columns2"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui23_Columns3/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Columns3"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui24_Columns4/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Columns4"
+    }
+  ]
+}

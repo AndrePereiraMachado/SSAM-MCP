@@ -1,0 +1,51 @@
+{
+ "description": "ODC: a mesma refatoracao da faixa O11 (op replace). Tres actions: uma antiga, uma nova de assinatura igual, e uma que chama a antiga. Depois do replace, quem chamava passa a apontar para a nova, a antiga fica sem consumidores e e apagada sem force.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfProof_Old", "as": "$old"},
+  {"op": "create", "parent": "$old", "type": "IInputParameter", "name": "Label", "as": "$oldIn"},
+  {"op": "set", "target": "$oldIn", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$old", "type": "IStartNode", "as": "$o0"},
+  {"op": "create", "parent": "$old", "type": "IEndNode", "as": "$o9"},
+  {"op": "link", "from": "$o0", "to": "$o9"},
+  {"op": "layout", "target": "$old"},
+
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfProof_New", "as": "$new"},
+  {"op": "create", "parent": "$new", "type": "IInputParameter", "name": "Label", "as": "$newIn"},
+  {"op": "set", "target": "$newIn", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$new", "type": "IStartNode", "as": "$n0"},
+  {"op": "create", "parent": "$new", "type": "IEndNode", "as": "$n9"},
+  {"op": "link", "from": "$n0", "to": "$n9"},
+  {"op": "layout", "target": "$new"},
+
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfProof_Caller", "as": "$caller"},
+  {"op": "create", "parent": "$caller", "type": "IStartNode", "as": "$c0"},
+  {"op": "create", "parent": "$caller", "type": "IExecuteServerActionNode", "name": "CallOld", "as": "$call"},
+  {"op": "set", "target": "$call", "prop": "Action", "value": "$old"},
+  {"op": "set", "target": "$call/Label", "prop": "Value", "value": "\"proof\""},
+  {"op": "create", "parent": "$caller", "type": "IEndNode", "as": "$c9"},
+  {"op": "link", "from": "$c0", "to": "$call"},
+  {"op": "link", "from": "$call", "to": "$c9"},
+  {"op": "layout", "target": "$caller"},
+
+  {"op": "usages", "target": "$old", "_why": "um consumidor real: o no do WfProof_Caller"},
+  {"op": "replace", "from": "$old", "to": "$new"},
+  {"op": "usages", "target": "$old", "_why": "tem de ficar em zero"},
+  {"op": "usages", "target": "$new", "_why": "o consumidor passou para ca, com a mesma chave"},
+  {"op": "delete", "target": "$old", "_why": "sem consumidores, sem force"},
+  {"op": "find", "name": "WfProof_New"}
+ ],
+ "expectedMessages": [
+  {
+   "id": "UnusedUserAction",
+   "element": "InsuranceApp (ESpace) / WfProof_Caller (ServerAction)",
+   "why": "a action que chama e criada so para dar um consumidor ao replace; ninguem a chama, e o Verify do ODC avisa sobre actions sem uso."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "InsuranceApp (ESpace) / WfProof_New (ServerAction) / Label (InputParameter)",
+   "why": "a action nova tem a MESMA assinatura da antiga, que e o que faz o replace ser seguro, mas o corpo dela e so Start/End: o parametro existe para casar a assinatura e nao e lido."
+  }
+ ]
+}

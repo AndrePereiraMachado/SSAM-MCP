@@ -1,0 +1,269 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "OutSystemsUI",
+    "OutSystemsUIWeb:FlipContent",
+    "OutSystemsUIWeb:FloatingActions",
+    "OutSystemsUIWeb:FloatingActionsItem",
+    "OutSystemsUIWeb:Gallery",
+    "OutSystemsUIWeb:IconBadge"
+  ],
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "tests/fixtures/outsystems-ui-web.oml",
+      "elements": [
+        "IWebBlock:FlipContent",
+        "IWebBlock:FloatingActions",
+        "IWebBlock:FloatingActionsItem",
+        "IWebBlock:Gallery",
+        "IWebBlock:IconBadge"
+      ]
+    }
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Ui40_FlipContent",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:FlipContent",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "CardFront": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "CardBack": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui41_FloatingActions",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:FloatingActions",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Items": [
+                {
+                  "name": "Part2",
+                  "type": "IWebBlockInstanceWidget",
+                  "properties": {},
+                  "source": "IWebBlock:FloatingActionsItem",
+                  "args": {
+                    "ExtendedClass": "\"coverage\""
+                  },
+                  "slots": {
+                    "Label": [
+                      {
+                        "name": "Part3",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Text"
+                        }
+                      }
+                    ],
+                    "Item": [
+                      {
+                        "name": "Part4",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Icon"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ],
+              "Button": [
+                {
+                  "name": "Part5",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Icon"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui42_FloatingActionsItem",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:FloatingActionsItem",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Label": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Text"
+                  }
+                }
+              ],
+              "Item": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Icon"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui43_Gallery",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:Gallery",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "ListRecords": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui44_IconBadge",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:IconBadge",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Icon": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Icon"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      }
+    ]
+  },
+  "mutations": [
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui40_FlipContent/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "FlipContent"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui41_FloatingActions/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "FloatingActions"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui42_FloatingActionsItem/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "FloatingActionsItem"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui43_Gallery/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Gallery"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui44_IconBadge/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "IconBadge"
+    }
+  ]
+}

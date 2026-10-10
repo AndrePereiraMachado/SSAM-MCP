@@ -1,0 +1,114 @@
+{
+  "publicationPending": true,
+  "deliveries": {
+    "cs": {
+      "taskId": "a832f8715f8e4e76b3ca874f0fc8af66",
+      "delivered": true,
+      "stage": "complete",
+      "result": "C:\\Users\\andre\\Anvil\\.local\\mass-casualty-fix\\deliver\\a832f8715f8e4e76b3ca874f0fc8af66\\result.json",
+      "newErrors": false
+    },
+    "ui": {
+      "taskId": "3421d56206054d58b5dfdf0c1bb2c0c6",
+      "delivered": true,
+      "stage": "complete",
+      "result": "C:\\Users\\andre\\Anvil\\.local\\mass-casualty-fix\\deliver\\3421d56206054d58b5dfdf0c1bb2c0c6\\result.json",
+      "newErrors": false
+    }
+  },
+  "fieldRepair": {
+    "updatedIds": [
+      "20",
+      "21",
+      "48",
+      "49",
+      "50"
+    ],
+    "fields": {
+      "20": {
+        "MultiCasualtyIncident": "Yes",
+        "MultiCasualtyId": "incgrp_mtpxugathh0opt",
+        "MultiCasualtyIncidentName": "23134"
+      },
+      "21": {
+        "MultiCasualtyIncident": "Yes",
+        "MultiCasualtyId": "incgrp_mtpxugathh0opt",
+        "MultiCasualtyIncidentName": "23134"
+      },
+      "48": {
+        "IncidentType": "Training simulation",
+        "LegacyIncidentDate": "2026-09-01",
+        "MultiCasualtyIncident": "Yes",
+        "MultiCasualtyId": "incgrp_3e96be885eb3268f84da4f8100efb987",
+        "MultiCasualtyIncidentName": "TRN-MC-E2E-0907 synthetic range"
+      },
+      "49": {
+        "IncidentType": "Training simulation",
+        "LegacyIncidentDate": "2026-09-01",
+        "MultiCasualtyIncident": "Yes",
+        "MultiCasualtyId": "incgrp_3e96be885eb3268f84da4f8100efb987",
+        "MultiCasualtyIncidentName": "TRN-MC-E2E-0907 synthetic range"
+      },
+      "50": {
+        "IncidentType": "Training simulation",
+        "LegacyIncidentDate": "2026-09-01",
+        "MultiCasualtyIncident": "Yes",
+        "MultiCasualtyId": "incgrp_374019ac0f3858bea7c47f91c0db018b",
+        "MultiCasualtyIncidentName": "TRN-MC-E2E-0907 synthetic range"
+      }
+    },
+    "allOtherFieldsAndRowsUnchanged": true,
+    "totalBefore": 50,
+    "totalAfter": 50
+  },
+  "mobileCssPreview": {
+    "width": 390,
+    "title": [
+      {
+        "right": 357.3333435058594,
+        "width": 341.3333435058594
+      }
+    ],
+    "controls": [
+      {
+        "text": "Single-casualty form \u00e2\u2020\u2019",
+        "right": 223.76388359069824,
+        "width": 201.0833282470703
+      },
+      {
+        "text": "Download template",
+        "right": 237.79167556762695,
+        "width": 200.9027862548828
+      },
+      {
+        "text": "Upload CSV",
+        "right": 169.6944465637207,
+        "width": 132.80555725097656
+      },
+      {
+        "text": "Cancel",
+        "right": 97.61111450195312,
+        "width": 81.61111450195312
+      },
+      {
+        "text": "Submit 0 casualty reports",
+        "right": 329.26390075683594,
+        "width": 195.6527862548828
+      }
+    ]
+  },
+  "openedPublishedReport": {
+    "reportId": 48,
+    "httpStatus": 200,
+    "evidence": "C:\\Users\\andre\\Anvil\\.local\\mass-casualty-e2e\\open-saved.json"
+  },
+  "sources": {
+    "scripts/gen_dcips_masscasualty_fixes.py": "e321d66b0f64b6f1529c6cb0593dd98e5ab7735a83947644bffc0015045ab9a2",
+    "tests/jobs-live/dcips-masscasualty-data-fixes.json": "9d71083d2c046a974d121a272b44cb8a77561c49f9a522ee47078c53f67accef",
+    "tests/jobs-live/dcips-masscasualty-ui-fixes.json": "9700560c8b0046ae156684aa6f72674e6993fa6042bd3aecce51c1969eb45602",
+    "tests/html/dcips-masscasualty.css": "6f3db4f26894c8eb17cdf0c7bcf5c45ffee24af9f7f8fffdcd03d45c44299437",
+    "tests/html/dcips-masscasualty-parser.js": "b0cc20df5f4dcb79ad9a1fdc8746276ee1d121e788c581130344a46fc295534c",
+    "tests/html/dcips-masscasualty-drop.js": "758bda3d6621f4edc86f59b8b5ac41ffc61f9154e0c5a75fd09a5478f3c595e9",
+    "tests/browser/dcips-masscasualty-contract.cjs": "1f34c03eec476494742d9be7cadfd71821f3d19fff766caf21cfea7ae71be1b2"
+  }
+}

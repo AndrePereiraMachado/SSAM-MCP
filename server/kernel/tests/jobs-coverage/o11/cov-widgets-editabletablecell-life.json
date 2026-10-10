@@ -1,0 +1,108 @@
+{
+ "description": "Cobertura testada (fase 1, medir): life de ServiceStudio.Plugin.Widgets.IEditableTableCell (o11) em uiWebEditableTable. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnsubmitableInputs_NoLinks",
+   "element": "HeadlessTrad_UI (ESpace) / MainFlow (WebFlow) / CovSWebScreen (WebScreen)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  },
+  {
+   "id": "CustomObjectWarning",
+   "element": "MainFlow (WebFlow) / CovSWebScreen (WebScreen) / WebBlockInstanceWidget / MainContent (PlaceholderContentWidget) / CovSBox (ContainerWidget) / CovSEditable (EditableTable)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "entities": [
+     {
+      "name": "CovSEntity",
+      "attributes": [
+       {
+        "name": "Title",
+        "type": "Text",
+        "length": 50
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "create",
+   "parent": "IWebFlow:MainFlow",
+   "type": "IWebScreen",
+   "name": "CovSWebScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "ILocalVariable",
+   "name": "CovSRecords",
+   "as": "$hr"
+  },
+  {
+   "op": "set",
+   "target": "$hr",
+   "prop": "DataType",
+   "value": "CovSEntity List"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IWebBlockInstanceWidget/MainContent",
+   "type": "IContainerWidget",
+   "name": "CovSBox",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEditableTable",
+   "name": "CovSEditable",
+   "as": "$et"
+  },
+  {
+   "op": "set",
+   "target": "$et",
+   "prop": "SourceRecordList",
+   "value": "CovSRecords"
+  },
+  {
+   "op": "create",
+   "parent": "$et/HeaderRow",
+   "type": "IEditableTableCell",
+   "name": "CovAEditableTableCell",
+   "as": "$a"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "CustomStyle",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovREditableTableCell"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "move",
+   "target": "$b",
+   "first": true
+  }
+ ]
+}

@@ -1,0 +1,12 @@
+{
+ "description": "ProgressBar do OSUI: o input obrigatorio Progress.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProgressBarDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ProgressBar1", "source": "IMobileBlock:ProgressBar", "as": "$pb"},
+  {"op": "set", "target": "$pb/Progress", "prop": "Value", "value": "40"}
+ ]
+}

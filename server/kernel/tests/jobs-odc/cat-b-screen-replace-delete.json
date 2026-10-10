@@ -1,0 +1,61 @@
+{
+ "description": "Frente B (catalogo abrangente), faixa ODC: o mesmo cenario, na mesma ordem, de tests/jobs/cat-b-screen-replace-delete.json (O11). REPONTAR os consumidores de uma tela para outra com o verbo replace (ReplaceReferences em cada consumidor) e APAGAR a antiga sem force; mover uma tela no canvas do fluxo, reordenar expressoes, apagar um botao com a sua navegacao e renomear um UI flow. As telas CatBAbout e CatBAboutV2 NAO tem input (os argumentos de uma navegacao ligam-se ao input da tela antiga, que o replace da tela nao mapeia). CatBHome e criada primeiro: no ODC a primeira tela criada sem Studio vira a DefaultScreen do modulo (tests/jobs-odc/delete-screen.json), e assim nao e a tela que sai. Ate aqui nenhum job ODC repontava os consumidores de uma tela nem a movia.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CatBHome", "as": "$home", "_why": "1. a tela dos consumidores, criada primeiro"},
+  {"op": "set", "target": "$home/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$home/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$homeTitle"},
+  {"op": "set", "target": "$homeTitle", "prop": "Value", "value": "\"Home\""},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CatBAbout", "as": "$about", "_why": "2. a tela que vai sair, sem input"},
+  {"op": "set", "target": "$about/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$about/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$aboutTitle"},
+  {"op": "set", "target": "$aboutTitle", "prop": "Value", "value": "\"About\""},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CatBAboutV2", "as": "$about2", "_why": "a substituta, com o mesmo contrato (nenhum input)"},
+  {"op": "set", "target": "$about2/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$about2/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$about2Title"},
+  {"op": "set", "target": "$about2Title", "prop": "Value", "value": "\"About (new)\""},
+
+  {"op": "create", "parent": "$home/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "HomeBox", "as": "$box", "_why": "3. conteudo e navegacao da Home"},
+  {"op": "create", "parent": "$box", "type": "IExpression", "as": "$first"},
+  {"op": "set", "target": "$first", "prop": "Value", "value": "\"First line\""},
+  {"op": "create", "parent": "$box", "type": "IExpression", "as": "$second"},
+  {"op": "set", "target": "$second", "prop": "Value", "value": "\"Second line\""},
+  {"op": "create", "parent": "$box", "type": "IButton", "name": "AboutButton", "as": "$btn"},
+  {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "About"},
+  {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$about"},
+  {"op": "create", "parent": "$box", "type": "ILink", "name": "AboutLink", "as": "$lnk"},
+  {"op": "set", "target": "$lnk/#ITextWidget", "prop": "Text", "value": "About (link)"},
+  {"op": "set", "target": "$lnk/OnClick", "prop": "Destination", "value": "$about"},
+  {"op": "create", "parent": "$box", "type": "IButton", "name": "ObsoleteButton", "as": "$obsolete"},
+  {"op": "set", "target": "$obsolete/#ITextWidget", "prop": "Text", "value": "Old shortcut"},
+  {"op": "set", "target": "$obsolete/OnClick", "prop": "Destination", "value": "$about2"},
+
+  {"op": "move", "target": "$second", "before": "$first", "_why": "4. reordenar expressoes dentro do mesmo container"},
+  {"op": "move", "target": "$about2", "x": 1400, "y": 600, "_why": "mover a tela no canvas do fluxo (posicao do no)"},
+  {"op": "get", "target": "$about2"},
+
+  {"op": "usages", "target": "$about", "_why": "5. ANTES: 2 consumidores (o OnClick do botao e o do link)"},
+  {"op": "replace", "from": "$about", "to": "$about2", "_why": "REPONTAR pelo ReplaceReferences de cada consumidor, mesmo tipo (IMobileScreen), sem force"},
+  {"op": "usages", "target": "$about", "_why": "zero consumidores"},
+  {"op": "usages", "target": "$about2", "_why": "3: os dois repontados e o ObsoleteButton"},
+  {"op": "get", "target": "$btn/OnClick", "_why": "LER DE VOLTA: Destination = CatBAboutV2"},
+  {"op": "get", "target": "$lnk/OnClick"},
+
+  {"op": "delete", "target": "$obsolete", "_why": "6. apagar um botao com a sua navegacao"},
+  {"op": "delete", "target": "$about", "_why": "7. sem consumidores a tela sai sem force"},
+  {"op": "usages", "target": "$about2", "_why": "2: botao e link"},
+
+  {"op": "create", "parent": "@espace", "type": "IMobileFlow", "name": "CatBAuxFlow", "as": "$flow", "_why": "8. um UI flow proprio, com uma tela, renomeado"},
+  {"op": "create", "parent": "$flow", "type": "IMobileScreen", "name": "CatBHelp", "as": "$help"},
+  {"op": "set", "target": "$help/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$help/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$helpTitle"},
+  {"op": "set", "target": "$helpTitle", "prop": "Value", "value": "\"Help\""},
+  {"op": "rename", "target": "$flow", "name": "CatBHelpFlow"},
+  {"op": "get", "target": "IMobileFlow:CatBHelpFlow", "_why": "o fluxo pelo nome novo, com a tela dentro"},
+
+  {"op": "dump", "target": "$home", "depth": 6}
+ ]
+}

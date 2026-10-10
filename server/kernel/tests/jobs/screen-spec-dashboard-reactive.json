@@ -1,0 +1,239 @@
+{
+  "description": "Screen spec screen-spec-dashboard-reactive: public block contracts, fixture-owned data, zero new messages.",
+  "base": "reactive-ui.oml",
+  "expectValid": true,
+  "ops": [
+    {
+      "op": "spec",
+      "data": {
+        "static": [
+          {
+            "name": "ShowcaseGenre",
+            "records": [
+              {
+                "name": "Adventure"
+              },
+              {
+                "name": "Strategy"
+              }
+            ]
+          }
+        ],
+        "entities": [
+          {
+            "name": "ShowcaseGame",
+            "public": true,
+            "attributes": [
+              {
+                "name": "Title",
+                "type": "Text",
+                "mandatory": true,
+                "length": 120
+              },
+              {
+                "name": "Description",
+                "type": "Text",
+                "length": 500
+              },
+              {
+                "name": "Price",
+                "type": "Currency"
+              },
+              {
+                "name": "Rating",
+                "type": "Decimal"
+              },
+              {
+                "name": "ImageUrl",
+                "type": "Text",
+                "length": 500
+              },
+              {
+                "name": "Active",
+                "type": "Boolean"
+              },
+              {
+                "name": "GenreId",
+                "type": "ShowcaseGenre Identifier"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "logic",
+      "data": {
+        "actions": [
+          {
+            "name": "ShowcaseGame_Featured",
+            "public": true,
+            "outputs": [
+              {
+                "name": "Games",
+                "type": "ShowcaseGame List"
+              }
+            ],
+            "vars": [
+              {
+                "name": "Game",
+                "type": "ShowcaseGame"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "Game.Title": "\"Featured game\"",
+                  "Game.Price": "19.99"
+                }
+              },
+              {
+                "call": "ListAppend",
+                "as": "AppendGame",
+                "args": {
+                  "List": "Games",
+                  "Element": "Game"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "logic",
+      "data": {
+        "actions": [
+          {
+            "name": "ShowcaseGame_Search",
+            "public": true,
+            "inputs": [
+              {
+                "name": "Offset",
+                "type": "Integer"
+              },
+              {
+                "name": "Limit",
+                "type": "Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Games",
+                "type": "ShowcaseGame List"
+              },
+              {
+                "name": "Total",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "ShowcaseGame",
+                "as": "ReadGames",
+                "start": "Offset",
+                "max": "Limit"
+              },
+              {
+                "foreach": "ReadGames.List",
+                "as": "EachGame",
+                "do": [
+                  {
+                    "call": "ListAppend",
+                    "as": "Append",
+                    "args": {
+                      "List": "Games",
+                      "Element": "ReadGames.List.Current.ShowcaseGame"
+                    }
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "Total": "ReadGames.Count"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "screen",
+      "data": {
+        "screens": [
+          {
+            "name": "GamesDashboard",
+            "kind": "dashboard",
+            "title": "Games overview",
+            "source": {
+              "entity": "ShowcaseGame",
+              "as": "GetGames"
+            },
+            "fields": [
+              {
+                "label": "All games",
+                "value": "GetGames.Count"
+              },
+              {
+                "label": "Loaded games",
+                "value": "GetGames.List.Length"
+              }
+            ],
+            "card": {
+              "title": "Title",
+              "description": "Description",
+              "price": "Price",
+              "rating": "Rating",
+              "image": "ImageUrl",
+              "layout": "carousel"
+            }
+          },
+          {
+            "name": "FeaturedGame",
+            "kind": "detail",
+            "title": "Featured",
+            "source": {
+              "action": "ShowcaseGame_Featured",
+              "as": "LoadGames",
+              "output": "Games"
+            },
+            "fields": [
+              {
+                "field": "Title",
+                "label": "Title"
+              },
+              {
+                "field": "Price",
+                "label": "Price"
+              }
+            ]
+          },
+          {
+            "name": "ActionCatalog",
+            "kind": "cards",
+            "source": {
+              "action": "ShowcaseGame_Search",
+              "as": "LoadGames",
+              "output": "Games",
+              "total": "Total",
+              "args": {
+                "Offset": "StartIndex",
+                "Limit": "MaxRecords"
+              }
+            },
+            "card": {
+              "title": "Title",
+              "price": "Price"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "op": "find",
+      "type": "IMobileBlockInstanceWidget",
+      "max": 100
+    }
+  ]
+}

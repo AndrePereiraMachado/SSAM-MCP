@@ -1,0 +1,2161 @@
+{
+ "description": "Tickets: verificacao de SLA, auto-close, auto-assign, despacho de notificacoes, lembretes e os timers",
+ "base": "job:tickets-05-org",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Sla_CheckBreaches",
+   "as": "$Sla_CheckBreaches"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches",
+   "prop": "Description",
+   "value": "Timer: cria TicketSlaBreach para prazos vencidos e escala na primeira vez"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches",
+   "type": "IOutputParameter",
+   "name": "BreachedCount",
+   "as": "$Sla_CheckBreaches_out1"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_out1",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches",
+   "type": "ILocalVariable",
+   "name": "B",
+   "as": "$Sla_CheckBreaches_var2"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_var2",
+   "prop": "DataType",
+   "value": "TicketSlaBreach"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches",
+   "type": "IStartNode",
+   "as": "$Sla_CheckBreaches_start3"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches",
+   "type": "IAggregateNode",
+   "name": "GetOverdueResolution",
+   "as": "$Sla_CheckBreaches_agg4"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_agg4",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_agg4",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.ResolutionDueOn < CurrDateTime()"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_agg4",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.StatusId <> Entities.TicketStatus.Resolved"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_agg4",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.StatusId <> Entities.TicketStatus.Closed"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_agg4",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.StatusId <> Entities.TicketStatus.Cancelled"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches",
+   "type": "IForEachNode",
+   "name": "EachOverdue",
+   "as": "$Sla_CheckBreaches_fe5"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_fe5",
+   "prop": "Label",
+   "value": "EachOverdue"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_fe5",
+   "prop": "RecordList",
+   "value": "GetOverdueResolution.List"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches",
+   "type": "IAggregateNode",
+   "name": "GetBreach",
+   "allowQueryInLoop": {"why": "proof job written before the 2026-10-09 data-access rule (QUERY_IN_LOOP); kept as the regression it already proves"},
+   "as": "$Sla_CheckBreaches_agg6"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_agg6",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:TicketSlaBreach"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_agg6",
+   "type": "IFilter",
+   "args": {
+    "condition": "TicketSlaBreach.TicketId = GetOverdueResolution.List.Current.Ticket.Id"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_agg6",
+   "type": "IFilter",
+   "args": {
+    "condition": "TicketSlaBreach.TargetId = Entities.SlaTarget.Resolution"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_agg6",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches",
+   "type": "IIfNode",
+   "name": "NoBreachYet",
+   "as": "$Sla_CheckBreaches_if7"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_if7",
+   "prop": "Label",
+   "value": "NoBreachYet"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_if7",
+   "prop": "Condition",
+   "value": "GetBreach.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches",
+   "type": "IAssignNode",
+   "name": "FillBreach",
+   "as": "$Sla_CheckBreaches_asg8"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_asg8",
+   "prop": "Label",
+   "value": "FillBreach"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_asg8",
+   "type": "IAssignment",
+   "as": "$Sla_CheckBreaches_a9"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a9",
+   "prop": "Variable",
+   "value": "B.TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a9",
+   "prop": "Value",
+   "value": "GetOverdueResolution.List.Current.Ticket.Id"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_asg8",
+   "type": "IAssignment",
+   "as": "$Sla_CheckBreaches_a10"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a10",
+   "prop": "Variable",
+   "value": "B.TargetId"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a10",
+   "prop": "Value",
+   "value": "Entities.SlaTarget.Resolution"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_asg8",
+   "type": "IAssignment",
+   "as": "$Sla_CheckBreaches_a11"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a11",
+   "prop": "Variable",
+   "value": "B.DueOn"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a11",
+   "prop": "Value",
+   "value": "GetOverdueResolution.List.Current.Ticket.ResolutionDueOn"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_asg8",
+   "type": "IAssignment",
+   "as": "$Sla_CheckBreaches_a12"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a12",
+   "prop": "Variable",
+   "value": "B.BreachedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a12",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_asg8",
+   "type": "IAssignment",
+   "as": "$Sla_CheckBreaches_a13"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a13",
+   "prop": "Variable",
+   "value": "B.NotifiedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a13",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_asg8",
+   "type": "IAssignment",
+   "as": "$Sla_CheckBreaches_a14"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a14",
+   "prop": "Variable",
+   "value": "BreachedCount"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a14",
+   "prop": "Value",
+   "value": "BreachedCount + 1"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches",
+   "type": "IExecuteServerActionNode",
+   "name": "CreateBreach",
+   "as": "$Sla_CheckBreaches_call15"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_call15",
+   "prop": "Action",
+   "value": "IEntityActionSignature:CreateTicketSlaBreach"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_call15/Source",
+   "prop": "Value",
+   "value": "B"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches",
+   "type": "IExecuteServerActionNode",
+   "name": "Escalate",
+   "as": "$Sla_CheckBreaches_call16"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_call16",
+   "prop": "Action",
+   "value": "IServerAction:Ticket_Escalate"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_call16/TicketId",
+   "prop": "Value",
+   "value": "GetOverdueResolution.List.Current.Ticket.Id"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_call16/ActorId",
+   "prop": "Value",
+   "value": "NullIdentifier()"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_call16/Reason",
+   "prop": "Value",
+   "value": "\"Resolution SLA breached\""
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches",
+   "type": "IAggregateNode",
+   "name": "GetOverdueFirst",
+   "as": "$Sla_CheckBreaches_agg17"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_agg17",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_agg17",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.FirstResponseDueOn < CurrDateTime()"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_agg17",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.FirstRespondedOn = NullDate()"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_agg17",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.StatusId <> Entities.TicketStatus.Resolved"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_agg17",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.StatusId <> Entities.TicketStatus.Closed"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_agg17",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.StatusId <> Entities.TicketStatus.Cancelled"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches",
+   "type": "IForEachNode",
+   "name": "EachOverdueFirst",
+   "as": "$Sla_CheckBreaches_fe18"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_fe18",
+   "prop": "Label",
+   "value": "EachOverdueFirst"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_fe18",
+   "prop": "RecordList",
+   "value": "GetOverdueFirst.List"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches",
+   "type": "IAggregateNode",
+   "name": "GetFirstBreach",
+   "allowQueryInLoop": {"why": "proof job written before the 2026-10-09 data-access rule (QUERY_IN_LOOP); kept as the regression it already proves"},
+   "as": "$Sla_CheckBreaches_agg19"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_agg19",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:TicketSlaBreach"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_agg19",
+   "type": "IFilter",
+   "args": {
+    "condition": "TicketSlaBreach.TicketId = GetOverdueFirst.List.Current.Ticket.Id"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_agg19",
+   "type": "IFilter",
+   "args": {
+    "condition": "TicketSlaBreach.TargetId = Entities.SlaTarget.FirstResponse"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_agg19",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches",
+   "type": "IIfNode",
+   "name": "NoFirstBreachYet",
+   "as": "$Sla_CheckBreaches_if20"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_if20",
+   "prop": "Label",
+   "value": "NoFirstBreachYet"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_if20",
+   "prop": "Condition",
+   "value": "GetFirstBreach.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches",
+   "type": "IAssignNode",
+   "name": "FillFirstBreach",
+   "as": "$Sla_CheckBreaches_asg21"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_asg21",
+   "prop": "Label",
+   "value": "FillFirstBreach"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_asg21",
+   "type": "IAssignment",
+   "as": "$Sla_CheckBreaches_a22"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a22",
+   "prop": "Variable",
+   "value": "B.TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a22",
+   "prop": "Value",
+   "value": "GetOverdueFirst.List.Current.Ticket.Id"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_asg21",
+   "type": "IAssignment",
+   "as": "$Sla_CheckBreaches_a23"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a23",
+   "prop": "Variable",
+   "value": "B.TargetId"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a23",
+   "prop": "Value",
+   "value": "Entities.SlaTarget.FirstResponse"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_asg21",
+   "type": "IAssignment",
+   "as": "$Sla_CheckBreaches_a24"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a24",
+   "prop": "Variable",
+   "value": "B.DueOn"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a24",
+   "prop": "Value",
+   "value": "GetOverdueFirst.List.Current.Ticket.FirstResponseDueOn"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_asg21",
+   "type": "IAssignment",
+   "as": "$Sla_CheckBreaches_a25"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a25",
+   "prop": "Variable",
+   "value": "B.BreachedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a25",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_asg21",
+   "type": "IAssignment",
+   "as": "$Sla_CheckBreaches_a26"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a26",
+   "prop": "Variable",
+   "value": "B.NotifiedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a26",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches_asg21",
+   "type": "IAssignment",
+   "as": "$Sla_CheckBreaches_a27"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a27",
+   "prop": "Variable",
+   "value": "BreachedCount"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_a27",
+   "prop": "Value",
+   "value": "BreachedCount + 1"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches",
+   "type": "IExecuteServerActionNode",
+   "name": "CreateFirstBreach",
+   "as": "$Sla_CheckBreaches_call28"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_call28",
+   "prop": "Action",
+   "value": "IEntityActionSignature:CreateTicketSlaBreach"
+  },
+  {
+   "op": "set",
+   "target": "$Sla_CheckBreaches_call28/Source",
+   "prop": "Value",
+   "value": "B"
+  },
+  {
+   "op": "create",
+   "parent": "$Sla_CheckBreaches",
+   "type": "IEndNode",
+   "as": "$Sla_CheckBreaches_end29"
+  },
+  {
+   "op": "link",
+   "from": "$Sla_CheckBreaches_start3",
+   "to": "$Sla_CheckBreaches_agg4"
+  },
+  {
+   "op": "link",
+   "from": "$Sla_CheckBreaches_agg4",
+   "to": "$Sla_CheckBreaches_fe5"
+  },
+  {
+   "op": "link",
+   "from": "$Sla_CheckBreaches_fe5",
+   "to": "$Sla_CheckBreaches_agg6",
+   "connector": "CycleTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Sla_CheckBreaches_agg6",
+   "to": "$Sla_CheckBreaches_if7"
+  },
+  {
+   "op": "link",
+   "from": "$Sla_CheckBreaches_if7",
+   "to": "$Sla_CheckBreaches_asg8",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Sla_CheckBreaches_asg8",
+   "to": "$Sla_CheckBreaches_call15"
+  },
+  {
+   "op": "link",
+   "from": "$Sla_CheckBreaches_call15",
+   "to": "$Sla_CheckBreaches_call16"
+  },
+  {
+   "op": "link",
+   "from": "$Sla_CheckBreaches_call16",
+   "to": "$Sla_CheckBreaches_fe5"
+  },
+  {
+   "op": "link",
+   "from": "$Sla_CheckBreaches_if7",
+   "to": "$Sla_CheckBreaches_fe5",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Sla_CheckBreaches_fe5",
+   "to": "$Sla_CheckBreaches_agg17"
+  },
+  {
+   "op": "link",
+   "from": "$Sla_CheckBreaches_agg17",
+   "to": "$Sla_CheckBreaches_fe18"
+  },
+  {
+   "op": "link",
+   "from": "$Sla_CheckBreaches_fe18",
+   "to": "$Sla_CheckBreaches_agg19",
+   "connector": "CycleTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Sla_CheckBreaches_agg19",
+   "to": "$Sla_CheckBreaches_if20"
+  },
+  {
+   "op": "link",
+   "from": "$Sla_CheckBreaches_if20",
+   "to": "$Sla_CheckBreaches_asg21",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Sla_CheckBreaches_asg21",
+   "to": "$Sla_CheckBreaches_call28"
+  },
+  {
+   "op": "link",
+   "from": "$Sla_CheckBreaches_call28",
+   "to": "$Sla_CheckBreaches_fe18"
+  },
+  {
+   "op": "link",
+   "from": "$Sla_CheckBreaches_if20",
+   "to": "$Sla_CheckBreaches_fe18",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Sla_CheckBreaches_fe18",
+   "to": "$Sla_CheckBreaches_end29"
+  },
+  {
+   "op": "layout",
+   "target": "$Sla_CheckBreaches"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Ticket_AutoClose",
+   "as": "$Ticket_AutoClose"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose",
+   "prop": "Description",
+   "value": "Timer: Resolved ha mais de AutoCloseDays passa a Closed e pede avaliacao"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoClose",
+   "type": "IOutputParameter",
+   "name": "ClosedCount",
+   "as": "$Ticket_AutoClose_out1"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose_out1",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoClose",
+   "type": "ILocalVariable",
+   "name": "Recipients",
+   "as": "$Ticket_AutoClose_var2"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose_var2",
+   "prop": "DataType",
+   "value": "User Identifier List"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoClose",
+   "type": "IStartNode",
+   "as": "$Ticket_AutoClose_start3"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoClose",
+   "type": "IAggregateNode",
+   "name": "GetResolved",
+   "as": "$Ticket_AutoClose_agg4"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoClose_agg4",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoClose_agg4",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.StatusId = Entities.TicketStatus.Resolved"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoClose_agg4",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.ResolvedOn < AddDays(CurrDateTime(), -Site.AutoCloseDays)"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoClose",
+   "type": "IForEachNode",
+   "name": "EachResolved",
+   "as": "$Ticket_AutoClose_fe5"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose_fe5",
+   "prop": "Label",
+   "value": "EachResolved"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose_fe5",
+   "prop": "RecordList",
+   "value": "GetResolved.List"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoClose",
+   "type": "IExecuteServerActionNode",
+   "name": "Close",
+   "as": "$Ticket_AutoClose_call6"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose_call6",
+   "prop": "Action",
+   "value": "IServerAction:Ticket_ChangeStatus"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose_call6/TicketId",
+   "prop": "Value",
+   "value": "GetResolved.List.Current.Ticket.Id"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose_call6/NewStatusId",
+   "prop": "Value",
+   "value": "Entities.TicketStatus.Closed"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose_call6/ActorId",
+   "prop": "Value",
+   "value": "NullIdentifier()"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose_call6/Note",
+   "prop": "Value",
+   "value": "\"Closed automatically\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoClose",
+   "type": "IExecuteServerActionNode",
+   "name": "ClearRecipients",
+   "as": "$Ticket_AutoClose_call7"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose_call7",
+   "prop": "Action",
+   "value": "IActionSignature:ListClear"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose_call7/List",
+   "prop": "Value",
+   "value": "Recipients"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoClose",
+   "type": "IExecuteServerActionNode",
+   "name": "AppendRequester",
+   "as": "$Ticket_AutoClose_call8"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose_call8",
+   "prop": "Action",
+   "value": "IActionSignature:ListAppend"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose_call8/List",
+   "prop": "Value",
+   "value": "Recipients"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose_call8/Element",
+   "prop": "Value",
+   "value": "GetResolved.List.Current.Ticket.RequesterId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoClose",
+   "type": "IExecuteServerActionNode",
+   "name": "AskRating",
+   "as": "$Ticket_AutoClose_call9"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose_call9",
+   "prop": "Action",
+   "value": "IServerAction:Notification_Create"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose_call9/UserIds",
+   "prop": "Value",
+   "value": "Recipients"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose_call9/TicketId",
+   "prop": "Value",
+   "value": "GetResolved.List.Current.Ticket.Id"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose_call9/Title",
+   "prop": "Value",
+   "value": "\"How did we do on \" + GetResolved.List.Current.Ticket.Number + \"?\""
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose_call9/Body",
+   "prop": "Value",
+   "value": "\"Please rate your ticket\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoClose",
+   "type": "IAssignNode",
+   "name": "Count",
+   "as": "$Ticket_AutoClose_asg10"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose_asg10",
+   "prop": "Label",
+   "value": "Count"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoClose_asg10",
+   "type": "IAssignment",
+   "as": "$Ticket_AutoClose_a11"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose_a11",
+   "prop": "Variable",
+   "value": "ClosedCount"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoClose_a11",
+   "prop": "Value",
+   "value": "ClosedCount + 1"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoClose",
+   "type": "IEndNode",
+   "as": "$Ticket_AutoClose_end12"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoClose_start3",
+   "to": "$Ticket_AutoClose_agg4"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoClose_agg4",
+   "to": "$Ticket_AutoClose_fe5"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoClose_fe5",
+   "to": "$Ticket_AutoClose_call6",
+   "connector": "CycleTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoClose_call6",
+   "to": "$Ticket_AutoClose_call7"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoClose_call7",
+   "to": "$Ticket_AutoClose_call8"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoClose_call8",
+   "to": "$Ticket_AutoClose_call9"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoClose_call9",
+   "to": "$Ticket_AutoClose_asg10"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoClose_asg10",
+   "to": "$Ticket_AutoClose_fe5"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoClose_fe5",
+   "to": "$Ticket_AutoClose_end12"
+  },
+  {
+   "op": "layout",
+   "target": "$Ticket_AutoClose"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Ticket_AutoAssign",
+   "as": "$Ticket_AutoAssign"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign",
+   "prop": "Description",
+   "value": "Membro da equipa com menos tickets abertos"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign",
+   "type": "IInputParameter",
+   "name": "TicketId",
+   "as": "$Ticket_AutoAssign_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_in1",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign",
+   "type": "IOutputParameter",
+   "name": "AssigneeId",
+   "as": "$Ticket_AutoAssign_out2"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_out2",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign",
+   "type": "ILocalVariable",
+   "name": "Best",
+   "as": "$Ticket_AutoAssign_var3"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_var3",
+   "prop": "DataType",
+   "value": "Long Integer"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_var3",
+   "prop": "DefaultValue",
+   "value": "999999"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign",
+   "type": "IStartNode",
+   "as": "$Ticket_AutoAssign_start4"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign",
+   "type": "IAggregateNode",
+   "name": "GetTicket",
+   "as": "$Ticket_AutoAssign_agg5"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign_agg5",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign_agg5",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.Id = TicketId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_agg5",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign",
+   "type": "IIfNode",
+   "name": "TicketFound",
+   "as": "$Ticket_AutoAssign_if6"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_if6",
+   "prop": "Label",
+   "value": "TicketFound"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_if6",
+   "prop": "Condition",
+   "value": "not GetTicket.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseTicketNotFound",
+   "as": "$Ticket_AutoAssign_raise7"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_raise7",
+   "prop": "Exception",
+   "value": "IUserException:NotFound"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_raise7",
+   "prop": "ExceptionMessage",
+   "value": "\"Ticket not found\""
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoAssign_if6",
+   "to": "$Ticket_AutoAssign_raise7",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign",
+   "type": "IAggregateNode",
+   "name": "GetMembers",
+   "as": "$Ticket_AutoAssign_agg8"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign_agg8",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:TeamMember"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign_agg8",
+   "type": "IFilter",
+   "args": {
+    "condition": "TeamMember.TeamId = GetTicket.List.Current.Ticket.TeamId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign",
+   "type": "IForEachNode",
+   "name": "EachMember",
+   "as": "$Ticket_AutoAssign_fe9"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_fe9",
+   "prop": "Label",
+   "value": "EachMember"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_fe9",
+   "prop": "RecordList",
+   "value": "GetMembers.List"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign",
+   "type": "IAggregateNode",
+   "name": "GetOpenCount",
+   "allowQueryInLoop": {"why": "proof job written before the 2026-10-09 data-access rule (QUERY_IN_LOOP); kept as the regression it already proves"},
+   "as": "$Ticket_AutoAssign_agg10"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign_agg10",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign_agg10",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.AssigneeId = GetMembers.List.Current.TeamMember.UserId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign_agg10",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.StatusId <> Entities.TicketStatus.Resolved"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign_agg10",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.StatusId <> Entities.TicketStatus.Closed"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign_agg10",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.StatusId <> Entities.TicketStatus.Cancelled"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign",
+   "type": "IIfNode",
+   "name": "Fewer",
+   "as": "$Ticket_AutoAssign_if11"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_if11",
+   "prop": "Label",
+   "value": "Fewer"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_if11",
+   "prop": "Condition",
+   "value": "GetOpenCount.Count < Best"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign",
+   "type": "IAssignNode",
+   "name": "Pick",
+   "as": "$Ticket_AutoAssign_asg12"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_asg12",
+   "prop": "Label",
+   "value": "Pick"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign_asg12",
+   "type": "IAssignment",
+   "as": "$Ticket_AutoAssign_a13"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_a13",
+   "prop": "Variable",
+   "value": "Best"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_a13",
+   "prop": "Value",
+   "value": "GetOpenCount.Count"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign_asg12",
+   "type": "IAssignment",
+   "as": "$Ticket_AutoAssign_a14"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_a14",
+   "prop": "Variable",
+   "value": "AssigneeId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_a14",
+   "prop": "Value",
+   "value": "GetMembers.List.Current.TeamMember.UserId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign",
+   "type": "IIfNode",
+   "name": "Found",
+   "as": "$Ticket_AutoAssign_if15"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_if15",
+   "prop": "Label",
+   "value": "Found"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_if15",
+   "prop": "Condition",
+   "value": "AssigneeId <> NullIdentifier()"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign",
+   "type": "IExecuteServerActionNode",
+   "name": "Assign",
+   "as": "$Ticket_AutoAssign_call16"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_call16",
+   "prop": "Action",
+   "value": "IServerAction:Ticket_Assign"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_call16/TicketId",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_call16/TeamId",
+   "prop": "Value",
+   "value": "GetTicket.List.Current.Ticket.TeamId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_call16/AssigneeId",
+   "prop": "Value",
+   "value": "AssigneeId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_AutoAssign_call16/ActorId",
+   "prop": "Value",
+   "value": "NullIdentifier()"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_AutoAssign",
+   "type": "IEndNode",
+   "as": "$Ticket_AutoAssign_end17"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoAssign_start4",
+   "to": "$Ticket_AutoAssign_agg5"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoAssign_agg5",
+   "to": "$Ticket_AutoAssign_if6"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoAssign_if6",
+   "to": "$Ticket_AutoAssign_agg8",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoAssign_agg8",
+   "to": "$Ticket_AutoAssign_fe9"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoAssign_fe9",
+   "to": "$Ticket_AutoAssign_agg10",
+   "connector": "CycleTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoAssign_agg10",
+   "to": "$Ticket_AutoAssign_if11"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoAssign_if11",
+   "to": "$Ticket_AutoAssign_asg12",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoAssign_asg12",
+   "to": "$Ticket_AutoAssign_fe9"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoAssign_if11",
+   "to": "$Ticket_AutoAssign_fe9",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoAssign_fe9",
+   "to": "$Ticket_AutoAssign_if15"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoAssign_if15",
+   "to": "$Ticket_AutoAssign_call16",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoAssign_if15",
+   "to": "$Ticket_AutoAssign_end17",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_AutoAssign_call16",
+   "to": "$Ticket_AutoAssign_end17"
+  },
+  {
+   "op": "layout",
+   "target": "$Ticket_AutoAssign"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Notification_Dispatch",
+   "as": "$Notification_Dispatch"
+  },
+  {
+   "op": "set",
+   "target": "$Notification_Dispatch",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Notification_Dispatch",
+   "prop": "Description",
+   "value": "Timer: marca como enviadas as notificacoes pendentes (o envio por email fica no modulo de UI/email)"
+  },
+  {
+   "op": "create",
+   "parent": "$Notification_Dispatch",
+   "type": "IOutputParameter",
+   "name": "SentCount",
+   "as": "$Notification_Dispatch_out1"
+  },
+  {
+   "op": "set",
+   "target": "$Notification_Dispatch_out1",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$Notification_Dispatch",
+   "type": "ILocalVariable",
+   "name": "N",
+   "as": "$Notification_Dispatch_var2"
+  },
+  {
+   "op": "set",
+   "target": "$Notification_Dispatch_var2",
+   "prop": "DataType",
+   "value": "Notification"
+  },
+  {
+   "op": "create",
+   "parent": "$Notification_Dispatch",
+   "type": "IStartNode",
+   "as": "$Notification_Dispatch_start3"
+  },
+  {
+   "op": "create",
+   "parent": "$Notification_Dispatch",
+   "type": "IAggregateNode",
+   "name": "GetPending",
+   "as": "$Notification_Dispatch_agg4"
+  },
+  {
+   "op": "create",
+   "parent": "$Notification_Dispatch_agg4",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Notification"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Notification_Dispatch_agg4",
+   "type": "IFilter",
+   "args": {
+    "condition": "Notification.SentOn = NullDate()"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Notification_Dispatch_agg4",
+   "prop": "MaxRecords",
+   "value": "500"
+  },
+  {
+   "op": "create",
+   "parent": "$Notification_Dispatch",
+   "type": "IForEachNode",
+   "name": "EachPending",
+   "as": "$Notification_Dispatch_fe5"
+  },
+  {
+   "op": "set",
+   "target": "$Notification_Dispatch_fe5",
+   "prop": "Label",
+   "value": "EachPending"
+  },
+  {
+   "op": "set",
+   "target": "$Notification_Dispatch_fe5",
+   "prop": "RecordList",
+   "value": "GetPending.List"
+  },
+  {
+   "op": "create",
+   "parent": "$Notification_Dispatch",
+   "type": "IAssignNode",
+   "name": "MarkSent",
+   "as": "$Notification_Dispatch_asg6"
+  },
+  {
+   "op": "set",
+   "target": "$Notification_Dispatch_asg6",
+   "prop": "Label",
+   "value": "MarkSent"
+  },
+  {
+   "op": "create",
+   "parent": "$Notification_Dispatch_asg6",
+   "type": "IAssignment",
+   "as": "$Notification_Dispatch_a7"
+  },
+  {
+   "op": "set",
+   "target": "$Notification_Dispatch_a7",
+   "prop": "Variable",
+   "value": "N"
+  },
+  {
+   "op": "set",
+   "target": "$Notification_Dispatch_a7",
+   "prop": "Value",
+   "value": "GetPending.List.Current.Notification"
+  },
+  {
+   "op": "create",
+   "parent": "$Notification_Dispatch_asg6",
+   "type": "IAssignment",
+   "as": "$Notification_Dispatch_a8"
+  },
+  {
+   "op": "set",
+   "target": "$Notification_Dispatch_a8",
+   "prop": "Variable",
+   "value": "N.SentOn"
+  },
+  {
+   "op": "set",
+   "target": "$Notification_Dispatch_a8",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Notification_Dispatch_asg6",
+   "type": "IAssignment",
+   "as": "$Notification_Dispatch_a9"
+  },
+  {
+   "op": "set",
+   "target": "$Notification_Dispatch_a9",
+   "prop": "Variable",
+   "value": "SentCount"
+  },
+  {
+   "op": "set",
+   "target": "$Notification_Dispatch_a9",
+   "prop": "Value",
+   "value": "SentCount + 1"
+  },
+  {
+   "op": "create",
+   "parent": "$Notification_Dispatch",
+   "type": "IExecuteServerActionNode",
+   "name": "UpdateNotification",
+   "as": "$Notification_Dispatch_call10"
+  },
+  {
+   "op": "set",
+   "target": "$Notification_Dispatch_call10",
+   "prop": "Action",
+   "value": "IEntityActionSignature:UpdateNotification"
+  },
+  {
+   "op": "set",
+   "target": "$Notification_Dispatch_call10/Source",
+   "prop": "Value",
+   "value": "N"
+  },
+  {
+   "op": "create",
+   "parent": "$Notification_Dispatch",
+   "type": "IEndNode",
+   "as": "$Notification_Dispatch_end11"
+  },
+  {
+   "op": "link",
+   "from": "$Notification_Dispatch_start3",
+   "to": "$Notification_Dispatch_agg4"
+  },
+  {
+   "op": "link",
+   "from": "$Notification_Dispatch_agg4",
+   "to": "$Notification_Dispatch_fe5"
+  },
+  {
+   "op": "link",
+   "from": "$Notification_Dispatch_fe5",
+   "to": "$Notification_Dispatch_asg6",
+   "connector": "CycleTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Notification_Dispatch_asg6",
+   "to": "$Notification_Dispatch_call10"
+  },
+  {
+   "op": "link",
+   "from": "$Notification_Dispatch_call10",
+   "to": "$Notification_Dispatch_fe5"
+  },
+  {
+   "op": "link",
+   "from": "$Notification_Dispatch_fe5",
+   "to": "$Notification_Dispatch_end11"
+  },
+  {
+   "op": "layout",
+   "target": "$Notification_Dispatch"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Ticket_Reminders",
+   "as": "$Ticket_Reminders"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders",
+   "prop": "Description",
+   "value": "Timer: Pending parados lembram o requester; Open parados lembram o assignee"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Reminders",
+   "type": "ILocalVariable",
+   "name": "Recipients",
+   "as": "$Ticket_Reminders_var1"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_var1",
+   "prop": "DataType",
+   "value": "User Identifier List"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Reminders",
+   "type": "IStartNode",
+   "as": "$Ticket_Reminders_start2"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Reminders",
+   "type": "IAggregateNode",
+   "name": "GetStalePending",
+   "as": "$Ticket_Reminders_agg3"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Reminders_agg3",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Reminders_agg3",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.StatusId = Entities.TicketStatus.Pending"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Reminders_agg3",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.UpdatedOn < AddDays(CurrDateTime(), -Site.ReminderDays)"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Reminders",
+   "type": "IForEachNode",
+   "name": "EachPending",
+   "as": "$Ticket_Reminders_fe4"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_fe4",
+   "prop": "Label",
+   "value": "EachPending"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_fe4",
+   "prop": "RecordList",
+   "value": "GetStalePending.List"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Reminders",
+   "type": "IExecuteServerActionNode",
+   "name": "Clear1",
+   "as": "$Ticket_Reminders_call5"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_call5",
+   "prop": "Action",
+   "value": "IActionSignature:ListClear"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_call5/List",
+   "prop": "Value",
+   "value": "Recipients"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Reminders",
+   "type": "IExecuteServerActionNode",
+   "name": "AppendRequester",
+   "as": "$Ticket_Reminders_call6"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_call6",
+   "prop": "Action",
+   "value": "IActionSignature:ListAppend"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_call6/List",
+   "prop": "Value",
+   "value": "Recipients"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_call6/Element",
+   "prop": "Value",
+   "value": "GetStalePending.List.Current.Ticket.RequesterId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Reminders",
+   "type": "IExecuteServerActionNode",
+   "name": "RemindRequester",
+   "as": "$Ticket_Reminders_call7"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_call7",
+   "prop": "Action",
+   "value": "IServerAction:Notification_Create"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_call7/UserIds",
+   "prop": "Value",
+   "value": "Recipients"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_call7/TicketId",
+   "prop": "Value",
+   "value": "GetStalePending.List.Current.Ticket.Id"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_call7/Title",
+   "prop": "Value",
+   "value": "\"We are waiting for you on \" + GetStalePending.List.Current.Ticket.Number"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_call7/Body",
+   "prop": "Value",
+   "value": "\"\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Reminders",
+   "type": "IAggregateNode",
+   "name": "GetStaleOpen",
+   "as": "$Ticket_Reminders_agg8"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Reminders_agg8",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Reminders_agg8",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.StatusId = Entities.TicketStatus.Open"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Reminders_agg8",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.UpdatedOn < AddDays(CurrDateTime(), -Site.ReminderDays)"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Reminders_agg8",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.AssigneeId <> NullIdentifier()"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Reminders",
+   "type": "IForEachNode",
+   "name": "EachOpen",
+   "as": "$Ticket_Reminders_fe9"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_fe9",
+   "prop": "Label",
+   "value": "EachOpen"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_fe9",
+   "prop": "RecordList",
+   "value": "GetStaleOpen.List"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Reminders",
+   "type": "IExecuteServerActionNode",
+   "name": "Clear2",
+   "as": "$Ticket_Reminders_call10"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_call10",
+   "prop": "Action",
+   "value": "IActionSignature:ListClear"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_call10/List",
+   "prop": "Value",
+   "value": "Recipients"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Reminders",
+   "type": "IExecuteServerActionNode",
+   "name": "AppendAssignee",
+   "as": "$Ticket_Reminders_call11"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_call11",
+   "prop": "Action",
+   "value": "IActionSignature:ListAppend"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_call11/List",
+   "prop": "Value",
+   "value": "Recipients"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_call11/Element",
+   "prop": "Value",
+   "value": "GetStaleOpen.List.Current.Ticket.AssigneeId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Reminders",
+   "type": "IExecuteServerActionNode",
+   "name": "RemindAssignee",
+   "as": "$Ticket_Reminders_call12"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_call12",
+   "prop": "Action",
+   "value": "IServerAction:Notification_Create"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_call12/UserIds",
+   "prop": "Value",
+   "value": "Recipients"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_call12/TicketId",
+   "prop": "Value",
+   "value": "GetStaleOpen.List.Current.Ticket.Id"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_call12/Title",
+   "prop": "Value",
+   "value": "\"Ticket \" + GetStaleOpen.List.Current.Ticket.Number + \" has no activity\""
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Reminders_call12/Body",
+   "prop": "Value",
+   "value": "\"\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Reminders",
+   "type": "IEndNode",
+   "as": "$Ticket_Reminders_end13"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Reminders_start2",
+   "to": "$Ticket_Reminders_agg3"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Reminders_agg3",
+   "to": "$Ticket_Reminders_fe4"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Reminders_fe4",
+   "to": "$Ticket_Reminders_call5",
+   "connector": "CycleTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Reminders_call5",
+   "to": "$Ticket_Reminders_call6"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Reminders_call6",
+   "to": "$Ticket_Reminders_call7"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Reminders_call7",
+   "to": "$Ticket_Reminders_fe4"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Reminders_fe4",
+   "to": "$Ticket_Reminders_agg8"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Reminders_agg8",
+   "to": "$Ticket_Reminders_fe9"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Reminders_fe9",
+   "to": "$Ticket_Reminders_call10",
+   "connector": "CycleTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Reminders_call10",
+   "to": "$Ticket_Reminders_call11"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Reminders_call11",
+   "to": "$Ticket_Reminders_call12"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Reminders_call12",
+   "to": "$Ticket_Reminders_fe9"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Reminders_fe9",
+   "to": "$Ticket_Reminders_end13"
+  },
+  {
+   "op": "layout",
+   "target": "$Ticket_Reminders"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ITimer",
+   "name": "SlaCheckTimer",
+   "as": "$timer_SlaCheckTimer"
+  },
+  {
+   "op": "set",
+   "target": "$timer_SlaCheckTimer",
+   "prop": "Action",
+   "value": "IServerAction:Sla_CheckBreaches"
+  },
+  {
+   "op": "set",
+   "target": "$timer_SlaCheckTimer",
+   "prop": "Description",
+   "value": "A cada 5 minutos"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ITimer",
+   "name": "AutoCloseTimer",
+   "as": "$timer_AutoCloseTimer"
+  },
+  {
+   "op": "set",
+   "target": "$timer_AutoCloseTimer",
+   "prop": "Action",
+   "value": "IServerAction:Ticket_AutoClose"
+  },
+  {
+   "op": "set",
+   "target": "$timer_AutoCloseTimer",
+   "prop": "Description",
+   "value": "Diario"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ITimer",
+   "name": "NotificationDispatchTimer",
+   "as": "$timer_NotificationDispatchTimer"
+  },
+  {
+   "op": "set",
+   "target": "$timer_NotificationDispatchTimer",
+   "prop": "Action",
+   "value": "IServerAction:Notification_Dispatch"
+  },
+  {
+   "op": "set",
+   "target": "$timer_NotificationDispatchTimer",
+   "prop": "Description",
+   "value": "A cada minuto"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ITimer",
+   "name": "RemindersTimer",
+   "as": "$timer_RemindersTimer"
+  },
+  {
+   "op": "set",
+   "target": "$timer_RemindersTimer",
+   "prop": "Action",
+   "value": "IServerAction:Ticket_Reminders"
+  },
+  {
+   "op": "set",
+   "target": "$timer_RemindersTimer",
+   "prop": "Description",
+   "value": "Diario"
+  }
+ ]
+}

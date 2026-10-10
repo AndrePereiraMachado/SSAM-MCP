@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Anvil.Bridge: o unico codigo que roda DENTRO do Service Studio. Minimo por principio:
+    servidor TCP JSON-lines, ping, snapshot do modulo aberto, merge de 3 vias, export (so leitura)
+    e as leituras que o merge precisa. Nada de mutacao do modelo pelo bridge: o worker muta, o Studio recebe por merge.
+    Service Center (sc_api, sc_web, studio_login, sc_session): listas fechadas sobre o login do proprio Studio.
+    Referencia as DLLs do Studio instalado (Private=false); e injetado por tools/Anvil.Inject.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RollForward>Major</RollForward>
+    <SSDir Condition="'$(SSDir)' == ''">$(USERPROFILE)\OutSystems\Service Studio 11 - Anvil 4516\Service Studio</SSDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="OutSystems.Communication"><HintPath>$(SSDir)\OutSystems.Communication.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Communication.Identity"><HintPath>$(SSDir)\OutSystems.Communication.Identity.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.RuntimeCommon"><HintPath>$(SSDir)\OutSystems.RuntimeCommon.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.MetaModel"><HintPath>$(SSDir)\OutSystems.MetaModel.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Model.V1"><HintPath>$(SSDir)\OutSystems.Model.V1.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Model.Implementation"><HintPath>$(SSDir)\OutSystems.Model.Implementation.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.C5"><HintPath>$(SSDir)\OutSystems.C5.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Framework"><HintPath>$(SSDir)\ServiceStudio.Framework.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Common"><HintPath>$(SSDir)\ServiceStudio.Common.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Presenter"><HintPath>$(SSDir)\ServiceStudio.Presenter.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.ServerCommunications"><HintPath>$(SSDir)\ServiceStudio.ServerCommunications.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.ServerCommunications.API"><HintPath>$(SSDir)\ServiceStudio.ServerCommunications.API.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.ServerCommunications.ServiceCenter"><HintPath>$(SSDir)\ServiceStudio.ServerCommunications.ServiceCenter.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Communication.Rest"><HintPath>$(SSDir)\OutSystems.Communication.Rest.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="WebViewControl.Avalonia"><HintPath>$(SSDir)\WebViewControl.Avalonia.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Xilium.CefGlue"><HintPath>$(SSDir)\Xilium.CefGlue.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Commands"><HintPath>$(SSDir)\ServiceStudio.Commands.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Merge"><HintPath>$(SSDir)\ServiceStudio.Merge.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Undo"><HintPath>$(SSDir)\ServiceStudio.Undo.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.PluginAPI"><HintPath>$(SSDir)\ServiceStudio.PluginAPI.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Avalonia.Base"><HintPath>$(SSDir)\Avalonia.Base.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Avalonia.Controls"><HintPath>$(SSDir)\Avalonia.Controls.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Avalonia.Desktop"><HintPath>$(SSDir)\Avalonia.Desktop.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Anvil.Core\Anvil.Core.csproj" />
+    <Compile Include="../../query-test/*.cs" Link="QueryTest/%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

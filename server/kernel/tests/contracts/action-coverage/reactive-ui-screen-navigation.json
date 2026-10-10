@@ -1,0 +1,79 @@
+{
+  "fixture": "reactive-ui",
+  "features": [
+    "screen-navigation",
+    "screen"
+  ],
+  "contract": {
+    "logic": {
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "screen",
+          "owner": "IMobileScreen:CoverageScreen",
+          "steps": [
+            {
+              "node": "IDestinationNode",
+              "as": "Go",
+              "properties": {
+                "Destination": "IMobileScreen:CoverageTarget",
+                "Transition": "Inherited"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "setup": [
+    {
+      "op": "create",
+      "parent": "IMobileFlow:MainFlow",
+      "type": "IMobileScreen",
+      "name": "CoverageScreen"
+    },
+    {
+      "op": "create",
+      "parent": "IMobileFlow:MainFlow",
+      "type": "IMobileScreen",
+      "name": "CoverageTarget"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:CoverageScreen/#IMobileBlockInstanceWidget",
+      "prop": "SourceBlock",
+      "value": "IMobileBlock:LayoutTopMenu"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:CoverageTarget/#IMobileBlockInstanceWidget",
+      "prop": "SourceBlock",
+      "value": "IMobileBlock:LayoutTopMenu"
+    },
+    {
+      "op": "create",
+      "parent": "IMobileScreen:CoverageScreen",
+      "type": "IButton",
+      "name": "Run"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:CoverageScreen/Run/#ITextWidget",
+      "prop": "Text",
+      "value": "Run proof"
+    }
+  ],
+  "bindings": [
+    {
+      "op": "set",
+      "target": "IMobileScreen:CoverageScreen/Run/OnClick",
+      "prop": "Destination",
+      "value": "IMobileScreen:CoverageScreen/Coverage"
+    }
+  ],
+  "mutation": {
+    "target": "IMobileScreen:CoverageScreen/Coverage/#IDestinationNode",
+    "prop": "Transition",
+    "value": "None"
+  }
+}

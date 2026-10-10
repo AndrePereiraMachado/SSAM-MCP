@@ -1,0 +1,233 @@
+{
+ "description": "Cold G (Traditional): entidade Subscriber (Email obrigatorio, Name, Active default True) + static DigestKind (Daily, Weekly) via spec; email DigestEmail no flow Emails com input SubscriberName; server action publica Digest_SendAll sem inputs: aggregate dos Subscriber ativos -> ForEach -> Send Email (To = email do subscriber, argumento = nome); timer DigestTimer que executa Digest_SendAll (escrito por uma LLM sem contexto na sessao fria G, rodada 2, 2026-09-04)",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "static": [
+     {
+      "name": "DigestKind",
+      "records": [
+       {
+        "name": "Daily",
+        "label": "Daily"
+       },
+       {
+        "name": "Weekly",
+        "label": "Weekly"
+       }
+      ]
+     }
+    ],
+    "entities": [
+     {
+      "name": "Subscriber",
+      "description": "Assinante do digest",
+      "attributes": [
+       {
+        "name": "Email",
+        "type": "Email",
+        "mandatory": true
+       },
+       {
+        "name": "Name",
+        "type": "Text",
+        "length": 100
+       },
+       {
+        "name": "Active",
+        "type": "Boolean",
+        "default": "True"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "create",
+   "parent": "IWebFlow:Emails",
+   "type": "IWebEmail",
+   "name": "DigestEmail",
+   "as": "$em"
+  },
+  {
+   "op": "create",
+   "parent": "$em",
+   "type": "IInputParameter",
+   "name": "SubscriberName",
+   "as": "$emIn"
+  },
+  {
+   "op": "set",
+   "target": "$emIn",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$em",
+   "prop": "Subject",
+   "value": "\"Your digest, \" + SubscriberName"
+  },
+  {
+   "op": "create",
+   "parent": "$em",
+   "type": "IExpressionWidget",
+   "as": "$txt"
+  },
+  {
+   "op": "set",
+   "target": "$txt",
+   "prop": "Value",
+   "value": "\"Hello \" + SubscriberName + \", here is your digest.\""
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Digest_SendAll",
+   "as": "$sa"
+  },
+  {
+   "op": "set",
+   "target": "$sa",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IStartNode",
+   "as": "$s0"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IAggregateNode",
+   "name": "GetActiveSubscribers",
+   "as": "$agg"
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "$Subscriber"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IFilter",
+   "args": {
+    "condition": "Subscriber.Active"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IForEachNode",
+   "name": "ForEachSubscriber",
+   "as": "$fe"
+  },
+  {
+   "op": "set",
+   "target": "$fe",
+   "prop": "Label",
+   "value": "ForEachSubscriber"
+  },
+  {
+   "op": "set",
+   "target": "$fe",
+   "prop": "RecordList",
+   "value": "GetActiveSubscribers.List"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "ISendEmailNode",
+   "name": "SendDigestEmail",
+   "as": "$send"
+  },
+  {
+   "op": "set",
+   "target": "$send",
+   "prop": "Email",
+   "value": "$em"
+  },
+  {
+   "op": "set",
+   "target": "$send",
+   "prop": "To",
+   "value": "GetActiveSubscribers.List.Current.Subscriber.Email"
+  },
+  {
+   "op": "set",
+   "target": "$send/SubscriberName",
+   "prop": "Value",
+   "value": "GetActiveSubscribers.List.Current.Subscriber.Name"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IEndNode",
+   "as": "$s9"
+  },
+  {
+   "op": "link",
+   "from": "$s0",
+   "to": "$agg"
+  },
+  {
+   "op": "link",
+   "from": "$agg",
+   "to": "$fe"
+  },
+  {
+   "op": "link",
+   "from": "$fe",
+   "connector": "CycleTarget",
+   "to": "$send"
+  },
+  {
+   "op": "link",
+   "from": "$send",
+   "to": "$fe"
+  },
+  {
+   "op": "link",
+   "from": "$fe",
+   "to": "$s9"
+  },
+  {
+   "op": "layout",
+   "target": "$sa"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ITimer",
+   "name": "DigestTimer",
+   "as": "$timer"
+  },
+  {
+   "op": "set",
+   "target": "$timer",
+   "prop": "Action",
+   "value": "$sa"
+  },
+  {
+   "op": "set",
+   "target": "$timer",
+   "prop": "Description",
+   "value": "Envia o digest a todos os subscribers ativos"
+  },
+  {
+   "op": "get",
+   "target": "$timer"
+  }
+ ]
+}

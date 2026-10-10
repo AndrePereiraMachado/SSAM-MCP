@@ -1,0 +1,28 @@
+{
+ "description": "NEG D5/T3 (OutSystems padroes): chamada a server action dentro de while (compilado como IIfNode em ciclo).",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "logic", "data": {"actions": [
+   {"name": "CheckMoreBatches", "kind": "server", "public": true,
+    "description": "Diz se ainda ha lote a drenar; chamada pelo laco do controle negativo D5.",
+    "inputs": [{"name": "Round", "type": "Integer", "description": "Rodada atual do laco que pergunta por mais lotes."}],
+    "outputs": [{"name": "HasMore", "type": "Boolean", "description": "Verdadeiro enquanto houver lote a drenar."}],
+    "steps": [{"assign": {"HasMore": "Round < 1"}, "as": "Decide if more batches remain"}]},
+   {"name": "DrainBatches", "kind": "server", "public": true,
+    "description": "Chama o servidor a cada iteracao de um while (violacao proposital da D5).",
+    "vars": [
+     {"name": "Round", "type": "Integer", "description": "Contador de rodadas do laco while."},
+     {"name": "IsDone", "type": "Boolean", "description": "Marca o fim do laco quando nao ha mais lote."}],
+    "outputs": [{"name": "Rounds", "type": "Integer", "description": "Numero de rodadas executadas pelo laco."}],
+    "steps": [
+     {"while": "not IsDone", "label": "More batches to drain?", "do": [
+      {"call": "CheckMoreBatches", "as": "CheckBatch", "args": {"Round": "Round"}},
+      {"assign": {"IsDone": "not CheckBatch.HasMore", "Round": "Round + 1"}, "as": "Advance the drain round"}
+     ]},
+     {"assign": {"Rounds": "Round"}, "as": "Report drained rounds"}
+    ]}
+  ]}}
+ ]
+}

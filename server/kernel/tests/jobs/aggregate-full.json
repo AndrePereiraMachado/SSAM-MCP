@@ -1,0 +1,338 @@
+{
+ "description": "Aggregate com join, filtro, ordenacao e group by Count.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedUserAction",
+   "element": "Headless_CS (ESpace) / Order_Report (ServerAction)",
+   "why": "Action privada isolada para provar joins e agregacoes; este fixture nao tem um chamador."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerEntity",
+   "name": "Order",
+   "as": "$o"
+  },
+  {
+   "op": "create",
+   "parent": "$o",
+   "type": "IEntityAttribute",
+   "name": "Id",
+   "as": "$oid"
+  },
+  {
+   "op": "set",
+   "target": "$oid",
+   "prop": "DataType",
+   "value": "Long Integer"
+  },
+  {
+   "op": "set",
+   "target": "$oid",
+   "prop": "IsAutoNumber",
+   "value": "Yes"
+  },
+  {
+   "op": "set",
+   "target": "$o",
+   "prop": "IdentifierAttribute",
+   "value": "$oid"
+  },
+  {
+   "op": "create",
+   "parent": "$o",
+   "type": "IEntityAttribute",
+   "name": "CustomerName",
+   "as": "$oc"
+  },
+  {
+   "op": "set",
+   "target": "$oc",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$o",
+   "type": "IEntityAttribute",
+   "name": "Total",
+   "as": "$ot"
+  },
+  {
+   "op": "set",
+   "target": "$ot",
+   "prop": "DataType",
+   "value": "Currency"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerEntity",
+   "name": "OrderItem",
+   "as": "$i"
+  },
+  {
+   "op": "create",
+   "parent": "$i",
+   "type": "IEntityAttribute",
+   "name": "Id",
+   "as": "$iid"
+  },
+  {
+   "op": "set",
+   "target": "$iid",
+   "prop": "DataType",
+   "value": "Long Integer"
+  },
+  {
+   "op": "set",
+   "target": "$iid",
+   "prop": "IsAutoNumber",
+   "value": "Yes"
+  },
+  {
+   "op": "set",
+   "target": "$i",
+   "prop": "IdentifierAttribute",
+   "value": "$iid"
+  },
+  {
+   "op": "create",
+   "parent": "$i",
+   "type": "IEntityAttribute",
+   "name": "OrderId",
+   "as": "$ifk"
+  },
+  {
+   "op": "set",
+   "target": "$ifk",
+   "prop": "DataType",
+   "value": "Order Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$i",
+   "type": "IEntityAttribute",
+   "name": "Qty",
+   "as": "$iq"
+  },
+  {
+   "op": "set",
+   "target": "$iq",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Order_Report",
+   "as": "$act"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IInputParameter",
+   "name": "MinTotal",
+   "as": "$in"
+  },
+  {
+   "op": "set",
+   "target": "$in",
+   "prop": "DataType",
+   "value": "Currency"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IOutputParameter",
+   "name": "Count",
+   "as": "$out"
+  },
+  {
+   "op": "set",
+   "target": "$out",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IStartNode",
+   "as": "$start"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IEndNode",
+   "as": "$end"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IAggregateNode",
+   "name": "GetOrdersWithItems",
+   "as": "$agg"
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Order"
+   },
+   "as": "$srcO"
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:OrderItem"
+   },
+   "as": "$srcI"
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IJoin",
+   "as": "$join"
+  },
+  {
+   "op": "set",
+   "target": "$join",
+   "prop": "LeftSource",
+   "value": "$srcO"
+  },
+  {
+   "op": "set",
+   "target": "$join",
+   "prop": "RightSource",
+   "value": "$srcI"
+  },
+  {
+   "op": "set",
+   "target": "$join",
+   "prop": "JoinType",
+   "value": "Left"
+  },
+  {
+   "op": "set",
+   "target": "$join",
+   "prop": "Condition",
+   "value": "Order.Id = OrderItem.OrderId"
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IFilter",
+   "args": {
+    "condition": "Order.Total >= MinTotal"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "ISort",
+   "as": "$sort"
+  },
+  {
+   "op": "set",
+   "target": "$sort",
+   "prop": "Attribute",
+   "value": "Order.Total"
+  },
+  {
+   "op": "set",
+   "target": "$sort",
+   "prop": "SortDirection",
+   "value": "Descending"
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IGroupByAttribute",
+   "name": "CustomerName",
+   "as": "$gb"
+  },
+  {
+   "op": "set",
+   "target": "$gb",
+   "prop": "Attribute",
+   "value": "Order.CustomerName"
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IAggregateAttribute",
+   "name": "Orders",
+   "as": "$cnt"
+  },
+  {
+   "op": "set",
+   "target": "$cnt",
+   "prop": "Attribute",
+   "value": "Order.Id"
+  },
+  {
+   "op": "set",
+   "target": "$cnt",
+   "prop": "AggregationType",
+   "value": "Count"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IAssignNode",
+   "name": "SetCount",
+   "as": "$assign"
+  },
+  {
+   "op": "set",
+   "target": "$assign",
+   "prop": "Label",
+   "value": "SetCount"
+  },
+  {
+   "op": "create",
+   "parent": "$assign",
+   "type": "IAssignment",
+   "as": "$a1"
+  },
+  {
+   "op": "set",
+   "target": "$a1",
+   "prop": "Variable",
+   "value": "Count"
+  },
+  {
+   "op": "set",
+   "target": "$a1",
+   "prop": "Value",
+   "value": "GetOrdersWithItems.List.Length"
+  },
+  {
+   "op": "link",
+   "from": "$start",
+   "to": "$agg"
+  },
+  {
+   "op": "link",
+   "from": "$agg",
+   "to": "$assign"
+  },
+  {
+   "op": "link",
+   "from": "$assign",
+   "to": "$end"
+  },
+  {
+   "op": "layout",
+   "target": "$act"
+  }
+ ]
+}

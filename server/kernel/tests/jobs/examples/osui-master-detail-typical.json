@@ -1,0 +1,19 @@
+{
+ "description": "MasterDetail (OutSystemsUI, Adaptive) tipico; criado vazio e preenchido com conteudo proprio; placeholders LeftContent, RightContent com dados do aggregate de tarefas; eventos DetailClose tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "DetailCloseCount", "as": "$vDetailCloseCount"},
+  {"op": "set", "target": "$vDetailCloseCount", "prop": "DataType", "value": "Integer"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetShowcaseTasks", "as": "$tasks"},
+  {"op": "create", "parent": "$tasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "logic", "data": {"actions": [{"name": "MasterDetailDemoDetailClose", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Conta as vezes que DetailClose disparou", "inputs": [],"steps": [{"assign": {"DetailCloseCount": "DetailCloseCount + 1"},"as": "KeepDetailClose"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "MasterDetailDemo", "source": "IMobileBlock:MasterDetail", "empty": true,"as": "$b"},
+  {"op": "set", "target": "$b/DetailClose", "prop": "Handler", "value": "IScreenAction:MasterDetailDemoDetailClose"},
+  {"op": "create", "parent": "$b/LeftContent", "type": "IExpression", "as": "$ph1"},
+  {"op": "set", "target": "$ph1", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/RightContent", "type": "IExpression", "as": "$ph2"},
+  {"op": "set", "target": "$ph2", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""}
+ ]
+}

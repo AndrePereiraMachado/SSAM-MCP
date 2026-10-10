@@ -1,0 +1,47 @@
+{
+ "description": "ODC: a resposta a 'evento obrigatorio sem handler e recusa ou aviso?' na faixa ODC, e a resposta e a MESMA do O11 - nem recusa nem aviso: o kernel aplica tudo sem dizer nada (ok=True) e o Verify da ERRO EventHandlerRequiredAction, deixando o modulo invalido. O bloco WfPingPanel declara OnPing com IsMandatory true e duas instancias nascem na tela WfPingDemo sem handler: saem DOIS erros, um por instancia, cada um no caminho do seu IEventHandler - a obrigatoriedade cobra-se por INSTANCIA, nao por bloco. Vale ainda o mesmo detalhe do O11: o IEventHandler nasce com a instancia mesmo vazio, por isso as duas instancias sem handler ja contam como consumidoras no `usages`. Paridade confirmada com tests/jobs/block-events-mandatory-reactive.json; o caminho valido (mesmo IsMandatory true, um handler por instancia) esta em tests/jobs-odc/block-events-two-instances.json.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": false,
+ "expectedMessages": [
+  {"id": "EventHandlerRequiredAction", "element": "WfPingPanel1 (MobileBlockInstanceWidget) / EventHandler", "why": "E ESTE o resultado que o job existe para provar na faixa ODC: com IsMandatory true, a instancia sem handler produz um erro (nao um aviso) no seu proprio IEventHandler. Calar isto seria apagar a prova."},
+  {"id": "EventHandlerRequiredAction", "element": "WfPingPanel2 (MobileBlockInstanceWidget) / EventHandler", "why": "A segunda mensagem prova que a cobranca e por INSTANCIA e nao por bloco nem por evento: duas instancias sem handler dao dois erros, com caminhos diferentes."}
+ ],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "WfPingPanel", "as": "$blk", "_why": "1. o bloco com o evento obrigatorio"},
+  {"op": "create", "parent": "$blk", "type": "IInputParameter", "name": "Caption", "as": "$blkIn"},
+  {"op": "set", "target": "$blkIn", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$blk", "type": "IBlockEvent", "name": "OnPing", "as": "$ev"},
+  {"op": "set", "target": "$ev", "prop": "Description", "value": "Disparado quando o painel pinga; obrigatorio para quem o instancia"},
+  {"op": "set", "target": "$ev", "prop": "IsMandatory", "value": true},
+  {"op": "create", "parent": "$ev", "type": "IInputParameter", "name": "Note", "as": "$evNote"},
+  {"op": "set", "target": "$evNote", "prop": "DataType", "value": "Text"},
+
+  {"op": "create", "parent": "$blk", "type": "IButton", "name": "PingButton", "as": "$btn"},
+  {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "Ping"},
+  {"op": "create", "parent": "$blk", "type": "IScreenAction", "name": "Ping", "as": "$act"},
+  {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$a0"},
+  {"op": "create", "parent": "$act", "type": "ITriggerNode", "name": "RaiseOnPing", "as": "$trg"},
+  {"op": "set", "target": "$trg", "prop": "Event", "value": "$ev"},
+  {"op": "set", "target": "$trg/Note", "prop": "Value", "value": "\"ping de \" + Caption"},
+  {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$a9"},
+  {"op": "link", "from": "$a0", "to": "$trg"},
+  {"op": "link", "from": "$trg", "to": "$a9"},
+  {"op": "layout", "target": "$act"},
+  {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$act"},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfPingDemo", "as": "$scr", "_why": "2. a tela com DUAS instancias, nenhuma com handler"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Ping\""},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "WfPingPanel1", "as": "$i1", "source": "IMobileBlock:WfPingPanel", "_why": "o kernel aceita a instancia sem handler sem dizer nada"},
+  {"op": "set", "target": "$i1/Caption", "prop": "Value", "value": "\"Primeira, sem handler\""},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "WfPingPanel2", "as": "$i2", "source": "IMobileBlock:WfPingPanel", "_why": "a segunda so serve para provar que sao dois erros, nao um"},
+  {"op": "set", "target": "$i2/Caption", "prop": "Value", "value": "\"Segunda, tambem sem handler\""},
+
+  {"op": "get", "target": "$ev", "_why": "IsMandatory True"},
+  {"op": "get", "target": "$i1", "_why": "EventHandlers 1 mesmo sem handler ligado: o IEventHandler nasce com a instancia"},
+  {"op": "get", "target": "$i1/#IEventHandler", "_why": "tem Event, nao tem Handler nem Arguments: a assinatura de 'instancia registada, handler em falta'"},
+  {"op": "usages", "target": "$ev", "_why": "3 consumidores: as duas instancias vazias contam tanto quanto o ITriggerNode"},
+  {"op": "dump", "target": "$scr", "depth": 6}
+ ]
+}

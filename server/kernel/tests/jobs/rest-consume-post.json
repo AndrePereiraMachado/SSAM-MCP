@@ -1,0 +1,268 @@
+{
+ "description": "REST consumido POST com body JSON, Basic Auth, header de cliente e de metodo, output em header (job da investigacao REST de 2026-09-04)",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IRestClient",
+   "name": "OrdersApi",
+   "as": "$api"
+  },
+  {
+   "op": "set",
+   "target": "$api",
+   "prop": "BaseURL",
+   "value": "https://api.example.com"
+  },
+  {
+   "op": "set",
+   "target": "$api",
+   "prop": "AuthenticationType",
+   "value": "BasicAuthentication"
+  },
+  {
+   "op": "set",
+   "target": "$api",
+   "prop": "Username",
+   "value": "user"
+  },
+  {
+   "op": "set",
+   "target": "$api",
+   "prop": "Password",
+   "value": "secret"
+  },
+  {
+   "op": "create",
+   "parent": "$api",
+   "type": "IExtendedProperty",
+   "as": "$h"
+  },
+  {
+   "op": "set",
+   "target": "$h",
+   "prop": "Property",
+   "value": "Accept"
+  },
+  {
+   "op": "set",
+   "target": "$h",
+   "prop": "Value",
+   "value": "\"application/json\""
+  },
+  {
+   "op": "create",
+   "parent": "$api",
+   "type": "IRestStructure",
+   "name": "CreateOrderRequest",
+   "as": "$req"
+  },
+  {
+   "op": "create",
+   "parent": "$req",
+   "type": "IRestStructureAttribute",
+   "name": "CustomerId",
+   "as": "$r1"
+  },
+  {
+   "op": "set",
+   "target": "$r1",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "set",
+   "target": "$r1",
+   "prop": "NameInJSON",
+   "value": "customer_id"
+  },
+  {
+   "op": "create",
+   "parent": "$req",
+   "type": "IRestStructureAttribute",
+   "name": "Total",
+   "as": "$r2"
+  },
+  {
+   "op": "set",
+   "target": "$r2",
+   "prop": "DataType",
+   "value": "Decimal"
+  },
+  {
+   "op": "set",
+   "target": "$r2",
+   "prop": "NameInJSON",
+   "value": "total"
+  },
+  {
+   "op": "create",
+   "parent": "$api",
+   "type": "IRestStructure",
+   "name": "CreateOrderResponse",
+   "as": "$res"
+  },
+  {
+   "op": "create",
+   "parent": "$res",
+   "type": "IRestStructureAttribute",
+   "name": "Id",
+   "as": "$s1"
+  },
+  {
+   "op": "set",
+   "target": "$s1",
+   "prop": "DataType",
+   "value": "Long Integer"
+  },
+  {
+   "op": "set",
+   "target": "$s1",
+   "prop": "NameInJSON",
+   "value": "id"
+  },
+  {
+   "op": "create",
+   "parent": "$api",
+   "type": "IRestAction",
+   "name": "CreateOrder",
+   "as": "$m"
+  },
+  {
+   "op": "set",
+   "target": "$m",
+   "prop": "HTTPMethod",
+   "value": "POST"
+  },
+  {
+   "op": "set",
+   "target": "$m",
+   "prop": "URLPath",
+   "value": "/orders"
+  },
+  {
+   "op": "set",
+   "target": "$m",
+   "prop": "RequestFormat",
+   "value": "JSON"
+  },
+  {
+   "op": "set",
+   "target": "$m",
+   "prop": "ResponseFormat",
+   "value": "JSON"
+  },
+  {
+   "op": "set",
+   "target": "$m",
+   "prop": "TimeoutinSeconds",
+   "value": 30
+  },
+  {
+   "op": "create",
+   "parent": "$m",
+   "type": "IRestActionInput",
+   "name": "Request",
+   "as": "$in"
+  },
+  {
+   "op": "set",
+   "target": "$in",
+   "prop": "DataType",
+   "value": "CreateOrderRequest"
+  },
+  {
+   "op": "set",
+   "target": "$in",
+   "prop": "InputPlacement",
+   "value": "BodyPlacement"
+  },
+  {
+   "op": "set",
+   "target": "$in",
+   "prop": "IsMandatory",
+   "value": true
+  },
+  {
+   "op": "create",
+   "parent": "$m",
+   "type": "IRestActionInput",
+   "name": "XApiKey",
+   "as": "$hin"
+  },
+  {
+   "op": "set",
+   "target": "$hin",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$hin",
+   "prop": "InputPlacement",
+   "value": "HeaderPlacement"
+  },
+  {
+   "op": "set",
+   "target": "$hin",
+   "prop": "OriginalName",
+   "value": "X-Api-Key"
+  },
+  {
+   "op": "set",
+   "target": "$hin",
+   "prop": "IsMandatory",
+   "value": true
+  },
+  {
+   "op": "create",
+   "parent": "$m",
+   "type": "IRestActionOutput",
+   "name": "Response",
+   "as": "$out"
+  },
+  {
+   "op": "set",
+   "target": "$out",
+   "prop": "DataType",
+   "value": "CreateOrderResponse"
+  },
+  {
+   "op": "set",
+   "target": "$out",
+   "prop": "OutputPlacement",
+   "value": "BodyPlacement"
+  },
+  {
+   "op": "create",
+   "parent": "$m",
+   "type": "IRestActionOutput",
+   "name": "ETag",
+   "as": "$hout"
+  },
+  {
+   "op": "set",
+   "target": "$hout",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$hout",
+   "prop": "OutputPlacement",
+   "value": "HeaderPlacement"
+  },
+  {
+   "op": "set",
+   "target": "$hout",
+   "prop": "OriginalName",
+   "value": "ETag"
+  },
+  {
+   "op": "get",
+   "target": "$h"
+  }
+ ]
+}

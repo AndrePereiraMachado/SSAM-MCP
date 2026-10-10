@@ -1,0 +1,61 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "native-widget",
+    "web:ILinkWidget"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Subject",
+            "type": "ILinkWidget",
+            "properties": {
+              "StyleClasses": "coverage"
+            },
+            "children": [
+              {
+                "name": "Part2",
+                "type": "ITextWidget",
+                "properties": {
+                  "Text": "Go"
+                }
+              }
+            ],
+            "events": {
+              "OnClick": {
+                "destination": "IWebScreen:Coverage/Handle1",
+                "method": "Ajax"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "name": "Handle1",
+          "kind": "screen",
+          "owner": "IWebScreen:Coverage",
+          "steps": []
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IWebScreen:Coverage/Subject",
+    "prop": "StyleClasses",
+    "value": "changed"
+  }
+}

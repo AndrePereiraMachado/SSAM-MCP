@@ -1,0 +1,24 @@
+# Monorepo SSAM-MCP: o que nunca entra no git, nas duas caixas.
+# Cada caixa tem ainda os .gitignore do repositório original (server/.gitignore, server/kernel/.gitignore,
+# server/platforms/odc/.gitignore e agent/.gitignore).
+
+# Saídas de build e de teste
+**/bin/
+**/obj/
+**/TestResults/
+**/__pycache__/
+
+# Dependências (pnpm install --frozen-lockfile recria)
+**/node_modules/
+
+# Estado local: CLIs compiladas, tokens do servidor, workspaces de clientes, seleção assinada
+**/.local/
+
+# Pacote do agente gerado por agent/scripts/agent-pack.ps1
+*.zip
+
+# Segredos e valores da máquina
+.env
+**/*.credentials.json
+**/tokens.json
+**/.ssam-local.json

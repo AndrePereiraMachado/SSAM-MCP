@@ -1,0 +1,711 @@
+{
+ "schemaVersion": "ssam-discovery-fragment/1",
+ "contract": "ssam-catalog-contribution/1",
+ "front": "B",
+ "title": "UI events: widget events bound to a destination, lifecycle events, application (system) events, external sites and extended (DOM) events",
+ "reviewedAt": "2026-09-23",
+ "synonyms": {
+  "lifecycle": [
+   "ciclo de vida",
+   "life cycle"
+  ]
+ },
+ "capabilities": [
+  {
+   "id": "ui.event",
+   "category": "ui",
+   "title": "Widget and lifecycle events: bind OnClick, OnReady or OnAfterFetch to a destination",
+   "keywords": [
+    "event",
+    "on click",
+    "onclick",
+    "destination",
+    "navigate",
+    "navigation",
+    "lifecycle event",
+    "on after fetch",
+    "onafterfetch",
+    "on ready",
+    "onready",
+    "on initialize",
+    "event binding",
+    "call action"
+   ],
+   "summary": "A built-in widget event (`$btn/OnClick`, `$item/OnClick`, `$link/OnClick`) is born with its widget and is bound with `set <widget>/OnClick Destination <target>`, where the target is a screen action (`$action`, `IScreenAction:<Name>`), a screen (`IMobileScreen:<Name>`, navigation) or an external site; navigation arguments are `set <widget>/OnClick/<Parameter> Value <expr>`. Lifecycle events (`$scr/OnReady`, `$da/OnAfterFetch`) are bound the same way. This capability owns the binding only; the body of the target is declared by the logic capabilities.",
+   "route": {
+    "kind": "job",
+    "operation": "set {target: '<widget>/OnClick' | '<screen>/OnReady' | '<dataAction>/OnAfterFetch', prop: 'Destination', value: '<screen action | IMobileScreen:Name | external site>'}; set {target: '<widget>/OnClick/<Input>', prop: 'Value', value: '<expr>'}"
+   },
+   "contract": [
+    "verbs.verbs.set",
+    "verbs.verbs.get",
+    "verbs.references"
+   ],
+   "depends": [],
+   "alternatives": [],
+   "guidance": "The chain is widget -> event -> action -> data: create the widget (ui.widget, ui.input, ui.list), create or reuse the screen action (logic), then bind the event Destination; a Destination must name an element that already exists at that op of the job. Built-in events navigate or call logic with a Destination; a block instance event uses a Handler (ui.block-instance); an extended DOM event (IEvent) uses a Handler (logic.app-event). A screen action bound to an event must have no outputs. An event of a block instance in the html fragment: @Event=\"ScreenAction\" on <Block name=\"B\">, with :Input=\"expr\" for its inputs and <slot name=\"P\"> for its placeholders.",
+   "example": {
+    "ops": [
+     "create",
+     "set"
+    ],
+    "max": 16
+   },
+   "elements": [
+    {
+     "role": "widget event",
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.UI.Mobile.Events.IBuiltinEvent",
+       "jobType": "(born with the widget)",
+       "address": "<widget path>/OnClick"
+      },
+      "o11": {
+       "native": "OutSystems.Model.UI.Mobile.Events.IUILifeCycleEvent",
+       "jobType": "(born with the widget)",
+       "address": "<widget path>/OnClick"
+      }
+     }
+    },
+    {
+     "role": "lifecycle event",
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.UI.Mobile.Events.IUILifeCycleEvent",
+       "jobType": "(born with the screen, block or data action)",
+       "address": "<screen|block|data action path>/OnReady | /OnInitialize | /OnRender | /OnDestroy | /OnParametersChanged | /OnAfterFetch"
+      },
+      "o11": {
+       "native": "OutSystems.Model.UI.Mobile.Events.IUILifeCycleEvent",
+       "jobType": "(born with the screen, block or data action)",
+       "address": "<screen|block|data action path>/OnReady | /OnInitialize | /OnRender | /OnDestroy | /OnParametersChanged | /OnAfterFetch"
+      }
+     }
+    }
+   ],
+   "operations": {
+    "create": {
+     "route": "none: built-in and lifecycle events are born with their owner",
+     "preconditions": [],
+     "roles": {
+      "widget event": {
+       "odc": {
+        "status": "not-applicable",
+        "note": "born with the widget; bind it with set Destination",
+        "alternative": "set <widget>/OnClick Destination"
+       },
+       "o11": {
+        "status": "not-applicable",
+        "note": "born with the widget; bind it with set Destination",
+        "alternative": "set <widget>/OnClick Destination"
+       }
+      },
+      "lifecycle event": {
+       "odc": {
+        "status": "not-applicable",
+        "note": "born with the screen, block or data action",
+        "alternative": "set <owner>/<Event> Destination"
+       },
+       "o11": {
+        "status": "not-applicable",
+        "note": "born with the screen, block or data action",
+        "alternative": "set <owner>/<Event> Destination"
+       }
+      }
+     }
+    },
+    "set": {
+     "route": "set {target: '<owner>/<Event>', prop: 'Destination', value}; arguments: set {target: '<owner>/<Event>/<Input>', prop: 'Value', value}",
+     "preconditions": [
+      "the Destination exists earlier in the job (the preflight refuses forward references)",
+      "a screen action used as Destination has no outputs",
+      "navigating to a screen with mandatory inputs needs one argument Value per input"
+     ],
+     "roles": {
+      "widget event": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-basic",
+         "screen-list"
+        ],
+        "scope": "button OnClick -> screen action (screen-basic); list item OnClick -> detail screen with its input argument (screen-list)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-form-reactive"
+        ],
+        "negative": [
+         "destination-before-screen"
+        ],
+        "scope": "button OnClick -> screen action; the O11 ledger records the OnClick object under OutSystems.Model.UI.Mobile.Events.IUILifeCycleEvent (its GetInterface())",
+        "note": "a forward reference (screen created later in the job) is refused by the preflight with the op numbers"
+       }
+      },
+      "lifecycle event": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-screen-lifecycle",
+         "data-action"
+        ],
+        "scope": "screen OnInitialize, OnReady and OnDestroy and block OnParametersChanged bound to screen actions (cat-b-screen-lifecycle); the OnAfterFetch of a Data Action (data-action)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-screen-lifecycle"
+        ],
+        "scope": "screen OnInitialize, OnReady and OnDestroy and block OnParametersChanged bound to screen actions (cat-b-screen-lifecycle)",
+        "note": "the button OnClick bindings share the interface IUILifeCycleEvent on O11: they are not cited here; this statement rests on cat-b-screen-lifecycle only"
+       }
+      }
+     }
+    },
+    "read": {
+     "route": "get {target: '<widget>/OnClick'}",
+     "preconditions": [],
+     "roles": {
+      "widget event": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "platform-events-lifecycle"
+        ],
+        "scope": "get IButton:<Name>/OnClick after renaming the external site it navigates to: same Destination by key"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-form-reactive"
+        ],
+        "scope": "get $btn/OnClick after binding it (screen-form-reactive op 63): the object answers as IUILifeCycleEvent"
+       }
+      },
+      "lifecycle event": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-screen-lifecycle"
+        ],
+        "scope": "get of the four events after binding: each answers as IUILifeCycleEvent with the key <owner>.#<Event>"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-screen-lifecycle"
+        ],
+        "scope": "get of the four events after binding: each answers as IUILifeCycleEvent with the key <owner>.#<Event>"
+       }
+      }
+     }
+    },
+    "delete": {
+     "route": "none: an event is removed with its owner",
+     "preconditions": [],
+     "roles": {
+      "widget event": {
+       "odc": {
+        "status": "not-applicable",
+        "note": "the event lives as long as its widget; to stop navigating, point the Destination elsewhere or delete the widget",
+        "alternative": "set another Destination, or delete the widget"
+       },
+       "o11": {
+        "status": "not-applicable",
+        "note": "the event lives as long as its widget",
+        "alternative": "set another Destination, or delete the widget"
+       }
+      }
+     }
+    }
+   },
+   "platforms": {
+    "odc": {
+     "proofs": [
+      "screen-list",
+      "screen-form",
+      "screen-basic",
+      "delete-screen",
+      "external-site-and-events",
+      "platform-events-lifecycle",
+      "data-action",
+      "cat-b-screen-lifecycle"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileScreen",
+       "ScreenAction"
+      ],
+      "signatures": [
+       "MobileScreen"
+      ]
+     },
+     "limits": [
+      {
+       "text": "Two event families on the same widget: the built-in event (IBuiltinEvent, OnClick) navigates or calls logic through Destination; an extended event (IEvent) calls a screen action through Handler. usages of an external site names the IBuiltinEvent OnClick, not the IEvent.",
+       "origin": "job:external-site-and-events ops 47-62"
+      },
+      {
+       "text": "Screen and block lifecycle events (OnInitialize, OnReady, OnDestroy, OnParametersChanged) and a Data Action OnAfterFetch are bound with Destination like any built-in event; OnRender is in the vocabulary but not exercised by a job.",
+       "origin": "job:cat-b-screen-lifecycle; job:data-action; kernel/src/Anvil.Core/Kernel/ScreenVocabulary.json"
+      }
+     ],
+     "differences": [
+      "the OnClick object is recorded as IBuiltinEvent"
+     ]
+    },
+    "o11": {
+     "proofs": [
+      "screen-form-reactive",
+      "refactor-move",
+      "refactor-duplicate",
+      "rename-logic-propagation",
+      "cat-b-screen-lifecycle"
+     ],
+     "negative": [
+      "destination-before-screen"
+     ],
+     "context": {
+      "kinds": [
+       "MobileScreen",
+       "ScreenAction"
+      ],
+      "signatures": [
+       "MobileScreen"
+      ]
+     },
+     "limits": [
+      {
+       "text": "A navigation Destination must name a screen created earlier in the job: the preflight refuses forward references and names the op numbers.",
+       "origin": "jobs-negative/destination-before-screen"
+      },
+      {
+       "text": "Traditional Web screens run their data fetch in the Preparation (not a lifecycle event); that is a logic element (A) of ui.traditional-screen.",
+       "origin": "kernel/src/Anvil.Core/Kernel/LogicOrder.cs:25,75; ScreenSpecification.cs:89"
+      },
+      {
+       "text": "Screen and block lifecycle events (OnInitialize, OnReady, OnDestroy, OnParametersChanged) are bound with Destination; OnRender and a Data Action OnAfterFetch are not exercised by an O11 suite job.",
+       "origin": "job:cat-b-screen-lifecycle (stamped)"
+      }
+     ],
+     "differences": [
+      "the OnClick object's interface is OutSystems.Model.UI.Mobile.Events.IUILifeCycleEvent (ledger of the stamped O11 results), so the widget-event and lifecycle-event roles share one native type on O11"
+     ]
+    }
+   },
+   "recommends": [
+    {
+     "id": "logic.screen-action",
+     "when": "the Destination is a screen action: its body, inputs and assignments are declared there"
+    },
+    {
+     "id": "logic.data-action",
+     "when": "the lifecycle event is the OnAfterFetch of a Data Action"
+    }
+   ]
+  },
+  {
+   "id": "logic.app-event",
+   "supersedes": [
+    "logic.app-event"
+   ],
+   "category": "ui",
+   "title": "Application events, external sites and extended (DOM) events",
+   "keywords": [
+    "on application ready",
+    "system event",
+    "external site",
+    "external link",
+    "extended event",
+    "dom event",
+    "onblur",
+    "onkeydown",
+    "ondoubleclick"
+   ],
+   "summary": "ISystemEvent (OnApplicationReady; one fixed place per app, the flow is born empty), IExternalSite (a UI flow node with an URL, the destination of a widget event that leaves the app) and IEvent (an extended DOM event of a widget, handled by a screen action without outputs).",
+   "route": {
+    "kind": "job",
+    "operation": "create ISystemEvent at @espace | IExternalSite in IMobileFlow:<Flow> | IEvent under a widget; set Event/Handler/URL; the system event body is a logic flow edited by path"
+   },
+   "contract": [
+    "verbs.verbs.create",
+    "verbs.verbs.set",
+    "verbs.verbs.rename",
+    "verbs.verbs.move",
+    "verbs.verbs.usages",
+    "verbs.verbs.get"
+   ],
+   "depends": [],
+   "alternatives": [],
+   "guidance": "The name given to `create ISystemEvent` is ignored: the factory order of this build yields OnApplicationReady; read @espace back to see which one was born, then author its Start/body/End. An extended event has no name of its own: it is named after its Event (closed list of 11 DOM names).",
+   "example": {
+    "ops": [
+     "create",
+     "set",
+     "link"
+    ],
+    "max": 20
+   },
+   "elements": [
+    {
+     "role": "system event",
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.Logic.ISystemEvent",
+       "jobType": "ISystemEvent",
+       "address": "ISystemEvent:OnApplicationReady"
+      },
+      "o11": {
+       "native": "OutSystems.Model.Logic.ISystemEvent",
+       "jobType": "ISystemEvent",
+       "address": "ISystemEvent:<Name>"
+      }
+     }
+    },
+    {
+     "role": "external site",
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.UI.Mobile.IExternalSite",
+       "jobType": "IExternalSite",
+       "address": "IExternalSite:<Name>"
+      },
+      "o11": {
+       "native": "OutSystems.Model.UI.Mobile.IExternalSite",
+       "jobType": "IExternalSite",
+       "address": "IExternalSite:<Name>"
+      }
+     }
+    },
+    {
+     "role": "extended event",
+     "child": true,
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.UI.Mobile.Events.IEvent",
+       "jobType": "IEvent",
+       "address": "IEvent:<eventName> | <widget path>/#IEvent[n]"
+      },
+      "o11": {
+       "native": "OutSystems.Model.UI.Mobile.Events.IEvent",
+       "jobType": "IEvent",
+       "address": "IEvent:<eventName> | <widget path>/#IEvent[n]"
+      }
+     }
+    }
+   ],
+   "operations": {
+    "create": {
+     "route": "create {parent: @espace, type: ISystemEvent} | {parent: IMobileFlow:<Flow>, type: IExternalSite, name} | {parent: <widget>, type: IEvent}",
+     "preconditions": [
+      "ISystemEvent: the four factories take no argument, the name is ignored and one fixed place per app is filled (this build: OnApplicationReady); the flow is born empty (Start is required)",
+      "IExternalSite: the parent is the UI flow, never a screen; an input parameter named URL makes the URL dynamic",
+      "IEvent: any top-level widget can carry extended events (IContainer.CreateEvent())"
+     ],
+     "roles": {
+      "system event": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "external-site-and-events"
+        ],
+        "scope": "OnApplicationReady born empty, then Start/assign/End authored and read back"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-app-events"
+        ],
+        "scope": "cat-b-app-events: create (op 3) answered by IESpace.CreateOnApplicationReady (the first ISystemEvent factory by reflection order; get @espace, op 16); Start, Assign and End authored in it (ops 5-14)"
+       }
+      },
+      "external site": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "external-site-and-events"
+        ],
+        "scope": "two external sites in MainFlow, one with an URL input parameter"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-app-events"
+        ],
+        "scope": "cat-b-app-events: create (ops 18, 21)"
+       }
+      },
+      "extended event": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "external-site-and-events"
+        ],
+        "scope": "on a container and on an input; born without name, Event and Handler"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-app-events"
+        ],
+        "scope": "cat-b-app-events: create (ops 50, 54)"
+       }
+      }
+     }
+    },
+    "set": {
+     "route": "set {target, prop: Event|Handler|URL|Description, value}",
+     "preconditions": [
+      "IEvent.Event is a closed list of 11 DOM event names; Handler accepts a screen action without outputs"
+     ],
+     "roles": {
+      "system event": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "platform-events-lifecycle"
+        ],
+        "scope": "Description of the inherited OnApplicationReady; its body edited as a logic flow by path"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-app-events"
+        ],
+        "scope": "cat-b-app-events: set Description (qualified ledger)"
+       }
+      },
+      "external site": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "external-site-and-events"
+        ],
+        "scope": "URL and Description"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-app-events"
+        ],
+        "scope": "cat-b-app-events: set URL, Description (ops 19, 22)"
+       }
+      },
+      "extended event": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "external-site-and-events"
+        ],
+        "scope": "Event onclick -> ondoubleclick keeps the key; Handler repointed to another screen action"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-app-events"
+        ],
+        "scope": "cat-b-app-events: set Event, Handler (ops 52-53, 55-56)"
+       }
+      }
+     }
+    },
+    "read": {
+     "route": "get/dump by path",
+     "preconditions": [],
+     "roles": {
+      "system event": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "external-site-and-events"
+        ],
+        "scope": "key <espace>.#OnApplicationReady; Nodes and IsValid before and after editing"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-app-events"
+        ],
+        "scope": "cat-b-app-events: get/dump (ops 4, 17, 67)"
+       }
+      },
+      "external site": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "platform-events-lifecycle"
+        ],
+        "scope": "Referrers of an inherited external site"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-app-events"
+        ],
+        "scope": "cat-b-app-events: get (ops 60-61)"
+       }
+      },
+      "extended event": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "external-site-and-events"
+        ],
+        "scope": "Event and Handler of a born and of an inherited extended event"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-app-events"
+        ],
+        "scope": "cat-b-app-events: get (ops 51, 66)"
+       }
+      }
+     }
+    },
+    "usages": {
+     "route": "usages {target}",
+     "preconditions": [],
+     "roles": {
+      "external site": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "external-site-and-events"
+        ],
+        "scope": "the consumer is the button's IBuiltinEvent OnClick"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-app-events"
+        ],
+        "scope": "cat-b-app-events: usages (ops 70-71), consumers 1 -> 1"
+       }
+      }
+     }
+    },
+    "rename": {
+     "route": "rename {target, name}",
+     "preconditions": [],
+     "roles": {
+      "system event": {
+       "odc": {
+        "status": "not-applicable",
+        "note": "the platform refuses rename on ISystemEvent (recorded in job:platform-events-lifecycle description and kernel/docs/NAO-DA.md; no negative job)",
+        "alternative": "the name is the fixed place of the event (OnApplicationReady)"
+       },
+       "o11": {
+        "status": "not-applicable",
+        "negative": [
+         "cat-b-system-event-rename"
+        ],
+        "note": "refused by the platform although ISystemEvent inherits a writable Name from IFlowSignature on O11: \"Cannot find handler for object OnApplicationReady of type On Application Ready\" (measured in the B-009 probe, 2026-09-24); the same refusal as on ODC",
+        "alternative": "the name is the fixed place of the event (OnApplicationReady)"
+       }
+      },
+      "external site": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "platform-events-lifecycle"
+        ],
+        "scope": "inherited external site renamed; the button OnClick keeps the same Destination by key"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-app-events"
+        ],
+        "scope": "cat-b-app-events: rename (op 64)"
+       }
+      },
+      "extended event": {
+       "odc": {
+        "status": "not-applicable",
+        "note": "the platform refuses rename on IEvent (job:platform-events-lifecycle description; kernel/docs/NAO-DA.md; no negative job)",
+        "alternative": "set Event: the name is derived from the DOM event"
+       },
+       "o11": {
+        "status": "not-applicable",
+        "note": "IEvent has no Name on O11: neither the interface nor its bases (IObject, IObjectSignature) declare one (kernel/catalog/model-api-11.55.69.json); the event is identified by its Event property, which is what rename writes",
+        "alternative": "set Event: the name is derived from the DOM event"
+       }
+      }
+     }
+    },
+    "move": {
+     "route": "move {target, x, y} (canvas position in the UI flow)",
+     "preconditions": [],
+     "roles": {
+      "external site": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "external-site-and-events"
+        ],
+        "scope": "x/y only (the drawing); nothing is reparented"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-app-events"
+        ],
+        "scope": "cat-b-app-events: move (qualified ledger)"
+       }
+      }
+     }
+    }
+   },
+   "platforms": {
+    "odc": {
+     "proofs": [
+      "external-site-and-events",
+      "platform-events-lifecycle"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileFlow"
+      ]
+     },
+     "limits": [
+      {
+       "text": "The platform refuses `rename` on IEvent and ISystemEvent; an extended event is renamed by writing `Event` (closed list of 11 DOM names).",
+       "origin": "job:platform-events-lifecycle description; kernel/docs/NAO-DA.md 'rename sobre IEvent e ISystemEvent'"
+      },
+      {
+       "text": "ISystemEvent's flow is born empty (Nodes=0, IsValid=False): author Start and End or Verify reports InvalidFlow_NoStart.",
+       "origin": "job:external-site-and-events ops 3-5"
+      }
+     ],
+     "differences": []
+    },
+    "o11": {
+     "proofs": [
+      "cat-b-app-events"
+     ],
+     "negative": [
+      "cat-b-system-event-rename"
+     ],
+     "context": {
+      "kinds": [
+       "MobileFlow"
+      ]
+     },
+     "limits": [
+      {
+       "text": "No O11 suite job exercises ISystemEvent, IExternalSite or IEvent: every operation is undetermined on O11 (the verbs are the shared kernel's; the behaviour is not measured).",
+       "origin": "kernel/tests/jobs (scan 2026-09-23)"
+      }
+     ],
+     "differences": []
+    }
+   }
+  }
+ ],
+ "unavailable": [],
+ "coverage": []
+}

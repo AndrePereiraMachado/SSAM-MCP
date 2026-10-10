@@ -1,0 +1,84 @@
+{
+ "description": "Frente B (catalogo abrangente), faixa O11 Reactive: porto num so job de tests/jobs-odc/theme-script-resource.json (nascimento) e tests/jobs-odc/resource-script-lifecycle.json (edicao, refatoracao e delecao), provados na faixa ODC. Um UI Flow proprio (IMobileFlow) recebe um tema proprio (IMobileTheme com BaseTheme = tema do modulo e CSS de autor) e uma tela que exige um Script do modulo (RequiredScripts) e usa a classe do tema; um IResource sem bytes (ResourceContent e so de leitura) nasce com DeployAction/TargetDirectory. Depois: o recurso muda de Description, TargetDirectory, DeployAction e Public, com a armadilha do RefreshState (por DeployAction Ignore o TargetDirectory escrito antes e apagado; escreve-se depois) e e renomeado; o script muda de conteudo e e renomeado, um sucessor recebe o consumidor por replace e so entao o delete passa sem force. Diferencas para o ODC: o SS11 nao tem Shareable (Public e o unico bit), e o sucessor tem JavaScript numa linha so. A unica mensagem nova esperada e a resposta da plataforma ao DeployAction Ignore (UnusedResource), como no ODC. Mesmo cenario, resultados independentes por faixa.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedResource",
+   "element": "Headless_UI (ESpace) / CatBAuditLetter (Resource)",
+   "why": "Resultado do set DeployAction Ignore (op 31), nao defeito: o recurso nao tem consumidores no modelo (e um ficheiro entregue com a app) e no ODC Resource.InnerVerify so emite esta mensagem quando Referers vazio e DeployAction == Ignore; o mapa de criacao do O11 (docs/mapa/criar-reactive-ui) ja mostra UnusedResource num IResource acabado de criar."
+  }
+ ],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IMobileTheme", "name": "CatBTheme", "as": "$theme", "_why": "0. tema proprio: IESpace.CreateMobileTheme no O11 (no ODC o job pediu ITheme)"},
+  {"op": "set", "target": "$theme", "prop": "Description", "value": "Frente B O11: tema proprio, derivado do tema do modulo"},
+  {"op": "set", "target": "$theme", "prop": "BaseTheme", "value": "IMobileTheme:Headless_UI", "_why": "o tema do modulo da fixture reactive-ui"},
+  {"op": "set", "target": "$theme", "prop": "StyleSheet", "value": ".cat-b-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; background: #eef; }", "_why": "escreve a metade do autor; tema novo sem Theme Editor"},
+
+  {"op": "create", "parent": "@espace", "type": "IScript", "name": "CatBFormatting", "as": "$script"},
+  {"op": "set", "target": "$script", "prop": "Description", "value": "Frente B O11: helpers de formatacao do lado do cliente"},
+  {"op": "set", "target": "$script", "prop": "JavaScript", "value": "window.CatBFormatting = { badge: function (s) { return String(s || \"\").toUpperCase(); } };"},
+
+  {"op": "create", "parent": "@espace", "type": "IResource", "name": "CatBAuditTemplate", "as": "$resource", "_why": "IESpace.CreateResource(byte[] binary, name, key) no O11: o kernel passa binary null, como no ODC"},
+  {"op": "set", "target": "$resource", "prop": "Description", "value": "Frente B O11: recurso do modulo, entregue com a app"},
+  {"op": "set", "target": "$resource", "prop": "DeployAction", "value": "CopyToApplicationDir", "_why": "enum OutSystems.Model.Enumerations.DeployAction: Ignore, CopyToApplicationDir"},
+  {"op": "set", "target": "$resource", "prop": "TargetDirectory", "value": "templates"},
+
+  {"op": "create", "parent": "@espace", "type": "IMobileFlow", "name": "CatBThemeFlow", "as": "$flow", "_why": "IESpace.CreateMobileFlow: flow proprio para nao mexer no MainFlow da fixture"},
+  {"op": "set", "target": "$flow", "prop": "Theme", "value": "$theme", "_why": "o tema liga-se ao UI Flow (IMobileFlow.Theme), nao a tela"},
+  {"op": "set", "target": "$flow", "prop": "Description", "value": "Frente B O11: flow proprio so para provar o tema"},
+
+  {"op": "create", "parent": "$flow", "type": "IMobileScreen", "name": "CatBBadgeScreen", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "link", "from": "$scr", "connector": "RequiredScripts", "to": "$script", "_why": "o consumidor do script, igual a client-js-reactive"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Badge\""},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "BadgeBox", "as": "$box"},
+  {"op": "set", "target": "$box", "prop": "Style", "value": "\"cat-b-badge\"", "_why": "a classe vem do CSS do tema criado acima"},
+  {"op": "create", "parent": "$box", "type": "IExpression", "as": "$text"},
+  {"op": "set", "target": "$text", "prop": "Value", "value": "\"Covered by front B (O11)\""},
+
+  {"op": "get", "target": "$theme", "_why": "23. BaseTheme e as metades do CSS"},
+  {"op": "get", "target": "$flow", "_why": "o Theme do flow e o tema novo"},
+  {"op": "usages", "target": "$theme", "_why": "o flow como consumidor do tema"},
+
+  {"op": "get", "target": "$resource", "_why": "26. ANTES: DeployAction, TargetDirectory, RuntimePath derivado, Public False"},
+  {"op": "usages", "target": "$resource", "_why": "ANTES: count 0; um recurso e consumido pelo deploy, nao pelo modelo"},
+  {"op": "set", "target": "$resource", "prop": "Description", "value": "Modelo da carta de auditoria. Description REESCRITA pelo proprio job por cima da do nascimento."},
+  {"op": "set", "target": "$resource", "prop": "TargetDirectory", "value": "audit/templates", "_why": "29. escrita que a plataforma vai desfazer no op 31 (fica de proposito, como no ODC)"},
+  {"op": "get", "target": "$resource", "_why": "RuntimePath recalculado de TargetDirectory+Name"},
+  {"op": "set", "target": "$resource", "prop": "DeployAction", "value": "Ignore", "_why": "31. no ODC Resource.RefreshState guarda o Path e poe-no a null; e a condicao do UnusedResource declarado"},
+  {"op": "get", "target": "$resource", "_why": "a escrita desfeita, lida de volta"},
+  {"op": "set", "target": "$resource", "prop": "TargetDirectory", "value": "audit/templates", "_why": "33. a ordem certa: DeployAction primeiro, TargetDirectory depois"},
+  {"op": "set", "target": "$resource", "prop": "Public", "value": true, "_why": "no SS11 IResource so tem Public (Shareable e do ODC)"},
+  {"op": "get", "target": "$resource", "_why": "DEPOIS das escritas"},
+  {"op": "rename", "target": "$resource", "name": "CatBAuditLetter", "_why": "36. refatoracao do recurso; consumers 0"},
+  {"op": "get", "target": "IResource:CatBAuditLetter", "_why": "RuntimePath acompanha o Name novo"},
+  {"op": "usages", "target": "IResource:CatBAuditLetter", "_why": "continua sem consumidores"},
+
+  {"op": "get", "target": "$script", "_why": "39. ANTES: JavaScript, RuntimePath, Referrers"},
+  {"op": "usages", "target": "$script", "_why": "ANTES: a dependencia RequiredScripts da tela CatBBadgeScreen"},
+  {"op": "set", "target": "$script", "prop": "JavaScript", "value": "window.CatBFormatting = {\n  badge: function (s) { return String(s || \"\").trim().toUpperCase(); },\n  slug: function (s) { return String(s || \"\").trim().toLowerCase().replace(/\\s+/g, \"-\"); }\n};", "_why": "conteudo novo; o contrato de dados esquece-o no delete do op 55"},
+  {"op": "set", "target": "$script", "prop": "Description", "value": "Helpers de formatacao. Description REESCRITA pelo proprio job."},
+  {"op": "set", "target": "$script", "prop": "Public", "value": true, "_why": "IScript.Public; no SS11 nao ha Shareable"},
+  {"op": "get", "target": "$script"},
+  {"op": "rename", "target": "$script", "name": "CatBBadgeFormatting", "_why": "45. rename com o consumidor ligado"},
+  {"op": "get", "target": "IScript:CatBBadgeFormatting", "_why": "RuntimePath do .js acompanha o nome"},
+  {"op": "usages", "target": "IScript:CatBBadgeFormatting", "_why": "o mesmo consumidor, pela chave"},
+
+  {"op": "create", "parent": "@espace", "type": "IScript", "name": "CatBBadgeHelpers", "as": "$successor", "_why": "48. o sucessor: a tela continua a precisar de um script"},
+  {"op": "set", "target": "$successor", "prop": "Description", "value": "Versao mantida dos helpers de badge. Substituiu o CatBFormatting."},
+  {"op": "set", "target": "$successor", "prop": "JavaScript", "value": "window.CatBBadgeHelpers = { badge: function (s) { return String(s || \"\").trim().toUpperCase(); } };", "_why": "numa linha so: fica no modelo e o contrato de dados cobra-o, sem depender de normalizacao de quebras de linha no O11"},
+  {"op": "get", "target": "$successor"},
+  {"op": "replace", "from": "IScript:CatBBadgeFormatting", "to": "$successor", "_why": "52. repontar o consumidor (ReplaceReferences em cada consumidor), nao busca de texto"},
+  {"op": "usages", "target": "IScript:CatBBadgeFormatting", "_why": "o antigo em zero antes do delete"},
+  {"op": "usages", "target": "$successor", "_why": "o consumidor da tela esta agora aqui"},
+  {"op": "delete", "target": "IScript:CatBBadgeFormatting", "_why": "55. sem force: brokenConsumers 0 depois do replace"},
+  {"op": "rename", "target": "$successor", "name": "CatBFormatting", "_why": "o nome original, livre"},
+  {"op": "get", "target": "$successor", "_why": "RuntimePath igual ao do script original, Key do sucessor"},
+  {"op": "find", "name": "CatBBadgeFormatting", "_why": "lista vazia: o script antigo saiu do modulo"},
+  {"op": "get", "target": "IMobileScreen:CatBBadgeScreen", "_why": "a tela continua a exigir um script"},
+  {"op": "get", "target": "IResource:CatBAuditLetter", "_why": "o estado final do recurso"},
+  {"op": "dump", "target": "$flow", "depth": 1, "_why": "o flow novo com a sua tela"}
+ ]
+}

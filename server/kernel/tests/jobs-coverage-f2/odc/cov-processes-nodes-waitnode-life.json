@@ -1,0 +1,85 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.Processes.Nodes.IWaitNode (odc) em processFlow. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IProcess",
+   "name": "CovSProcess",
+   "as": "$p"
+  },
+  {
+   "op": "set",
+   "target": "$p",
+   "prop": "Detail",
+   "value": "\"Cov\""
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IWaitNode",
+   "name": "CovAWaitNode",
+   "as": "$a"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$a"
+  },
+  {
+   "op": "link",
+   "from": "$a",
+   "to": "$fe"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRWaitNode"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "link",
+   "from": "$a",
+   "to": "$b"
+  },
+  {
+   "op": "link",
+   "from": "$b",
+   "to": "$fe"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "x": 600,
+   "y": 400
+  }
+ ]
+}

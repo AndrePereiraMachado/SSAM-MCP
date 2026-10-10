@@ -1,0 +1,1 @@
+[{"namespace":"OutSystems.ModelAPILoader","name":"Loader","kind":"static class","bases":[],"members":[{"kind":"property","signature":"IModelServices ModelServicesInstance { get; }"},{"kind":"method","signature":"void SetConfiguration(Configuration configuration)"}]}]

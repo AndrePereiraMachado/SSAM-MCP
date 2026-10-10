@@ -1,0 +1,8 @@
+{
+ "_leia": "runtime: evidencia pass para todo runtimeTest -> exit 0.",
+ "stage": "runtime",
+ "mode": "autor",
+ "fromReport": "runtime.report.json",
+ "review": "runtime-pass.review.json",
+ "exitCode": 0
+}

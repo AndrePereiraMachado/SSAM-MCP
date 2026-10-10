@@ -1,0 +1,75 @@
+{
+  "fixture": "mobile-ui",
+  "features": [
+    "native-widget",
+    "mobile:IMobileBlockInstanceWidget"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Subject",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:ContractBlock",
+            "args": {
+              "Caption": "\"Original\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Content"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "ContractBlock",
+        "type": "IMobileBlock",
+        "flow": "MainFlow",
+        "inputs": [
+          {
+            "name": "Caption",
+            "type": "Text",
+            "mandatory": false
+          }
+        ],
+        "widgets": [
+          {
+            "name": "BlockTitle",
+            "type": "IExpression",
+            "properties": {
+              "Value": "Caption"
+            }
+          },
+          {
+            "name": "Content",
+            "type": "IPlaceholderWidget",
+            "properties": {}
+          }
+        ]
+      }
+    ]
+  },
+  "mutation": {
+    "target": "IMobileScreen:Coverage/Subject/Caption",
+    "prop": "Value",
+    "value": "\"Changed\""
+  }
+}

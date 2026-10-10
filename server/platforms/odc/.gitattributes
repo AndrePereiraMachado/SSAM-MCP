@@ -1,0 +1,23 @@
+# Fins de linha fixos, decididos aqui e nao pela maquina de quem clona.
+#
+# Custou uma tarde no repositorio irmao (Anvil, 2026-09-17): o git normalizou fins de linha, os sha256 fixados
+# nos testes deixaram de bater, e a causa so apareceu depois de se provar que forcar LF reproduzia os hashes
+# exactos. Aqui ha manifestos com sha256 de snapshots -- e barato evitar a mesma tarde.
+
+* text=auto eol=lf
+
+# Binarios: nunca tocar.
+*.oml binary
+*.oap binary
+*.osp binary
+*.dll binary
+*.pdb binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.pptx binary
+*.xif binary
+
+# Scripts de Windows querem CRLF para correr em cmd.exe antigo.
+*.cmd text eol=crlf
+*.bat text eol=crlf

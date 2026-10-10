@@ -1,0 +1,84 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "ISendEmailNode",
+    "IAttachFileNode",
+    "preparation",
+    "server"
+  ],
+  "contract": {
+    "logic": {
+      "actions": [
+        {
+          "name": "Preparation",
+          "kind": "preparation",
+          "owner": "IWebEmail:CoverageMail",
+          "steps": [
+            {
+              "node": "IAttachFileNode",
+              "as": "Attach",
+              "properties": {
+                "FileContent": "NullBinary()",
+                "FileName": "\"proof.bin\"",
+                "MimeType": "\"application/octet-stream\""
+              }
+            }
+          ]
+        },
+        {
+          "name": "SendProof",
+          "kind": "server",
+          "public": true,
+          "access": {
+            "authenticated": true
+          },
+          "steps": [
+            {
+              "node": "ISendEmailNode",
+              "as": "Send",
+              "properties": {
+                "Email": "IWebEmail:CoverageMail",
+                "To": "\"nobody@example.invalid\"",
+                "From": "",
+                "Cc": "",
+                "Bcc": "",
+                "LogContent": false
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "setup": [
+    {
+      "op": "create",
+      "parent": "IWebFlow:Emails",
+      "type": "IWebEmail",
+      "name": "CoverageMail"
+    },
+    {
+      "op": "set",
+      "target": "IWebEmail:CoverageMail",
+      "prop": "Subject",
+      "value": "\"Proof\""
+    },
+    {
+      "op": "create",
+      "parent": "IWebEmail:CoverageMail",
+      "type": "IExpressionWidget",
+      "name": "Body"
+    },
+    {
+      "op": "set",
+      "target": "IWebEmail:CoverageMail/Body",
+      "prop": "Value",
+      "value": "\"Test email body\""
+    }
+  ],
+  "mutation": {
+    "target": "IWebEmail:CoverageMail/Preparation/Attach",
+    "prop": "FileName",
+    "value": "\"changed.bin\""
+  }
+}

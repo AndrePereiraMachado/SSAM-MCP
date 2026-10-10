@@ -1,0 +1,64 @@
+{
+ "description": "Loja (parte 3 de 4): tela ProductDetail com o input ProductId - foto externa, nome, categoria, preco e descricao; quantidade e botao que chama Cart_Add, avisa e abre o carrinho; link com icone para o carrinho.",
+ "base": "job:ecommerce-02-cart",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductDetail", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "IInputParameter", "name": "ProductId", "as": "$pid"},
+  {"op": "set", "target": "$pid", "prop": "DataType", "value": "Product Identifier"},
+  {"op": "set", "target": "$pid", "prop": "IsMandatory", "value": true},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Quantity", "as": "$qty"},
+  {"op": "set", "target": "$qty", "prop": "DataType", "value": "Integer"},
+  {"op": "set", "target": "$qty", "prop": "DefaultValue", "value": "1"},
+
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProduct", "as": "$agg", "_why": "1. o produto do input, com a categoria (static entity) pelo join"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}, "as": "$srcProduct"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IStaticEntity:Category"}, "as": "$srcCategory"},
+  {"op": "create", "parent": "$agg", "type": "IJoin", "as": "$join"},
+  {"op": "set", "target": "$join", "prop": "LeftSource", "value": "$srcProduct"},
+  {"op": "set", "target": "$join", "prop": "RightSource", "value": "$srcCategory"},
+  {"op": "set", "target": "$join", "prop": "JoinType", "value": "Inner"},
+  {"op": "set", "target": "$join", "prop": "Condition", "value": "Product.CategoryId = Category.Id"},
+  {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "Product.Id = ProductId"}},
+
+  {"op": "logic", "_why": "2. adicionar ao carrinho: servidor, mensagem e navegacao", "data": {"actions": [
+   {"name": "AddToCart", "kind": "screen", "owner": "IMobileScreen:ProductDetail",
+    "steps": [
+     {"call": "Cart_Add", "as": "Add", "args": {"ProductId": "ProductId", "Quantity": "Quantity"}},
+     {"node": "IMessageNode", "as": "Added", "properties": {"Message": "\"Added to cart\"", "Type": "Success"}},
+     {"node": "IDestinationNode", "as": "GoToCart", "properties": {"Destination": "IMobileScreen:Cart"}}]}]}},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "GetProduct.List.Current.Product.Name"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Actions", "type": "ILink", "name": "CartLink", "as": "$cartLink", "_why": "3. link com icone e texto no topo"},
+  {"op": "delete", "target": "$cartLink/#ITextWidget"},
+  {"op": "create", "parent": "$cartLink", "type": "IIcon", "name": "CartIcon", "as": "$cartIcon"},
+  {"op": "set", "target": "$cartIcon", "prop": "Icon", "value": "shopping-cart"},
+  {"op": "set", "target": "$cartIcon", "prop": "Weight", "value": "regular"},
+  {"op": "create", "parent": "$cartLink", "type": "IExpression", "as": "$cartText"},
+  {"op": "set", "target": "$cartText", "prop": "Value", "value": "\" Cart\""},
+  {"op": "set", "target": "$cartLink/OnClick", "prop": "Destination", "value": "IMobileScreen:Cart"},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "ProductPanel", "as": "$panel", "_why": "4. o detalhe"},
+  {"op": "create", "parent": "$panel", "type": "IImage", "name": "ProductPhoto", "as": "$img"},
+  {"op": "set", "target": "$img", "prop": "Type", "value": "External"},
+  {"op": "set", "target": "$img", "prop": "Url", "value": "GetProduct.List.Current.Product.ImageUrl"},
+  {"op": "create", "parent": "$panel", "type": "IExpression", "as": "$category"},
+  {"op": "set", "target": "$category", "prop": "Value", "value": "GetProduct.List.Current.Category.Label"},
+  {"op": "create", "parent": "$panel", "type": "IExpression", "as": "$price"},
+  {"op": "set", "target": "$price", "prop": "Value", "value": "FormatCurrency(GetProduct.List.Current.Product.Price, \"$\", 2, \".\", \",\")"},
+  {"op": "create", "parent": "$panel", "type": "IExpression", "as": "$desc"},
+  {"op": "set", "target": "$desc", "prop": "Value", "value": "GetProduct.List.Current.Product.Description"},
+
+  {"op": "create", "parent": "$panel", "type": "ILabel", "name": "QuantityLabel", "as": "$qtyLabel"},
+  {"op": "set", "target": "$qtyLabel/#ITextWidget", "prop": "Text", "value": "Quantity"},
+  {"op": "create", "parent": "$panel", "type": "IInput", "name": "QuantityInput", "as": "$qtyInput"},
+  {"op": "set", "target": "$qtyInput", "prop": "Variable", "value": "Quantity"},
+  {"op": "set", "target": "$qtyLabel", "prop": "TargetWidget", "value": "$qtyInput"},
+  {"op": "create", "parent": "$panel", "type": "IButton", "name": "AddButton", "as": "$add"},
+  {"op": "set", "target": "$add/#ITextWidget", "prop": "Text", "value": "Add to cart"},
+  {"op": "set", "target": "$add/OnClick", "prop": "Destination", "value": "IMobileScreen:ProductDetail/AddToCart"}
+ ]
+}

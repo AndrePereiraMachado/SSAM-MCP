@@ -1,0 +1,53 @@
+{
+ "description": "Cobertura testada (fase 1, medir): life de OutSystems.Model.UI.IBlockEvent (o11) em mobileBlock. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "WebBlock_CustomEventNotTriggered",
+   "element": "Headless_UI (ESpace) / MainFlow (MobileFlow) / CovSBlock (MobileBlock) / CovRBlockEvent (BlockEvent)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  },
+  {
+   "id": "WebBlock_CustomEventNotTriggered",
+   "element": "Headless_UI (ESpace) / MainFlow (MobileFlow) / CovSBlock (MobileBlock) / CovRBlockEvent2 (BlockEvent)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileBlock",
+   "name": "CovSBlock",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IBlockEvent",
+   "name": "CovABlockEvent",
+   "as": "$a"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRBlockEvent"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  }
+ ]
+}

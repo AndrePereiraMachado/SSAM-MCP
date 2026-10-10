@@ -1,0 +1,72 @@
+{
+ "description": "Cobertura testada (fase 1, medir): life de OutSystems.Model.Data.IServerEntity (o11) em espace. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerEntity",
+   "name": "CovAServerEntity",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IEntityAttribute",
+   "name": "Id",
+   "as": "$aid"
+  },
+  {
+   "op": "set",
+   "target": "$aid",
+   "prop": "DataType",
+   "value": "Long Integer"
+  },
+  {
+   "op": "set",
+   "target": "$aid",
+   "prop": "IsAutoNumber",
+   "value": "Yes"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "IdentifierAttribute",
+   "value": "$aid"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IEntityAttribute",
+   "name": "Title",
+   "as": "$attr"
+  },
+  {
+   "op": "set",
+   "target": "$attr",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRServerEntity"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  }
+ ]
+}

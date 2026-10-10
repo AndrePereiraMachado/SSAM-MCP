@@ -1,0 +1,93 @@
+{
+  "date": "2026-09-06",
+  "capability": "relative HTML component imports and frozen source bundles",
+  "status": "implemented and installed; broader UI convergence incomplete",
+  "lanes": [
+    "ss4",
+    "ss5"
+  ],
+  "liveLane": "ss5",
+  "module": "ZZHtmlDashboardReview_UI",
+  "url": "https://personal-2qqw9srv.outsystemscloud.com/ZZHtmlDashboardReview_UI/ImportGallery",
+  "files": 3,
+  "nativeBlocks": 2,
+  "screen": 1,
+  "initialDelivery": {
+    "taskId": "d58daeceacd64c0aac4c7190068bd42e",
+    "elapsedMs": 18175,
+    "publishMs": 10044
+  },
+  "installedDelivery": {
+    "taskId": "36bf99de7079449d8e504b2a9df034b8",
+    "elapsedMs": 14993,
+    "delivered": true,
+    "unchanged": true,
+    "sourceHashes": [
+      {
+        "path": "C:\\Users\\andre\\Anvil\\tests\\html\\components\\imports\\main.html",
+        "sha256": "e930f87b7198481db9a227237cae4aa8ae39d07cc62e39086c93aaa8d4e7b9f6"
+      },
+      {
+        "path": "C:\\Users\\andre\\Anvil\\tests\\html\\components\\imports\\panel.html",
+        "sha256": "e80fde18716fefbf0298764ba6dbdce52a68ea9274087ef756ef307c2a312ad0"
+      },
+      {
+        "path": "C:\\Users\\andre\\Anvil\\tests\\html\\components\\imports\\card.html",
+        "sha256": "3542f49cecbf9c3e98ab220edf2f94a31c080c38ca23c7a8732f1f5a3c49e48b"
+      }
+    ],
+    "checks": 318,
+    "receiptAccepted": true
+  },
+  "browser": {
+    "checks": [
+      "two aliases of one imported panel contain independent instances of one imported counter",
+      "slot content survives nested file imports",
+      "stylesheet from imported file applied",
+      "390px without horizontal overflow"
+    ],
+    "errors": [],
+    "ok": true
+  },
+  "focusedTests": {
+    "total": 43,
+    "passed": 43,
+    "failed": 0
+  },
+  "broadRegression": {
+    "total": 640,
+    "passed": 639,
+    "failed": 1
+  },
+  "workerRetest": {
+    "total": 4,
+    "passed": 4,
+    "failed": 0
+  },
+  "testRepair": "Transport test injects a low heap provider instead of inheriting memory retained by native-model tests. Production worker recycling unchanged; dedicated 3GB heap test passed. Full broad suite was not repeated after this test-only change.",
+  "pythonProtocol": {
+    "passed": 10,
+    "failed": 0
+  },
+  "coreHashes": {
+    ".local/cli/Anvil.Core.dll": "4a30e65d6782ab5b0d31730448b2ea0f63d1452d33d28569ce3633dbcaf0fa72",
+    ".local/lane-ss5/cli/Anvil.Core.dll": "4a30e65d6782ab5b0d31730448b2ea0f63d1452d33d28569ce3633dbcaf0fa72"
+  },
+  "workerPids": {
+    "ss4": 21736,
+    "ss5": 14476
+  },
+  "studioRestarted": false,
+  "ss4LiveProof": false,
+  "ss4Limitation": "Bridge retains old credential; safe restart question still pending.",
+  "notIncluded": [
+    "OutSystems module imports",
+    "JS file imports",
+    "typed record/array state",
+    "stateful list identity",
+    "async source lowering",
+    "Dashboard migration",
+    "Data/Logic high-code compiler"
+  ],
+  "implementationGuide": "docs/tasks/2026-09-06-ui-convergence-implementation.md"
+}

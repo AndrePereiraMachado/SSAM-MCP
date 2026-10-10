@@ -1,0 +1,1282 @@
+{
+  "schemaVersion": "ssam-discovery-fragment/1",
+  "contract": "ssam-catalog-contribution/1",
+  "front": "C",
+  "title": "REST integrations: consumed REST (client, methods, inputs/outputs, structures, headers) and exposed REST (service, methods, inputs/outputs) on ODC and O11, with the credential refusal on ODC",
+  "reviewedAt": "2026-10-06",
+  "synonyms": {
+    "rest": [
+      "rest api",
+      "api rest",
+      "restful",
+      "web api",
+      "http api"
+    ],
+    "consume": [
+      "consumir",
+      "consumo",
+      "chamar api",
+      "call an api"
+    ],
+    "expose": [
+      "expor",
+      "exposto",
+      "publicar endpoint",
+      "endpoint"
+    ],
+    "openapi": [
+      "swagger",
+      "open api",
+      "openapi spec",
+      "swagger json"
+    ]
+  },
+  "capabilities": [
+    {
+      "id": "integration.rest-consume",
+      "supersedes": [
+        "logic.rest-consume"
+      ],
+      "category": "integration",
+      "title": "Consume a REST API: client, methods, inputs/outputs by placement, request/response structures, headers",
+      "keywords": [
+        "rest",
+        "consume",
+        "external api",
+        "http",
+        "get",
+        "post",
+        "json",
+        "call api",
+        "integration",
+        "rest client",
+        "base url",
+        "url path",
+        "header"
+      ],
+      "summary": "IRestClient with BaseURL (and the authentication MODE), IRestStructure(s) for request/response under the client (nested: the child structure first, then its name as the attribute DataType), IRestAction with HTTPMethod and URLPath (the query string is written inside URLPath; each {param} needs a UrlPlacement input), IRestActionInput/IRestActionOutput by placement (Url/Body/Header, OriginalName for a non-identifier header name), a client header as IExtendedProperty (Property/Value). A server action calls the method with IExecuteServerActionNode Action = IRestAction:<Name> and reads <Node>.Response.<Attribute>.",
+      "route": {
+        "kind": "job",
+        "operation": "op rest {client, methods, structures, remove, breaks} in one call (api --op rest), or the raw verbs create/set of IRestClient, IRestStructure, IRestAction and their inputs/outputs; deliver with studio_deliver / o11_deliver"
+      },
+      "contract": [
+        "verbs.verbs.create",
+        "verbs.verbs.set",
+        "verbs.verbs.rename",
+        "verbs.verbs.usages",
+        "verbs.references"
+      ],
+      "guidance": "Addressing outside the creating job: IRestClient:<Client>, IRestAction:<Method>, IRestStructure:<Structure>, children by path ($parent/<Child>, $client/#IExtendedProperty[n]). Calling the method is logic (front A): IExecuteServerActionNode with Action = IRestAction:<Name>, one argument per method input ($call/<Input> Value), output read as <Node>.Response.<Attribute>. Renaming a method keeps its callers by key (ODC, rest-consume-lifecycle). Credentials are not model data on ODC (see integration.rest-credentials-in-model); the model keeps AuthenticationType only.",
+      "example": {
+        "ops": [
+          "rest"
+        ],
+        "max": 4
+      },
+      "elements": [
+        {
+          "role": "rest client",
+          "platforms": {
+            "odc": {
+              "native": "ServiceStudio.Plugin.REST.IRestClient",
+              "jobType": "IRestClient",
+              "address": "IRestClient:<Client>"
+            },
+            "o11": {
+              "native": "ServiceStudio.Plugin.REST.IRestClient",
+              "jobType": "IRestClient",
+              "address": "IRestClient:<Client>"
+            }
+          }
+        },
+        {
+          "role": "rest method",
+          "child": true,
+          "platforms": {
+            "odc": {
+              "native": "ServiceStudio.Plugin.REST.IRestAction",
+              "jobType": "IRestAction",
+              "address": "IRestAction:<Method> or IRestClient:<Client>/<Method>"
+            },
+            "o11": {
+              "native": "ServiceStudio.Plugin.REST.IRestAction",
+              "jobType": "IRestAction",
+              "address": "IRestAction:<Method> or IRestClient:<Client>/<Method>"
+            }
+          }
+        },
+        {
+          "role": "method input",
+          "child": true,
+          "platforms": {
+            "odc": {
+              "native": "ServiceStudio.Plugin.REST.IRestActionInput",
+              "jobType": "IRestActionInput",
+              "address": "$method/<Input>"
+            },
+            "o11": {
+              "native": "ServiceStudio.Plugin.REST.IRestActionInput",
+              "jobType": "IRestActionInput",
+              "address": "$method/<Input>"
+            }
+          }
+        },
+        {
+          "role": "method output",
+          "child": true,
+          "platforms": {
+            "odc": {
+              "native": "ServiceStudio.Plugin.REST.IRestActionOutput",
+              "jobType": "IRestActionOutput",
+              "address": "$method/<Output>"
+            },
+            "o11": {
+              "native": "ServiceStudio.Plugin.REST.IRestActionOutput",
+              "jobType": "IRestActionOutput",
+              "address": "$method/<Output>"
+            }
+          }
+        },
+        {
+          "role": "rest structure",
+          "child": true,
+          "platforms": {
+            "odc": {
+              "native": "ServiceStudio.Plugin.REST.IRestStructure",
+              "jobType": "IRestStructure",
+              "address": "IRestStructure:<Structure>"
+            },
+            "o11": {
+              "native": "ServiceStudio.Plugin.REST.IRestStructure",
+              "jobType": "IRestStructure",
+              "address": "IRestStructure:<Structure>"
+            }
+          }
+        },
+        {
+          "role": "rest structure attribute",
+          "child": true,
+          "platforms": {
+            "odc": {
+              "native": "ServiceStudio.Plugin.REST.IRestStructureAttribute",
+              "jobType": "IRestStructureAttribute",
+              "address": "IRestStructure:<Structure>/<Attribute>"
+            },
+            "o11": {
+              "native": "ServiceStudio.Plugin.REST.IRestStructureAttribute",
+              "jobType": "IRestStructureAttribute",
+              "address": "IRestStructure:<Structure>/<Attribute>"
+            }
+          }
+        },
+        {
+          "role": "client header",
+          "child": true,
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.IExtendedProperty",
+              "jobType": "IExtendedProperty",
+              "address": "$client/#IExtendedProperty[n]"
+            },
+            "o11": {
+              "native": "OutSystems.Model.IExtendedProperty",
+              "jobType": "IExtendedProperty",
+              "address": "$client/#IExtendedProperty[n]"
+            }
+          }
+        }
+      ],
+      "operations": {
+        "read": {
+          "route": "get/dump by path or alias; reader --kind RestClient | RestAction | RestStructure",
+          "preconditions": [],
+          "roles": {
+            "rest client": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-post",
+                  "rest-consume-lifecycle"
+                ],
+                "scope": "get/dump of the client: BaseURL and the authentication mode read back intact after an edit"
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "no O11 job reads a REST client back (the reader lists any kind; not proven here)"
+              }
+            },
+            "rest method": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume",
+                  "rest-consume-lifecycle"
+                ]
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-get",
+                  "rest-query-nested"
+                ]
+              }
+            },
+            "method input": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-post"
+                ]
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "no O11 job reads an input back"
+              }
+            },
+            "method output": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume",
+                  "rest-consume-post"
+                ]
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-get"
+                ]
+              }
+            },
+            "rest structure": {
+              "odc": {
+                "status": "undetermined",
+                "note": "structures are read only inside a dump of the client"
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "no O11 job reads a REST structure back"
+              }
+            },
+            "rest structure attribute": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-query-nested"
+                ],
+                "scope": "the nested attribute typed by the child structure"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-query-nested"
+                ],
+                "scope": "the nested attribute typed by the child structure"
+              }
+            },
+            "client header": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-post"
+                ]
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-post"
+                ]
+              }
+            }
+          }
+        },
+        "usages": {
+          "route": "usages {target}",
+          "preconditions": [
+            "consumers of a method are the IExecuteServerActionNode calls that point at it; external callers are invisible to the model"
+          ],
+          "roles": {
+            "rest method": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-call",
+                  "rest-consume-lifecycle"
+                ],
+                "scope": "the server action node that calls the method, before and after a rename"
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "no O11 REST job runs usages"
+              }
+            },
+            "rest client": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-lifecycle"
+                ]
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "no O11 REST job runs usages"
+              }
+            },
+            "rest structure": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-query-nested"
+                ],
+                "scope": "three consumers of the nested structure: the parent attribute typed by it, the anonymous record attribute and the expression GetLatest.Response.Rates.USD (an expression consumer blocks deleting the nested structure)"
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "no O11 REST job runs usages"
+              }
+            }
+          }
+        },
+        "create": {
+          "route": "create <Type> under @espace (client), the client (structures, methods, headers) or the method (inputs, outputs)",
+          "preconditions": [
+            "a nested response type: create the child IRestStructure first and use its NAME as the parent attribute DataType",
+            "each {param} of URLPath needs an IRestActionInput with InputPlacement UrlPlacement; the query string is part of URLPath (no own op)"
+          ],
+          "roles": {
+            "rest client": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume",
+                  "rest-consume-post",
+                  "rest-query-nested"
+                ]
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-get",
+                  "rest-consume-post",
+                  "rest-query-nested"
+                ]
+              }
+            },
+            "rest method": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-spec-consume",
+                  "rest-consume",
+                  "rest-consume-post",
+                  "rest-consume-lifecycle"
+                ],
+                "scope": "GET and POST; a method added to a client another job created"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-spec-consume",
+                  "rest-consume-get",
+                  "rest-consume-post",
+                  "rest-query-nested"
+                ]
+              }
+            },
+            "method input": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume",
+                  "rest-consume-post",
+                  "rest-query-nested"
+                ],
+                "scope": "UrlPlacement, BodyPlacement and HeaderPlacement (OriginalName X-Api-Key)"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-get",
+                  "rest-consume-post",
+                  "rest-query-nested"
+                ]
+              }
+            },
+            "method output": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume",
+                  "rest-consume-post"
+                ],
+                "scope": "BodyPlacement and HeaderPlacement (OriginalName ETag)"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-get",
+                  "rest-consume-post"
+                ]
+              }
+            },
+            "rest structure": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume",
+                  "rest-consume-post",
+                  "rest-query-nested"
+                ]
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-get",
+                  "rest-consume-post",
+                  "rest-query-nested"
+                ]
+              }
+            },
+            "rest structure attribute": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume",
+                  "rest-query-nested"
+                ]
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-get",
+                  "rest-query-nested"
+                ]
+              }
+            },
+            "client header": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-post"
+                ]
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-post"
+                ]
+              }
+            }
+          }
+        },
+        "set": {
+          "route": "set {target, prop, value}",
+          "preconditions": [
+            "ODC: IRestClient.Username/Password accept the write but the Verify rejects them as errors (integration.rest-credentials-in-model)"
+          ],
+          "roles": {
+            "rest client": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume",
+                  "rest-consume-post",
+                  "rest-consume-lifecycle"
+                ],
+                "scope": "BaseURL, Description, AuthenticationType; BaseURL edited on a client another job created"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-get",
+                  "rest-consume-post"
+                ],
+                "scope": "BaseURL, AuthenticationType, Username, Password (accepted by the O11 Verify)"
+              }
+            },
+            "rest method": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume",
+                  "rest-consume-post",
+                  "rest-consume-lifecycle"
+                ],
+                "scope": "HTTPMethod, URLPath, RequestFormat, ResponseFormat, TimeoutinSeconds"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-spec-edit-delete",
+                  "rest-consume-get",
+                  "rest-consume-post",
+                  "rest-query-nested"
+                ],
+                "scope": "HTTPMethod, URLPath, RequestFormat, ResponseFormat, TimeoutinSeconds"
+              }
+            },
+            "method input": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume",
+                  "rest-consume-post"
+                ],
+                "scope": "DataType, InputPlacement, IsMandatory, OriginalName"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-get",
+                  "rest-consume-post"
+                ],
+                "scope": "DataType, InputPlacement, IsMandatory, OriginalName"
+              }
+            },
+            "method output": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume",
+                  "rest-consume-post"
+                ],
+                "scope": "DataType, OutputPlacement, OriginalName"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-get",
+                  "rest-consume-post"
+                ],
+                "scope": "DataType, OutputPlacement, OriginalName"
+              }
+            },
+            "rest structure attribute": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume",
+                  "rest-query-nested"
+                ],
+                "scope": "DataType (including a nested structure by name), NameInJSON"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-get",
+                  "rest-query-nested"
+                ],
+                "scope": "DataType (including a nested structure by name), NameInJSON"
+              }
+            },
+            "client header": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-post"
+                ],
+                "scope": "Property, Value (a quoted expression)"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-post"
+                ],
+                "scope": "Property, Value (a quoted expression)"
+              }
+            }
+          }
+        },
+        "rename": {
+          "route": "rename {target, name}",
+          "preconditions": [
+            "the new name must be free in scope"
+          ],
+          "roles": {
+            "rest method": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-lifecycle"
+                ],
+                "scope": "the calling server action node follows by key"
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "no O11 job renames a consumed REST method"
+              }
+            },
+            "rest client": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-consume-lifecycle"
+                ]
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "no O11 job renames a REST client"
+              }
+            }
+          }
+        },
+        "delete": {
+          "route": "op rest remove [<Method> | IRestStructure:<Name>] (+ breaks), or delete {target, breaks?}",
+          "preconditions": [
+            "callers refuse it (DELETE_HAS_CONSUMERS, each path): delete them earlier in the job or list them in breaks",
+            "the user's words name each removed element and each breaks consumer; a standing grant never covers a delete"
+          ],
+          "roles": {
+            "rest method": {
+              "odc": {
+                "status": "undetermined",
+                "note": "same kernel op as O11; no ODC job yet"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-spec-edit-delete"
+                ],
+                "negative": [
+                  "rest-delete-consumers"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "platforms": {
+        "odc": {
+          "proofs": [
+            "rest-consume",
+            "rest-consume-post",
+            "rest-consume-call",
+            "rest-query-nested",
+            "rest-consume-lifecycle"
+          ],
+          "negative": [],
+          "context": {
+            "kinds": [
+              "RestClient",
+              "RestAction",
+              "RestStructure"
+            ]
+          },
+          "limits": [
+            {
+              "text": "Username/Password exist in the ODC API and accept writes, but the Verify rejects them as errors: only the authentication mode stays in the model; credentials live outside it.",
+              "origin": "kernel/docs/NAO-DA.md IRestClient.Username/Password; tests/jobs-odc/rest-consume-post.json description"
+            }
+          ],
+          "differences": [
+            {
+              "text": "Credentials: ODC refuses Username/Password in the model (Verify error); O11 accepts them (tests/jobs/rest-consume-post.json sets both with expectValid true).",
+              "origin": "tests/jobs-odc/rest-consume-post.json and tests/jobs/rest-consume-post.json"
+            }
+          ]
+        },
+        "o11": {
+          "proofs": [
+            "rest-consume-get",
+            "rest-consume-post",
+            "rest-consume-call",
+            "rest-query-nested"
+          ],
+          "negative": [],
+          "context": {
+            "kinds": [
+              "RestClient",
+              "RestAction",
+              "RestStructure"
+            ]
+          },
+          "limits": [
+            {
+              "text": "No O11 job edits, renames or runs usages on an existing REST client: maintenance on O11 is undetermined, not inherited from ODC.",
+              "origin": "kernel/tests/jobs (rest-consume-get, rest-consume-post, rest-consume-call, rest-query-nested)"
+            }
+          ],
+          "differences": [
+            {
+              "text": "O11 accepts IRestClient Username/Password in the model; ODC rejects them in the Verify.",
+              "origin": "tests/jobs/rest-consume-post.json vs tests/jobs-odc/rest-consume-post.json"
+            }
+          ]
+        }
+      },
+      "depends": [],
+      "alternatives": [],
+      "recommends": [
+        {
+          "id": "logic.server-action",
+          "when": "the REST method must be called: a server action with IExecuteServerActionNode Action = IRestAction:<Name>"
+        }
+      ]
+    },
+    {
+      "id": "integration.rest-import",
+      "category": "integration",
+      "title": "OpenAPI or Swagger document import: only the chosen operations become methods",
+      "keywords": [
+        "openapi",
+        "swagger",
+        "openapi document",
+        "swagger document",
+        "openapi operations",
+        "swagger json"
+      ],
+      "summary": "The openapi block of the op {path, sha256, operations: [operationId | \"VERB /path\"], external?} imports the chosen operations of an OpenAPI/Swagger document through the platform's own importer, offline: the deliver pins the document and its external $ref files. ODC headless in the kernel; O11 through the bridge (integration_import) inside o11_deliver.",
+      "route": {
+        "kind": "job",
+        "operation": "op rest {client: {name}, openapi: {path, sha256, operations}} (api --op rest, shapes.openapi); deliver with studio_deliver (ODC, headless) or o11_deliver (O11, bridge integration_import)"
+      },
+      "contract": [
+        "rest.shapes",
+        "rest.rules",
+        "rest.codes"
+      ],
+      "guidance": "Name the operations exactly (operationId, or the verb and the path as the document writes them); a wrong one is OPENAPI_OPERATION_NOT_FOUND with the list of what exists. The client is named by the op (the platform names it after the title). Add more methods by hand in the same op (methods) or later. Without a document, declare the methods with the op rest (integration.rest-consume).",
+      "example": {
+        "ops": [
+          "rest"
+        ],
+        "max": 2
+      },
+      "platforms": {
+        "odc": {
+          "proofs": [
+            "rest-openapi-import"
+          ],
+          "negative": [],
+          "limits": [
+            {
+              "text": "An existing client gets new operations through GetSwaggerInfo + ToImport + ISwaggerInfo.Create only for a document without external references (GetSwaggerInfo has no dependency override); a new client takes the bundled files.",
+              "origin": "kernel/src/Anvil.Core.Odc/Adapters.ODC/OdcRestOpenApi.cs"
+            }
+          ]
+        },
+        "o11": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "Declared, not proven live: the O11 importer runs in the bridge (integration_import:openapi) on a detached copy of the module; the bridge loads with the next Service Studio opened.",
+              "origin": "kernel/src/Anvil.Bridge/IntegrationImportHandler.cs; kernel/tests/jobs-live/o11-rest-openapi-import.json"
+            }
+          ]
+        }
+      },
+      "depends": []
+    },
+    {
+      "id": "integration.rest-expose",
+      "supersedes": [
+        "logic.rest-expose"
+      ],
+      "category": "integration",
+      "title": "Expose a REST API: service, methods, URL inputs, typed outputs",
+      "keywords": [
+        "expose",
+        "rest service",
+        "endpoint",
+        "public api",
+        "exposed rest",
+        "rest endpoint"
+      ],
+      "summary": "IRestService under the module; IRestServiceAction under the service (born with Start and End) with HTTPMethod and URLPath; IRestServiceActionInput/IRestServiceActionOutput under the method (DataType, IsMandatory; on O11 also ReceiveIn/SendIn); the method body is logic (an Assign fills the output).",
+      "route": {
+        "kind": "job",
+        "operation": "op rest-expose {service, methods, remove} in one call (api --op rest-expose), or the raw verbs create/set of IRestService, IRestServiceAction and their inputs/outputs with the body nodes; deliver with studio_deliver / o11_deliver"
+      },
+      "contract": [
+        "verbs.verbs.create",
+        "verbs.verbs.set",
+        "verbs.verbs.rename",
+        "verbs.verbs.usages",
+        "verbs.references"
+      ],
+      "guidance": "Addressing outside the creating job: IRestService:<Service> and IRestService:<Service>/<Method>. ODC (measured): renaming an exposed method rewrites its URLPath when the path contains the method name (the public URL changes) while rename reports consumers 0: external consumers are invisible to the model. The output type should be a public structure (data.structure, front A). The method body (Assign, calls) is logic owned by front A.",
+      "example": {
+        "ops": [
+          "rest-expose"
+        ],
+        "max": 4
+      },
+      "elements": [
+        {
+          "role": "rest service",
+          "platforms": {
+            "odc": {
+              "native": "ServiceStudio.Plugin.RESTService.IRestService",
+              "jobType": "IRestService",
+              "address": "IRestService:<Service>"
+            },
+            "o11": {
+              "native": "ServiceStudio.Plugin.RESTService.IRestService",
+              "jobType": "IRestService",
+              "address": "IRestService:<Service>"
+            }
+          }
+        },
+        {
+          "role": "exposed method",
+          "child": true,
+          "platforms": {
+            "odc": {
+              "native": "ServiceStudio.Plugin.RESTService.IRestServiceAction",
+              "jobType": "IRestServiceAction",
+              "address": "IRestService:<Service>/<Method>"
+            },
+            "o11": {
+              "native": "ServiceStudio.Plugin.RESTService.IRestServiceAction",
+              "jobType": "IRestServiceAction",
+              "address": "IRestService:<Service>/<Method>"
+            }
+          }
+        },
+        {
+          "role": "exposed input",
+          "child": true,
+          "platforms": {
+            "odc": {
+              "native": "ServiceStudio.Plugin.RESTService.IRestServiceActionInput",
+              "jobType": "IRestServiceActionInput",
+              "address": "IRestService:<Service>/<Method>/<Input>"
+            },
+            "o11": {
+              "native": "ServiceStudio.Plugin.RESTService.IRestServiceActionInput",
+              "jobType": "IRestServiceActionInput",
+              "address": "IRestService:<Service>/<Method>/<Input>"
+            }
+          }
+        },
+        {
+          "role": "exposed output",
+          "child": true,
+          "platforms": {
+            "odc": {
+              "native": "ServiceStudio.Plugin.RESTService.IRestServiceActionOutput",
+              "jobType": "IRestServiceActionOutput",
+              "address": "IRestService:<Service>/<Method>/<Output>"
+            },
+            "o11": {
+              "native": "ServiceStudio.Plugin.RESTService.IRestServiceActionOutput",
+              "jobType": "IRestServiceActionOutput",
+              "address": "IRestService:<Service>/<Method>/<Output>"
+            }
+          }
+        }
+      ],
+      "operations": {
+        "read": {
+          "route": "get/dump by path; reader --kind RestService | RestServiceAction",
+          "preconditions": [],
+          "roles": {
+            "rest service": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-expose-lifecycle"
+                ]
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "no O11 job reads an exposed service back"
+              }
+            },
+            "exposed method": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-expose",
+                  "rest-expose-lifecycle"
+                ]
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rename-logic-propagation"
+                ],
+                "scope": "get after each rename"
+              }
+            },
+            "exposed input": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-expose"
+                ]
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "read only through the method"
+              }
+            },
+            "exposed output": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-expose"
+                ]
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "read only through the method"
+              }
+            }
+          }
+        },
+        "usages": {
+          "route": "usages {target}",
+          "preconditions": [
+            "external consumers of an exposed endpoint are invisible to the model: usages counts model consumers only"
+          ],
+          "roles": {
+            "exposed method": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-expose-lifecycle"
+                ],
+                "scope": "consumers 0: the model cannot see external callers"
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "no O11 job runs usages on an exposed method"
+              }
+            }
+          }
+        },
+        "create": {
+          "route": "create IRestService @espace; IRestServiceAction under the service; inputs/outputs under the method",
+          "preconditions": [
+            "the method is born with Start and End: body nodes are created inside it and linked"
+          ],
+          "roles": {
+            "rest service": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-expose"
+                ]
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-expose",
+                  "rename-logic-propagation"
+                ]
+              }
+            },
+            "exposed method": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-spec-expose",
+                  "rest-expose",
+                  "rest-expose-lifecycle"
+                ],
+                "scope": "including a method added to a service another job created"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-spec-expose",
+                  "rest-expose",
+                  "rename-logic-propagation"
+                ]
+              }
+            },
+            "exposed input": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-expose",
+                  "rest-expose-lifecycle"
+                ]
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-expose",
+                  "rename-logic-propagation"
+                ]
+              }
+            },
+            "exposed output": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-expose",
+                  "rest-expose-lifecycle"
+                ]
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-expose",
+                  "rename-logic-propagation"
+                ]
+              }
+            }
+          }
+        },
+        "set": {
+          "route": "set {target, prop, value}",
+          "preconditions": [],
+          "roles": {
+            "rest service": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-expose",
+                  "rest-expose-lifecycle"
+                ],
+                "scope": "Description"
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "no O11 job sets a service property"
+              }
+            },
+            "exposed method": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-expose",
+                  "rest-expose-lifecycle"
+                ],
+                "scope": "HTTPMethod, URLPath, Description; HTTPMethod changed on a method another job created"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-expose"
+                ],
+                "scope": "HTTPMethod, URLPath"
+              }
+            },
+            "exposed input": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-expose",
+                  "rest-expose-lifecycle"
+                ],
+                "scope": "DataType, IsMandatory"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-expose"
+                ],
+                "scope": "DataType, ReceiveIn (URL), IsMandatory"
+              }
+            },
+            "exposed output": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-expose",
+                  "rest-expose-lifecycle"
+                ],
+                "scope": "DataType (a public structure)"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-expose"
+                ],
+                "scope": "DataType, SendIn (Body)"
+              }
+            }
+          }
+        },
+        "rename": {
+          "route": "rename {target, name}",
+          "preconditions": [
+            "renaming a method whose URLPath contains its name rewrites the URLPath (the public URL changes); a hand-written URLPath without the name is not touched by a later rename"
+          ],
+          "roles": {
+            "rest service": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-expose-lifecycle"
+                ],
+                "scope": "changes the service half of the URL, no method URLPath"
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "no O11 job renames an exposed service"
+              }
+            },
+            "exposed method": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "rest-expose-lifecycle"
+                ],
+                "scope": "URLPath rewritten, consumers 0, expressionsRewritten 0"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rename-logic-propagation"
+                ]
+              }
+            },
+            "exposed input": {
+              "odc": {
+                "status": "undetermined",
+                "note": "no ODC job renames an exposed input"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "rename-logic-propagation"
+                ],
+                "scope": "the Assign that reads the input follows by key"
+              }
+            }
+          }
+        },
+        "delete": {
+          "route": "op rest-expose remove [<Method>], or delete {target}",
+          "preconditions": [
+            "external callers: the user's words name the method"
+          ],
+          "roles": {
+            "exposed method": {
+              "odc": {
+                "status": "undetermined",
+                "note": "no job removes an exposed method"
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "no job removes an exposed method"
+              }
+            }
+          }
+        }
+      },
+      "platforms": {
+        "odc": {
+          "proofs": [
+            "rest-expose",
+            "rest-expose-lifecycle"
+          ],
+          "negative": [],
+          "context": {
+            "kinds": [
+              "RestService",
+              "RestServiceAction"
+            ]
+          },
+          "limits": [
+            {
+              "text": "Renaming an exposed method rewrites its URLPath (the public URL changes) while rename reports consumers 0: external consumers are invisible to the model.",
+              "origin": "tests/jobs-odc/rest-expose-lifecycle.json description and ops 32-42"
+            }
+          ],
+          "differences": [
+            {
+              "text": "The ODC jobs do not set ReceiveIn/SendIn on exposed inputs/outputs; the O11 job does (ReceiveIn URL, SendIn Body).",
+              "origin": "tests/jobs-odc/rest-expose.json vs tests/jobs/rest-expose.json"
+            }
+          ]
+        },
+        "o11": {
+          "proofs": [
+            "rest-expose",
+            "rename-logic-propagation"
+          ],
+          "negative": [],
+          "context": {
+            "kinds": [
+              "RestService",
+              "RestServiceAction"
+            ]
+          },
+          "limits": [
+            {
+              "text": "The URLPath rewrite on rename is measured on ODC only; on O11 the rename of a method and of an input is proven (rename-logic-propagation) without an assertion on the URLPath.",
+              "origin": "tests/jobs/rename-logic-propagation.json; tests/jobs-odc/rest-expose-lifecycle.json"
+            }
+          ],
+          "differences": []
+        }
+      },
+      "depends": [],
+      "alternatives": []
+    }
+  ],
+  "unavailable": [
+    {
+      "id": "integration.rest-credentials-in-model",
+      "supersedes": [
+        "rest-credentials-in-model"
+      ],
+      "lanes": [
+        "odc"
+      ],
+      "keywords": [
+        "username",
+        "password",
+        "basic auth password",
+        "credentials",
+        "credencial",
+        "senha",
+        "rest password"
+      ],
+      "reason": "On ODC IRestClient.Username/Password accept writes but the Verify rejects them as errors; only the authentication mode (AuthenticationType/ClientAuthentication) stays in the model. Credentials are configured outside the model.",
+      "evidence": "kernel/docs/NAO-DA.md IRestClient.Username/Password; tests/jobs-odc/rest-consume-post.json and rest-consume-lifecycle.json descriptions (declared refusal: no negative job in jobs-odc-negative)",
+      "negative": {
+        "odc": []
+      },
+      "alternative": "integration.rest-consume with AuthenticationType only; the credential values are environment configuration, never written by the catalog"
+    }
+  ],
+  "coverage": [
+    {
+      "type": "odc:ServiceStudio.Plugin.REST.IRestAction",
+      "status": "represented",
+      "applicability": "applicable",
+      "capability": "integration.rest-consume",
+      "role": "rest method",
+      "note": "created by the consumer/exposing module in the proof jobs; the inventory class comes from its base closure (request C-007)",
+      "classification": "concrete",
+      "origin": "tests/jobs-odc/rest-consume.json (create IRestAction under the client), rest-consume-lifecycle.json (rename)"
+    },
+    {
+      "type": "odc:ServiceStudio.Plugin.RESTService.IRestService",
+      "status": "represented",
+      "applicability": "applicable",
+      "capability": "integration.rest-expose",
+      "role": "rest service",
+      "note": "created by the consumer/exposing module in the proof jobs; the inventory class comes from its base closure (request C-007)",
+      "classification": "concrete",
+      "origin": "tests/jobs-odc/rest-expose.json (create IRestService @espace)"
+    },
+    {
+      "type": "o11:ServiceStudio.Plugin.REST.IRestAction",
+      "status": "represented",
+      "applicability": "applicable",
+      "classification": "concrete",
+      "origin": "tests/jobs/rest-consume-get.json (create IRestAction under the client)",
+      "capability": "integration.rest-consume",
+      "role": "rest method",
+      "note": "created by the consumer/exposing module in the proof jobs; the inventory class comes from its base closure (request C-007)"
+    },
+    {
+      "type": "o11:ServiceStudio.Plugin.RESTService.IRestService",
+      "status": "represented",
+      "applicability": "applicable",
+      "classification": "concrete",
+      "origin": "tests/jobs/rest-expose.json, rename-logic-propagation.json (create IRestService @espace)",
+      "capability": "integration.rest-expose",
+      "role": "rest service",
+      "note": "created by the consumer/exposing module in the proof jobs; the inventory class comes from its base closure (request C-007)"
+    }
+  ]
+}

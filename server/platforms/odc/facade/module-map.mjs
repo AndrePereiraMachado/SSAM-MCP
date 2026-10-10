@@ -1,0 +1,493 @@
+// The module map: every element of a capture from its module index, read here without .NET.
+// The index is written by the lane's resident reader (C#), one JSON per capture and reader adapter:
+//   <SSAM_MODULE_INDEX_ROOT | <workspace>\.local\module-index>\v1\<lane>\<sha256>.<adapter>.json   (ssam-module-index/1)
+// A file is served only when schema, extractor and sourceSha256 (the hash of the bytes read now) match; anything else
+// is a miss, and the lane reader builds it again ({"index":"ensure"}). The store is a cache: its writer trims it.
+//   ssam map [--lane o11|odc] <capture.oml|Module> [--kind K] [--name N] [--prefix P] [--role R] [--parent @key]
+//     [--key @key] [--offset N] [--max N] [--budget B] [--detail] [--expectedSourceSha256 H]
+//   node module-map.mjs --prefetch <capture.oml> --lane o11|odc      (the detached warm-up, see prefetchIndex)
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+import { createHash, randomUUID } from 'node:crypto';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { workspaceRoot, anvilRoot, o11Lane } from './workspace.mjs';
+import { readSnapshot } from './reader-client.mjs';
+import { root as odcRoot, paths, odcStudioDir, ensureBuilder, builderNeedsBuild, studio } from './lib.mjs';
+import { LANES } from './lanes.mjs';
+import { o11LaneOf } from './o11-lane.mjs';
+import { resolveOpenModule, systemModuleName } from './studio-module.mjs';
+import { withStudioWriteLock } from './studio-write-lock.mjs';
+import { canonicalCapture } from './oml-content-sha.mjs';
+
+export const INDEX_SCHEMA = 'ssam-module-index/1';
+export const EXTRACTOR = 1;
+export const MAP_SCHEMA = 'ssam-map/1';
+export const ROLES = ['module', 'flow', 'screen', 'block', 'action', 'actionRef', 'aggregate', 'entity', 'staticEntity', 'structure',
+  'attribute', 'parameter', 'variable', 'widget', 'event', 'flowNode', 'expression', 'reference', 'other'];
+export const MAP_USAGE = 'ssam map [--lane o11|odc] <capture.oml|Module> [--kind K] [--name N] [--prefix P] [--role R] [--parent @key] [--key @key] [--offset N] [--max N] [--budget B] [--detail] [--expectedSourceSha256 H]';
+const DETAIL_ROLES = new Set(['expression', 'reference', 'other']);
+const ANONYMOUS_KINDS = ['AnonymousStructure', 'ListType'];
+// The reader's own refusal text (SnapshotReading.Read), which discovery and callers already recognize.
+const CHANGED = 'Snapshot content changed: expectedSourceSha256 does not match the source bytes';
+const NOT_OBSERVED = 'No instance of the requested kind was observed in this scope. Check the kind spelling and scope; this does not prove that the type is unsupported.';
+const self = fileURLToPath(import.meta.url);
+
+const adapterOf = lane => lane === 'odc' ? 'builder' : 'kernel';
+export const sha256Of = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+// The C# store takes only an absolute SSAM_MODULE_INDEX_ROOT and otherwise looks for the workspace above the reader's
+// own folder (ModuleIndexStore.Default); readerConfig hands every reader this resolved root, so both sides use one folder.
+export const indexRoot = (env = process.env) => env.SSAM_MODULE_INDEX_ROOT ? path.resolve(env.SSAM_MODULE_INDEX_ROOT) : path.join(workspaceRoot, '.local', 'module-index');
+export const indexFile = (lane, sha256, env = process.env) => path.join(indexRoot(env), 'v1', lane, sha256.toLowerCase() + '.' + adapterOf(lane) + '.json');
+// C15: the registry of canonical captures by content (oml-content-sha.mjs canonicalCapture), beside the index store.
+export const contentRegistry = (lane, env = process.env) => path.join(indexRoot(env), 'v1', lane, 'content');
+// The capture that answers a read of `file`: the first intact capture of the same content (its index and its sha), or the
+// file itself. A registry that cannot be read or written only loses the reuse.
+export function readCapture(file, lane, { module = null, env = process.env } = {}) {
+  try { return canonicalCapture({ file, module, dir: contentRegistry(lane, env) }); }
+  catch { const raw = sha256Of(file); return { file: path.resolve(file), rawSha256: raw, contentSha256: raw, reused: false, rule: 'raw' }; }
+}
+
+// The resident reader of each lane (reader-client.mjs): the ODC builder, or the O11 kernel CLI of the selected lane.
+export function readerConfig(lane, { entry = LANES.o11, ssDir, env = process.env } = {}) {
+  if (lane === 'odc') return { dll: paths.builder, platform: 'odc', runtimeDir: odcStudioDir(env),
+    cacheRoot: env.SSAM_READER_CACHE_ROOT ?? path.join(odcRoot, '.local', 'readers'), indexRoot: indexRoot(env) };
+  if (lane === 'o11') return { dll: entry.cli, platform: entry.lane,
+    runtimeDir: ssDir ?? env.ANVIL_STUDIO_DIR ?? path.join(env.USERPROFILE, 'OutSystems',
+      entry.lane === 'ss5' ? 'Service Studio 11 - Anvil 4536' : 'Service Studio 11 - Anvil 4516', 'Service Studio'),
+    cacheRoot: env.SSAM_READER_CACHE_ROOT ?? path.join(entry.root, '.local', 'readers'), indexRoot: indexRoot(env) };
+  throw new Error('Unknown lane ' + lane + '; lanes: odc, o11');
+}
+
+// ---- the store
+// The checks of ModuleIndex.Parse: identity, roles, and every row and ancestor in range and in ordinal key order.
+// A parent reference is a row (>= 0), no parent (-1) or ancestors[-2 - ref] (<= -2): an element Parent() reaches that
+// no Children list holds (O11 an aggregate's DataTable, ODC CustomProperty); it names paths and is never listed.
+function wellFormed(index, lane) {
+  if (!index || index.schema !== INDEX_SCHEMA || index.extractor !== EXTRACTOR || index.lane !== lane || index.adapter !== adapterOf(lane)
+    || typeof index.sourceSha256 !== 'string' || typeof index.complete !== 'boolean' || typeof index.module?.name !== 'string'
+    || !Array.isArray(index.rows) || !Array.isArray(index.types) || !Array.isArray(index.ancestors)
+    || !Array.isArray(index.roles) || index.roles.length !== ROLES.length || index.roles.some((r, i) => r !== ROLES[i])) return false;
+  const rows = index.rows.length, types = index.types.length;
+  const reference = p => Number.isInteger(p) && p >= -1 - index.ancestors.length && p < rows;
+  const type = t => Number.isInteger(t) && t >= 0 && t < types;
+  return index.types.every(t => t && typeof t.kind === 'string' && Array.isArray(t.answers))
+    && index.ancestors.every(a => Array.isArray(a) && a.length === 4 && typeof a[0] === 'string' && type(a[1]) && typeof a[2] === 'string' && reference(a[3]))
+    && index.rows.every((r, i) => Array.isArray(r) && r.length === 9 && typeof r[0] === 'string' && type(r[1]) && typeof r[2] === 'string'
+      && reference(r[5]) && Number.isInteger(r[6]) && r[6] >= 0 && r[6] < ROLES.length && Number.isInteger(r[8]) && r[8] >= 0
+      && (i === 0 || index.rows[i - 1][0] <= r[0]));
+}
+// A parent reference's own parent reference, type and name (rows and ancestors alike).
+const parentOf = (index, ref) => ref >= 0 ? index.rows[ref][5] : index.ancestors[-2 - ref][3];
+const typeOf = (index, ref) => ref >= 0 ? index.rows[ref][1] : index.ancestors[-2 - ref][1];
+const nameOf = (index, ref) => ref >= 0 ? index.rows[ref][2] : index.ancestors[-2 - ref][2];
+// The last two parsed indexes (a large module is 20-40 MB of heap); the file is content-addressed, the stamp only
+// tells a rewritten file from the one already parsed.
+const parsed = new Map();
+export function loadIndex(file, lane, sha256) {
+  let stat; try { stat = fs.statSync(file); } catch { return null; }
+  const stamp = stat.size + ':' + stat.mtimeMs + ':' + stat.ino;
+  let index = parsed.get(file)?.stamp === stamp ? parsed.get(file).index : null;
+  if (!index) {
+    try { index = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, '')); } catch { return null; }
+    if (!wellFormed(index, lane)) return null;
+    parsed.delete(file); parsed.set(file, { stamp, index });
+    while (parsed.size > 2) parsed.delete(parsed.keys().next().value);
+  }
+  return index.sourceSha256.toLowerCase() === sha256.toLowerCase() ? index : null;
+}
+// Derived tables, once per parsed index: keys of rows, keys of ancestors (as parent references) and, per reference,
+// whether it lies inside an anonymous structure or a list type (the types the model creates on its own), itself included.
+const derived = new WeakMap();
+function tables(index) {
+  let t = derived.get(index);
+  if (!t) {
+    const keys = new Map(index.rows.map((r, i) => [r[0], i]));
+    const ancestorKeys = new Map(index.ancestors.map((a, i) => [a[0], -2 - i]));
+    const anonymousType = index.types.map(type => ANONYMOUS_KINDS.some(k => answers(type, k)));
+    const rowsInside = new Uint8Array(index.rows.length), ancestorsInside = new Uint8Array(index.ancestors.length); // 0 unknown, 1 inside, 2 outside
+    const memo = ref => ref >= 0 ? rowsInside : ancestorsInside, slot = ref => ref >= 0 ? ref : -2 - ref;
+    const limit = index.rows.length + index.ancestors.length;
+    const inside = ref => {
+      if (ref === -1) return 2;
+      if (memo(ref)[slot(ref)]) return memo(ref)[slot(ref)];
+      const chain = []; let at = ref, state = 2;
+      while (at !== -1 && chain.length <= limit) {
+        if (memo(at)[slot(at)]) { state = memo(at)[slot(at)]; break; }
+        chain.push(at);
+        if (anonymousType[typeOf(index, at)]) { state = 1; break; }
+        at = parentOf(index, at);
+      }
+      for (const j of chain) memo(j)[slot(j)] = state;
+      return state;
+    };
+    for (let i = 0; i < index.rows.length; i++) inside(i);
+    derived.set(index, t = { keys, ancestorKeys, inside });
+  }
+  return t;
+}
+// HasKind of the readers (ModuleIndex.Query): a name in the node's answers, with or without the leading I.
+const answers = (type, kind) => (type.answers ?? []).some(a => a === kind || a === 'I' + kind);
+// OrdinalIgnoreCase of the readers, per UTF-16 unit.
+const folded = text => { let out = ''; for (const ch of String(text)) { const up = ch.toUpperCase(); out += up.length === ch.length ? up : ch; } return out; };
+const clip = text => text.length > 80 ? text.slice(0, 80) + '…' : text;
+
+// ---- the request
+const integer = (name, value, min, max, fallback) => {
+  if (value == null) return fallback;
+  const n = typeof value === 'number' ? value : /^-?\d+$/.test(String(value)) ? Number(value) : NaN;
+  if (!Number.isInteger(n) || n < min || n > max) throw new Error(name + ' must be an integer between ' + min + ' and ' + max);
+  return n;
+};
+// The default byte budget is the MCP answer ceiling of ssam.mjs (SSAM_MAX_ANSWER_BYTES, 40960) less the room its shaper
+// keeps for next steps (2048 bytes, ssam.mjs budgetCeiling): a map never answers more than a client takes in one piece,
+// and the ceiling never has to page it.
+export const DEFAULT_MAP_BUDGET = (env = process.env) => {
+  const n = Number(env.SSAM_MAX_ANSWER_BYTES); const ceiling = Number.isInteger(n) && n >= 4096 ? n : 40960;
+  return Math.min(1048576, Math.max(4096, ceiling - 2048));
+};
+function mapRequest(input) {
+  const lane = input.lane ?? 'odc';
+  if (!['odc', 'o11'].includes(lane)) throw new Error('Unknown lane ' + lane + '; lanes: odc, o11');
+  if (typeof input.target !== 'string' || !input.target.trim()) throw new Error('target is required: a capture .oml or, on ODC, an open module name. ' + MAP_USAGE);
+  for (const name of ['kind', 'name', 'prefix', 'role', 'parent', 'key'])
+    if (input[name] != null && (typeof input[name] !== 'string' || !input[name])) throw new Error(name + ' must be a non-empty string');
+  if (input.expectedSourceSha256 != null && !/^[a-fA-F0-9]{64}$/.test(input.expectedSourceSha256)) throw new Error('expectedSourceSha256 must be 64 hexadecimal characters');
+  return { lane, target: input.target, kind: input.kind, name: input.name, prefix: input.prefix, role: input.role, parent: input.parent, key: input.key,
+    offset: integer('offset', input.offset, 0, Number.MAX_SAFE_INTEGER, 0), max: integer('max', input.max, 1, 500, 100),
+    budgetBytes: integer('budgetBytes', input.budgetBytes, 2000, 1048576, DEFAULT_MAP_BUDGET()), includeDetail: input.includeDetail === true,
+    expectedSourceSha256: input.expectedSourceSha256?.toLowerCase(), pid: input.pid };
+}
+export function parseMapArguments(args) {
+  const input = {};
+  const values = { '--lane': 'lane', '--kind': 'kind', '--name': 'name', '--prefix': 'prefix', '--role': 'role', '--parent': 'parent', '--key': 'key',
+    '--offset': 'offset', '--max': 'max', '--budget': 'budgetBytes', '--expectedSourceSha256': 'expectedSourceSha256', '--oml': 'target', '--pid': 'pid' };
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--detail') { input.includeDetail = true; continue; }
+    if (values[arg]) {
+      const value = args[++i];
+      if (value == null || value.startsWith('--')) throw new Error('Missing value for ' + arg);
+      if (values[arg] in input) throw new Error('Duplicate ' + (values[arg] === 'target' ? 'target' : arg));
+      input[values[arg]] = value; continue;
+    }
+    if (arg.startsWith('--')) throw new Error('Unknown map argument ' + arg + '; ' + MAP_USAGE);
+    if ('target' in input) throw new Error('map takes one target; ' + MAP_USAGE);
+    input.target = arg;
+  }
+  if (!input.target) throw new Error(MAP_USAGE);
+  if (input.pid != null) input.pid = integer('--pid', input.pid, 1, Number.MAX_SAFE_INTEGER);
+  return input;
+}
+
+// ---- the answer
+// One call answers from the store; a miss asks the lane reader to build the index ({"index":"ensure"}) and reads the
+// file it wrote. deps replace the reader transport, the builder check and the Studio snapshot (tests).
+export async function moduleMap(input = {}, deps = {}) {
+  const { read = readSnapshot, prepare = ensureBuilder, capture = studio, reader = {}, env = process.env } = deps;
+  const started = performance.now();
+  let q, file;
+  try {
+    q = mapRequest(input);
+    let snapshot = null;
+    if (/\.oml$/i.test(q.target)) file = path.resolve(q.target);
+    else {
+      // A module name is the live module: snapshot first, as inspect does; the map itself warms nothing else. O11
+      // captures through the selected Service Studio (captureO11Module: an open tab by its key, without the write lock;
+      // a closed or system module from its published OML, never a tab), ODC through the ODC Studio bridge. deps.o11:
+      // options of captureO11Module (bridge, assertSelected, download, lockDeps, ...).
+      snapshot = q.lane === 'o11'
+        ? await (deps.captureO11 ?? (module => captureO11Module(module, { env, ...(deps.o11 ?? {}) })))(q.target)
+        : await capture(['snapshot', q.target], q.pid, { prefetch: false });
+      if (!snapshot?.ok) return { ...snapshot, ok: false, lane: q.lane, target: q.target };
+      file = path.resolve(snapshot.path);
+    }
+    // C15: a capture of an unchanged module differs from the previous one only in volatile header fields; the first intact
+    // capture of the same content answers the read, so its index (keyed by its raw sha256) and its keys serve again.
+    const captured = file;
+    const canonical = readCapture(file, q.lane, { module: snapshot?.module ?? null, env });
+    file = canonical.file;
+    const sha256 = canonical.rawSha256;
+    const hashMs = performance.now() - started;
+    // expectedSourceSha256: the raw sha256 of the capture served, of the capture just taken, or their content sha256.
+    if (q.expectedSourceSha256 && ![sha256, canonical.contentSha256, ...(canonical.reused ? [sha256Of(captured)] : [])].includes(q.expectedSourceSha256)) throw new Error(CHANGED);
+    const stored = indexFile(q.lane, sha256, env);
+    let index = loadIndex(stored, q.lane, sha256), served = stored, cache = { index: 'hit' }, ensureMs;
+    if (!index) {
+      const phase = performance.now();
+      if (q.lane === 'odc') { const ready = await prepare(); if (!ready.ok) throw new Error(ready.error); }
+      const response = await read({ ...readerConfig(q.lane, { ...reader, env }), request: { file, index: 'ensure', expectedSourceSha256: sha256 } });
+      const built = response.index ?? response.data?.index;
+      if (!built) throw new Error('The ' + q.lane + ' reader answered without a module index: its binaries predate ' + INDEX_SCHEMA + '; rebuild the reader');
+      index = loadIndex(stored, q.lane, sha256);
+      // A reader started under another store root (SSAM_MODULE_INDEX_ROOT at its start) reports where it wrote.
+      const reported = typeof built.path === 'string' ? path.resolve(built.path) : null;
+      if (!index && reported && reported !== stored) { index = loadIndex(reported, q.lane, sha256); served = reported; }
+      if (!index) throw new Error('The module index of this capture is missing or invalid after the reader built it: ' + stored);
+      ensureMs = performance.now() - phase;
+      cache = { index: 'ensured', built: built.built === true, ...(response.cache ? { loads: response.cache.loads, generation: response.cache.generation } : {}) };
+    }
+    const answer = present(index, q, { file, sha256, stored: served, cache, snapshot });
+    if (answer.ok) {
+      answer.contentSha256 = canonical.contentSha256;
+      if (canonical.reused) answer.capture = { file: captured, reused: true, note: 'same content as the capture this answer reads (volatile header fields aside): its keys and index serve' };
+      answer.timings = { hashMs, ...(ensureMs != null ? { ensureMs } : {}), totalMs: performance.now() - started };
+    }
+    return answer;
+  } catch (error) {
+    return { ok: false, lane: q?.lane ?? input.lane ?? 'odc', target: input.target, ...(file ? { file } : {}), error: error.message };
+  }
+}
+
+function present(index, q, { file, sha256, stored, cache, snapshot }) {
+  const { rows, types, roles } = index;
+  const { keys, ancestorKeys, inside } = tables(index);
+  // A key is a row; as a parent it may also be an ancestor (the parent of rows, never listed itself).
+  const rowOf = (reference, parent = false) => {
+    const key = reference.startsWith('@') ? reference.slice(1) : reference;
+    const at = keys.get(key) ?? (parent ? ancestorKeys.get(key) : undefined);
+    if (at == null) throw new Error('Unresolved key in this capture: @' + key + '. Keys belong to one capture: map the current capture again');
+    return at;
+  };
+  const roleIndex = q.role == null ? null : roles.indexOf(q.role);
+  if (q.role != null && roleIndex < 0) throw new Error('Unknown role ' + q.role + '; roles: ' + roles.join(', '));
+  const parentRow = q.parent != null ? rowOf(q.parent, true) : null;
+  const keyRow = q.key != null ? rowOf(q.key) : null;
+  const kinds = q.kind != null && q.kind !== '*' ? types.map(t => answers(t, q.kind)) : null;
+  // Detail rows and the anonymous types stay out of a plain map; a kind, a role, a key or --detail asks for them.
+  const explicit = q.includeDetail || q.kind != null || q.role != null || q.key != null;
+  const parentInside = parentRow != null && inside(parentRow) === 1;
+  const name = q.name != null ? folded(q.name) : null, prefix = q.prefix != null ? folded(q.prefix) : null;
+  const matched = []; const hidden = { detail: 0, anonymous: 0 };
+  let kindObserved = kinds == null;
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (keyRow != null && i !== keyRow) continue;
+    if (parentRow != null && row[5] !== parentRow) continue;
+    if (kinds && !kinds[row[1]]) continue;
+    kindObserved = true;
+    if (roleIndex != null && row[6] !== roleIndex) continue;
+    if (name != null && folded(row[2] ?? '') !== name) continue;
+    if (prefix != null && !folded(row[2] ?? '').startsWith(prefix)) continue;
+    if (!explicit && DETAIL_ROLES.has(roles[row[6]])) { hidden.detail++; continue; }
+    if (!explicit && !parentInside && inside(i) === 1) { hidden.anonymous++; continue; }
+    matched.push(i);
+  }
+  // ModelReader.PathOf (ModuleIndex.PathOf): every element up the parent references, ancestors included, that has a
+  // parent itself; the module root is left out.
+  const pathOf = i => {
+    const parts = []; const seen = new Set();
+    for (let at = i; at !== -1 && parentOf(index, at) !== -1 && !seen.has(at); at = parentOf(index, at)) {
+      seen.add(at); parts.push(types[typeOf(index, at)].kind + ':' + clip(nameOf(index, at) ?? ''));
+    }
+    return parts.reverse().join('/');
+  };
+  const keyOf = ref => ref >= 0 ? rows[ref][0] : ref <= -2 ? index.ancestors[-2 - ref][0] : null;
+  const entryOf = i => { const r = rows[i]; return { key: r[0], kind: types[r[1]].kind, name: r[2] ?? '', role: roles[r[6]],
+    parentKey: keyOf(r[5]), path: pathOf(i), childrenTotal: r[8], ...(r[7] != null ? { dataType: r[7] } : {}) }; };
+  const page = matched.slice(q.offset, q.offset + q.max).map(entryOf);
+  const count = matched.length;
+  const query = Object.fromEntries(Object.entries({ kind: q.kind, name: q.name, prefix: q.prefix, role: q.role, parent: q.parent, key: q.key,
+    includeDetail: q.includeDetail || undefined }).filter(([, v]) => v != null));
+  const counts = { elements: index.counts?.elements ?? rows.length, byRole: index.counts?.byRole ?? null, ...(q.offset === 0 ? { byKind: index.counts?.byKind ?? null } : {}) };
+  // A module read from its published OML (A29) says so: it is the published version, not a Studio tab.
+  const head = { ok: true, schema: MAP_SCHEMA, lane: q.lane, target: q.target, file, sourceSha256: sha256, ...(snapshot ? { snapshotSha256: snapshot.sha256 } : {}),
+    ...(snapshot?.capturedBy === PUBLISHED_CAPTURE ? { capturedBy: PUBLISHED_CAPTURE, versionId: snapshot.versionId ?? null } : {}),
+    module: index.module ?? null, answeredBy: 'module-index',
+    index: { file: stored, adapter: index.adapter, extractor: index.extractor, createdAt: index.createdAt ?? null, complete: index.complete === true,
+      readErrors: index.readErrors ?? 0, ...(index.readErrors ? { errorSamples: index.errorSamples ?? [] } : {}) },
+    counts, query, cache };
+  const answer = (n, dropKinds = false) => {
+    const nextOffset = q.offset + n < count ? q.offset + n : null;
+    return { ...head, ...(dropKinds ? { counts: { ...counts, byKind: undefined, byKindOmitted: 'budget' } } : {}),
+      count, returned: n, offset: q.offset, omitted: count - n, truncated: count !== n, nextOffset,
+      kindObserved, searchComplete: index.complete === true && !index.readErrors, notices: kindObserved ? [] : [NOT_OBSERVED],
+      ...(hidden.detail || hidden.anonymous ? { hidden: { ...hidden, note: 'detail rows (expression, reference, other) and anonymous structures/list types are left out of a plain map: pass includeDetail, a kind or a role to list them' } } : {}),
+      entries: page.slice(0, n), continuations: continuations(q, file, sha256, nextOffset),
+      note: 'Keys belong to this capture (sourceSha256). Read a subtree, its properties or its usages with continuations.inspect; after a Studio change take a new capture and map it again.' };
+  };
+  // The budget is on compact UTF-8 bytes of the whole answer, with room for size and timings.
+  const bytes = value => Buffer.byteLength(JSON.stringify(value), 'utf8') + 200;
+  // The counts by kind go first when even an empty page does not fit.
+  const dropKinds = counts.byKind != null && bytes(answer(0)) > q.budgetBytes;
+  const minimal = bytes(answer(0, dropKinds));
+  // Below the smallest page (head, counts, continuations): the minimal answer, inside the budget, with the same query at a
+  // budget that holds a page as the next call; never an exception.
+  if (minimal > q.budgetBytes) {
+    const raise = Math.min(1048576, minimal + 2000);
+    const filters = Object.fromEntries(['kind', 'name', 'prefix', 'role', 'parent', 'key'].filter(k => q[k] != null).map(k => [k, q[k]]));
+    const short = { ok: true, schema: MAP_SCHEMA, lane: q.lane, target: q.target, file, sourceSha256: sha256, module: index.module ?? null, answeredBy: 'module-index',
+      count, returned: 0, offset: q.offset, omitted: count, truncated: count > 0, nextOffset: count > q.offset ? q.offset : null, entries: [],
+      continuation: { tool: 'ssam_map', arguments: { lane: q.lane, target: file, ...filters, ...(q.includeDetail ? { includeDetail: true } : {}), offset: q.offset, max: q.max,
+        budgetBytes: raise, expectedSourceSha256: sha256 }, why: 'the smallest page of this query needs ' + minimal + ' bytes' } };
+    short.size = { status: 'insufficient', bytes: 0, budgetBytes: q.budgetBytes, minimalBytes: minimal, limitedBy: 'budget' };
+    short.size.bytes = Buffer.byteLength(JSON.stringify(short), 'utf8');
+    return short;
+  }
+  let n = 0, total = minimal;
+  while (n < page.length && total + Buffer.byteLength(JSON.stringify(page[n]), 'utf8') + 1 <= q.budgetBytes) total += Buffer.byteLength(JSON.stringify(page[n++]), 'utf8') + 1;
+  let result = answer(n, dropKinds);
+  while (n > 0 && bytes(result) > q.budgetBytes) result = answer(--n, dropKinds);
+  result.size = { bytes: bytes(result) - 200, budgetBytes: q.budgetBytes, limitedBy: n < page.length ? 'budget' : count > q.offset + n ? 'max' : null };
+  return result;
+}
+
+// Ready-to-use next calls, MCP only (no CLI line: it sent the model to a shell): a subtree by @key through the lane's
+// reader tool, guarded by the hash, and the next page of this map.
+function continuations(q, file, sha256, nextOffset) {
+  const inspect = q.lane === 'odc'
+    ? { tool: 'studio_inspect', arguments: { target: file, path: '@<key>', expectedSourceSha256: sha256 } }
+    : { tool: 'o11_inspect', arguments: { oml: file, path: '@<key>', expectedSourceSha256: sha256 } };
+  let next = null;
+  if (nextOffset != null) {
+    const filters = Object.fromEntries(['kind', 'name', 'prefix', 'role', 'parent', 'key'].filter(k => q[k] != null).map(k => [k, q[k]]));
+    next = { tool: 'ssam_map', arguments: { lane: q.lane, target: file, ...filters, ...(q.includeDetail ? { includeDetail: true } : {}), offset: nextOffset, max: q.max,
+      budgetBytes: q.budgetBytes, expectedSourceSha256: sha256 } };
+  }
+  return { inspect, next, note: 'replace <key> with the key of an entry; the hash guard refuses a capture that changed' };
+}
+
+// ---- O11: the live module a name means (ssam_map, ssam_discover app, o11_inspect module).
+// A read never opens a module tab (A29, 2026-10-06). The open tabs of the selected Service Studio (list_open_modules, the
+// name resolved as studio-module.mjs does) decide among three ways:
+// 1. A system module (Users, OutSystemsUI, System: studio-module.mjs systemModuleName) or a module no tab has: its
+//    PUBLISHED OML, downloaded by o11-environment.mjs downloadModule (contract I7; deps.download), without a tab and
+//    without the write lock. A build without that function refuses MODULE_NOT_OPEN with the o11_environment download
+//    continuation; nothing is opened.
+// 2. A module open in a tab: captured by its key without selecting it (snapshot_module module_key, bridge C41; the
+//    bridge's snapshot registry only adds, so a delivery's registered base stays). No lock: parallel reads and a running
+//    write (a delivery pinned to its own module key) never meet.
+// 3. A module open but not capturable by its key (still opening, a name two tabs match, an older bridge that captures only
+//    the selected tab, no answer to the capture): the o11_studio snapshot {module} (open_module selects its tab) under the
+//    write lock, waiting its turn in the Studio's write queue (studio-write-lock.mjs) behind any running write.
+// A selected Studio that changed, or a Studio that does not answer the listing, is refused as o11_studio refuses it: no
+// tab is opened and nothing is downloaded.
+// deps: tool (named in the lock), env, lane, root, bridge (a client of o11-bridge.mjs or a function returning one),
+// assertSelected, openCapture(module) (way 3), download({module}, {root, lane, env, assertSelected}) (way 1; null = absent),
+// lockDeps (studio-write-lock deps), signal, now.
+const OPENING = m => m?.serverSilentMode === true || m?.hasOpenedActiveESpace === false; // o11-studio.mjs openingOf
+const stampOf = ms => new Date(ms).toISOString().replace(/[-:T]/g, '').slice(0, 14);     // UTC yyyyMMddHHmmss
+export const OPEN_TAB_CAPTURE = 'open-tab';
+export const PUBLISHED_CAPTURE = 'published-oml';
+export async function captureO11Module(module, { tool = 'ssam_map', env = process.env, lane = o11Lane.lane, root = anvilRoot, bridge, assertSelected,
+  openCapture, download, lockDeps, signal, now = Date.now } = {}) {
+  const client = async () => {
+    if (typeof bridge === 'function') return bridge();
+    if (bridge) return bridge;
+    const { o11Bridge, bridgeTarget } = await import('./o11-bridge.mjs');
+    return o11Bridge(bridgeTarget({ lane, root, env }));
+  };
+  const studioTool = () => import('./o11-studio.mjs');
+  const selected = assertSelected ?? (async () => (await import('./studio-connect.mjs')).assertSelectedO11());
+  const open = openCapture ?? (async name => (await studioTool()).o11Studio({ lane, root, env,
+    ...(bridge ? { bridge } : {}), ...(assertSelected ? { assertSelected } : {}) })({ command: 'snapshot', args: { module: name } }, { signal }));
+  // Way 1: the published OML (contract I7), never a tab.
+  const published = async (name, reason) => {
+    const fetchIt = { tool: 'o11_environment', arguments: { action: 'download', module: name },
+      why: 'baixa o OML publicado sem abrir aba; depois ssam_map {lane:"o11", target:<arquivo devolvido>}' };
+    let fn = download;
+    if (fn === undefined) { try { fn = (await import('./o11-environment.mjs')).downloadModule ?? null; } catch { fn = null; } }
+    if (typeof fn !== 'function') return { ok: false, code: 'MODULE_NOT_OPEN', module: name, outcome: 'not-sent',
+      error: (reason === 'system' ? name + ' is a system module and is never opened in the Studio' : name + ' is not open in the Studio')
+        + '; this SSAM cannot read its published OML by itself yet, and nothing was opened.', continuation: fetchIt };
+    let got;
+    try { got = await fn({ module: name }, { root, lane, env, ...(assertSelected ? { assertSelected } : {}) }); }
+    catch (error) { return { ok: false, code: 'DOWNLOAD_FAILED', module: name, error: String(error?.message ?? error), continuation: fetchIt }; }
+    if (got?.ok !== true || typeof got.file !== 'string')
+      return { ...(got && typeof got === 'object' ? got : {}), ok: false, code: got?.code ?? 'DOWNLOAD_FAILED', module: got?.module ?? name,
+        ...(got?.continuation ? {} : { continuation: fetchIt }) };
+    let sha256;
+    try { sha256 = sha256Of(got.file); }
+    catch (error) { return { ok: false, code: 'DOWNLOAD_FAILED', module: name, file: got.file, error: 'The downloaded OML cannot be read: ' + error.message, continuation: fetchIt }; }
+    return { ok: true, path: got.file, sha256, module: got.module ?? name, key: got.key ?? null, versionId: got.versionId ?? null,
+      folder: got.folder ?? path.dirname(got.file), capturedBy: PUBLISHED_CAPTURE, reason };
+  };
+  const system = systemModuleName(module);
+  if (system) return published(system, 'system');
+  try { await selected(); } catch (error) { return (await studioTool()).notSelectedRefusal(error); }
+  let target, listed;
+  try { target = await client(); listed = await target.ok('list_open_modules', {}, { timeoutMs: 10000, ...(signal ? { signal } : {}) }); }
+  catch (error) {
+    const refused = (await studioTool()).studioFailure(error);
+    return { ...refused, code: refused.code ?? 'STUDIO_READ_FAILED', module, outcome: refused.outcome ?? 'not-sent',
+      continuation: refused.continuation ?? { tool: 'o11_studio', arguments: { command: 'status' }, why: 'as abas abertas do Studio não puderam ser lidas; veja o estado dele' } };
+  }
+  const all = (Array.isArray(listed?.modules) ? listed.modules : []).filter(m => m && m.hasESpace !== false && typeof m.name === 'string' && m.name);
+  const resolved = resolveOpenModule(module, { open: all, lane: 'o11' });
+  if (resolved.ok === true && resolved.via === 'unresolved') return published(module, 'not-open');
+  // Way 2: the open tab by its key; null sends the capture to way 3.
+  const byKey = async tab => {
+    const file = path.join(o11LaneOf(lane, { root, env }).local, 'snapshots', tab.name.replace(/[^\w.-]/g, '_') + '-' + stampOf(now()) + '-' + randomUUID().slice(0, 8) + '.oml');
+    try {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      const data = await target.ok('snapshot_module', { path: file, module_key: tab.key }, signal ? { signal } : undefined);
+      if (data?.key && data.key !== tab.key) return null;
+      return { ok: true, path: data?.path ?? file, sha256: data?.sha256 ?? sha256Of(data?.path ?? file), module: data?.name ?? tab.name, key: tab.key,
+        environment: data?.environment ?? tab.environment ?? null, snapshotId: data?.snapshot_id ?? null, capturedBy: OPEN_TAB_CAPTURE };
+    } catch (error) {
+      // A capture that may still be running in the Studio is never started a second time.
+      if (error?.code === 'CANCELLED' || signal?.aborted) return { ok: false, code: 'CANCELLED', method: 'snapshot_module', outcome: 'unknown',
+        error: 'The capture was cancelled; it stopped waiting.', continuation: { tool: 'o11_studio', arguments: { command: 'status' }, why: 'read the Studio state before repeating it' } };
+      if (error?.code === 'BRIDGE_TIMEOUT') return { ok: false, code: 'BRIDGE_TIMEOUT', method: 'snapshot_module', outcome: error.executed === false ? 'not-sent' : 'unknown',
+        error: 'The capture of ' + tab.name + ' got no answer in time.', continuation: { tool: 'o11_studio', arguments: { command: 'status' }, why: 'o Studio pode estar ocupado; leia o estado antes de repetir' } };
+      return null;
+    }
+  };
+  const named = resolved.ok === true ? all.filter(m => m.name === resolved.module || m.key === resolved.module) : [];
+  const tab = named.length === 1 && !OPENING(named[0]) && typeof named[0].key === 'string' && named[0].key ? named[0] : null;
+  const shot = tab ? await byKey(tab) : null;
+  if (shot) return shot;
+  // Way 3: the module is open in the Studio but must be selected first; the write waits its turn in the queue.
+  return withStudioWriteLock({ tool, args: { lane: 'o11', module }, lane, write: true, deps: lockDeps ?? { o11Root: root, o11Lane: lane }, signal },
+    () => open(module));
+}
+
+// ---- warm-up: a new capture gets its index in the background. Never blocks and never changes the caller's answer:
+// the caller only spawns a detached `node module-map.mjs --prefetch`, which reads through its OWN reader cache root
+// (<readers>-prefetch), so the capture an agent is reading in the lane reader is never evicted.
+const prefetched = new Set();
+export const prefetchCacheRoot = (lane, env = process.env) => readerConfig(lane, { env }).cacheRoot + '-prefetch';
+export function prefetchIndex(file, lane, { env = process.env, spawnProcess = spawn } = {}) {
+  try {
+    if (typeof file !== 'string' || !/\.oml$/i.test(file) || !['odc', 'o11'].includes(lane)) return { started: false, reason: 'not a capture' };
+    file = path.resolve(file);
+    if (!fs.existsSync(file)) return { started: false, reason: 'missing' };
+    const sha256 = sha256Of(file);
+    if (fs.existsSync(indexFile(lane, sha256, env))) return { started: false, reason: 'stored', sha256 };
+    // C15: a capture with the content of an indexed one is read through that one; nothing to warm.
+    const canonical = readCapture(file, lane, { env });
+    if (canonical.reused && fs.existsSync(indexFile(lane, canonical.rawSha256, env))) return { started: false, reason: 'content', sha256, contentSha256: canonical.contentSha256 };
+    if (prefetched.has(lane + ':' + sha256)) return { started: false, reason: 'started', sha256 };
+    prefetched.add(lane + ':' + sha256);
+    const cacheRoot = prefetchCacheRoot(lane, env);
+    const child = spawnProcess(process.execPath, [self, '--prefetch', file, '--lane', lane],
+      { detached: true, stdio: 'ignore', windowsHide: true, env: { ...env, SSAM_READER_CACHE_ROOT: cacheRoot } });
+    child.on?.('error', () => {}); child.unref?.();
+    return { started: true, sha256, cacheRoot };
+  } catch (error) { return { started: false, error: error.message }; }
+}
+// The helper itself. It never builds the ODC reader (a background build would race a foreground one): a stale
+// builder skips, and the next map builds the index through the lane reader instead.
+export async function prefetchMain({ file, lane }, { env = process.env, read = readSnapshot, fresh = () => lane !== 'odc' || !builderNeedsBuild() } = {}) {
+  const sha256 = sha256Of(file);
+  if (loadIndex(indexFile(lane, sha256, env), lane, sha256)) return { ok: true, skipped: 'stored', sha256 };
+  if (!fresh()) return { ok: false, skipped: 'the ODC reader needs a rebuild; prefetch never builds', sha256 };
+  const response = await read({ ...readerConfig(lane, { env }), request: { file, index: 'ensure', expectedSourceSha256: sha256 } });
+  return { ok: true, sha256, index: response.index ?? response.data?.index ?? null };
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const args = process.argv.slice(2);
+  const value = name => { const at = args.indexOf(name); return at >= 0 ? args[at + 1] : undefined; };
+  if (args[0] === '--prefetch') {
+    const lane = value('--lane'); const file = path.resolve(value('--prefetch') ?? '');
+    const record = outcome => { try {
+      const log = readerConfig(lane).cacheRoot; fs.mkdirSync(log, { recursive: true });
+      fs.appendFileSync(path.join(log, 'prefetch.jsonl'), JSON.stringify({ at: new Date().toISOString(), lane, file, ...outcome }) + '\n');
+    } catch { /* the warm-up leaves no trace when it cannot */ } };
+    prefetchMain({ file, lane }).then(record, error => { record({ ok: false, error: error.message }); process.exitCode = 1; });
+  } else {
+    process.stderr.write(JSON.stringify({ ok: false, error: 'Use ssam map / odc map; this entry only runs --prefetch <capture.oml> --lane o11|odc' }) + '\n');
+    process.exitCode = 1;
+  }
+}

@@ -1,0 +1,39 @@
+{
+ "description": "ListItem tipico: List de tarefas com ListItem; a acao de deslizar que nasce no RightActions ganha texto e OnClick que conclui a tarefa da linha (Task_SetDone) e recarrega a lista; o clique no item mostra o titulo.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "logic", "data": {"actions": [
+   {"name": "Task_SetDone", "kind": "server", "description": "Marca uma tarefa como concluida",
+    "inputs": [{"name": "TaskId", "type": "Task Identifier"}],
+    "vars": [{"name": "Item", "type": "Task"}],
+    "steps": [
+     {"get": "Task", "as": "GetTask", "where": "Task.Id = TaskId", "max": 1},
+     {"assign": {"Item": "GetTask.List.Current.Task", "Item.Done": "True"}, "as": "SetDone"},
+     {"update": "Task", "record": "Item", "as": "UpdateTask"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetOpenTasks", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "not Task.Done"}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "CompleteTask", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Conclui a tarefa deslizada e recarrega",
+    "inputs": [{"name": "TaskId", "type": "Task Identifier"}],
+    "steps": [
+     {"call": "Task_SetDone", "as": "MarkDone", "args": {"TaskId": "TaskId"}},
+     {"node": "IRefreshDataNode", "as": "RefreshOpen", "properties": {"DataSource": "IScreenAggregate:GetOpenTasks"}}]},
+   {"name": "ShowTask", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Mostra o titulo da tarefa tocada",
+    "inputs": [{"name": "TaskTitle", "type": "Text"}],
+    "steps": [{"node": "IMessageNode", "as": "TitleMessage", "properties": {"Message": "TaskTitle", "Type": "Info"}}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "OpenTaskList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetOpenTasks.List"},
+  {"op": "create", "parent": "$list", "type": "IListItem", "name": "OpenTaskItem", "as": "$li"},
+  {"op": "create", "parent": "$li/Content", "type": "IExpression", "as": "$liT"},
+  {"op": "set", "target": "$liT", "prop": "Value", "value": "GetOpenTasks.List.Current.Task.Title"},
+  {"op": "set", "target": "$li/OnClick", "prop": "Destination", "value": "IScreenAction:ShowTask"},
+  {"op": "set", "target": "$li/OnClick/TaskTitle", "prop": "Value", "value": "GetOpenTasks.List.Current.Task.Title"},
+  {"op": "create", "parent": "$li/RightActions/#IListItemAction", "type": "IExpression", "as": "$actT"},
+  {"op": "set", "target": "$actT", "prop": "Value", "value": "\"Done\""},
+  {"op": "set", "target": "$li/RightActions/#IListItemAction/OnClick", "prop": "Destination", "value": "IScreenAction:CompleteTask"},
+  {"op": "set", "target": "$li/RightActions/#IListItemAction/OnClick/TaskId", "prop": "Value", "value": "GetOpenTasks.List.Current.Task.Id"}
+ ]
+}

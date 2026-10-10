@@ -1,0 +1,24 @@
+<component name="SharedComponents" kind="screen" roles="Anonymous,Registered">
+  <script type="module">
+    import { CounterCard as Counter } from 'outsystems:ZZHtmlDashboardReview_UI/MainFlow';
+    export let last = 0;
+    export let received = 0;
+    export function receive(value) { last = value; received += 1; }
+  </script>
+  <style>
+    main { max-width:1080px; margin:40px auto; padding:24px; }
+    h1 { color:#192b40; font-size:32px; }
+    .cards { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; margin-top:24px; }
+    .result { color:#192b40; font-size:20px; margin-top:24px; }
+    @media(max-width:600px) { .cards { grid-template-columns:1fr; } main { margin:12px auto; } }
+  </style>
+  <main>
+    <h1>Um block, dois módulos</h1>
+    <p>Este módulo importa o contador publicado pelo laboratório, com CSS, estado, eventos e slot.</p>
+    <div class="cards">
+      <Counter id="First" title="Primeira instância" @changed="receive"><span slot="Footer">Conteúdo da primeira instância</span></Counter>
+      <Counter id="Second" title="Segunda instância" @changed="receive"><span slot="Footer">Conteúdo da segunda instância</span></Counter>
+    </div>
+    <p class="result">Último: {{last}} · Eventos recebidos: {{received}}</p>
+  </main>
+</component>

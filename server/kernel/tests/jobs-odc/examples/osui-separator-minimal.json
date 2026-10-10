@@ -1,0 +1,15 @@
+{
+ "description": "Separator do OSUI: a instancia, sem inputs obrigatorios.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "SeparatorDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "ITextWidget", "as": "$text1"},
+  {"op": "set", "target": "$text1", "prop": "Text", "value": "Above"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Separator1", "source": "IMobileBlock:Separator", "as": "$sp"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "ITextWidget", "as": "$text2"},
+  {"op": "set", "target": "$text2", "prop": "Text", "value": "Below"}
+ ]
+}

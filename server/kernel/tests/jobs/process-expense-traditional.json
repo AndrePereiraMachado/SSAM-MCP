@@ -1,0 +1,202 @@
+{
+ "description": "Sessao fria C: tela Traditional ExpenseReview (input Amount Decimal + expressao com o valor); processo ApproveExpense (input Amount, Detail, Start -> Human Activity Review -> End, layout); server action publica Expenses_Cleanup (Start -> End) e timer ExpensesCleanupTimer que a executa (escrito por uma LLM sem contexto na sessao fria C de 2026-09-04, passou a primeira)",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IWebFlow:MainFlow",
+   "type": "IWebScreen",
+   "name": "ExpenseReview",
+   "as": "$scr"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IInputParameter",
+   "name": "Amount",
+   "as": "$scrAmount"
+  },
+  {
+   "op": "set",
+   "target": "$scrAmount",
+   "prop": "DataType",
+   "value": "Decimal"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IWebBlockInstanceWidget/Title",
+   "type": "IExpressionWidget",
+   "as": "$title"
+  },
+  {
+   "op": "set",
+   "target": "$title",
+   "prop": "Value",
+   "value": "\"Expense review\""
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IWebBlockInstanceWidget/MainContent",
+   "type": "IExpressionWidget",
+   "name": "AmountExpression",
+   "as": "$amountExpr"
+  },
+  {
+   "op": "set",
+   "target": "$amountExpr",
+   "prop": "Value",
+   "value": "Amount"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IProcess",
+   "name": "ApproveExpense",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IInputParameter",
+   "name": "Amount",
+   "as": "$pAmount"
+  },
+  {
+   "op": "set",
+   "target": "$pAmount",
+   "prop": "DataType",
+   "value": "Decimal"
+  },
+  {
+   "op": "set",
+   "target": "$p",
+   "prop": "Detail",
+   "value": "\"Approve expense of \" + Amount"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IStartNode",
+   "name": "Start",
+   "as": "$start"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IHumanActivityNode",
+   "name": "Review",
+   "as": "$human"
+  },
+  {
+   "op": "set",
+   "target": "$human",
+   "prop": "Label",
+   "value": "Review"
+  },
+  {
+   "op": "set",
+   "target": "$human",
+   "prop": "Destination",
+   "value": "IWebScreen:ExpenseReview"
+  },
+  {
+   "op": "set",
+   "target": "$human/Amount",
+   "prop": "Value",
+   "value": "Amount"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEndNode",
+   "name": "End",
+   "as": "$end"
+  },
+  {
+   "op": "link",
+   "from": "$start",
+   "to": "$human"
+  },
+  {
+   "op": "link",
+   "from": "$human",
+   "to": "$end"
+  },
+  {
+   "op": "layout",
+   "target": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Expenses_Cleanup",
+   "as": "$cl"
+  },
+  {
+   "op": "set",
+   "target": "$cl",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "create",
+   "parent": "$cl",
+   "type": "IStartNode",
+   "as": "$cl0"
+  },
+  {
+   "op": "create",
+   "parent": "$cl",
+   "type": "IEndNode",
+   "as": "$cl9"
+  },
+  {
+   "op": "link",
+   "from": "$cl0",
+   "to": "$cl9"
+  },
+  {
+   "op": "layout",
+   "target": "$cl"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ITimer",
+   "name": "ExpensesCleanupTimer",
+   "as": "$timer"
+  },
+  {
+   "op": "set",
+   "target": "$timer",
+   "prop": "Action",
+   "value": "$cl"
+  },
+  {
+   "op": "set",
+   "target": "$timer",
+   "prop": "Description",
+   "value": "Limpeza de despesas"
+  },
+  {
+   "op": "dump",
+   "target": "$scr",
+   "depth": 4
+  },
+  {
+   "op": "dump",
+   "target": "$p",
+   "depth": 2
+  },
+  {
+   "op": "get",
+   "target": "$human"
+  },
+  {
+   "op": "get",
+   "target": "$timer"
+  }
+ ]
+}

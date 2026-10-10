@@ -1,0 +1,50 @@
+{
+ "description": "ODC: APAGAR, sem force, elementos cujo unico consumidor e o que a plataforma gera junto com eles (cobertura testada, fase 2). Cada entidade, static entity, client entity, structure (tambem as de REST e SOAP) nasce com o registo anonimo `<X> Record`, e cada app role com a excecao `Not <Role>`; o delete contava-os como consumidores e recusava um elemento recem-criado. Agora o tipo gerado so conta quando alguem fora do alvo o usa (a recusa entao nomeia quem o usa: tests/jobs-odc-negative/delete-entity-list-type-in-use.json e delete-role-exception-in-use.json). O usages mostra o registo anonimo com derived true e real 0. Mesmo cenario na faixa O11: tests/jobs/delete-generated-companions.json.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {
+    "entities": [{"name": "DelGenEntity", "attributes": [{"name": "Title", "type": "Text", "length": 50}]}],
+    "static": [{"name": "DelGenStatus", "records": [{"name": "Open"}, {"name": "Closed"}]}],
+    "structures": [{"name": "DelGenSummary", "attributes": [{"name": "Title", "type": "Text"}]}]}},
+  {"op": "create", "parent": "@espace", "type": "IClientEntity", "name": "DelGenLocal", "as": "$local"},
+  {"op": "create", "parent": "@espace", "type": "IAppRole", "name": "DelGenRole", "as": "$role"},
+  {"op": "usages", "target": "$DelGenSummary", "_why": "count 1, real 0: o IAttribute do registo anonimo 'DelGenSummary Record', derived true"},
+  {"op": "usages", "target": "$role", "_why": "count 1, real 0: a IRoleException 'Not DelGenRole', derived true"},
+
+  {"op": "create", "parent": "@espace", "type": "IRestClient", "name": "DelGenApi", "as": "$api"},
+  {"op": "set", "target": "$api", "prop": "BaseURL", "value": "https://example.com"},
+  {"op": "create", "parent": "$api", "type": "IRestStructure", "name": "DelGenBody", "as": "$body"},
+  {"op": "create", "parent": "$body", "type": "IRestStructureAttribute", "name": "Title", "as": "$bodyTitle"},
+  {"op": "set", "target": "$bodyTitle", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$api", "type": "IRestAction", "name": "DelGenGet", "as": "$get"},
+  {"op": "set", "target": "$get", "prop": "HTTPMethod", "value": "GET"},
+  {"op": "set", "target": "$get", "prop": "URLPath", "value": "/items"},
+  {"op": "set", "target": "$get", "prop": "ResponseFormat", "value": "JSON"},
+  {"op": "create", "parent": "$get", "type": "IRestActionOutput", "name": "Response", "as": "$getOut"},
+  {"op": "set", "target": "$getOut", "prop": "DataType", "value": "DelGenBody"},
+  {"op": "set", "target": "$getOut", "prop": "OutputPlacement", "value": "BodyPlacement"},
+  {"op": "create", "parent": "$api", "type": "IRestStructure", "name": "DelGenRestSpare", "as": "$restSpare"},
+  {"op": "create", "parent": "$api", "type": "IRestStaticEntity", "name": "DelGenRestStatic", "as": "$restStatic"},
+
+  {"op": "create", "parent": "@espace", "type": "ISOAPClient", "name": "DelGenSoap", "as": "$soap"},
+  {"op": "create", "parent": "$soap", "type": "ISOAPStructure", "name": "DelGenSoapStructure", "as": "$soapStructure"},
+  {"op": "create", "parent": "$soap", "type": "ISOAPStructurePolymorphic", "name": "DelGenSoapPolymorphic", "as": "$soapPoly"},
+  {"op": "create", "parent": "$soap", "type": "ISOAPStaticEntity", "name": "DelGenSoapStatic", "as": "$soapStatic"},
+  {"op": "create", "parent": "$soap", "type": "ISOAPStaticEntityPolymorphic", "name": "DelGenSoapStaticPolymorphic", "as": "$soapStaticPoly"},
+
+  {"op": "delete", "target": "$DelGenEntity", "_why": "sem force: brokenConsumers 0"},
+  {"op": "delete", "target": "$DelGenStatus"},
+  {"op": "delete", "target": "$DelGenSummary"},
+  {"op": "delete", "target": "$local"},
+  {"op": "delete", "target": "$role", "_why": "a plataforma apaga a 'Not DelGenRole' junto"},
+  {"op": "delete", "target": "$restSpare"},
+  {"op": "delete", "target": "$restStatic"},
+  {"op": "delete", "target": "$soapStructure"},
+  {"op": "delete", "target": "$soapPoly"},
+  {"op": "delete", "target": "$soapStatic"},
+  {"op": "delete", "target": "$soapStaticPoly"},
+  {"op": "find", "name": "Not DelGenRole", "_why": "lista vazia: a excecao saiu com o role"}
+ ]
+}

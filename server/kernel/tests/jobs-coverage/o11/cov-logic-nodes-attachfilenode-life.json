@@ -1,0 +1,112 @@
+{
+ "description": "Cobertura testada (fase 1, medir): life de OutSystems.Model.Logic.Nodes.IAttachFileNode (o11) em lgEmailPreparation. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IWebFlow:Emails",
+   "type": "IWebEmail",
+   "name": "CovSEmail",
+   "as": "$em"
+  },
+  {
+   "op": "set",
+   "target": "$em",
+   "prop": "Subject",
+   "value": "\"Cov\""
+  },
+  {
+   "op": "create",
+   "parent": "$em",
+   "type": "IExpressionWidget",
+   "as": "$emb"
+  },
+  {
+   "op": "set",
+   "target": "$emb",
+   "prop": "Value",
+   "value": "\"Cov\""
+  },
+  {
+   "op": "create",
+   "parent": "$em",
+   "type": "IPreparation",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IAttachFileNode",
+   "name": "CovAAttachFileNode",
+   "as": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "FileContent",
+   "value": "NullBinary()"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "FileName",
+   "value": "\"cov.bin\""
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$a"
+  },
+  {
+   "op": "link",
+   "from": "$a",
+   "connector": "Target",
+   "to": "$fe"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRAttachFileNode"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "link",
+   "from": "$a",
+   "connector": "Target",
+   "to": "$b"
+  },
+  {
+   "op": "link",
+   "from": "$b",
+   "connector": "Target",
+   "to": "$fe"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "x": 600,
+   "y": 400
+  }
+ ]
+}

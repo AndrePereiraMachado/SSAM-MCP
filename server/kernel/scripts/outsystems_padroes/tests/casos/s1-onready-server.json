@@ -1,0 +1,34 @@
+{
+ "description": "NEG S1 (OutSystems padroes): OnReady da tela chama uma screen action que chama o servidor.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "logic", "data": {"actions": [
+   {"name": "GetGreetingText", "kind": "server",
+    "description": "Monta a saudacao da tela no servidor; chamada no OnReady do controle S1.",
+    "outputs": [{"name": "Greeting", "type": "Text", "description": "Saudacao mostrada no topo da tela."}],
+    "steps": [{"assign": {"Greeting": "\"Welcome\""}, "as": "Build the greeting"}]}
+  ]}},
+  {"op": "create", "parent": "@espace", "type": "IRole", "name": "NegS1Viewer", "as": "$role"},
+  {"op": "set", "target": "$role", "prop": "Description", "value": "Perfil que pode abrir a tela do controle negativo S1."},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "NegOnReadyScreen", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "set", "target": "$scr", "prop": "Description", "value": "Tela que busca dados no OnReady (violacao proposital da S1)."},
+  {"op": "link", "from": "$scr", "connector": "Roles", "to": "$role"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "GreetingText", "as": "$v"},
+  {"op": "set", "target": "$v", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$v", "prop": "Description", "value": "Saudacao carregada no OnReady e mostrada na tela."},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$expr"},
+  {"op": "set", "target": "$expr", "prop": "Value", "value": "GreetingText"},
+  {"op": "logic", "data": {"actions": [
+   {"name": "LoadGreetingOnReady", "kind": "screen", "owner": "IMobileScreen:NegOnReadyScreen",
+    "description": "Carrega a saudacao no OnReady chamando o servidor (violacao proposital da S1).",
+    "steps": [
+     {"call": "GetGreetingText", "as": "FetchGreeting"},
+     {"assign": {"GreetingText": "FetchGreeting.Greeting"}, "as": "Show the greeting"}
+    ]}
+  ]}},
+  {"op": "set", "target": "$scr/OnReady", "prop": "Destination", "value": "$scr/LoadGreetingOnReady"}
+ ]
+}

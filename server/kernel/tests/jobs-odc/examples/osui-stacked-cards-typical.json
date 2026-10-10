@@ -1,0 +1,32 @@
+{
+ "description": "StackedCards do OSUI: List de produtos no Content, um card por linha, e OnRightSwipe/OnLeftSwipe contando curtidas e descartes.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [{"name": "Name", "type": "Text", "length": 100, "mandatory": true}, {"name": "Price", "type": "Currency"}, {"name": "ImageUrl", "type": "Text", "length": 500}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "SwipeProducts", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Swipe\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$GetProducts"},
+  {"op": "create", "parent": "$GetProducts", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Likes", "as": "$vLikes"},
+  {"op": "set", "target": "$vLikes", "prop": "DataType", "value": "Integer"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Skips", "as": "$vSkips"},
+  {"op": "set", "target": "$vSkips", "prop": "DataType", "value": "Integer"},
+  {"op": "logic", "data": {"actions": [{"name": "Liked", "kind": "screen", "owner": "IMobileScreen:SwipeProducts", "steps": [{"assign": {"Likes": "Likes + 1"}, "as": "Count"}]}]}},
+  {"op": "logic", "data": {"actions": [{"name": "Skipped", "kind": "screen", "owner": "IMobileScreen:SwipeProducts", "steps": [{"assign": {"Skips": "Skips + 1"}, "as": "Count"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "StackedCards1", "source": "IMobileBlock:StackedCards", "empty": true, "as": "$sc"},
+  {"op": "set", "target": "$sc/StackedOptions", "prop": "Value", "value": "Entities.StackedCardsPosition.Top"},
+  {"op": "set", "target": "$sc/Items", "prop": "Value", "value": "3"},
+  {"op": "set", "target": "$sc/OnRightSwipe", "prop": "Handler", "value": "IMobileScreen:SwipeProducts/Liked"},
+  {"op": "set", "target": "$sc/OnLeftSwipe", "prop": "Handler", "value": "IMobileScreen:SwipeProducts/Skipped"},
+  {"op": "create", "parent": "$sc/Content", "type": "IList", "name": "CardList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetProducts.List"},
+  {"op": "create", "parent": "$list", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "GetProducts.List.Current.Product.Name"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$expr2"},
+  {"op": "set", "target": "$expr2", "prop": "Value", "value": "Likes + \" liked, \" + Skips + \" skipped\""}
+ ]
+}

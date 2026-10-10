@@ -1,0 +1,29 @@
+{
+ "description": "ODC: regras PostgreSQL decididas pelo tipo de um atributo da BASE. {WfCovTask}.[IsDone] e Boolean e e comparado com 1 (o bit do SQL Server aceitava; o PostgreSQL nao tem boolean = integer) e {WfCovTask}.[Title] e Text somado com '+' (o PostgreSQL concatena com || ou CONCAT). O job sozinho nao sabe os tipos: o preflight deixa os nomes em unresolvedSql e o CheckBase recusa contra a base carregada, antes da primeira mutacao. Roda em OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane.",
+ "base": "job:data-full-model",
+ "expectValid": true,
+ "expectError": [
+  "op #0 (SQL in logic action 'WfCov_Tasks_DoneSql' get 'ReadTasks', line 2): {WfCovTask}.[IsDone] is Boolean and is compared with the number 1; PostgreSQL (ODC) has no boolean = integer operator and refuses the query: compare with TRUE or FALSE",
+  "op #0 (SQL in logic action 'WfCov_Tasks_DoneSql' get 'ReadTasks', line 3): '+' does not concatenate text in PostgreSQL (ODC) ({WfCovTask}.[Title] is Text); use || or CONCAT(...)"
+ ],
+ "ops": [
+  {"op": "logic", "data": {"actions": [
+   {
+    "name": "WfCov_Tasks_DoneSql",
+    "kind": "server",
+    "description": "Prova negativa: Boolean comparado com 1 e Text somado com + na faixa ODC",
+    "outputs": [{"name": "Tasks", "type": "WfCovTask List"}],
+    "steps": [
+     {
+      "get": "WfCovTask",
+      "sql": true,
+      "as": "ReadTasks",
+      "statement": "SELECT {WfCovTask}.* FROM {WfCovTask}\nWHERE {WfCovTask}.[IsDone] = 1\n  AND {WfCovTask}.[Title] + ' (copy)' <> {WfCovTask}.[Title]",
+      "max": 50
+     },
+     {"assign": {"Tasks": "ReadTasks.List"}, "as": "SetOutput"}
+    ]
+   }
+  ]}}
+ ]
+}

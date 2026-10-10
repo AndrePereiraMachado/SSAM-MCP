@@ -1,0 +1,119 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.Logic.Nodes.IExecuteServerActionNode (odc) em serverFlow. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "CovSFlow",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IExecuteServerActionNode",
+   "name": "CovAExecuteServerActionNode",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "CovSCallee",
+   "as": "$callee"
+  },
+  {
+   "op": "create",
+   "parent": "$callee",
+   "type": "IStartNode",
+   "as": "$cs"
+  },
+  {
+   "op": "create",
+   "parent": "$callee",
+   "type": "IEndNode",
+   "as": "$ce"
+  },
+  {
+   "op": "link",
+   "from": "$cs",
+   "to": "$ce"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Action",
+   "value": "$callee"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$a"
+  },
+  {
+   "op": "link",
+   "from": "$a",
+   "connector": "Target",
+   "to": "$fe"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "AnimationEffect",
+   "value": "Highlight"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRExecuteServerActionNode"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "link",
+   "from": "$a",
+   "connector": "Target",
+   "to": "$b"
+  },
+  {
+   "op": "link",
+   "from": "$b",
+   "connector": "Target",
+   "to": "$fe"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "x": 600,
+   "y": 400
+  }
+ ],
+ "expectedMessages": [
+  {
+   "id": "UnusedUserAction",
+   "element": "WrightFlood (ESpace) / CovSFlow (ServerAction)",
+   "why": "ODC: um app nao expoe server action publica (o kernel recusa, como o Studio ao vivo); a action fica privada e sem consumidor neste job de cobertura"
+  }
+ ]
+}

@@ -1,0 +1,18 @@
+{
+ "description": "Cobertura testada (fase 1, medir): del de OutSystems.Model.UI.Web.IWebTheme (o11) em espaceWeb. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IWebTheme",
+   "name": "CovAWebTheme",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

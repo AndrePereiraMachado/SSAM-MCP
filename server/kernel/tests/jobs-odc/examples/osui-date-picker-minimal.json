@@ -1,0 +1,17 @@
+{
+ "description": "DatePicker do OSUI: o Input de exemplo ligado a uma variavel Date e o evento obrigatorio OnSelected guardando a data.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "DatePickerDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "PickedDate", "as": "$vPickedDate"},
+  {"op": "set", "target": "$vPickedDate", "prop": "DataType", "value": "Date"},
+  {"op": "logic", "data": {"actions": [{"name": "DatePicked", "kind": "screen", "owner": "IMobileScreen:DatePickerDemo", "inputs": [{"name": "SelectedDateTime", "type": "Date Time"}], "steps": [{"assign": {"PickedDate": "DateTimeToDate(SelectedDateTime)"}, "as": "Keep"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "DatePicker1", "source": "IMobileBlock:DatePicker", "as": "$dp"},
+  {"op": "set", "target": "$dp/Datepicker/#IInput", "prop": "Variable", "value": "PickedDate"},
+  {"op": "set", "target": "$dp/OnSelected", "prop": "Handler", "value": "IMobileScreen:DatePickerDemo/DatePicked"},
+  {"op": "set", "target": "$dp/OnSelected/SelectedDateTime", "prop": "Value", "value": "SelectedDateTime"}
+ ]
+}

@@ -1,0 +1,66 @@
+{
+ "description": "Cobertura testada (fase 2): del de OutSystems.Model.Logic.Nodes.ISwitchCondition (odc) em switchNode. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "CovSFlow",
+   "as": "$fp"
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "ISwitchNode",
+   "as": "$p"
+  },
+  {
+   "op": "set",
+   "target": "$p",
+   "prop": "Label",
+   "value": "CovSSwitch"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$p"
+  },
+  {
+   "op": "link",
+   "from": "$p",
+   "connector": "OtherwiseTarget",
+   "to": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "ISwitchCondition",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ],
+ "expectedMessages": [
+  {
+   "id": "UnusedUserAction",
+   "element": "WrightFlood (ESpace) / CovSFlow (ServerAction)",
+   "why": "ODC: um app nao expoe server action publica (o kernel recusa, como o Studio ao vivo); a action fica privada e sem consumidor neste job de cobertura"
+  }
+ ]
+}

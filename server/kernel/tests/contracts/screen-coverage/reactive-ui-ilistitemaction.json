@@ -1,0 +1,110 @@
+{
+  "fixture": "reactive-ui",
+  "features": [
+    "native-widget",
+    "mobile:IListItemAction"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "RowsList",
+            "type": "IList",
+            "properties": {
+              "Source": "Rows"
+            },
+            "children": [
+              {
+                "name": "RowItem",
+                "type": "IListItem",
+                "properties": {},
+                "slots": {
+                  "Content": [
+                    {
+                      "name": "Part3",
+                      "type": "ITextWidget",
+                      "properties": {
+                        "Text": "Content"
+                      }
+                    }
+                  ],
+                  "RightActions": [
+                    {
+                      "name": "Subject",
+                      "type": "IListItemAction",
+                      "properties": {
+                        "Style": "\"coverage\""
+                      },
+                      "events": {
+                        "OnClick": {
+                          "destination": "IMobileScreen:Coverage/Handle1"
+                        }
+                      },
+                      "children": [
+                        {
+                          "name": "Part2",
+                          "type": "ITextWidget",
+                          "properties": {
+                            "Text": "Swipe"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ],
+        "vars": [
+          {
+            "name": "Rows",
+            "type": "ScreenRow List"
+          }
+        ]
+      }
+    ],
+    "data": {
+      "structures": [
+        {
+          "name": "ScreenRow",
+          "attributes": [
+            {
+              "name": "Name",
+              "type": "Text"
+            },
+            {
+              "name": "Value",
+              "type": "Integer"
+            }
+          ]
+        }
+      ]
+    },
+    "logic": {
+      "actions": [
+        {
+          "name": "Handle1",
+          "kind": "screen",
+          "owner": "IMobileScreen:Coverage",
+          "steps": []
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IMobileScreen:Coverage/RowsList/RowItem/RightActions/Subject",
+    "prop": "Style",
+    "value": "\"changed\""
+  }
+}

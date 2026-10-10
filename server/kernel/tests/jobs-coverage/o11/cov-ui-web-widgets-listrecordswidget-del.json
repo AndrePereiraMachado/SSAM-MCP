@@ -1,0 +1,49 @@
+{
+ "description": "Cobertura testada (fase 1, medir): del de OutSystems.Model.UI.Web.Widgets.IListRecordsWidget (o11) em uiWebContainerEntity. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "entities": [
+     {
+      "name": "CovSEntity",
+      "attributes": [
+       {
+        "name": "Title",
+        "type": "Text",
+        "length": 50
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "create",
+   "parent": "IWebFlow:MainFlow",
+   "type": "IWebScreen",
+   "name": "CovSWebScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IWebBlockInstanceWidget/MainContent",
+   "type": "IContainerWidget",
+   "name": "CovSBox",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IListRecordsWidget",
+   "name": "CovAListRecordsWidget",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

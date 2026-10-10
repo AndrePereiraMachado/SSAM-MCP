@@ -1,0 +1,24 @@
+{
+ "description": "ColumnsMediumRight do OSUI com configuracao: gutter Large, colunas empilhadas no telefone e um conteudo ligado a dados em cada placeholder Column1..2.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [{"name": "Name", "type": "Text", "length": 100, "mandatory": true}, {"name": "Price", "type": "Currency"}, {"name": "ImageUrl", "type": "Text", "length": 500}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ColumnsMediumRightLayout", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Columns\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$GetProducts"},
+  {"op": "create", "parent": "$GetProducts", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "create", "parent": "$GetProducts", "type": "ISort", "as": "$GetProductsSort"},
+  {"op": "set", "target": "$GetProductsSort", "prop": "Attribute", "value": "Product.Name"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ColumnsMediumRight1", "source": "IMobileBlock:ColumnsMediumRight", "as": "$cols"},
+  {"op": "set", "target": "$cols/GutterSize", "prop": "Value", "value": "Entities.GutterSize.Large", "_why": "inputs de static entity do OSUI: Entities.<Entidade>.<Registro>"},
+  {"op": "set", "target": "$cols/PhoneBehavior", "prop": "Value", "value": "Entities.BreakColumns.All"},
+  {"op": "create", "parent": "$cols/Column1", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "\"Products: \" + GetProducts.Count"},
+  {"op": "create", "parent": "$cols/Column2", "type": "IExpression", "as": "$expr2"},
+  {"op": "set", "target": "$expr2", "prop": "Value", "value": "\"Column 2\""}
+ ]
+}

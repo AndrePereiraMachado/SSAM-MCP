@@ -1,0 +1,78 @@
+{
+ "description": "Linha de carrinho com botoes - e + : a screen action chama a server action, grava a quantidade nova em GetCartItems.List[Linha] e o resumo devolvido pelo servidor, sem Refresh Data da lista.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {
+   "entities": [{"name": "CartItem", "attributes": [
+    {"name": "ProductName", "type": "Text", "length": 100, "mandatory": true},
+    {"name": "UnitPrice", "type": "Currency"},
+    {"name": "Quantity", "type": "Integer"}]}],
+   "structures": [{"name": "CartSummary", "attributes": [
+    {"name": "ItemCount", "type": "Integer"},
+    {"name": "Total", "type": "Currency"}]}]}},
+
+  {"op": "logic", "_why": "1. servidor: o resumo e a troca de quantidade; a troca devolve a quantidade nova E o resumo, para a tela nao reler a lista", "data": {"actions": [
+   {"name": "Cart_GetSummary", "kind": "server",
+    "outputs": [{"name": "Summary", "type": "CartSummary"}],
+    "steps": [
+     {"get": "CartItem", "as": "ReadLines"},
+     {"foreach": "ReadLines.List", "as": "EachLine", "do": [
+      {"assign": {"Summary.ItemCount": "Summary.ItemCount + ReadLines.List.Current.CartItem.Quantity",
+                  "Summary.Total": "Summary.Total + ReadLines.List.Current.CartItem.Quantity * ReadLines.List.Current.CartItem.UnitPrice"}, "as": "Accumulate"}]}]},
+   {"name": "Cart_ChangeQuantity", "kind": "server",
+    "inputs": [{"name": "CartItemId", "type": "CartItem Identifier"}, {"name": "Delta", "type": "Integer"}],
+    "outputs": [{"name": "NewQuantity", "type": "Integer"}, {"name": "Summary", "type": "CartSummary"}],
+    "vars": [{"name": "Line", "type": "CartItem"}],
+    "steps": [
+     {"get": "CartItem", "as": "ReadLine", "where": "CartItem.Id = CartItemId", "max": 1},
+     {"assign": {"Line": "ReadLine.List.Current.CartItem"}, "as": "TakeLine"},
+     {"assign": {"Line.Quantity": "Max(0, Line.Quantity + Delta)"}, "as": "ApplyDelta"},
+     {"update": "CartItem", "record": "Line", "as": "SaveLine"},
+     {"call": "Cart_GetSummary", "as": "Recalculate"},
+     {"assign": {"NewQuantity": "Line.Quantity", "Summary": "Recalculate.Summary"}, "as": "SetOutputs"}]}]}},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "Cart", "as": "$scr", "_why": "2. a tela: a lista do carrinho e o resumo"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetCartItems", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:CartItem"}},
+
+  {"op": "logic", "data": {"actions": [
+   {"name": "LoadSummary", "kind": "data", "owner": "IMobileScreen:Cart", "fetch": "AtStart",
+    "outputs": [{"name": "Summary", "type": "CartSummary"}],
+    "steps": [{"call": "Cart_GetSummary", "as": "ReadSummary"}, {"assign": {"Summary": "ReadSummary.Summary"}, "as": "SetSummary"}]},
+   {"name": "ChangeQuantity", "kind": "screen", "owner": "IMobileScreen:Cart",
+    "inputs": [{"name": "RowIndex", "type": "Integer"}, {"name": "Delta", "type": "Integer"}],
+    "steps": [
+     {"call": "Cart_ChangeQuantity", "as": "Change", "args": {"CartItemId": "GetCartItems.List[RowIndex].CartItem.Id", "Delta": "Delta"}},
+     {"assign": {"GetCartItems.List[RowIndex].CartItem.Quantity": "Change.NewQuantity", "LoadSummary.Summary": "Change.Summary"}, "as": "ApplyResult"}]}]}},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "CartLines", "as": "$list", "_why": "3. a linha: nome, - quantidade +"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetCartItems.List"},
+  {"op": "create", "parent": "$list", "type": "IContainer", "name": "CartLine", "as": "$line"},
+  {"op": "set", "target": "$line", "prop": "Style", "value": "\"display-flex align-items-center\""},
+  {"op": "create", "parent": "$line", "type": "IExpression", "as": "$product"},
+  {"op": "set", "target": "$product", "prop": "Value", "value": "GetCartItems.List.Current.CartItem.ProductName"},
+  {"op": "create", "parent": "$line", "type": "IButton", "name": "MinusButton", "as": "$minus"},
+  {"op": "set", "target": "$minus/#ITextWidget", "prop": "Text", "value": "-"},
+  {"op": "set", "target": "$minus/OnClick", "prop": "Destination", "value": "IMobileScreen:Cart/ChangeQuantity"},
+  {"op": "set", "target": "$minus/OnClick/RowIndex", "prop": "Value", "value": "GetCartItems.List.CurrentRowNumber", "_why": "o indice da linha clicada; a screen action le e escreve List[RowIndex]"},
+  {"op": "set", "target": "$minus/OnClick/Delta", "prop": "Value", "value": "-1"},
+  {"op": "create", "parent": "$line", "type": "IExpression", "as": "$qty"},
+  {"op": "set", "target": "$qty", "prop": "Value", "value": "GetCartItems.List.Current.CartItem.Quantity"},
+  {"op": "create", "parent": "$line", "type": "IButton", "name": "PlusButton", "as": "$plus"},
+  {"op": "set", "target": "$plus/#ITextWidget", "prop": "Text", "value": "+"},
+  {"op": "set", "target": "$plus/OnClick", "prop": "Destination", "value": "IMobileScreen:Cart/ChangeQuantity"},
+  {"op": "set", "target": "$plus/OnClick/RowIndex", "prop": "Value", "value": "GetCartItems.List.CurrentRowNumber"},
+  {"op": "set", "target": "$plus/OnClick/Delta", "prop": "Value", "value": "1"},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "CartSummaryBox", "as": "$sum", "_why": "4. o resumo le a saida da data action, que a screen action atualiza"},
+  {"op": "create", "parent": "$sum", "type": "IExpression", "as": "$count"},
+  {"op": "set", "target": "$count", "prop": "Value", "value": "\"Items: \" + LoadSummary.Summary.ItemCount"},
+  {"op": "create", "parent": "$sum", "type": "IExpression", "as": "$total"},
+  {"op": "set", "target": "$total", "prop": "Value", "value": "\"Total: \" + FormatCurrency(LoadSummary.Summary.Total, \"$\", 2, \".\", \",\")"},
+
+  {"op": "dump", "target": "IMobileScreen:Cart/ChangeQuantity", "depth": 3}
+ ]
+}

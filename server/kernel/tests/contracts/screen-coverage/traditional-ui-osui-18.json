@@ -1,0 +1,234 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "OutSystemsUI",
+    "OutSystemsUIWeb:UserInitials",
+    "OutSystemsUIWeb:Video",
+    "OutSystemsUIWeb:Website_Section",
+    "OutSystemsUIWeb:Wizard",
+    "OutSystemsUIWeb:WizardItem"
+  ],
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "tests/fixtures/outsystems-ui-web.oml",
+      "elements": [
+        "IWebBlock:UserInitials",
+        "IWebBlock:Video",
+        "IWebBlock:Website_Section",
+        "IWebBlock:Wizard",
+        "IWebBlock:WizardItem"
+      ]
+    }
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Ui85_UserInitials",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:UserInitials",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {}
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui86_Video",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:Video",
+            "args": {
+              "SourceFile": "\"Coverage\"",
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {}
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui87_Website_Section",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:Website_Section",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui88_Wizard",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:Wizard",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "IWebBlockInstanceWidget",
+                  "properties": {},
+                  "source": "IWebBlock:WizardItem",
+                  "args": {
+                    "Step": "Entities.Step.Past",
+                    "ExtendedClass": "\"coverage\""
+                  },
+                  "slots": {
+                    "Label": [
+                      {
+                        "name": "Part3",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Component content"
+                        }
+                      }
+                    ],
+                    "Icon": [
+                      {
+                        "name": "Part4",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Component content"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui89_WizardItem",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:WizardItem",
+            "args": {
+              "Step": "Entities.Step.Past",
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Label": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Icon": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      }
+    ]
+  },
+  "mutations": [
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui85_UserInitials/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "UserInitials"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui86_Video/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Video"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui87_Website_Section/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Website_Section"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui88_Wizard/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Wizard"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui89_WizardItem/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "WizardItem"
+    }
+  ]
+}

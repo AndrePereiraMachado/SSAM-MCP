@@ -1,0 +1,11 @@
+{
+ "description": "Diagnostico tipico: um erro do Verify reproduzido de proposito (Input sem Variable). expectValid false e o erro declarado em expectedMessages: o job passa porque o erro e o esperado. Nunca entregavel; serve para ler validation.new e o caminho do elemento.",
+ "base": "job:ex-base",
+ "expectValid": false,
+ "expectedMessages": [
+  {"id": "RequiredPropertyValue_Property", "element": "NoVariableInput (Input) / Variable (CustomProperty)", "why": "Erro reproduzido de proposito: um Input precisa de Variable."}
+ ],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IInput", "name": "NoVariableInput", "as": "$in"}
+ ]
+}

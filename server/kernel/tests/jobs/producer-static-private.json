@@ -1,0 +1,26 @@
+{
+  "description": "Static entity producer with explicit visibility for reference contract tests.",
+  "base": "blank-service.oml",
+  "expectValid": true,
+  "ops": [
+    {
+      "op": "spec",
+      "data": {
+        "static": [
+          {
+            "name": "ReferenceStatus",
+            "public": false,
+            "records": [
+              {
+                "name": "Active"
+              },
+              {
+                "name": "Inactive"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

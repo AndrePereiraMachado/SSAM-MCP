@@ -1,0 +1,37 @@
+{
+ "description": "DropdownSearch do OSUI com dados: uma data action monta a lista de opcoes a partir da static entity Category e o OnChanged grava o Id escolhido numa variavel Category Identifier.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"static": [{"name": "Category", "records": [{"name": "Books"}, {"name": "Games"}, {"name": "Music"}]}]}},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CategoryPicker", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "SelectedCategoryId", "as": "$sel"},
+  {"op": "set", "target": "$sel", "prop": "DataType", "value": "Category Identifier"},
+
+  {"op": "logic", "data": {"actions": [
+   {"name": "GetCategoryOptions", "kind": "data", "owner": "IMobileScreen:CategoryPicker", "fetch": "AtStart",
+    "outputs": [{"name": "Options", "type": "DropdownOption List"}],
+    "vars": [{"name": "Option", "type": "DropdownOption"}],
+    "steps": [
+     {"get": "Category", "as": "ReadCategories", "sort": "Category.Order"},
+     {"foreach": "ReadCategories.List", "as": "EachCategory", "do": [
+      {"assign": {"Option.Value": "IntegerToText(ReadCategories.List.Current.Category.Id)", "Option.Label": "ReadCategories.List.Current.Category.Label"}, "as": "FillOption"},
+      {"call": "ListAppend", "as": "AddOption", "args": {"List": "Options", "Element": "Option"}}]}]},
+   {"name": "CategoryChosen", "kind": "screen", "owner": "IMobileScreen:CategoryPicker",
+    "inputs": [{"name": "Selection", "type": "DropdownOption List"}],
+    "steps": [{"assign": {"SelectedCategoryId": "If(Selection.Empty, NullIdentifier(), IntegerToIdentifier(TextToInteger(Selection[0].Value)))"}, "as": "KeepCategory"}]}]}},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "CategorySearch", "source": "IMobileBlock:DropdownSearch", "as": "$dd"},
+  {"op": "set", "target": "$dd/OptionsList", "prop": "Value", "value": "GetCategoryOptions.Options", "_why": "as opcoes vem da data action"},
+  {"op": "set", "target": "$dd/Prompt", "prop": "Value", "value": "\"Pick a category\""},
+  {"op": "set", "target": "$dd/OnChanged", "prop": "Handler", "value": "IMobileScreen:CategoryPicker/CategoryChosen"},
+  {"op": "set", "target": "$dd/OnChanged/Selection", "prop": "Value", "value": "SelectedOptionList"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$show"},
+  {"op": "set", "target": "$show", "prop": "Value", "value": "If(SelectedCategoryId = NullIdentifier(), \"No category\", \"Category chosen\")"},
+
+  {"op": "get", "target": "$dd/#IEventHandler"}
+ ]
+}

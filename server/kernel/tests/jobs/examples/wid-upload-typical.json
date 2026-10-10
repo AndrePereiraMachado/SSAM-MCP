@@ -1,0 +1,33 @@
+{
+ "description": "Upload tipico: FileContent e FileName ligados a variaveis da tela; OnChange grava o arquivo pela server action TaskFile_Create (entidade TaskFile com Binary Data) e mostra uma mensagem.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "TaskFile", "attributes": [
+   {"name": "FileName", "type": "Text", "mandatory": true, "length": 250},
+   {"name": "Content", "type": "Binary Data"}]}]}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "TaskFile_Create", "kind": "server", "description": "Guarda um arquivo enviado",
+    "inputs": [{"name": "FileName", "type": "Text"}, {"name": "Content", "type": "Binary Data"}],
+    "outputs": [{"name": "TaskFileId", "type": "TaskFile Identifier"}],
+    "vars": [{"name": "Item", "type": "TaskFile"}],
+    "steps": [
+     {"assign": {"Item.FileName": "FileName", "Item.Content": "Content"}, "as": "FillTaskFile"},
+     {"create": "TaskFile", "record": "Item", "as": "CreateTaskFile"},
+     {"assign": {"TaskFileId": "CreateTaskFile.Id"}, "as": "KeepId"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "UploadContent", "as": "$vContent"},
+  {"op": "set", "target": "$vContent", "prop": "DataType", "value": "Binary Data"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "UploadName", "as": "$vName"},
+  {"op": "set", "target": "$vName", "prop": "DataType", "value": "Text"},
+  {"op": "logic", "data": {"actions": [
+   {"name": "UploadOnChange", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Grava o arquivo escolhido",
+    "steps": [
+     {"call": "TaskFile_Create", "as": "SaveTaskFile", "args": {"FileName": "UploadName", "Content": "UploadContent"}},
+     {"node": "IMessageNode", "as": "UploadedMessage", "properties": {"Message": "UploadName + \" uploaded\"", "Type": "Success"}}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IUpload", "name": "TaskFileUpload", "as": "$up"},
+  {"op": "set", "target": "$up", "prop": "FileContent", "value": "UploadContent"},
+  {"op": "set", "target": "$up", "prop": "FileName", "value": "UploadName"},
+  {"op": "set", "target": "$up/OnChange", "prop": "Destination", "value": "IScreenAction:UploadOnChange"}
+ ]
+}

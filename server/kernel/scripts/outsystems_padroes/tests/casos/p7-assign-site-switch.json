@@ -1,0 +1,17 @@
+{
+ "description": "NEG P7 (OutSystems padroes): assign de uma site property de switch (Site.IsFeatureHardEnabled, listada em config.p7.siteSwitches).",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "ISiteProperty", "name": "IsFeatureHardEnabled", "as": "$sw"},
+  {"op": "set", "target": "$sw", "prop": "DataType", "value": "Boolean"},
+  {"op": "set", "target": "$sw", "prop": "DefaultValue", "value": "True"},
+  {"op": "set", "target": "$sw", "prop": "Description", "value": "Trava dura da funcionalidade; so uma pessoa muda no Service Center (controle P7)."},
+  {"op": "logic", "data": {"actions": [
+   {"name": "DisableFeature", "kind": "server", "public": true,
+    "description": "Desliga a funcionalidade gravando a site property de switch (violacao proposital do lint P7).",
+    "steps": [{"assign": {"Site.IsFeatureHardEnabled": "False"}, "as": "Turn the feature off"}]}
+  ]}}
+ ]
+}

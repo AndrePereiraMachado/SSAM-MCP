@@ -1,0 +1,802 @@
+{
+  "schemaVersion": "ssam-discovery-fragment/1",
+  "contract": "ssam-catalog-contribution/1",
+  "front": "A",
+  "title": "Aggregates and SQL: aggregate node, screen aggregate, sources, filters, sorts, joins, group by, aggregated and calculated columns; SQL node, SQL parameters and SQL output",
+  "reviewedAt": "2026-09-23",
+  "synonyms": {
+    "aggregate": ["agregado", "agregados", "aggregates"],
+    "source": [
+      "fonte do agregado", "fontes do agregado", "fonte de dados do agregado", "aggregate source", "aggregate sources", "aggregate data source",
+      "entidade de origem do agregado"
+    ],
+    "filter": ["filtro", "filtros", "filtrar", "filtre", "filters", "filtrada", "filtrado", "filtradas", "filtrados"],
+    "sort": ["ordenação", "ordene", "ordenar", "ordenar por", "ordenado", "ordenada", "sorted", "sorts"],
+    "join": ["junção", "junções", "joins"],
+    "group": ["agrupar", "agrupe", "agrupamento", "agrupado", "agrupada", "agrupados", "agrupar por", "grouped"],
+    "aggregated": [
+      "agregada", "agregadas", "coluna agregada", "colunas agregadas", "coluna de soma", "coluna de contagem", "coluna de media", "sum column", "count column",
+      "average column", "soma agregada", "contagem agregada"
+    ],
+    "column": ["coluna", "colunas", "columns"],
+    "calculated": [
+      "coluna calculada", "colunas calculadas", "calculated columns", "computed column", "computed columns", "coluna com formula", "formula column",
+      "atributo calculado do agregado"
+    ],
+    "sql input parameter": ["consulta sql com parametro de entrada", "sql query with an input parameter", "sql query with input parameters", "parametro de entrada da consulta sql"],
+    "log aggregation": ["aggregate the logs", "aggregate logs", "aggregate the crash logs", "aggregate the error logs", "aggregate the server logs"],
+    "sql server": ["microsoft sql server", "external sql server"]
+  },
+  "capabilities": [
+    {
+      "id": "logic.aggregate",
+      "supersedes": ["logic.aggregate"],
+      "category": "logic",
+      "title": "Aggregates (IAggregateNode, IScreenAggregate)",
+      "keywords": [
+        "aggregate", "agregado", "aggregate node", "screen aggregate", "aggregate de tela", "agregado de tela", "consulta filtrada", "filtro do agregado",
+        "aggregate filter", "carregar dados da entidade", "load entity records", "consulta ordenada", "ordenação do agregado", "aggregate sort", "left join",
+        "inner join", "aggregate join", "junção de entidades", "join entities", "consulta agrupada", "agrupamento por coluna", "group by column",
+        "agrupar registos", "agrupar registros", "group records", "aggregated column", "coluna agregada", "count column", "sum column", "coluna de contagem",
+        "coluna de soma", "calculated column", "coluna calculada", "fonte do agregado", "aggregate source", "max records", "carregar dados com uma consulta",
+        "dados com uma consulta filtrada"
+      ],
+      "summary": "An aggregate node in an action flow or a screen aggregate; children by raw verbs on the aggregate: IAliasedSource (args.dataSource), IFilter (args.condition), ISort, IJoin, IGroupByAttribute, aggregated column, ICalculatedAttribute. The compact `get` step covers where/sort/max. Direct native testing is a separate MCP operation: ssam_query_test describe/run with capture hash, query @key and explicit Test Values; it requires existing schema and does not validate app-user access.",
+      "route": { "kind": "job", "operation": "compact get {get, as, where, sort, max}; or create IAggregateNode|IScreenAggregate, its children, set, link" },
+      "contract": [
+        "logic.steps.get", "logic.queryJoin", "logic.queryColumn", "logic.queryCalculated", "verbs.verbs.create", "verbs.verbs.set", "verbs.verbs.link",
+        "verbs.verbs.rename", "verbs.verbs.delete", "verbs.references"
+      ],
+      "guidance": "Data access rules (kernel, both lanes): an aggregate or SQL inside a loop (ForEach body, or an If cycle that jumps back) is REFUSED with QUERY_IN_LOOP; fetch once before the loop with the related entity joined, e.g. {\"get\":\"Order\",\"as\":\"GetOrdersWithLines\",\"sources\":[\"OrderLine\"],\"joins\":[{\"left\":\"Order\",\"right\":\"OrderLine\",\"kind\":\"With or Without\",\"condition\":\"OrderLine.OrderId = Order.Id\"}]}, then look rows up by key inside the loop with ListFilter/ListIndexOf (escape only with allowQueryInLoop {why, at least 15 characters} on the op, recorded in the receipt). Two or more aggregates of the same flow or screen over the same entity or entities related by a reference attribute, used together, raise the HIGH warning AGGREGATES_MERGEABLE with the single aggregate (sources + join + filters) as suggestion. Without group by read <Agg>.List.Current.<Entity>.<Attr>; with group by or aggregated columns read <Agg>.List.Current.<Column>; <Agg>.List.Length counts rows. Filters, sorts, joins and calculated columns run before group by and cite the source alias (the entity name). A filter citing an action input creates an implicit parameter. Widget binding is ui.*.",
+      "example": { "ops": ["create", "set", "link"], "max": 24 },
+      "depends": [],
+      "recommends": [
+        { "id": "ui.screen", "when": "the screen that owns the screen aggregate does not exist yet, or a widget must read the aggregate list" },
+        { "id": "data.entity", "when": "the source entity or the attributes cited by filters/columns must be created first" },
+        { "id": "logic.flow", "when": "placing the aggregate node in an existing flow (link predecessor/successor)" },
+        { "id": "logic.variable", "when": "an action input feeds a filter, or an output receives <Agg>.List" }
+      ],
+      "alternatives": [
+        { "id": "logic.sql", "when": "the query cannot be expressed as an aggregate" },
+        { "id": "logic.data-action", "when": "a screen needs data computed by logic instead of a screen aggregate" }
+      ],
+      "elements": [
+        {
+          "role": "aggregate",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.Nodes.IAggregateNode", "jobType": "IAggregateNode", "address": "<Action>/<Name>" },
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.IAggregateNode", "jobType": "IAggregateNode", "address": "<Action>/<Name>" }
+          }
+        },
+        {
+          "role": "screen aggregate",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.UI.Mobile.IScreenAggregate", "jobType": "IScreenAggregate", "address": "IMobileScreen:<Screen>/<Name>" },
+            "o11": { "native": "OutSystems.Model.UI.Mobile.IScreenAggregate", "jobType": "IScreenAggregate", "address": "IMobileScreen:<Screen>/<Name>" }
+          }
+        },
+        {
+          "role": "source",
+          "child": true,
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.Logic.Aggregates.Full.IAliasedSource",
+              "jobType": "IAliasedSource",
+              "address": "create <aggregate> IAliasedSource args.dataSource=IServerEntity:<E> (alias = entity name)"
+            },
+            "o11": {
+              "native": "OutSystems.Model.Logic.Aggregates.Full.IAliasedSource",
+              "jobType": "IAliasedSource",
+              "address": "create <aggregate> IAliasedSource args.dataSource=IServerEntity:<E> (alias = entity name)"
+            }
+          }
+        },
+        {
+          "role": "filter",
+          "child": true,
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.Logic.Aggregates.IFilter",
+              "jobType": "IFilter",
+              "address": "create <aggregate> IFilter args.condition; <aggregate>/**IFilter[n]"
+            },
+            "o11": {
+              "native": "OutSystems.Model.Logic.Aggregates.IFilter",
+              "jobType": "IFilter",
+              "address": "create <aggregate> IFilter args.condition; <aggregate>/**IFilter[n]"
+            }
+          }
+        },
+        {
+          "role": "sort",
+          "child": true,
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.Aggregates.ISort", "jobType": "ISort", "address": "create <aggregate> ISort (alias)" },
+            "o11": { "native": "OutSystems.Model.Logic.Aggregates.ISort", "jobType": "ISort", "address": "create <aggregate> ISort (alias)" }
+          }
+        },
+        {
+          "role": "join",
+          "child": true,
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.Aggregates.Full.IJoin", "jobType": "IJoin", "address": "create <aggregate> IJoin (alias)" },
+            "o11": { "native": "OutSystems.Model.Logic.Aggregates.Full.IJoin", "jobType": "IJoin", "address": "create <aggregate> IJoin (alias)" }
+          }
+        },
+        {
+          "role": "group by",
+          "child": true,
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.Logic.Aggregates.IGroupByAttribute",
+              "jobType": "IGroupByAttribute",
+              "address": "create <aggregate> IGroupByAttribute name=<Column>"
+            },
+            "o11": {
+              "native": "OutSystems.Model.Logic.Aggregates.IGroupByAttribute",
+              "jobType": "IGroupByAttribute",
+              "address": "create <aggregate> IGroupByAttribute name=<Column>"
+            }
+          }
+        },
+        {
+          "role": "aggregated column",
+          "child": true,
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.Logic.Aggregates.IAggregatedAttribute",
+              "jobType": "IAggregatedAttribute",
+              "address": "create <aggregate> IAggregatedAttribute name=<Column>"
+            },
+            "o11": {
+              "native": "OutSystems.Model.Logic.Aggregates.IAggregateAttribute",
+              "jobType": "IAggregateAttribute",
+              "address": "create <aggregate> IAggregateAttribute name=<Column>"
+            }
+          }
+        },
+        {
+          "role": "calculated column",
+          "child": true,
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.Logic.Aggregates.ICalculatedAttribute",
+              "jobType": "ICalculatedAttribute",
+              "address": "create <aggregate> ICalculatedAttribute name=<Column>"
+            },
+            "o11": {
+              "native": "OutSystems.Model.Logic.Aggregates.ICalculatedAttribute",
+              "jobType": "ICalculatedAttribute",
+              "address": "create <aggregate> ICalculatedAttribute name=<Column>"
+            }
+          }
+        }
+      ],
+      "operations": {
+        "read": {
+          "route": "get <aggregate child> by alias or path; dump <aggregate> (depth 4 shows the whole tree)",
+          "preconditions": [],
+          "roles": {
+            "aggregate": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["aggregate-full", "action-edit-lifecycle"],
+                "scope": "dump of a new aggregate; get of an inherited aggregate node (Target connector)"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["entity-lifecycle", "aggregate-sum-calc"],
+                "scope": "get of an inherited aggregate after an entity rename; dump of an action aggregate"
+              }
+            },
+            "screen aggregate": {
+              "odc": { "status": "applicable", "proofs": ["email-popover-metadata"], "scope": "dump of a screen aggregate with its source and metadata" },
+              "o11": { "status": "undetermined", "note": "created by suite jobs; no get/dump on the aggregate itself" }
+            },
+            "source": {
+              "odc": { "status": "undetermined", "note": "seen only inside the aggregate dump; no get" },
+              "o11": { "status": "undetermined", "note": "no O11 job reads it" }
+            },
+            "filter": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["entity-lifecycle", "entity-refactor", "data-contract-identity"],
+                "scope": "Condition read before/after an entity or attribute rename (rewritten by the platform)"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["data-contract-identity", "entity-refactor"],
+                "scope": "Condition read before/after a rename (rewritten by the platform)"
+              }
+            },
+            "sort": {
+              "odc": { "status": "applicable", "proofs": ["aggregate-full"], "scope": "Attribute and SortDirection" },
+              "o11": { "status": "undetermined", "note": "no O11 job reads it" }
+            },
+            "join": {
+              "odc": { "status": "applicable", "proofs": ["aggregate-full"], "scope": "LeftSource, RightSource, JoinType, Condition" },
+              "o11": { "status": "undetermined", "note": "no O11 job reads it" }
+            },
+            "group by": {
+              "odc": { "status": "undetermined", "note": "seen only inside the aggregate dump; no get" },
+              "o11": { "status": "undetermined", "note": "no O11 job reads it" }
+            },
+            "aggregated column": {
+              "odc": { "status": "applicable", "proofs": ["aggregate-full", "structure-list-type"], "scope": "get of a Count column: Long Integer" },
+              "o11": { "status": "undetermined", "note": "seen only inside the aggregate dump; no get" }
+            },
+            "calculated column": {
+              "odc": { "status": "undetermined", "note": "seen only inside the aggregate dump; no get" },
+              "o11": { "status": "undetermined", "note": "no O11 job reads it" }
+            }
+          }
+        },
+        "create": {
+          "route": "compact get (where/sort/max) or raw create <Action> IAggregateNode | <Screen> IScreenAggregate, then create the children on the aggregate",
+          "preconditions": [
+            "give the aggregate its own name: a default Get<Entity>s is renamed by the platform when it receives a filter (compact get requires 'as')",
+            "sources first: joins, filters, sorts and columns cite the source alias (entity name by default)",
+            "aggregated columns: raw verbs on both lanes; the compact get columns route per lane is in the limits"
+          ],
+          "roles": {
+            "aggregate": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["aggregate-full", "logic-steps", "data-action", "service-action", "structure-list-type"],
+                "scope": "raw create in server, service and data actions; compact get step"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["producer-public", "spec-data", "smoke-data-logic", "aggregate-full", "aggregate-sum-calc"],
+                "scope": "raw create in server actions"
+              }
+            },
+            "screen aggregate": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["screen-list", "screen-form", "rename-data-propagation", "client-storage"],
+                "scope": "server-side; client-side with args.isClientSide over a client entity"
+              },
+              "o11": { "status": "applicable", "proofs": ["screen-form-reactive", "refactor-duplicate"], "scope": "Reactive screen aggregate with source and filter" }
+            },
+            "source": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["aggregate-full", "service-action", "screen-list", "client-storage", "html-visual-list"],
+                "scope": "server, static, client entity and referenced entity sources; two sources for a join"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["producer-public", "spec-data", "screen-form-reactive", "refactor-duplicate"],
+                "scope": "server entity source"
+              }
+            },
+            "filter": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["aggregate-full", "logic-steps", "screen-form", "delete-data-consumers", "data-action"],
+                "scope": "args.condition; compact where (list); a condition citing an action input"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["producer-public", "spec-data", "screen-form-reactive", "delete-data-consumers"],
+                "scope": "args.condition on node and screen aggregates"
+              }
+            },
+            "sort": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["aggregate-full", "screen-list", "logic-steps", "timer-action"],
+                "scope": "raw and compact (one sort per compact get)"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["aggregate-full", "screen-list-reactive"],
+                "scope": "raw create on a screen aggregate and on an action aggregate"
+              }
+            },
+            "join": {
+              "odc": { "status": "applicable", "proofs": ["aggregate-full", "service-action"], "scope": "Left join of two entities; Inner join with a static entity" },
+              "o11": { "status": "applicable", "proofs": ["aggregate-full", "service-action"], "scope": "Left and Inner joins" }
+            },
+            "group by": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["aggregate-full", "structure-list-type", "logic-aggregate-columns"],
+                "scope": "one group by column: raw create, and compact get columns kind Group"
+              },
+              "o11": { "status": "applicable", "proofs": ["aggregate-full", "aggregate-sum-calc"], "scope": "one group by column" }
+            },
+            "aggregated column": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["aggregate-full", "structure-list-type", "logic-aggregate-columns"],
+                "scope": "raw IAggregatedAttribute: Count and Sum over both sides of a join; compact get columns (Count, Max) creates the same type"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["aggregate-full", "aggregate-sum-calc"],
+                "scope": "raw IAggregateAttribute Count/Sum/Max/Min/Avg"
+              }
+            },
+            "calculated column": {
+              "odc": { "status": "applicable", "proofs": ["structure-list-type"], "scope": "raw create + Value beside a group by" },
+              "o11": { "status": "applicable", "proofs": ["aggregate-sum-calc"], "scope": "raw create + Value" }
+            }
+          }
+        },
+        "set": {
+          "route": "set {target, prop, value}; link the aggregate node in the flow",
+          "preconditions": ["enum values by name: JoinType None/Inner/Right/Left/Full, SortDirection, AggregationType Count/Sum/Max/Min/Avg"],
+          "roles": {
+            "aggregate": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["aggregate-full", "structure-list-type", "logic-steps", "service-action"],
+                "scope": "MaxRecords; flow links"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["producer-public", "spec-data", "aggregate-sum-calc"],
+                "scope": "flow links; MaxRecords"
+              }
+            },
+            "sort": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["aggregate-full", "screen-list", "logic-steps", "timer-action"],
+                "scope": "Attribute (source alias), SortDirection"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["aggregate-full", "screen-list-reactive"],
+                "scope": "Attribute, SortDirection on a screen aggregate and on an action aggregate"
+              }
+            },
+            "join": {
+              "odc": { "status": "applicable", "proofs": ["aggregate-full", "service-action"], "scope": "LeftSource, RightSource, JoinType, Condition" },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["aggregate-full", "service-action"],
+                "scope": "LeftSource, RightSource, JoinType, Condition"
+              }
+            },
+            "group by": {
+              "odc": { "status": "applicable", "proofs": ["aggregate-full", "structure-list-type"], "scope": "Attribute" },
+              "o11": { "status": "applicable", "proofs": ["aggregate-full", "aggregate-sum-calc"], "scope": "Attribute" }
+            },
+            "aggregated column": {
+              "odc": { "status": "applicable", "proofs": ["aggregate-full", "structure-list-type"], "scope": "Attribute, AggregationType" },
+              "o11": { "status": "applicable", "proofs": ["aggregate-full", "aggregate-sum-calc"], "scope": "Attribute, AggregationType" }
+            },
+            "calculated column": {
+              "odc": { "status": "applicable", "proofs": ["structure-list-type"], "scope": "Value (expression over the source alias)" },
+              "o11": { "status": "applicable", "proofs": ["aggregate-sum-calc"], "scope": "Value" }
+            },
+            "filter": {
+              "odc": { "status": "undetermined", "note": "condition only given at create (args.condition); no set measured" },
+              "o11": { "status": "undetermined", "note": "condition only given at create (args.condition); no set measured" }
+            }
+          }
+        },
+        "rename": {
+          "route": "rename {target, name} on the aggregate node",
+          "preconditions": ["expressions that read <Agg>.List follow the rename"],
+          "roles": {
+            "aggregate": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["refactor-inherited"],
+                "scope": "two inherited aggregate nodes renamed; their 6 reading expressions rewritten"
+              },
+              "o11": { "status": "undetermined", "note": "no O11 job renames an aggregate" }
+            },
+            "screen aggregate": { "odc": { "status": "undetermined", "note": "not exercised" }, "o11": { "status": "undetermined", "note": "not exercised" } }
+          }
+        },
+        "delete": {
+          "route": "delete {target} on a child of the aggregate",
+          "preconditions": [],
+          "roles": {
+            "filter": {
+              "odc": { "status": "applicable", "proofs": ["delete-data-consumers"], "scope": "a filter citing an attribute removed before deleting the attribute" },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["delete-data-consumers", "entity-refactor"],
+                "scope": "filter addressed by <aggregate>/**IFilter[n], removed before an attribute change"
+              }
+            }
+          }
+        }
+      },
+      "platforms": {
+        "odc": {
+          "proofs": [
+            "aggregate-full", "structure-list-type", "logic-aggregate-columns", "logic-steps", "service-action", "data-action", "screen-list", "screen-form",
+            "client-storage", "delete-data-consumers", "refactor-inherited", "action-edit-lifecycle", "email-popover-metadata", "timer-action",
+            "rename-data-propagation", "html-visual-list", "entity-lifecycle", "entity-refactor", "data-contract-identity"
+          ],
+          "negative": ["delete-data-in-use"],
+          "context": { "kinds": ["ServerEntity", "ServerAction", "MobileScreen"], "signatures": ["ServerEntity"] },
+          "limits": [
+            {
+              "text": "Compact get `columns` creates the lane's column type (IAggregatedAttribute; Group gives IGroupByAttribute) since kernel commit 41fdaaa, proven with Group, Count and Max over one source; compact sources/joins/calculated have no ODC suite job.",
+              "origin": "kernel commit 41fdaaa (ModelApiMetadata.AggregateColumnType; LogicExpander.cs:417); job:logic-aggregate-columns"
+            },
+            {
+              "text": "Declared, not read by any op: a calculated column runs before group by, so it is not in the grouped row (reading it is said to give ExpressionUnknownObject).",
+              "origin": "job:structure-list-type (ICalculatedAttribute create _why comment; no op reads the column)"
+            },
+            {
+              "text": "An attribute cited by a filter is refused on delete without force; the refusal names the filter path (.../ICombineSourcesOperation:<Source>/IFilter).",
+              "origin": "jobs-odc-negative/delete-data-in-use"
+            }
+          ],
+          "differences": ["aggregated column native is IAggregatedAttribute (O11: IAggregateAttribute)", "Count, and Sum of an Integer column, are Long Integer"]
+        },
+        "o11": {
+          "proofs": [
+            "producer-public", "spec-data", "smoke-data-logic", "screen-form-reactive", "refactor-duplicate", "delete-data-consumers", "aggregate-full",
+            "aggregate-sum-calc", "screen-list-reactive", "service-action", "entity-lifecycle", "entity-refactor", "data-contract-identity"
+          ],
+          "negative": ["delete-attribute-in-use"],
+          "context": { "kinds": ["ServerEntity", "ServerAction", "MobileScreen"], "signatures": ["ServerEntity"] },
+          "limits": [
+            {
+              "text": "Joins, group by, columns and action-aggregate sorts: raw verbs only; no O11 job reads them back by get.",
+              "origin": "jobs aggregate-full, aggregate-sum-calc (O11)"
+            },
+            {
+              "text": "Compact get `columns` creates IAggregateAttribute (the lane's type, resolved per lane since kernel commit 41fdaaa); compact sources/joins/columns/calculated are covered by C# contract tests only (spec route), no suite job.",
+              "origin": "kernel commit 41fdaaa (ModelApiMetadata.AggregateColumnType); kernel/tests/contracts/action-coverage/*-aggregate-full.json (ActionCoverageTests.cs)"
+            }
+          ],
+          "differences": ["aggregated column native is IAggregateAttribute (ODC: IAggregatedAttribute)"]
+        }
+      }
+    },
+    {
+      "id": "logic.sql",
+      "supersedes": ["logic.sql"],
+      "category": "logic",
+      "title": "AdvancedSQL (ISQLNode)",
+      "keywords": [
+        "sql query", "consulta sql", "query sql", "advanced query", "advanced sql", "consulta avançada", "query avançada", "sql statement", "instrução sql",
+        "sql parameter", "sql input parameter", "sql com parametro de entrada", "parametro de entrada do sql", "parametro sql", "sql output", "saida sql",
+        "sql node", "query with an input parameter"
+      ],
+      "summary": "Compact `get` with sql:true, statement ({Entity}.[Attr], @Param) and params {type, value}; or raw ISQLNode + Statement, an input parameter (ISQLInputParameter) + DataType, ISQLOutput named List (args.entityOrStructure), argument <sql>/arg:<Param>. Preflight is not execution. Direct native testing: ssam_query_test describe/run, SELECT subset only, explicit Test Values independent of runtime Value, existing schema; status reconciles uncertain calls without replay.",
+      "route": { "kind": "job", "operation": "compact get with sql:true, statement ({E}.[A], @P) and params {P: {type, value}}; or raw ISQLNode" },
+      "contract": ["logic.steps.get", "logic.sqlParameter", "verbs.verbs.create", "verbs.verbs.set", "verbs.verbs.link"],
+      "guidance": "Never inside a loop (QUERY_IN_LOOP refuses it): one SQL before the loop with IN or JOIN on the key of the iterated list, e.g. SELECT {OrderLine}.* FROM {OrderLine} WHERE {OrderLine}.[OrderId] IN (@OrderIds) with @OrderIds Expand Inline, or JOIN {Order} ON {Order}.[Id] = {OrderLine}.[OrderId], then ListFilter by key inside the loop. The output is named List: the result is <Name>.List; a field reads <Name>.List.Current.List.<Field>. Filter, sort and page inside the statement; max sets MaxRecords.",
+      "example": { "ops": ["logic"], "max": 1 },
+      "depends": [],
+      "recommends": [
+        { "id": "logic.variable", "when": "action inputs feed the parameters or an output receives <Name>.List" },
+        { "id": "data.structure", "when": "the output is typed by a structure" }
+      ],
+      "alternatives": [{ "id": "logic.aggregate", "when": "an aggregate expresses the query (filters, joins, group by)" }],
+      "elements": [
+        {
+          "role": "sql",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.Nodes.ISQLNode", "jobType": "ISQLNode", "address": "<Action>/<Name>" },
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.ISQLNode", "jobType": "ISQLNode", "address": "<Action>/<Name>" }
+          }
+        },
+        {
+          "role": "sql input parameter",
+          "child": true,
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.ISQLInputParameter", "jobType": "ISQLInputParameter", "address": "<sql>/<Param>; value <sql>/arg:<Param>" },
+            "o11": { "native": "OutSystems.Model.Logic.ISQLInputParameter", "jobType": "ISQLInputParameter", "address": "<sql>/<Param>; value <sql>/arg:<Param>" }
+          }
+        },
+        {
+          "role": "sql output",
+          "child": true,
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.ISQLOutput", "jobType": "ISQLOutput", "address": "<sql>/List (create args.entityOrStructure)" },
+            "o11": { "native": "OutSystems.Model.Logic.ISQLOutput", "jobType": "ISQLOutput", "address": "<sql>/List (create args.entityOrStructure)" }
+          }
+        }
+      ],
+      "operations": {
+        "read": {
+          "route": "get <sql>; dump the owning action",
+          "preconditions": [],
+          "roles": {
+            "sql": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["rename-data-propagation"],
+                "scope": "Statement read back after entity and attribute renames: {Entity}.[Attr] regenerated"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["rename-data-propagation", "sql-input-output"],
+                "scope": "Statement read back after entity and attribute renames: {Entity}.[Attr] regenerated; Statement of a SQL with input and output"
+              }
+            },
+            "sql input parameter": { "odc": { "status": "undetermined", "note": "only inside an action dump" }, "o11": { "status": "undetermined", "note": "no job reads it" } },
+            "sql output": { "odc": { "status": "undetermined", "note": "only inside an action dump" }, "o11": { "status": "undetermined", "note": "no job reads it" } }
+          }
+        },
+        "create": {
+          "route": "compact get sql:true (node, one parameter per params key, output List) or raw create <Action> ISQLNode + children",
+          "preconditions": [
+            "every @name of the statement is declared in params and every declared param is used (case-insensitive)",
+            "where/sort/start/sources/joins/columns/calculated are refused with sql:true"
+          ],
+          "roles": {
+            "sql": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["logic-sql", "rename-data-propagation"],
+                "scope": "compact (two parameters, max) and raw create in a server action"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["rename-data-propagation", "sql-input-output", "logic-sql-params"],
+                "scope": "raw and compact create in a server action"
+              }
+            },
+            "sql input parameter": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["logic-sql", "rename-data-propagation"],
+                "scope": "params from action inputs (identifier, date); raw Text parameter"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["rename-data-propagation", "sql-input-output", "logic-sql-params"],
+                "scope": "raw and compact parameters"
+              }
+            },
+            "sql output": {
+              "odc": { "status": "applicable", "proofs": ["logic-sql", "rename-data-propagation"], "scope": "output List typed by an entity" },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["rename-data-propagation", "sql-input-output", "logic-sql-params"],
+                "scope": "output List typed by an entity (raw and compact) and by a structure"
+              }
+            }
+          }
+        },
+        "set": {
+          "route": "set <sql> Statement; set <param> DataType; set <sql>/arg:<Param> Value; link in the flow",
+          "preconditions": ["raw verbs skip the compact parameter check: the Verify judges the statement"],
+          "roles": {
+            "sql": {
+              "odc": { "status": "applicable", "proofs": ["rename-data-propagation", "logic-sql"], "scope": "Statement; flow links" },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["rename-data-propagation", "sql-input-output"],
+                "scope": "Statement; flow links"
+              }
+            },
+            "sql input parameter": {
+              "odc": { "status": "applicable", "proofs": ["logic-sql", "rename-data-propagation"], "scope": "DataType" },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["rename-data-propagation", "sql-input-output"],
+                "scope": "DataType"
+              }
+            },
+            "sql output": {
+              "odc": { "status": "undetermined", "note": "type given at create only" },
+              "o11": { "status": "undetermined", "note": "type given at create only" }
+            }
+          }
+        },
+        "rename": {
+          "route": "rename {target, name}",
+          "preconditions": [],
+          "roles": {
+            "sql": {
+              "odc": { "status": "undetermined", "note": "node rename not exercised; entity renames rewrite the statement (read)" },
+              "o11": { "status": "undetermined", "note": "node rename not exercised; entity renames rewrite the statement (read)" }
+            }
+          }
+        }
+      },
+      "platforms": {
+        "odc": {
+          "proofs": ["logic-sql", "rename-data-propagation"],
+          "negative": [],
+          "context": { "kinds": ["ServerEntity", "Structure", "ServerAction"], "signatures": ["ServerEntity", "Structure"] },
+          "limits": [
+            {
+              "text": "where/sort/start (and sources/joins/columns/calculated) are refused with sql:true: filter, sort and page in the statement.",
+              "origin": "kernel LogicExpander.cs:448-450"
+            },
+            {
+              "text": "Declared params and statement @names must match (case-insensitive; duplicates refused), checked before any op runs.",
+              "origin": "kernel/src/Anvil.Core/Kernel/SqlChecks.cs:13-24"
+            }
+          ],
+          "differences": []
+        },
+        "o11": {
+          "proofs": ["rename-data-propagation", "sql-input-output", "logic-sql-params"],
+          "negative": [],
+          "context": { "kinds": ["ServerEntity", "Structure", "ServerAction"], "signatures": ["ServerEntity", "Structure"] },
+          "limits": [
+            {
+              "text": "where/sort/start (and sources/joins/columns/calculated) are refused with sql:true: filter, sort and page in the statement.",
+              "origin": "kernel/src/Anvil.Core/Kernel/LogicExpander.cs:448-450 (SqlContractTests.cs:31-41)"
+            },
+            {
+              "text": "Declared params and statement @names must match (case-insensitive); raw verbs are judged by the Verify: an unknown @name gives InvalidSQL_UnknownParam.",
+              "origin": "kernel/src/Anvil.Core/Kernel/SqlChecks.cs:13-24; job:sql-unknown-param (SqlContractTests) at kernel/tests/Anvil.Tests/SqlContractTests.cs:61-71; expectValid false, no expectError"
+            },
+            {
+              "text": "Reading a field without the List level of the output (<Name>.List.Current.<Field>) fails Verify with 'Hint Current: ... Current has: List'.",
+              "origin": "kernel/tests/Anvil.Tests/PerformanceContractTests.cs:94-109 (SqlCurrentHintShowsTheActualOutputWrapper, inline job with expectValid false; C# test, no suite job)"
+            },
+            {
+              "text": "A public action typed by a structure output needs a public structure; enumerating every column raises the SQL_Enumeration warning.",
+              "origin": "job:sql-input-output (description, expectedMessages)"
+            }
+          ],
+          "differences": []
+        }
+      }
+    }
+  ],
+  "unavailable": [],
+  "coverage": [
+    {
+      "type": "odc:OutSystems.Model.Logic.Aggregates.IAggregate",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface; its concrete implementers are accounted",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.Aggregates.IAggregate",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface; its concrete implementers are accounted",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.Aggregates.Full.IOperation",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface; its concrete implementers are accounted",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.Aggregates.Full.IOperation",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface; its concrete implementers are accounted",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.Aggregates.Full.IAddSourceOperation",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "classification": "generated",
+      "reason": "stage the platform creates for each source added to an aggregate; authored through the source role",
+      "origin": "job:aggregate-full (executed ODC job: its description and the _why of the IAliasedSource creates state it from the final dump; that dump is not in the ledger and a-matrix.json has no executed or static evidence of this type)",
+      "alternative": "logic.aggregate role source"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.Aggregates.Full.ICombineSourcesOperation",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "classification": "generated",
+      "reason": "stage the platform creates to hold joins, filters, sorts and calculated columns; authored through those roles",
+      "origin": "job:aggregate-full (description and final dump); jobs-odc-negative/delete-data-in-use expectError path .../ICombineSourcesOperation:<Source>/IFilter",
+      "alternative": "logic.aggregate roles join, filter, sort, calculated column"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.Aggregates.Full.IGroupByOperation",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "classification": "generated",
+      "reason": "stage the platform creates to hold group by and aggregated columns; authored through those roles",
+      "origin": "job:aggregate-full (executed ODC job: stated by its description from the final dump; that dump is not in the ledger and a-matrix.json has no executed or static evidence of this type)",
+      "alternative": "logic.aggregate roles group by, aggregated column"
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.Aggregates.Full.ICombineSourcesOperation",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "classification": "generated",
+      "reason": "stage created by the platform that holds the filters (consumer path of a filter); authored through the child roles",
+      "origin": "jobs-negative/delete-static-record-in-use expectError path .../ICombineSourcesOperation:<Source>/IFilter",
+      "alternative": "logic.aggregate roles join, filter, sort, calculated column"
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.Aggregates.Full.IAddSourceOperation",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "classification": "generated",
+      "reason": "stage the platform creates for each source added to an aggregate (the executed O11 dump of job:aggregate-sum-calc lists one per source); authored through the source role",
+      "origin": "inventory factory IFullAggregate.CreateAddSourceOperation; kernel/docs/mapa/criar-blank-service.json (factory map: IFullAggregate.CreateAddSourceOperation, status no-parent, never instantiated); kernel/src/Anvil.Core/Kernel/Verbs.cs:1120 (usage paths through it counted as derived)"
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.Aggregates.Full.IGroupByOperation",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "classification": "generated",
+      "reason": "stage the platform creates to hold group by and aggregated columns (the executed O11 dump of job:aggregate-sum-calc lists it); authored through those roles",
+      "origin": "inventory factory IFullAggregate.CreateGroupByOperation; kernel/docs/mapa/criar-blank-service.json (factory map: it is the factory parent of IGroupByAttribute and IAggregateAttribute, status no-parent, never instantiated); a-matrix.json lanes.o11 (no evidence)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.Aggregates.Full.IFullAggregate",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "which type is the DataTable child of an aggregate (full or database aggregate) is not read by any job; needs a native get of <aggregate>/DataTable",
+      "origin": "inventory kindClass undetermined; jobs-odc-negative/delete-data-in-use path IAggregateNode:<Name>/DataTable/..."
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.Aggregates.Full.IFullAggregate",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "which type is the DataTable child of an aggregate (full or database aggregate) is not read by any job; needs a native get of <aggregate>/DataTable",
+      "origin": "inventory kindClass undetermined; jobs-negative/delete-static-record-in-use path IAggregateNode:<Name>/DataTable/..."
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.Aggregates.Database.IDatabaseAggregate",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "no factory returns it; unknown whether any aggregate body is a database aggregate (see IFullAggregate)",
+      "origin": "inventory kindClass undetermined; a-matrix.json lanes.odc (no evidence)"
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.Aggregates.Database.IDatabaseAggregate",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "no factory returns it; unknown whether any aggregate body is a database aggregate (see IFullAggregate)",
+      "origin": "inventory kindClass undetermined; a-matrix.json lanes.o11 (no evidence)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.Aggregates.Database.IAliasedSource",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "created only by IDatabaseAggregate.CreateSource; every job resolves IAliasedSource to the Full type; the compact check reads sources through this interface, so it may be a base of the runtime object",
+      "origin": "inventory factory IDatabaseAggregate.CreateSource; kernel/src/Anvil.Core/Kernel/LogicRequirements.cs:289; a-matrix.json lanes.odc"
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.Aggregates.Database.IAliasedSource",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "created only by IDatabaseAggregate.CreateSource; every job resolves IAliasedSource to the Full type; the compact check reads sources through this interface, so it may be a base of the runtime object",
+      "origin": "inventory factory IDatabaseAggregate.CreateSource; kernel/src/Anvil.Core/Kernel/LogicRequirements.cs:289; a-matrix.json lanes.o11"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.Aggregates.Database.IJoin",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "created only by IDatabaseAggregate.CreateJoin; every job resolves IJoin to the Full type",
+      "origin": "inventory factory IDatabaseAggregate.CreateJoin; a-matrix.json lanes.odc (no evidence)"
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.Aggregates.Database.IJoin",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "created only by IDatabaseAggregate.CreateJoin; every job resolves IJoin to the Full type",
+      "origin": "inventory factory IDatabaseAggregate.CreateJoin; a-matrix.json lanes.o11 (no evidence)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.Aggregates.IDataSource",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "abstraction of what an aggregate source points at (an entity or a structure, whose types implement it); not authored itself: the source role receives it as IAliasedSource args.dataSource",
+      "origin": "inventory bases (entity, static entity, client entity and structure types and their signatures implement it); api --op verbs (create IAliasedSource args.dataSource); job:aggregate-full (IAliasedSource creates with args.dataSource = an entity)",
+      "alternative": "logic.aggregate role source"
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.Aggregates.IDataSource",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "abstraction of what an aggregate source points at (an entity or a structure, whose types implement it); not authored itself: the source role receives it as IAliasedSource args.dataSource",
+      "origin": "inventory bases (entity, static entity, client entity and structure types and their signatures implement it); api --op verbs (create IAliasedSource args.dataSource); job:aggregate-full (IAliasedSource creates with args.dataSource = an entity)",
+      "alternative": "logic.aggregate role source"
+    }
+  ]
+}

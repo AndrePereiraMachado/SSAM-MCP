@@ -1,0 +1,199 @@
+{
+ "description": "Cobertura testada (fase 1, medir): so leitura. get de uma instancia existente de cada tipo concreto encontrado na fixture reactive-ui (endereco @chave).",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "get",
+   "target": "@l1CSc5x1O0awp_WWouahoQ"
+  },
+  {
+   "op": "get",
+   "target": "@O4P6c455EUCiBY6a1QkDGQ"
+  },
+  {
+   "op": "get",
+   "target": "@ErXO1bgWaEKNvko4q_Tc9w"
+  },
+  {
+   "op": "get",
+   "target": "@WfwpZ3Adz0+5iD86897xeA"
+  },
+  {
+   "op": "get",
+   "target": "@wwV2f+Yynk+3H4GC19pa8A"
+  },
+  {
+   "op": "get",
+   "target": "@N7XZjDVULUScIzK8VViztQ"
+  },
+  {
+   "op": "get",
+   "target": "@jjnFHJmtlEukP6jufbPSvw"
+  },
+  {
+   "op": "get",
+   "target": "@DK+haLlsbEiwnT8eD__MNQ"
+  },
+  {
+   "op": "get",
+   "target": "@yCJzTyHZ306_5j1iw6zLeg"
+  },
+  {
+   "op": "get",
+   "target": "@tbPw9t7iu0OdYFzBsCJ1ug"
+  },
+  {
+   "op": "get",
+   "target": "@4HZGCwrkH0SYtQsOw+5O5g"
+  },
+  {
+   "op": "get",
+   "target": "@lbJGpaEQnE2rZZgyKcLjGw"
+  },
+  {
+   "op": "get",
+   "target": "@PyMbSrJ03U+6PK7udNFoMQ"
+  },
+  {
+   "op": "get",
+   "target": "@UEw6n9qWe06ZuSWntFQS4w"
+  },
+  {
+   "op": "get",
+   "target": "@OmCNmhHGRU2VB0lVbZn0eA"
+  },
+  {
+   "op": "get",
+   "target": "@5MrtZVVVTEGgluVB4R0Vqg"
+  },
+  {
+   "op": "get",
+   "target": "@eFR3RS9re0+r1_PHPHgETQ"
+  },
+  {
+   "op": "get",
+   "target": "@WuDa0z40_k6SkHbBjiHbMQ"
+  },
+  {
+   "op": "get",
+   "target": "@hd35JhN3zEmey3w4Y9h7LQ"
+  },
+  {
+   "op": "get",
+   "target": "@cVMchisbq02ZTO5xmXe9bg"
+  },
+  {
+   "op": "get",
+   "target": "@iR8Vgbps6UyLcVmBiFofeA"
+  },
+  {
+   "op": "get",
+   "target": "@cFORgl5PQkueXKjHbSfz0A"
+  },
+  {
+   "op": "get",
+   "target": "@B4kRGvrnOEmQonA8ir4Pyg.#FlowExceptionHandler"
+  },
+  {
+   "op": "get",
+   "target": "@+2ZqMvS+Q0q543ygEY0ymA"
+  },
+  {
+   "op": "get",
+   "target": "@qp8AovV7Y0iz+OhOM94Ccw"
+  },
+  {
+   "op": "get",
+   "target": "@Z49XFmKbRUyIj31jxENnPA"
+  },
+  {
+   "op": "get",
+   "target": "@Lvz40cvMOkqLEG6fU0bYcg"
+  },
+  {
+   "op": "get",
+   "target": "@h5vDTMuLX06AWEdKRweFvA"
+  },
+  {
+   "op": "get",
+   "target": "@dazwmfzUG0aXr0zvksbeWA"
+  },
+  {
+   "op": "get",
+   "target": "@EHWy15q2lEymE4eJ_Th8yQ"
+  },
+  {
+   "op": "get",
+   "target": "@liohM6qCc0mdOGuBiafMYg"
+  },
+  {
+   "op": "get",
+   "target": "@6BwU9zJc7Uy3DAuXdm4JUw"
+  },
+  {
+   "op": "get",
+   "target": "@SYG7cQOxYE+sIk1Vx4gb9A"
+  },
+  {
+   "op": "get",
+   "target": "@JwHkw+PGGEOnHkJ2qRXvnA"
+  },
+  {
+   "op": "get",
+   "target": "@xzAQ6k8I90SKLj4_1YKe3w"
+  },
+  {
+   "op": "get",
+   "target": "@2LSq6h5P6UCTE49+x0DQYQ"
+  },
+  {
+   "op": "get",
+   "target": "@t2oBqo4b4EmaZsHE0F+s3g"
+  },
+  {
+   "op": "get",
+   "target": "@UR7vmPLlO0KtywGor4mlgw"
+  },
+  {
+   "op": "get",
+   "target": "@PvdRlQ_+K0Ww3EEfS8rqbw"
+  },
+  {
+   "op": "get",
+   "target": "@tyDpq52o506smhHCnh_Syw"
+  },
+  {
+   "op": "get",
+   "target": "@8lEy+z8iXUqB3svMwRxbLw"
+  },
+  {
+   "op": "get",
+   "target": "@W_dEYU6Bmk+4UQuieAPFpg"
+  },
+  {
+   "op": "get",
+   "target": "@88Z5bDwxekaUY+bjRHyRsg"
+  },
+  {
+   "op": "get",
+   "target": "@sCnW2AtVKE+gG3g6afSR8g"
+  },
+  {
+   "op": "get",
+   "target": "@WxPfnZSSyEykzY5u_w8_CQ"
+  },
+  {
+   "op": "get",
+   "target": "@ebdbpmNN_kyXm1A2tbbfRQ"
+  },
+  {
+   "op": "get",
+   "target": "@v0EvM3VbLk2qvrGUFPotcQ"
+  },
+  {
+   "op": "get",
+   "target": "@yrBOh3DrgEyCRFouLoupyA"
+  }
+ ]
+}

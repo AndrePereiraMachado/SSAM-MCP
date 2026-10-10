@@ -1,0 +1,101 @@
+{
+ "description": "Cobertura testada (fase 2): del de OutSystems.Model.BusinessProcesses.Nodes.IJoinNode (odc) em ctxWorkflowParallel. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/blank-workflow.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IBusinessProcess",
+   "name": "CovSWorkflow",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "set",
+   "target": "$fs",
+   "prop": "TriggerMode",
+   "value": "Schedule"
+  },
+  {
+   "op": "set",
+   "target": "$fs",
+   "prop": "Frequency",
+   "value": "Daily"
+  },
+  {
+   "op": "set",
+   "target": "$fs/ScheduleConfiguration",
+   "prop": "CronExpression",
+   "value": "0 6 * * *"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "OutSystems.Model.BusinessProcesses.Nodes.IForkNode",
+   "name": "CovSFork",
+   "as": "$fk"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$fk"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "OutSystems.Model.BusinessProcesses.Nodes.IJoinNode",
+   "name": "CovSJoin",
+   "as": "$j"
+  },
+  {
+   "op": "link",
+   "from": "$j",
+   "to": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$fk",
+   "type": "IPath",
+   "as": "$p1"
+  },
+  {
+   "op": "link",
+   "from": "$p1",
+   "to": "$j"
+  },
+  {
+   "op": "create",
+   "parent": "$fk",
+   "type": "IPath",
+   "as": "$p2"
+  },
+  {
+   "op": "link",
+   "from": "$p2",
+   "to": "$j"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IJoinNode",
+   "name": "CovAJoinNode",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

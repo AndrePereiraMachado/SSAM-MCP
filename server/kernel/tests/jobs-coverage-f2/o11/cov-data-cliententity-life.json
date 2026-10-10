@@ -1,0 +1,54 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.Data.IClientEntity (o11) em espace. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedElement",
+   "element": "Headless_CS (ESpace) / CovRClientEntity (ClientEntity) / Title (EntityAttribute)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IClientEntity",
+   "name": "CovAClientEntity",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IEntityAttribute",
+   "name": "Title",
+   "as": "$attr"
+  },
+  {
+   "op": "set",
+   "target": "$attr",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRClientEntity"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  }
+ ]
+}

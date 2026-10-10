@@ -1,0 +1,11 @@
+{
+ "description": "SearchPlaces do OutSystemsMaps: a caixa de busca de lugares (a chave de API vem de um Setting no app real).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "SearchPlacesDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "SearchPlaces1", "source": "IMobileBlock:SearchPlaces", "as": "$sp"}
+ ]
+}

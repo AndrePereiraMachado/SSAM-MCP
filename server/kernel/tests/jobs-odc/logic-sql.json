@@ -1,0 +1,36 @@
+{
+ "description": "ODC (cobertura C): o logic-sql-params.json espelhado na faixa ODC sobre o modelo do data-full-model. Statement com dois parametros (@ProjectId e @MaxDue) declarados em params e alimentados pelos inputs da action, MaxRecords por max, e a saida tipada pela entidade atribuida ao output List.",
+ "base": "job:data-full-model",
+ "expectValid": true,
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCov_Tasks_SearchSql (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "ops": [
+  {"op": "logic", "data": {"actions": [
+   {
+    "name": "WfCov_Tasks_SearchSql",
+    "kind": "server",
+    "description": "Cobertura C: consulta SQL com parametros de entrada e saida tipada por entidade",
+    "inputs": [
+     {"name": "ProjectId", "type": "WfCovProject Identifier"},
+     {"name": "DueUntil", "type": "Date"}
+    ],
+    "outputs": [{"name": "Tasks", "type": "WfCovTask List"}],
+    "steps": [
+     {
+      "get": "WfCovTask",
+      "sql": true,
+      "as": "ReadTasks",
+      "statement": "SELECT {WfCovTask}.* FROM {WfCovTask} WHERE {WfCovTask}.[ProjectId] = @ProjectId AND {WfCovTask}.[DueOn] <= @DueUntil ORDER BY {WfCovTask}.[DueOn]",
+      "params": {
+       "ProjectId": {"type": "WfCovProject Identifier", "value": "ProjectId"},
+       "DueUntil": {"type": "Date", "value": "DueUntil"}
+      },
+      "max": 50
+     },
+     {"assign": {"Tasks": "ReadTasks.List"}, "as": "SetOutput"}
+    ]
+   }
+  ]}},
+  {"op": "find", "name": "WfCov_Tasks_SearchSql"},
+  {"op": "dump", "target": "IServerAction:WfCov_Tasks_SearchSql", "depth": 4}
+ ]
+}

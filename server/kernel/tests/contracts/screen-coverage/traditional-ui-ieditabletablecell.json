@@ -1,0 +1,117 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "native-widget",
+    "web:IEditableTableCell"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Table",
+            "type": "IEditableTable",
+            "properties": {
+              "SourceRecordList": "Rows"
+            },
+            "slots": {
+              "HeaderRow": [
+                {
+                  "name": "Part4",
+                  "type": "IEditableTableCell",
+                  "properties": {},
+                  "children": [
+                    {
+                      "name": "Part3",
+                      "type": "ITextWidget",
+                      "properties": {
+                        "Text": "Name"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "Row": [
+                {
+                  "name": "Subject",
+                  "type": "IEditableTableCell",
+                  "properties": {},
+                  "children": [
+                    {
+                      "name": "Part2",
+                      "type": "ITextWidget",
+                      "properties": {
+                        "Text": "Content"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            "events": {
+              "OnRowSave": {
+                "destination": "IWebScreen:Coverage/Handle1"
+              },
+              "OnRowDelete": {
+                "destination": "IWebScreen:Coverage/Handle2"
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Rows",
+            "type": "ScreenRow List"
+          }
+        ]
+      }
+    ],
+    "data": {
+      "structures": [
+        {
+          "name": "ScreenRow",
+          "attributes": [
+            {
+              "name": "Name",
+              "type": "Text"
+            },
+            {
+              "name": "Value",
+              "type": "Integer"
+            }
+          ]
+        }
+      ]
+    },
+    "logic": {
+      "actions": [
+        {
+          "name": "Handle1",
+          "kind": "screen",
+          "owner": "IWebScreen:Coverage",
+          "steps": []
+        },
+        {
+          "name": "Handle2",
+          "kind": "screen",
+          "owner": "IWebScreen:Coverage",
+          "steps": []
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IWebScreen:Coverage/Table/Row/Subject",
+    "prop": "Name",
+    "value": "ChangedName"
+  }
+}

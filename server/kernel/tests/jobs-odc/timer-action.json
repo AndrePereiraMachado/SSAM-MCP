@@ -1,0 +1,36 @@
+{
+ "description": "ODC (cobertura T): TIMER, o tipo que nunca tinha passado pela faixa ODC. Espelha o bloco de ITimer de tests/jobs/tickets-06-sla.json (Action + Description) e acrescenta o que so o ODC tem: CronSchedule, TimeoutInMinutes e o filho ScheduleConfiguration (ISchedule, com ScheduleItems tipados), que no SS11 nao existem - la o agendamento e so a string Schedule. A server action agendada le WfCovTask e conta as que estao por fazer.",
+ "base": "job:data-full-model",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {
+   "op": "logic",
+   "data": {
+    "actions": [
+     {
+      "name": "WfCovTask_SweepOverdue",
+      "kind": "server",
+      "description": "Cobertura T: a logica que o timer acorda. Conta as tarefas por fazer com prazo vencido.",
+      "outputs": [{"name": "Overdue", "type": "Long Integer"}],
+      "steps": [
+       {"get": "WfCovTask", "as": "ReadOverdue", "where": ["WfCovTask.IsDone = False", "WfCovTask.DueOn < CurrDate()"], "sort": ["WfCovTask.DueOn", "Ascending"]},
+       {"assign": {"Overdue": "ReadOverdue.List.Length"}, "as": "SetOverdue"}
+      ]
+     }
+    ]
+   }
+  },
+
+  {"op": "create", "parent": "@espace", "type": "ITimer", "name": "WfCovOverdueSweep", "as": "$timer"},
+  {"op": "set", "target": "$timer", "prop": "Action", "value": "IServerAction:WfCovTask_SweepOverdue"},
+  {"op": "set", "target": "$timer", "prop": "Description", "value": "Cobertura T: varre tarefas vencidas de madrugada"},
+  {"op": "set", "target": "$timer", "prop": "CronSchedule", "value": "15 3 * * *", "_why": "cron de CINCO campos (minuto hora diaDoMes mes diaDaSemana); com seis campos o ODC recusa: 'Invalid cron expression provided'"},
+  {"op": "set", "target": "$timer", "prop": "TimeoutInMinutes", "value": 20},
+  {"op": "set", "target": "$timer", "prop": "Priority", "value": "Normal"},
+
+  {"op": "get", "target": "$timer", "_why": "prova Action, Description, CronSchedule e TimeoutInMinutes no mesmo objeto"},
+  {"op": "dump", "target": "$timer", "depth": 3, "_why": "prova o filho ScheduleConfiguration (ISchedule) com os ScheduleItems: a parte que o SS11 nao tem"},
+  {"op": "usages", "target": "IServerAction:WfCovTask_SweepOverdue", "_why": "prova que o timer conta como consumidor da action (por isso nao ha UnusedUserAction)"}
+ ]
+}

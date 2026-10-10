@@ -1,0 +1,16 @@
+{
+ "description": "ODC: a RECUSA do create de um Radio Button fora de um Radio Group. A plataforma ODC ja recusava ('A Radio Button must be placed inside a Radio Group widget.'); o kernel recusa antes, com o mesmo texto e o como fazer, igual nas duas faixas (no O11 o Verify nativo caia fora de qualquer op). Dentro do Content do grupo o create funciona: tests/jobs-odc/cat-b-choice-table.json. Cobertura testada, fase 2.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectError": [
+  "create IRadioButton: a Radio Button must be placed inside a Radio Group widget",
+  "IContainer 'RadioLessBox' is not inside one",
+  "Create the IRadioGroup first"
+ ],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "RadioLess", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "RadioLessBox", "as": "$box"},
+  {"op": "create", "parent": "$box", "type": "IRadioButton", "name": "LooseRadio"}
+ ]
+}

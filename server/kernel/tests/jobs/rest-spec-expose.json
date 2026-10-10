@@ -1,0 +1,15 @@
+{
+ "description": "Op rest-expose (REST exposto declarativo): o servico CepService com GET /cep/{Cep} mapeado para a server action CepInfo_Get (chamada e atribuicao geradas, Start e End do proprio metodo).",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {"op": "spec", "data": {"structures": [{"name": "CepInfo", "attributes": [{"name": "Cep", "type": "Text"}, {"name": "Uf", "type": "Text"}]}]}},
+  {"op": "logic", "data": {"actions": [{"name": "CepInfo_Get", "inputs": [{"name": "Cep", "type": "Text"}], "outputs": [{"name": "Info", "type": "CepInfo"}],
+    "steps": [{"assign": {"Info.Cep": "Cep", "Info.Uf": "\"SP\""}}]}]}},
+  {"op": "rest-expose", "data": {
+    "service": {"name": "CepService"},
+    "methods": [{"name": "GetCep", "http": "GET", "path": "/cep/{Cep}", "inputs": [{"name": "Cep", "type": "Text", "in": "url"}],
+                 "outputs": [{"name": "Info", "type": "CepInfo"}], "action": "IServerAction:CepInfo_Get"}]}},
+  {"op": "get", "target": "IRestServiceAction:GetCep"}
+ ]
+}

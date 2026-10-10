@@ -1,0 +1,100 @@
+{
+ "description": "Cobertura testada (fase 1, medir): life de OutSystems.Model.Logic.Nodes.IRaiseExceptionNode (o11) em serverFlow. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "CovSFlow",
+   "as": "$p"
+  },
+  {
+   "op": "set",
+   "target": "$p",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IRaiseExceptionNode",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IUserException",
+   "name": "CovSError",
+   "as": "$ex"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Exception",
+   "value": "$ex"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "ExceptionMessage",
+   "value": "\"Cov\""
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$a"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IIfNode",
+   "as": "$dif"
+  },
+  {
+   "op": "set",
+   "target": "$dif",
+   "prop": "Condition",
+   "value": "True"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$dif"
+  },
+  {
+   "op": "link",
+   "from": "$dif",
+   "connector": "TrueTarget",
+   "to": "$a"
+  },
+  {
+   "op": "link",
+   "from": "$dif",
+   "connector": "FalseTarget",
+   "to": "$b"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "x": 600,
+   "y": 400
+  }
+ ]
+}

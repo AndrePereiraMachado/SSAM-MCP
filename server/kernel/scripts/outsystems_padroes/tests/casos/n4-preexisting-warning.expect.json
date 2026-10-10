@@ -1,0 +1,16 @@
+{
+ "_leia": "N4: warning PREEXISTENTE da base conta (a N4 soma base e novos); --base-oml so atribui.",
+ "stage": "truechange",
+ "mode": "autor",
+ "module": "Integration_CS",
+ "result": "n4-preexisting-warning.result.json",
+ "exitCode": 1,
+ "mustFind": [
+  {
+   "rule": "N4",
+   "severity": "erro",
+   "stage": "truechange",
+   "contains": "preexistente"
+  }
+ ]
+}

@@ -1,0 +1,9 @@
+{
+ "description":"Duas actions declaradas em ordem inversa: o compilador cria a dependencia antes da chamadora.",
+ "base":"tests/fixtures/blank-service.oml",
+ "expectValid":true,
+ "ops":[{"op":"logic","data":{"actions":[
+  {"name":"ReplaceCaller","public":true,"inputs":[{"name":"N","type":"Integer"}],"outputs":[{"name":"Result","type":"Integer"}],"steps":[{"call":"ReplaceTarget","as":"Compute","args":{"Value":"N"}},{"assign":{"Result":"Compute.Result"}}]},
+  {"name":"ReplaceTarget","inputs":[{"name":"Value","type":"Integer"}],"outputs":[{"name":"Result","type":"Integer"}],"steps":[{"assign":{"Result":"Value + 1"}}]}
+ ]}}]
+}

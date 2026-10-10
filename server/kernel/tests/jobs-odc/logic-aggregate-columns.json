@@ -1,0 +1,28 @@
+{
+ "description": "ODC (integrador, lote de kernel INT-T2-002, suspeita da frente A): get compacto da spec de logica com colunas agregadas (Group, Count, Max), sobre o modelo do data-full-model. No ODC a interface da coluna agregada chama-se IAggregatedAttribute (no SS11, IAggregateAttribute; o DisplayName e o mesmo); o expansor emitia sempre o nome do SS11. O contrato de dados le as colunas de volta pelo nome da faixa.",
+ "base": "job:data-full-model",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedUserAction",
+   "element": "InsuranceApp (ESpace) / WfCov_Tasks_ByProject (ServerAction)",
+   "why": "a action existe para provar a expansao das colunas agregadas e nao tem consumidor; o Verify do ODC avisa sobre actions sem uso (o SS11 nao)."
+  }
+ ],
+ "ops": [
+  {"op": "logic", "data": {"actions": [
+   {"name": "WfCov_Tasks_ByProject", "kind": "server", "description": "Cobertura (INT-T2-002): tarefas abertas por projeto, com colunas agregadas",
+    "outputs": [{"name": "Groups", "type": "Long Integer"}],
+    "steps": [
+     {"get": "WfCovTask", "as": "OpenByProject", "where": "WfCovTask.IsDone = False",
+      "columns": [
+       {"name": "ProjectId", "kind": "Group", "attribute": "WfCovTask.ProjectId"},
+       {"name": "OpenTasks", "kind": "Count", "attribute": "WfCovTask.Id"},
+       {"name": "LastDue", "kind": "Max", "attribute": "WfCovTask.DueOn"}]},
+     {"assign": {"Groups": "OpenByProject.Count"}, "as": "SetGroups"}
+    ]}
+  ]}},
+  {"op": "dump", "target": "IServerAction:WfCov_Tasks_ByProject", "depth": 4},
+  {"op": "find", "name": "OpenTasks", "_why": "a coluna Count existe com o tipo da faixa (IAggregatedAttribute no ODC)"}
+ ]
+}

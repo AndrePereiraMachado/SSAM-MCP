@@ -1,0 +1,31 @@
+{
+ "description": "MouseEvents do OSUI: o Start guarda o ponto inicial e o End guarda o deslocamento do arraste sobre um Container.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "DragArea", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Drag\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "StartX", "as": "$vStartX"},
+  {"op": "set", "target": "$vStartX", "prop": "DataType", "value": "Decimal"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "MovedX", "as": "$vMovedX"},
+  {"op": "set", "target": "$vMovedX", "prop": "DataType", "value": "Decimal"},
+  {"op": "logic", "data": {"actions": [{"name": "DragStarted", "kind": "screen", "owner": "IMobileScreen:DragArea", "inputs": [{"name": "X", "type": "Decimal"}], "steps": [{"assign": {"StartX": "X"}, "as": "KeepStart"}]}]}},
+  {"op": "logic", "data": {"actions": [{"name": "DragEnded", "kind": "screen", "owner": "IMobileScreen:DragArea", "inputs": [{"name": "OffsetX", "type": "Decimal"}], "steps": [{"assign": {"MovedX": "OffsetX"}, "as": "KeepOffset"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "DragZone", "as": "$zone"},
+  {"op": "set", "target": "$zone", "prop": "Style", "value": "\"padding-l\""},
+  {"op": "create", "parent": "$zone", "type": "ITextWidget", "as": "$text1"},
+  {"op": "set", "target": "$text1", "prop": "Text", "value": "Drag here"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "MouseEvents1", "source": "IMobileBlock:MouseEvents", "as": "$me"},
+  {"op": "set", "target": "$me/WidgetId", "prop": "Value", "value": "DragZone.Id"},
+  {"op": "set", "target": "$me/PreventDefaults", "prop": "Value", "value": "True"},
+  {"op": "set", "target": "$me/Start", "prop": "Handler", "value": "IMobileScreen:DragArea/DragStarted"},
+  {"op": "set", "target": "$me/Start/X", "prop": "Value", "value": "X"},
+  {"op": "set", "target": "$me/End", "prop": "Handler", "value": "IMobileScreen:DragArea/DragEnded"},
+  {"op": "set", "target": "$me/End/OffsetX", "prop": "Value", "value": "OffsetX"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "\"Moved \" + MovedX + \"px from \" + StartX"}
+ ]
+}

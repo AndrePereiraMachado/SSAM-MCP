@@ -1,0 +1,285 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "OutSystemsUI",
+    "OutSystemsUIWeb:NavigationBar",
+    "OutSystemsUIWeb:NavigationBarItem",
+    "OutSystemsUIWeb:NavigationBarSubItem",
+    "OutSystemsUIWeb:Panel",
+    "OutSystemsUIWeb:ProgressBar"
+  ],
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "tests/fixtures/outsystems-ui-web.oml",
+      "elements": [
+        "IWebBlock:NavigationBar",
+        "IWebBlock:NavigationBarItem",
+        "IWebBlock:NavigationBarSubItem",
+        "IWebBlock:Panel",
+        "IWebBlock:ProgressBar"
+      ]
+    }
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Ui60_NavigationBar",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:NavigationBar",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "IWebBlockInstanceWidget",
+                  "properties": {},
+                  "source": "IWebBlock:NavigationBarItem",
+                  "args": {
+                    "ExtendedClass": "\"coverage\""
+                  },
+                  "slots": {
+                    "Title": [
+                      {
+                        "name": "Part3",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Component content"
+                        }
+                      }
+                    ],
+                    "Content": [
+                      {
+                        "name": "Part4",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Component content"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui61_NavigationBarItem",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:NavigationBarItem",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Title": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Content": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui62_NavigationBarSubItem",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:NavigationBarSubItem",
+            "args": {},
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui63_Panel",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:Panel",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Footer": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Title": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Actions": [
+                {
+                  "name": "Part5",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui64_ProgressBar",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:ProgressBar",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Title": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Text"
+                  }
+                }
+              ],
+              "Value": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Text"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      }
+    ]
+  },
+  "mutations": [
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui60_NavigationBar/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "NavigationBar"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui61_NavigationBarItem/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "NavigationBarItem"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui62_NavigationBarSubItem/Part1/Content/Part2",
+      "prop": "Text",
+      "value": "Changed",
+      "element": "NavigationBarSubItem"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui63_Panel/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Panel"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui64_ProgressBar/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "ProgressBar"
+    }
+  ]
+}

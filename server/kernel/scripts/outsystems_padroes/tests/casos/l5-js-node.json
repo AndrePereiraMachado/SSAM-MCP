@@ -1,0 +1,18 @@
+{
+ "description": "NEG L5 (OutSystems padroes): client action com no JavaScript.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "logic", "data": {"actions": [
+   {"name": "CopyPackageCode", "kind": "client", "public": true,
+    "description": "Copia o codigo do pacote para a area de transferencia com JavaScript (violacao proposital da L5).",
+    "inputs": [{"name": "PackageCode", "type": "Text", "description": "Codigo do pacote que o usuario quer copiar."}],
+    "steps": [
+     {"node": "IJavaScriptNode", "as": "CopyToClipboard",
+      "properties": {"JavaScript": "navigator.clipboard.writeText($parameters.Code);"},
+      "inputs": [{"name": "Code", "type": "Text"}], "args": {"Code": "PackageCode"}}
+    ]}
+  ]}}
+ ]
+}

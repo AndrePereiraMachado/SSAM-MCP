@@ -1,0 +1,21 @@
+{
+ "description": "Image tipico: imagem binaria vinda da base (Type Binary, ImageContent = campo Binary Data do registro) numa lista de anexos, com o nome do arquivo ao lado.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Photo", "attributes": [
+   {"name": "Caption", "type": "Text", "length": 100},
+   {"name": "Content", "type": "Binary Data"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetPhotos", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Photo"}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "PhotoList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetPhotos.List"},
+  {"op": "create", "parent": "$list", "type": "IContainer", "name": "PhotoRow", "as": "$row"},
+  {"op": "create", "parent": "$row", "type": "IImage", "name": "PhotoImage", "as": "$img"},
+  {"op": "set", "target": "$img", "prop": "Type", "value": "Binary"},
+  {"op": "set", "target": "$img", "prop": "ImageContent", "value": "GetPhotos.List.Current.Photo.Content"},
+  {"op": "create", "parent": "$row", "type": "IExpression", "as": "$caption"},
+  {"op": "set", "target": "$caption", "prop": "Value", "value": "GetPhotos.List.Current.Photo.Caption"}
+ ]
+}

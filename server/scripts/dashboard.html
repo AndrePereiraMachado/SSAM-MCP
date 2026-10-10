@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel SSAM</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e4e3df; --head: #f1f0ec;
+  --ok: #1f7a4d; --ok-bg: #e6f2ec; --warn: #9a6200; --warn-bg: #fbf0dc; --bad: #b42318; --bad-bg: #fbe9e7; --accent: #2f5bd3;
+  --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #141413; --panel: #1c1c1a; --ink: #ecebe6; --muted: #9c9b95; --line: #2e2e2b; --head: #232321;
+    --ok: #5cc28d; --ok-bg: #18302a; --warn: #e3b25a; --warn-bg: #33291a; --bad: #f08a7e; --bad-bg: #3a1f1c; --accent: #8aa8ff; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, "Segoe UI", sans-serif; }
+header { padding: 18px 24px 10px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; }
+h1 { margin: 0 0 4px; font-size: 18px; font-weight: 650; }
+.status { color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.status b { color: var(--ink); font-weight: 600; }
+main { padding: 18px 24px 40px; display: grid; gap: 22px; max-width: 1500px; }
+section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 8px; font-weight: 600; display: flex; align-items: baseline; gap: 10px; }
+section h2 .n { color: var(--ink); }
+.wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 7px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: middle; }
+th { background: var(--head); font-size: 12px; color: var(--muted); font-weight: 600; position: sticky; top: 0; }
+tr:last-child td { border-bottom: 0; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--mono); font-size: 12.5px; }
+.muted { color: var(--muted); }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; font-weight: 600; }
+.pill.ok { color: var(--ok); background: var(--ok-bg); } .pill.warn { color: var(--warn); background: var(--warn-bg); } .pill.bad { color: var(--bad); background: var(--bad-bg); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--muted); }
+.dot.on { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-bg); } .dot.off { background: var(--muted); }
+.two { display: grid; grid-template-columns: 3fr 2fr; gap: 22px; }
+@media (max-width: 1000px) { .two { grid-template-columns: 1fr; } main, header { padding-left: 16px; padding-right: 16px; } }
+button.revoke { font: inherit; font-size: 12px; color: var(--bad); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 2px 9px; cursor: pointer; }
+button.revoke:hover { border-color: var(--bad); }
+input.filter { font: inherit; font-size: 13px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); text-transform: none; letter-spacing: 0; }
+.empty { padding: 14px 12px; color: var(--muted); }
+.flash { animation: flash 1.2s ease-out; } @keyframes flash { from { background: var(--warn-bg); } to { background: transparent; } }
+.offline { color: var(--bad); font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Painel SSAM</h1>
+  <div class="status" id="status">Carregando…</div>
+</header>
+<main>
+  <section>
+    <h2>Licenças <span class="n" id="nLic"></span></h2>
+    <div class="wrap"><table>
+      <thead><tr><th>Colega</th><th>Estado</th><th>Faixas</th><th>Validade</th><th>Máquina registrada</th><th>Agente</th><th class="num">Sessões abertas</th><th class="num">Chamadas hoje</th><th class="num">Falhas hoje</th><th>Última atividade</th><th>Token</th><th></th></tr></thead>
+      <tbody id="licenses"></tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Sessões abertas agora <span class="n" id="nSes"></span></h2>
+    <div class="wrap"><table>
+      <thead><tr><th>Colega</th><th>Cliente MCP</th><th>IP</th><th>Aberta há</th><th class="num">Chamadas</th><th>Última ferramenta</th><th>Última atividade</th></tr></thead>
+      <tbody id="sessions"></tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Agentes <span class="n" id="nAg"></span></h2>
+    <div class="wrap"><table>
+      <thead><tr><th>Colega</th><th>Estado</th><th>Máquina</th><th>IP</th><th>Versão</th><th>Conectado desde</th><th>Último sinal</th></tr></thead>
+      <tbody id="agents"></tbody>
+    </table></div>
+  </section>
+
+  <div class="two">
+    <section>
+      <h2>Atividade ao vivo <input class="filter" id="filter" placeholder="filtrar por colega ou ferramenta"></h2>
+      <div class="wrap"><table>
+        <thead><tr><th>Hora</th><th>Colega</th><th>O quê</th><th class="num">Tempo</th></tr></thead>
+        <tbody id="activity"></tbody>
+      </table></div>
+    </section>
+    <section>
+      <h2>Alertas de acesso <span class="n" id="nAl"></span></h2>
+      <div class="wrap"><table>
+        <thead><tr><th>Quando</th><th>Colega</th><th>Máquina nova</th><th>Primeira máquina</th><th>IP</th></tr></thead>
+        <tbody id="alerts"></tbody>
+      </table></div>
+    </section>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = v => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const ago = iso => { if (!iso) return '—'; const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
+  return s < 60 ? Math.round(s) + ' s' : s < 3600 ? Math.round(s / 60) + ' min' : s < 86400 ? (s / 3600).toFixed(1).replace('.0', '') + ' h' : Math.round(s / 86400) + ' d'; };
+const clock = iso => iso ? new Date(iso).toLocaleTimeString('pt-BR') : '—';
+const machine = m => m ? `${esc(m.name)} <span class="muted">(${esc(m.user)})</span>` : '<span class="muted">—</span>';
+const rows = (el, list, render, empty) => { el.innerHTML = list.length ? list.map(render).join('') : `<tr><td class="empty" colspan="12">${empty}</td></tr>`; };
+let last = null, seen = new Set();
+
+function render(s) {
+  last = s;
+  const active = s.licenses.filter(l => l.state === 'active');
+  const online = s.agents.filter(a => a.online);
+  const up = s.server.health;
+  $('status').innerHTML = [
+    up ? `<span><span class="dot on"></span><b>Servidor no ar</b> · pid ${esc(up.pid)} · desde ${clock(s.server.since)} (${ago(s.server.since)})</span>` : `<span class="offline">Servidor fora do ar</span>`,
+    `<span><b>${active.length}</b> licenças ativas</span>`, `<span><b>${s.sessions.length}</b> sessões abertas</span>`,
+    `<span><b>${online.length}</b> agentes conectados</span>`, `<span><b>${s.alerts.length}</b> alertas</span>`,
+    `<span>atualizado ${clock(s.now)}</span>`].join('');
+  $('nLic').textContent = `${active.length} ativas de ${s.licenses.length}`;
+  rows($('licenses'), s.licenses, l => {
+    const pill = l.state === 'active' ? 'ok' : l.state === 'expired' ? 'warn' : 'bad';
+    const label = { active: 'ativa', expired: 'vencida', revoked: 'revogada' }[l.state] ?? l.state;
+    const days = l.expiresAt ? Math.ceil((Date.parse(l.expiresAt) - Date.now()) / 86400000) : null;
+    const validity = !l.expiresAt ? 'sem validade' : l.state !== 'active' ? new Date(l.expiresAt).toLocaleDateString('pt-BR')
+      : `<span class="${days <= 3 ? 'pill warn' : ''}">${days} dia${days === 1 ? '' : 's'}</span> <span class="muted">(${new Date(l.expiresAt).toLocaleDateString('pt-BR')})</span>`;
+    return `<tr><td><b>${esc(l.customer)}</b></td><td><span class="pill ${pill}">${label}</span></td><td class="mono">${esc((l.lanes || []).join(', '))}</td>
+      <td>${validity}</td><td>${machine(l.machine)}</td>
+      <td>${l.state === 'active' ? `<span class="dot ${l.agentOnline ? 'on' : 'off'}"></span>${l.agentOnline ? 'conectado' : 'offline'}` : '<span class="muted">—</span>'}</td>
+      <td class="num">${l.sessionsOpen}</td><td class="num">${l.usage?.calls ?? 0}</td><td class="num">${l.usage?.failures ?? 0}</td>
+      <td>${l.usage?.lastAt ? 'há ' + ago(l.usage.lastAt) + (l.usage.lastTool ? ` <span class="muted mono">${esc(l.usage.lastTool)}</span>` : '') : '<span class="muted">nunca</span>'}</td>
+      <td class="mono muted">${esc(l.id)}</td>
+      <td>${l.state === 'active' ? `<button class="revoke" data-id="${esc(l.id)}" data-name="${esc(l.customer)}">Revogar</button>` : ''}</td></tr>`;
+  }, 'Nenhuma licença emitida.');
+  $('nSes').textContent = s.sessions.length;
+  rows($('sessions'), s.sessions, x => `<tr><td><b>${esc(x.customer)}</b></td><td>${esc(x.client ?? '—')}</td><td class="mono">${esc(x.ip ?? '—')}</td>
+      <td>${ago(x.openedAt)}</td><td class="num">${x.calls}</td><td class="mono">${esc(x.lastTool ?? '—')}</td><td>há ${ago(x.lastAt)}</td></tr>`, 'Nenhuma sessão aberta agora.');
+  $('nAg').textContent = `${online.length} conectados`;
+  rows($('agents'), s.agents, a => `<tr><td><b>${esc(a.customer)}</b></td><td><span class="dot ${a.online ? 'on' : 'off'}"></span>${a.online ? 'conectado' : 'offline'}</td>
+      <td>${machine(a.machine)}</td><td class="mono">${esc(a.ip ?? '—')}</td><td class="mono">${esc(a.version ?? '—')}</td><td>${clock(a.since)}</td><td>há ${ago(a.lastAt)}</td></tr>`, 'Nenhum agente conectou desde que o servidor subiu.');
+  renderActivity();
+  $('nAl').textContent = s.alerts.length;
+  rows($('alerts'), s.alerts, a => `<tr><td>${new Date(a.time).toLocaleString('pt-BR')}</td><td><b>${esc(a.customer)}</b></td><td>${machine(a.machine)}</td><td>${machine(a.first)}</td><td class="mono">${esc(a.ip)}</td></tr>`, 'Nenhum alerta.');
+}
+function renderActivity() {
+  if (!last) return;
+  const q = $('filter').value.trim().toLowerCase();
+  const label = e => e.event === 'mcp-response-flushed' ? `<span class="mono">${esc(e.tools)}</span>`
+    : e.event === 'session-opened' ? 'abriu sessão' : e.event === 'session-closed' ? `fechou sessão <span class="muted">${esc(e.reason ?? '')}</span>`
+    : e.event === 'agent-connected' ? 'agente conectou' : e.event === 'agent-resumed' ? 'agente reconectou'
+    : e.event === 'agent-machine-changed' ? '<span class="pill bad">máquina diferente</span>'
+    : e.event === 'agent-call' ? `<span class="pill bad">falha</span> <span class="mono">${esc(e.kind)} ${esc(e.code ?? '')}</span>` : esc(e.event);
+  const list = last.activity.filter(e => !q || (e.customer + ' ' + (e.tools ?? '') + ' ' + e.event).toLowerCase().includes(q));
+  const key = e => e.time + e.event + e.customer + (e.tools ?? '');
+  rows($('activity'), list, e => `<tr class="${seen.size && !seen.has(key(e)) ? 'flash' : ''}"><td class="mono">${clock(e.time)}</td><td>${esc(e.customer)}</td><td>${label(e)}</td><td class="num">${e.ms != null ? (e.ms >= 1000 ? (e.ms / 1000).toFixed(1) + ' s' : Math.round(e.ms) + ' ms') : ''}</td></tr>`, 'Sem atividade.');
+  seen = new Set(last.activity.map(key));
+}
+$('filter').addEventListener('input', renderActivity);
+document.addEventListener('click', async ev => {
+  const b = ev.target.closest('button.revoke'); if (!b) return;
+  if (!confirm(`Revogar a licença de ${b.dataset.name} (${b.dataset.id})?\n\nO token MCP e o agente param na hora. Não dá para desfazer: depois é preciso emitir uma nova.`)) return;
+  const r = await fetch('/api/revoke', { method: 'POST', headers: { 'content-type': 'application/json', 'x-ssam-dashboard': '1' }, body: JSON.stringify({ id: b.dataset.id }) });
+  alert(r.ok ? 'Licença revogada.' : 'Não foi possível revogar.');
+});
+const source = new EventSource('/events');
+source.onmessage = m => render(JSON.parse(m.data));
+source.onerror = () => { $('status').innerHTML = '<span class="offline">Painel sem conexão com o processo do painel…</span>'; };
+setInterval(() => last && render(last), 15000);
+</script>
+</body>
+</html>

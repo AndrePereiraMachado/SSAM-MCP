@@ -1,0 +1,62 @@
+{
+ "description": "Cobertura testada (fase 2): del de OutSystems.Model.Logic.Nodes.ICallAgentNode (odc) em ctxAgentFlow. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/blank-agent.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IAgent",
+   "name": "CovSAgent",
+   "as": "$ag"
+  },
+  {
+   "op": "set",
+   "target": "$ag",
+   "prop": "AIModel",
+   "value": "IServerActionSignature:CovAIModel"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "CovSFlow",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "ICallAgentNode",
+   "name": "CovACallAgentNode",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ],
+ "expectedMessages": [
+  {
+   "id": "UnusedUserAction",
+   "element": "CovBlankAgent (ESpace) / CovSFlow (ServerAction)",
+   "why": "ODC: um app nao expoe server action publica (o kernel recusa, como o Studio ao vivo); a action fica privada e sem consumidor neste job de cobertura"
+  }
+ ]
+}

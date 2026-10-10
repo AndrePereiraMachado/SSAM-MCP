@@ -1,0 +1,24 @@
+{
+ "description": "T4 (OutSystems padroes): ListFilter numa client action gera um item em runtimeTests com o texto da condicao (a prova so vem no E2E).",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"structures": [
+   {"name": "NegTaskRow", "public": true, "description": "Linha de tarefa filtrada no cliente pelo controle T4.",
+    "attributes": [
+     {"name": "Title", "type": "Text", "description": "Titulo da tarefa mostrado na lista."},
+     {"name": "IsUrgent", "type": "Boolean", "description": "Marca as tarefas que o filtro mantem."}]}
+  ]}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "FilterUrgentTasks", "kind": "client", "public": true,
+    "description": "Filtra no cliente as tarefas urgentes de uma lista ja carregada (a condicao vai ao E2E da T4).",
+    "inputs": [{"name": "Tasks", "type": "NegTaskRow List", "description": "Tarefas ja carregadas pela tela."}],
+    "outputs": [{"name": "UrgentTasks", "type": "NegTaskRow List", "description": "So as tarefas marcadas como urgentes."}],
+    "steps": [
+     {"call": "ListFilter", "as": "KeepUrgent", "args": {"List": "Tasks", "Condition": "Tasks.Current.IsUrgent"}},
+     {"assign": {"UrgentTasks": "KeepUrgent.FilteredList"}, "as": "Return the urgent tasks"}
+    ]}
+  ]}}
+ ]
+}

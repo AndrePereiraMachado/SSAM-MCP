@@ -1,0 +1,15 @@
+{
+ "description": "ODC: a RECUSA do delete de um registo de static entity com consumidor real. O default herdado de WfClaimFile.StageId cita Entities.WfClaimStage.Received (ligado por chave ao registo); sem force o delete tem de ser recusado E a mensagem tem de nomear o consumidor. O caminho limpo (reapontar com replace e so depois apagar) esta em tests/jobs-odc/static-record-refactor.json.",
+ "base": "job:static-entity",
+ "expectValid": true,
+ "expectError": [
+  "delete: refused",
+  "IStaticEntityRecord 'Received' is used by 1 consumer(s)",
+  "IServerEntity:WfClaimFile/IEntityAttribute:StageId",
+  "pass \"force\": true to break them"
+ ],
+ "ops": [
+  {"op": "usages", "target": "IStaticEntity:WfClaimStage/Received", "max": 20, "_why": "count 1, real 1: o ITextBasedExpression do default de StageId."},
+  {"op": "delete", "target": "IStaticEntity:WfClaimStage/Received"}
+ ]
+}

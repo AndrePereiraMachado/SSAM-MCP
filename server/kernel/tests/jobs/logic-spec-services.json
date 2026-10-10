@@ -1,0 +1,49 @@
+{
+ "description": "Spec de LOGICA (op logic): as 4 service actions do app de tickets escritas de forma declarativa (call + assign), mais uma server action que usa todas as formas de passo: get com where/sort, if com raise, foreach com assign e save, assign final. E o mesmo resultado de tickets-08-services.json (escrito verbo a verbo) com 1/5 do texto.",
+ "base": "job:tickets-07-read",
+ "expectValid": true,
+ "ops": [
+  {"op": "logic", "data": {"actions": [
+   {"name": "Tickets_Create", "kind": "service", "description": "Cria um ticket (remoto)",
+    "inputs": [{"name": "Subject", "type": "Text"}, {"name": "Description", "type": "Text", "mandatory": false}, {"name": "TypeId", "type": "TicketType Identifier"}, {"name": "CategoryId", "type": "Category Identifier", "mandatory": false}, {"name": "PriorityId", "type": "TicketPriority Identifier", "mandatory": false}, {"name": "RequesterId", "type": "User Identifier"}],
+    "outputs": [{"name": "TicketId", "type": "Ticket Identifier"}, {"name": "Number", "type": "Text"}],
+    "steps": [
+     {"call": "Ticket_Create", "as": "Create", "args": {"Subject": "Subject", "Description": "Description", "TypeId": "TypeId", "ChannelId": "Entities.TicketChannel.API", "CategoryId": "CategoryId", "PriorityId": "PriorityId", "RequesterId": "RequesterId"}},
+     {"assign": {"TicketId": "Create.TicketId", "Number": "Create.Number"}, "as": "SetOutputs"}
+    ]},
+   {"name": "Tickets_Comment", "kind": "service", "description": "Comentario publico (remoto)",
+    "inputs": [{"name": "TicketId", "type": "Ticket Identifier"}, {"name": "AuthorId", "type": "User Identifier"}, {"name": "Body", "type": "Text"}],
+    "outputs": [{"name": "CommentId", "type": "TicketComment Identifier"}],
+    "steps": [
+     {"call": "Comment_Add", "as": "Comment", "args": {"TicketId": "TicketId", "AuthorId": "AuthorId", "Body": "Body", "IsInternal": "False"}},
+     {"assign": {"CommentId": "Comment.CommentId"}, "as": "SetOutput"}
+    ]},
+   {"name": "Tickets_ChangeStatus", "kind": "service", "description": "Transicao de status (remoto)",
+    "inputs": [{"name": "TicketId", "type": "Ticket Identifier"}, {"name": "NewStatusId", "type": "TicketStatus Identifier"}, {"name": "ActorId", "type": "User Identifier"}, {"name": "Note", "type": "Text", "mandatory": false}],
+    "steps": [
+     {"call": "Ticket_ChangeStatus", "as": "Change", "args": {"TicketId": "TicketId", "NewStatusId": "NewStatusId", "ActorId": "ActorId", "Note": "Note"}}
+    ]},
+   {"name": "Tickets_Get", "kind": "service", "description": "Ticket com permissoes (remoto)",
+    "inputs": [{"name": "TicketId", "type": "Ticket Identifier"}, {"name": "ViewerId", "type": "User Identifier"}],
+    "outputs": [{"name": "Ticket", "type": "Ticket"}, {"name": "Found", "type": "Boolean"}, {"name": "CanEdit", "type": "Boolean"}, {"name": "CanClose", "type": "Boolean"}],
+    "steps": [
+     {"call": "Ticket_Get", "as": "Get", "args": {"TicketId": "TicketId", "ViewerId": "ViewerId"}},
+     {"assign": {"Ticket": "Get.Ticket", "Found": "Get.Found", "CanEdit": "Get.CanEdit", "CanClose": "Get.CanClose"}, "as": "SetOutputs"}
+    ]},
+   {"name": "Ticket_ReopenClosedOfTeam", "kind": "server", "public": true, "description": "Reabre todos os tickets fechados de uma equipa (todas as formas de passo da spec de logica)",
+    "inputs": [{"name": "TeamId", "type": "Team Identifier"}],
+    "outputs": [{"name": "Count", "type": "Integer"}],
+    "vars": [{"name": "T", "type": "Ticket"}],
+    "steps": [
+     {"get": "Ticket", "as": "GetClosedOfTeam", "where": ["Ticket.TeamId = TeamId", "Ticket.StatusId = Entities.TicketStatus.Closed"], "sort": ["Ticket.ClosedOn", "Descending"]},
+     {"if": "GetClosedOfTeam.List.Empty", "as": "AnyClosed", "then": [{"raise": "NotFound", "message": "\"No closed tickets for this team\""}]},
+     {"foreach": "GetClosedOfTeam.List", "as": "EachClosed", "do": [
+      {"assign": {"T": "GetClosedOfTeam.List.Current.Ticket", "T.StatusId": "Entities.TicketStatus.Open", "T.ClosedOn": "NullDate()", "T.UpdatedOn": "CurrDateTime()"}, "as": "Reopen"},
+      {"save": "Ticket", "record": "T", "as": "SaveTicket"}
+     ]},
+     {"assign": {"Count": "GetClosedOfTeam.List.Length"}, "as": "SetCount"}
+    ]}
+  ]}},
+  {"op": "find", "name": "Ticket_ReopenClosedOfTeam"}
+ ]
+}

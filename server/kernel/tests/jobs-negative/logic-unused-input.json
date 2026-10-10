@@ -1,0 +1,5 @@
+{
+ "description":"C18 (atritos 3): B e V sem uso nao recusam mais. O Verify avisa (UnusedElement) e o aviso volta como warning nao bloqueante (A03); o preflight devolve a nota LOGIC_UNUSED. Texto literal continua nao sendo uso.",
+ "base":"tests/fixtures/blank-service.oml",
+ "ops":[{"op":"logic","data":{"actions":[{"name":"UsageProbe","public":true,"inputs":[{"name":"A","type":"Text"},{"name":"B","type":"Text"}],"outputs":[{"name":"Ok","type":"Boolean"}],"vars":[{"name":"V","type":"Text"}],"steps":[{"assign":{"Ok":"A <> \"B V\""}}]}]}}]
+}

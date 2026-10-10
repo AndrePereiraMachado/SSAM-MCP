@@ -1,0 +1,276 @@
+{
+  "fixture": "mobile-ui",
+  "features": [
+    "OutSystemsUI",
+    "OutSystemsUI:FloatingActions",
+    "OutSystemsUI:FloatingActionsItem",
+    "OutSystemsUI:FloatingContent",
+    "OutSystemsUI:Gallery",
+    "OutSystemsUI:IconBadge"
+  ],
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "tests/fixtures/outsystems-ui.oml",
+      "elements": [
+        "IMobileBlock:FloatingActions",
+        "IMobileBlock:FloatingActionsItem",
+        "IMobileBlock:FloatingContent",
+        "IMobileBlock:Gallery",
+        "IMobileBlock:IconBadge"
+      ]
+    }
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Ui40_FloatingActions",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:FloatingActions",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Button": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Icon"
+                  }
+                }
+              ],
+              "Items": [
+                {
+                  "name": "Part3",
+                  "type": "IMobileBlockInstanceWidget",
+                  "properties": {},
+                  "source": "IMobileBlock:FloatingActionsItem",
+                  "args": {
+                    "ExtendedClass": "\"coverage\""
+                  },
+                  "slots": {
+                    "Label": [
+                      {
+                        "name": "Part4",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Component content"
+                        }
+                      }
+                    ],
+                    "Item": [
+                      {
+                        "name": "Part5",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Component content"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui41_FloatingActionsItem",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:FloatingActionsItem",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Label": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Item": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui42_FloatingContent",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:FloatingContent",
+            "args": {
+              "Position": "Entities.Position.Right",
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui43_Gallery",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:Gallery",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part3",
+                  "type": "IList",
+                  "properties": {
+                    "Source": "Value1"
+                  },
+                  "children": [
+                    {
+                      "name": "Part2",
+                      "type": "ITextWidget",
+                      "properties": {
+                        "Text": "Component content"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value1",
+            "type": "Text List"
+          }
+        ]
+      },
+      {
+        "name": "Ui44_IconBadge",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:IconBadge",
+            "args": {
+              "Number": "1",
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Icon": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Icon"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      }
+    ]
+  },
+  "mutations": [
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui40_FloatingActions/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "FloatingActions"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui41_FloatingActionsItem/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "FloatingActionsItem"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui42_FloatingContent/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "FloatingContent"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui43_Gallery/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Gallery"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui44_IconBadge/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "IconBadge"
+    }
+  ]
+}

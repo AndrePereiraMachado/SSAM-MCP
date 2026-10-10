@@ -1,0 +1,1565 @@
+{
+  "scope": "Current public components outside the Private flow; deprecated/internal components are not certified by this matrix.",
+  "rows": [
+    {
+      "module": "OutSystemsUI",
+      "block": "Accordion",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-01"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "AccordionItem",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-01"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "ActionSheet",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-01"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Alert",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-01"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "AlignCenter",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-01"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Animate",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-02"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "AnimatedLabel",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-02"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "AppFeedbackHelp",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-02"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Badge",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-02"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "BlankSlate",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-02"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "BottomBarItem",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-03"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "BottomSheet",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-03"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Breadcrumbs",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-03"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "BreadcrumbsItem",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-03"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "ButtonLoading",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-03"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Card",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-04"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "CardBackground",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-04"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "CardItem",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-04"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "CardSectioned",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-04"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Carousel",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-04"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "CenterContent",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-05"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "ChatMessage",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-05"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Columns2",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-05"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Columns3",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-05"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Columns4",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-05"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Columns5",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-06"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Columns6",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-06"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "ColumnsMediumLeft",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-06"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "ColumnsMediumRight",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-06"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "ColumnsSmallLeft",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-06"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "ColumnsSmallRight",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-07"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Counter",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-07"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "DatePicker",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-07"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "DatePickerRange",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-07"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "DisplayOnDevice",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-07"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "DropdownSearch",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-08"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "DropdownServerSide",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-08"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "DropdownServerSideItem",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-08"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "DropdownTags",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-08"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "FlipContent",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-08"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "FloatingActions",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-09"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "FloatingActionsItem",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-09"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "FloatingContent",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-09"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Gallery",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-09"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "IconBadge",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-09"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "InlineSVG",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-10"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "InputWithIcon",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-10"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Licenses",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-10"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "LightboxImage",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-10"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "ListItemContent",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-10"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "MarginContainer",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-11"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "MasterDetail",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-11"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "MonthPicker",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-11"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "MouseEvents",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-11"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Notification",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-11"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "OverflowMenu",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-12"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Pagination",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-12"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "ProgressBar",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-12"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "ProgressCircle",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-12"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "RangeSlider",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-12"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "RangeSliderInterval",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-13"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Rating",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-13"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "ScrollableArea",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-13"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Search",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-13"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Section",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-13"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "SectionGroup",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-14"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "SectionIndex",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-14"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "SectionIndexItem",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-14"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Separator",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-14"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Sidebar",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-14"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "StackedCards",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-15"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Submenu",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-15"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "SwipeEvents",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-15"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Tabs",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-15"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "TabsContentItem",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-15"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "TabsHeaderItem",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-16"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Tag",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-16"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "TimePicker",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-16"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "TimelineItem",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-16"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Tooltip",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-16"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "TouchEvents",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-17"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "UserAvatar",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-17"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Video",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-17"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Wizard",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-17"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "WizardItem",
+      "fixture": "reactive-ui",
+      "case": "reactive-ui-osui-17"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Accordion",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-01"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "AccordionItem",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-01"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "ActionSheet",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-01"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Alert",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-01"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "AlignCenter",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-01"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Animate",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-02"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "AnimatedLabel",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-02"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "AppFeedbackHelp",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-02"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Badge",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-02"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "BlankSlate",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-02"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "BottomBarItem",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-03"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "BottomSheet",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-03"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Breadcrumbs",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-03"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "BreadcrumbsItem",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-03"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "ButtonLoading",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-03"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Card",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-04"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "CardBackground",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-04"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "CardItem",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-04"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "CardSectioned",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-04"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Carousel",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-04"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "CenterContent",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-05"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "ChatMessage",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-05"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Columns2",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-05"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Columns3",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-05"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Columns4",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-05"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Columns5",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-06"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Columns6",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-06"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "ColumnsMediumLeft",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-06"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "ColumnsMediumRight",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-06"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "ColumnsSmallLeft",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-06"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "ColumnsSmallRight",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-07"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Counter",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-07"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "DatePicker",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-07"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "DatePickerRange",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-07"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "DisplayOnDevice",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-07"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "DropdownSearch",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-08"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "DropdownServerSide",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-08"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "DropdownServerSideItem",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-08"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "DropdownTags",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-08"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "FlipContent",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-08"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "FloatingActions",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-09"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "FloatingActionsItem",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-09"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "FloatingContent",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-09"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Gallery",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-09"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "IconBadge",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-09"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "InlineSVG",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-10"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "InputWithIcon",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-10"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Licenses",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-10"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "LightboxImage",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-10"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "ListItemContent",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-10"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "MarginContainer",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-11"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "MasterDetail",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-11"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "MonthPicker",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-11"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "MouseEvents",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-11"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Notification",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-11"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "OverflowMenu",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-12"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Pagination",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-12"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "ProgressBar",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-12"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "ProgressCircle",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-12"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "RangeSlider",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-12"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "RangeSliderInterval",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-13"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Rating",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-13"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "ScrollableArea",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-13"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Search",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-13"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Section",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-13"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "SectionGroup",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-14"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "SectionIndex",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-14"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "SectionIndexItem",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-14"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Separator",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-14"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Sidebar",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-14"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "StackedCards",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-15"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Submenu",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-15"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "SwipeEvents",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-15"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Tabs",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-15"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "TabsContentItem",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-15"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "TabsHeaderItem",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-16"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Tag",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-16"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "TimePicker",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-16"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "TimelineItem",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-16"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Tooltip",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-16"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "TouchEvents",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-17"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "UserAvatar",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-17"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Video",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-17"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "Wizard",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-17"
+    },
+    {
+      "module": "OutSystemsUI",
+      "block": "WizardItem",
+      "fixture": "mobile-ui",
+      "case": "mobile-ui-osui-17"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Accordion",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-01"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "AccordionItem",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-01"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Alert",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-01"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "AlignCenter",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-01"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Animate",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-01"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "AnimatedLabel",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-02"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Badge",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-02"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Balloon",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-02"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "BlankSlate",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-02"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Breadcrumbs",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-02"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "BreadcrumbsItem",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-03"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "BulletItem",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-03"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Bullets",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-03"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "ButtonGroup",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-03"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "ButtonGroupItem",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-03"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "ButtonLoading",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-04"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Card",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-04"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "CardBackground",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-04"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "CardSectioned",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-04"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Carousel",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-04"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "CharacterCount",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-05"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "ChatMessage",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-05"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Columns2",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-05"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Columns3",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-05"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Columns4",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-05"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Columns5",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-06"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Columns6",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-06"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "ColumnsMediumLeft",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-06"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "ColumnsMediumRight",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-06"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "ColumnsSmallLeft",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-06"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "ColumnsSmallRight",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-07"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Counter",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-07"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "DatePicker",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-07"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "DisplayOnDevice",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-07"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Dropdown",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-07"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "DropdownSelect",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-08"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Email3Rows",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-08"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "EmailSection",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-08"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Fieldset",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-08"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "FileUpload",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-08"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "FlipContent",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-09"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "FloatingActions",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-09"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "FloatingActionsItem",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-09"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Gallery",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-09"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "IconBadge",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-09"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Iframe",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-10"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "InputWithIcon",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-10"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "LayoutEmail",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-10"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "LayoutLogin",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-10"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "LayoutLoginSplit",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-10"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "LayoutMenuSide",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-11"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "LayoutMenuTop",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-11"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "LayoutPopup",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-11"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "LayoutSimple",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-11"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "LayoutWidgets",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-11"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "LightBoxImage",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-12"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "LoadOnVisible",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-12"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "LoginForm",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-12"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Modal",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-12"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "MoveOnDevice",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-12"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "NavigationBar",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-13"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "NavigationBarItem",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-13"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "NavigationBarSubItem",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-13"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Panel",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-13"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "ProgressBar",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-13"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "ProgressCircle",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-14"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "RangeSlider",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-14"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "RangeSliderInterval",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-14"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "ResponsiveTableRecords",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-14"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Search",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-14"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "SearchBalloon",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-15"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Section",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-15"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "SectionIndex",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-15"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Separator",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-15"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Sidebar",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-15"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "StackedIcon",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-16"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Tabs",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-16"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "TabsContentItem",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-16"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "TabsHeaderItem",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-16"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Tag",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-16"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "TimePicker",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-17"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Timeline",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-17"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "TimelineItem",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-17"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "ToggleButton",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-17"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Tooltip",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-17"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "UserInitials",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-18"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Video",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-18"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Website_Section",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-18"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "Wizard",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-18"
+    },
+    {
+      "module": "OutSystemsUIWeb",
+      "block": "WizardItem",
+      "fixture": "traditional-ui",
+      "case": "traditional-ui-osui-18"
+    }
+  ]
+}

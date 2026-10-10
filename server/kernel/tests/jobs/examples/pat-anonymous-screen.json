@@ -1,0 +1,24 @@
+{
+ "description": "Acesso anonimo declarado uma vez por tela: set Roles com a lista inteira (Anonymous leva Registered junto) na tela publica, so Registered na area logada. Um set por tela, nunca um link por role nem um ajuste no modulo. A tela anonima nao chama server action (seria aviso de seguranca).",
+ "base": "reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "MyArea", "as": "$private"},
+  {"op": "set", "target": "$private/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "set", "target": "$private", "prop": "Roles", "value": ["IRole:Registered"]},
+  {"op": "create", "parent": "$private/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$privateTitle"},
+  {"op": "set", "target": "$privateTitle", "prop": "Value", "value": "\"My area\""},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "PublicHome", "as": "$public"},
+  {"op": "set", "target": "$public/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "set", "target": "$public", "prop": "Roles", "value": ["IRole:Anonymous", "IRole:Registered"]},
+  {"op": "create", "parent": "$public/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$publicTitle"},
+  {"op": "set", "target": "$publicTitle", "prop": "Value", "value": "\"Welcome\""},
+  {"op": "create", "parent": "$public/#IMobileBlockInstanceWidget/MainContent", "type": "ILink", "name": "GoToMyArea", "as": "$lnk"},
+  {"op": "set", "target": "$lnk/#ITextWidget", "prop": "Text", "value": "Go to my area"},
+  {"op": "set", "target": "$lnk/OnClick", "prop": "Destination", "value": "IMobileScreen:MyArea"},
+  {"op": "get", "target": "$public"},
+  {"op": "get", "target": "$private"}
+ ]
+}

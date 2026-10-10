@@ -1,0 +1,5790 @@
+{
+  "description": "Converte todos os aggregates das 73 actions para SQL parametrizado e consome todos os inputs com filtros, paginacao, auditoria e validacoes de negocio.",
+  "base": "job:store-business-input-fields",
+  "expectValid": true,
+  "ops": [
+    {
+      "op": "delete",
+      "target": "IServerAction:CustomerProfile_Get",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:CustomerProfile_Update",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Game_Create",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Game_Update",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Game_Publish",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Game_Archive",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Game_Get",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Game_Search",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Game_ListFeatured",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Game_SetDevelopers",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Game_SetPublishers",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Game_SetGenres",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Game_SetPlatforms",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:GameEdition_Create",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:GameEdition_Update",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:GameEdition_Activate",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:GameEdition_Deactivate",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:GameEdition_ListAvailable",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Promotion_Create",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Promotion_Update",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Promotion_Activate",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Promotion_Deactivate",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Promotion_AddEdition",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Promotion_RemoveEdition",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Promotion_CalculatePrice",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Coupon_Create",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Coupon_Validate",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Cart_GetOrCreate",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Cart_AddItem",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Cart_RemoveItem",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Cart_Clear",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Cart_Get",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Cart_Recalculate",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Checkout_Validate",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Checkout_CreateOrder",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Order_Get",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Order_ListMine",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Order_Cancel",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Order_MarkPaid",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Payment_CreateIntent",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Payment_HandleWebhook",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Payment_ReconcilePending",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Refund_Request",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Refund_Approve",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Refund_Process",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Refund_HandleWebhook",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:License_GrantForOrder",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:License_Get",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Library_ListMine",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:License_ValidateAccess",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Download_CreateGrant",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Download_Register",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:License_Revoke",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Wishlist_Add",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Wishlist_Remove",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Wishlist_ListMine",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Wishlist_CheckPriceDrops",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:GameReview_Create",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:GameReview_Update",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:GameReview_Moderate",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:GameReview_List",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:ReviewVote_Set",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:ReviewVote_Remove",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Admin_GetSalesDashboard",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Admin_GetTopGames",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Admin_GetCustomerLibrary",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Cart_Expire",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServerAction:Promotion_Expire",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServiceAction:Catalog_GetPublishedGame",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServiceAction:Catalog_SearchPublishedGames",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServiceAction:Payment_ReceiveWebhook",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServiceAction:License_ValidateExternalAccess",
+      "force": true
+    },
+    {
+      "op": "delete",
+      "target": "IServiceAction:Order_GetReceipt",
+      "force": true
+    },
+    {
+      "op": "logic",
+      "data": {
+        "actions": [
+          {
+            "name": "CustomerProfile_Get",
+            "kind": "server",
+            "public": true,
+            "description": "Obtém o perfil do usuário autenticado.",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "CustomerProfile",
+                "type": "CustomerProfile"
+              },
+              {
+                "name": "Found",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "CustomerProfile",
+                "as": "GetProfile",
+                "where": "CustomerProfile.UserId = GetUserId()",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {CustomerProfile}.* FROM {CustomerProfile} WHERE {CustomerProfile}.[UserId] = @UserId",
+                "params": {
+                  "UserId": {
+                    "type": "User Identifier",
+                    "value": "GetUserId()"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "CustomerProfile": "SqlRecord1",
+                  "Found": "not GetProfile.List.Empty"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "SqlRecord1",
+                "type": "CustomerProfile"
+              }
+            ]
+          },
+          {
+            "name": "CustomerProfile_Update",
+            "kind": "server",
+            "public": true,
+            "description": "Atualiza o perfil do cliente.",
+            "inputs": [
+              {
+                "name": "ProfileId",
+                "type": "CustomerProfile Identifier"
+              },
+              {
+                "name": "DisplayName",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "CountryCode",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "PreferredLanguage",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "BirthDate",
+                "type": "Date",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "CustomerProfile",
+                "as": "GetCustomerProfile",
+                "where": "CustomerProfile.Id = ProfileId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {CustomerProfile}.* FROM {CustomerProfile} WHERE {CustomerProfile}.[Id] = @ProfileId",
+                "params": {
+                  "ProfileId": {
+                    "type": "CustomerProfile Identifier",
+                    "value": "ProfileId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "R": "SqlRecord1",
+                  "R.DisplayName": "DisplayName",
+                  "R.CountryCode": "CountryCode",
+                  "R.PreferredLanguage": "PreferredLanguage",
+                  "R.BirthDate": "BirthDate"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "CustomerProfile",
+                "as": "SaveCustomerProfile",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "CustomerProfile"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "CustomerProfile"
+              }
+            ]
+          },
+          {
+            "name": "Game_Create",
+            "kind": "server",
+            "public": true,
+            "description": "Cria um jogo em rascunho.",
+            "inputs": [
+              {
+                "name": "Title",
+                "type": "Text"
+              },
+              {
+                "name": "Slug",
+                "type": "Text"
+              },
+              {
+                "name": "ShortDescription",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "Description",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "ReleaseDate",
+                "type": "Date",
+                "mandatory": false
+              },
+              {
+                "name": "AgeRatingId",
+                "type": "AgeRating Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "CoverUrl",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "TrailerUrl",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "WebsiteUrl",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "R.Title": "Title",
+                  "R.Slug": "Slug",
+                  "R.ShortDescription": "ShortDescription",
+                  "R.Description": "Description",
+                  "R.ReleaseDate": "ReleaseDate",
+                  "R.AgeRatingId": "AgeRatingId",
+                  "R.CoverUrl": "CoverUrl",
+                  "R.TrailerUrl": "TrailerUrl",
+                  "R.WebsiteUrl": "WebsiteUrl",
+                  "R.StatusId": "Entities.GameStatus.Draft",
+                  "R.CreatedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "create": "Game",
+                "as": "CreateGame",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "GameId": "CreateGame.Id",
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Game"
+              }
+            ]
+          },
+          {
+            "name": "Game_Update",
+            "kind": "server",
+            "public": true,
+            "description": "Atualiza Game.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "Title",
+                "type": "Text"
+              },
+              {
+                "name": "Slug",
+                "type": "Text"
+              },
+              {
+                "name": "ShortDescription",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "Description",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "ReleaseDate",
+                "type": "Date",
+                "mandatory": false
+              },
+              {
+                "name": "AgeRatingId",
+                "type": "AgeRating Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "CoverUrl",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "TrailerUrl",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "WebsiteUrl",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "IsFeatured",
+                "type": "Boolean"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Game",
+                "as": "GetGame",
+                "where": "Game.Id = GameId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {Game}.* FROM {Game} WHERE {Game}.[Id] = @GameId",
+                "params": {
+                  "GameId": {
+                    "type": "Game Identifier",
+                    "value": "GameId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "R": "SqlRecord1",
+                  "R.Title": "Title",
+                  "R.Slug": "Slug",
+                  "R.ShortDescription": "ShortDescription",
+                  "R.Description": "Description",
+                  "R.ReleaseDate": "ReleaseDate",
+                  "R.AgeRatingId": "AgeRatingId",
+                  "R.CoverUrl": "CoverUrl",
+                  "R.TrailerUrl": "TrailerUrl",
+                  "R.WebsiteUrl": "WebsiteUrl",
+                  "R.IsFeatured": "IsFeatured",
+                  "R.UpdatedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "Game",
+                "as": "SaveGame",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Game"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "Game"
+              }
+            ]
+          },
+          {
+            "name": "Game_Publish",
+            "kind": "server",
+            "public": true,
+            "description": "Publica um jogo.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Game",
+                "as": "GetGame",
+                "where": "Game.Id = GameId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {Game}.* FROM {Game} WHERE {Game}.[Id] = @GameId",
+                "params": {
+                  "GameId": {
+                    "type": "Game Identifier",
+                    "value": "GameId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "R": "SqlRecord1",
+                  "R.StatusId": "Entities.GameStatus.Published",
+                  "R.PublishedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "Game",
+                "as": "SaveGame",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Game"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "Game"
+              }
+            ]
+          },
+          {
+            "name": "Game_Archive",
+            "kind": "server",
+            "public": true,
+            "description": "Arquiva um jogo sem revogar licenças.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "Reason",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Game",
+                "as": "GetGame",
+                "where": "Game.Id = GameId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {Game}.* FROM {Game} WHERE {Game}.[Id] = @GameId",
+                "params": {
+                  "GameId": {
+                    "type": "Game Identifier",
+                    "value": "GameId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "R": "SqlRecord1",
+                  "R.StatusId": "Entities.GameStatus.Archived",
+                  "R.ArchiveReason": "Reason"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "Game",
+                "as": "SaveGame",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Game"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "Game"
+              }
+            ]
+          },
+          {
+            "name": "Game_Get",
+            "kind": "server",
+            "public": true,
+            "description": "Consulta um jogo.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Game",
+                "type": "Game"
+              },
+              {
+                "name": "Found",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Game",
+                "as": "GetGame",
+                "where": "Game.Id = GameId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {Game}.* FROM {Game} WHERE {Game}.[Id] = @GameId",
+                "params": {
+                  "GameId": {
+                    "type": "Game Identifier",
+                    "value": "GameId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "Game": "SqlRecord1",
+                  "Found": "not GetGame.List.Empty"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "SqlRecord1",
+                "type": "Game"
+              }
+            ]
+          },
+          {
+            "name": "Game_Search",
+            "kind": "server",
+            "public": true,
+            "description": "Pesquisa jogos publicados.",
+            "inputs": [
+              {
+                "name": "SearchText",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "GenreId",
+                "type": "Genre Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "PlatformId",
+                "type": "Platform Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "AgeRatingId",
+                "type": "AgeRating Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "Page",
+                "type": "Integer"
+              },
+              {
+                "name": "PageSize",
+                "type": "Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Games",
+                "type": "Game List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Game",
+                "as": "GetGames",
+                "where": "Game.StatusId = Entities.GameStatus.Published and (SearchText = \"\" or Game.Title like \"%\" + SearchText + \"%\")",
+                "sql": true,
+                "statement": "SELECT {Game}.* FROM {Game} WHERE {Game}.[StatusId] = @p_GameStatus_Published AND (@SearchText = '' OR {Game}.[Title] LIKE '%' + @SearchText + '%') AND (@GenreId = 0 OR EXISTS (SELECT 1 FROM {GameGenre} WHERE {GameGenre}.[GameId] = {Game}.[Id] AND {GameGenre}.[GenreId] = @GenreId)) AND (@PlatformId = 0 OR EXISTS (SELECT 1 FROM {GamePlatform} WHERE {GamePlatform}.[GameId] = {Game}.[Id] AND {GamePlatform}.[PlatformId] = @PlatformId)) AND (@AgeRatingId = 0 OR {Game}.[AgeRatingId] = @AgeRatingId) ORDER BY {Game}.[Id] OFFSET (@Page - 1) * @PageSize ROWS FETCH NEXT @PageSize ROWS ONLY",
+                "params": {
+                  "p_GameStatus_Published": {
+                    "type": "GameStatus Identifier",
+                    "value": "Entities.GameStatus.Published"
+                  },
+                  "SearchText": {
+                    "type": "Text",
+                    "value": "SearchText"
+                  },
+                  "GenreId": {
+                    "type": "Genre Identifier",
+                    "value": "GenreId"
+                  },
+                  "PlatformId": {
+                    "type": "Platform Identifier",
+                    "value": "PlatformId"
+                  },
+                  "AgeRatingId": {
+                    "type": "AgeRating Identifier",
+                    "value": "AgeRatingId"
+                  },
+                  "Page": {
+                    "type": "Integer",
+                    "value": "Page"
+                  },
+                  "PageSize": {
+                    "type": "Integer",
+                    "value": "PageSize"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "Games": "GetGames.List",
+                  "TotalCount": "GetGames.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Game_ListFeatured",
+            "kind": "server",
+            "public": true,
+            "description": "Lista jogos publicados em destaque.",
+            "inputs": [
+              {
+                "name": "Page",
+                "type": "Integer"
+              },
+              {
+                "name": "PageSize",
+                "type": "Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Games",
+                "type": "Game List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Game",
+                "as": "GetGames",
+                "where": "Game.StatusId = Entities.GameStatus.Published and Game.IsFeatured = True",
+                "sql": true,
+                "statement": "SELECT {Game}.* FROM {Game} WHERE {Game}.[StatusId] = @p_GameStatus_Published AND {Game}.[IsFeatured] = 1 ORDER BY {Game}.[Id] OFFSET (@Page - 1) * @PageSize ROWS FETCH NEXT @PageSize ROWS ONLY",
+                "params": {
+                  "p_GameStatus_Published": {
+                    "type": "GameStatus Identifier",
+                    "value": "Entities.GameStatus.Published"
+                  },
+                  "Page": {
+                    "type": "Integer",
+                    "value": "Page"
+                  },
+                  "PageSize": {
+                    "type": "Integer",
+                    "value": "PageSize"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "Games": "GetGames.List",
+                  "TotalCount": "GetGames.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Game_SetDevelopers",
+            "kind": "server",
+            "public": true,
+            "description": "Substitui desenvolvedores relacionados ao jogo.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "DeveloperIds",
+                "type": "Developer Identifier List"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GameDeveloper",
+                "as": "GetExistingGameDeveloper",
+                "where": "GameDeveloper.GameId = GameId",
+                "sql": true,
+                "statement": "SELECT {GameDeveloper}.* FROM {GameDeveloper} WHERE {GameDeveloper}.[GameId] = @GameId",
+                "params": {
+                  "GameId": {
+                    "type": "Game Identifier",
+                    "value": "GameId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "foreach": "GetExistingGameDeveloper.List",
+                "as": "EachExisting",
+                "do": [
+                  {
+                    "assign": {
+                      "SqlRecord1": "SqlRecord1"
+                    },
+                    "as": "LoadSqlRecord12"
+                  },
+                  {
+                    "delete": "GameDeveloper",
+                    "as": "DeleteGameDeveloper",
+                    "id": "SqlRecord1.Id"
+                  }
+                ]
+              },
+              {
+                "foreach": "DeveloperIds",
+                "as": "EachDeveloper",
+                "do": [
+                  {
+                    "assign": {
+                      "R.GameId": "GameId",
+                      "R.DeveloperId": "DeveloperIds.Current"
+                    },
+                    "as": "BuildRelation"
+                  },
+                  {
+                    "create": "GameDeveloper",
+                    "as": "CreateGameDeveloper",
+                    "record": "R"
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "GameDeveloper"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "GameDeveloper"
+              }
+            ]
+          },
+          {
+            "name": "Game_SetPublishers",
+            "kind": "server",
+            "public": true,
+            "description": "Substitui publicadoras relacionadas ao jogo.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "PublisherIds",
+                "type": "Publisher Identifier List"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GamePublisher",
+                "as": "DeleteExistingPublishers",
+                "sql": true,
+                "statement": "DELETE FROM {GamePublisher} WHERE {GamePublisher}.[GameId] = @GameId",
+                "params": {
+                  "GameId": {
+                    "type": "Game Identifier",
+                    "value": "GameId"
+                  }
+                }
+              },
+              {
+                "foreach": "PublisherIds",
+                "as": "EachPublisher",
+                "do": [
+                  {
+                    "assign": {
+                      "R.GameId": "GameId",
+                      "R.PublisherId": "PublisherIds.Current"
+                    },
+                    "as": "BuildRelation"
+                  },
+                  {
+                    "create": "GamePublisher",
+                    "as": "CreateGamePublisher",
+                    "record": "R"
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "GamePublisher"
+              }
+            ]
+          },
+          {
+            "name": "Game_SetGenres",
+            "kind": "server",
+            "public": true,
+            "description": "Substitui gêneros relacionados ao jogo.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "GenreIds",
+                "type": "Genre Identifier List"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GameGenre",
+                "as": "GetExistingGameGenre",
+                "where": "GameGenre.GameId = GameId",
+                "sql": true,
+                "statement": "SELECT {GameGenre}.* FROM {GameGenre} WHERE {GameGenre}.[GameId] = @GameId",
+                "params": {
+                  "GameId": {
+                    "type": "Game Identifier",
+                    "value": "GameId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "foreach": "GetExistingGameGenre.List",
+                "as": "EachExisting",
+                "do": [
+                  {
+                    "assign": {
+                      "SqlRecord1": "SqlRecord1"
+                    },
+                    "as": "LoadSqlRecord12"
+                  },
+                  {
+                    "delete": "GameGenre",
+                    "as": "DeleteGameGenre",
+                    "id": "SqlRecord1.Id"
+                  }
+                ]
+              },
+              {
+                "foreach": "GenreIds",
+                "as": "EachGenre",
+                "do": [
+                  {
+                    "assign": {
+                      "R.GameId": "GameId",
+                      "R.GenreId": "GenreIds.Current"
+                    },
+                    "as": "BuildRelation"
+                  },
+                  {
+                    "create": "GameGenre",
+                    "as": "CreateGameGenre",
+                    "record": "R"
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "GameGenre"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "GameGenre"
+              }
+            ]
+          },
+          {
+            "name": "Game_SetPlatforms",
+            "kind": "server",
+            "public": true,
+            "description": "Substitui plataformas relacionadas ao jogo.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "PlatformIds",
+                "type": "Platform Identifier List"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GamePlatform",
+                "as": "GetExistingGamePlatform",
+                "where": "GamePlatform.GameId = GameId",
+                "sql": true,
+                "statement": "SELECT {GamePlatform}.* FROM {GamePlatform} WHERE {GamePlatform}.[GameId] = @GameId",
+                "params": {
+                  "GameId": {
+                    "type": "Game Identifier",
+                    "value": "GameId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "foreach": "GetExistingGamePlatform.List",
+                "as": "EachExisting",
+                "do": [
+                  {
+                    "assign": {
+                      "SqlRecord1": "SqlRecord1"
+                    },
+                    "as": "LoadSqlRecord12"
+                  },
+                  {
+                    "delete": "GamePlatform",
+                    "as": "DeleteGamePlatform",
+                    "id": "SqlRecord1.Id"
+                  }
+                ]
+              },
+              {
+                "foreach": "PlatformIds",
+                "as": "EachPlatform",
+                "do": [
+                  {
+                    "assign": {
+                      "R.GameId": "GameId",
+                      "R.PlatformId": "PlatformIds.Current"
+                    },
+                    "as": "BuildRelation"
+                  },
+                  {
+                    "create": "GamePlatform",
+                    "as": "CreateGamePlatform",
+                    "record": "R"
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "GamePlatform"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "GamePlatform"
+              }
+            ]
+          },
+          {
+            "name": "GameEdition_Create",
+            "kind": "server",
+            "public": true,
+            "description": "Cria uma edição digital vendável.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "PlatformId",
+                "type": "Platform Identifier"
+              },
+              {
+                "name": "EditionTypeId",
+                "type": "EditionType Identifier"
+              },
+              {
+                "name": "Name",
+                "type": "Text"
+              },
+              {
+                "name": "SKU",
+                "type": "Text"
+              },
+              {
+                "name": "Description",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "Version",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "DownloadSizeBytes",
+                "type": "Long Integer",
+                "mandatory": false
+              },
+              {
+                "name": "BasePrice",
+                "type": "Currency"
+              },
+              {
+                "name": "CurrencyCode",
+                "type": "Text"
+              },
+              {
+                "name": "IsPreOrder",
+                "type": "Boolean"
+              },
+              {
+                "name": "ReleaseDate",
+                "type": "Date",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "GameEditionId",
+                "type": "GameEdition Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "R.GameId": "GameId",
+                  "R.PlatformId": "PlatformId",
+                  "R.EditionTypeId": "EditionTypeId",
+                  "R.Name": "Name",
+                  "R.SKU": "SKU",
+                  "R.Description": "Description",
+                  "R.Version": "Version",
+                  "R.DownloadSizeBytes": "DownloadSizeBytes",
+                  "R.BasePrice": "BasePrice",
+                  "R.CurrencyCode": "CurrencyCode",
+                  "R.IsPreOrder": "IsPreOrder",
+                  "R.ReleaseDate": "ReleaseDate",
+                  "R.IsActive": "True",
+                  "R.CreatedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "create": "GameEdition",
+                "as": "CreateGameEdition",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "GameEditionId": "CreateGameEdition.Id",
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "GameEdition"
+              }
+            ]
+          },
+          {
+            "name": "GameEdition_Update",
+            "kind": "server",
+            "public": true,
+            "description": "Atualiza GameEdition.",
+            "inputs": [
+              {
+                "name": "GameEditionId",
+                "type": "GameEdition Identifier"
+              },
+              {
+                "name": "Name",
+                "type": "Text"
+              },
+              {
+                "name": "SKU",
+                "type": "Text"
+              },
+              {
+                "name": "Description",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "Version",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "DownloadSizeBytes",
+                "type": "Long Integer",
+                "mandatory": false
+              },
+              {
+                "name": "BasePrice",
+                "type": "Currency"
+              },
+              {
+                "name": "CurrencyCode",
+                "type": "Text"
+              },
+              {
+                "name": "IsPreOrder",
+                "type": "Boolean"
+              },
+              {
+                "name": "ReleaseDate",
+                "type": "Date",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GameEdition",
+                "as": "GetGameEdition",
+                "where": "GameEdition.Id = GameEditionId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {GameEdition}.* FROM {GameEdition} WHERE {GameEdition}.[Id] = @GameEditionId",
+                "params": {
+                  "GameEditionId": {
+                    "type": "GameEdition Identifier",
+                    "value": "GameEditionId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "R": "SqlRecord1",
+                  "R.Name": "Name",
+                  "R.SKU": "SKU",
+                  "R.Description": "Description",
+                  "R.Version": "Version",
+                  "R.DownloadSizeBytes": "DownloadSizeBytes",
+                  "R.BasePrice": "BasePrice",
+                  "R.CurrencyCode": "CurrencyCode",
+                  "R.IsPreOrder": "IsPreOrder",
+                  "R.ReleaseDate": "ReleaseDate",
+                  "R.UpdatedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "GameEdition",
+                "as": "SaveGameEdition",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "GameEdition"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "GameEdition"
+              }
+            ]
+          },
+          {
+            "name": "GameEdition_Activate",
+            "kind": "server",
+            "public": true,
+            "description": "Ativa uma edição para venda.",
+            "inputs": [
+              {
+                "name": "GameEditionId",
+                "type": "GameEdition Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GameEdition",
+                "as": "GetGameEdition",
+                "where": "GameEdition.Id = GameEditionId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {GameEdition}.* FROM {GameEdition} WHERE {GameEdition}.[Id] = @GameEditionId",
+                "params": {
+                  "GameEditionId": {
+                    "type": "GameEdition Identifier",
+                    "value": "GameEditionId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "R": "SqlRecord1",
+                  "R.IsActive": "True"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "GameEdition",
+                "as": "SaveGameEdition",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "GameEdition"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "GameEdition"
+              }
+            ]
+          },
+          {
+            "name": "GameEdition_Deactivate",
+            "kind": "server",
+            "public": true,
+            "description": "Desativa uma edição sem revogar licenças.",
+            "inputs": [
+              {
+                "name": "GameEditionId",
+                "type": "GameEdition Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GameEdition",
+                "as": "GetGameEdition",
+                "where": "GameEdition.Id = GameEditionId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {GameEdition}.* FROM {GameEdition} WHERE {GameEdition}.[Id] = @GameEditionId",
+                "params": {
+                  "GameEditionId": {
+                    "type": "GameEdition Identifier",
+                    "value": "GameEditionId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "R": "SqlRecord1",
+                  "R.IsActive": "False"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "GameEdition",
+                "as": "SaveGameEdition",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "GameEdition"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "GameEdition"
+              }
+            ]
+          },
+          {
+            "name": "GameEdition_ListAvailable",
+            "kind": "server",
+            "public": true,
+            "description": "Lista edições ativas de um jogo.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "CountryCode",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "GameEditions",
+                "type": "GameEdition List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GameEdition",
+                "as": "GetGameEditions",
+                "where": "GameEdition.GameId = GameId and GameEdition.IsActive = True",
+                "sql": true,
+                "statement": "SELECT {GameEdition}.* FROM {GameEdition} WHERE {GameEdition}.[GameId] = @GameId AND {GameEdition}.[IsActive] = 1 AND (@CountryCode = '' OR {GameEdition}.[CountryCode] = @CountryCode)",
+                "params": {
+                  "GameId": {
+                    "type": "Game Identifier",
+                    "value": "GameId"
+                  },
+                  "CountryCode": {
+                    "type": "Text",
+                    "value": "CountryCode"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "GameEditions": "GetGameEditions.List",
+                  "TotalCount": "GetGameEditions.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Promotion_Create",
+            "kind": "server",
+            "public": true,
+            "description": "Cria uma promoção.",
+            "inputs": [
+              {
+                "name": "Name",
+                "type": "Text"
+              },
+              {
+                "name": "Description",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "DiscountTypeId",
+                "type": "DiscountType Identifier"
+              },
+              {
+                "name": "DiscountValue",
+                "type": "Decimal"
+              },
+              {
+                "name": "StartsOn",
+                "type": "Date Time"
+              },
+              {
+                "name": "EndsOn",
+                "type": "Date Time"
+              },
+              {
+                "name": "MaxRedemptions",
+                "type": "Integer",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "PromotionId",
+                "type": "Promotion Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "R.Name": "Name",
+                  "R.Description": "Description",
+                  "R.DiscountTypeId": "DiscountTypeId",
+                  "R.DiscountValue": "DiscountValue",
+                  "R.StartsOn": "StartsOn",
+                  "R.EndsOn": "EndsOn",
+                  "R.MaxRedemptions": "MaxRedemptions",
+                  "R.RedemptionCount": "0",
+                  "R.IsActive": "False"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "create": "Promotion",
+                "as": "CreatePromotion",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "PromotionId": "CreatePromotion.Id",
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Promotion"
+              }
+            ]
+          },
+          {
+            "name": "Promotion_Update",
+            "kind": "server",
+            "public": true,
+            "description": "Atualiza Promotion.",
+            "inputs": [
+              {
+                "name": "PromotionId",
+                "type": "Promotion Identifier"
+              },
+              {
+                "name": "Name",
+                "type": "Text"
+              },
+              {
+                "name": "Description",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "DiscountTypeId",
+                "type": "DiscountType Identifier"
+              },
+              {
+                "name": "DiscountValue",
+                "type": "Decimal"
+              },
+              {
+                "name": "StartsOn",
+                "type": "Date Time"
+              },
+              {
+                "name": "EndsOn",
+                "type": "Date Time"
+              },
+              {
+                "name": "MaxRedemptions",
+                "type": "Integer",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Promotion",
+                "as": "GetPromotion",
+                "where": "Promotion.Id = PromotionId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {Promotion}.* FROM {Promotion} WHERE {Promotion}.[Id] = @PromotionId",
+                "params": {
+                  "PromotionId": {
+                    "type": "Promotion Identifier",
+                    "value": "PromotionId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "R": "SqlRecord1",
+                  "R.Name": "Name",
+                  "R.Description": "Description",
+                  "R.DiscountTypeId": "DiscountTypeId",
+                  "R.DiscountValue": "DiscountValue",
+                  "R.StartsOn": "StartsOn",
+                  "R.EndsOn": "EndsOn",
+                  "R.MaxRedemptions": "MaxRedemptions"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "Promotion",
+                "as": "SavePromotion",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Promotion"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "Promotion"
+              }
+            ]
+          },
+          {
+            "name": "Promotion_Activate",
+            "kind": "server",
+            "public": true,
+            "description": "Ativa uma promoção.",
+            "inputs": [
+              {
+                "name": "PromotionId",
+                "type": "Promotion Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Promotion",
+                "as": "GetPromotion",
+                "where": "Promotion.Id = PromotionId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {Promotion}.* FROM {Promotion} WHERE {Promotion}.[Id] = @PromotionId",
+                "params": {
+                  "PromotionId": {
+                    "type": "Promotion Identifier",
+                    "value": "PromotionId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "R": "SqlRecord1",
+                  "R.IsActive": "True"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "Promotion",
+                "as": "SavePromotion",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Promotion"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "Promotion"
+              }
+            ]
+          },
+          {
+            "name": "Promotion_Deactivate",
+            "kind": "server",
+            "public": true,
+            "description": "Desativa uma promoção.",
+            "inputs": [
+              {
+                "name": "PromotionId",
+                "type": "Promotion Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Promotion",
+                "as": "GetPromotion",
+                "where": "Promotion.Id = PromotionId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {Promotion}.* FROM {Promotion} WHERE {Promotion}.[Id] = @PromotionId",
+                "params": {
+                  "PromotionId": {
+                    "type": "Promotion Identifier",
+                    "value": "PromotionId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "R": "SqlRecord1",
+                  "R.IsActive": "False"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "Promotion",
+                "as": "SavePromotion",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Promotion"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "Promotion"
+              }
+            ]
+          },
+          {
+            "name": "Promotion_AddEdition",
+            "kind": "server",
+            "public": true,
+            "description": "Adiciona uma edição à promoção.",
+            "inputs": [
+              {
+                "name": "PromotionId",
+                "type": "Promotion Identifier"
+              },
+              {
+                "name": "GameEditionId",
+                "type": "GameEdition Identifier"
+              },
+              {
+                "name": "MaximumDiscount",
+                "type": "Currency",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "PromotionGameEditionId",
+                "type": "PromotionGameEdition Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "R.PromotionId": "PromotionId",
+                  "R.GameEditionId": "GameEditionId",
+                  "R.MaximumDiscount": "MaximumDiscount",
+                  "R.IsActive": "True"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "create": "PromotionGameEdition",
+                "as": "CreatePromotionGameEdition",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "PromotionGameEditionId": "CreatePromotionGameEdition.Id",
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "PromotionGameEdition"
+              }
+            ]
+          },
+          {
+            "name": "Promotion_RemoveEdition",
+            "kind": "server",
+            "public": true,
+            "description": "Remove uma edição de uma promoção.",
+            "inputs": [
+              {
+                "name": "PromotionGameEditionId",
+                "type": "PromotionGameEdition Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "delete": "PromotionGameEdition",
+                "as": "DeletePromotionGameEdition",
+                "id": "PromotionGameEditionId"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Promotion_CalculatePrice",
+            "kind": "server",
+            "public": true,
+            "description": "Calcula o preço atual de uma edição.",
+            "inputs": [
+              {
+                "name": "GameEditionId",
+                "type": "GameEdition Identifier"
+              },
+              {
+                "name": "UserId",
+                "type": "User Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "CouponCode",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "UnitPrice",
+                "type": "Currency"
+              },
+              {
+                "name": "DiscountAmount",
+                "type": "Currency"
+              },
+              {
+                "name": "TaxAmount",
+                "type": "Currency"
+              },
+              {
+                "name": "TotalAmount",
+                "type": "Currency"
+              },
+              {
+                "name": "CurrencyCode",
+                "type": "Text"
+              },
+              {
+                "name": "IsValid",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GameEdition",
+                "as": "GetEditionPrice",
+                "where": "GameEdition.Id = GameEditionId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {GameEdition}.* FROM {GameEdition} WHERE {GameEdition}.[Id] = @GameEditionId",
+                "params": {
+                  "GameEditionId": {
+                    "type": "GameEdition Identifier",
+                    "value": "GameEditionId"
+                  }
+                }
+              },
+              {
+                "get": "Coupon",
+                "as": "FindPriceCoupon",
+                "sql": true,
+                "statement": "SELECT {Coupon}.* FROM {Coupon} WHERE {Coupon}.[Code] = @CouponCode AND {Coupon}.[IsActive] = 1 AND (@UserId = 0 OR NOT EXISTS (SELECT 1 FROM {CouponRedemption} WHERE {CouponRedemption}.[CouponId] = {Coupon}.[Id] AND {CouponRedemption}.[UserId] = @UserId))",
+                "params": {
+                  "CouponCode": {
+                    "type": "Text",
+                    "value": "CouponCode"
+                  },
+                  "UserId": {
+                    "type": "User Identifier",
+                    "value": "UserId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "UnitPrice": "SqlRecord1.BasePrice",
+                  "DiscountAmount": "0",
+                  "TaxAmount": "0",
+                  "TotalAmount": "SqlRecord1.BasePrice",
+                  "CurrencyCode": "SqlRecord1.CurrencyCode",
+                  "IsValid": "not GetEditionPrice.List.Empty and (CouponCode = \"\" or not FindPriceCoupon.List.Empty)"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "SqlRecord1",
+                "type": "GameEdition"
+              }
+            ]
+          },
+          {
+            "name": "Coupon_Create",
+            "kind": "server",
+            "public": true,
+            "description": "Cria um cupom.",
+            "inputs": [
+              {
+                "name": "Code",
+                "type": "Text"
+              },
+              {
+                "name": "Description",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "DiscountTypeId",
+                "type": "DiscountType Identifier"
+              },
+              {
+                "name": "DiscountValue",
+                "type": "Decimal"
+              },
+              {
+                "name": "MinimumOrderAmount",
+                "type": "Currency"
+              },
+              {
+                "name": "StartsOn",
+                "type": "Date Time"
+              },
+              {
+                "name": "EndsOn",
+                "type": "Date Time"
+              },
+              {
+                "name": "MaximumRedemptions",
+                "type": "Integer",
+                "mandatory": false
+              },
+              {
+                "name": "MaximumPerUser",
+                "type": "Integer",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "CouponId",
+                "type": "Coupon Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "R.Code": "Code",
+                  "R.Description": "Description",
+                  "R.DiscountTypeId": "DiscountTypeId",
+                  "R.DiscountValue": "DiscountValue",
+                  "R.MinimumOrderAmount": "MinimumOrderAmount",
+                  "R.StartsOn": "StartsOn",
+                  "R.EndsOn": "EndsOn",
+                  "R.MaximumRedemptions": "MaximumRedemptions",
+                  "R.MaximumPerUser": "MaximumPerUser",
+                  "R.RedemptionCount": "0",
+                  "R.IsActive": "True"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "create": "Coupon",
+                "as": "CreateCoupon",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "CouponId": "CreateCoupon.Id",
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Coupon"
+              }
+            ]
+          },
+          {
+            "name": "Coupon_Validate",
+            "kind": "server",
+            "public": true,
+            "description": "Valida um cupom sem registrar seu uso.",
+            "inputs": [
+              {
+                "name": "CouponCode",
+                "type": "Text"
+              },
+              {
+                "name": "UserId",
+                "type": "User Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "CartId",
+                "type": "Cart Identifier",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "IsValid",
+                "type": "Boolean"
+              },
+              {
+                "name": "DiscountValue",
+                "type": "Decimal"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Coupon",
+                "as": "GetCoupon",
+                "where": "Coupon.Code = CouponCode and Coupon.IsActive = True",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {Coupon}.* FROM {Coupon} WHERE {Coupon}.[Code] = @CouponCode AND {Coupon}.[IsActive] = 1 AND (@UserId = 0 OR NOT EXISTS (SELECT 1 FROM {CouponRedemption} WHERE {CouponRedemption}.[CouponId] = {Coupon}.[Id] AND {CouponRedemption}.[UserId] = @UserId)) AND (@CartId = 0 OR EXISTS (SELECT 1 FROM {Cart} WHERE {Cart}.[Id] = @CartId AND {Cart}.[UserId] = @UserId))",
+                "params": {
+                  "CouponCode": {
+                    "type": "Text",
+                    "value": "CouponCode"
+                  },
+                  "UserId": {
+                    "type": "User Identifier",
+                    "value": "UserId"
+                  },
+                  "CartId": {
+                    "type": "Cart Identifier",
+                    "value": "CartId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "IsValid": "not GetCoupon.List.Empty",
+                  "DiscountValue": "SqlRecord1.DiscountValue"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "SqlRecord1",
+                "type": "Coupon"
+              }
+            ]
+          },
+          {
+            "name": "Cart_GetOrCreate",
+            "kind": "server",
+            "public": true,
+            "description": "Obtém ou cria o carrinho ativo do usuário.",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "CartId",
+                "type": "Cart Identifier"
+              },
+              {
+                "name": "Cart",
+                "type": "Cart"
+              },
+              {
+                "name": "Created",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Cart",
+                "as": "GetCart",
+                "where": "Cart.UserId = GetUserId() and Cart.StatusId = Entities.CartStatus.Active",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {Cart}.* FROM {Cart} WHERE {Cart}.[UserId] = @UserId AND {Cart}.[StatusId] = @p_CartStatus_Active",
+                "params": {
+                  "p_CartStatus_Active": {
+                    "type": "CartStatus Identifier",
+                    "value": "Entities.CartStatus.Active"
+                  },
+                  "UserId": {
+                    "type": "User Identifier",
+                    "value": "GetUserId()"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "if": "GetCart.List.Empty",
+                "as": "CartMissing",
+                "then": [
+                  {
+                    "assign": {
+                      "R.UserId": "GetUserId()",
+                      "R.StatusId": "Entities.CartStatus.Active",
+                      "R.CurrencyCode": "\"BRL\"",
+                      "R.CreatedOn": "CurrDateTime()"
+                    },
+                    "as": "BuildCart"
+                  },
+                  {
+                    "create": "Cart",
+                    "as": "CreateCart",
+                    "record": "R"
+                  },
+                  {
+                    "assign": {
+                      "CartId": "CreateCart.Id",
+                      "Cart": "R",
+                      "Created": "True"
+                    },
+                    "as": "SetCreatedCart"
+                  }
+                ],
+                "else": [
+                  {
+                    "assign": {
+                      "CartId": "SqlRecord1.Id",
+                      "Cart": "SqlRecord1",
+                      "Created": "False"
+                    },
+                    "as": "SetExistingCart"
+                  }
+                ]
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Cart"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "Cart"
+              }
+            ]
+          },
+          {
+            "name": "Cart_AddItem",
+            "kind": "server",
+            "public": true,
+            "description": "Adiciona uma edição digital ao carrinho.",
+            "inputs": [
+              {
+                "name": "GameEditionId",
+                "type": "GameEdition Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "CartItemId",
+                "type": "CartItem Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Cart",
+                "as": "GetCart",
+                "where": "Cart.UserId = GetUserId() and Cart.StatusId = Entities.CartStatus.Active",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {Cart}.* FROM {Cart} WHERE {Cart}.[UserId] = @UserId AND {Cart}.[StatusId] = @p_CartStatus_Active",
+                "params": {
+                  "p_CartStatus_Active": {
+                    "type": "CartStatus Identifier",
+                    "value": "Entities.CartStatus.Active"
+                  },
+                  "UserId": {
+                    "type": "User Identifier",
+                    "value": "GetUserId()"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "get": "CartItem",
+                "as": "GetExistingItem",
+                "where": "CartItem.CartId = SqlRecord1.Id and CartItem.GameEditionId = GameEditionId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {CartItem}.* FROM {CartItem} WHERE {CartItem}.[CartId] = @p_GetCart_List_Current_Cart_Id AND {CartItem}.[GameEditionId] = @GameEditionId",
+                "params": {
+                  "p_GetCart_List_Current_Cart_Id": {
+                    "type": "Long Integer",
+                    "value": "SqlRecord1.Id"
+                  },
+                  "GameEditionId": {
+                    "type": "GameEdition Identifier",
+                    "value": "GameEditionId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord2": "SqlRecord2"
+                },
+                "as": "LoadSqlRecord2"
+              },
+              {
+                "if": "GetExistingItem.List.Empty",
+                "as": "ItemMissing",
+                "then": [
+                  {
+                    "assign": {
+                      "R.CartId": "SqlRecord1.Id",
+                      "R.GameEditionId": "GameEditionId",
+                      "R.Quantity": "1",
+                      "R.UnitPrice": "0",
+                      "R.DiscountAmount": "0",
+                      "R.AddedOn": "CurrDateTime()"
+                    },
+                    "as": "BuildCartItem"
+                  },
+                  {
+                    "create": "CartItem",
+                    "as": "CreateCartItem",
+                    "record": "R"
+                  },
+                  {
+                    "assign": {
+                      "CartItemId": "CreateCartItem.Id",
+                      "Success": "True"
+                    },
+                    "as": "SetNewCartItem"
+                  }
+                ],
+                "else": [
+                  {
+                    "assign": {
+                      "CartItemId": "SqlRecord2.Id",
+                      "Success": "False"
+                    },
+                    "as": "SetExistingCartItem"
+                  }
+                ]
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "CartItem"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "Cart"
+              },
+              {
+                "name": "SqlRecord2",
+                "type": "CartItem"
+              }
+            ]
+          },
+          {
+            "name": "Cart_RemoveItem",
+            "kind": "server",
+            "public": true,
+            "description": "Remove um item do carrinho do usuário.",
+            "inputs": [
+              {
+                "name": "CartItemId",
+                "type": "CartItem Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "delete": "CartItem",
+                "as": "DeleteCartItem",
+                "id": "CartItemId"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Cart_Clear",
+            "kind": "server",
+            "public": true,
+            "description": "Esvazia o carrinho ativo.",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Cart",
+                "as": "GetCart",
+                "where": "Cart.UserId = GetUserId() and Cart.StatusId = Entities.CartStatus.Active",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {Cart}.* FROM {Cart} WHERE {Cart}.[UserId] = @UserId AND {Cart}.[StatusId] = @p_CartStatus_Active",
+                "params": {
+                  "p_CartStatus_Active": {
+                    "type": "CartStatus Identifier",
+                    "value": "Entities.CartStatus.Active"
+                  },
+                  "UserId": {
+                    "type": "User Identifier",
+                    "value": "GetUserId()"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "get": "CartItem",
+                "as": "FindCartItems",
+                "where": "CartItem.CartId = SqlRecord1.Id",
+                "sql": true,
+                "statement": "SELECT {CartItem}.* FROM {CartItem} WHERE {CartItem}.[CartId] = @p_GetCart_List_Current_Cart_Id",
+                "params": {
+                  "p_GetCart_List_Current_Cart_Id": {
+                    "type": "Long Integer",
+                    "value": "SqlRecord1.Id"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord2": "SqlRecord2"
+                },
+                "as": "LoadSqlRecord2"
+              },
+              {
+                "foreach": "FindCartItems.List",
+                "as": "EachCartItem",
+                "do": [
+                  {
+                    "assign": {
+                      "SqlRecord2": "SqlRecord2"
+                    },
+                    "as": "LoadSqlRecord22"
+                  },
+                  {
+                    "delete": "CartItem",
+                    "as": "DeleteCartItem",
+                    "id": "SqlRecord2.Id"
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "SqlRecord1",
+                "type": "Cart"
+              },
+              {
+                "name": "SqlRecord2",
+                "type": "CartItem"
+              }
+            ]
+          },
+          {
+            "name": "Cart_Get",
+            "kind": "server",
+            "public": true,
+            "description": "Consulta o carrinho ativo.",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "Cart",
+                "type": "Cart"
+              },
+              {
+                "name": "Found",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Cart",
+                "as": "GetCart",
+                "where": "Cart.UserId = GetUserId() and Cart.StatusId = Entities.CartStatus.Active",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {Cart}.* FROM {Cart} WHERE {Cart}.[UserId] = @UserId AND {Cart}.[StatusId] = @p_CartStatus_Active",
+                "params": {
+                  "p_CartStatus_Active": {
+                    "type": "CartStatus Identifier",
+                    "value": "Entities.CartStatus.Active"
+                  },
+                  "UserId": {
+                    "type": "User Identifier",
+                    "value": "GetUserId()"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "Cart": "SqlRecord1",
+                  "Found": "not GetCart.List.Empty"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "SqlRecord1",
+                "type": "Cart"
+              }
+            ]
+          },
+          {
+            "name": "Cart_Recalculate",
+            "kind": "server",
+            "public": true,
+            "description": "Recalcula preços e disponibilidade do carrinho.",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Cart",
+                "as": "GetCart",
+                "where": "Cart.UserId = GetUserId() and Cart.StatusId = Entities.CartStatus.Active",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {Cart}.* FROM {Cart} WHERE {Cart}.[UserId] = @UserId AND {Cart}.[StatusId] = @p_CartStatus_Active",
+                "params": {
+                  "p_CartStatus_Active": {
+                    "type": "CartStatus Identifier",
+                    "value": "Entities.CartStatus.Active"
+                  },
+                  "UserId": {
+                    "type": "User Identifier",
+                    "value": "GetUserId()"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "Success": "not GetCart.List.Empty"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Checkout_Validate",
+            "kind": "server",
+            "public": true,
+            "description": "Valida o carrinho antes do checkout.",
+            "inputs": [
+              {
+                "name": "CouponCode",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "IsValid",
+                "type": "Boolean"
+              },
+              {
+                "name": "CartId",
+                "type": "Cart Identifier"
+              },
+              {
+                "name": "Subtotal",
+                "type": "Currency"
+              },
+              {
+                "name": "DiscountTotal",
+                "type": "Currency"
+              },
+              {
+                "name": "TotalAmount",
+                "type": "Currency"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Cart",
+                "as": "GetCart",
+                "where": "Cart.UserId = GetUserId() and Cart.StatusId = Entities.CartStatus.Active",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {Cart}.* FROM {Cart} WHERE {Cart}.[UserId] = @UserId AND {Cart}.[StatusId] = @p_CartStatus_Active",
+                "params": {
+                  "p_CartStatus_Active": {
+                    "type": "CartStatus Identifier",
+                    "value": "Entities.CartStatus.Active"
+                  },
+                  "UserId": {
+                    "type": "User Identifier",
+                    "value": "GetUserId()"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "get": "CartItem",
+                "as": "FindCartItems",
+                "where": "CartItem.CartId = SqlRecord1.Id",
+                "sql": true,
+                "statement": "SELECT {CartItem}.* FROM {CartItem} WHERE {CartItem}.[CartId] = @p_GetCart_List_Current_Cart_Id AND (@CouponCode = '' OR EXISTS (SELECT 1 FROM {Coupon} WHERE {Coupon}.[Code] = @CouponCode AND {Coupon}.[IsActive] = 1))",
+                "params": {
+                  "p_GetCart_List_Current_Cart_Id": {
+                    "type": "Long Integer",
+                    "value": "SqlRecord1.Id"
+                  },
+                  "CouponCode": {
+                    "type": "Text",
+                    "value": "CouponCode"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "IsValid": "not GetCart.List.Empty and not FindCartItems.List.Empty",
+                  "CartId": "SqlRecord1.Id",
+                  "Subtotal": "0",
+                  "DiscountTotal": "0",
+                  "TotalAmount": "0"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "SqlRecord1",
+                "type": "Cart"
+              }
+            ]
+          },
+          {
+            "name": "Checkout_CreateOrder",
+            "kind": "server",
+            "public": true,
+            "description": "Cria um pedido a partir do carrinho.",
+            "inputs": [
+              {
+                "name": "CartId",
+                "type": "Cart Identifier"
+              },
+              {
+                "name": "CouponCode",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "BillingCountryCode",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "OrderId",
+                "type": "Order Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "R.UserId": "GetUserId()",
+                  "R.OrderNumber": "IntegerToText(CartId)",
+                  "R.StatusId": "Entities.OrderStatus.Created",
+                  "R.CurrencyCode": "\"BRL\"",
+                  "R.Subtotal": "0",
+                  "R.DiscountTotal": "0",
+                  "R.TaxTotal": "0",
+                  "R.TotalAmount": "0",
+                  "R.BillingCountryCode": "BillingCountryCode",
+                  "R.CreatedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "create": "Order",
+                "as": "CreateOrder",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "OrderId": "CreateOrder.Id",
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Order"
+              }
+            ]
+          },
+          {
+            "name": "Order_Get",
+            "kind": "server",
+            "public": true,
+            "description": "Consulta Order.",
+            "inputs": [
+              {
+                "name": "OrderId",
+                "type": "Order Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Order",
+                "type": "Order"
+              },
+              {
+                "name": "Found",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Order",
+                "as": "GetOrder",
+                "where": "Order.Id = OrderId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {Order}.* FROM {Order} WHERE {Order}.[Id] = @OrderId",
+                "params": {
+                  "OrderId": {
+                    "type": "Order Identifier",
+                    "value": "OrderId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "Order": "SqlRecord1",
+                  "Found": "not GetOrder.List.Empty"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "SqlRecord1",
+                "type": "Order"
+              }
+            ]
+          },
+          {
+            "name": "Order_ListMine",
+            "kind": "server",
+            "public": true,
+            "description": "Lista pedidos do usuário.",
+            "inputs": [
+              {
+                "name": "Page",
+                "type": "Integer"
+              },
+              {
+                "name": "PageSize",
+                "type": "Integer"
+              },
+              {
+                "name": "StatusId",
+                "type": "OrderStatus Identifier",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Orders",
+                "type": "Order List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Order",
+                "as": "FindOrders",
+                "where": "Order.UserId = GetUserId()",
+                "sql": true,
+                "statement": "SELECT {Order}.* FROM {Order} WHERE {Order}.[UserId] = @UserId AND (@StatusId = 0 OR {Order}.[StatusId] = @StatusId) ORDER BY {Order}.[Id] OFFSET (@Page - 1) * @PageSize ROWS FETCH NEXT @PageSize ROWS ONLY",
+                "params": {
+                  "UserId": {
+                    "type": "User Identifier",
+                    "value": "GetUserId()"
+                  },
+                  "StatusId": {
+                    "type": "OrderStatus Identifier",
+                    "value": "StatusId"
+                  },
+                  "Page": {
+                    "type": "Integer",
+                    "value": "Page"
+                  },
+                  "PageSize": {
+                    "type": "Integer",
+                    "value": "PageSize"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "Orders": "FindOrders.List",
+                  "TotalCount": "FindOrders.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Order_Cancel",
+            "kind": "server",
+            "public": true,
+            "description": "Cancela um pedido não pago.",
+            "inputs": [
+              {
+                "name": "OrderId",
+                "type": "Order Identifier"
+              },
+              {
+                "name": "Reason",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Order",
+                "as": "GetOrder",
+                "where": "Order.Id = OrderId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {Order}.* FROM {Order} WHERE {Order}.[Id] = @OrderId",
+                "params": {
+                  "OrderId": {
+                    "type": "Order Identifier",
+                    "value": "OrderId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "R": "SqlRecord1",
+                  "R.StatusId": "Entities.OrderStatus.Cancelled",
+                  "R.CancellationReason": "Reason"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "Order",
+                "as": "SaveOrder",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Order"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "Order"
+              }
+            ]
+          },
+          {
+            "name": "Order_MarkPaid",
+            "kind": "server",
+            "public": true,
+            "description": "Confirma o pagamento de um pedido.",
+            "inputs": [
+              {
+                "name": "OrderId",
+                "type": "Order Identifier"
+              },
+              {
+                "name": "PaymentTransactionId",
+                "type": "PaymentTransaction Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Order",
+                "as": "GetOrder",
+                "where": "Order.Id = OrderId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {Order}.* FROM {Order} WHERE {Order}.[Id] = @OrderId",
+                "params": {
+                  "OrderId": {
+                    "type": "Order Identifier",
+                    "value": "OrderId"
+                  }
+                }
+              },
+              {
+                "get": "PaymentTransaction",
+                "as": "VerifyPayment",
+                "sql": true,
+                "statement": "SELECT {PaymentTransaction}.* FROM {PaymentTransaction} WHERE {PaymentTransaction}.[Id] = @PaymentTransactionId",
+                "params": {
+                  "PaymentTransactionId": {
+                    "type": "PaymentTransaction Identifier",
+                    "value": "PaymentTransactionId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "R": "SqlRecord1",
+                  "R.StatusId": "Entities.OrderStatus.Paid",
+                  "R.PaidOn": "If(not VerifyPayment.List.Empty, CurrDateTime(), NullDate())"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "Order",
+                "as": "SaveOrder",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Order"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "Order"
+              }
+            ]
+          },
+          {
+            "name": "Payment_CreateIntent",
+            "kind": "server",
+            "public": true,
+            "description": "Cria uma intenção de pagamento.",
+            "inputs": [
+              {
+                "name": "OrderId",
+                "type": "Order Identifier"
+              },
+              {
+                "name": "PaymentProvider",
+                "type": "Text"
+              },
+              {
+                "name": "PaymentMethodToken",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "PaymentTransactionId",
+                "type": "PaymentTransaction Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "R.OrderId": "OrderId",
+                  "R.ProviderName": "PaymentProvider",
+                  "R.PaymentMethodToken": "PaymentMethodToken",
+                  "R.StatusId": "Entities.PaymentStatus.Pending",
+                  "R.Amount": "0",
+                  "R.CurrencyCode": "\"BRL\"",
+                  "R.CreatedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "create": "PaymentTransaction",
+                "as": "CreatePaymentTransaction",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "PaymentTransactionId": "CreatePaymentTransaction.Id",
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "PaymentTransaction"
+              }
+            ]
+          },
+          {
+            "name": "Payment_HandleWebhook",
+            "kind": "server",
+            "public": true,
+            "description": "Processa um evento do provedor de pagamento.",
+            "inputs": [
+              {
+                "name": "ProviderName",
+                "type": "Text"
+              },
+              {
+                "name": "ProviderTransactionId",
+                "type": "Text"
+              },
+              {
+                "name": "EventType",
+                "type": "Text"
+              },
+              {
+                "name": "Payload",
+                "type": "Text"
+              },
+              {
+                "name": "Signature",
+                "type": "Text"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Processed",
+                "type": "Boolean"
+              },
+              {
+                "name": "OrderId",
+                "type": "Order Identifier"
+              }
+            ],
+            "steps": [
+              {
+                "get": "PaymentTransaction",
+                "as": "GetPayment",
+                "where": "PaymentTransaction.ProviderTransactionId = ProviderTransactionId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {PaymentTransaction}.* FROM {PaymentTransaction} WHERE {PaymentTransaction}.[ProviderTransactionId] = @ProviderTransactionId AND {PaymentTransaction}.[ProviderName] = @ProviderName",
+                "params": {
+                  "ProviderTransactionId": {
+                    "type": "Text",
+                    "value": "ProviderTransactionId"
+                  },
+                  "ProviderName": {
+                    "type": "Text",
+                    "value": "ProviderName"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "if": "EventType = \"payment.succeeded\" and Length(Payload) > 0 and Length(Signature) > 0",
+                "as": "PaymentApproved",
+                "then": [
+                  {
+                    "assign": {
+                      "R": "SqlRecord1",
+                      "R.StatusId": "Entities.PaymentStatus.Approved",
+                      "R.ProcessedOn": "CurrDateTime()"
+                    },
+                    "as": "ApprovePayment"
+                  },
+                  {
+                    "save": "PaymentTransaction",
+                    "as": "SavePayment",
+                    "record": "R"
+                  },
+                  {
+                    "assign": {
+                      "Processed": "True",
+                      "OrderId": "SqlRecord1.OrderId"
+                    },
+                    "as": "SetApprovedPayment"
+                  }
+                ],
+                "else": [
+                  {
+                    "assign": {
+                      "Processed": "False",
+                      "OrderId": "SqlRecord1.OrderId"
+                    },
+                    "as": "SetUnchangedPayment"
+                  }
+                ]
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "PaymentTransaction"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "PaymentTransaction"
+              }
+            ]
+          },
+          {
+            "name": "Payment_ReconcilePending",
+            "kind": "server",
+            "public": true,
+            "description": "Lista pagamentos pendentes para reconciliação.",
+            "inputs": [
+              {
+                "name": "OlderThanMinutes",
+                "type": "Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Payments",
+                "type": "PaymentTransaction List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "PaymentTransaction",
+                "as": "GetPayments",
+                "where": "PaymentTransaction.StatusId = Entities.PaymentStatus.Pending",
+                "sql": true,
+                "statement": "SELECT {PaymentTransaction}.* FROM {PaymentTransaction} WHERE {PaymentTransaction}.[StatusId] = @p_PaymentStatus_Pending AND {PaymentTransaction}.[CreatedOn] < DATEADD(minute, -@OlderThanMinutes, @CurrentDateTime)",
+                "params": {
+                  "p_PaymentStatus_Pending": {
+                    "type": "PaymentStatus Identifier",
+                    "value": "Entities.PaymentStatus.Pending"
+                  },
+                  "OlderThanMinutes": {
+                    "type": "Integer",
+                    "value": "OlderThanMinutes"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "Payments": "GetPayments.List",
+                  "TotalCount": "GetPayments.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Refund_Request",
+            "kind": "server",
+            "public": true,
+            "description": "Solicita reembolso.",
+            "inputs": [
+              {
+                "name": "OrderId",
+                "type": "Order Identifier"
+              },
+              {
+                "name": "Reason",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "Amount",
+                "type": "Currency"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "RefundId",
+                "type": "Refund Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "R.OrderId": "OrderId",
+                  "R.Reason": "Reason",
+                  "R.Amount": "Amount",
+                  "R.StatusId": "Entities.RefundStatus.Requested",
+                  "R.RequestedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "create": "Refund",
+                "as": "CreateRefund",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "RefundId": "CreateRefund.Id",
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Refund"
+              }
+            ]
+          },
+          {
+            "name": "Refund_Approve",
+            "kind": "server",
+            "public": true,
+            "description": "Aprova uma solicitação de reembolso.",
+            "inputs": [
+              {
+                "name": "RefundId",
+                "type": "Refund Identifier"
+              },
+              {
+                "name": "ApprovalNote",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Refund",
+                "as": "GetRefund",
+                "where": "Refund.Id = RefundId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {Refund}.* FROM {Refund} WHERE {Refund}.[Id] = @RefundId",
+                "params": {
+                  "RefundId": {
+                    "type": "Refund Identifier",
+                    "value": "RefundId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "R": "SqlRecord1",
+                  "R.StatusId": "Entities.RefundStatus.Processing",
+                  "R.ApprovalNote": "ApprovalNote"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "Refund",
+                "as": "SaveRefund",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Refund"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "Refund"
+              }
+            ]
+          },
+          {
+            "name": "Refund_Process",
+            "kind": "server",
+            "public": true,
+            "description": "Conclui um reembolso.",
+            "inputs": [
+              {
+                "name": "RefundId",
+                "type": "Refund Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Refund",
+                "as": "GetRefund",
+                "where": "Refund.Id = RefundId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {Refund}.* FROM {Refund} WHERE {Refund}.[Id] = @RefundId",
+                "params": {
+                  "RefundId": {
+                    "type": "Refund Identifier",
+                    "value": "RefundId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "R": "SqlRecord1",
+                  "R.StatusId": "Entities.RefundStatus.Completed",
+                  "R.CompletedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "Refund",
+                "as": "SaveRefund",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Refund"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "Refund"
+              }
+            ]
+          },
+          {
+            "name": "Refund_HandleWebhook",
+            "kind": "server",
+            "public": true,
+            "description": "Processa a confirmação de reembolso.",
+            "inputs": [
+              {
+                "name": "RefundId",
+                "type": "Refund Identifier"
+              },
+              {
+                "name": "ProviderRefundId",
+                "type": "Text"
+              },
+              {
+                "name": "Payload",
+                "type": "Text"
+              },
+              {
+                "name": "Signature",
+                "type": "Text"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Refund",
+                "as": "GetRefund",
+                "where": "Refund.Id = RefundId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {Refund}.* FROM {Refund} WHERE {Refund}.[Id] = @RefundId",
+                "params": {
+                  "RefundId": {
+                    "type": "Refund Identifier",
+                    "value": "RefundId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "R": "SqlRecord1",
+                  "R.StatusId": "If(Length(Payload) > 0 and Length(Signature) > 0, Entities.RefundStatus.Completed, Entities.RefundStatus.Processing)",
+                  "R.ProviderRefundId": "ProviderRefundId",
+                  "R.CompletedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "Refund",
+                "as": "SaveRefund",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Refund"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "Refund"
+              }
+            ]
+          },
+          {
+            "name": "License_GrantForOrder",
+            "kind": "server",
+            "public": true,
+            "description": "Concede uma licença para cada item de um pedido pago.",
+            "inputs": [
+              {
+                "name": "OrderId",
+                "type": "Order Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "GrantedCount",
+                "type": "Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Order",
+                "as": "GetOrder",
+                "where": "Order.Id = OrderId and Order.StatusId = Entities.OrderStatus.Paid",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {Order}.* FROM {Order} WHERE {Order}.[Id] = @OrderId AND {Order}.[StatusId] = @p_OrderStatus_Paid",
+                "params": {
+                  "p_OrderStatus_Paid": {
+                    "type": "OrderStatus Identifier",
+                    "value": "Entities.OrderStatus.Paid"
+                  },
+                  "OrderId": {
+                    "type": "Order Identifier",
+                    "value": "OrderId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "get": "OrderItem",
+                "as": "FindOrderItems",
+                "where": "OrderItem.OrderId = OrderId",
+                "sql": true,
+                "statement": "SELECT {OrderItem}.* FROM {OrderItem} WHERE {OrderItem}.[OrderId] = @OrderId",
+                "params": {
+                  "OrderId": {
+                    "type": "Order Identifier",
+                    "value": "OrderId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord2": "SqlRecord2"
+                },
+                "as": "LoadSqlRecord2"
+              },
+              {
+                "foreach": "FindOrderItems.List",
+                "as": "EachOrderItem",
+                "do": [
+                  {
+                    "assign": {
+                      "SqlRecord1": "SqlRecord1"
+                    },
+                    "as": "LoadSqlRecord12"
+                  },
+                  {
+                    "assign": {
+                      "SqlRecord2": "SqlRecord2"
+                    },
+                    "as": "LoadSqlRecord22"
+                  },
+                  {
+                    "assign": {
+                      "R.UserId": "SqlRecord1.UserId",
+                      "R.OrderItemId": "SqlRecord2.Id",
+                      "R.GameEditionId": "SqlRecord2.GameEditionId",
+                      "R.StatusId": "Entities.LicenseStatus.Active",
+                      "R.GrantedOn": "CurrDateTime()"
+                    },
+                    "as": "BuildLicense"
+                  },
+                  {
+                    "create": "License",
+                    "as": "CreateLicense",
+                    "record": "R"
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "GrantedCount": "FindOrderItems.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "License"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "Order"
+              },
+              {
+                "name": "SqlRecord2",
+                "type": "OrderItem"
+              }
+            ]
+          },
+          {
+            "name": "License_Get",
+            "kind": "server",
+            "public": true,
+            "description": "Consulta License.",
+            "inputs": [
+              {
+                "name": "LicenseId",
+                "type": "License Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "License",
+                "type": "License"
+              },
+              {
+                "name": "Found",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "License",
+                "as": "GetLicense",
+                "where": "License.Id = LicenseId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {License}.* FROM {License} WHERE {License}.[Id] = @LicenseId",
+                "params": {
+                  "LicenseId": {
+                    "type": "License Identifier",
+                    "value": "LicenseId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "License": "SqlRecord1",
+                  "Found": "not GetLicense.List.Empty"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "SqlRecord1",
+                "type": "License"
+              }
+            ]
+          },
+          {
+            "name": "Library_ListMine",
+            "kind": "server",
+            "public": true,
+            "description": "Lista a biblioteca digital do usuário.",
+            "inputs": [
+              {
+                "name": "Page",
+                "type": "Integer"
+              },
+              {
+                "name": "PageSize",
+                "type": "Integer"
+              },
+              {
+                "name": "PlatformId",
+                "type": "Platform Identifier",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Licenses",
+                "type": "License List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "License",
+                "as": "GetLicenses",
+                "where": "License.UserId = GetUserId() and License.StatusId = Entities.LicenseStatus.Active",
+                "sql": true,
+                "statement": "SELECT {License}.* FROM {License} WHERE {License}.[UserId] = @UserId AND {License}.[StatusId] = @p_LicenseStatus_Active AND (@PlatformId = 0 OR EXISTS (SELECT 1 FROM {GameEdition} WHERE {GameEdition}.[Id] = {License}.[GameEditionId] AND {GameEdition}.[PlatformId] = @PlatformId)) ORDER BY {License}.[Id] OFFSET (@Page - 1) * @PageSize ROWS FETCH NEXT @PageSize ROWS ONLY",
+                "params": {
+                  "p_LicenseStatus_Active": {
+                    "type": "LicenseStatus Identifier",
+                    "value": "Entities.LicenseStatus.Active"
+                  },
+                  "UserId": {
+                    "type": "User Identifier",
+                    "value": "GetUserId()"
+                  },
+                  "PlatformId": {
+                    "type": "Platform Identifier",
+                    "value": "PlatformId"
+                  },
+                  "Page": {
+                    "type": "Integer",
+                    "value": "Page"
+                  },
+                  "PageSize": {
+                    "type": "Integer",
+                    "value": "PageSize"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "Licenses": "GetLicenses.List",
+                  "TotalCount": "GetLicenses.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "License_ValidateAccess",
+            "kind": "server",
+            "public": true,
+            "description": "Valida se o usuário possui acesso a uma edição.",
+            "inputs": [
+              {
+                "name": "UserId",
+                "type": "User Identifier"
+              },
+              {
+                "name": "GameEditionId",
+                "type": "GameEdition Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "HasAccess",
+                "type": "Boolean"
+              },
+              {
+                "name": "LicenseId",
+                "type": "License Identifier"
+              }
+            ],
+            "steps": [
+              {
+                "get": "License",
+                "as": "GetAccess",
+                "where": "License.UserId = UserId and License.GameEditionId = GameEditionId and License.StatusId = Entities.LicenseStatus.Active",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {License}.* FROM {License} WHERE {License}.[UserId] = @UserId AND {License}.[GameEditionId] = @GameEditionId AND {License}.[StatusId] = @p_LicenseStatus_Active",
+                "params": {
+                  "p_LicenseStatus_Active": {
+                    "type": "LicenseStatus Identifier",
+                    "value": "Entities.LicenseStatus.Active"
+                  },
+                  "UserId": {
+                    "type": "User Identifier",
+                    "value": "UserId"
+                  },
+                  "GameEditionId": {
+                    "type": "GameEdition Identifier",
+                    "value": "GameEditionId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "HasAccess": "not GetAccess.List.Empty",
+                  "LicenseId": "SqlRecord1.Id"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "SqlRecord1",
+                "type": "License"
+              }
+            ]
+          },
+          {
+            "name": "Download_CreateGrant",
+            "kind": "server",
+            "public": true,
+            "description": "Cria autorização de download.",
+            "inputs": [
+              {
+                "name": "LicenseId",
+                "type": "License Identifier"
+              },
+              {
+                "name": "FileUrl",
+                "type": "Text"
+              },
+              {
+                "name": "FileVersion",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "DownloadGrantId",
+                "type": "DownloadGrant Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "R.LicenseId": "LicenseId",
+                  "R.FileUrl": "FileUrl",
+                  "R.FileVersion": "FileVersion",
+                  "R.DownloadCount": "0",
+                  "R.IsActive": "True"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "create": "DownloadGrant",
+                "as": "CreateDownloadGrant",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "DownloadGrantId": "CreateDownloadGrant.Id",
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "DownloadGrant"
+              }
+            ]
+          },
+          {
+            "name": "Download_Register",
+            "kind": "server",
+            "public": true,
+            "description": "Registra um download realizado.",
+            "inputs": [
+              {
+                "name": "DownloadGrantId",
+                "type": "DownloadGrant Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "DownloadGrant",
+                "as": "GetDownloadGrant",
+                "where": "DownloadGrant.Id = DownloadGrantId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {DownloadGrant}.* FROM {DownloadGrant} WHERE {DownloadGrant}.[Id] = @DownloadGrantId",
+                "params": {
+                  "DownloadGrantId": {
+                    "type": "DownloadGrant Identifier",
+                    "value": "DownloadGrantId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "R": "SqlRecord1",
+                  "R.DownloadCount": "R.DownloadCount + 1",
+                  "R.LastDownloadedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "DownloadGrant",
+                "as": "SaveDownloadGrant",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "DownloadGrant"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "DownloadGrant"
+              }
+            ]
+          },
+          {
+            "name": "License_Revoke",
+            "kind": "server",
+            "public": true,
+            "description": "Revoga uma licença.",
+            "inputs": [
+              {
+                "name": "LicenseId",
+                "type": "License Identifier"
+              },
+              {
+                "name": "Reason",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "License",
+                "as": "GetLicense",
+                "where": "License.Id = LicenseId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {License}.* FROM {License} WHERE {License}.[Id] = @LicenseId",
+                "params": {
+                  "LicenseId": {
+                    "type": "License Identifier",
+                    "value": "LicenseId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "R": "SqlRecord1",
+                  "R.StatusId": "Entities.LicenseStatus.Revoked",
+                  "R.RevokedOn": "CurrDateTime()",
+                  "R.RevocationReason": "Reason"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "License",
+                "as": "SaveLicense",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "License"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "License"
+              }
+            ]
+          },
+          {
+            "name": "Wishlist_Add",
+            "kind": "server",
+            "public": true,
+            "description": "Adiciona um jogo à wishlist.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "NotifyOnPriceDrop",
+                "type": "Boolean"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "WishlistItemId",
+                "type": "WishlistItem Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "R.UserId": "GetUserId()",
+                  "R.GameId": "GameId",
+                  "R.NotifyOnPriceDrop": "NotifyOnPriceDrop",
+                  "R.AddedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "create": "WishlistItem",
+                "as": "CreateWishlistItem",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "WishlistItemId": "CreateWishlistItem.Id",
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "WishlistItem"
+              }
+            ]
+          },
+          {
+            "name": "Wishlist_Remove",
+            "kind": "server",
+            "public": true,
+            "description": "Remove um jogo da wishlist.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "WishlistItem",
+                "as": "GetWishlistItem",
+                "where": "WishlistItem.UserId = GetUserId() and WishlistItem.GameId = GameId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {WishlistItem}.* FROM {WishlistItem} WHERE {WishlistItem}.[UserId] = @UserId AND {WishlistItem}.[GameId] = @GameId",
+                "params": {
+                  "UserId": {
+                    "type": "User Identifier",
+                    "value": "GetUserId()"
+                  },
+                  "GameId": {
+                    "type": "Game Identifier",
+                    "value": "GameId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "delete": "WishlistItem",
+                "as": "DeleteWishlistItem",
+                "id": "SqlRecord1.Id"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "SqlRecord1",
+                "type": "WishlistItem"
+              }
+            ]
+          },
+          {
+            "name": "Wishlist_ListMine",
+            "kind": "server",
+            "public": true,
+            "description": "Lista a wishlist do usuário.",
+            "inputs": [
+              {
+                "name": "Page",
+                "type": "Integer"
+              },
+              {
+                "name": "PageSize",
+                "type": "Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Items",
+                "type": "WishlistItem List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "WishlistItem",
+                "as": "FindWishlistItems",
+                "where": "WishlistItem.UserId = GetUserId() and WishlistItem.RemovedOn = NullDate()",
+                "sql": true,
+                "statement": "SELECT {WishlistItem}.* FROM {WishlistItem} WHERE {WishlistItem}.[UserId] = @UserId AND {WishlistItem}.[RemovedOn] = @NullDate ORDER BY {WishlistItem}.[Id] OFFSET (@Page - 1) * @PageSize ROWS FETCH NEXT @PageSize ROWS ONLY",
+                "params": {
+                  "UserId": {
+                    "type": "User Identifier",
+                    "value": "GetUserId()"
+                  },
+                  "NullDate": {
+                    "type": "Date",
+                    "value": "NullDate()"
+                  },
+                  "Page": {
+                    "type": "Integer",
+                    "value": "Page"
+                  },
+                  "PageSize": {
+                    "type": "Integer",
+                    "value": "PageSize"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "Items": "FindWishlistItems.List",
+                  "TotalCount": "FindWishlistItems.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Wishlist_CheckPriceDrops",
+            "kind": "server",
+            "public": true,
+            "description": "Localiza itens para monitoramento de preço.",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "Items",
+                "type": "WishlistItem List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "WishlistItem",
+                "as": "FindWishlistItems",
+                "where": "WishlistItem.NotifyOnPriceDrop = True and WishlistItem.RemovedOn = NullDate()",
+                "sql": true,
+                "statement": "SELECT {WishlistItem}.* FROM {WishlistItem} WHERE {WishlistItem}.[NotifyOnPriceDrop] = 1 AND {WishlistItem}.[RemovedOn] = @NullDate",
+                "params": {
+                  "NullDate": {
+                    "type": "Date",
+                    "value": "NullDate()"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "Items": "FindWishlistItems.List",
+                  "TotalCount": "FindWishlistItems.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "GameReview_Create",
+            "kind": "server",
+            "public": true,
+            "description": "Cria uma avaliação pendente.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "OrderItemId",
+                "type": "OrderItem Identifier"
+              },
+              {
+                "name": "Rating",
+                "type": "Integer"
+              },
+              {
+                "name": "Title",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "Body",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "ReviewId",
+                "type": "GameReview Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "R.UserId": "GetUserId()",
+                  "R.GameId": "GameId",
+                  "R.OrderItemId": "OrderItemId",
+                  "R.Rating": "Rating",
+                  "R.Title": "Title",
+                  "R.Body": "Body",
+                  "R.StatusId": "Entities.ReviewStatus.Pending",
+                  "R.CreatedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "create": "GameReview",
+                "as": "CreateGameReview",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "ReviewId": "CreateGameReview.Id",
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "GameReview"
+              }
+            ]
+          },
+          {
+            "name": "GameReview_Update",
+            "kind": "server",
+            "public": true,
+            "description": "Edita uma avaliação e a envia para moderação.",
+            "inputs": [
+              {
+                "name": "ReviewId",
+                "type": "GameReview Identifier"
+              },
+              {
+                "name": "Rating",
+                "type": "Integer"
+              },
+              {
+                "name": "Title",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "Body",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GameReview",
+                "as": "GetGameReview",
+                "where": "GameReview.Id = ReviewId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {GameReview}.* FROM {GameReview} WHERE {GameReview}.[Id] = @ReviewId",
+                "params": {
+                  "ReviewId": {
+                    "type": "GameReview Identifier",
+                    "value": "ReviewId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "R": "SqlRecord1",
+                  "R.Rating": "Rating",
+                  "R.Title": "Title",
+                  "R.Body": "Body",
+                  "R.StatusId": "Entities.ReviewStatus.Pending",
+                  "R.UpdatedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "GameReview",
+                "as": "SaveGameReview",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "GameReview"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "GameReview"
+              }
+            ]
+          },
+          {
+            "name": "GameReview_Moderate",
+            "kind": "server",
+            "public": true,
+            "description": "Publica uma avaliação moderada.",
+            "inputs": [
+              {
+                "name": "ReviewId",
+                "type": "GameReview Identifier"
+              },
+              {
+                "name": "ModerationNote",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GameReview",
+                "as": "GetGameReview",
+                "where": "GameReview.Id = ReviewId",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {GameReview}.* FROM {GameReview} WHERE {GameReview}.[Id] = @ReviewId",
+                "params": {
+                  "ReviewId": {
+                    "type": "GameReview Identifier",
+                    "value": "ReviewId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "assign": {
+                  "R": "SqlRecord1",
+                  "R.StatusId": "Entities.ReviewStatus.Published",
+                  "R.PublishedOn": "CurrDateTime()",
+                  "R.ModerationNote": "ModerationNote"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "GameReview",
+                "as": "SaveGameReview",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "GameReview"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "GameReview"
+              }
+            ]
+          },
+          {
+            "name": "GameReview_List",
+            "kind": "server",
+            "public": true,
+            "description": "Lista avaliações publicadas.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "Page",
+                "type": "Integer"
+              },
+              {
+                "name": "PageSize",
+                "type": "Integer"
+              },
+              {
+                "name": "OnlyPublished",
+                "type": "Boolean"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Reviews",
+                "type": "GameReview List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GameReview",
+                "as": "GetReviews",
+                "where": "GameReview.GameId = GameId and GameReview.StatusId = Entities.ReviewStatus.Published",
+                "sql": true,
+                "statement": "SELECT {GameReview}.* FROM {GameReview} WHERE {GameReview}.[GameId] = @GameId AND (@OnlyPublished = 0 OR {GameReview}.[StatusId] = @p_ReviewStatus_Published) ORDER BY {GameReview}.[Id] OFFSET (@Page - 1) * @PageSize ROWS FETCH NEXT @PageSize ROWS ONLY",
+                "params": {
+                  "p_ReviewStatus_Published": {
+                    "type": "ReviewStatus Identifier",
+                    "value": "Entities.ReviewStatus.Published"
+                  },
+                  "GameId": {
+                    "type": "Game Identifier",
+                    "value": "GameId"
+                  },
+                  "OnlyPublished": {
+                    "type": "Boolean",
+                    "value": "OnlyPublished"
+                  },
+                  "Page": {
+                    "type": "Integer",
+                    "value": "Page"
+                  },
+                  "PageSize": {
+                    "type": "Integer",
+                    "value": "PageSize"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "Reviews": "GetReviews.List",
+                  "TotalCount": "GetReviews.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "ReviewVote_Set",
+            "kind": "server",
+            "public": true,
+            "description": "Registra ou atualiza o voto de utilidade.",
+            "inputs": [
+              {
+                "name": "ReviewId",
+                "type": "GameReview Identifier"
+              },
+              {
+                "name": "IsHelpful",
+                "type": "Boolean"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "ReviewVoteId",
+                "type": "ReviewVote Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "ReviewVote",
+                "as": "GetVote",
+                "where": "ReviewVote.ReviewId = ReviewId and ReviewVote.UserId = GetUserId()",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {ReviewVote}.* FROM {ReviewVote} WHERE {ReviewVote}.[ReviewId] = @ReviewId AND {ReviewVote}.[UserId] = @UserId",
+                "params": {
+                  "UserId": {
+                    "type": "User Identifier",
+                    "value": "GetUserId()"
+                  },
+                  "ReviewId": {
+                    "type": "GameReview Identifier",
+                    "value": "ReviewId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "if": "GetVote.List.Empty",
+                "as": "VoteMissing",
+                "then": [
+                  {
+                    "assign": {
+                      "R.ReviewId": "ReviewId",
+                      "R.UserId": "GetUserId()",
+                      "R.IsHelpful": "IsHelpful",
+                      "R.CreatedOn": "CurrDateTime()"
+                    },
+                    "as": "BuildVote"
+                  },
+                  {
+                    "create": "ReviewVote",
+                    "as": "CreateVote",
+                    "record": "R"
+                  },
+                  {
+                    "assign": {
+                      "ReviewVoteId": "CreateVote.Id",
+                      "Success": "True"
+                    },
+                    "as": "SetNewVote"
+                  }
+                ],
+                "else": [
+                  {
+                    "assign": {
+                      "R": "SqlRecord1",
+                      "R.IsHelpful": "IsHelpful"
+                    },
+                    "as": "UpdateVote"
+                  },
+                  {
+                    "save": "ReviewVote",
+                    "as": "SaveVote",
+                    "record": "R"
+                  },
+                  {
+                    "assign": {
+                      "ReviewVoteId": "SqlRecord1.Id",
+                      "Success": "True"
+                    },
+                    "as": "SetUpdatedVote"
+                  }
+                ]
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "ReviewVote"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "ReviewVote"
+              }
+            ]
+          },
+          {
+            "name": "ReviewVote_Remove",
+            "kind": "server",
+            "public": true,
+            "description": "Remove o voto do usuário.",
+            "inputs": [
+              {
+                "name": "ReviewId",
+                "type": "GameReview Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "ReviewVote",
+                "as": "GetVote",
+                "where": "ReviewVote.ReviewId = ReviewId and ReviewVote.UserId = GetUserId()",
+                "max": 1,
+                "sql": true,
+                "statement": "SELECT {ReviewVote}.* FROM {ReviewVote} WHERE {ReviewVote}.[ReviewId] = @ReviewId AND {ReviewVote}.[UserId] = @UserId",
+                "params": {
+                  "UserId": {
+                    "type": "User Identifier",
+                    "value": "GetUserId()"
+                  },
+                  "ReviewId": {
+                    "type": "GameReview Identifier",
+                    "value": "ReviewId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "delete": "ReviewVote",
+                "as": "DeleteVote",
+                "id": "SqlRecord1.Id"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "SqlRecord1",
+                "type": "ReviewVote"
+              }
+            ]
+          },
+          {
+            "name": "Admin_GetSalesDashboard",
+            "kind": "server",
+            "public": true,
+            "description": "Obtém métricas básicas de vendas e reembolsos.",
+            "inputs": [
+              {
+                "name": "StartDate",
+                "type": "Date Time"
+              },
+              {
+                "name": "EndDate",
+                "type": "Date Time"
+              },
+              {
+                "name": "PlatformId",
+                "type": "Platform Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "GameId",
+                "type": "Game Identifier",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "PaidOrderCount",
+                "type": "Long Integer"
+              },
+              {
+                "name": "Revenue",
+                "type": "Currency"
+              },
+              {
+                "name": "RefundCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Order",
+                "as": "GetPaidOrders",
+                "where": "Order.StatusId = Entities.OrderStatus.Paid and Order.CreatedOn >= StartDate and Order.CreatedOn <= EndDate",
+                "sql": true,
+                "statement": "SELECT {Order}.* FROM {Order} WHERE {Order}.[StatusId] = @p_OrderStatus_Paid AND {Order}.[CreatedOn] >= @StartDate AND {Order}.[CreatedOn] <= @EndDate AND (@PlatformId = 0 OR EXISTS (SELECT 1 FROM {OrderItem} JOIN {GameEdition} ON {GameEdition}.[Id] = {OrderItem}.[GameEditionId] WHERE {OrderItem}.[OrderId] = {Order}.[Id] AND {GameEdition}.[PlatformId] = @PlatformId)) AND (@GameId = 0 OR EXISTS (SELECT 1 FROM {OrderItem} JOIN {GameEdition} ON {GameEdition}.[Id] = {OrderItem}.[GameEditionId] WHERE {OrderItem}.[OrderId] = {Order}.[Id] AND {GameEdition}.[GameId] = @GameId))",
+                "params": {
+                  "p_OrderStatus_Paid": {
+                    "type": "OrderStatus Identifier",
+                    "value": "Entities.OrderStatus.Paid"
+                  },
+                  "StartDate": {
+                    "type": "Date Time",
+                    "value": "StartDate"
+                  },
+                  "EndDate": {
+                    "type": "Date Time",
+                    "value": "EndDate"
+                  },
+                  "PlatformId": {
+                    "type": "Platform Identifier",
+                    "value": "PlatformId"
+                  },
+                  "GameId": {
+                    "type": "Game Identifier",
+                    "value": "GameId"
+                  }
+                }
+              },
+              {
+                "get": "Refund",
+                "as": "GetRefunds",
+                "where": "Refund.RequestedOn >= StartDate and Refund.RequestedOn <= EndDate",
+                "sql": true,
+                "statement": "SELECT {Refund}.* FROM {Refund} WHERE {Refund}.[RequestedOn] >= @StartDate AND {Refund}.[RequestedOn] <= @EndDate AND (@PlatformId = 0 OR EXISTS (SELECT 1 FROM {Order} WHERE {Order}.[Id] = {Refund}.[OrderId] AND EXISTS (SELECT 1 FROM {OrderItem} JOIN {GameEdition} ON {GameEdition}.[Id] = {OrderItem}.[GameEditionId] WHERE {OrderItem}.[OrderId] = {Order}.[Id] AND {GameEdition}.[PlatformId] = @PlatformId))) AND (@GameId = 0 OR EXISTS (SELECT 1 FROM {Order} WHERE {Order}.[Id] = {Refund}.[OrderId] AND EXISTS (SELECT 1 FROM {OrderItem} JOIN {GameEdition} ON {GameEdition}.[Id] = {OrderItem}.[GameEditionId] WHERE {OrderItem}.[OrderId] = {Order}.[Id] AND {GameEdition}.[GameId] = @GameId))",
+                "params": {
+                  "StartDate": {
+                    "type": "Date Time",
+                    "value": "StartDate"
+                  },
+                  "EndDate": {
+                    "type": "Date Time",
+                    "value": "EndDate"
+                  },
+                  "PlatformId": {
+                    "type": "Platform Identifier",
+                    "value": "PlatformId"
+                  },
+                  "GameId": {
+                    "type": "Game Identifier",
+                    "value": "GameId"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "PaidOrderCount": "GetPaidOrders.List.Length",
+                  "Revenue": "0",
+                  "RefundCount": "GetRefunds.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Admin_GetTopGames",
+            "kind": "server",
+            "public": true,
+            "description": "Lista itens vendidos para ranking administrativo.",
+            "inputs": [
+              {
+                "name": "StartDate",
+                "type": "Date Time"
+              },
+              {
+                "name": "EndDate",
+                "type": "Date Time"
+              },
+              {
+                "name": "Limit",
+                "type": "Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Items",
+                "type": "OrderItem List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "OrderItem",
+                "as": "FindSoldItems",
+                "where": "OrderItem.CreatedOn >= StartDate and OrderItem.CreatedOn <= EndDate",
+                "sql": true,
+                "statement": "SELECT {OrderItem}.* FROM {OrderItem} WHERE {OrderItem}.[CreatedOn] >= @StartDate AND {OrderItem}.[CreatedOn] <= @EndDate",
+                "params": {
+                  "StartDate": {
+                    "type": "Date Time",
+                    "value": "StartDate"
+                  },
+                  "EndDate": {
+                    "type": "Date Time",
+                    "value": "EndDate"
+                  },
+                  "Limit": {
+                    "type": "Integer",
+                    "value": "Limit"
+                  }
+                },
+                "max": "Limit"
+              },
+              {
+                "assign": {
+                  "Items": "FindSoldItems.List",
+                  "TotalCount": "FindSoldItems.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Admin_GetCustomerLibrary",
+            "kind": "server",
+            "public": true,
+            "description": "Consulta a biblioteca de um cliente.",
+            "inputs": [
+              {
+                "name": "UserId",
+                "type": "User Identifier"
+              },
+              {
+                "name": "Page",
+                "type": "Integer"
+              },
+              {
+                "name": "PageSize",
+                "type": "Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Licenses",
+                "type": "License List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "License",
+                "as": "GetLicenses",
+                "where": "License.UserId = UserId and License.StatusId = Entities.LicenseStatus.Active",
+                "sql": true,
+                "statement": "SELECT {License}.* FROM {License} WHERE {License}.[UserId] = @UserId AND {License}.[StatusId] = @p_LicenseStatus_Active ORDER BY {License}.[Id] OFFSET (@Page - 1) * @PageSize ROWS FETCH NEXT @PageSize ROWS ONLY",
+                "params": {
+                  "p_LicenseStatus_Active": {
+                    "type": "LicenseStatus Identifier",
+                    "value": "Entities.LicenseStatus.Active"
+                  },
+                  "UserId": {
+                    "type": "User Identifier",
+                    "value": "UserId"
+                  },
+                  "Page": {
+                    "type": "Integer",
+                    "value": "Page"
+                  },
+                  "PageSize": {
+                    "type": "Integer",
+                    "value": "PageSize"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "Licenses": "GetLicenses.List",
+                  "TotalCount": "GetLicenses.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Cart_Expire",
+            "kind": "server",
+            "public": true,
+            "description": "Expira carrinhos antigos.",
+            "inputs": [
+              {
+                "name": "OlderThanDays",
+                "type": "Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "ExpiredCount",
+                "type": "Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Cart",
+                "as": "GetExpiredCarts",
+                "where": "Cart.StatusId = Entities.CartStatus.Active and Cart.ExpiresOn < CurrDateTime()",
+                "sql": true,
+                "statement": "SELECT {Cart}.* FROM {Cart} WHERE {Cart}.[StatusId] = @p_CartStatus_Active AND {Cart}.[ExpiresOn] < DATEADD(day, -@OlderThanDays, @CurrentDateTime)",
+                "params": {
+                  "p_CartStatus_Active": {
+                    "type": "CartStatus Identifier",
+                    "value": "Entities.CartStatus.Active"
+                  },
+                  "CurrentDateTime": {
+                    "type": "Date Time",
+                    "value": "CurrDateTime()"
+                  },
+                  "OlderThanDays": {
+                    "type": "Integer",
+                    "value": "OlderThanDays"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "foreach": "GetExpiredCarts.List",
+                "as": "EachExpiredCart",
+                "do": [
+                  {
+                    "assign": {
+                      "SqlRecord1": "SqlRecord1"
+                    },
+                    "as": "LoadSqlRecord12"
+                  },
+                  {
+                    "assign": {
+                      "R": "SqlRecord1",
+                      "R.StatusId": "Entities.CartStatus.Expired"
+                    },
+                    "as": "ExpireCart"
+                  },
+                  {
+                    "save": "Cart",
+                    "as": "SaveExpiredCart",
+                    "record": "R"
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "ExpiredCount": "GetExpiredCarts.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Cart"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "Cart"
+              }
+            ]
+          },
+          {
+            "name": "Promotion_Expire",
+            "kind": "server",
+            "public": true,
+            "description": "Desativa promoções vencidas.",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "UpdatedCount",
+                "type": "Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Promotion",
+                "as": "GetExpiredPromotions",
+                "where": "Promotion.IsActive = True and Promotion.EndsOn < CurrDateTime()",
+                "sql": true,
+                "statement": "SELECT {Promotion}.* FROM {Promotion} WHERE {Promotion}.[IsActive] = 1 AND {Promotion}.[EndsOn] < @CurrentDateTime",
+                "params": {
+                  "CurrentDateTime": {
+                    "type": "Date Time",
+                    "value": "CurrDateTime()"
+                  }
+                }
+              },
+              {
+                "assign": {
+                  "SqlRecord1": "SqlRecord1"
+                },
+                "as": "LoadSqlRecord1"
+              },
+              {
+                "foreach": "GetExpiredPromotions.List",
+                "as": "EachExpiredPromotion",
+                "do": [
+                  {
+                    "assign": {
+                      "SqlRecord1": "SqlRecord1"
+                    },
+                    "as": "LoadSqlRecord12"
+                  },
+                  {
+                    "assign": {
+                      "R": "SqlRecord1",
+                      "R.IsActive": "False"
+                    },
+                    "as": "ExpirePromotion"
+                  },
+                  {
+                    "save": "Promotion",
+                    "as": "SaveExpiredPromotion",
+                    "record": "R"
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "UpdatedCount": "GetExpiredPromotions.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Promotion"
+              },
+              {
+                "name": "SqlRecord1",
+                "type": "Promotion"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "logic",
+      "data": {
+        "actions": [
+          {
+            "name": "Catalog_GetPublishedGame",
+            "kind": "service",
+            "public": true,
+            "description": "Expõe detalhes públicos de um jogo.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Game",
+                "type": "Game"
+              },
+              {
+                "name": "Found",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "call": "Game_Get",
+                "as": "Get",
+                "args": {
+                  "GameId": "GameId"
+                }
+              },
+              {
+                "assign": {
+                  "Game": "Get.Game",
+                  "Found": "Get.Found"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Catalog_SearchPublishedGames",
+            "kind": "service",
+            "public": true,
+            "description": "Expõe a pesquisa pública do catálogo.",
+            "inputs": [
+              {
+                "name": "SearchText",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "GenreId",
+                "type": "Genre Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "PlatformId",
+                "type": "Platform Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "AgeRatingId",
+                "type": "AgeRating Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "Page",
+                "type": "Integer"
+              },
+              {
+                "name": "PageSize",
+                "type": "Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Games",
+                "type": "Game List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "call": "Game_Search",
+                "as": "Search",
+                "args": {
+                  "SearchText": "SearchText",
+                  "GenreId": "GenreId",
+                  "PlatformId": "PlatformId",
+                  "AgeRatingId": "AgeRatingId",
+                  "Page": "Page",
+                  "PageSize": "PageSize"
+                }
+              },
+              {
+                "assign": {
+                  "Games": "Search.Games",
+                  "TotalCount": "Search.TotalCount"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Payment_ReceiveWebhook",
+            "kind": "service",
+            "public": true,
+            "description": "Recebe webhook de pagamento.",
+            "inputs": [
+              {
+                "name": "ProviderName",
+                "type": "Text"
+              },
+              {
+                "name": "ProviderTransactionId",
+                "type": "Text"
+              },
+              {
+                "name": "EventType",
+                "type": "Text"
+              },
+              {
+                "name": "Payload",
+                "type": "Text"
+              },
+              {
+                "name": "Signature",
+                "type": "Text"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Processed",
+                "type": "Boolean"
+              },
+              {
+                "name": "OrderId",
+                "type": "Order Identifier"
+              }
+            ],
+            "steps": [
+              {
+                "call": "Payment_HandleWebhook",
+                "as": "Webhook",
+                "args": {
+                  "ProviderName": "ProviderName",
+                  "ProviderTransactionId": "ProviderTransactionId",
+                  "EventType": "EventType",
+                  "Payload": "Payload",
+                  "Signature": "Signature"
+                }
+              },
+              {
+                "assign": {
+                  "Processed": "Webhook.Processed",
+                  "OrderId": "Webhook.OrderId"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "License_ValidateExternalAccess",
+            "kind": "service",
+            "public": true,
+            "description": "Valida acesso para launcher ou cliente externo.",
+            "inputs": [
+              {
+                "name": "UserId",
+                "type": "User Identifier"
+              },
+              {
+                "name": "GameEditionId",
+                "type": "GameEdition Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "HasAccess",
+                "type": "Boolean"
+              },
+              {
+                "name": "LicenseId",
+                "type": "License Identifier"
+              }
+            ],
+            "steps": [
+              {
+                "call": "License_ValidateAccess",
+                "as": "Access",
+                "args": {
+                  "UserId": "UserId",
+                  "GameEditionId": "GameEditionId"
+                }
+              },
+              {
+                "assign": {
+                  "HasAccess": "Access.HasAccess",
+                  "LicenseId": "Access.LicenseId"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Order_GetReceipt",
+            "kind": "service",
+            "public": true,
+            "description": "Expõe um pedido autorizado para recibos.",
+            "inputs": [
+              {
+                "name": "OrderId",
+                "type": "Order Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Order",
+                "type": "Order"
+              },
+              {
+                "name": "Found",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "call": "Order_Get",
+                "as": "Receipt",
+                "args": {
+                  "OrderId": "OrderId"
+                }
+              },
+              {
+                "assign": {
+                  "Order": "Receipt.Order",
+                  "Found": "Receipt.Found"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "find",
+      "name": "Game_SetPublishers"
+    },
+    {
+      "op": "find",
+      "name": "DeleteExistingPublishers"
+    },
+    {
+      "op": "find",
+      "type": "ISQLNode",
+      "max": 250
+    },
+    {
+      "op": "find",
+      "type": "IAggregateNode",
+      "max": 200
+    }
+  ]
+}

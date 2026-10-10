@@ -1,0 +1,11 @@
+{
+  "name": "ssam-hybrid",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "doctor": "node facade/ssam.mjs doctor",
+    "test": "node --test tests/*.test.mjs platforms/odc/facade/tests/*.test.mjs platforms/odc/portal/tests/*.test.mjs platforms/odc/tests/*.test.mjs",
+    "configure:mcp": "node scripts/configure-mcp.mjs"
+  }
+}

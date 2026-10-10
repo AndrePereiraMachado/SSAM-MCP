@@ -1,0 +1,18 @@
+{
+ "description": "Faixa ODC, o espelho de tests/jobs-negative/move-into-incompatible.json. A recusa do move com `into` quando o pai novo nao aceita aquele tipo: um contentor nao entra numa entidade. O teste e o da propria plataforma (CloneAllowed, o mesmo do arrastar do Studio), e a mensagem nomeia o destino, o tipo recusado e onde o objeto fica. O caminho limpo esta em tests/jobs-odc/refactor-reparent.json.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectError": [
+  "move into:",
+  "IServerEntity 'RpNoWidgets' does not accept IContainer as a child",
+  "the Studio refuses the same drop",
+  "IContainer 'RpLost' stays inside"
+ ],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "RpRefuse", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "RpLost", "as": "$box"},
+  {"op": "spec", "data": {"entities": [{"name": "RpNoWidgets", "attributes": [{"name": "Title", "type": "Text", "length": 50}]}]}},
+  {"op": "move", "target": "$box", "into": "IServerEntity:RpNoWidgets"}
+ ]
+}

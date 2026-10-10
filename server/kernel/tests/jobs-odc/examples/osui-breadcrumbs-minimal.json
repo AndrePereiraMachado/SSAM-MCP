@@ -1,0 +1,11 @@
+{
+ "description": "Breadcrumbs do OSUI: a instancia no placeholder Breadcrumbs do layout.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "BreadcrumbsDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Breadcrumbs", "type": "IMobileBlockInstanceWidget", "name": "Breadcrumbs1", "source": "IMobileBlock:Breadcrumbs", "as": "$bc"}
+ ]
+}

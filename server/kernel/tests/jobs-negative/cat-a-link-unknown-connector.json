@@ -1,0 +1,13 @@
+{
+ "description": "Frente A (catalogo abrangente), faixa O11: a RECUSA de ligar um ramo por um conector que o no nao tem. Num If os ramos sao TrueTarget/FalseTarget; 'Then' nao existe e o link tem de ser recusado com a lista dos conectores aceites, antes de tocar no fluxo.",
+ "base": "job:smoke-data-logic",
+ "expectValid": true,
+ "expectError": [
+  "has no connector 'Then'",
+  "TrueTarget",
+  "FalseTarget"
+ ],
+ "ops": [
+  {"op": "link", "from": "IServerAction:Customer_AddCredit/#IIfNode[1]", "connector": "Then", "to": "IServerAction:Customer_AddCredit/#IRaiseExceptionNode[1]"}
+ ]
+}

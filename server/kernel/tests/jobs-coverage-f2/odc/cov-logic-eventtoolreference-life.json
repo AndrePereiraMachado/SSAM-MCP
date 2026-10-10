@@ -1,0 +1,71 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.Logic.IEventToolReference (odc) em ctxManifestEvent. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/blank-agent-definition.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedReferenceGlobalEvent",
+   "element": "CovBlankAgentDefinition (ESpace) / CovBlankMobile (Reference) / CovSEvent (GlobalEventSignature)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "reference",
+   "producer": "tests/fixtures/odc/blank-mobile-producer.oml",
+   "elements": [
+    "IGlobalEvent:CovSEvent"
+   ]
+  },
+  {
+   "op": "set",
+   "target": "IAgentManifest:CovBlankAgentDefinition",
+   "prop": "GoalsAndInstructions",
+   "value": "Cobertura"
+  },
+  {
+   "op": "set",
+   "target": "IAgentManifest:CovBlankAgentDefinition",
+   "prop": "AIModel",
+   "value": "IServerActionSignature:CovAIModel"
+  },
+  {
+   "op": "create",
+   "parent": "IAgentManifest:CovBlankAgentDefinition",
+   "type": "IEventToolReference",
+   "name": "CovAEventToolReference",
+   "as": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Event",
+   "value": "IGlobalEventSignature:CovSEvent"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Enabled",
+   "value": true
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovREventToolReference"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "move",
+   "target": "$b",
+   "first": true
+  }
+ ]
+}

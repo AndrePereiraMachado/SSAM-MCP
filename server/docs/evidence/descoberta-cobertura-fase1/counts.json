@@ -1,0 +1,1469 @@
+{
+ "odc": {
+  "identity": {
+   "metadataVersion": "1.7.24.10718",
+   "installedStudio": "1.7.25.10762",
+   "note": "ODC metadata 1.7.24.10718 (reflection index) against the installed Studio 1.7.25.10762: the inventory is not complete for the installed version"
+  },
+  "denominators": {
+   "inventoried": 556,
+   "byKindClass": {
+    "concrete-authorable": 272,
+    "base-interface": 42,
+    "referenced-signature": 183,
+    "undetermined": 59
+   },
+   "byAppFamilyTag": {
+    "shared": 383,
+    "reactive": 97,
+    "web": 76
+   },
+   "byKindClassAndAppFamily": {
+    "concrete-authorable": {
+     "shared": 182,
+     "reactive": 51,
+     "web": 39
+    },
+    "base-interface": {
+     "shared": 35,
+     "reactive": 4,
+     "web": 3
+    },
+    "referenced-signature": {
+     "shared": 113,
+     "reactive": 40,
+     "web": 30
+    },
+    "undetermined": {
+     "shared": 53,
+     "reactive": 2,
+     "web": 4
+    }
+   },
+   "shortNameCollisionsInIndex": 140,
+   "shortNameCollisionsInventoried": 51,
+   "rule": "kept: every interface (no de-duplication by short name) whose resolved base closure reaches IObject (role object) or IObjectSignature only (role signature); a base written as a short name is resolved by RESOLUTION_RULE, otherwise recorded in ambiguousBases and not followed (its members are not merged); role stated through an ambiguous base only when all candidates agree, else undetermined (kept, flagged); excluded: *Descriptor / IObjectDescriptor / IClassDescriptor closures, classes, static classes, enums, interfaces without the object roots (Extensions/ExternalLibraries hierarchies reach IModelObject only). Identity = platform:metadataVersion:assembly:namespace.name",
+   "kindClassRule": "referenced-signature = role signature (base closure reaches IObjectSignature but not IObject); concrete-authorable = role object with a factory that returns exactly this type (ODC: Create* method resolved without ambiguity; O11: catalog Creatables) or, when no other inventoried interface has it as a base, a widget/flow-node interface created through the generic CreateWidget<T>/CreateNode<T>; base-interface = role object without such a factory that appears in the resolved base closure of another inventoried interface (its properties and operations are kept; it is not counted as an extra concrete element); undetermined = role object with neither a factory nor an implementer (possibly created by the platform, not verified). A concrete type that is also a base of others keeps alsoBaseOf",
+   "appFamilyRule": "tag from namespace/name: web = OutSystems.Model.UI.Web or Web*/IWeb* names; reactive = OutSystems.Model.UI.Mobile, NRWidgets plugin or Mobile*/IMobile* names; shared = the rest. A tag, not an exclusion: types tagged web stay in the inventory and in the per-kind denominators; the reader census tells whether ODC objects implement them",
+   "attributionRule": "evidence keyed by a short name (jobs, ledger, descriptor, reader census) is attributed to a qualified type only when: exact = the short name has one qualified type in the platform inventory; kernel-rank (create only) = the kernel ranking of Verbs.cs FindCreateCore leaves one top candidate (NRWidgets > OutSystems.Model.* > Extensions/ExternalLibraries/Processes/BusinessProcesses); module-context = after removing the OutSystems.Model.Extensions and OutSystems.Model.ExternalLibraries candidates (extension-module types, \"never what an eSpace creates\", Verbs.cs:904-905) one candidate remains; otherwise ambiguous = recorded under the short name, attributed to no qualified type and not counted as proof"
+  },
+  "typesNamedInPublicContract": {
+   "count": 44,
+   "note": "short name appears in the JSON returned by api --op (spec/logic/screen/html/html-visual); a mention in expander source code is recorded separately as route.codeMentions and is not a public contract",
+   "shortNameNote": "contract naming is by short name; attributed to every qualified type with that short name (the contracts do not qualify names)"
+  },
+  "typesMentionedInExpanderCode": 172,
+  "descriptor": {
+   "typesNamedByDescriptor": {
+    "ledgerQualified": 95,
+    "exact": 89,
+    "moduleContext": 0,
+    "kernelRank": 10,
+    "ambiguousShortName": 34,
+    "attributedToAnotherQualifiedType": 9
+   },
+   "typesNamedByDescriptorAttributed": 89,
+   "capabilities": 44,
+   "shared": [
+    "data.static",
+    "data.structure"
+   ],
+   "note": "exposure counted only when the descriptor of lane odc names the short name AND the attribution rule assigns it to this qualified type; on this lane the descriptor holds the shared capabilities projected for it (data.static, data.structure)",
+   "reusePotential": {
+    "typesWithSameShortNameInTheOtherLaneDescriptor": 39,
+    "note": "same short name as a type named by the other lane's descriptor: reuse potential, not exposure"
+   }
+  },
+  "executedProof": {
+   "typesWithLedgerEntryForAnyOp": {
+    "ledgerQualified": 105,
+    "exact": 0,
+    "moduleContext": 0,
+    "kernelRank": 9,
+    "ambiguousShortName": 18,
+    "attributedToAnotherQualifiedType": 9
+   },
+   "results": 69,
+   "current": 69,
+   "qualifiedResults": 69,
+   "note": "ODC ledger of the suite jobs; counted per attribution level (ledger-qualified = the result names the interface)"
+  },
+  "staticProof": {
+   "typesWithPositiveJobForAnyOp": {
+    "ledgerQualified": 86,
+    "exact": 64,
+    "moduleContext": 0,
+    "kernelRank": 8,
+    "ambiguousShortName": 21,
+    "attributedToAnotherQualifiedType": 8
+   },
+   "typesWithNegativeJobOnly": 3,
+   "note": "positive suites only; the type name as written in the job; negative suites counted separately"
+  },
+  "census": {
+   "typesObservedInFixture": {
+    "ledgerQualified": 0,
+    "exact": 191,
+    "moduleContext": 0,
+    "kernelRank": 0,
+    "ambiguousShortName": 93,
+    "attributedToAnotherQualifiedType": 0
+   },
+   "baseInterfacesObservedThroughImplementers": 31,
+   "identity": {
+    "reusedFrom": "../AppData/Local/Temp/claude/C--Users-andre-SSAM-Hybrid/f540252a-d713-436a-9092-28f94f7ce28f/scratchpad/phase1-96ea16f-inventory.json",
+    "generatedAt": "2026-09-23T01:36:54.590Z",
+    "fixture": "kernel/tests/fixtures/odc/wrightflood-personal-r8.oml",
+    "fixtureSha256": "EB15CA882B9D6406B5D7C4024C2920BAC4D30EA8B42922369FA4DA6E9319D975",
+    "kinds": 461,
+    "note": "census reused from a previous run (same fixture identity declared here); kinds absent from that run have no census",
+    "currentFixtureSha256": "EB15CA882B9D6406B5D7C4024C2920BAC4D30EA8B42922369FA4DA6E9319D975",
+    "sameFixture": true,
+    "filled": {
+     "kinds": 37,
+     "generatedAt": "2026-09-23T12:49:46.266Z",
+     "note": "kinds absent from the reused census read now against the same fixture (same sha256)"
+    }
+   },
+   "note": "--kind K counts objects implementing any interface named IK (inclusive); a kind absent from the fixture is not unreadable"
+  },
+  "perOp": {
+   "read": {
+    "types": 556,
+    "byStatus": {
+     "tested-executed": 191,
+     "tested-static": 19,
+     "route-only": 251,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 0,
+     "undetermined": 95
+    },
+    "byStatusConcreteAuthorable": {
+     "tested-executed": 78,
+     "tested-static": 16,
+     "route-only": 132,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 0,
+     "undetermined": 46
+    },
+    "metadataSuggests": 556,
+    "metadataSuggestsOwn": 556,
+    "metadataInheritedOnly": 0,
+    "metadataAmbiguous": 0,
+    "metadataNoBasis": 0,
+    "contextExcluded": 0,
+    "evidenceUnattributed": 16
+   },
+   "address": {
+    "types": 556,
+    "byStatus": {
+     "tested-executed": 191,
+     "tested-static": 19,
+     "route-only": 251,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 0,
+     "undetermined": 95
+    },
+    "byStatusConcreteAuthorable": {
+     "tested-executed": 78,
+     "tested-static": 16,
+     "route-only": 132,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 0,
+     "undetermined": 46
+    },
+    "metadataSuggests": 556,
+    "metadataSuggestsOwn": 556,
+    "metadataInheritedOnly": 0,
+    "metadataAmbiguous": 0,
+    "metadataNoBasis": 0,
+    "contextExcluded": 0,
+    "evidenceUnattributed": 16
+   },
+   "usages": {
+    "types": 556,
+    "byStatus": {
+     "tested-executed": 0,
+     "tested-static": 26,
+     "route-only": 67,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 0,
+     "undetermined": 463
+    },
+    "byStatusConcreteAuthorable": {
+     "tested-executed": 0,
+     "tested-static": 21,
+     "route-only": 24,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 0,
+     "undetermined": 227
+    },
+    "metadataSuggests": 77,
+    "metadataSuggestsOwn": 77,
+    "metadataInheritedOnly": 0,
+    "metadataAmbiguous": 7,
+    "metadataNoBasis": 472,
+    "contextExcluded": 0,
+    "evidenceUnattributed": 6
+   },
+   "create": {
+    "types": 556,
+    "byStatus": {
+     "tested-executed": 97,
+     "tested-static": 3,
+     "route-only": 159,
+     "suggested-only": 0,
+     "context-excluded": 183,
+     "refused-proven": 1,
+     "undetermined": 113
+    },
+    "byStatusConcreteAuthorable": {
+     "tested-executed": 95,
+     "tested-static": 0,
+     "route-only": 159,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 1,
+     "undetermined": 17
+    },
+    "metadataSuggests": 272,
+    "metadataSuggestsOwn": 151,
+    "metadataInheritedOnly": 0,
+    "metadataAmbiguous": 1,
+    "metadataNoBasis": 100,
+    "contextExcluded": 183,
+    "evidenceUnattributed": 18
+   },
+   "set": {
+    "types": 556,
+    "byStatus": {
+     "tested-executed": 91,
+     "tested-static": 3,
+     "route-only": 232,
+     "suggested-only": 0,
+     "context-excluded": 183,
+     "refused-proven": 2,
+     "undetermined": 45
+    },
+    "byStatusConcreteAuthorable": {
+     "tested-executed": 85,
+     "tested-static": 1,
+     "route-only": 168,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 1,
+     "undetermined": 17
+    },
+    "metadataSuggests": 337,
+    "metadataSuggestsOwn": 278,
+    "metadataInheritedOnly": 59,
+    "metadataAmbiguous": 0,
+    "metadataNoBasis": 36,
+    "contextExcluded": 183,
+    "evidenceUnattributed": 14
+   },
+   "rename": {
+    "types": 556,
+    "byStatus": {
+     "tested-executed": 27,
+     "tested-static": 1,
+     "route-only": 187,
+     "suggested-only": 0,
+     "context-excluded": 183,
+     "refused-proven": 4,
+     "undetermined": 154
+    },
+    "byStatusConcreteAuthorable": {
+     "tested-executed": 26,
+     "tested-static": 1,
+     "route-only": 164,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 3,
+     "undetermined": 78
+    },
+    "metadataSuggests": 218,
+    "metadataSuggestsOwn": 118,
+    "metadataInheritedOnly": 100,
+    "metadataAmbiguous": 0,
+    "metadataNoBasis": 155,
+    "contextExcluded": 183,
+    "evidenceUnattributed": 2
+   },
+   "replace": {
+    "types": 556,
+    "byStatus": {
+     "tested-executed": 6,
+     "tested-static": 1,
+     "route-only": 75,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 0,
+     "undetermined": 474
+    },
+    "byStatusConcreteAuthorable": {
+     "tested-executed": 6,
+     "tested-static": 1,
+     "route-only": 30,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 0,
+     "undetermined": 235
+    },
+    "metadataSuggests": 77,
+    "metadataSuggestsOwn": 77,
+    "metadataInheritedOnly": 0,
+    "metadataAmbiguous": 7,
+    "metadataNoBasis": 472,
+    "contextExcluded": 0,
+    "evidenceUnattributed": 1
+   },
+   "move": {
+    "types": 556,
+    "byStatus": {
+     "tested-executed": 13,
+     "tested-static": 2,
+     "route-only": 352,
+     "suggested-only": 0,
+     "context-excluded": 183,
+     "refused-proven": 1,
+     "undetermined": 5
+    },
+    "byStatusConcreteAuthorable": {
+     "tested-executed": 13,
+     "tested-static": 2,
+     "route-only": 252,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 1,
+     "undetermined": 4
+    },
+    "metadataSuggests": 373,
+    "metadataSuggestsOwn": 0,
+    "metadataInheritedOnly": 373,
+    "metadataAmbiguous": 0,
+    "metadataNoBasis": 0,
+    "contextExcluded": 183,
+    "evidenceUnattributed": 5
+   },
+   "duplicate": {
+    "types": 556,
+    "byStatus": {
+     "tested-executed": 8,
+     "tested-static": 0,
+     "route-only": 364,
+     "suggested-only": 0,
+     "context-excluded": 183,
+     "refused-proven": 0,
+     "undetermined": 1
+    },
+    "byStatusConcreteAuthorable": {
+     "tested-executed": 8,
+     "tested-static": 0,
+     "route-only": 263,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 0,
+     "undetermined": 1
+    },
+    "metadataSuggests": 373,
+    "metadataSuggestsOwn": 0,
+    "metadataInheritedOnly": 373,
+    "metadataAmbiguous": 0,
+    "metadataNoBasis": 0,
+    "contextExcluded": 183,
+    "evidenceUnattributed": 1
+   },
+   "delete": {
+    "types": 556,
+    "byStatus": {
+     "tested-executed": 24,
+     "tested-static": 2,
+     "route-only": 342,
+     "suggested-only": 0,
+     "context-excluded": 183,
+     "refused-proven": 1,
+     "undetermined": 4
+    },
+    "byStatusConcreteAuthorable": {
+     "tested-executed": 24,
+     "tested-static": 2,
+     "route-only": 242,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 1,
+     "undetermined": 3
+    },
+    "metadataSuggests": 373,
+    "metadataSuggestsOwn": 0,
+    "metadataInheritedOnly": 373,
+    "metadataAmbiguous": 0,
+    "metadataNoBasis": 0,
+    "contextExcluded": 183,
+    "evidenceUnattributed": 4
+   }
+  },
+  "byFamily": {
+   "abstract": {
+    "types": 8,
+    "byKindClass": {
+     "concrete-authorable": 0,
+     "base-interface": 2,
+     "referenced-signature": 4,
+     "undetermined": 2
+    },
+    "typesWithAnyTestedExecuted": 0,
+    "typesWithAnyTestedStatic": 0,
+    "typesNamedInDescriptor": 0,
+    "typesObservedInFixture": 6,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "ai": {
+    "types": 16,
+    "byKindClass": {
+     "concrete-authorable": 2,
+     "base-interface": 2,
+     "referenced-signature": 7,
+     "undetermined": 5
+    },
+    "typesWithAnyTestedExecuted": 0,
+    "typesWithAnyTestedStatic": 0,
+    "typesNamedInDescriptor": 0,
+    "typesObservedInFixture": 0,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "data.entity": {
+    "types": 20,
+    "byKindClass": {
+     "concrete-authorable": 9,
+     "base-interface": 3,
+     "referenced-signature": 2,
+     "undetermined": 6
+    },
+    "typesWithAnyTestedExecuted": 7,
+    "typesWithAnyTestedStatic": 4,
+    "typesNamedInDescriptor": 7,
+    "typesObservedInFixture": 17,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "data.structure": {
+    "types": 7,
+    "byKindClass": {
+     "concrete-authorable": 2,
+     "base-interface": 0,
+     "referenced-signature": 4,
+     "undetermined": 1
+    },
+    "typesWithAnyTestedExecuted": 2,
+    "typesWithAnyTestedStatic": 1,
+    "typesNamedInDescriptor": 2,
+    "typesObservedInFixture": 3,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "data.type": {
+    "types": 11,
+    "byKindClass": {
+     "concrete-authorable": 1,
+     "base-interface": 4,
+     "referenced-signature": 2,
+     "undetermined": 4
+    },
+    "typesWithAnyTestedExecuted": 0,
+    "typesWithAnyTestedStatic": 1,
+    "typesNamedInDescriptor": 0,
+    "typesObservedInFixture": 6,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "integration.event": {
+    "types": 9,
+    "byKindClass": {
+     "concrete-authorable": 6,
+     "base-interface": 2,
+     "referenced-signature": 0,
+     "undetermined": 1
+    },
+    "typesWithAnyTestedExecuted": 6,
+    "typesWithAnyTestedStatic": 2,
+    "typesNamedInDescriptor": 3,
+    "typesObservedInFixture": 3,
+    "evidenceOnlyByAmbiguousShortName": 3
+   },
+   "integration.plugin": {
+    "types": 7,
+    "byKindClass": {
+     "concrete-authorable": 0,
+     "base-interface": 5,
+     "referenced-signature": 2,
+     "undetermined": 0
+    },
+    "typesWithAnyTestedExecuted": 0,
+    "typesWithAnyTestedStatic": 0,
+    "typesNamedInDescriptor": 0,
+    "typesObservedInFixture": 0,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "integration.rest": {
+    "types": 23,
+    "byKindClass": {
+     "concrete-authorable": 13,
+     "base-interface": 0,
+     "referenced-signature": 9,
+     "undetermined": 1
+    },
+    "typesWithAnyTestedExecuted": 9,
+    "typesWithAnyTestedStatic": 10,
+    "typesNamedInDescriptor": 10,
+    "typesObservedInFixture": 0,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "integration.soap": {
+    "types": 25,
+    "byKindClass": {
+     "concrete-authorable": 18,
+     "base-interface": 1,
+     "referenced-signature": 2,
+     "undetermined": 4
+    },
+    "typesWithAnyTestedExecuted": 0,
+    "typesWithAnyTestedStatic": 0,
+    "typesNamedInDescriptor": 0,
+    "typesObservedInFixture": 0,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "integration.timer": {
+    "types": 10,
+    "byKindClass": {
+     "concrete-authorable": 8,
+     "base-interface": 1,
+     "referenced-signature": 0,
+     "undetermined": 1
+    },
+    "typesWithAnyTestedExecuted": 1,
+    "typesWithAnyTestedStatic": 1,
+    "typesNamedInDescriptor": 1,
+    "typesObservedInFixture": 0,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "logic.action": {
+    "types": 24,
+    "byKindClass": {
+     "concrete-authorable": 16,
+     "base-interface": 2,
+     "referenced-signature": 5,
+     "undetermined": 1
+    },
+    "typesWithAnyTestedExecuted": 8,
+    "typesWithAnyTestedStatic": 5,
+    "typesNamedInDescriptor": 7,
+    "typesObservedInFixture": 9,
+    "evidenceOnlyByAmbiguousShortName": 2
+   },
+   "logic.exception": {
+    "types": 5,
+    "byKindClass": {
+     "concrete-authorable": 1,
+     "base-interface": 1,
+     "referenced-signature": 1,
+     "undetermined": 2
+    },
+    "typesWithAnyTestedExecuted": 1,
+    "typesWithAnyTestedStatic": 1,
+    "typesNamedInDescriptor": 1,
+    "typesObservedInFixture": 5,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "logic.node": {
+    "types": 89,
+    "byKindClass": {
+     "concrete-authorable": 73,
+     "base-interface": 12,
+     "referenced-signature": 0,
+     "undetermined": 4
+    },
+    "typesWithAnyTestedExecuted": 25,
+    "typesWithAnyTestedStatic": 2,
+    "typesNamedInDescriptor": 21,
+    "typesObservedInFixture": 32,
+    "evidenceOnlyByAmbiguousShortName": 10
+   },
+   "logic.parameter": {
+    "types": 10,
+    "byKindClass": {
+     "concrete-authorable": 4,
+     "base-interface": 0,
+     "referenced-signature": 5,
+     "undetermined": 1
+    },
+    "typesWithAnyTestedExecuted": 4,
+    "typesWithAnyTestedStatic": 1,
+    "typesNamedInDescriptor": 3,
+    "typesObservedInFixture": 6,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "logic.query": {
+    "types": 16,
+    "byKindClass": {
+     "concrete-authorable": 13,
+     "base-interface": 1,
+     "referenced-signature": 0,
+     "undetermined": 2
+    },
+    "typesWithAnyTestedExecuted": 8,
+    "typesWithAnyTestedStatic": 1,
+    "typesNamedInDescriptor": 6,
+    "typesObservedInFixture": 8,
+    "evidenceOnlyByAmbiguousShortName": 3
+   },
+   "module": {
+    "types": 9,
+    "byKindClass": {
+     "concrete-authorable": 4,
+     "base-interface": 0,
+     "referenced-signature": 0,
+     "undetermined": 5
+    },
+    "typesWithAnyTestedExecuted": 2,
+    "typesWithAnyTestedStatic": 0,
+    "typesNamedInDescriptor": 2,
+    "typesObservedInFixture": 5,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "other": {
+    "types": 2,
+    "byKindClass": {
+     "concrete-authorable": 0,
+     "base-interface": 1,
+     "referenced-signature": 1,
+     "undetermined": 0
+    },
+    "typesWithAnyTestedExecuted": 0,
+    "typesWithAnyTestedStatic": 0,
+    "typesNamedInDescriptor": 0,
+    "typesObservedInFixture": 0,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "process": {
+    "types": 11,
+    "byKindClass": {
+     "concrete-authorable": 3,
+     "base-interface": 0,
+     "referenced-signature": 8,
+     "undetermined": 0
+    },
+    "typesWithAnyTestedExecuted": 0,
+    "typesWithAnyTestedStatic": 0,
+    "typesNamedInDescriptor": 0,
+    "typesObservedInFixture": 1,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "reference.signature": {
+    "types": 57,
+    "byKindClass": {
+     "concrete-authorable": 0,
+     "base-interface": 0,
+     "referenced-signature": 57,
+     "undetermined": 0
+    },
+    "typesWithAnyTestedExecuted": 0,
+    "typesWithAnyTestedStatic": 0,
+    "typesNamedInDescriptor": 1,
+    "typesObservedInFixture": 28,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "security.config": {
+    "types": 7,
+    "byKindClass": {
+     "concrete-authorable": 4,
+     "base-interface": 1,
+     "referenced-signature": 2,
+     "undetermined": 0
+    },
+    "typesWithAnyTestedExecuted": 3,
+    "typesWithAnyTestedStatic": 3,
+    "typesNamedInDescriptor": 3,
+    "typesObservedInFixture": 6,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "ui.block": {
+    "types": 18,
+    "byKindClass": {
+     "concrete-authorable": 9,
+     "base-interface": 0,
+     "referenced-signature": 9,
+     "undetermined": 0
+    },
+    "typesWithAnyTestedExecuted": 3,
+    "typesWithAnyTestedStatic": 1,
+    "typesNamedInDescriptor": 2,
+    "typesObservedInFixture": 5,
+    "evidenceOnlyByAmbiguousShortName": 2
+   },
+   "ui.metadata": {
+    "types": 8,
+    "byKindClass": {
+     "concrete-authorable": 0,
+     "base-interface": 1,
+     "referenced-signature": 0,
+     "undetermined": 7
+    },
+    "typesWithAnyTestedExecuted": 1,
+    "typesWithAnyTestedStatic": 1,
+    "typesNamedInDescriptor": 1,
+    "typesObservedInFixture": 0,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "ui.screen": {
+    "types": 34,
+    "byKindClass": {
+     "concrete-authorable": 23,
+     "base-interface": 2,
+     "referenced-signature": 4,
+     "undetermined": 5
+    },
+    "typesWithAnyTestedExecuted": 8,
+    "typesWithAnyTestedStatic": 6,
+    "typesNamedInDescriptor": 7,
+    "typesObservedInFixture": 15,
+    "evidenceOnlyByAmbiguousShortName": 1
+   },
+   "ui.widget": {
+    "types": 130,
+    "byKindClass": {
+     "concrete-authorable": 63,
+     "base-interface": 1,
+     "referenced-signature": 59,
+     "undetermined": 7
+    },
+    "typesWithAnyTestedExecuted": 16,
+    "typesWithAnyTestedStatic": 0,
+    "typesNamedInDescriptor": 12,
+    "typesObservedInFixture": 36,
+    "evidenceOnlyByAmbiguousShortName": 4
+   }
+  }
+ },
+ "o11": {
+  "identity": {
+   "metadataVersion": "11.55.69",
+   "installedStudio": "11.55.87.65162",
+   "note": "O11 catalog 11.55.69"
+  },
+  "denominators": {
+   "inventoried": 408,
+   "byKindClass": {
+    "concrete-authorable": 209,
+    "base-interface": 32,
+    "referenced-signature": 130,
+    "undetermined": 37
+   },
+   "byAppFamilyTag": {
+    "shared": 247,
+    "reactive": 89,
+    "web": 72
+   },
+   "byKindClassAndAppFamily": {
+    "concrete-authorable": {
+     "shared": 131,
+     "reactive": 43,
+     "web": 35
+    },
+    "base-interface": {
+     "shared": 27,
+     "reactive": 2,
+     "web": 3
+    },
+    "referenced-signature": {
+     "shared": 61,
+     "reactive": 40,
+     "web": 29
+    },
+    "undetermined": {
+     "shared": 28,
+     "reactive": 4,
+     "web": 5
+    }
+   },
+   "shortNameCollisionsInIndex": 46,
+   "shortNameCollisionsInventoried": 31,
+   "rule": "kept: every interface (no de-duplication) whose catalog Bases include OutSystems.Model.IObject (object) or IObjectSignature only (signature); excluded: *Descriptor and interfaces without those roots; names are qualified in the catalog (bases, creatables, property types), so no resolution ambiguity arises except for property types written as short names; the catalog has no method list (Delete/Duplicate assumed from IObject). Identity = platform:metadataVersion:namespace.name (assembly not recorded by the catalog)",
+   "kindClassRule": "referenced-signature = role signature (base closure reaches IObjectSignature but not IObject); concrete-authorable = role object with a factory that returns exactly this type (ODC: Create* method resolved without ambiguity; O11: catalog Creatables) or, when no other inventoried interface has it as a base, a widget/flow-node interface created through the generic CreateWidget<T>/CreateNode<T>; base-interface = role object without such a factory that appears in the resolved base closure of another inventoried interface (its properties and operations are kept; it is not counted as an extra concrete element); undetermined = role object with neither a factory nor an implementer (possibly created by the platform, not verified). A concrete type that is also a base of others keeps alsoBaseOf",
+   "appFamilyRule": "tag from namespace/name: web = OutSystems.Model.UI.Web or Web*/IWeb* names; reactive = OutSystems.Model.UI.Mobile, NRWidgets plugin or Mobile*/IMobile* names; shared = the rest. A tag, not an exclusion: types tagged web stay in the inventory and in the per-kind denominators; the reader census tells whether ODC objects implement them",
+   "attributionRule": "evidence keyed by a short name (jobs, ledger, descriptor, reader census) is attributed to a qualified type only when: exact = the short name has one qualified type in the platform inventory; kernel-rank (create only) = the kernel ranking of Verbs.cs FindCreateCore leaves one top candidate (NRWidgets > OutSystems.Model.* > Extensions/ExternalLibraries/Processes/BusinessProcesses); module-context = after removing the OutSystems.Model.Extensions and OutSystems.Model.ExternalLibraries candidates (extension-module types, \"never what an eSpace creates\", Verbs.cs:904-905) one candidate remains; otherwise ambiguous = recorded under the short name, attributed to no qualified type and not counted as proof"
+  },
+  "typesNamedInPublicContract": {
+   "count": 43,
+   "note": "short name appears in the JSON returned by api --op (spec/logic/screen/html/html-visual); a mention in expander source code is recorded separately as route.codeMentions and is not a public contract",
+   "shortNameNote": "contract naming is by short name; attributed to every qualified type with that short name (the contracts do not qualify names)"
+  },
+  "typesMentionedInExpanderCode": 162,
+  "descriptor": {
+   "typesNamedByDescriptor": {
+    "ledgerQualified": 31,
+    "exact": 27,
+    "moduleContext": 0,
+    "kernelRank": 3,
+    "ambiguousShortName": 10,
+    "attributedToAnotherQualifiedType": 3
+   },
+   "typesNamedByDescriptorAttributed": 27,
+   "capabilities": 2,
+   "shared": [
+    "data.static",
+    "data.structure"
+   ],
+   "note": "exposure counted only when the descriptor of lane o11 names the short name AND the attribution rule assigns it to this qualified type; on this lane the descriptor holds the shared capabilities projected for it (data.static, data.structure)",
+   "reusePotential": {
+    "typesWithSameShortNameInTheOtherLaneDescriptor": 115,
+    "note": "same short name as a type named by the other lane's descriptor: reuse potential, not exposure"
+   }
+  },
+  "executedProof": {
+   "typesWithLedgerEntryForAnyOp": {
+    "ledgerQualified": 36,
+    "exact": 0,
+    "moduleContext": 0,
+    "kernelRank": 3,
+    "ambiguousShortName": 5,
+    "attributedToAnotherQualifiedType": 3
+   },
+   "results": 11,
+   "current": 11,
+   "qualifiedResults": 11,
+   "note": "O11 ledger of the jobs stamped by JobTests (tests/provenance-o11.json); counted per attribution level"
+  },
+  "staticProof": {
+   "typesWithPositiveJobForAnyOp": {
+    "ledgerQualified": 33,
+    "exact": 90,
+    "moduleContext": 0,
+    "kernelRank": 11,
+    "ambiguousShortName": 21,
+    "attributedToAnotherQualifiedType": 7
+   },
+   "typesWithNegativeJobOnly": 4,
+   "note": "positive suites only; the type name as written in the job; negative suites counted separately"
+  },
+  "census": {
+   "typesObservedInFixture": null,
+   "note": "O11 reader not run (O11 CLI not built in this checkout)"
+  },
+  "perOp": {
+   "read": {
+    "types": 408,
+    "byStatus": {
+     "tested-executed": 0,
+     "tested-static": 41,
+     "route-only": 359,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 0,
+     "undetermined": 8
+    },
+    "byStatusConcreteAuthorable": {
+     "tested-executed": 0,
+     "tested-static": 39,
+     "route-only": 163,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 0,
+     "undetermined": 7
+    },
+    "metadataSuggests": 408,
+    "metadataSuggestsOwn": 408,
+    "metadataInheritedOnly": 0,
+    "metadataAmbiguous": 0,
+    "metadataNoBasis": 0,
+    "contextExcluded": 0,
+    "evidenceUnattributed": 8
+   },
+   "address": {
+    "types": 408,
+    "byStatus": {
+     "tested-executed": 0,
+     "tested-static": 37,
+     "route-only": 363,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 0,
+     "undetermined": 8
+    },
+    "byStatusConcreteAuthorable": {
+     "tested-executed": 0,
+     "tested-static": 35,
+     "route-only": 167,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 0,
+     "undetermined": 7
+    },
+    "metadataSuggests": 408,
+    "metadataSuggestsOwn": 408,
+    "metadataInheritedOnly": 0,
+    "metadataAmbiguous": 0,
+    "metadataNoBasis": 0,
+    "contextExcluded": 0,
+    "evidenceUnattributed": 8
+   },
+   "usages": {
+    "types": 408,
+    "byStatus": {
+     "tested-executed": 0,
+     "tested-static": 11,
+     "route-only": 50,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 0,
+     "undetermined": 347
+    },
+    "byStatusConcreteAuthorable": {
+     "tested-executed": 0,
+     "tested-static": 11,
+     "route-only": 14,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 0,
+     "undetermined": 184
+    },
+    "metadataSuggests": 54,
+    "metadataSuggestsOwn": 54,
+    "metadataInheritedOnly": 0,
+    "metadataAmbiguous": 0,
+    "metadataNoBasis": 354,
+    "contextExcluded": 0,
+    "evidenceUnattributed": 2
+   },
+   "create": {
+    "types": 408,
+    "byStatus": {
+     "tested-executed": 31,
+     "tested-static": 68,
+     "route-only": 96,
+     "suggested-only": 0,
+     "context-excluded": 130,
+     "refused-proven": 1,
+     "undetermined": 82
+    },
+    "byStatusConcreteAuthorable": {
+     "tested-executed": 30,
+     "tested-static": 68,
+     "route-only": 96,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 1,
+     "undetermined": 14
+    },
+    "metadataSuggests": 209,
+    "metadataSuggestsOwn": 108,
+    "metadataInheritedOnly": 0,
+    "metadataAmbiguous": 0,
+    "metadataNoBasis": 69,
+    "contextExcluded": 130,
+    "evidenceUnattributed": 15
+   },
+   "set": {
+    "types": 408,
+    "byStatus": {
+     "tested-executed": 30,
+     "tested-static": 52,
+     "route-only": 162,
+     "suggested-only": 0,
+     "context-excluded": 130,
+     "refused-proven": 1,
+     "undetermined": 33
+    },
+    "byStatusConcreteAuthorable": {
+     "tested-executed": 27,
+     "tested-static": 52,
+     "route-only": 114,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 1,
+     "undetermined": 15
+    },
+    "metadataSuggests": 257,
+    "metadataSuggestsOwn": 222,
+    "metadataInheritedOnly": 35,
+    "metadataAmbiguous": 0,
+    "metadataNoBasis": 21,
+    "contextExcluded": 130,
+    "evidenceUnattributed": 15
+   },
+   "rename": {
+    "types": 408,
+    "byStatus": {
+     "tested-executed": 12,
+     "tested-static": 3,
+     "route-only": 172,
+     "suggested-only": 0,
+     "context-excluded": 130,
+     "refused-proven": 3,
+     "undetermined": 88
+    },
+    "byStatusConcreteAuthorable": {
+     "tested-executed": 12,
+     "tested-static": 3,
+     "route-only": 149,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 3,
+     "undetermined": 42
+    },
+    "metadataSuggests": 189,
+    "metadataSuggestsOwn": 95,
+    "metadataInheritedOnly": 94,
+    "metadataAmbiguous": 0,
+    "metadataNoBasis": 89,
+    "contextExcluded": 130,
+    "evidenceUnattributed": 1
+   },
+   "replace": {
+    "types": 408,
+    "byStatus": {
+     "tested-executed": 2,
+     "tested-static": 2,
+     "route-only": 54,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 0,
+     "undetermined": 350
+    },
+    "byStatusConcreteAuthorable": {
+     "tested-executed": 2,
+     "tested-static": 2,
+     "route-only": 18,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 0,
+     "undetermined": 187
+    },
+    "metadataSuggests": 54,
+    "metadataSuggestsOwn": 54,
+    "metadataInheritedOnly": 0,
+    "metadataAmbiguous": 0,
+    "metadataNoBasis": 354,
+    "contextExcluded": 0,
+    "evidenceUnattributed": 0
+   },
+   "move": {
+    "types": 408,
+    "byStatus": {
+     "tested-executed": 1,
+     "tested-static": 5,
+     "route-only": 271,
+     "suggested-only": 0,
+     "context-excluded": 130,
+     "refused-proven": 1,
+     "undetermined": 0
+    },
+    "byStatusConcreteAuthorable": {
+     "tested-executed": 1,
+     "tested-static": 5,
+     "route-only": 202,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 1,
+     "undetermined": 0
+    },
+    "metadataSuggests": 278,
+    "metadataSuggestsOwn": 0,
+    "metadataInheritedOnly": 278,
+    "metadataAmbiguous": 0,
+    "metadataNoBasis": 0,
+    "contextExcluded": 130,
+    "evidenceUnattributed": 0
+   },
+   "duplicate": {
+    "types": 408,
+    "byStatus": {
+     "tested-executed": 2,
+     "tested-static": 2,
+     "route-only": 272,
+     "suggested-only": 0,
+     "context-excluded": 130,
+     "refused-proven": 0,
+     "undetermined": 2
+    },
+    "byStatusConcreteAuthorable": {
+     "tested-executed": 2,
+     "tested-static": 2,
+     "route-only": 203,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 0,
+     "undetermined": 2
+    },
+    "metadataSuggests": 278,
+    "metadataSuggestsOwn": 0,
+    "metadataInheritedOnly": 278,
+    "metadataAmbiguous": 0,
+    "metadataNoBasis": 0,
+    "contextExcluded": 130,
+    "evidenceUnattributed": 2
+   },
+   "delete": {
+    "types": 408,
+    "byStatus": {
+     "tested-executed": 4,
+     "tested-static": 11,
+     "route-only": 257,
+     "suggested-only": 0,
+     "context-excluded": 130,
+     "refused-proven": 0,
+     "undetermined": 6
+    },
+    "byStatusConcreteAuthorable": {
+     "tested-executed": 4,
+     "tested-static": 11,
+     "route-only": 189,
+     "suggested-only": 0,
+     "context-excluded": 0,
+     "refused-proven": 0,
+     "undetermined": 5
+    },
+    "metadataSuggests": 278,
+    "metadataSuggestsOwn": 0,
+    "metadataInheritedOnly": 278,
+    "metadataAmbiguous": 0,
+    "metadataNoBasis": 0,
+    "contextExcluded": 130,
+    "evidenceUnattributed": 6
+   }
+  },
+  "byFamily": {
+   "abstract": {
+    "types": 3,
+    "byKindClass": {
+     "concrete-authorable": 0,
+     "base-interface": 1,
+     "referenced-signature": 1,
+     "undetermined": 1
+    },
+    "typesWithAnyTestedExecuted": 0,
+    "typesWithAnyTestedStatic": 0,
+    "typesNamedInDescriptor": 0,
+    "typesObservedInFixture": null,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "data.entity": {
+    "types": 8,
+    "byKindClass": {
+     "concrete-authorable": 5,
+     "base-interface": 1,
+     "referenced-signature": 1,
+     "undetermined": 1
+    },
+    "typesWithAnyTestedExecuted": 5,
+    "typesWithAnyTestedStatic": 5,
+    "typesNamedInDescriptor": 4,
+    "typesObservedInFixture": null,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "data.structure": {
+    "types": 4,
+    "byKindClass": {
+     "concrete-authorable": 2,
+     "base-interface": 0,
+     "referenced-signature": 2,
+     "undetermined": 0
+    },
+    "typesWithAnyTestedExecuted": 2,
+    "typesWithAnyTestedStatic": 2,
+    "typesNamedInDescriptor": 2,
+    "typesObservedInFixture": null,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "data.type": {
+    "types": 8,
+    "byKindClass": {
+     "concrete-authorable": 0,
+     "base-interface": 4,
+     "referenced-signature": 0,
+     "undetermined": 4
+    },
+    "typesWithAnyTestedExecuted": 0,
+    "typesWithAnyTestedStatic": 1,
+    "typesNamedInDescriptor": 1,
+    "typesObservedInFixture": null,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "integration.event": {
+    "types": 8,
+    "byKindClass": {
+     "concrete-authorable": 5,
+     "base-interface": 1,
+     "referenced-signature": 0,
+     "undetermined": 2
+    },
+    "typesWithAnyTestedExecuted": 1,
+    "typesWithAnyTestedStatic": 1,
+    "typesNamedInDescriptor": 0,
+    "typesObservedInFixture": null,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "integration.plugin": {
+    "types": 14,
+    "byKindClass": {
+     "concrete-authorable": 5,
+     "base-interface": 5,
+     "referenced-signature": 2,
+     "undetermined": 2
+    },
+    "typesWithAnyTestedExecuted": 0,
+    "typesWithAnyTestedStatic": 0,
+    "typesNamedInDescriptor": 0,
+    "typesObservedInFixture": null,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "integration.rest": {
+    "types": 23,
+    "byKindClass": {
+     "concrete-authorable": 13,
+     "base-interface": 0,
+     "referenced-signature": 9,
+     "undetermined": 1
+    },
+    "typesWithAnyTestedExecuted": 4,
+    "typesWithAnyTestedStatic": 7,
+    "typesNamedInDescriptor": 4,
+    "typesObservedInFixture": null,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "integration.soap": {
+    "types": 19,
+    "byKindClass": {
+     "concrete-authorable": 16,
+     "base-interface": 0,
+     "referenced-signature": 1,
+     "undetermined": 2
+    },
+    "typesWithAnyTestedExecuted": 0,
+    "typesWithAnyTestedStatic": 0,
+    "typesNamedInDescriptor": 0,
+    "typesObservedInFixture": null,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "integration.timer": {
+    "types": 1,
+    "byKindClass": {
+     "concrete-authorable": 1,
+     "base-interface": 0,
+     "referenced-signature": 0,
+     "undetermined": 0
+    },
+    "typesWithAnyTestedExecuted": 0,
+    "typesWithAnyTestedStatic": 1,
+    "typesNamedInDescriptor": 0,
+    "typesObservedInFixture": null,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "logic.action": {
+    "types": 15,
+    "byKindClass": {
+     "concrete-authorable": 10,
+     "base-interface": 2,
+     "referenced-signature": 3,
+     "undetermined": 0
+    },
+    "typesWithAnyTestedExecuted": 4,
+    "typesWithAnyTestedStatic": 6,
+    "typesNamedInDescriptor": 3,
+    "typesObservedInFixture": null,
+    "evidenceOnlyByAmbiguousShortName": 2
+   },
+   "logic.exception": {
+    "types": 5,
+    "byKindClass": {
+     "concrete-authorable": 1,
+     "base-interface": 1,
+     "referenced-signature": 1,
+     "undetermined": 2
+    },
+    "typesWithAnyTestedExecuted": 0,
+    "typesWithAnyTestedStatic": 1,
+    "typesNamedInDescriptor": 0,
+    "typesObservedInFixture": null,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "logic.node": {
+    "types": 57,
+    "byKindClass": {
+     "concrete-authorable": 43,
+     "base-interface": 10,
+     "referenced-signature": 0,
+     "undetermined": 4
+    },
+    "typesWithAnyTestedExecuted": 6,
+    "typesWithAnyTestedStatic": 14,
+    "typesNamedInDescriptor": 4,
+    "typesObservedInFixture": null,
+    "evidenceOnlyByAmbiguousShortName": 6
+   },
+   "logic.parameter": {
+    "types": 9,
+    "byKindClass": {
+     "concrete-authorable": 3,
+     "base-interface": 1,
+     "referenced-signature": 4,
+     "undetermined": 1
+    },
+    "typesWithAnyTestedExecuted": 4,
+    "typesWithAnyTestedStatic": 3,
+    "typesNamedInDescriptor": 3,
+    "typesObservedInFixture": null,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "logic.query": {
+    "types": 16,
+    "byKindClass": {
+     "concrete-authorable": 13,
+     "base-interface": 1,
+     "referenced-signature": 0,
+     "undetermined": 2
+    },
+    "typesWithAnyTestedExecuted": 3,
+    "typesWithAnyTestedStatic": 5,
+    "typesNamedInDescriptor": 2,
+    "typesObservedInFixture": null,
+    "evidenceOnlyByAmbiguousShortName": 3
+   },
+   "module": {
+    "types": 5,
+    "byKindClass": {
+     "concrete-authorable": 3,
+     "base-interface": 0,
+     "referenced-signature": 0,
+     "undetermined": 2
+    },
+    "typesWithAnyTestedExecuted": 0,
+    "typesWithAnyTestedStatic": 2,
+    "typesNamedInDescriptor": 0,
+    "typesObservedInFixture": null,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "process": {
+    "types": 8,
+    "byKindClass": {
+     "concrete-authorable": 2,
+     "base-interface": 0,
+     "referenced-signature": 6,
+     "undetermined": 0
+    },
+    "typesWithAnyTestedExecuted": 0,
+    "typesWithAnyTestedStatic": 1,
+    "typesNamedInDescriptor": 0,
+    "typesObservedInFixture": null,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "reference.signature": {
+    "types": 40,
+    "byKindClass": {
+     "concrete-authorable": 0,
+     "base-interface": 0,
+     "referenced-signature": 40,
+     "undetermined": 0
+    },
+    "typesWithAnyTestedExecuted": 0,
+    "typesWithAnyTestedStatic": 0,
+    "typesNamedInDescriptor": 0,
+    "typesObservedInFixture": null,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "security.config": {
+    "types": 5,
+    "byKindClass": {
+     "concrete-authorable": 4,
+     "base-interface": 0,
+     "referenced-signature": 1,
+     "undetermined": 0
+    },
+    "typesWithAnyTestedExecuted": 0,
+    "typesWithAnyTestedStatic": 3,
+    "typesNamedInDescriptor": 0,
+    "typesObservedInFixture": null,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "ui.block": {
+    "types": 14,
+    "byKindClass": {
+     "concrete-authorable": 9,
+     "base-interface": 0,
+     "referenced-signature": 5,
+     "undetermined": 0
+    },
+    "typesWithAnyTestedExecuted": 1,
+    "typesWithAnyTestedStatic": 3,
+    "typesNamedInDescriptor": 0,
+    "typesObservedInFixture": null,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "ui.metadata": {
+    "types": 6,
+    "byKindClass": {
+     "concrete-authorable": 0,
+     "base-interface": 1,
+     "referenced-signature": 0,
+     "undetermined": 5
+    },
+    "typesWithAnyTestedExecuted": 0,
+    "typesWithAnyTestedStatic": 0,
+    "typesNamedInDescriptor": 0,
+    "typesObservedInFixture": null,
+    "evidenceOnlyByAmbiguousShortName": 0
+   },
+   "ui.screen": {
+    "types": 25,
+    "byKindClass": {
+     "concrete-authorable": 19,
+     "base-interface": 1,
+     "referenced-signature": 0,
+     "undetermined": 5
+    },
+    "typesWithAnyTestedExecuted": 2,
+    "typesWithAnyTestedStatic": 8,
+    "typesNamedInDescriptor": 2,
+    "typesObservedInFixture": null,
+    "evidenceOnlyByAmbiguousShortName": 2
+   },
+   "ui.widget": {
+    "types": 115,
+    "byKindClass": {
+     "concrete-authorable": 55,
+     "base-interface": 3,
+     "referenced-signature": 54,
+     "undetermined": 3
+    },
+    "typesWithAnyTestedExecuted": 4,
+    "typesWithAnyTestedStatic": 31,
+    "typesNamedInDescriptor": 2,
+    "typesObservedInFixture": null,
+    "evidenceOnlyByAmbiguousShortName": 8
+   }
+  }
+ },
+ "correspondence": {
+  "sameShortName": {
+   "shortNames": 365,
+   "odcO11Pairs": 486,
+   "oneToOnePairs": 318,
+   "meaning": "the same short name exists on both platforms (possibly in several namespaces each); a naming coincidence, not a contract"
+  },
+  "sameQualifiedName": {
+   "pairs": 389,
+   "meaning": "same namespace.name on both platforms: a correspondence CANDIDATE; the contract (properties, factories, behaviour) is not verified by this level"
+  },
+  "sameQualifiedNameAndSameWritableProperties": {
+   "pairs": 152,
+   "meaning": "metadata-level agreement of the writable property names (ODC own+inherited vs O11 catalog list, whose inheritance scope is not recorded); still not a proof of behaviour"
+  },
+  "verifiedContractEquivalence": {
+   "pairs": 0,
+   "meaning": "requires a positive proof of the same operation with the same contract on both platforms; O11 has no executed ledger in this checkout, so nothing is verified"
+  }
+ }
+}

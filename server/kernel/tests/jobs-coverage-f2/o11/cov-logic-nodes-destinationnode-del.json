@@ -1,0 +1,61 @@
+{
+ "description": "Cobertura testada (fase 2): del de OutSystems.Model.Logic.Nodes.IDestinationNode (o11) em screenActionFlow. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "CovSScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAction",
+   "name": "CovSAction",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IDestinationNode",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ],
+ "expectedMessages": [
+  {
+   "id": "UnusedAction",
+   "element": "Headless_UI (ESpace) / MainFlow (MobileFlow) / CovSScreen (MobileScreen) / CovSAction (ScreenAction)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ]
+}

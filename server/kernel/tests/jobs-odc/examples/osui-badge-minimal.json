@@ -1,0 +1,12 @@
+{
+ "description": "Badge do OSUI: o input obrigatorio Number.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "BadgeDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Badge1", "source": "IMobileBlock:Badge", "as": "$bd"},
+  {"op": "set", "target": "$bd/Number", "prop": "Value", "value": "3"}
+ ]
+}

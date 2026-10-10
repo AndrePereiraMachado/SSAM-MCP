@@ -1,0 +1,17 @@
+{
+ "description": "A RECUSA do delete de dados: Contact.Email e usado pelo Input do formulario e por um filtro do aggregate. Sem force, o delete tem de ser recusado E a mensagem tem de nomear os dois consumidores (e o caminho limpo esta em tests/jobs/delete-data-consumers.json).",
+ "base": "job:screen-form-reactive",
+ "expectValid": true,
+ "expectError": [
+  "delete: refused",
+  "IEntityAttribute 'Email' is used by 2 consumer(s)",
+  "IForm:ContactForm/IMobileWidget:content/IInput:Email_Input/CustomProperty:Variable/IExpression",
+  "IScreenAggregate:GetContactById",
+  "pass \"force\": true to break them"
+ ],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:ContactDetail/GetContactById", "type": "IFilter", "args": {"condition": "Contact.Email <> \"\""}},
+  {"op": "usages", "target": "IServerEntity:Contact/Email"},
+  {"op": "delete", "target": "IServerEntity:Contact/Email"}
+ ]
+}

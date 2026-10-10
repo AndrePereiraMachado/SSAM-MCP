@@ -1,0 +1,394 @@
+{
+  "schemaVersion": "ssam-discovery-fragment/1",
+  "contract": "ssam-catalog-contribution/1",
+  "front": "C",
+  "title": "Configuration and security: Settings (ISiteProperty), application roles (ODC IAppRole / O11 IRole) and screen restriction; client variables are front A's data.client-variable",
+  "reviewedAt": "2026-09-23",
+  "synonyms": {
+    "setting": [
+      "settings",
+      "site property",
+      "site properties",
+      "configuracao",
+      "configuração",
+      "parametro de ambiente"
+    ],
+    "role": [
+      "roles",
+      "papel de acesso",
+      "perfil de acesso",
+      "permissao",
+      "permissão"
+    ]
+  },
+  "capabilities": [
+    {
+      "id": "security.settings-roles",
+      "supersedes": [
+        "data.setting"
+      ],
+      "category": "security",
+      "title": "Settings (site properties) and application roles",
+      "keywords": [
+        "setting",
+        "site property",
+        "role",
+        "permission",
+        "secret",
+        "configuration",
+        "restrict screen",
+        "is secret"
+      ],
+      "summary": "ISiteProperty (the ODC product calls it Setting; expressions read Settings.<Name> on ODC, Site.<Name> on O11) with DataType, DefaultValue, Description and, on ODC, IsSecret; an application role created with `create IRole` (ODC answers an IAppRole, O11 an IRole) with Description; a screen restricted with `link from <screen> connector Roles to <role>`.",
+      "route": {
+        "kind": "job",
+        "operation": "create ISiteProperty|IRole @espace; set DataType/DefaultValue/Description/IsSecret; link {from:<screen>, connector:\"Roles\", to:<role>}; deliver with studio_deliver / o11_deliver (they validate and refuse before any change)"
+      },
+      "contract": [
+        "verbs.verbs.create",
+        "verbs.verbs.set",
+        "verbs.verbs.link",
+        "verbs.verbs.rename",
+        "verbs.verbs.usages",
+        "verbs.references"
+      ],
+      "guidance": "Addressing outside the creating job: ISiteProperty:<Name>; the ODC role answers as IAppRole. Settings are read-only inside actions on ODC per the security-settings description, but NAO-DA records that write as NOT MEASURED: do not rely on either claim without a proof. IsSecret protects nothing in the model: the flag is independent of the value, DefaultValue stays readable in clear, and the secret value belongs in the Portal (environment configuration). Per-user state on the device, which on ODC also replaces session variables, is front A's data.client-variable; user exceptions are front A's logic.exception.",
+      "example": {
+        "ops": [
+          "create",
+          "set",
+          "link"
+        ],
+        "max": 14
+      },
+      "elements": [
+        {
+          "role": "setting",
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.Data.ISiteProperty",
+              "jobType": "ISiteProperty",
+              "address": "ISiteProperty:<Name>"
+            },
+            "o11": {
+              "native": "OutSystems.Model.Data.ISiteProperty",
+              "jobType": "ISiteProperty",
+              "address": "ISiteProperty:<Name>"
+            }
+          }
+        },
+        {
+          "role": "application role",
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.Logic.IAppRole",
+              "jobType": "IRole",
+              "address": "IAppRole:<Name> (created with create IRole)"
+            },
+            "o11": {
+              "native": "OutSystems.Model.Logic.IRole",
+              "jobType": "IRole",
+              "address": "IRole:<Name>"
+            }
+          }
+        }
+      ],
+      "operations": {
+        "read": {
+          "route": "get/dump by path; reader --kind SiteProperty | AppRole | Role",
+          "preconditions": [],
+          "roles": {
+            "setting": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "security-settings",
+                  "setting-lifecycle"
+                ],
+                "scope": "DefaultValue, Description, IsSecret read back before and after each edit"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "security-config-reactive"
+                ]
+              }
+            },
+            "application role": {
+              "odc": {
+                "status": "undetermined",
+                "note": "no ODC job reads a role back"
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "no O11 job reads a role back"
+              }
+            }
+          }
+        },
+        "usages": {
+          "route": "usages {target}",
+          "preconditions": [
+            "consumers of a setting are the expressions that read Settings.<Name> (ODC) / Site.<Name> (O11)"
+          ],
+          "roles": {
+            "setting": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "setting-lifecycle"
+                ],
+                "scope": "the server action expressions that read Settings.<Name>, before and after a rename"
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "no O11 job runs usages on a site property"
+              }
+            }
+          }
+        },
+        "create": {
+          "route": "create <Type> under @espace",
+          "preconditions": [
+            "a setting nobody reads raises UnusedElement (declare it in expectedMessages or use it)",
+            "ODC: `create IRole` answers an IAppRole (IRole is a base interface there)"
+          ],
+          "roles": {
+            "setting": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "security-settings"
+                ]
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "security-config-reactive",
+                  "tickets-01-data"
+                ]
+              }
+            },
+            "application role": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "security-settings"
+                ],
+                "scope": "create IRole; the ledger names IAppRole"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "security-config-reactive",
+                  "tickets-01-data"
+                ]
+              }
+            }
+          }
+        },
+        "set": {
+          "route": "set {target, prop, value}; link {from:<screen>, connector:\"Roles\", to:<role>} restricts a screen",
+          "preconditions": [
+            "ODC: IsSecret does not protect the DefaultValue in the model (written and read back in clear); a Text DefaultValue is a quoted literal"
+          ],
+          "roles": {
+            "setting": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "security-settings",
+                  "setting-lifecycle"
+                ],
+                "scope": "DataType, DefaultValue, Description, IsSecret (true and back to false); edited on settings another job created"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "security-config-reactive",
+                  "tickets-01-data"
+                ],
+                "scope": "DataType, DefaultValue"
+              }
+            },
+            "application role": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "security-settings"
+                ],
+                "scope": "Description; the screen restricted by link connector Roles"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "security-config-reactive"
+                ],
+                "scope": "Description; the screen restricted by link connector Roles"
+              }
+            }
+          }
+        },
+        "rename": {
+          "route": "rename {target, name}",
+          "preconditions": [
+            "expressions that read the element follow by key"
+          ],
+          "roles": {
+            "setting": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "setting-lifecycle"
+                ],
+                "scope": "Settings.<Name> in the reading action rewritten by key"
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "no O11 job renames a site property"
+              }
+            },
+            "application role": {
+              "odc": {
+                "status": "undetermined",
+                "note": "no job renames a role"
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "no job renames a role"
+              }
+            }
+          }
+        },
+        "delete": {
+          "route": "delete {target}",
+          "preconditions": [
+            "check usages first"
+          ],
+          "roles": {
+            "application role": {
+              "odc": {
+                "status": "undetermined",
+                "note": "no job deletes a role (the ODC builder's DeleteRole removes the role exception first: platforms/odc/studio/shared/AuthoringMisc.cs:43-53, not a job route)"
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "no job deletes a role"
+              }
+            }
+          }
+        }
+      },
+      "platforms": {
+        "odc": {
+          "proofs": [
+            "security-settings",
+            "setting-lifecycle"
+          ],
+          "negative": [],
+          "context": {
+            "kinds": [
+              "SiteProperty",
+              "AppRole"
+            ]
+          },
+          "limits": [
+            {
+              "text": "A Setting is written ISiteProperty in the API and jobs, but expressions read Settings.<Name>.",
+              "origin": "kernel/docs/NAO-DA.md (Settings prefix, CONFIRMADO); tests/jobs-odc/setting-lifecycle.json description"
+            },
+            {
+              "text": "Writing a Setting inside an action is described as an error in security-settings, but NAO-DA records it as NOT MEASURED: unverified either way.",
+              "origin": "tests/jobs-odc/security-settings.json description; kernel/docs/NAO-DA.md (gravar Setting em action, NAO MEDIDO)"
+            },
+            {
+              "text": "IsSecret protects nothing in the model: the flag is independent of the value, the DefaultValue is written and read back in clear, and the secret lives in the Portal configuration.",
+              "origin": "kernel/docs/NAO-DA.md:334-346 (IsSecret numa Setting); tests/jobs-odc/setting-lifecycle.json ops 14-17"
+            }
+          ],
+          "differences": [
+            {
+              "text": "ODC `create IRole` answers an IAppRole (IRole is only a base interface); O11 answers an IRole.",
+              "origin": "tests/jobs-odc/security-settings.json ledger (OutSystems.Model.Logic.IAppRole); kernel/catalog/model-api-11.55.69.json CreateRole"
+            },
+            {
+              "text": "Expression prefix Settings.<Name> (ODC) vs Site.<Name> (O11); on O11 expressions read Site.<Name> in valid jobs (tickets-02-helpers, tickets-04-collab, tickets-06-sla), while usages of a site property is not proven.",
+              "origin": "kernel/docs/NAO-DA.md (prefix, CONFIRMADO); kernel/tests/jobs/tickets-02-helpers.json ops 187,192; tickets-04-collab.json ops 228,231,234; tickets-06-sla.json ops 125,279,299"
+            }
+          ]
+        },
+        "o11": {
+          "proofs": [
+            "security-config-reactive",
+            "tickets-01-data"
+          ],
+          "negative": [],
+          "context": {
+            "kinds": [
+              "SiteProperty",
+              "Role"
+            ]
+          },
+          "limits": [
+            {
+              "text": "tests/jobs/security-config-reactive.json promises a session variable and a user exception in its description, but its ops create neither: session variables on O11 have no proof.",
+              "origin": "tests/jobs/security-config-reactive.json (description vs ops)"
+            }
+          ],
+          "differences": [
+            {
+              "text": "ODC adds Shareable to the application role (IAppRole); Public and IsPersistent exist on both lanes.",
+              "origin": "kernel/catalog/model-api-11.55.69.json IRole; platforms/odc/docs/model-api/OutSystems.Model.V1.md IAppRole/IRole"
+            }
+          ]
+        }
+      },
+      "depends": [],
+      "alternatives": [
+        {
+          "id": "data.client-variable",
+          "when": "per-user state kept on the device and read as Client.<Name>, not an app-wide setting; on ODC it also replaces session variables"
+        }
+      ]
+    }
+  ],
+  "unavailable": [],
+  "coverage": [
+    {
+      "type": "odc:OutSystems.Model.Logic.IRole",
+      "status": "excluded",
+      "applicability": "applicable",
+      "reason": "base interface on ODC: `create IRole` answers an IAppRole, which carries the role contract",
+      "origin": "tests/jobs-odc/security-settings.json ledger names OutSystems.Model.Logic.IAppRole; inventory kindClass base-interface",
+      "capability": "security.settings-roles"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.IAppRoleSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature of a role of a producer module: read-only in the consumer (a consumer restricts screens with it, never edits it)",
+      "origin": "inventory rule: context-excluded for referenced signatures (inventory.json sources.metadataRules)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.IRoleSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced role signature: defined in the producer, read-only in the consumer",
+      "origin": "inventory rule: context-excluded for referenced signatures"
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.IRoleSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced role signature: defined in the producer, read-only in the consumer",
+      "origin": "inventory rule: context-excluded for referenced signatures"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.ISystemRole",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "system role supplied by the platform (Anonymous/Registered), listed by IESpace.SystemRoles {get}: IESpace has no Create for it (probe: cannot create ISystemRole); used, never authored",
+      "origin": "kernel/docs/NAO-DA.md:136-158 (ISystemRole item); platforms/odc/docs/model-api/OutSystems.Model.V1.md (ISystemRole : IRole; IESpace.SystemRoles)"
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+ "ok": true,
+ "command": "apply",
+ "_fixture": "Envelope sintetico do run_job para o controle negativo N4: nenhum warning novo, um warning PREEXISTENTE da base (UnusedElement) e accepted=true. A N4 conta a base: a ferramenta tem de acusar o preexistente.",
+ "data": {
+  "outPath": "C:\\fixture\\n4-preexisting-warning.oml",
+  "ops": 1,
+  "objects": 180,
+  "isValid": true,
+  "messages": 1,
+  "details": [],
+  "validation": {
+   "new": [],
+   "fixed": [],
+   "preexisting": [
+    {
+     "id": "UnusedElement",
+     "type": "Warning",
+     "key": "[\"UnusedElement\",\"PreKey000000000000000A\",[],[\"Site Property\",\"LegacyTimeoutSeconds\",\"Module\",\"Integration_CS\"]]",
+     "path": "Integration_CS (ESpace) / LegacyTimeoutSeconds (SiteProperty)",
+     "detail": "Unused Element | Site Property 'LegacyTimeoutSeconds' is never used in Module 'Integration_CS'. Consider deleting it."
+    }
+   ],
+   "unexpected": [],
+   "missingExpected": [],
+   "ambiguous": [],
+   "tolerated": []
+  },
+  "accepted": true,
+  "expectedValid": true,
+  "policyMessages": [],
+  "handles": {},
+  "results": [],
+  "coverage": {"tipos": 0, "porTipo": {}}
+ }
+}

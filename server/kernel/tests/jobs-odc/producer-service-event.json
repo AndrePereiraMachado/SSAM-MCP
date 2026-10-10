@@ -1,0 +1,23 @@
+{
+ "description": "ODC (contexto: produtor offline). Sobre a app Mobile em branco (create-blank --kind Mobile), uma service action publica e um global event publico disparado por uma server action. E o produtor que um workflow (automatic activity, human activity, conditional start, inicio por evento) e um agent definition (tool references de service action e de evento) referenciam: workflow e agent definition nao podem ter service actions nem eventos proprios ('Server Action can't be created in BusinessProcess runtime kind', 'Event can't be created in BusinessProcess runtime kind'). A saida deste job e a fixture tests/fixtures/odc/blank-mobile-producer.oml (apply com --base blank-mobile.oml --out blank-mobile-producer.oml).",
+ "base": "tests/fixtures/odc/blank-mobile.oml",
+ "expectValid": true,
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "CovBlankMobile (ESpace) / CovSRaiseEvent (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IServiceAction", "name": "CovSService", "as": "$svc"},
+  {"op": "set", "target": "$svc", "prop": "Description", "value": "Service action que um workflow dispara (automatic activity) e que um agente usa como ferramenta."},
+  {"op": "create", "parent": "$svc", "type": "IStartNode", "as": "$svc0"},
+  {"op": "create", "parent": "$svc", "type": "IEndNode", "as": "$svc9"},
+  {"op": "link", "from": "$svc0", "to": "$svc9"},
+  {"op": "create", "parent": "@espace", "type": "IGlobalEvent", "name": "CovSEvent", "as": "$ev"},
+  {"op": "set", "target": "$ev", "prop": "Public", "value": true},
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "CovSRaiseEvent", "as": "$raise",
+   "_why": "um evento sem quem o dispare avisa UnusedGlobalEvent: a app que o publica tambem o dispara"},
+  {"op": "create", "parent": "$raise", "type": "IStartNode", "as": "$r0"},
+  {"op": "create", "parent": "$raise", "type": "ITriggerGlobalNode", "as": "$rt"},
+  {"op": "set", "target": "$rt", "prop": "Event", "value": "$ev"},
+  {"op": "create", "parent": "$raise", "type": "IEndNode", "as": "$r9"},
+  {"op": "link", "from": "$r0", "to": "$rt"},
+  {"op": "link", "from": "$rt", "to": "$r9"}
+ ]
+}

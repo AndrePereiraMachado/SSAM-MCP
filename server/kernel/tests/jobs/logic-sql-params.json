@@ -1,0 +1,13 @@
+{
+ "description":"Spec SQL: parametros no statement e no contrato, input consumido em params.value, MaxRecords por max e lista atribuida ao output.",
+ "base":"tests/fixtures/blank-service.oml",
+ "expectValid":true,
+ "ops":[
+  {"op":"spec","data":{"entities":[{"name":"SqlItem","public":true,"attributes":[{"name":"Quantity","type":"Integer"}]}]}},
+  {"op":"logic","data":{"actions":[{"name":"SqlItems_Search","public":true,"inputs":[{"name":"Minimum","type":"Integer"}],"outputs":[{"name":"Items","type":"SqlItem List"}],"steps":[
+   {"get":"SqlItem","sql":true,"as":"ReadSqlItems","statement":"SELECT {SqlItem}.* FROM {SqlItem} WHERE {SqlItem}.[Quantity] >= @Minimum","params":{"minimum":{"type":"Integer","value":"Minimum"}},"max":50},
+   {"assign":{"Items":"ReadSqlItems.List"}}
+  ]}]}},
+  {"op":"find","name":"SqlItems_Search"}
+ ]
+}

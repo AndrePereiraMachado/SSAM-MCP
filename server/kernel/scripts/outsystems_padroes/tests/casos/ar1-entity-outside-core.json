@@ -1,0 +1,12 @@
+{
+ "description": "NEG AR1 (OutSystems padroes): entidade criada num modulo End-user (a UI EngineApp); entidades ficam no Core. A ferramenta roda com --module EngineApp.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [
+   {"name": "RunNote", "public": true, "description": "Anotacao de run guardada na propria UI (violacao proposital da AR1).",
+    "attributes": [{"name": "Text", "type": "Text", "length": 500, "description": "Texto livre da anotacao sobre o run."}]}
+  ]}}
+ ]
+}

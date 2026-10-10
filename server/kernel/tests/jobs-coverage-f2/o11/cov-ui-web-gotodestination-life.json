@@ -1,0 +1,41 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.UI.Web.IGoToDestination (o11) em webFlow. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IWebFlow:MainFlow",
+   "type": "IGoToDestination",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "IWebFlow:MainFlow",
+   "type": "IWebScreen",
+   "name": "CovSTarget",
+   "as": "$t"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Destination",
+   "value": "$t"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "x": 600,
+   "y": 400
+  }
+ ]
+}

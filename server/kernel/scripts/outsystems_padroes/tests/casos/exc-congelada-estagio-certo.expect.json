@@ -1,0 +1,25 @@
+{
+ "_leia": "Copia congelada de I1 com --plan-stage I1 e o mesmo modulo: a excecao aprovada se aplica.",
+ "stage": "job",
+ "mode": "integrador",
+ "module": "Domain_CS",
+ "jobs": [
+  "l6-json-text-param.json"
+ ],
+ "planStage": "I1",
+ "exceptions": "exc-congelada-i1.exceptions.json",
+ "configOverride": {
+  "approvers": [
+   "autoteste"
+  ]
+ },
+ "exitCode": 3,
+ "maxBlockingErrors": 0,
+ "mustFind": [
+  {
+   "rule": "L6",
+   "contains": "SummaryJson",
+   "excepted": true
+  }
+ ]
+}

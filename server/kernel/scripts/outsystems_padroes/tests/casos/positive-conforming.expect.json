@@ -1,0 +1,23 @@
+{
+ "_leia": "POSITIVO: parte conforme no estagio J; exit 0 e nenhum erro bloqueante.",
+ "stage": "job",
+ "mode": "autor",
+ "module": "PosGate_CS",
+ "exitCode": 0,
+ "maxBlockingErrors": 0,
+ "mustNotFind": [
+  {
+   "rule": "D2"
+  },
+  {
+   "rule": "N1",
+   "severity": "erro"
+  },
+  {
+   "rule": "D5"
+  },
+  {
+   "rule": "L3"
+  }
+ ]
+}

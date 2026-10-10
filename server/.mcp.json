@@ -1,0 +1,34 @@
+{
+  "mcpServers": {
+    "ssam": {
+      "command": "${SSAM_NODE:-C:\\Users\\andre\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe}",
+      "args": [
+        "${SSAM_ROOT:-C:\\Users\\andre\\SSAM-Hybrid}\\facade\\ssam.mjs",
+        "mcp"
+      ],
+      "env": {
+        "ANVIL_LANE": "ss4"
+      }
+    },
+    "ssam-headless-selected": {
+      "command": "${SSAM_NODE:-C:\\Users\\andre\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe}",
+      "args": [
+        "${SSAM_ROOT:-C:\\Users\\andre\\SSAM-Hybrid}\\facade\\ssam.mjs",
+        "package",
+        "mcp"
+      ]
+    },
+    "ssam-functional": {
+      "command": "${SSAM_NODE:-C:/Users/andre/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe}",
+      "args": [
+        "${SSAM_ROOT:-C:/Users/andre/SSAM-Hybrid}/facade/ssam.mjs",
+        "package",
+        "mcp",
+        "--selection",
+        "${SSAM_ROOT:-C:/Users/andre/SSAM-Hybrid}/.local/releases/sessions/stage1-functional-r5-r2/selection.json",
+        "--sha256",
+        "2bf2153e7cd1d087c4df8f686d582cd36c34fa78627e5c5c1d5ae84b4ac4a093"
+      ]
+    }
+  }
+}

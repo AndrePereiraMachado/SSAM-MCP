@@ -1,0 +1,25 @@
+{
+  "base": "reactive-ui.oml",
+  "ops": [
+    {
+      "op": "screen",
+      "data": {
+        "screens": [
+          {
+            "name": "Probe",
+            "kind": "kanban",
+            "source": {
+              "entity": "User",
+              "as": "GetUsers"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "description": "Unknown screen archetype fails with the allowed kinds.",
+  "expectError": [
+    "unknown kind",
+    "cards, table, detail, form, dashboard"
+  ]
+}

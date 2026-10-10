@@ -1,0 +1,9 @@
+{
+ "description": "Section (OutSystemsUI, Content) minimo: instancia como o Studio cria ao arrastar o bloco.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "SectionDemo", "source": "IMobileBlock:Section", "as": "$b"}
+ ]
+}

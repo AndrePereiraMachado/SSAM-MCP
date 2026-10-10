@@ -1,0 +1,160 @@
+{
+  "description": "Complete native support agent on the official ODC agentic V2 template. Resolve the actual AI model connection before use.",
+  "expectValid": true,
+  "expectedMessages": [],
+  "ops": [
+    {
+      "op": "reference",
+      "producer": "TrialAmazonNovaPro",
+      "elements": [
+        "IServerAction:CallTrialAmazonNovaPro"
+      ]
+    },
+    {
+      "op": "logic",
+      "data": {
+        "actions": [
+          {
+            "name": "LookupTicket",
+            "description": "Return demonstration ticket status.",
+            "inputs": [
+              {
+                "name": "TicketId",
+                "type": "Text"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Status",
+                "type": "Text"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "Status": "\"Ticket \" + TicketId + \": in review.\""
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "agent",
+      "data": {
+        "name": "Support",
+        "model": "IReference:TrialAmazonNovaPro/CallTrialAmazonNovaPro",
+        "maxTokens": "1024",
+        "temperature": "0",
+        "tools": [
+          {
+            "action": "IServerAction:LookupTicket",
+            "arguments": {
+              "TicketId": {
+                "fromAI": true
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "op": "logic",
+      "data": {
+        "actions": [
+          {
+            "name": "AskSupportTask",
+            "inputs": [
+              {
+                "name": "UserInput",
+                "type": "Text"
+              },
+              {
+                "name": "SessionId",
+                "type": "Text"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Response",
+                "type": "Text"
+              }
+            ],
+            "steps": [
+              {
+                "call": "BuildMessages_V2",
+                "as": "BuildMessages",
+                "args": {
+                  "UserInput": "UserInput",
+                  "SessionId": "SessionId",
+                  "GroundingData": "\"\""
+                }
+              },
+              {
+                "node": "ICallAgentNode",
+                "as": "RunAgent",
+                "properties": {
+                  "Agent": "IAgent:Support"
+                },
+                "args": {
+                  "Messages": "BuildMessages.Messages"
+                }
+              },
+              {
+                "call": "StoreMemory_V2",
+                "as": "StoreMemory",
+                "args": {
+                  "SessionId": "SessionId",
+                  "MessageToStoreInMemory": "BuildMessages.MessageToStoreInMemory",
+                  "ResponseMessage": "RunAgent.Response"
+                }
+              },
+              {
+                "assign": {
+                  "Response": "RunAgent.Response.Content.Current.ContentText"
+                }
+              }
+            ]
+          },
+          {
+            "name": "AskSupport",
+            "kind": "service",
+            "public": true,
+            "inputs": [
+              {
+                "name": "UserInput",
+                "type": "Text"
+              },
+              {
+                "name": "SessionId",
+                "type": "Text"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Response",
+                "type": "Text"
+              }
+            ],
+            "steps": [
+              {
+                "call": "AskSupportTask",
+                "as": "Task",
+                "args": {
+                  "UserInput": "UserInput",
+                  "SessionId": "SessionId"
+                }
+              },
+              {
+                "assign": {
+                  "Response": "Task.Response"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

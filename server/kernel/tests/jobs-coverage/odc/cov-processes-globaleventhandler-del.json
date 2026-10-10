@@ -1,0 +1,108 @@
+{
+ "description": "Cobertura testada (fase 1, medir): del de OutSystems.Model.Processes.IGlobalEventHandler (odc) em lgGlobalEvent. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IGlobalEvent",
+   "name": "CovSEvent",
+   "as": "$p"
+  },
+  {
+   "op": "set",
+   "target": "$p",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "CovSHandler",
+   "as": "$h"
+  },
+  {
+   "op": "create",
+   "parent": "$h",
+   "type": "IStartNode",
+   "as": "$h0"
+  },
+  {
+   "op": "create",
+   "parent": "$h",
+   "type": "IEndNode",
+   "as": "$h9"
+  },
+  {
+   "op": "link",
+   "from": "$h0",
+   "to": "$h9"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "CovSRaiser",
+   "as": "$r"
+  },
+  {
+   "op": "create",
+   "parent": "$r",
+   "type": "IStartNode",
+   "as": "$r0"
+  },
+  {
+   "op": "create",
+   "parent": "$r",
+   "type": "IEndNode",
+   "as": "$r9"
+  },
+  {
+   "op": "create",
+   "parent": "$r",
+   "type": "ITriggerGlobalNode",
+   "as": "$rt"
+  },
+  {
+   "op": "set",
+   "target": "$rt",
+   "prop": "Event",
+   "value": "$p"
+  },
+  {
+   "op": "link",
+   "from": "$r0",
+   "to": "$rt"
+  },
+  {
+   "op": "link",
+   "from": "$rt",
+   "to": "$r9"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IGlobalEventHandler",
+   "name": "CovAGlobalEventHandler",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ],
+ "expectedMessages": [
+  {
+   "id": "UnusedUserAction",
+   "element": "WrightFlood (ESpace) / CovSHandler (ServerAction)",
+   "why": "ODC: um app nao expoe server action publica (o kernel recusa, como o Studio ao vivo); a action fica privada e sem consumidor neste job de cobertura"
+  },
+  {
+   "id": "UnusedUserAction",
+   "element": "WrightFlood (ESpace) / CovSRaiser (ServerAction)",
+   "why": "ODC: um app nao expoe server action publica (o kernel recusa, como o Studio ao vivo); a action fica privada e sem consumidor neste job de cobertura"
+  }
+ ]
+}

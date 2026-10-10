@@ -1,0 +1,27 @@
+using System.Collections.Generic;
+using System.Linq;
+using Anvil.Authoring;
+
+[Entity]
+public record Reading(Id<Reading> Id,int Rank,int Group,int? Optional);
+public static class Queries
+{
+    public static List<Reading> Page(IDataSession data)=>data.Query<Reading>().OrderBy(x=>x.Rank).ThenBy(x=>x.Id).Skip(1).Take(2).ToList();
+    public static List<Reading> TakeThenWhere(IDataSession data)=>data.Query<Reading>().OrderBy(x=>x.Id).Take(2).Where(x=>x.Group==2).ToList();
+    public static List<Reading> WhereThenTake(IDataSession data)=>data.Query<Reading>().Where(x=>x.Group==2).Take(2).ToList();
+    public static List<Reading> SkipAfterTake(IDataSession data)=>data.Query<Reading>().OrderBy(x=>x.Id).Take(4).Skip(2).ToList();
+    public static List<Reading> TakeAfterSkip(IDataSession data)=>data.Query<Reading>().OrderBy(x=>x.Id).Skip(2).Take(4).ToList();
+    public static List<Reading> EmptyTake(IDataSession data)=>data.Query<Reading>().Take(0).ToList();
+    public static List<Reading> NegativeTake(IDataSession data)=>data.Query<Reading>().Take(-1).ToList();
+    public static List<Reading> NegativeSkip(IDataSession data)=>data.Query<Reading>().OrderBy(x=>x.Id).Skip(-1).Take(1).ToList();
+    public static List<Reading> NullableAscending(IDataSession data)=>data.Query<Reading>().OrderBy(x=>x.Optional).ThenBy(x=>x.Id).Take(3).ToList();
+    public static List<Reading> NullableDescending(IDataSession data)=>data.Query<Reading>().OrderByDescending(x=>x.Optional).ThenBy(x=>x.Id).Take(3).ToList();
+    public static int CountPage(IDataSession data)=>data.Query<Reading>().OrderBy(x=>x.Id).Skip(1).Take(2).Count();
+    public static bool PredicateAfterTake(IDataSession data)=>data.Query<Reading>().OrderBy(x=>x.Id).Take(2).Any(x=>x.Group==2);
+    public static Reading? FirstEmpty(IDataSession data)=>data.Query<Reading>().Take(0).FirstOrDefault();
+    public static List<Reading> StableOrderBy(IDataSession data)=>data.Query<Reading>().OrderByDescending(x=>x.Rank).OrderBy(x=>x.Group).ToList();
+    public static List<Reading> TwoTakes(IDataSession data)=>data.Query<Reading>().Take(3).Take(1).ToList();
+    public static List<Reading> TwoSkips(IDataSession data)=>data.Query<Reading>().Skip(1).Skip(2).ToList();
+    public static List<Reading> AbsentValues(IDataSession data)=>data.Query<Reading>().Where(x=>x.Optional==null).ToList();
+    public static List<Reading> ZeroValues(IDataSession data)=>data.Query<Reading>().Where(x=>x.Optional==0).ToList();
+}

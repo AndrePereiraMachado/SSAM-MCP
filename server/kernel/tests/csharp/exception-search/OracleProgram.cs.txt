@@ -1,0 +1,43 @@
+using System.Text.Json;
+
+namespace ExceptionSearchOracle;
+
+internal sealed class OracleResult(string name)
+{
+    public string Name { get; } = name;
+    public List<string> Events { get; } = new();
+    public string ReturnValue { get; set; } = "no-return";
+    public string CaughtException { get; set; } = "none";
+    public string FinalException { get; set; } = "none";
+    public Dictionary<string, string> State { get; } = new();
+}
+
+internal static class Identity
+{
+    internal static string Of(Exception exception, Exception original,
+        Exception? replacement = null, Exception? helper = null)
+    {
+        if (ReferenceEquals(exception, original)) return "original";
+        if (ReferenceEquals(exception, replacement)) return "replacement";
+        if (ReferenceEquals(exception, helper)) return "helper";
+        return "unknown:" + exception.GetType().FullName;
+    }
+}
+
+internal static class Program
+{
+    private static void Main()
+    {
+        var results = new[]
+        {
+            CallerFilter.Run(),
+            CapturedScalar.Run(),
+            FinallyReplacement.Run(),
+            FilterHelperThrows.Run(),
+            ReassignedCatchRethrow.Run(),
+            RecursiveActivations.Run()
+        };
+        Console.WriteLine(JsonSerializer.Serialize(results,
+            new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+    }
+}

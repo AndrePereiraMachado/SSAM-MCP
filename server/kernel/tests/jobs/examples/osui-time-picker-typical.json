@@ -1,0 +1,26 @@
+{
+ "description": "TimePicker (OutSystemsUI, Interaction) tipico; o Input de exemplo ligado a uma variavel Time; placeholders Placeholder_SSPreview com dados do aggregate de tarefas; eventos OnSelected, Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "PickedTime", "as": "$vPickedTime"},
+  {"op": "set", "target": "$vPickedTime", "prop": "DataType", "value": "Time"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastTimePickerId", "as": "$vLastTimePickerId"},
+  {"op": "set", "target": "$vLastTimePickerId", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastSelectedTime", "as": "$vLastSelectedTime"},
+  {"op": "set", "target": "$vLastSelectedTime", "prop": "DataType", "value": "Time"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetShowcaseTasks", "as": "$tasks"},
+  {"op": "create", "parent": "$tasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "logic", "data": {"actions": [{"name": "TimePickerDemoOnSelected", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de OnSelected", "inputs": [{"name": "TimePickerId", "type": "Text"}, {"name": "SelectedTime", "type": "Time"}],"steps": [{"assign": {"LastTimePickerId": "TimePickerId", "LastSelectedTime": "SelectedTime"},"as": "KeepOnSelected"}]}, {"name": "TimePickerDemoInitialized", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de Initialized", "inputs": [{"name": "TimePickerId", "type": "Text"}],"steps": [{"assign": {"LastTimePickerId": "TimePickerId"},"as": "KeepInitialized"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "TimePickerDemo", "source": "IMobileBlock:TimePicker", "as": "$b"},
+  {"op": "set", "target": "$b/Timepicker/#IInput", "prop": "Variable", "value": "PickedTime"},
+  {"op": "set", "target": "$b/OnSelected", "prop": "Handler", "value": "IScreenAction:TimePickerDemoOnSelected"},
+  {"op": "set", "target": "$b/OnSelected/TimePickerId", "prop": "Value", "value": "TimePickerId"},
+  {"op": "set", "target": "$b/OnSelected/SelectedTime", "prop": "Value", "value": "SelectedTime"},
+  {"op": "set", "target": "$b/Initialized", "prop": "Handler", "value": "IScreenAction:TimePickerDemoInitialized"},
+  {"op": "set", "target": "$b/Initialized/TimePickerId", "prop": "Value", "value": "TimePickerId"},
+  {"op": "create", "parent": "$b/Placeholder_SSPreview", "type": "IExpression", "as": "$ph1"},
+  {"op": "set", "target": "$ph1", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""}
+ ]
+}

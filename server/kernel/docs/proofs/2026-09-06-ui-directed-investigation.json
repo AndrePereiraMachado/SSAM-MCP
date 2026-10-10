@@ -1,0 +1,200 @@
+{
+  "date": "2026-09-06",
+  "kind": "directed research, not frontend feature release",
+  "lane": "ss5",
+  "productModulesChanged": false,
+  "compilerChanged": false,
+  "newProductDependencies": [],
+  "lab": {
+    "module": "ZZHtmlDashboardReview_UI",
+    "screens": [
+      "InteropResearch",
+      "InteropListResearch"
+    ],
+    "taskId": "b832c0b3a5a64717b901de39061739ae",
+    "deliverMs": 12938,
+    "publishMs": 8924,
+    "publishedAt": "2026-09-06T11:11:20",
+    "checkDeliveryAccepted": true,
+    "contractChecks": 637,
+    "sourceSpecSha256": "2cff22dd63d6967acb787df5214e4a5ba11e802da7e73b9cfac8108ccd7f0c18"
+  },
+  "modelCases": [
+    {
+      "case": "synchronous",
+      "valid": true,
+      "accepted": true,
+      "isAsynchronous": false,
+      "reloadPreserved": true,
+      "expectedNegative": false
+    },
+    {
+      "case": "promise-only",
+      "valid": true,
+      "accepted": true,
+      "isAsynchronous": false,
+      "reloadPreserved": true,
+      "expectedNegative": false
+    },
+    {
+      "case": "async-resolve",
+      "valid": true,
+      "accepted": true,
+      "isAsynchronous": true,
+      "reloadPreserved": true,
+      "expectedNegative": false
+    },
+    {
+      "case": "async-reject",
+      "valid": true,
+      "accepted": true,
+      "isAsynchronous": true,
+      "reloadPreserved": true,
+      "expectedNegative": false
+    },
+    {
+      "case": "server-direct",
+      "valid": false,
+      "accepted": false,
+      "isAsynchronous": true,
+      "reloadPreserved": true,
+      "expectedNegative": true
+    },
+    {
+      "case": "server-wrapper",
+      "valid": true,
+      "accepted": true,
+      "isAsynchronous": true,
+      "reloadPreserved": true,
+      "expectedNegative": false
+    },
+    {
+      "case": "record-parameter",
+      "valid": false,
+      "accepted": false,
+      "isAsynchronous": false,
+      "reloadPreserved": true,
+      "expectedNegative": true
+    },
+    {
+      "case": "list-parameter",
+      "valid": false,
+      "accepted": false,
+      "isAsynchronous": false,
+      "reloadPreserved": true,
+      "expectedNegative": true
+    },
+    {
+      "case": "long-parameter",
+      "valid": true,
+      "accepted": true,
+      "isAsynchronous": false,
+      "reloadPreserved": true,
+      "expectedNegative": false
+    }
+  ],
+  "crossModuleReference": {
+    "passed": true,
+    "instances": 2,
+    "distinctReactiveModules": true,
+    "producer": "private lab snapshot",
+    "consumer": "reactive fixture",
+    "sharedSourceReference": true,
+    "referenceRefresh": true,
+    "reloadAndMerge": true,
+    "browserExecuted": false,
+    "highCodeImportsImplemented": false
+  },
+  "browser": {
+    "checks": [
+      "typed native list renders two distinct 64-bit IDs after JSON round trip",
+      "native Busy visible before delayed request completes",
+      "newer response preserved after slower older response; instances isolated",
+      "rejection settles loading; retry commits result",
+      "disposed instance cannot overwrite remounted instance",
+      "native list replacement/reorder observed; key semantics reported separately"
+    ],
+    "errors": [],
+    "serverCalls": 5,
+    "wire": "[{\"Id\":\"9223372036854775807\",\"Caption\":\"primeiro\",\"Amount\":\"123456789012345.67\",\"At\":\"2026-09-06T12:34:56\"},{\"Id\":\"9007199254740993\",\"Caption\":\"segundo\",\"Amount\":\"0.1\",\"At\":\"1900-01-01T00:00:00\"}]",
+    "nativeRows": "9223372036854775807:primeiro9007199254740993:segundo",
+    "parsedWire": [
+      {
+        "Id": "9223372036854775807",
+        "Caption": "primeiro",
+        "Amount": "123456789012345.67",
+        "At": "2026-09-06T12:34:56"
+      },
+      {
+        "Id": "9007199254740993",
+        "Caption": "segundo",
+        "Amount": "0.1",
+        "At": "1900-01-01T00:00:00"
+      }
+    ],
+    "decimal": {
+      "source": "123456789012345.6789",
+      "nativeClientValue": "123456789012345.67",
+      "exact": false
+    },
+    "nativeSerializer": {
+      "rejected": true,
+      "name": "NumberOverflowException",
+      "message": "Unable to convert 9223372036854775807 to the Javascript Number type since exceeds the maximum value allowed which is 9007199254740991."
+    },
+    "nativeSort": {
+      "captions": [
+        "B",
+        "A"
+      ],
+      "values": [
+        "0",
+        "0"
+      ],
+      "stateFollowsBusinessKey": false
+    },
+    "reorder": {
+      "captions": [
+        "B",
+        "A"
+      ],
+      "values": [
+        "0",
+        "0"
+      ],
+      "stateFollowsBusinessKey": false
+    },
+    "ok": true
+  },
+  "runtimeFlagsReadOnly": {
+    "PreserveListItemReactKey": false,
+    "UseNewJSONSerialization": false
+  },
+  "limitations": [
+    "Imports/arrays/async still not compiled from uiSource",
+    "Native list replacement and native sort reset block state in this environment",
+    "Native client Decimal lost precision in the recorded case",
+    "Cross-module browser composition not tested",
+    "No fresh-LLM workflow test",
+    "Dashboard not migrated",
+    "SS4 not restarted or live-tested"
+  ],
+  "sourceFiles": [
+    {
+      "path": "scripts/probes/highcode/ui_interop_probe.py",
+      "sha256": "d7dd3424615df9d0e11facd3d0dc7e09b6c0b9b0d99aa2c199324964ad8feb8d"
+    },
+    {
+      "path": "scripts/probes/highcode/ui_reference_probe.py",
+      "sha256": "21e29ad08f31464340284b79831d1138ceebe95a4e8be966ba787b99bc28f36d"
+    },
+    {
+      "path": "scripts/probes/highcode/ui_async_lab.py",
+      "sha256": "c531c36df646201a28d573d470ce0c1c65821d938a81b9ae82c2e19bade9e64f"
+    },
+    {
+      "path": "scripts/probes/highcode/ui_async_browser.cjs",
+      "sha256": "516a84dd4de2b4c34ee4bb788a0d200c4c51982dc0f30b0e22220b9782bc007d"
+    }
+  ]
+}

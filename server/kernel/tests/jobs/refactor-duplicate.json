@@ -1,0 +1,75 @@
+{
+ "description": "A copia que o Studio faz com Ctrl+D, pelo verbo duplicate, nas tres areas: atributo, entidade inteira, widget dentro de container, screen action com os nos, e a tela inteira. Tres coisas que quem entrega precisa de saber e nada provava ate agora: (1) o nome ganha o sufixo que a PLATAFORMA escolhe (Body vira Body2), nao um nome que o job escolha -- para dar outro nome, renomeie a seguir; (2) a copia entra no FIM da sequencia do mesmo pai; (3) a copia nasce SEM consumidores: quem usava o original continua a usar o original, e e por isso que a copia de uma action aparece no Verify como UnusedAction. Copiar um contentor, uma action ou uma tela leva tudo o que esta dentro.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedAction",
+   "element": "Headless_UI (ESpace) / MainFlow (MobileFlow) / DupScreen (MobileScreen) / Greet2 (ScreenAction)",
+   "why": "A copia de uma screen action nasce sem consumidores: e exatamente o que este job prova, e o Verify diz o mesmo."
+  },
+  {
+   "id": "UnusedAction",
+   "element": "Headless_UI (ESpace) / MainFlow (MobileFlow) / DupScreen2 (MobileScreen) / Greet2 (ScreenAction)",
+   "why": "A tela copiada leva as duas actions, e a copia da copia continua sem consumidores."
+  }
+ ],
+ "ops": [
+  {"op": "spec", "data": {"entities": [
+   {"name": "DupNotice", "attributes": [
+    {"name": "Title", "type": "Text", "mandatory": true, "length": 100},
+    {"name": "Body", "type": "Text", "length": 500},
+    {"name": "Rank", "type": "Integer"}
+   ]}
+  ]}},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "DupScreen", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Duplicar\""},
+
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetNotices", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "$DupNotice"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "Box", "as": "$box"},
+  {"op": "create", "parent": "$box", "type": "IContainer", "name": "Um", "as": "$c1"},
+  {"op": "create", "parent": "$box", "type": "IContainer", "name": "Dois", "as": "$c2"},
+  {"op": "create", "parent": "$c2", "type": "IExpression", "as": "$usaBody"},
+  {"op": "set", "target": "$usaBody", "prop": "Value", "value": "GetNotices.List.Current.DupNotice.Body"},
+  {"op": "create", "parent": "$box", "type": "IContainer", "name": "Tres", "as": "$c3"},
+
+  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "Greet", "as": "$act"},
+  {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$a0"},
+  {"op": "create", "parent": "$act", "type": "IAssignNode", "as": "$a1"},
+  {"op": "set", "target": "$a1", "prop": "Label", "value": "Passo"},
+  {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$a9"},
+  {"op": "link", "from": "$a0", "to": "$a1"},
+  {"op": "link", "from": "$a1", "to": "$a9"},
+  {"op": "layout", "target": "$act"},
+  {"op": "create", "parent": "$c1", "type": "IButton", "name": "Go", "as": "$btn"},
+  {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "Go"},
+  {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$act", "_why": "a original TEM consumidor; a copia nao vai ter"},
+
+  {"op": "usages", "target": "$DupNotice.Body", "_why": "antes de duplicar: a Expression do Dois usa o atributo"},
+  {"op": "duplicate", "target": "$DupNotice.Body", "as": "$bodyCopy"},
+  {"op": "get", "target": "$bodyCopy", "_why": "chama-se Body2: o sufixo e da plataforma"},
+  {"op": "usages", "target": "$bodyCopy", "_why": "a COPIA nasce com zero consumidores"},
+  {"op": "usages", "target": "$DupNotice.Body", "_why": "e o original mantem os seus"},
+  {"op": "dump", "target": "$DupNotice", "depth": 2, "_why": "Body2 entrou no fim"},
+
+  {"op": "duplicate", "target": "$DupNotice", "as": "$entityCopy"},
+  {"op": "get", "target": "$entityCopy"},
+  {"op": "dump", "target": "$entityCopy", "depth": 2, "_why": "a entidade copiada traz atributos, entity actions e o identificador proprios"},
+
+  {"op": "duplicate", "target": "$c2", "as": "$c2copy"},
+  {"op": "dump", "target": "$box", "depth": 2, "_why": "Dois2 entrou no fim do container, com a Expression que estava dentro"},
+
+  {"op": "duplicate", "target": "$act", "as": "$actCopy"},
+  {"op": "get", "target": "$actCopy"},
+  {"op": "dump", "target": "$actCopy", "depth": 2, "_why": "Greet2 leva os tres nos; o botao continua a chamar Greet"},
+  {"op": "usages", "target": "$act", "_why": "o OnClick do botao continua no original"},
+
+  {"op": "duplicate", "target": "$scr", "as": "$scrCopy"},
+  {"op": "get", "target": "$scrCopy"},
+  {"op": "dump", "target": "$scrCopy", "depth": 3, "_why": "DupScreen2 leva aggregate, actions, layout e widgets"}
+ ]
+}

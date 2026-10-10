@@ -1,0 +1,15 @@
+#nullable enable
+public static class Utf16TextRules
+{
+    public static int Measure(string? value) => value?.Length ?? -1;
+
+    public static string Describe(string? value)
+    {
+        if (value == null) return "null;blank=yes";
+        return "length=" + value.Length
+            + ";trim=[" + value.Trim() + "]"
+            + ";start=[" + value.TrimStart() + "]"
+            + ";end=[" + value.TrimEnd() + "]"
+            + ";blank=" + (string.IsNullOrWhiteSpace(value) ? "yes" : "no");
+    }
+}

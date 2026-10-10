@@ -1,0 +1,30 @@
+{
+ "description": "ODC: SQL escrito em dialeto SQL Server (TOP, ISNULL, GETDATE). O ODC Studio aceita (o TrueChange confere entidades, atributos e parametros, nao o dialeto) e o PostgreSQL do ODC recusa ao executar a query. O preflight SQL da faixa ODC recusa antes de carregar o modelo, com op, linha e a troca PostgreSQL. Roda em OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane.",
+ "base": "job:data-full-model",
+ "expectValid": true,
+ "expectError": [
+  "op #0 (SQL in logic action 'WfCov_Tasks_TopSql' get 'ReadTasks', line 1) [SQL_INVALID]: TOP does not exist in PostgreSQL (ODC); remove it and end the query with LIMIT n",
+  "op #0 (SQL in logic action 'WfCov_Tasks_TopSql' get 'ReadTasks', line 2) [SQL_INVALID]: ISNULL() is SQL Server; ODC runs SQL on PostgreSQL, which has no such function: use COALESCE(x, fallback)",
+  "op #0 (SQL in logic action 'WfCov_Tasks_TopSql' get 'ReadTasks', line 3) [SQL_INVALID]: GETDATE() is SQL Server; ODC runs SQL on PostgreSQL, which has no such function: use NOW() or CURRENT_TIMESTAMP"
+ ],
+ "ops": [
+  {"op": "logic", "data": {"actions": [
+   {
+    "name": "WfCov_Tasks_TopSql",
+    "kind": "server",
+    "description": "Prova negativa: consulta SQL em dialeto SQL Server na faixa ODC",
+    "outputs": [{"name": "Tasks", "type": "WfCovTask List"}],
+    "steps": [
+     {
+      "get": "WfCovTask",
+      "sql": true,
+      "as": "ReadTasks",
+      "statement": "SELECT TOP 10 {WfCovTask}.* FROM {WfCovTask}\nWHERE ISNULL({WfCovTask}.[Title], '') <> ''\n  AND {WfCovTask}.[DueOn] <= GETDATE()\nORDER BY {WfCovTask}.[DueOn]",
+      "max": 10
+     },
+     {"assign": {"Tasks": "ReadTasks.List"}, "as": "SetOutput"}
+    ]
+   }
+  ]}}
+ ]
+}

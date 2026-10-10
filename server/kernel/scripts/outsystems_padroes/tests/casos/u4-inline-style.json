@@ -1,0 +1,16 @@
+{
+ "description": "NEG U4 (OutSystems padroes): fragmento visual com atributo style inline (vira ExtendedProperty style).",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IRole", "name": "NegU4Viewer", "as": "$role"},
+  {"op": "set", "target": "$role", "prop": "Description", "value": "Perfil que pode abrir a tela do controle negativo U4."},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "NegStyleScreen", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "set", "target": "$scr", "prop": "Description", "value": "Tela com estilo inline num aviso (violacao proposital da U4)."},
+  {"op": "link", "from": "$scr", "connector": "Roles", "to": "$role"},
+  {"op": "html", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "html": "<div class=\"neg-note\" style=\"color: red\">Revisao pendente</div>"}
+ ]
+}

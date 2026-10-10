@@ -1,0 +1,320 @@
+{
+  "fixture": "mobile-ui",
+  "features": [
+    "OutSystemsUI",
+    "OutSystemsUI:MarginContainer",
+    "OutSystemsUI:MasterDetail",
+    "OutSystemsUI:MonthPicker",
+    "OutSystemsUI:MouseEvents",
+    "OutSystemsUI:Notification"
+  ],
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "tests/fixtures/outsystems-ui.oml",
+      "elements": [
+        "IMobileBlock:MarginContainer",
+        "IMobileBlock:MasterDetail",
+        "IMobileBlock:MonthPicker",
+        "IMobileBlock:MouseEvents",
+        "IMobileBlock:Notification"
+      ]
+    }
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Ui50_MarginContainer",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:MarginContainer",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "MarginContainer": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui51_MasterDetail",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:MasterDetail",
+            "args": {},
+            "slots": {
+              "LeftContent": [
+                {
+                  "name": "Part3",
+                  "type": "IList",
+                  "properties": {
+                    "Source": "Value1"
+                  },
+                  "children": [
+                    {
+                      "name": "Part2",
+                      "type": "ITextWidget",
+                      "properties": {
+                        "Text": "Component content"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "RightContent": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value1",
+            "type": "Text List"
+          }
+        ]
+      },
+      {
+        "name": "Ui52_MonthPicker",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part2",
+            "type": "IExpression",
+            "properties": {
+              "Value": "LastEvent"
+            }
+          },
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:MonthPicker",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "MonthPicker": [
+                {
+                  "name": "Part3",
+                  "type": "IInput",
+                  "properties": {
+                    "Variable": "Value2"
+                  }
+                }
+              ],
+              "Placeholder_SSPreview": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            },
+            "events": {
+              "OnSelected": {
+                "destination": "IMobileScreen:Ui52_MonthPicker/Ui52_MonthPicker_Event1",
+                "args": {
+                  "MonthpickerId": "MonthpickerId",
+                  "SelectedMonth": "SelectedMonth"
+                }
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "LastEvent",
+            "type": "Text"
+          },
+          {
+            "name": "Value2",
+            "type": "Text"
+          }
+        ]
+      },
+      {
+        "name": "Ui53_MouseEvents",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part2",
+            "type": "IInput",
+            "properties": {
+              "Variable": "Value1"
+            }
+          },
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:MouseEvents",
+            "args": {
+              "WidgetId": "Part2.Id"
+            },
+            "slots": {}
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value1",
+            "type": "Text"
+          }
+        ]
+      },
+      {
+        "name": "Ui54_Notification",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:Notification",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "name": "Ui52_MonthPicker_Event1",
+          "kind": "screen",
+          "owner": "IMobileScreen:Ui52_MonthPicker",
+          "inputs": [
+            {
+              "name": "MonthpickerId",
+              "type": "Text",
+              "mandatory": true
+            },
+            {
+              "name": "SelectedMonth",
+              "type": "MonthOrderYear",
+              "mandatory": false
+            }
+          ],
+          "steps": [
+            {
+              "assign": {
+                "LastEvent": "MonthpickerId"
+              }
+            },
+            {
+              "node": "IJSONSerializeNode",
+              "as": "Serialized2",
+              "properties": {
+                "Data": "SelectedMonth",
+                "DateFormat": "ISO",
+                "SerializeDefaultValues": true,
+                "Description": ""
+              }
+            },
+            {
+              "assign": {
+                "LastEvent": "Serialized2.JSON"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "mutations": [
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui50_MarginContainer/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "MarginContainer"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui51_MasterDetail/Part1",
+      "prop": "Name",
+      "value": "RenamedSubject",
+      "element": "MasterDetail"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui52_MonthPicker/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "MonthPicker"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui53_MouseEvents/Part1",
+      "prop": "Name",
+      "value": "RenamedSubject",
+      "element": "MouseEvents"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui54_Notification/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Notification"
+    }
+  ]
+}

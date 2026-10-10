@@ -1,0 +1,25 @@
+{
+ "description": "CenterContent do OSUI com altura: icone no Top, mensagem ligada a variavel no Center e link de volta no Bottom.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ErrorPage", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Oops\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "ErrorText", "as": "$vErrorText"},
+  {"op": "set", "target": "$vErrorText", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$vErrorText", "prop": "DefaultValue", "value": "\"Page not found\""},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "CenterContent1", "source": "IMobileBlock:CenterContent", "as": "$cc"},
+  {"op": "set", "target": "$cc/Height", "prop": "Value", "value": "400"},
+  {"op": "create", "parent": "$cc/Top", "type": "IIcon", "name": "WarnIcon", "as": "$icon1"},
+  {"op": "set", "target": "$icon1", "prop": "Icon", "value": "warning"},
+  {"op": "set", "target": "$icon1", "prop": "Weight", "value": "regular"},
+  {"op": "create", "parent": "$cc/Center", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "ErrorText"},
+  {"op": "create", "parent": "$cc/Bottom", "type": "ILink", "name": "BackLink", "as": "$lBackLink"},
+  {"op": "set", "target": "$lBackLink/#ITextWidget", "prop": "Text", "value": "Back to profile"},
+  {"op": "set", "target": "$lBackLink/OnClick", "prop": "Destination", "value": "IMobileScreen:UserProfile"}
+ ]
+}

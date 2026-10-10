@@ -1,0 +1,22 @@
+{
+ "description": "ODC: o espelho de tests/jobs-negative/rename-connector.json (mesma recusa, mesmo texto). A RECUSA do rename num conector. Conectores nao tem nome: o ICommentConnector publica um Label gravavel (continua escrito por `set Label`), mas o rename nao o trata como nome e recusa com uma frase curta, em vez do antigo \"Cannot find handler for object  of type Connector\" que vinha do NameClashHandler da plataforma. O caminho positivo do rename (Label de If/Assign/ForEach/Switch/Message e da condicao de Switch, Identifier de registo, Property/Event) esta em tests/jobs-odc/rename-name-property.json.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectError": [
+  "rename RnNote",
+  "rename: ICommentConnector is a connector; connectors have no name"
+ ],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "RnFlow", "as": "$fp"},
+  {"op": "create", "parent": "$fp", "type": "IStartNode", "as": "$fs"},
+  {"op": "create", "parent": "$fp", "type": "IEndNode", "as": "$fe"},
+  {"op": "create", "parent": "$fp", "type": "IAssignNode", "as": "$as"},
+  {"op": "set", "target": "$as", "prop": "Label", "value": "RnAssign"},
+  {"op": "link", "from": "$fs", "to": "$as"},
+  {"op": "link", "from": "$as", "to": "$fe"},
+  {"op": "create", "parent": "$fp", "type": "ICommentNode", "as": "$note"},
+  {"op": "set", "target": "$note", "prop": "Text", "value": "why this assign exists"},
+  {"op": "create", "parent": "$note", "type": "OutSystems.Model.Logic.Nodes.ICommentConnector", "args": {"target": "$as"}, "as": "$line"},
+  {"op": "rename", "target": "$line", "name": "RnNote", "_why": "recusado: o conector de comentario e uma linha, nao tem nome"}
+ ]
+}

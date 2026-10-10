@@ -1,0 +1,34 @@
+{
+ "description": "ODC (contexto: app de agente). Uma app CrossDevice recusa agentes ('Agent objects can't be children of App objects'). Sobre o modulo AIAgent em branco (create-blank --kind AIAgent --connection ai-model:CovAIModel) o agente nasce, com action handler, e e chamado por uma server action (Call Agent) e direto do modelo (Call Agent Core). O AI model de um agente tem de ser uma action de uma conexao de AI model ('A IServerAction cannot be used as the value for IAgent.AIModel'): a fixture traz uma conexao construida offline (IModelServices.CreateAIModelConnection + IESpace.AddDependency), referida por IServerActionSignature:CovAIModel. Messages e uma lista de AIMessage; '[]' basta para o Verify.",
+ "base": "tests/fixtures/odc/blank-agent.oml",
+ "expectValid": true,
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "CovBlankAgent (ESpace) / CovGAsk (ServerAction)", "why": "ODC: um app nao expoe server action publica (o Studio ao vivo da erro); CovGAsk fica privada e sem consumidor neste job. A CovGLookup nao precisa: o agente a usa como ferramenta"}],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IAgent", "name": "CovGHelper", "as": "$agent"},
+  {"op": "set", "target": "$agent", "prop": "AIModel", "value": "IServerActionSignature:CovAIModel"},
+  {"op": "set", "target": "$agent", "prop": "Description", "value": "Agente minimo da cobertura"},
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "CovGLookup", "as": "$tool"},
+  {"op": "create", "parent": "$tool", "type": "IStartNode", "as": "$tool0"},
+  {"op": "create", "parent": "$tool", "type": "IEndNode", "as": "$tool9"},
+  {"op": "link", "from": "$tool0", "to": "$tool9"},
+  {"op": "create", "parent": "$agent", "type": "IActionHandler", "as": "$handler"},
+  {"op": "set", "target": "$handler", "prop": "Action", "value": "$tool"},
+  {"op": "get", "target": "$agent"},
+
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "CovGAsk", "as": "$ask"},
+  {"op": "create", "parent": "$ask", "type": "IStartNode", "as": "$ask0"},
+  {"op": "create", "parent": "$ask", "type": "ICallAgentNode", "name": "CovGCallHelper", "as": "$call"},
+  {"op": "set", "target": "$call", "prop": "Agent", "value": "$agent"},
+  {"op": "set", "target": "$call/Messages", "prop": "Value", "value": "[]", "_why": "o argumento Messages do agente: sem expressao, ArgumentRequiredExpression"},
+  {"op": "create", "parent": "$ask", "type": "ICallAgentCoreNode", "name": "CovGCallModel", "as": "$core"},
+  {"op": "set", "target": "$core", "prop": "AIModel", "value": "IServerActionSignature:CovAIModel"},
+  {"op": "set", "target": "$core", "prop": "Messages", "value": "[]"},
+  {"op": "create", "parent": "$core", "type": "IActionHandler", "as": "$coreHandler"},
+  {"op": "set", "target": "$coreHandler", "prop": "Action", "value": "$tool"},
+  {"op": "create", "parent": "$ask", "type": "IEndNode", "as": "$ask9"},
+  {"op": "link", "from": "$ask0", "to": "$call"},
+  {"op": "link", "from": "$call", "to": "$core"},
+  {"op": "link", "from": "$core", "to": "$ask9"},
+  {"op": "get", "target": "$core"}
+ ]
+}

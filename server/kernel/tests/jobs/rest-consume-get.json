@@ -1,0 +1,161 @@
+{
+ "description": "REST consumido GET (ViaCEP): IRestClient, structure de resposta, metodo com URL Path {CEP}, input UrlPlacement, output Body (job da investigacao REST de 2026-09-04)",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IRestClient",
+   "name": "ViaCepApi",
+   "as": "$api"
+  },
+  {
+   "op": "set",
+   "target": "$api",
+   "prop": "BaseURL",
+   "value": "https://viacep.com.br"
+  },
+  {
+   "op": "create",
+   "parent": "$api",
+   "type": "IRestStructure",
+   "name": "GetAddressByCepResponse",
+   "as": "$st"
+  },
+  {
+   "op": "create",
+   "parent": "$st",
+   "type": "IRestStructureAttribute",
+   "name": "cep",
+   "as": "$a1"
+  },
+  {
+   "op": "set",
+   "target": "$a1",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$a1",
+   "prop": "NameInJSON",
+   "value": "cep"
+  },
+  {
+   "op": "create",
+   "parent": "$st",
+   "type": "IRestStructureAttribute",
+   "name": "logradouro",
+   "as": "$a2"
+  },
+  {
+   "op": "set",
+   "target": "$a2",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$a2",
+   "prop": "NameInJSON",
+   "value": "logradouro"
+  },
+  {
+   "op": "create",
+   "parent": "$st",
+   "type": "IRestStructureAttribute",
+   "name": "uf",
+   "as": "$a3"
+  },
+  {
+   "op": "set",
+   "target": "$a3",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$a3",
+   "prop": "NameInJSON",
+   "value": "uf"
+  },
+  {
+   "op": "create",
+   "parent": "$api",
+   "type": "IRestAction",
+   "name": "GetAddressByCep",
+   "as": "$m"
+  },
+  {
+   "op": "set",
+   "target": "$m",
+   "prop": "HTTPMethod",
+   "value": "GET"
+  },
+  {
+   "op": "set",
+   "target": "$m",
+   "prop": "URLPath",
+   "value": "/ws/{CEP}/json/"
+  },
+  {
+   "op": "set",
+   "target": "$m",
+   "prop": "ResponseFormat",
+   "value": "JSON"
+  },
+  {
+   "op": "create",
+   "parent": "$m",
+   "type": "IRestActionInput",
+   "name": "CEP",
+   "as": "$in"
+  },
+  {
+   "op": "set",
+   "target": "$in",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$in",
+   "prop": "IsMandatory",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$in",
+   "prop": "InputPlacement",
+   "value": "UrlPlacement"
+  },
+  {
+   "op": "create",
+   "parent": "$m",
+   "type": "IRestActionOutput",
+   "name": "Response",
+   "as": "$out"
+  },
+  {
+   "op": "set",
+   "target": "$out",
+   "prop": "DataType",
+   "value": "GetAddressByCepResponse"
+  },
+  {
+   "op": "set",
+   "target": "$out",
+   "prop": "OutputPlacement",
+   "value": "BodyPlacement"
+  },
+  {
+   "op": "get",
+   "target": "$m"
+  },
+  {
+   "op": "get",
+   "target": "$out"
+  }
+ ]
+}

@@ -1,0 +1,31 @@
+{
+ "description": "Add-ons do OutSystemsCharts num ColumnChart: titulos dos eixos X e Y ligados a variaveis, legenda visivel, rotulo da serie com valores e nome do arquivo de exportacao.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "SalesChartAddons", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Sales\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "XTitle", "as": "$vXTitle"},
+  {"op": "set", "target": "$vXTitle", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$vXTitle", "prop": "DefaultValue", "value": "\"Month\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "YTitle", "as": "$vYTitle"},
+  {"op": "set", "target": "$vYTitle", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$vYTitle", "prop": "DefaultValue", "value": "\"Sales ($)\""},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ColumnChart1", "source": "IMobileBlock:ColumnChart", "empty": true, "as": "$ch"},
+  {"op": "set", "target": "$ch/DataPointList", "prop": "Value", "value": "[{Label: \"Jan\", Value: 10, SeriesName: \"2026\"}, {Label: \"Feb\", Value: 14, SeriesName: \"2026\"}]"},
+  {"op": "create", "parent": "$ch/AddOns_Placeholder", "type": "IMobileBlockInstanceWidget", "name": "ChartXAxis1", "source": "IMobileBlock:ChartXAxis", "as": "$x"},
+  {"op": "set", "target": "$x/Title", "prop": "Value", "value": "XTitle"},
+  {"op": "create", "parent": "$ch/AddOns_Placeholder", "type": "IMobileBlockInstanceWidget", "name": "ChartYAxis1", "source": "IMobileBlock:ChartYAxis", "as": "$y"},
+  {"op": "set", "target": "$y/Title", "prop": "Value", "value": "YTitle"},
+  {"op": "create", "parent": "$ch/AddOns_Placeholder", "type": "IMobileBlockInstanceWidget", "name": "ChartLegend1", "source": "IMobileBlock:ChartLegend", "as": "$lg"},
+  {"op": "set", "target": "$lg/Visible", "prop": "Value", "value": "True"},
+  {"op": "create", "parent": "$ch/AddOns_Placeholder", "type": "IMobileBlockInstanceWidget", "name": "ChartSeriesStyling1", "source": "IMobileBlock:ChartSeriesStyling", "as": "$st"},
+  {"op": "set", "target": "$st/SeriesName", "prop": "Value", "value": "\"2026\""},
+  {"op": "set", "target": "$st/ShowDataPointValues", "prop": "Value", "value": "True"},
+  {"op": "create", "parent": "$ch/AddOns_Placeholder", "type": "IMobileBlockInstanceWidget", "name": "ChartExport1", "source": "IMobileBlock:ChartExport", "as": "$ex"},
+  {"op": "set", "target": "$ex/FileName", "prop": "Value", "value": "\"sales-\" + XTitle"}
+ ]
+}

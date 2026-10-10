@@ -1,0 +1,43 @@
+{
+  "fixture": "mobile-ui",
+  "features": [
+    "native-widget",
+    "mobile:ICheckbox"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Subject",
+            "type": "ICheckbox",
+            "properties": {
+              "Variable": "Value",
+              "Style": "\"coverage\""
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value",
+            "type": "Boolean"
+          }
+        ]
+      }
+    ]
+  },
+  "mutation": {
+    "target": "IMobileScreen:Coverage/Subject",
+    "prop": "Style",
+    "value": "\"changed\""
+  }
+}

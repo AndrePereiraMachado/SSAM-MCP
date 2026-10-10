@@ -1,0 +1,181 @@
+{
+ "description": "ODC (cobertura C): os data-action-reactive.json e data-action-entity-list-reactive.json da faixa O11 espelhados e juntos na faixa ODC. Uma DATA ACTION e a terceira fonte de dados de uma tela (ao lado do Screen Aggregate e do parametro de entrada): busca por LOGICA, corre no servidor e devolve o que quiser. Duas telas provam as duas metades. WfDaKpis: output de STRUCTURE List, Fetch AtStart (a tela busca sozinha ao abrir) e OnAfterFetch ligado a uma screen action que carimba a hora - o `get` mostra que Fetch e uma propriedade de verdade no modelo, e nao um default silencioso. WfDaRegions: output de ENTIDADE List, e por isso o Current expoe os atributos DIRETO (GetWfDaRegions.Regions.Current.Name, sem o wrapper da entidade que um aggregate obriga), Fetch OnDemand (a tela NAO busca ao abrir) e um Refresh Data num botao a disparar a busca. O censo do tenant diz que as 121 data actions dos modulos reais tem todas a propriedade Fetch escrita: este job e o primeiro da faixa a escreve-la, nos dois valores.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "entities": [
+     {
+      "name": "WfDaRegion",
+      "description": "Cobertura C: entidade lida pelas duas data actions; a metade do entity list devolve WfDaRegion List",
+      "attributes": [
+       {"name": "Name", "type": "Text", "mandatory": true, "length": 100},
+       {"name": "Code", "type": "Text", "length": 10}
+      ]
+     }
+    ],
+    "structures": [
+     {
+      "name": "WfDaKpi",
+      "description": "Cobertura C: tipo de saida da data action que NAO e uma entidade - e o que separa a data action do aggregate",
+      "attributes": [
+       {"name": "Name", "type": "Text"},
+       {"name": "Value", "type": "Long Integer", "description": "Long Integer e nao Integer: no ODC as contagens do aggregate sao Long Integer, e Integer cabe aqui por alargamento"}
+      ]
+     }
+    ]
+   }
+  },
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfDaKpis", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"KPIs\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "LoadedAt", "as": "$loaded"},
+  {"op": "set", "target": "$loaded", "prop": "DataType", "value": "Date Time"},
+
+  {"op": "create", "parent": "$scr", "type": "IDataAction", "name": "GetWfDaKpis", "as": "$da", "_why": "a data action nasce no proprio IMobileScreen (IMobileScreen.CreateDataAction), como o aggregate de tela - nao no @espace"},
+  {"op": "set", "target": "$da", "prop": "Fetch", "value": "AtStart", "_why": "DIFERENCA DE PLATAFORMA registada: no ODC o IDataAction tem a propriedade Fetch (enum DataSourceFetch: AtStart | OnDemand) e ela nasce ja em AtStart; escreve-la a mao e o que fecha a paridade com o censo, que ve as 121 instancias reais com Fetch definido"},
+  {"op": "delete", "target": "$da/Out1", "_why": "igual ao SS11: a data action nasce com um output Out1 de exemplo; deixado como esta ele da Error InvalidDataAction_OutputMustBeSet e Warning UnusedElement"},
+  {"op": "create", "parent": "$da", "type": "IOutputParameter", "name": "Kpis", "as": "$daOut"},
+  {"op": "set", "target": "$daOut", "prop": "DataType", "value": "WfDaKpi List", "_why": "o output de uma data action nao precisa de ser uma entidade: aqui e a lista de uma structure, que nenhum aggregate sabe devolver"},
+  {"op": "create", "parent": "$da", "type": "ILocalVariable", "name": "K", "as": "$daK"},
+  {"op": "set", "target": "$daK", "prop": "DataType", "value": "WfDaKpi"},
+  {"op": "create", "parent": "$da", "type": "ILocalVariable", "name": "L", "as": "$daL"},
+  {"op": "set", "target": "$daL", "prop": "DataType", "value": "WfDaKpi List"},
+
+  {"op": "create", "parent": "$da", "type": "IStartNode", "as": "$d0"},
+  {"op": "create", "parent": "$da", "type": "IAggregateNode", "name": "CountRegions", "as": "$agg", "_why": "dentro da data action o aggregate e um NO (IAggregateNode), nao o IScreenAggregate da tela; e o nome nao pode ser o padrao GetWfDaRegions, senao um filtro futuro renomeia-o e as expressoes partem"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:WfDaRegion"}},
+
+  {"op": "create", "parent": "$da", "type": "IAssignNode", "as": "$as"},
+  {"op": "set", "target": "$as", "prop": "Label", "value": "Fill"},
+  {"op": "create", "parent": "$as", "type": "IAssignment", "as": "$a1"},
+  {"op": "set", "target": "$a1", "prop": "Variable", "value": "K.Name"},
+  {"op": "set", "target": "$a1", "prop": "Value", "value": "\"Regions\""},
+  {"op": "create", "parent": "$as", "type": "IAssignment", "as": "$a2"},
+  {"op": "set", "target": "$a2", "prop": "Variable", "value": "K.Value"},
+  {"op": "set", "target": "$a2", "prop": "Value", "value": "CountRegions.List.Length"},
+
+  {"op": "create", "parent": "$da", "type": "IExecuteServerActionNode", "name": "ListAppend", "as": "$app"},
+  {"op": "set", "target": "$app", "prop": "Action", "value": "IServerActionSignature:ListAppend", "_why": "DIFERENCA DE PLATAFORMA registada: o job do SS11 escreve IActionSignature:ListAppend; no ODC o ListAppend existe como IClientActionSignature E como IServerActionSignature, e o corpo da data action corre no SERVIDOR - por isso e a assinatura de servidor que o IExecuteServerActionNode aceita"},
+  {"op": "set", "target": "$app/List", "prop": "Value", "value": "L"},
+  {"op": "set", "target": "$app/Element", "prop": "Value", "value": "K"},
+
+  {"op": "create", "parent": "$da", "type": "IAssignNode", "as": "$asOut"},
+  {"op": "set", "target": "$asOut", "prop": "Label", "value": "SetOutput"},
+  {"op": "create", "parent": "$asOut", "type": "IAssignment", "as": "$aOut"},
+  {"op": "set", "target": "$aOut", "prop": "Variable", "value": "Kpis"},
+  {"op": "set", "target": "$aOut", "prop": "Value", "value": "L"},
+
+  {"op": "create", "parent": "$da", "type": "IEndNode", "as": "$d9"},
+  {"op": "link", "from": "$d0", "to": "$agg"},
+  {"op": "link", "from": "$agg", "to": "$as"},
+  {"op": "link", "from": "$as", "to": "$app"},
+  {"op": "link", "from": "$app", "to": "$asOut"},
+  {"op": "link", "from": "$asOut", "to": "$d9"},
+  {"op": "layout", "target": "$da", "_why": "o layout vale para o fluxo da data action como para qualquer action"},
+
+  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "OnKpisFetched", "as": "$after"},
+  {"op": "create", "parent": "$after", "type": "IStartNode", "as": "$f0"},
+  {"op": "create", "parent": "$after", "type": "IAssignNode", "as": "$fAs"},
+  {"op": "set", "target": "$fAs", "prop": "Label", "value": "StampLoadedAt"},
+  {"op": "create", "parent": "$fAs", "type": "IAssignment", "as": "$fa1"},
+  {"op": "set", "target": "$fa1", "prop": "Variable", "value": "LoadedAt"},
+  {"op": "set", "target": "$fa1", "prop": "Value", "value": "CurrDateTime()"},
+  {"op": "create", "parent": "$after", "type": "IEndNode", "as": "$f9"},
+  {"op": "link", "from": "$f0", "to": "$fAs"},
+  {"op": "link", "from": "$fAs", "to": "$f9"},
+  {"op": "layout", "target": "$after"},
+  {"op": "set", "target": "$da/OnAfterFetch", "prop": "Destination", "value": "$after", "_why": "OnAfterFetch e um IUILifeCycleEvent do proprio IDataAction: le-se como propriedade que devolve objeto ($da/OnAfterFetch) e liga-se pelo Destination, igual ao OnClick de um botao"},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "KpiList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetWfDaKpis.Kpis", "_why": "a fonte da List e <DataAction>.<Output>, e e ISTO que faz a data action ter consumidor (sem consumidor o ODC da Warning UnusedAction, como qualquer action)"},
+  {"op": "create", "parent": "$list", "type": "IExpression", "as": "$ex"},
+  {"op": "set", "target": "$ex", "prop": "Value", "value": "GetWfDaKpis.Kpis.Current.Name + \": \" + LongIntegerToText(GetWfDaKpis.Kpis.Current.Value)"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$exLoaded"},
+  {"op": "set", "target": "$exLoaded", "prop": "Value", "value": "\"Loaded at \" + DateTimeToText(LoadedAt)", "_why": "le a variavel que o OnAfterFetch carimbou: prova que o evento corre depois da busca"},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfDaRegions", "as": "$scr2"},
+  {"op": "set", "target": "$scr2/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr2/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title2"},
+  {"op": "set", "target": "$title2", "prop": "Value", "value": "\"Regions\""},
+
+  {"op": "create", "parent": "$scr2", "type": "IDataAction", "name": "GetWfDaRegions", "as": "$da2"},
+  {"op": "set", "target": "$da2", "prop": "Fetch", "value": "OnDemand", "_why": "o OUTRO valor do enum: a tela abre SEM buscar e fica a espera de um Refresh Data; e a diferenca que o `get` das duas data actions mostra lado a lado"},
+  {"op": "delete", "target": "$da2/Out1"},
+  {"op": "create", "parent": "$da2", "type": "IOutputParameter", "name": "Regions", "as": "$da2Out"},
+  {"op": "set", "target": "$da2Out", "prop": "DataType", "value": "WfDaRegion List", "_why": "output de ENTIDADE List: e o que muda a leitura no ecra (Current sem wrapper)"},
+  {"op": "create", "parent": "$da2", "type": "ILocalVariable", "name": "R", "as": "$da2R"},
+  {"op": "set", "target": "$da2R", "prop": "DataType", "value": "WfDaRegion"},
+  {"op": "create", "parent": "$da2", "type": "ILocalVariable", "name": "RL", "as": "$da2L"},
+  {"op": "set", "target": "$da2L", "prop": "DataType", "value": "WfDaRegion List"},
+
+  {"op": "create", "parent": "$da2", "type": "IStartNode", "as": "$e0"},
+  {"op": "create", "parent": "$da2", "type": "IAggregateNode", "name": "ReadRegions", "as": "$agg2"},
+  {"op": "create", "parent": "$agg2", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:WfDaRegion"}},
+  {"op": "create", "parent": "$agg2", "type": "IFilter", "args": {"condition": "WfDaRegion.Code <> \"\""}},
+
+  {"op": "create", "parent": "$da2", "type": "IForEachNode", "as": "$each"},
+  {"op": "set", "target": "$each", "prop": "Label", "value": "EachRegion"},
+  {"op": "set", "target": "$each", "prop": "RecordList", "value": "ReadRegions.List"},
+
+  {"op": "create", "parent": "$da2", "type": "IAssignNode", "as": "$copy"},
+  {"op": "set", "target": "$copy", "prop": "Label", "value": "CopyRow"},
+  {"op": "create", "parent": "$copy", "type": "IAssignment", "as": "$c1"},
+  {"op": "set", "target": "$c1", "prop": "Variable", "value": "R"},
+  {"op": "set", "target": "$c1", "prop": "Value", "value": "ReadRegions.List.Current.WfDaRegion", "_why": "DENTRO da logica a linha do aggregate tem o wrapper da entidade (.Current.WfDaRegion); e o output tipado como entidade que tira o wrapper do lado do ECRA - as duas leituras convivem no mesmo job de proposito"},
+
+  {"op": "create", "parent": "$da2", "type": "IExecuteServerActionNode", "name": "AppendRegion", "as": "$app2"},
+  {"op": "set", "target": "$app2", "prop": "Action", "value": "IServerActionSignature:ListAppend"},
+  {"op": "set", "target": "$app2/List", "prop": "Value", "value": "RL"},
+  {"op": "set", "target": "$app2/Element", "prop": "Value", "value": "R"},
+
+  {"op": "create", "parent": "$da2", "type": "IAssignNode", "as": "$e2Out"},
+  {"op": "set", "target": "$e2Out", "prop": "Label", "value": "SetOutput"},
+  {"op": "create", "parent": "$e2Out", "type": "IAssignment", "as": "$e2A"},
+  {"op": "set", "target": "$e2A", "prop": "Variable", "value": "Regions"},
+  {"op": "set", "target": "$e2A", "prop": "Value", "value": "RL"},
+
+  {"op": "create", "parent": "$da2", "type": "IEndNode", "as": "$e9"},
+  {"op": "link", "from": "$e0", "to": "$agg2"},
+  {"op": "link", "from": "$agg2", "to": "$each"},
+  {"op": "link", "from": "$each", "connector": "CycleTarget", "to": "$copy"},
+  {"op": "link", "from": "$copy", "to": "$app2"},
+  {"op": "link", "from": "$app2", "to": "$each"},
+  {"op": "link", "from": "$each", "to": "$e2Out"},
+  {"op": "link", "from": "$e2Out", "to": "$e9"},
+  {"op": "layout", "target": "$da2"},
+
+  {"op": "create", "parent": "$scr2", "type": "IScreenAction", "name": "ReloadRegions", "as": "$reload"},
+  {"op": "create", "parent": "$reload", "type": "IStartNode", "as": "$r0"},
+  {"op": "create", "parent": "$reload", "type": "IRefreshDataNode", "as": "$refresh"},
+  {"op": "set", "target": "$refresh", "prop": "DataSource", "value": "$da2", "_why": "o Refresh Data aponta para a DATA ACTION (o DataSource e um IObject: serve o aggregate de tela e serve a data action); e o unico jeito de uma data action OnDemand chegar a correr"},
+  {"op": "create", "parent": "$reload", "type": "IEndNode", "as": "$r9"},
+  {"op": "link", "from": "$r0", "to": "$refresh"},
+  {"op": "link", "from": "$refresh", "to": "$r9"},
+  {"op": "layout", "target": "$reload"},
+
+  {"op": "create", "parent": "$scr2/#IMobileBlockInstanceWidget/Actions", "type": "IButton", "name": "ReloadButton", "as": "$btn"},
+  {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "Reload"},
+  {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$reload"},
+
+  {"op": "create", "parent": "$scr2/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "RegionList", "as": "$list2"},
+  {"op": "set", "target": "$list2", "prop": "Source", "value": "GetWfDaRegions.Regions"},
+  {"op": "create", "parent": "$list2", "type": "IExpression", "as": "$ex2"},
+  {"op": "set", "target": "$ex2", "prop": "Value", "value": "GetWfDaRegions.Regions.Current.Name + \" (\" + GetWfDaRegions.Regions.Current.Code + \")\"", "_why": "O PONTO DA SEGUNDA METADE: com output de entidade List le-se .Current.Name direto. Num aggregate a mesma leitura seria .List.Current.WfDaRegion.Name - o wrapper existe porque o aggregate pode juntar varias fontes, e o output da data action nao"},
+
+  {"op": "get", "target": "$da", "_why": "prova Fetch=AtStart"},
+  {"op": "get", "target": "$da2", "_why": "prova Fetch=OnDemand na mesma leitura: a propriedade que o censo ve nas 121 instancias reais, escrita aqui nos dois valores do enum"},
+  {"op": "get", "target": "$da/OnAfterFetch", "_why": "DIFERENCA DE PLATAFORMA registada: o OnAfterFetch NAO nasce vazio nem nulo - o IUILifeCycleEvent existe sempre nas duas data actions (o `get` do $da2 tambem devolve uma chave para ele). Quem diz se o evento esta ligado e o DESTINATION: aqui aponta para a screen action OnKpisFetched"},
+  {"op": "get", "target": "$da2/OnAfterFetch", "_why": "o mesmo evento do outro lado: existe, e o Destination esta vazio porque esta data action nao usa OnAfterFetch. Ler so a propriedade OnAfterFetch do IDataAction engana"},
+  {"op": "get", "target": "$daOut", "_why": "prova o output de structure List"},
+  {"op": "get", "target": "$da2Out", "_why": "prova o output de entidade List"},
+  {"op": "dump", "target": "$da", "depth": 4, "_why": "le de volta o fluxo inteiro da data action: aggregate, assign, ListAppend e o assign do output"},
+  {"op": "usages", "target": "$da2", "_why": "prova os consumidores da data action OnDemand: o Source da List, a Expression de dentro dela e o IRefreshDataNode que a dispara. Repare no CAMINHO que sai aqui - DIFERENCA DE PLATAFORMA registada: no ODC o filho de uma List nao pendura direto, vive num IContent (IList:RegionList/IContent:content/IExpression); o job escreve na List e o kernel poe o IContent no meio"},
+  {"op": "dump", "target": "$scr2", "depth": 6, "_why": "le de volta a tela toda: data action, screen action com Refresh Data, botao e a List que le .Current sem wrapper"}
+ ]
+}

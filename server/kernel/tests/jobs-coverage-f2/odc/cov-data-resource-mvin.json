@@ -1,0 +1,36 @@
+{
+ "description": "Cobertura testada (fase 2): move into (folder:Resources) de OutSystems.Model.Data.IResource (odc) em espace. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedResource",
+   "element": "WrightFlood (ESpace) / CovAResource (Resource)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IResource",
+   "name": "CovAResource",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IFolder",
+   "name": "CovSMvFolder",
+   "args": {
+    "parentFolder": "Resources"
+   },
+   "as": "$mvp"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "into": "$mvp"
+  }
+ ]
+}

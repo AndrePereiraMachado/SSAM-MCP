@@ -1,0 +1,311 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "OutSystemsUI",
+    "OutSystemsUIWeb:BreadcrumbsItem",
+    "OutSystemsUIWeb:BulletItem",
+    "OutSystemsUIWeb:Bullets",
+    "OutSystemsUIWeb:ButtonGroup",
+    "OutSystemsUIWeb:ButtonGroupItem"
+  ],
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "tests/fixtures/outsystems-ui-web.oml",
+      "elements": [
+        "IWebBlock:BreadcrumbsItem",
+        "IWebBlock:BulletItem",
+        "IWebBlock:Bullets",
+        "IWebBlock:ButtonGroup",
+        "IWebBlock:ButtonGroupItem"
+      ]
+    }
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Ui10_BreadcrumbsItem",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:BreadcrumbsItem",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Title": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Icon": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui11_BulletItem",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:BulletItem",
+            "args": {},
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui12_Bullets",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:Bullets",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "BulletsItems": [
+                {
+                  "name": "Part2",
+                  "type": "IWebBlockInstanceWidget",
+                  "properties": {},
+                  "source": "IWebBlock:BulletItem",
+                  "args": {},
+                  "slots": {
+                    "Content": [
+                      {
+                        "name": "Part3",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Component content"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui13_ButtonGroup",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:ButtonGroup",
+            "args": {},
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "IWebBlockInstanceWidget",
+                  "properties": {},
+                  "source": "IWebBlock:ButtonGroupItem",
+                  "args": {},
+                  "slots": {
+                    "Label": [
+                      {
+                        "name": "Part3",
+                        "type": "IRadioButtonWidget",
+                        "properties": {
+                          "Variable": "Value1",
+                          "Value": "\"Choice\""
+                        }
+                      },
+                      {
+                        "name": "Part4",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Text"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "Part5",
+            "type": "IButtonWidget",
+            "properties": {
+              "Label": "\"Submit\""
+            },
+            "events": {
+              "OnClick": {
+                "destination": "IWebScreen:Ui13_ButtonGroup/Ui13_ButtonGroup_Submit"
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value1",
+            "type": "Text"
+          }
+        ]
+      },
+      {
+        "name": "Ui14_ButtonGroupItem",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:ButtonGroupItem",
+            "args": {},
+            "slots": {
+              "Label": [
+                {
+                  "name": "Part2",
+                  "type": "IRadioButtonWidget",
+                  "properties": {
+                    "Variable": "Value1",
+                    "Value": "\"Choice\""
+                  }
+                },
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Text"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "Part4",
+            "type": "IButtonWidget",
+            "properties": {
+              "Label": "\"Submit\""
+            },
+            "events": {
+              "OnClick": {
+                "destination": "IWebScreen:Ui14_ButtonGroupItem/Ui14_ButtonGroupItem_Submit"
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value1",
+            "type": "Text"
+          }
+        ]
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "name": "Ui13_ButtonGroup_Submit",
+          "kind": "screen",
+          "owner": "IWebScreen:Ui13_ButtonGroup",
+          "steps": []
+        },
+        {
+          "name": "Ui14_ButtonGroupItem_Submit",
+          "kind": "screen",
+          "owner": "IWebScreen:Ui14_ButtonGroupItem",
+          "steps": []
+        }
+      ]
+    }
+  },
+  "mutations": [
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui10_BreadcrumbsItem/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "BreadcrumbsItem"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui11_BulletItem/Part1/Content/Part2",
+      "prop": "Text",
+      "value": "Changed",
+      "element": "BulletItem"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui12_Bullets/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Bullets"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui13_ButtonGroup/Part1",
+      "prop": "Name",
+      "value": "RenamedSubject",
+      "element": "ButtonGroup"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui14_ButtonGroupItem/Part1",
+      "prop": "Name",
+      "value": "RenamedSubject",
+      "element": "ButtonGroupItem"
+    }
+  ]
+}

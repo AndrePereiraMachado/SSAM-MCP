@@ -1,0 +1,366 @@
+{
+  "schemaVersion": "ssam-discovery-fragment/1",
+  "contract": "ssam-catalog-contribution/1",
+  "front": "C",
+  "title": "Processes: O11 BPT processes (process, start/end, automatic and human activities, connectors) proven by jobs; ODC workflows are not module-model elements on any public route",
+  "reviewedAt": "2026-09-23",
+  "synonyms": {
+    "process": [
+      "bpt",
+      "business process",
+      "processo",
+      "processo bpt",
+      "fluxo de aprovacao",
+      "approval flow"
+    ],
+    "workflow": [
+      "workflows",
+      "workflow editor"
+    ],
+    "human activity": [
+      "atividade humana",
+      "tarefa humana",
+      "human task"
+    ],
+    "automatic activity": [
+      "atividade automatica",
+      "atividade automática"
+    ]
+  },
+  "capabilities": [
+    {
+      "id": "process.bpt",
+      "lanes": [
+        "o11"
+      ],
+      "category": "process",
+      "title": "BPT process: process, start/end, automatic and human activities, connectors, edit and delete an activity",
+      "keywords": [
+        "process",
+        "bpt",
+        "business process",
+        "human activity",
+        "automatic activity",
+        "taskbox",
+        "approval",
+        "activity"
+      ],
+      "summary": "IProcess under the module (inputs as IInputParameter, Detail expression); inside it IStartNode, IAutomaticActivityNode (with its own action flow), IHumanActivityNode (Label, Destination = a screen, arguments by name, Instructions, DueDate, AllowSkip) and IEndNode, joined with link {from, to}; layout {target} arranges the canvas. An activity with a consumer (its incoming connector) is deleted only after the consumer is removed.",
+      "route": {
+        "kind": "job",
+        "operation": "create IProcess @espace; create IStartNode/IAutomaticActivityNode/IHumanActivityNode/IEndNode under the process; link {from,to}; layout {target}; set Detail / Label / Destination / Instructions / DueDate / AllowSkip; deliver with o11_deliver (it validates and refuses before any change)"
+      },
+      "contract": [
+        "verbs.verbs.create",
+        "verbs.verbs.set",
+        "verbs.verbs.link",
+        "verbs.verbs.layout",
+        "verbs.verbs.delete",
+        "verbs.verbs.usages",
+        "verbs.references"
+      ],
+      "guidance": "Addressing outside the creating job: IProcess:<Process> and activities by path IProcess:<Process>/<Activity>; connectors by #IActionConnector under their source. The body of an automatic activity is logic (front A): nodes inside the activity ($auto/#IStartNode ... #IEndNode). A human activity's Destination is a screen (front B) and its arguments are set by name ($human/<Input> Value). A minimal process without a Taskbox detail screen raises ProcessMissingInboxDetail (declared in process-bpt).",
+      "example": {
+        "ops": [
+          "create",
+          "link",
+          "set"
+        ],
+        "max": 16
+      },
+      "elements": [
+        {
+          "role": "process",
+          "platforms": {
+            "o11": {
+              "native": "OutSystems.Model.Processes.IProcess",
+              "jobType": "IProcess",
+              "address": "IProcess:<Process>"
+            }
+          }
+        },
+        {
+          "role": "start node",
+          "child": true,
+          "platforms": {
+            "o11": {
+              "native": "OutSystems.Model.Processes.Nodes.IStartNode",
+              "jobType": "IStartNode",
+              "address": "IProcess:<Process>/#IStartNode"
+            }
+          }
+        },
+        {
+          "role": "automatic activity",
+          "child": true,
+          "platforms": {
+            "o11": {
+              "native": "OutSystems.Model.Processes.Nodes.IAutomaticActivityNode",
+              "jobType": "IAutomaticActivityNode",
+              "address": "IProcess:<Process>/<Activity>"
+            }
+          }
+        },
+        {
+          "role": "human activity",
+          "child": true,
+          "platforms": {
+            "o11": {
+              "native": "OutSystems.Model.Processes.Nodes.IHumanActivityNode",
+              "jobType": "IHumanActivityNode",
+              "address": "IProcess:<Process>/<Activity>"
+            }
+          }
+        },
+        {
+          "role": "end node",
+          "child": true,
+          "platforms": {
+            "o11": {
+              "native": "OutSystems.Model.Processes.Nodes.IEndNode",
+              "jobType": "IEndNode",
+              "address": "IProcess:<Process>/#IEndNode"
+            }
+          }
+        }
+      ],
+      "operations": {
+        "read": {
+          "route": "get/dump IProcess:<Process> (depth 2-3 shows activities and connectors)",
+          "preconditions": [],
+          "roles": {
+            "process": {
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "process-bpt",
+                  "process-human-traditional",
+                  "process-edit-delete"
+                ]
+              }
+            },
+            "human activity": {
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "process-human-traditional",
+                  "process-expense-traditional"
+                ]
+              }
+            },
+            "start node": {
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "process-human-traditional"
+                ],
+                "scope": "get of the start node"
+              }
+            },
+            "end node": {
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "process-human-traditional"
+                ],
+                "scope": "get of the end node"
+              }
+            }
+          }
+        },
+        "usages": {
+          "route": "usages {target}",
+          "preconditions": [
+            "the consumer of an activity is its incoming connector"
+          ],
+          "roles": {
+            "human activity": {
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "process-edit-delete"
+                ],
+                "scope": "the connector from Start before and after it is removed"
+              }
+            }
+          }
+        },
+        "create": {
+          "route": "create <Type> under @espace (process) or the process (nodes)",
+          "preconditions": [
+            "create Start, the activities and End, then link them in order",
+            "a process without a Taskbox detail screen raises ProcessMissingInboxDetail"
+          ],
+          "roles": {
+            "process": {
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "process-bpt",
+                  "process-human-traditional",
+                  "process-expense-traditional"
+                ]
+              }
+            },
+            "start node": {
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "process-bpt",
+                  "process-human-traditional",
+                  "process-expense-traditional"
+                ]
+              }
+            },
+            "automatic activity": {
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "process-bpt",
+                  "process-edit-delete"
+                ],
+                "scope": "including an activity added between two existing nodes of a process another job created, with its own action flow"
+              }
+            },
+            "human activity": {
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "process-human-traditional",
+                  "process-expense-traditional"
+                ]
+              }
+            },
+            "end node": {
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "process-bpt",
+                  "process-human-traditional",
+                  "process-expense-traditional"
+                ]
+              }
+            }
+          }
+        },
+        "set": {
+          "route": "set {target, prop, value}; link {from, to} for connectors",
+          "preconditions": [],
+          "roles": {
+            "process": {
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "process-human-traditional",
+                  "process-expense-traditional",
+                  "process-edit-delete"
+                ],
+                "scope": "Detail (an expression over the process inputs)"
+              }
+            },
+            "human activity": {
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "process-human-traditional",
+                  "process-expense-traditional",
+                  "process-edit-delete"
+                ],
+                "scope": "Label, Destination (a screen), arguments by name, Instructions, DueDate, AllowSkip"
+              }
+            },
+            "automatic activity": {
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "process-edit-delete"
+                ],
+                "scope": "Label"
+              }
+            }
+          }
+        },
+        "delete": {
+          "route": "delete {target}",
+          "preconditions": [
+            "an activity with a consumer (incoming connector) is refused: remove the connector first (delete <source>/#IActionConnector), then delete the activity and relink"
+          ],
+          "roles": {
+            "human activity": {
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "process-edit-delete"
+                ],
+                "scope": "deleted after its incoming connector was removed; the process stays valid (Start -> NotifyOwner -> End)"
+              }
+            }
+          }
+        }
+      },
+      "platforms": {
+        "o11": {
+          "proofs": [
+            "process-bpt",
+            "process-human-traditional",
+            "process-expense-traditional",
+            "process-edit-delete"
+          ],
+          "negative": [],
+          "context": {
+            "kinds": [
+              "Process",
+              "ServerAction"
+            ]
+          },
+          "limits": [
+            {
+              "text": "Wait, conditional start, decision, execute-process, send-email (process) nodes, activity output parameters and process callbacks have factories in the API but no job: they are undetermined on this lane, not proven.",
+              "origin": "kernel/catalog/model-api-11.55.69.json; kernel/tests/jobs (no job creates them)"
+            },
+            {
+              "text": "The refusal of deleting an activity that still has a consumer is not in a negative job: the job description says it was pasted in a report outside the repository, so its text is not verified here.",
+              "origin": "tests/jobs/process-edit-delete.json description"
+            }
+          ],
+          "differences": [
+            {
+              "text": "ODC has no proven route for processes/workflows: IESpace.CreateProcess and CreateBusinessProcess exist in the ODC API and were never measured, and ODC workflows are a separate asset type (see process.odc-workflow).",
+              "origin": "kernel/docs/NAO-DA.md:371-392 (BPT / CreateBusinessProcess, REFUTADO, creation in a module not measured)"
+            }
+          ]
+        }
+      },
+      "depends": [],
+      "alternatives": []
+    }
+  ],
+  "unavailable": [
+    {
+      "id": "process.odc-workflow",
+      "supersedes": [
+        "bpt-process"
+      ],
+      "lanes": [
+        "odc"
+      ],
+      "keywords": [
+        "workflow",
+        "bpt",
+        "process",
+        "business process",
+        "human activity",
+        "taskbox",
+        "approval flow",
+        "processo"
+      ],
+      "reason": "No proven route on ODC: processes are Workflows, a separate asset type (SegmentationKind.BusinessProcess) written in the ODC Portal Workflow Editor, which the ODC Studio refuses to open; IESpace.CreateBusinessProcess and CreateProcess exist in the ODC Model API but creating either inside a module was never measured; no job or feature creates them.",
+      "evidence": "kernel/docs/NAO-DA.md:371-392 (BPT / IESpace.CreateBusinessProcess, REFUTADO: the feature exists as a Workflow asset; creation in a module not measured); no job in kernel/tests/jobs-odc or jobs-odc-negative (declared, not executed)",
+      "negative": {
+        "odc": []
+      },
+      "alternative": "none in the module model; a workflow is a Portal asset (outside this catalog). Server-side scheduling inside the module: timer.schedule"
+    }
+  ],
+  "coverage": []
+}

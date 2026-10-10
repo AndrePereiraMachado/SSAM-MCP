@@ -1,0 +1,16 @@
+{
+ "_leia": "Estagio parcial: so truechange, copia congelada com excecoes de D3/L6 cujos elementos so aparecem em J/O e 0 achados -> nenhuma staleException, exit 0.",
+ "stage": "truechange",
+ "mode": "integrador",
+ "module": "Integration_CS",
+ "planStage": "I1",
+ "deliverResult": "stale-tonly.deliver-result.json",
+ "exceptions": "stale-tonly.exceptions.json",
+ "configOverride": {
+  "approvers": [
+   "autoteste"
+  ]
+ },
+ "exitCode": 0,
+ "maxBlockingErrors": 0
+}

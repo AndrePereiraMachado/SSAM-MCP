@@ -1,0 +1,7 @@
+{
+ "description": "Expectativa obsoleta: a action privada que emitiria este aviso nao existe. Vira unusedExpectations (informativo, nao bloqueia: o Studio nao recusaria o modulo).",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [{"id":"UnusedUserAction","element":"Headless_CS (ESpace) / RemovedAction (ServerAction)","why":"Action de prova anteriormente privada; declaracao propositalmente obsoleta para testar unusedExpectations."}],
+ "ops": []
+}

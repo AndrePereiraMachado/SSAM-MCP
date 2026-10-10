@@ -1,0 +1,23 @@
+{
+  "description": "Native flow layout regression: nested decisions, reconvergence, loops and distinct terminals.",
+  "base": "tests/fixtures/blank-service.oml",
+  "expectValid": true,
+  "expectedMessages": [],
+  "ops": [{"op":"logic","data":{"actions":[
+    {"name":"Layout_Decide","public":true,"inputs":[{"name":"Amount","type":"Integer"},{"name":"Approved","type":"Boolean"}],"outputs":[{"name":"Result","type":"Text"}],"steps":[
+      {"if":"Amount < 0","then":[{"assign":{"Result":"\"Invalid amount\""},"as":"RejectNegative"},{"return":true}]},
+      {"if":"Approved","then":[
+        {"if":"Amount > 100","then":[{"assign":{"Result":"\"Escalate\""},"as":"EscalateLargeAmount"}],"else":[{"assign":{"Result":"\"Accept\""},"as":"AcceptAmount"}]}
+      ],"else":[{"assign":{"Result":"\"Pending\""},"as":"AwaitApproval"}]},
+      {"if":"Amount = 0","then":[{"assign":{"Result":"\"No charge\""},"as":"MarkNoCharge"}]},
+      {"assign":{"Result":"Result + \".\""},"as":"FinishDecision"}
+    ]},
+    {"name":"Layout_Loop","public":true,"inputs":[{"name":"Limit","type":"Integer"}],"outputs":[{"name":"Total","type":"Integer"}],"vars":[{"name":"Index","type":"Integer"}],"steps":[
+      {"while":"Index < Limit","do":[
+        {"if":"Index > 10","as":"LimitReached","then":[{"break":true}]},
+        {"assign":{"Total":"Total + Index","Index":"Index + 1"},"as":"Accumulate"}
+      ]},
+      {"assign":{"Total":"Total + 1"},"as":"FinishLoop"}
+    ]}
+  ]}}]
+}

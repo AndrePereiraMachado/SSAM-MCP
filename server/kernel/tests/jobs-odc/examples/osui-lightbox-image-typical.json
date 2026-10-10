@@ -1,0 +1,24 @@
+{
+ "description": "LightboxImage do OSUI por linha: a foto do produto abre ampliada, com titulo, grupo comum (navegacao entre fotos) e zoom.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [{"name": "Name", "type": "Text", "length": 100, "mandatory": true}, {"name": "Price", "type": "Currency"}, {"name": "ImageUrl", "type": "Text", "length": 500}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductGalleryZoom", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Photos\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$GetProducts"},
+  {"op": "create", "parent": "$GetProducts", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "PhotoList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetProducts.List"},
+  {"op": "create", "parent": "$list", "type": "IMobileBlockInstanceWidget", "name": "ProductLightbox", "source": "IMobileBlock:LightboxImage", "as": "$lb"},
+  {"op": "set", "target": "$lb/ImageURL", "prop": "Value", "value": "GetProducts.List.Current.Product.ImageUrl"},
+  {"op": "set", "target": "$lb/Title", "prop": "Value", "value": "GetProducts.List.Current.Product.Name"},
+  {"op": "set", "target": "$lb/Group", "prop": "Value", "value": "\"products\""},
+  {"op": "set", "target": "$lb/ImageZoom", "prop": "Value", "value": "3"},
+  {"op": "set", "target": "$lb/Thumbnail/#IImage", "prop": "Type", "value": "External"},
+  {"op": "set", "target": "$lb/Thumbnail/#IImage", "prop": "Url", "value": "GetProducts.List.Current.Product.ImageUrl"}
+ ]
+}

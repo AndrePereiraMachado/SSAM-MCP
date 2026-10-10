@@ -1,0 +1,23 @@
+{
+ "_leia": "No autor, 'proposta' conta como aplicavel: o achado nao bloqueia (exit 0).",
+ "stage": "job",
+ "mode": "autor",
+ "module": "Domain_CS",
+ "jobs": [
+  "l6-json-text-param.json"
+ ],
+ "exceptions": "exc-proposta.exceptions.json",
+ "configOverride": {
+  "approvers": [
+   "autoteste"
+  ]
+ },
+ "exitCode": 0,
+ "mustFind": [
+  {
+   "rule": "L6",
+   "contains": "SummaryJson",
+   "excepted": true
+  }
+ ]
+}

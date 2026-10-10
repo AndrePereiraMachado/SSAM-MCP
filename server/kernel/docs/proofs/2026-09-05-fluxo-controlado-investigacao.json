@@ -1,0 +1,382 @@
+{
+  "date": "2026-09-05",
+  "scope": "Source investigation and read-only queries against existing local snapshots; no live Studio calls, builds or publication. apply executed only get/find operations and saved separate inspection copies.",
+  "head": "a0491778d7ed754bfabe688c5d0fcf6ace4614e3",
+  "historicalReceipts": [
+    {
+      "id": "a0b7d44688a44c62842f3af690f622f7",
+      "sha256": "02264e832190cccd06fd6b509e57a598d0990669e5d1f18a52b1240e05881519",
+      "stage": "checks",
+      "delivered": false,
+      "merged": true,
+      "mergeReason": null,
+      "elapsedMs": 5396,
+      "applyDataChecks": 361,
+      "deliveredDataChecks": null,
+      "error": "merge kept for review: requested element 'IX_Incident_StatusId' was not found"
+    },
+    {
+      "id": "b53b1cd48c9449df9eb05d099b72323a",
+      "sha256": "eb4cd8b5b5d507d2e77c5a6b0e76447cd49d1d762b1f41a373fbfad689cb050f",
+      "stage": "apply",
+      "delivered": false,
+      "merged": null,
+      "mergeReason": null,
+      "elapsedMs": 5033,
+      "applyDataChecks": 361,
+      "deliveredDataChecks": null,
+      "error": "job rejected by validation contract; merge was not attempted"
+    },
+    {
+      "id": "916cbec5fc0441cfa1260637d08bfd0c",
+      "sha256": "76929276fa83736017997252be8c2db0e1d98314b81f7fa20a45630426e0b7fc",
+      "stage": "complete",
+      "delivered": true,
+      "merged": false,
+      "mergeReason": "no differences",
+      "elapsedMs": 3948,
+      "applyDataChecks": 0,
+      "deliveredDataChecks": null,
+      "error": null
+    },
+    {
+      "id": "1141cd9976ad4dd09175ebd1e471967a",
+      "sha256": "ea5d3d9bd39e221d3bbb939bfb204e40bac2c8b9f6ca2694a763a0db35877ac8",
+      "stage": "data-proof",
+      "delivered": false,
+      "merged": true,
+      "mergeReason": null,
+      "elapsedMs": 8560,
+      "applyDataChecks": 93,
+      "deliveredDataChecks": 93,
+      "error": "Merge kept for review: delivered data differs from the job; inspect dataProof.differences"
+    }
+  ],
+  "confirmedListFalsePositives": [
+    {
+      "field": "Comments",
+      "states": [
+        {
+          "snapshot": "foreign.oml",
+          "sha256": "aa8a7d07f42265b0273a783228bf44f04cfbacd1b03d6cff4f020e462c0ff8ba",
+          "inputUnchanged": true,
+          "attributeKey": "YjKdXFUWeUOUmIKH3+zXrw",
+          "typeKind": "IListType",
+          "listKey": "OuznK3X7lEOJgQnsWmdywQ",
+          "listGlobalKey": "2UmDmepsh0WSfJ_D1JexCA*wOKhdBCPPDvF4f0IGeAlwA",
+          "elementKind": "IServerEntity",
+          "elementKey": "FPcXBjXl6UGSGE0WXrrl5Q",
+          "elementGlobalKey": "QnnqNFUBkkSC2CwErHWZMw*FPcXBjXl6UGSGE0WXrrl5Q",
+          "elementName": "IncidentComment"
+        },
+        {
+          "snapshot": "delivered.oml",
+          "sha256": "7c9d8b3be74b2cf0ca47fbddabc65f7d39a172e43d1e282e4a2d2457dab0bc0d",
+          "inputUnchanged": true,
+          "attributeKey": "YjKdXFUWeUOUmIKH3+zXrw",
+          "typeKind": "IListType",
+          "listKey": "+sZ1HzRLXkyVF6Ku4g3hMQ",
+          "listGlobalKey": "2UmDmepsh0WSfJ_D1JexCA*wOKhdBCPPDvF4f0IGeAlwA",
+          "elementKind": "IServerEntity",
+          "elementKey": "FPcXBjXl6UGSGE0WXrrl5Q",
+          "elementGlobalKey": "QnnqNFUBkkSC2CwErHWZMw*FPcXBjXl6UGSGE0WXrrl5Q",
+          "elementName": "IncidentComment"
+        }
+      ],
+      "sameElementIdentity": true,
+      "differentListKey": true
+    },
+    {
+      "field": "History",
+      "states": [
+        {
+          "snapshot": "foreign.oml",
+          "sha256": "aa8a7d07f42265b0273a783228bf44f04cfbacd1b03d6cff4f020e462c0ff8ba",
+          "inputUnchanged": true,
+          "attributeKey": "LiTeM0qUok+nzuD0bu0IYQ",
+          "typeKind": "IListType",
+          "listKey": "JQEh5UHue0Oi8hfMbCUI7g",
+          "listGlobalKey": "2UmDmepsh0WSfJ_D1JexCA*1RKv+WYoDKpJsSVBPZgc6Q",
+          "elementKind": "IServerEntity",
+          "elementKey": "g2shNlA5gEG314VVGtyUGA",
+          "elementGlobalKey": "QnnqNFUBkkSC2CwErHWZMw*g2shNlA5gEG314VVGtyUGA",
+          "elementName": "IncidentHistory"
+        },
+        {
+          "snapshot": "delivered.oml",
+          "sha256": "7c9d8b3be74b2cf0ca47fbddabc65f7d39a172e43d1e282e4a2d2457dab0bc0d",
+          "inputUnchanged": true,
+          "attributeKey": "LiTeM0qUok+nzuD0bu0IYQ",
+          "typeKind": "IListType",
+          "listKey": "Mh4jrOAKq02gEUdFJcErLg",
+          "listGlobalKey": "2UmDmepsh0WSfJ_D1JexCA*1RKv+WYoDKpJsSVBPZgc6Q",
+          "elementKind": "IServerEntity",
+          "elementKey": "g2shNlA5gEG314VVGtyUGA",
+          "elementGlobalKey": "QnnqNFUBkkSC2CwErHWZMw*g2shNlA5gEG314VVGtyUGA",
+          "elementName": "IncidentHistory"
+        }
+      ],
+      "sameElementIdentity": true,
+      "differentListKey": true
+    }
+  ],
+  "indexProbe": {
+    "file": "C:\\Users\\andre\\Anvil\\.local\\work\\deliver\\b53b1cd48c9449df9eb05d099b72323a\\base.oml",
+    "sha256": "4f356d8fb564a15c5288dec6967320d5c8bec56d0c1ad97af3b9bc3903b76c6d",
+    "inputUnchanged": true,
+    "ok": true,
+    "error": null,
+    "results": [
+      {
+        "op": "get",
+        "result": {
+          "type": "EntityIndex",
+          "name": "IX_Incident_StatusId",
+          "key": "ThbkZLBioEOSN+2b4koIdQ",
+          "properties": {
+            "Unique": false,
+            "Entity": "Incident",
+            "Attributes": [
+              "StatusId"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "codeEvidence": [
+    {
+      "file": "src/Anvil.Core/Delivery/Delivery.cs",
+      "sha256": "9fa2e3dc8c162ca73749902b52c525cec69079372396650275e92f0045baba40",
+      "anchors": {
+        "public static JsonObject Run": [
+          12
+        ],
+        "Guid.NewGuid": [
+          17
+        ],
+        "var assertions =": [
+          54
+        ],
+        "bridge.Call(\"merge_from_oml\"": [
+          59
+        ],
+        "stage = \"checks\"": [
+          77
+        ],
+        "stage = \"data-proof\"": [
+          85
+        ],
+        "File.WriteAllText": [
+          108
+        ]
+      }
+    },
+    {
+      "file": "src/Anvil.Core/Delivery/DeliveryReceipt.cs",
+      "sha256": "6e1db7a0b4d6ea826ee20afc422cdb11cbf2b4457a9700731a486bc10dec4c61",
+      "anchors": {
+        "public static JsonObject Check": [
+          38
+        ]
+      }
+    },
+    {
+      "file": "src/Anvil.Core/Delivery/SnapshotRegistry.cs",
+      "sha256": "f31979e4524a969a66384e5380698b8e6f7e6f6df384d6971e4622708b658d44",
+      "anchors": {
+        "private readonly Dictionary": [
+          9
+        ],
+        "RequireBase": [
+          17
+        ],
+        "RequireSince": [
+          24
+        ]
+      }
+    },
+    {
+      "file": "src/Anvil.Core/Kernel/DataAssertions.cs",
+      "sha256": "791102590a85e672356a874ffc8f39d0886b93d34390218e86f781df145f17ae",
+      "anchors": {
+        "private void RememberData": [
+          11
+        ],
+        "IObjectSignature sig =>": [
+          43
+        ],
+        "public JsonObject CheckDataContract": [
+          61
+        ]
+      }
+    },
+    {
+      "file": "src/Anvil.Core/Kernel/SpecExpander.cs",
+      "sha256": "409fc027a28520753a242b21452e3c112647ba4d27288f38a448de3f726fd08d",
+      "anchors": {
+        "public static List<JsonObject> Expand": [
+          42
+        ]
+      }
+    },
+    {
+      "file": "src/Anvil.Core/Kernel/JobRunner.cs",
+      "sha256": "ffac2d1c5ec5b253d61fa833171907f43b49148df0326145838efb8f7c0e4e9b",
+      "anchors": {
+        "var dataContract =": [
+          52
+        ],
+        "public static void CheckJobName": [
+          100
+        ]
+      }
+    },
+    {
+      "file": "src/Anvil.Core/Adapters.SS11/EntityIndexes.cs",
+      "sha256": "6c0b891c0e39508975271bb2603aa11f131675ed748668082463af09c2254ded",
+      "anchors": {
+        "public static IEnumerable<IObjectSignature> IncludeNative": [
+          42
+        ]
+      }
+    },
+    {
+      "file": "src/Anvil.Bridge/Reads.cs",
+      "sha256": "bc599db2f7cb21781bbb9a591711f4e90e0e27faea5361738bc44d23b6cad69c",
+      "anchors": {
+        "public static Task<string> ActiveModule": [
+          12
+        ],
+        "public static Task<string> Find": [
+          72
+        ]
+      }
+    },
+    {
+      "file": "src/Anvil.Bridge/MergeHandler.cs",
+      "sha256": "b51f6ae3d737eeeb17d349dc8109fa5593d975d83f98c3b249f405f4c2f2af59",
+      "anchors": {
+        "allow_foreign_base": [
+          71
+        ],
+        "if (mode == \"dialog\")": [
+          77
+        ],
+        "CompareAndMergeCommands.CompareAndMerge(aggregator": [
+          142
+        ],
+        "var after = ReadMessages": [
+          146
+        ]
+      }
+    },
+    {
+      "file": "src/Anvil.Bridge/Server.cs",
+      "sha256": "c8860bcdca59e9fd4759bb66479ba8271cd989eaf0a385547722f5d0867f483f",
+      "anchors": {
+        "new TcpListener": [
+          37
+        ],
+        "Task.Run(() => Serve": [
+          43
+        ],
+        "Dispatch.Handle": [
+          71
+        ]
+      }
+    },
+    {
+      "file": "src/Anvil.Bridge/Dispatch.cs",
+      "sha256": "c398749833185fd94d1870ca7e256dfedf285a87a1104cf8b56b2ff23454f537",
+      "anchors": {
+        "Handle(string method": [
+          9
+        ]
+      }
+    },
+    {
+      "file": "src/Anvil.Cli/Program.cs",
+      "sha256": "4267e464e30b3740712da5491fe67d81dc5ec491db96cf31a598839e2a7068e6",
+      "anchors": {
+        "private static object? Dispatch": [
+          128
+        ],
+        "private static HeadlessSession Session": [
+          220
+        ],
+        "private static object DeliverCmd": [
+          545
+        ]
+      }
+    },
+    {
+      "file": "src/Anvil.Core/Hosting/WorkerServer.cs",
+      "sha256": "10fd38a8b52b24e9824b61e1142311845b9083ffbd454dceb62cc53793f71220",
+      "anchors": {
+        "private readonly BlockingCollection": [
+          15
+        ],
+        "private void Work": [
+          129
+        ]
+      }
+    },
+    {
+      "file": "src/Anvil.Core/Adapters.SS11/BridgeClient.cs",
+      "sha256": "cecb34798c72947548037ee123dd9fa7739795881a3a357f9a88bbfb7ca1bf33",
+      "anchors": {
+        "writer.WriteLine": [
+          18
+        ],
+        "reader.ReadLine": [
+          19
+        ]
+      }
+    },
+    {
+      "file": "src/Anvil.Core/Adapters.SS11/HeadlessSession.cs",
+      "sha256": "1b1cc3a57495cd18ea8c7e67c9b48d2b1e761383c7d900129e6cc0a5bd157709",
+      "anchors": {
+        "public void RequireWrite": [
+          33
+        ]
+      }
+    },
+    {
+      "file": "scripts/anvil_cli.py",
+      "sha256": "f332c40b12dfcd10dcc73a4e747dbd1264c33ff67748eaa9f80f79a6c59898eb",
+      "anchors": {
+        "use_worker =": [
+          104
+        ],
+        "execution outcome is unknown": [
+          117
+        ]
+      }
+    },
+    {
+      "file": "scripts/proof_cycles.py",
+      "sha256": "8e7b5b77c576bb8bceaeda2712efe5ca1dabcdb19c663e909e0d84729230842d",
+      "anchors": {
+        "allow_foreign_base=True": [
+          88
+        ]
+      }
+    },
+    {
+      "file": "scripts/proof_merge.py",
+      "sha256": "88a4434949bffc6ede9c31adc5fb1a2edad43d0be7f464e9a5324e22f8c4368c",
+      "anchors": {
+        "if args.publish:": [
+          66
+        ]
+      }
+    }
+  ],
+  "limitations": [
+    "Historical snapshots do not certify the current Incidents_CS state.",
+    "No workflow implementation or full test suite run in this investigation.",
+    "No claim of authentication or business-rule correctness from platform Verify."
+  ]
+}

@@ -1,0 +1,12 @@
+{
+ "ok": false,
+ "lane": "o11",
+ "verb": "job",
+ "exitCode": 1,
+ "output": [
+  "result: <fixtures>\\o11-verb-unknown-key.result.json",
+  "== verb-unknown-key.json: ok=False op #0 (create Probe): InvalidOperationException: create: unknown key(s) 'bogus'; required: parent, type; optional: name, args, as, source, empty (api --op verbs)",
+  "   via process | 2707 ms de parede"
+ ],
+ "laneFrom": "--lane"
+}

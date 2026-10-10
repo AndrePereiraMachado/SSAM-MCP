@@ -1,0 +1,221 @@
+#nullable enable
+using System;
+using System.Collections.Generic;
+
+// Standalone business examples authored without consulting translator capabilities.
+public static class ColdReferenceJournal
+{
+    private sealed class Entry
+    {
+        public int Amount;
+        public string? Caption;
+    }
+
+    private sealed class Journal
+    {
+        public Entry Current = new Entry();
+        public Entry Previous = new Entry();
+        public List<Entry> Entries = new List<Entry>();
+        public List<int> Values = new List<int>();
+    }
+
+    private sealed class Position
+    {
+        public int Index;
+    }
+
+    public static string AliasCharge(int seed, int delta, bool independent)
+    {
+        Entry first = new Entry { Amount = seed };
+        Entry second = independent ? new Entry { Amount = seed } : first;
+        ChargeBoth(first, second, delta);
+        return first.Amount + "/" + second.Amount;
+    }
+
+    private static void ChargeBoth(Entry first, Entry second, int delta)
+    {
+        first.Amount += delta;
+        second.Amount += first.Amount;
+    }
+
+    public static string InitializerSharing(int seed, int delta)
+    {
+        Entry shared = new Entry { Amount = seed, Caption = "opening" };
+        Journal journal = new Journal
+        {
+            Current = shared,
+            Previous = shared,
+            Entries = new List<Entry>
+            {
+                shared,
+                new Entry { Amount = seed, Caption = shared.Caption },
+                shared
+            }
+        };
+        ChargeRows(journal.Entries, journal.Current, delta);
+        return journal.Current.Amount + "/" + journal.Previous.Amount + "/"
+            + journal.Entries[0].Amount + "/" + journal.Entries[1].Amount + "/"
+            + journal.Entries[2].Amount;
+    }
+
+    private static void ChargeRows(List<Entry> rows, Entry entry, int delta)
+    {
+        rows[1].Amount += delta;
+        entry.Amount += rows[1].Amount;
+        rows[2].Amount += delta;
+    }
+
+    public static string SharedListInsert(int seed, int added, bool independent)
+    {
+        List<int> first = new List<int> { seed, seed + 1 };
+        List<int> second = independent ? new List<int>(first) : first;
+        AppendAndShift(first, second, added);
+        return first.Count + ":" + first[0] + ":" + first[first.Count - 1]
+            + "/" + second.Count + ":" + second[0] + ":" + second[second.Count - 1];
+    }
+
+    private static void AppendAndShift(List<int> first, List<int> second, int added)
+    {
+        first.Add(added);
+        second[0] += first.Count;
+    }
+
+    public static string RebindParameter(int seed, int next, int replacement)
+    {
+        Entry original = new Entry { Amount = seed };
+        Entry alias = original;
+        RebindEntry(alias, next, replacement);
+        return original.Amount + "/" + alias.Amount;
+    }
+
+    private static void RebindEntry(Entry entry, int next, int replacement)
+    {
+        entry.Amount = next;
+        entry = new Entry { Amount = replacement };
+        entry.Amount += 1;
+    }
+
+    public static string CaptureFieldReceiver(int seed, int rightHandValue)
+    {
+        Entry original = new Entry { Amount = seed };
+        Entry replacement = new Entry { Amount = seed + 100 };
+        Journal journal = new Journal { Current = original, Previous = replacement };
+        journal.Current.Amount = SwapAndReturn(journal, rightHandValue);
+        return original.Amount + "/" + replacement.Amount + "/" + journal.Current.Amount;
+    }
+
+    private static int SwapAndReturn(Journal journal, int value)
+    {
+        journal.Current = journal.Previous;
+        journal.Current.Amount += 1;
+        return value;
+    }
+
+    public static string CaptureListReceiver(int seed, int replacement, bool reject)
+    {
+        List<int> original = new List<int> { seed, seed + 1 };
+        Journal journal = new Journal { Values = original };
+        journal.Values[0] = ReplaceListAndReturn(journal, replacement, reject);
+        return original[0] + "/" + original[1] + "/" + journal.Values[0] + "/" + journal.Values[1];
+    }
+
+    private static int ReplaceListAndReturn(Journal journal, int value, bool reject)
+    {
+        journal.Values = new List<int> { value, value + 1 };
+        if (reject)
+            throw new InvalidOperationException("List replacement refused: " + value);
+        return value + 10;
+    }
+
+    public static string CaptureIndex(int first, int second, int nextIndex, int value)
+    {
+        List<int> values = new List<int> { first, second, first + second };
+        Position position = new Position { Index = 0 };
+        values[position.Index] = MoveAndReturn(position, nextIndex, value);
+        return values[0] + "/" + values[1] + "/" + values[2] + "/" + position.Index;
+    }
+
+    private static int MoveAndReturn(Position position, int nextIndex, int value)
+    {
+        position.Index = nextIndex;
+        return value;
+    }
+
+    public static string CaptureCompoundReceiver(int seed, int delta, bool reject)
+    {
+        Entry original = new Entry { Amount = seed };
+        Journal journal = new Journal { Current = original };
+        journal.Current.Amount += MutateAndSwap(journal, delta, reject);
+        return original.Amount + "/" + journal.Current.Amount;
+    }
+
+    private static int MutateAndSwap(Journal journal, int delta, bool reject)
+    {
+        journal.Current.Amount += 100;
+        journal.Current = new Entry { Amount = 2000 };
+        if (reject)
+            throw new ApplicationException("Compound charge refused: " + delta);
+        return delta;
+    }
+
+    public static string TextSlots(string? initial, string? updated, bool independent)
+    {
+        Entry first = new Entry { Caption = initial };
+        Entry second = independent ? new Entry { Caption = initial } : first;
+        List<string?> captions = new List<string?> { first.Caption, "", null };
+        RewriteCaption(second, captions, updated);
+        return Describe(first.Caption) + "/" + Describe(second.Caption) + "/"
+            + Describe(captions[0]) + "/" + Describe(captions[1]) + "/"
+            + Describe(captions[2]) + "/" + Describe(captions[3]);
+    }
+
+    private static void RewriteCaption(Entry entry, List<string?> captions, string? text)
+    {
+        entry.Caption = text;
+        captions.Add(entry.Caption);
+        captions[0] = entry.Caption;
+    }
+
+    private static string Describe(string? text)
+    {
+        if (text == null)
+            return "null";
+        if (text.Length == 0)
+            return "empty";
+        return "text:" + text.Length + ":" + text;
+    }
+
+    public static string RejectSharedEdit(int seed, int adjustment, bool reject)
+    {
+        Entry shared = new Entry { Amount = seed };
+        List<Entry> entries = new List<Entry> { shared, shared };
+        EditSharedRows(entries, adjustment, reject);
+        return shared.Amount + "/" + entries[0].Amount + "/" + entries[1].Amount;
+    }
+
+    private static void EditSharedRows(List<Entry> entries, int adjustment, bool reject)
+    {
+        entries[0].Amount += adjustment;
+        if (reject)
+            throw new ArgumentOutOfRangeException("adjustment", adjustment, "Journal adjustment rejected");
+        entries[1].Amount += entries[0].Amount;
+    }
+
+    public static string AliasRemoval(int seed, int delta, bool independent)
+    {
+        Entry first = new Entry { Amount = seed };
+        Entry second = independent ? new Entry { Amount = seed } : first;
+        List<Entry> entries = new List<Entry> { first, second };
+        List<Entry> listAlias = entries;
+        Entry removedAlias = entries[0];
+        RemoveAndCharge(listAlias, removedAlias, delta);
+        return entries.Count + "/" + first.Amount + "/" + second.Amount + "/" + entries[0].Amount;
+    }
+
+    private static void RemoveAndCharge(List<Entry> entries, Entry removed, int delta)
+    {
+        entries.RemoveAt(0);
+        removed.Amount += delta;
+        entries[0].Amount += 2;
+    }
+}

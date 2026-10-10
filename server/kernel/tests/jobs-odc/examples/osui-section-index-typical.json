@@ -1,0 +1,28 @@
+{
+ "description": "SectionIndex do OSUI: dois SectionIndexItem que rolam ate dois Containers da tela pelo Id do widget (SectionA.Id).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "HelpCenter", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Help center\""},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "SectionIndex1", "source": "IMobileBlock:SectionIndex", "empty": true, "as": "$si"},
+  {"op": "set", "target": "$si/IsFixed", "prop": "Value", "value": "True"},
+  {"op": "create", "parent": "$si/Content", "type": "IMobileBlockInstanceWidget", "name": "ShippingItem", "source": "IMobileBlock:SectionIndexItem", "as": "$i1"},
+  {"op": "create", "parent": "$i1/Content", "type": "ITextWidget", "as": "$text1"},
+  {"op": "set", "target": "$text1", "prop": "Text", "value": "Shipping"},
+  {"op": "create", "parent": "$si/Content", "type": "IMobileBlockInstanceWidget", "name": "ReturnsItem", "source": "IMobileBlock:SectionIndexItem", "as": "$i2"},
+  {"op": "create", "parent": "$i2/Content", "type": "ITextWidget", "as": "$text2"},
+  {"op": "set", "target": "$text2", "prop": "Text", "value": "Returns"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "SectionA", "as": "$secA"},
+  {"op": "create", "parent": "$secA", "type": "ITextWidget", "as": "$text3"},
+  {"op": "set", "target": "$text3", "prop": "Text", "value": "Shipping takes 3 days."},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "SectionB", "as": "$secB"},
+  {"op": "create", "parent": "$secB", "type": "ITextWidget", "as": "$text4"},
+  {"op": "set", "target": "$text4", "prop": "Text", "value": "Returns are free for 30 days."},
+  {"op": "set", "target": "$i1/ScrollToWidgetId", "prop": "Value", "value": "SectionA.Id", "_why": "o Id de um widget com nome le-se <Nome>.Id"},
+  {"op": "set", "target": "$i2/ScrollToWidgetId", "prop": "Value", "value": "SectionB.Id"}
+ ]
+}

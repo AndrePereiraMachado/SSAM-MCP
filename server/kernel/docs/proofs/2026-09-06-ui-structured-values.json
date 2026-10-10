@@ -1,0 +1,117 @@
+{
+  "date": "2026-09-06",
+  "scope": "Inferred local record and array state in HTML/CSS/JS components",
+  "status": "implemented, live proven and compiler/workers installed in SS4 and SS5",
+  "source": "tests/html/components/values.html",
+  "delivery": {
+    "taskId": "7d2034f74a254b8a84d187f5d9bacfa6",
+    "module": "ZZHtmlImports_UI",
+    "delivered": true,
+    "elapsedMs": 17039,
+    "newErrors": 0,
+    "unchanged": false
+  },
+  "assertions": 703,
+  "publication": {
+    "module": "ZZHtmlImports_UI",
+    "published": true,
+    "lastUploadDateTime": "2026-09-06T14:02:16",
+    "state": null,
+    "isValid": true,
+    "elapsedMs": 9977
+  },
+  "browser": {
+    "checks": [
+      "native initialization precedes authored onInitialize",
+      "large text identifiers preserved exactly",
+      "nested primitive arrays round trip",
+      "map/spread/nested field edits persist across native actions",
+      "block instances retain independent state",
+      "empty runtime arrays survive later handlers without affecting the other instance",
+      "390px without horizontal overflow"
+    ],
+    "errors": [],
+    "ok": true
+  },
+  "emittedJavaScript": {
+    "ok": true,
+    "rejectedValues": 16,
+    "checks": [
+      "actual generated JavaScript executed",
+      "nested value round trip",
+      "exact text identifiers",
+      "empty array output",
+      "invalid values rejected",
+      "unchanged list identity retained",
+      "expression captures immutable",
+      "native writes follow all decodes"
+    ]
+  },
+  "tests": {
+    "focusedBeforeFinalCodecGuard": 60,
+    "valueTestsAfterFinalCodecGuard": 8,
+    "regression": {
+      "passed": 657,
+      "failed": 0,
+      "skipped": 0,
+      "duration": "46m13s",
+      "trx": "tests/Anvil.Tests/TestResults/ui-values-regression.trx"
+    }
+  },
+  "limitations": [
+    "initially empty arrays and records require a type annotation that is not implemented",
+    "composite inputs/events and imported type codecs are pending",
+    "no keyed list reconciliation in the frontend",
+    "no async source lowering",
+    "product Dashboard not migrated",
+    "no exact decimal arithmetic guarantee",
+    "structured values cross handler boundaries by value; shared JavaScript references are not preserved"
+  ],
+  "dependenciesAdded": [],
+  "applyTimings": {
+    "loadMs": 584,
+    "verifyBeforeMs": 1,
+    "applyMs": 1935,
+    "verifyAfterMs": 0,
+    "describeMs": 37,
+    "detailsMs": 118,
+    "saveMs": 667,
+    "releaseMs": 3,
+    "totalMs": 3349
+  },
+  "checkDeliveryAccepted": true,
+  "installations": {
+    "ss4": {
+      "coreSha256": "0a8db4e3308f19d8273faaa694d0a07fb08ac8e25b19ac1d5a400b1a67634855",
+      "cliSha256": "bca7491ec1634d47c4982c4bea757a3dd788b54ca6278c29af3923274ad59a04",
+      "workerPort": 4517,
+      "workerPid": 60976,
+      "updated": true,
+      "apiReadAccepted": true,
+      "guiRestarted": false
+    },
+    "ss5": {
+      "coreSha256": "0a8db4e3308f19d8273faaa694d0a07fb08ac8e25b19ac1d5a400b1a67634855",
+      "cliSha256": "bca7491ec1634d47c4982c4bea757a3dd788b54ca6278c29af3923274ad59a04",
+      "workerPort": 4537,
+      "workerPid": 14664,
+      "updated": true,
+      "apiReadAccepted": true,
+      "guiRestarted": false
+    },
+    "normalSs5": {
+      "taskId": "ad224ff2a5ea4d7683e42d383e5080cd",
+      "delivered": true,
+      "unchanged": true,
+      "elapsedMs": 15701,
+      "newErrors": 0,
+      "assertions": 703,
+      "checkDeliveryAccepted": true,
+      "via": "worker"
+    }
+  },
+  "notes": [
+    "SS4 worker update waited until its existing delivery released the worker; no GUI restart in this stage",
+    "The screen coverage cases are temporary headless test modules, not published pages"
+  ]
+}

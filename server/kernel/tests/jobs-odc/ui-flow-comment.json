@@ -1,0 +1,33 @@
+{
+ "description": "ODC: o Comment do canvas de um fluxo de UI (IMobileFlow) — a nota que o autor cola ao lado das telas para explicar o desenho. E um IMobileFlowNode de pleno direito, nao um widget: mora no FLUXO, nunca dentro de uma tela. Quatro coisas que so o modelo real ensina e que este job prova: (1) o tipo tem de vir QUALIFICADO, OutSystems.Model.UI.Mobile.IComment, porque o nome nu IComment empata com OutSystems.Model.UI.Web.IComment no Rank 2 do FindCreateCore (Verbs.cs:877-880); (2) nao se chama layout (AGENTS.md:247 limita-o a action/preparation/processo) porque a posicao ja vem de .AtDefaultPosition(), em IMobileFlow.CreateNode<T> (NRFlows.cs:1257); (3) o Comment NAO tem nome — o name do create e descartado, o get devolve name=null e o DisplayName do objeto passa a ser o proprio texto; (4) a propriedade da interface e Text (IComment.cs:32), e o Comment que aparece no get e a MESMA gaveta vista pela classe concreta unica (ServiceStudio.Model.Nodes+Comment, a que serve tambem o no de BPT), nao uma segunda propriedade. O que a plataforma preenche sozinha: CreatedBy, LastModifiedBy e LastModifiedDate com a identidade de quem esta a editar, e uma posicao de omissao. O que NAO acompanha: essa posicao e a MESMA para todos os comentarios do fluxo (o segundo nasce em cima do primeiro), por isso quem quer duas notas legiveis tem de as separar com move x/y — e o conector que liga a nota a uma tela (Connectors continua 0 nos dois gets).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "Reminder",
+   "element": "MainFlow (MobileFlow) / Comment",
+   "why": "Marcar IsReminder=true faz a plataforma emitir uma mensagem 'Reminder' no TrueChange com o texto do proprio comentario: e para isso que a caixa serve, e e exatamente o que este job prova. O comentario com IsReminder=false nao emite nada. Nao e defeito do job: e o significado da propriedade."
+  }
+ ],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "OutSystems.Model.UI.Mobile.IComment", "name": "WfFlowNote", "as": "$note",
+   "_why": "nome QUALIFICADO: o nu IComment casa tambem com OutSystems.Model.UI.Web.IComment e os dois empatam em Rank 2 (Verbs.cs:877-880). O name 'WfFlowNote' vai ser DESCARTADO: o get adiante mostra name=null"},
+  {"op": "set", "target": "$note", "prop": "Text", "value": "Prova ODC: comentario no canvas do fluxo de UI",
+   "_why": "a propriedade da interface UI.Mobile e Text; e tambem o que passa a ser o DisplayName do objeto, ja que o Comment nao tem nome"},
+  {"op": "get", "target": "$note",
+   "_why": "prova o estado por omissao: name=null, IsReminder=False, Connectors=0, posicao ja dada por .AtDefaultPosition() (NRFlows), e CreatedBy/LastModifiedBy/LastModifiedDate preenchidos pela plataforma sem nenhum set. Mostra Text e Comment com o MESMO valor: uma gaveta, dois nomes"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "OutSystems.Model.UI.Mobile.IComment", "as": "$reminder",
+   "_why": "segundo comentario no mesmo fluxo, para provar que IsReminder=true e uma escrita de verdade e nao o valor por omissao do primeiro"},
+  {"op": "set", "target": "$reminder", "prop": "Text", "value": "Prova ODC: este comentario esta marcado como Is Reminder"},
+  {"op": "set", "target": "$reminder", "prop": "IsReminder", "value": true,
+   "_why": "booleana recebe JSON (true), nao texto de expressao OutSystems"},
+  {"op": "get", "target": "$reminder",
+   "_why": "IsReminder=True no modelo. E a armadilha: a posicao por omissao deste e EXATAMENTE a do primeiro (3196,800) — .AtDefaultPosition() nao empilha nada, poe todos os comentarios no mesmo ponto, sobrepostos"},
+  {"op": "move", "target": "$reminder", "x": 3196, "y": 1040,
+   "_why": "o unico jeito de separar comentarios no canvas: move com x/y, que e so desenho. Nao ha aqui nada para o layout fazer — o layout arruma os nos de UM fluxo de logica (AGENTS.md:247) e nao o canvas de um fluxo de UI. O proprio resultado do move devolve a posicao que ficou"},
+  {"op": "get", "target": "$reminder",
+   "_why": "confirma no modelo que HorizontalPosition/VerticalPosition sao agora (3196,1040) e que nada mais mudou"},
+  {"op": "dump", "target": "IMobileFlow:MainFlow", "depth": 1,
+   "_why": "os dois comentarios aparecem como filhos do FLUXO, ao lado das telas, e nao dentro de nenhuma"}
+ ]
+}

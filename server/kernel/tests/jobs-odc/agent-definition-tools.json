@@ -1,0 +1,25 @@
+{
+ "description": "ODC (contexto: agent definition). O manifesto de agente (IAgentManifest) e as suas ferramentas so existem num modulo AgentDefinition: a plataforma cria o manifesto com o modulo (create-blank --kind AgentDefinition) e ele nasce invalido ate ter AI model e instrucoes. A fixture traz conexoes offline de AI model, MCP e knowledge base (--connection), e a ferramenta de service action usa a app produtora (blank-mobile-producer.oml), porque um AgentDefinition nao cria server actions ('Server Action can't be created in AgentDefinition runtime kind'). A ferramenta de evento fica em tests/jobs-coverage/f2-ctx/agent-definition-event-tool.json (um evento referenciado sem handler avisa UnusedReferenceGlobalEvent, id so do ODC que expectedMessages ainda nao aceita); a de external library fica de fora: a sua Action vem de uma external library, que nao se constroi offline.",
+ "base": "tests/fixtures/odc/blank-agent-definition.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "reference", "producer": "tests/fixtures/odc/blank-mobile-producer.oml", "elements": ["IServiceAction:CovSService"]},
+  {"op": "get", "target": "IAgentManifest:CovBlankAgentDefinition", "_why": "o manifesto ja existe: e a plataforma que o cria com o modulo"},
+  {"op": "set", "target": "IAgentManifest:CovBlankAgentDefinition", "prop": "GoalsAndInstructions", "value": "Responder com o que as ferramentas devolvem."},
+  {"op": "set", "target": "IAgentManifest:CovBlankAgentDefinition", "prop": "AIModel", "value": "IServerActionSignature:CovAIModel",
+   "_why": "as duas propriedades que o modulo em branco deixa por preencher (RequiredPropertyValue_PropertyIn): o job conserta o que veio da base"},
+  {"op": "create", "parent": "IAgentManifest:CovBlankAgentDefinition", "type": "IAIModelSetting", "name": "temperature", "as": "$temp"},
+  {"op": "set", "target": "$temp", "prop": "Value", "value": "0.2"},
+  {"op": "create", "parent": "IAgentManifest:CovBlankAgentDefinition", "type": "IMCPToolReference", "name": "CovDMcp", "as": "$mcp"},
+  {"op": "set", "target": "$mcp", "prop": "Action", "value": "IServerActionSignature:CovMCP"},
+  {"op": "create", "parent": "IAgentManifest:CovBlankAgentDefinition", "type": "IKnowledgeBaseReference", "name": "CovDKnowledge", "as": "$kb"},
+  {"op": "set", "target": "$kb", "prop": "Action", "value": "IServerActionSignature:CovKnowledge"},
+  {"op": "create", "parent": "IAgentManifest:CovBlankAgentDefinition", "type": "ISkillReference", "name": "CovDSkill", "as": "$skill"},
+  {"op": "set", "target": "$skill", "prop": "SkillResourceId", "value": "cov-skill"},
+  {"op": "set", "target": "$skill", "prop": "Version", "value": "1"},
+  {"op": "create", "parent": "IAgentManifest:CovBlankAgentDefinition", "type": "IServiceActionToolReference", "name": "CovDService", "as": "$svc"},
+  {"op": "set", "target": "$svc", "prop": "ServiceAction", "value": "IServiceActionSignature:CovSService"},
+  {"op": "dump", "target": "IAgentManifest:CovBlankAgentDefinition", "depth": 1}
+ ]
+}

@@ -1,0 +1,10 @@
+{
+ "description": "Leitura minima pelo kernel: find lista as telas do modulo e get le as propriedades de uma tela. Job so de leitura: nada muda no modulo.",
+ "base": "reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "find", "type": "IMobileScreen", "max": 50},
+  {"op": "get", "target": "IMobileScreen:Login"}
+ ]
+}

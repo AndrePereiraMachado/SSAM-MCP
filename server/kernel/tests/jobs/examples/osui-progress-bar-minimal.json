@@ -1,0 +1,10 @@
+{
+ "description": "ProgressBar (OutSystemsUI, Numbers) minimo: instancia como o Studio cria ao arrastar o bloco; inputs obrigatorios Progress com valores simples.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ProgressBarDemo", "source": "IMobileBlock:ProgressBar", "as": "$b"},
+  {"op": "set", "target": "$b/Progress", "prop": "Value", "value": "40"}
+ ]
+}

@@ -1,0 +1,24 @@
+{
+ "description": "WizardItem (OutSystemsUI, Navigation) tipico; dentro de um Wizard vazio (placeholder Content); inputs obrigatorios Status ligados a variaveis da tela; placeholders Label, Icon com dados do aggregate de tarefas; eventos OnClick tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "StatusValue", "as": "$vStatusValue"},
+  {"op": "set", "target": "$vStatusValue", "prop": "DataType", "value": "Steps Identifier"},
+  {"op": "set", "target": "$vStatusValue", "prop": "DefaultValue", "value": "Entities.Steps.Next"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "OnClickCount", "as": "$vOnClickCount"},
+  {"op": "set", "target": "$vOnClickCount", "prop": "DataType", "value": "Integer"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetShowcaseTasks", "as": "$tasks"},
+  {"op": "create", "parent": "$tasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "logic", "data": {"actions": [{"name": "WizardItemDemoOnClick", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Conta as vezes que OnClick disparou", "inputs": [],"steps": [{"assign": {"OnClickCount": "OnClickCount + 1"},"as": "KeepOnClick"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "WizardDemo", "source": "IMobileBlock:Wizard", "empty": true,"as": "$parent"},
+  {"op": "create", "parent": "$parent/Content", "type": "IMobileBlockInstanceWidget", "name": "WizardItemDemo", "source": "IMobileBlock:WizardItem", "as": "$b"},
+  {"op": "set", "target": "$b/Status", "prop": "Value", "value": "StatusValue"},
+  {"op": "set", "target": "$b/OnClick", "prop": "Handler", "value": "IScreenAction:WizardItemDemoOnClick"},
+  {"op": "create", "parent": "$b/Label", "type": "IExpression", "as": "$ph1"},
+  {"op": "set", "target": "$ph1", "prop": "Value", "value": "\"Tasks\""},
+  {"op": "create", "parent": "$b/Icon", "type": "IExpression", "as": "$ph2"},
+  {"op": "set", "target": "$ph2", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""}
+ ]
+}

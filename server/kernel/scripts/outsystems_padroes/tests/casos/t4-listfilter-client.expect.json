@@ -1,0 +1,9 @@
+{
+ "_leia": "T4: o ListFilter no cliente vira item de runtimeTests com a condicao; nenhum erro bloqueante alem dos avisos.",
+ "stage": "job",
+ "mode": "autor",
+ "module": "DomainApp",
+ "exitCode": 0,
+ "runtimeTests": 1,
+ "maxBlockingErrors": 0
+}

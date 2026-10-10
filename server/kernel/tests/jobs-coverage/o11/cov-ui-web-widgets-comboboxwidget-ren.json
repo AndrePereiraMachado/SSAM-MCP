@@ -1,0 +1,129 @@
+{
+ "description": "Cobertura testada (fase 1, medir): ren de OutSystems.Model.UI.Web.Widgets.IComboBoxWidget (o11) em uiWebFormEntity. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "entities": [
+     {
+      "name": "CovSEntity",
+      "attributes": [
+       {
+        "name": "Title",
+        "type": "Text",
+        "length": 50
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "create",
+   "parent": "IWebFlow:MainFlow",
+   "type": "IWebScreen",
+   "name": "CovSWebScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAction",
+   "name": "CovSSubmit",
+   "as": "$sa"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IStartNode",
+   "as": "$sa0"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IEndNode",
+   "as": "$sa9"
+  },
+  {
+   "op": "link",
+   "from": "$sa0",
+   "to": "$sa9"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IWebBlockInstanceWidget/MainContent",
+   "type": "IContainerWidget",
+   "name": "CovSBox",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IWebBlockInstanceWidget/MainContent",
+   "type": "IButtonWidget",
+   "name": "CovSSubmitButton",
+   "as": "$sb"
+  },
+  {
+   "op": "set",
+   "target": "$sb",
+   "prop": "Label",
+   "value": "\"Submit\""
+  },
+  {
+   "op": "set",
+   "target": "$sb/OnClick",
+   "prop": "Destination",
+   "value": "$sa"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IComboBoxWidget",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "ILocalVariable",
+   "name": "CovSId",
+   "as": "$hv"
+  },
+  {
+   "op": "set",
+   "target": "$hv",
+   "prop": "DataType",
+   "value": "CovSEntity Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Variable",
+   "value": "CovSId"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "SourceEntity",
+   "value": "IServerEntity:CovSEntity"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "SourceAttribute",
+   "value": "IServerEntity:CovSEntity/Title"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "IsMandatory",
+   "value": "False"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRComboBoxWidget"
+  }
+ ]
+}

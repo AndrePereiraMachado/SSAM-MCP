@@ -1,0 +1,11 @@
+{
+ "description": "StackedCards do OSUI: a instancia com empty (a List de exemplo do Content nasce sem Source).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "StackedCardsDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "StackedCards1", "source": "IMobileBlock:StackedCards", "empty": true, "as": "$sc"}
+ ]
+}

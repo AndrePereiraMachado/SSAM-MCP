@@ -1,0 +1,268 @@
+{
+  "date": "2026-09-05",
+  "status": "live-controller-accepted-client-llm-evaluation-pending",
+  "authorization": {
+    "userMessage": "tem minha aprovacao pode seguir",
+    "scope": "Create ZZDataContract and publish initial empty ZZDataContract_CS; run live SS5 delivery/recovery proof"
+  },
+  "target": {
+    "lane": "ss5",
+    "environment": "personal-2qqw9srv.outsystemscloud.com",
+    "application": "ZZDataContract",
+    "applicationKey": "4PLLVrjeIUOQpL7SMUEeYQ",
+    "module": "ZZDataContract_CS",
+    "moduleKey": "OaXhYvdue0ugf0vpdQf3Xg"
+  },
+  "bootstrap": {
+    "wallMs": 31049,
+    "initialModuleVersion": 4891,
+    "publishCompleted": true,
+    "publishHasErrors": false,
+    "initialObjects": 170,
+    "messages": 0
+  },
+  "initialDelivery": {
+    "controllerMs": 8941,
+    "mcpContinueWallMs": 9474,
+    "operatorFixtureWallMs": 11887,
+    "preparationByLlmIncluded": false,
+    "fixtureHadPreparedContract": true,
+    "liveLlmConversation": false,
+    "deliveryTaskId": "6df3766c6b5f4a22b081a7acdf330c21",
+    "appTaskId": "fb4890a404e149489b29b14b78928e79",
+    "operationId": "440a9c4f1a844c949bcd463656fec0b4",
+    "accepted": true,
+    "dataChecks": 365,
+    "newErrors": 0,
+    "newMessages": 0,
+    "applyTimings": {
+      "loadMs": 15,
+      "verifyBeforeMs": 0,
+      "applyMs": 620,
+      "verifyAfterMs": 0,
+      "describeMs": 1,
+      "detailsMs": 27,
+      "saveMs": 202,
+      "releaseMs": 2,
+      "totalMs": 870
+    },
+    "mergeTimings": {
+      "thread": "worker",
+      "loadForeignMs": 68,
+      "loadBaseMs": 21,
+      "matchTreeMs": 63,
+      "verifyBeforeMs": 0,
+      "compareAndMergeMs": 483,
+      "verifyAfterMs": 0
+    },
+    "initialMergeCount": 1
+  },
+  "faults": {
+    "verify-failure": {
+      "first": {
+        "mode": "verify-failure",
+        "taskId": "bc42de3934674f629eb0ddae879ffc4d",
+        "writeState": "applied",
+        "delivered": false,
+        "operationId": "4d95d579010240fca768889c36af8086",
+        "error": "IOException: Injected verifier interruption after the applied merge",
+        "proofAccepted": true,
+        "applies": 1,
+        "mergeCalls": 1,
+        "faultInjected": true,
+        "work": "C:\\Users\\andre\\Anvil\\.local\\control-flow-live\\verify-failure"
+      },
+      "resumed": {
+        "ok": true,
+        "taskId": "bc42de3934674f629eb0ddae879ffc4d",
+        "sameOperation": true,
+        "mergeRecords": 1,
+        "appliedPhases": 1,
+        "proofAccepted": true,
+        "checks": 365,
+        "newErrors": 0,
+        "elapsedMs": 4611,
+        "error": null
+      },
+      "injected": true,
+      "nativeStudioMerge": true,
+      "resumedThroughProductionCli": true,
+      "replayedCreationOrMerge": false
+    },
+    "lost-response": {
+      "first": {
+        "mode": "lost-response",
+        "taskId": "4e1ba322206c47d1a745be568f8c4261",
+        "writeState": "unknown",
+        "delivered": false,
+        "operationId": "fafce252085d4d4cb4498e7eb679c5e1",
+        "error": "IOException: Injected loss of the reply after the real native merge",
+        "proofAccepted": null,
+        "applies": 1,
+        "mergeCalls": 1,
+        "faultInjected": true,
+        "work": "C:\\Users\\andre\\Anvil\\.local\\control-flow-live\\lost-response"
+      },
+      "resumed": {
+        "ok": true,
+        "taskId": "4e1ba322206c47d1a745be568f8c4261",
+        "sameOperation": true,
+        "mergeRecords": 1,
+        "appliedPhases": 1,
+        "journalState": "applied",
+        "proofAccepted": true,
+        "checks": 365,
+        "newErrors": 0,
+        "elapsedMs": 2061,
+        "error": null
+      },
+      "injected": true,
+      "nativeStudioMerge": true,
+      "resumedThroughProductionCli": true,
+      "replayedCreationOrMerge": false
+    }
+  },
+  "mcpResumption": {
+    "mcpContinueWallMs": 1605,
+    "controllerMs": 1023,
+    "sameAppTask": true,
+    "sameDeliveryTask": true,
+    "mergeRecordsAcrossAppTask": 1,
+    "preparationSnapshotsAcrossAppTask": 1
+  },
+  "responseReduction": {
+    "beforeCharacters": 79407,
+    "afterCharacters": 1586,
+    "percent": 98.0,
+    "measurement": "Python json.dumps of structuredContent with the same serializer",
+    "fullProofRetainedInCheckpoint": true,
+    "failureDiagnosticsRetained": true
+  },
+  "finalVerification": {
+    "module": "ZZDataContract_CS",
+    "moduleKey": "OaXhYvdue0ugf0vpdQf3Xg",
+    "modified": true,
+    "requestedNames": {
+      "Category": 2,
+      "Incident": 2,
+      "IncidentComment": 2,
+      "IncidentHistory": 2,
+      "IncidentPriority": 2,
+      "IncidentStatus": 2,
+      "IX_Incident_StatusId": 1,
+      "IX_Incident_PriorityId": 1,
+      "IX_Incident_AssigneeId": 1,
+      "IX_Incident_ReporterId": 1,
+      "IX_Incident_SlaDueAt": 1,
+      "IX_Incident_CreatedAt": 1
+    },
+    "delivered": true,
+    "newErrors": 0,
+    "proofChecks": 365,
+    "taskId": "6df3766c6b5f4a22b081a7acdf330c21",
+    "operationId": "440a9c4f1a844c949bcd463656fec0b4",
+    "mergeRecords": 1,
+    "snapshotPhases": 1,
+    "receiptAccepted": true,
+    "originalAppTaskId": "fb4890a404e149489b29b14b78928e79",
+    "originalContractHash": "36c3532c76d77442d0873a91409cca44991678f6dac8108735ed0dedf7b2c051",
+    "ownedEntityCounts": {
+      "Category": 1,
+      "Incident": 1,
+      "IncidentComment": 1,
+      "IncidentHistory": 1,
+      "IncidentPriority": 1,
+      "IncidentStatus": 1
+    },
+    "nativeIndexCounts": {
+      "IX_Incident_StatusId": 1,
+      "IX_Incident_PriorityId": 1,
+      "IX_Incident_AssigneeId": 1,
+      "IX_Incident_ReporterId": 1,
+      "IX_Incident_SlaDueAt": 1,
+      "IX_Incident_CreatedAt": 1
+    },
+    "noDuplicateEntities": true,
+    "note": "Raw find includes an autogenerated record attribute with the entity name; duplicate checks filter entity kind and owning module."
+  },
+  "testSuite": {
+    "outcome": "Completed",
+    "counts": {
+      "total": "294",
+      "executed": "294",
+      "passed": "294",
+      "failed": "0",
+      "error": "0",
+      "timeout": "0",
+      "aborted": "0",
+      "inconclusive": "0",
+      "passedButRunAborted": "0",
+      "notRunnable": "0",
+      "notExecuted": "0",
+      "disconnected": "0",
+      "warning": "0",
+      "completed": "0",
+      "inProgress": "0",
+      "pending": "0"
+    },
+    "times": {
+      "creation": "2026-09-05T17:07:57.8547136-03:00",
+      "queuing": "2026-09-05T17:07:57.8547138-03:00",
+      "start": "2026-09-05T17:07:55.9448195-03:00",
+      "finish": "2026-09-05T17:10:25.6057409-03:00"
+    },
+    "trx": ".local\\control-flow-live\\results\\live-final-suite.trx",
+    "sha256": "60acd186dbcfe122c23977e8bf02dbfa3147f1479c6fa4a832fd356ff36206cb",
+    "pythonPassed": 8
+  },
+  "installation": {
+    "controllerAndWorkerUpdated": true,
+    "lane": "ss5",
+    "bridgeRestartedThisTurn": false,
+    "ss4Changed": false,
+    "note": "Only AppSessions response projection changed after the previous bridge installation; native bridge protocol/build preserved with the unsaved lab open."
+  },
+  "scopeLimits": [
+    "Only initial empty module was published. Data and metadata test merges remain unpublished in SS5.",
+    "Two extra merges changed/restored Category description to exercise fault handling; entity definitions were not recreated.",
+    "Faults were injected by a wrapper around the real bridge, then resumed in another process through the production CLI.",
+    "MCP and hooks were exercised by an operator fixture; no Codex hook trust record was fabricated.",
+    "The user still needs to review hooks and run a real LLM conversation in the restricted profile.",
+    "One prepared-contract sample is not a median or an end-to-end 1-2 minute LLM benchmark.",
+    "Action/business authorization contracts remain a separate unfinished milestone."
+  ],
+  "artifacts": {
+    ".local\\control-flow-live\\contract.json": {
+      "sha256": "6843408d783a30373d2e70c2caa0ee4027e2e8fcaa18afbe7fcd39a650602440",
+      "bytes": 11246
+    },
+    ".local\\control-flow-live\\acceptance.py": {
+      "sha256": "0c58059f9725c110a983978050ccb48679d9ddef23da7f26ff50a9eb45f00a86",
+      "bytes": 4218
+    },
+    ".local\\control-flow-live\\fault-probe\\Program.cs": {
+      "sha256": "59b0ea8cc5cda5a49e18541d942b650e05a2cc9aa8888449184e85ebc471932a",
+      "bytes": 3407
+    },
+    ".local\\control-flow-live\\fault-probe\\fault-probe.csproj": {
+      "sha256": "069a4f5a63244e33d90c07f45b5b5825556172ab7594a03011509513d639d9b6",
+      "bytes": 304
+    },
+    ".local\\control-flow-live\\bootstrap-result.json": {
+      "sha256": "7ac0b1301ce160908929f80c59262e3cff4c2e755c9acc88c6776acda3d60ee2",
+      "bytes": 5724
+    },
+    ".local\\control-flow-live\\app-delivery-receipt.json": {
+      "sha256": "4630bc2b3f925892a08f0126754e056e68e4b3472ee8279c4b4019c5036c9753",
+      "bytes": 551738
+    },
+    ".local\\control-flow-live\\final-verification.json": {
+      "sha256": "02ea3e8f359db533c9c50e30f8a45e88fb01779fdc13dc36eaa0df44551348da",
+      "bytes": 6228
+    },
+    ".local\\control-flow-live\\receipt-check.json": {
+      "sha256": "6c93fc78834e3a7a9b5af2b8e82d0c17f26f31a51e0a705a540335b49893c98c",
+      "bytes": 16225
+    }
+  }
+}

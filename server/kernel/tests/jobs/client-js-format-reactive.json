@@ -1,0 +1,336 @@
+{
+ "description": "Cold D: client action FormatPhone(Phone Text) -> Formatted Text com no JavaScript que remove nao-digitos e formata (XX) XXXXX-XXXX; tela PhoneDemo com Input ligado a local Phone, botao Format -> screen action OnFormat que chama FormatPhone e guarda em local Formatted, mostrada numa Expression (escrito por uma LLM sem contexto na sessao fria D de 2026-09-04, passou a primeira)",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IClientAction",
+   "name": "FormatPhone",
+   "as": "$ca"
+  },
+  {
+   "op": "create",
+   "parent": "$ca",
+   "type": "IInputParameter",
+   "name": "Phone",
+   "as": "$caIn"
+  },
+  {
+   "op": "set",
+   "target": "$caIn",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$ca",
+   "type": "IOutputParameter",
+   "name": "Formatted",
+   "as": "$caOut"
+  },
+  {
+   "op": "set",
+   "target": "$caOut",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$ca",
+   "type": "IStartNode",
+   "as": "$c0"
+  },
+  {
+   "op": "create",
+   "parent": "$ca",
+   "type": "IJavaScriptNode",
+   "name": "FormatJS",
+   "as": "$js"
+  },
+  {
+   "op": "create",
+   "parent": "$js",
+   "type": "IInputParameter",
+   "name": "Phone",
+   "as": "$jsIn"
+  },
+  {
+   "op": "set",
+   "target": "$jsIn",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$js",
+   "type": "IOutputParameter",
+   "name": "Formatted",
+   "as": "$jsOut"
+  },
+  {
+   "op": "set",
+   "target": "$jsOut",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$js",
+   "prop": "JavaScript",
+   "value": "var d = String($parameters.Phone || \"\").replace(/\\D/g, \"\");\nif (d.length >= 11) {\n  d = d.substr(0, 11);\n  $parameters.Formatted = \"(\" + d.substr(0, 2) + \") \" + d.substr(2, 5) + \"-\" + d.substr(7, 4);\n} else if (d.length === 10) {\n  $parameters.Formatted = \"(\" + d.substr(0, 2) + \") \" + d.substr(2, 4) + \"-\" + d.substr(6, 4);\n} else {\n  $parameters.Formatted = d;\n}"
+  },
+  {
+   "op": "set",
+   "target": "$js/arg:Phone",
+   "prop": "Value",
+   "value": "Phone"
+  },
+  {
+   "op": "create",
+   "parent": "$ca",
+   "type": "IAssignNode",
+   "name": "SetOutput",
+   "as": "$caAs"
+  },
+  {
+   "op": "set",
+   "target": "$caAs",
+   "prop": "Label",
+   "value": "SetOutput"
+  },
+  {
+   "op": "create",
+   "parent": "$caAs",
+   "type": "IAssignment",
+   "as": "$caA1"
+  },
+  {
+   "op": "set",
+   "target": "$caA1",
+   "prop": "Variable",
+   "value": "Formatted"
+  },
+  {
+   "op": "set",
+   "target": "$caA1",
+   "prop": "Value",
+   "value": "FormatJS.Formatted"
+  },
+  {
+   "op": "create",
+   "parent": "$ca",
+   "type": "IEndNode",
+   "as": "$c9"
+  },
+  {
+   "op": "link",
+   "from": "$c0",
+   "to": "$js"
+  },
+  {
+   "op": "link",
+   "from": "$js",
+   "to": "$caAs"
+  },
+  {
+   "op": "link",
+   "from": "$caAs",
+   "to": "$c9"
+  },
+  {
+   "op": "layout",
+   "target": "$ca"
+  },
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "PhoneDemo",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "ILocalVariable",
+   "name": "Phone",
+   "as": "$vP"
+  },
+  {
+   "op": "set",
+   "target": "$vP",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "ILocalVariable",
+   "name": "Formatted",
+   "as": "$vF"
+  },
+  {
+   "op": "set",
+   "target": "$vF",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IInput",
+   "name": "PhoneInput",
+   "as": "$in"
+  },
+  {
+   "op": "set",
+   "target": "$in",
+   "prop": "Variable",
+   "value": "Phone"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IButton",
+   "name": "FormatButton",
+   "as": "$btn"
+  },
+  {
+   "op": "set",
+   "target": "$btn/#ITextWidget",
+   "prop": "Text",
+   "value": "Format"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IExpression",
+   "name": "FormattedExpr",
+   "as": "$out"
+  },
+  {
+   "op": "set",
+   "target": "$out",
+   "prop": "Value",
+   "value": "Formatted"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAction",
+   "name": "OnFormat",
+   "as": "$sa"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IStartNode",
+   "as": "$s0"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IExecuteClientActionNode",
+   "name": "FormatPhone",
+   "as": "$call"
+  },
+  {
+   "op": "set",
+   "target": "$call",
+   "prop": "Action",
+   "value": "IClientAction:FormatPhone"
+  },
+  {
+   "op": "set",
+   "target": "$call/Phone",
+   "prop": "Value",
+   "value": "Phone"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IAssignNode",
+   "name": "SetFormatted",
+   "as": "$saAs"
+  },
+  {
+   "op": "set",
+   "target": "$saAs",
+   "prop": "Label",
+   "value": "SetFormatted"
+  },
+  {
+   "op": "create",
+   "parent": "$saAs",
+   "type": "IAssignment",
+   "as": "$saA1"
+  },
+  {
+   "op": "set",
+   "target": "$saA1",
+   "prop": "Variable",
+   "value": "Formatted"
+  },
+  {
+   "op": "set",
+   "target": "$saA1",
+   "prop": "Value",
+   "value": "FormatPhone.Formatted"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IEndNode",
+   "as": "$s9"
+  },
+  {
+   "op": "link",
+   "from": "$s0",
+   "to": "$call"
+  },
+  {
+   "op": "link",
+   "from": "$call",
+   "to": "$saAs"
+  },
+  {
+   "op": "link",
+   "from": "$saAs",
+   "to": "$s9"
+  },
+  {
+   "op": "layout",
+   "target": "$sa"
+  },
+  {
+   "op": "set",
+   "target": "$btn/OnClick",
+   "prop": "Destination",
+   "value": "$sa"
+  },
+  {
+   "op": "find",
+   "name": "FormatPhone"
+  },
+  {
+   "op": "find",
+   "name": "PhoneDemo"
+  },
+  {
+   "op": "get",
+   "target": "$btn/OnClick"
+  },
+  {
+   "op": "dump",
+   "target": "$scr",
+   "depth": 6
+  }
+ ]
+}

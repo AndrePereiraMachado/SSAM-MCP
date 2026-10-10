@@ -1,0 +1,5 @@
+{
+ "ok": false,
+ "error": "op #0 (logic ): InvalidOperationException: logic: action Broken: chave(s) desconhecida(s) 'inputz'; permitidas: name, kind, owner, public, description, function, replace, inputs, outputs, vars, steps, handlers, comments, fetch, timeout",
+ "data": null
+}

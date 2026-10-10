@@ -1,0 +1,3449 @@
+{
+ "schema": "ssam-examples-matrix/1",
+ "lane": "o11",
+ "generatedAt": "2026-10-07",
+ "legend": {
+  "pending": "linhas sem job: state todo (a fazer) ou not-applicable (o minimo ja e o uso tipico)",
+  "kind": "widget | pattern | capability",
+  "level": "minimal | typical | rich",
+  "status": "proven-existing (job da suite tests/jobs) | new (job em tests/jobs/examples) | blocked (notes traz a recusa ou o motivo)",
+  "job": "caminho relativo a kernel/tests/jobs, sem .json"
+ },
+ "summary": {
+  "capability": {
+   "ids": 56,
+   "coveredBefore": 45,
+   "coveredAfter": 49,
+   "blockedIds": 7,
+   "rows": {
+    "proven-existing": 82,
+    "new": 14,
+    "blocked": 14
+   },
+   "pendingRows": 2,
+   "byLevel": {
+    "minimal": {
+     "ids": 56,
+     "before": 43,
+     "after": 48,
+     "blocked": 7,
+     "todo": 1,
+     "notApplicable": 0
+    },
+    "typical": {
+     "ids": 56,
+     "before": 39,
+     "after": 48,
+     "blocked": 7,
+     "todo": 0,
+     "notApplicable": 1
+    }
+   }
+  },
+  "widget": {
+   "ids": 55,
+   "coveredBefore": 54,
+   "coveredAfter": 55,
+   "blockedIds": 0,
+   "rows": {
+    "proven-existing": 69,
+    "new": 22,
+    "blocked": 0
+   },
+   "pendingRows": 19,
+   "byLevel": {
+    "minimal": {
+     "ids": 55,
+     "before": 54,
+     "after": 55,
+     "blocked": 0,
+     "todo": 0,
+     "notApplicable": 0
+    },
+    "typical": {
+     "ids": 55,
+     "before": 15,
+     "after": 36,
+     "blocked": 0,
+     "todo": 18,
+     "notApplicable": 1
+    }
+   }
+  },
+  "pattern": {
+   "ids": 103,
+   "coveredBefore": 27,
+   "coveredAfter": 102,
+   "blockedIds": 1,
+   "rows": {
+    "proven-existing": 38,
+    "new": 153,
+    "blocked": 2
+   },
+   "pendingRows": 4,
+   "byLevel": {
+    "minimal": {
+     "ids": 97,
+     "before": 27,
+     "after": 96,
+     "blocked": 1,
+     "todo": 0,
+     "notApplicable": 0
+    },
+    "typical": {
+     "ids": 94,
+     "before": 11,
+     "after": 89,
+     "blocked": 1,
+     "todo": 0,
+     "notApplicable": 4
+    },
+    "rich": {
+     "ids": 6,
+     "before": 0,
+     "after": 6,
+     "blocked": 0,
+     "todo": 0,
+     "notApplicable": 0
+    }
+   }
+  }
+ },
+ "newRowsByLevel": {
+  "typical": 108,
+  "minimal": 75,
+  "rich": 6
+ },
+ "exampleFiles": 167,
+ "entries": [
+  {
+   "id": "data.client-entity",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "local-storage-mobile",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "data.client-entity",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "local-storage-notes-mobile",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "data.client-variable",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "security-config-reactive",
+   "notes": "Prova da suite citada no catalogo."
+  },
+  {
+   "id": "data.client-variable",
+   "kind": "capability",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/cap-client-variable-typical",
+   "notes": "Client variable lida e escrita pela tela (Client.X)."
+  },
+  {
+   "id": "logic.expression",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "delete-data-consumers",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "logic.expression",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "rename-logic-propagation",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "logic.server-action",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "logic-spec-replace",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "logic.server-action",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "rename-logic-propagation",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "logic.service-action",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "logic-spec-services",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "logic.service-action",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "service-action",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "logic.client-action",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "local-storage-mobile",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "logic.client-action",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "rename-logic-propagation",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "logic.screen-action",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "block-events-delete-reactive",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "logic.screen-action",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "rename-logic-propagation",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "logic.data-action",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "data-action-reactive",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "logic.data-action",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "data-action-entity-list-reactive",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "logic.preparation",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/cap-preparation-minimal",
+   "notes": "Preparation de tela Traditional com um aggregate."
+  },
+  {
+   "id": "logic.preparation",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "screen-crud-traditional",
+   "notes": "Prova da suite: preparation com input e aggregate filtrado num CRUD."
+  },
+  {
+   "id": "logic.variable",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "consume-reference-static",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "logic.variable",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "tickets-02-helpers",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "logic.exception",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "logic-spec-services",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "logic.exception",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "hire-business-actions",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "logic.flow",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "refactor-usages",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "logic.flow",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "tickets-02-helpers",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "logic.native-nodes",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "email-traditional",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "logic.native-nodes",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "rename-logic-propagation",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "logic.aggregate",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "screen-list-reactive",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "logic.aggregate",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "entity-lifecycle",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "logic.sql",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "logic-sql-params",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "logic.sql",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "rename-data-propagation",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "refactor.rename",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "refactor-usages",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "refactor.rename",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "rename-logic-propagation",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "refactor.replace",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "refactor-replace-action",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "refactor.replace",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "structure-refactor",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "refactor.duplicate",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "refactor-duplicate",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "refactor.duplicate",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "structure-refactor",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "refactor.move",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "refactor-move",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "refactor.move",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "structure-refactor",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "refactor.delete",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "refactor-usages",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "refactor.delete",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "delete-logic-consumers",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "ui.block",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "cat-b-block-rename",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "ui.block",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "block-events-types-reactive",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "ui.block-instance",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "block-events-delete-reactive",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "ui.block-instance",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "hidden-reference-block",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "ui.event",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "refactor-duplicate",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "ui.event",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "rename-logic-propagation",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "logic.app-event",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "cat-b-app-events",
+   "notes": "Prova da suite: external site e eventos de aplicacao."
+  },
+  {
+   "id": "ui.email-popover",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "cat-b-flow-comment-popover",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "ui.email-popover",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "ui.form",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "screen-form-reactive",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "ui.form",
+   "kind": "capability",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-form-validation-save",
+   "notes": "Exemplo tipico novo deste pacote."
+  },
+  {
+   "id": "ui.dropdown-search",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/cap-dropdown-search-minimal",
+   "notes": "Bloco DropdownSearch com OptionsList e OnChanged; tipico monta as opcoes de uma static no OnAfterFetch."
+  },
+  {
+   "id": "ui.dropdown-search",
+   "kind": "capability",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/cap-dropdown-search-typical",
+   "notes": "Bloco DropdownSearch com OptionsList e OnChanged; tipico monta as opcoes de uma static no OnAfterFetch."
+  },
+  {
+   "id": "ui.html-visual",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "html-visual-list",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "ui.html-visual",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "html-visual-block",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "ui.screen-spec",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "screen-spec-table-reactive",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "ui.screen-spec",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "screen-spec-dashboard-reactive",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "ui.html-page",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "html-dashboard-update",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "ui.html-page",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "html-dashboard-reactive",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "ui.screen",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "screen-reactive",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "ui.screen",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "rename-logic-propagation",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "ui.flow-comment",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "cat-b-flow-comment-popover",
+   "notes": "Prova da suite citada no catalogo."
+  },
+  {
+   "id": "ui.theme-css",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "html-visual-alert",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "ui.theme-css",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "cat-b-theme-resource",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "ui.script-resource",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "client-js-reactive",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "ui.script-resource",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "rename-logic-propagation",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "ui.traditional-screen",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "osui-web-patterns",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "ui.traditional-screen",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "cat-b-traditional-gallery",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "ui.traditional-widget",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "osui-web-patterns",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "ui.traditional-widget",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "cat-b-traditional-gallery",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "ui.widget",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "html-visual-list",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "ui.widget",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "html-dashboard-reactive",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "ui.input",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "refactor-usages",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "ui.input",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "rename-logic-propagation",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "ui.list",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "screen-list-reactive",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "ui.list",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "ui.dropdown",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "widgets-reactive",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "ui.dropdown",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "integration.dotnet-extension-o11",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "blocked",
+   "job": null,
+   "notes": "Sem rota de job: o11_extension publica pelo Service Center do ambiente (rede e sessao do Studio). Consumir exige a assinatura .avsig capturada ao vivo."
+  },
+  {
+   "id": "integration.dotnet-extension-o11",
+   "kind": "capability",
+   "level": "typical",
+   "status": "blocked",
+   "job": null,
+   "notes": "Sem rota de job: o11_extension publica pelo Service Center do ambiente (rede e sessao do Studio). Consumir exige a assinatura .avsig capturada ao vivo."
+  },
+  {
+   "id": "read.discover",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "blocked",
+   "job": null,
+   "notes": "Ferramenta (ssam_discover), nao e mudanca de modulo: nao ha job que a exercite."
+  },
+  {
+   "id": "read.discover",
+   "kind": "capability",
+   "level": "typical",
+   "status": "blocked",
+   "job": null,
+   "notes": "Ferramenta (ssam_discover), nao e mudanca de modulo: nao ha job que a exercite."
+  },
+  {
+   "id": "read.inspect",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/cap-read-inspect-minimal",
+   "notes": "Prova os verbos de leitura do kernel (find, get, dump, usages) num job; ssam_map/o11_inspect sao a rota viva sobre a captura."
+  },
+  {
+   "id": "read.inspect",
+   "kind": "capability",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/cap-read-inspect-typical",
+   "notes": "Prova os verbos de leitura do kernel (find, get, dump, usages) num job; ssam_map/o11_inspect sao a rota viva sobre a captura."
+  },
+  {
+   "id": "deliver.job",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/cap-deliver-job-minimal",
+   "notes": "Forma minima de job e job composto (jobs) numa transacao; a entrega viva continua o11_deliver."
+  },
+  {
+   "id": "deliver.job",
+   "kind": "capability",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/cap-deliver-job-typical",
+   "notes": "Forma minima de job e job composto (jobs) numa transacao; a entrega viva continua o11_deliver."
+  },
+  {
+   "id": "data.records",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "blocked",
+   "job": null,
+   "notes": "Dados do ambiente (o11_data, Edit Data pelo Studio logado): nao e mudanca de modulo nem roda headless."
+  },
+  {
+   "id": "data.records",
+   "kind": "capability",
+   "level": "typical",
+   "status": "blocked",
+   "job": null,
+   "notes": "Dados do ambiente (o11_data, Edit Data pelo Studio logado): nao e mudanca de modulo nem roda headless."
+  },
+  {
+   "id": "ops.debugger",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "blocked",
+   "job": null,
+   "notes": "Depurador sobre o runtime publicado (ssam_debug): exige ambiente vivo."
+  },
+  {
+   "id": "ops.debugger",
+   "kind": "capability",
+   "level": "typical",
+   "status": "blocked",
+   "job": null,
+   "notes": "Depurador sobre o runtime publicado (ssam_debug): exige ambiente vivo."
+  },
+  {
+   "id": "ops.environment",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "blocked",
+   "job": null,
+   "notes": "Verificacao do ambiente (ssam_doctor): ferramenta operacional, sem job."
+  },
+  {
+   "id": "ops.environment",
+   "kind": "capability",
+   "level": "typical",
+   "status": "blocked",
+   "job": null,
+   "notes": "Verificacao do ambiente (ssam_doctor): ferramenta operacional, sem job."
+  },
+  {
+   "id": "diagnostic.troubleshoot",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/cap-diagnostic-minimal",
+   "notes": "Contrato expectedMessages: aviso declarado (matched) e erro reproduzido com expectValid false."
+  },
+  {
+   "id": "diagnostic.troubleshoot",
+   "kind": "capability",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/cap-diagnostic-typical",
+   "notes": "Contrato expectedMessages: aviso declarado (matched) e erro reproduzido com expectValid false."
+  },
+  {
+   "id": "process.bpt",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "process-bpt",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "process.bpt",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "process-expense-traditional",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "reference.producer-import",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "consume-reference-static",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "reference.producer-import",
+   "kind": "capability",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-consumer-reference-action",
+   "notes": "Exemplo tipico novo deste pacote."
+  },
+  {
+   "id": "integration.rest-consume",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "rest-spec-consume",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "integration.rest-consume",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "rest-query-nested",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "integration.rest-import",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "blocked",
+   "job": null,
+   "notes": "Recusa do kernel sem Studio: INTEGRATION_IMPORT_NEEDS_STUDIO (/data/openapi: \"the OpenAPI import of getOrder runs in the Service Studio (the O11 importer needs its workspace)\"). So o11_deliver com a bridge importa."
+  },
+  {
+   "id": "integration.rest-import",
+   "kind": "capability",
+   "level": "typical",
+   "status": "blocked",
+   "job": null,
+   "notes": "Recusa do kernel sem Studio: INTEGRATION_IMPORT_NEEDS_STUDIO (/data/openapi: \"the OpenAPI import of getOrder runs in the Service Studio (the O11 importer needs its workspace)\"). So o11_deliver com a bridge importa."
+  },
+  {
+   "id": "integration.rest-expose",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "rest-spec-expose",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "integration.rest-expose",
+   "kind": "capability",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "rename-logic-propagation",
+   "notes": "Prova da suite citada no catalogo (job mais completo)."
+  },
+  {
+   "id": "security.settings-roles",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "security-config-reactive",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "security.settings-roles",
+   "kind": "capability",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-role-check-screen",
+   "notes": "Exemplo tipico novo deste pacote."
+  },
+  {
+   "id": "integration.soap",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "blocked",
+   "job": null,
+   "notes": "Recusa do kernel sem Studio: INTEGRATION_IMPORT_NEEDS_STUDIO (/data/methods: \"Add must be imported from the WSDL, which the Service Studio's own importer does\"). So o11_deliver com a bridge importa."
+  },
+  {
+   "id": "integration.soap",
+   "kind": "capability",
+   "level": "typical",
+   "status": "blocked",
+   "job": null,
+   "notes": "Recusa do kernel sem Studio: INTEGRATION_IMPORT_NEEDS_STUDIO (/data/methods: \"Add must be imported from the WSDL, which the Service Studio's own importer does\"). So o11_deliver com a bridge importa."
+  },
+  {
+   "id": "timer.schedule",
+   "kind": "capability",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "process-human-traditional",
+   "notes": "Prova da suite citada no catalogo (menor job)."
+  },
+  {
+   "id": "timer.schedule",
+   "kind": "capability",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-timer-typical",
+   "notes": "Exemplo tipico novo deste pacote."
+  },
+  {
+   "id": "ui.widget.container",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "IContainer"
+  },
+  {
+   "id": "ui.widget.container",
+   "kind": "widget",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/wid-container-typical",
+   "notes": "IContainer"
+  },
+  {
+   "id": "ui.widget.expression",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "IExpression"
+  },
+  {
+   "id": "ui.widget.expression",
+   "kind": "widget",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "screen-list-reactive",
+   "notes": "IExpression"
+  },
+  {
+   "id": "ui.widget.text",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "ITextWidget"
+  },
+  {
+   "id": "ui.widget.input",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "IInput"
+  },
+  {
+   "id": "ui.widget.input",
+   "kind": "widget",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/wid-input-typical",
+   "notes": "IInput"
+  },
+  {
+   "id": "ui.widget.textarea",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "ITextArea"
+  },
+  {
+   "id": "ui.widget.textarea",
+   "kind": "widget",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/wid-textarea-typical",
+   "notes": "ITextArea"
+  },
+  {
+   "id": "ui.widget.checkbox",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "ICheckbox"
+  },
+  {
+   "id": "ui.widget.checkbox",
+   "kind": "widget",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/wid-checkbox-typical",
+   "notes": "ICheckbox"
+  },
+  {
+   "id": "ui.widget.switch",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "ISwitch"
+  },
+  {
+   "id": "ui.widget.switch",
+   "kind": "widget",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/wid-switch-typical",
+   "notes": "ISwitch"
+  },
+  {
+   "id": "ui.widget.radiogroup",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "IRadioGroup"
+  },
+  {
+   "id": "ui.widget.radiogroup",
+   "kind": "widget",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/wid-radiogroup-typical",
+   "notes": "IRadioGroup"
+  },
+  {
+   "id": "ui.widget.radiobutton",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "IRadioButton"
+  },
+  {
+   "id": "ui.widget.radiobutton",
+   "kind": "widget",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/wid-radiogroup-typical",
+   "notes": "IRadioButton"
+  },
+  {
+   "id": "ui.widget.dropdown",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "IDropdown"
+  },
+  {
+   "id": "ui.widget.dropdown",
+   "kind": "widget",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-static-dropdown",
+   "notes": "IDropdown"
+  },
+  {
+   "id": "ui.widget.buttongroup",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "IButtonGroup"
+  },
+  {
+   "id": "ui.widget.buttongroup",
+   "kind": "widget",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-osui-buttongroup",
+   "notes": "IButtonGroup"
+  },
+  {
+   "id": "ui.widget.buttongroupitem",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "IButtonGroupItem"
+  },
+  {
+   "id": "ui.widget.buttongroupitem",
+   "kind": "widget",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-osui-buttongroup",
+   "notes": "IButtonGroupItem"
+  },
+  {
+   "id": "ui.widget.upload",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "IUpload"
+  },
+  {
+   "id": "ui.widget.upload",
+   "kind": "widget",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/wid-upload-typical",
+   "notes": "IUpload"
+  },
+  {
+   "id": "ui.widget.button",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "IButton"
+  },
+  {
+   "id": "ui.widget.button",
+   "kind": "widget",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "screen-form-reactive",
+   "notes": "IButton"
+  },
+  {
+   "id": "ui.widget.link",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "ILink"
+  },
+  {
+   "id": "ui.widget.link",
+   "kind": "widget",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-master-detail",
+   "notes": "ILink"
+  },
+  {
+   "id": "ui.widget.icon",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "IIcon"
+  },
+  {
+   "id": "ui.widget.icon",
+   "kind": "widget",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/wid-icon-typical",
+   "notes": "IIcon"
+  },
+  {
+   "id": "ui.widget.image",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "IImage"
+  },
+  {
+   "id": "ui.widget.image",
+   "kind": "widget",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/wid-image-typical",
+   "notes": "IImage"
+  },
+  {
+   "id": "ui.widget.label",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "ILabel"
+  },
+  {
+   "id": "ui.widget.label",
+   "kind": "widget",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/wid-checkbox-typical",
+   "notes": "ILabel"
+  },
+  {
+   "id": "ui.widget.form",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "screen-form-reactive",
+   "notes": "IForm"
+  },
+  {
+   "id": "ui.widget.form",
+   "kind": "widget",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-form-validation-save",
+   "notes": "IForm"
+  },
+  {
+   "id": "ui.widget.list",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "screen-list-reactive",
+   "notes": "IList"
+  },
+  {
+   "id": "ui.widget.list",
+   "kind": "widget",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-consumer-reference-action",
+   "notes": "IList"
+  },
+  {
+   "id": "ui.widget.listitem",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "IListItem"
+  },
+  {
+   "id": "ui.widget.listitem",
+   "kind": "widget",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/wid-listitem-typical",
+   "notes": "IListItem"
+  },
+  {
+   "id": "ui.widget.listitemaction",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/wid-listitemaction-minimal",
+   "notes": "IListItemAction"
+  },
+  {
+   "id": "ui.widget.listitemaction",
+   "kind": "widget",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/wid-listitem-typical",
+   "notes": "IListItemAction"
+  },
+  {
+   "id": "ui.widget.table",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "ITableRecords"
+  },
+  {
+   "id": "ui.widget.table",
+   "kind": "widget",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "screen-search-refresh-reactive",
+   "notes": "ITableRecords"
+  },
+  {
+   "id": "ui.widget.headercell",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "IHeaderCell"
+  },
+  {
+   "id": "ui.widget.headercell",
+   "kind": "widget",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "screen-search-refresh-reactive",
+   "notes": "IHeaderCell"
+  },
+  {
+   "id": "ui.widget.rowcell",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "IRowCell"
+  },
+  {
+   "id": "ui.widget.rowcell",
+   "kind": "widget",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "screen-search-refresh-reactive",
+   "notes": "IRowCell"
+  },
+  {
+   "id": "ui.widget.if",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "IIfWidget"
+  },
+  {
+   "id": "ui.widget.if",
+   "kind": "widget",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "table-if-reactive",
+   "notes": "IIfWidget"
+  },
+  {
+   "id": "ui.widget.popup",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "IPopup"
+  },
+  {
+   "id": "ui.widget.popup",
+   "kind": "widget",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/crud-05-list",
+   "notes": "IPopup"
+  },
+  {
+   "id": "ui.widget.popover",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "cat-b-flow-comment-popover",
+   "notes": "IPopover"
+  },
+  {
+   "id": "ui.widget.popover",
+   "kind": "widget",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "cat-b-flow-comment-popover",
+   "notes": "IPopover"
+  },
+  {
+   "id": "ui.widget.advancedhtml",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "IAdvancedHtml"
+  },
+  {
+   "id": "ui.widget.advancedhtml",
+   "kind": "widget",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/wid-advancedhtml-typical",
+   "notes": "IAdvancedHtml"
+  },
+  {
+   "id": "ui.widget.blockinstance",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "osui-patterns",
+   "notes": "IMobileBlockInstanceWidget"
+  },
+  {
+   "id": "ui.widget.blockinstance",
+   "kind": "widget",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "block-events-reactive",
+   "notes": "IMobileBlockInstanceWidget"
+  },
+  {
+   "id": "ui.widget.placeholder",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "cat-b-block-placeholder",
+   "notes": "IPlaceholderWidget"
+  },
+  {
+   "id": "ui.widget.placeholder",
+   "kind": "widget",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "cat-b-block-placeholder",
+   "notes": "IPlaceholderWidget"
+  },
+  {
+   "id": "ui.web.container",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "screen-crud-traditional",
+   "notes": "IContainerWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.container",
+   "kind": "widget",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "screen-crud-traditional",
+   "notes": "IContainerWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.expression",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "screen-crud-traditional",
+   "notes": "IExpressionWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.expression",
+   "kind": "widget",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "screen-crud-traditional",
+   "notes": "IExpressionWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.input",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "screen-crud-traditional",
+   "notes": "IInputWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.input",
+   "kind": "widget",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "screen-crud-traditional",
+   "notes": "IInputWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.button",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "screen-crud-traditional",
+   "notes": "IButtonWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.button",
+   "kind": "widget",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "screen-crud-traditional",
+   "notes": "IButtonWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.link",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "screen-crud-traditional",
+   "notes": "ILinkWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.link",
+   "kind": "widget",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "screen-crud-traditional",
+   "notes": "ILinkWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.tablerecords",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "screen-crud-traditional",
+   "notes": "ITableRecordsWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.tablerecords",
+   "kind": "widget",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "screen-crud-traditional",
+   "notes": "ITableRecordsWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.cell",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "cat-b-traditional-gallery",
+   "notes": "ICellWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.checkbox",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "cat-b-traditional-gallery",
+   "notes": "ICheckBoxWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.combobox",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "cat-b-traditional-gallery",
+   "notes": "IComboBoxWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.radiobutton",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "cat-b-traditional-gallery",
+   "notes": "IRadioButtonWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.inputpassword",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "cat-b-traditional-gallery",
+   "notes": "IInputPasswordWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.inputfilename",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "cat-b-traditional-gallery",
+   "notes": "IInputFilenameWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.listrecords",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "cat-b-traditional-gallery",
+   "notes": "IListRecordsWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.editrecord",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "cat-b-traditional-gallery",
+   "notes": "IEditRecordWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.showrecord",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "cat-b-traditional-gallery",
+   "notes": "IShowRecordWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.table",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "cat-b-traditional-gallery",
+   "notes": "ITableWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.row",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "cat-b-traditional-gallery",
+   "notes": "IRowWidget (Traditional)"
+  },
+  {
+   "id": "ui.web.text",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "cat-b-traditional-gallery",
+   "notes": "ITextWidget (Web) (Traditional)"
+  },
+  {
+   "id": "ui.web.if",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "cat-b-traditional-gallery",
+   "notes": "IIfWidget (Web) (Traditional)"
+  },
+  {
+   "id": "ui.web.editabletable",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "cat-b-traditional-gallery",
+   "notes": "IEditableTable (Traditional)"
+  },
+  {
+   "id": "ui.web.editabletablecell",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "cat-b-traditional-gallery",
+   "notes": "IEditableTableCell (Traditional)"
+  },
+  {
+   "id": "ui.web.form",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "cat-b-traditional-gallery",
+   "notes": "IForm (Web) (Traditional)"
+  },
+  {
+   "id": "ui.web.label",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "cat-b-traditional-gallery",
+   "notes": "ILabel (Web) (Traditional)"
+  },
+  {
+   "id": "ui.web.blockinstance",
+   "kind": "widget",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "osui-web-patterns",
+   "notes": "IWebBlockInstanceWidget (Traditional)"
+  },
+  {
+   "id": "osui.FloatingContent",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-floating-content-minimal",
+   "notes": "Content/FloatingContent"
+  },
+  {
+   "id": "osui.FloatingContent",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-floating-content-typical",
+   "notes": "Content/FloatingContent"
+  },
+  {
+   "id": "osui.Tag",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "osui-datepicker-handler",
+   "notes": "Content/Tag"
+  },
+  {
+   "id": "osui.Tag",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "osui-datepicker-handler",
+   "notes": "Content/Tag"
+  },
+  {
+   "id": "osui.Section",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-section-minimal",
+   "notes": "Content/Section"
+  },
+  {
+   "id": "osui.Section",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-section-typical",
+   "notes": "Content/Section"
+  },
+  {
+   "id": "osui.ListItemContent",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-list-item-content-minimal",
+   "notes": "Content/ListItemContent"
+  },
+  {
+   "id": "osui.ListItemContent",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-list-item-content-typical",
+   "notes": "Content/ListItemContent"
+  },
+  {
+   "id": "osui.BlankSlate",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-blank-slate-minimal",
+   "notes": "Content/BlankSlate"
+  },
+  {
+   "id": "osui.BlankSlate",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-blank-slate-typical",
+   "notes": "Content/BlankSlate"
+  },
+  {
+   "id": "osui.Alert",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-alert-minimal",
+   "notes": "Content/Alert"
+  },
+  {
+   "id": "osui.Alert",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-alert-typical",
+   "notes": "Content/Alert"
+  },
+  {
+   "id": "osui.AccordionItem",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "osui-patterns",
+   "notes": "Content/AccordionItem"
+  },
+  {
+   "id": "osui.AccordionItem",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-accordion-item-typical",
+   "notes": "Content/AccordionItem"
+  },
+  {
+   "id": "osui.CardSectioned",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "screen-spec-cards-reactive",
+   "notes": "Content/CardSectioned"
+  },
+  {
+   "id": "osui.CardSectioned",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "screen-spec-cards-reactive",
+   "notes": "Content/CardSectioned"
+  },
+  {
+   "id": "osui.SectionGroup",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-section-group-minimal",
+   "notes": "Content/SectionGroup"
+  },
+  {
+   "id": "osui.UserAvatar",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-user-avatar-minimal",
+   "notes": "Content/UserAvatar"
+  },
+  {
+   "id": "osui.CardItem",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-card-item-minimal",
+   "notes": "Content/CardItem"
+  },
+  {
+   "id": "osui.CardItem",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-card-item-typical",
+   "notes": "Content/CardItem"
+  },
+  {
+   "id": "osui.Tooltip",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "osui-datepicker-handler",
+   "notes": "Content/Tooltip"
+  },
+  {
+   "id": "osui.Tooltip",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "osui-datepicker-handler",
+   "notes": "Content/Tooltip"
+  },
+  {
+   "id": "osui.CardBackground",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-card-background-minimal",
+   "notes": "Content/CardBackground"
+  },
+  {
+   "id": "osui.CardBackground",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-card-background-typical",
+   "notes": "Content/CardBackground"
+  },
+  {
+   "id": "osui.ChatMessage",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-chat-message-minimal",
+   "notes": "Content/ChatMessage"
+  },
+  {
+   "id": "osui.ChatMessage",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-chat-message-typical",
+   "notes": "Content/ChatMessage"
+  },
+  {
+   "id": "osui.Card",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "osui-patterns",
+   "notes": "Content/Card"
+  },
+  {
+   "id": "osui.Card",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-card-typical",
+   "notes": "Content/Card"
+  },
+  {
+   "id": "osui.FlipContent",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-flip-content-minimal",
+   "notes": "Content/FlipContent"
+  },
+  {
+   "id": "osui.FlipContent",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-flip-content-typical",
+   "notes": "Content/FlipContent"
+  },
+  {
+   "id": "osui.Accordion",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "osui-patterns",
+   "notes": "Content/Accordion"
+  },
+  {
+   "id": "osui.Accordion",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-accordion-typical",
+   "notes": "Content/Accordion"
+  },
+  {
+   "id": "osui.ColumnsSmallRight",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-columns-small-right-minimal",
+   "notes": "Adaptive/ColumnsSmallRight"
+  },
+  {
+   "id": "osui.ColumnsSmallRight",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-columns-small-right-typical",
+   "notes": "Adaptive/ColumnsSmallRight"
+  },
+  {
+   "id": "osui.MasterDetail",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-master-detail-minimal",
+   "notes": "Adaptive/MasterDetail"
+  },
+  {
+   "id": "osui.MasterDetail",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-master-detail-typical",
+   "notes": "Adaptive/MasterDetail"
+  },
+  {
+   "id": "osui.Columns5",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-columns5-minimal",
+   "notes": "Adaptive/Columns5"
+  },
+  {
+   "id": "osui.Columns5",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-columns5-typical",
+   "notes": "Adaptive/Columns5"
+  },
+  {
+   "id": "osui.DisplayOnDevice",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-display-on-device-minimal",
+   "notes": "Adaptive/DisplayOnDevice"
+  },
+  {
+   "id": "osui.DisplayOnDevice",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-display-on-device-typical",
+   "notes": "Adaptive/DisplayOnDevice"
+  },
+  {
+   "id": "osui.Columns6",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-columns6-minimal",
+   "notes": "Adaptive/Columns6"
+  },
+  {
+   "id": "osui.Columns6",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-columns6-typical",
+   "notes": "Adaptive/Columns6"
+  },
+  {
+   "id": "osui.Gallery",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "screen-spec-cards-reactive",
+   "notes": "Adaptive/Gallery"
+  },
+  {
+   "id": "osui.Gallery",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "screen-spec-cards-reactive",
+   "notes": "Adaptive/Gallery"
+  },
+  {
+   "id": "osui.Columns3",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-columns3-minimal",
+   "notes": "Adaptive/Columns3"
+  },
+  {
+   "id": "osui.Columns3",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-columns3-typical",
+   "notes": "Adaptive/Columns3"
+  },
+  {
+   "id": "osui.ColumnsMediumLeft",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-columns-medium-left-minimal",
+   "notes": "Adaptive/ColumnsMediumLeft"
+  },
+  {
+   "id": "osui.ColumnsMediumLeft",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-columns-medium-left-typical",
+   "notes": "Adaptive/ColumnsMediumLeft"
+  },
+  {
+   "id": "osui.Columns2",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-columns2-minimal",
+   "notes": "Adaptive/Columns2"
+  },
+  {
+   "id": "osui.Columns2",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-master-detail",
+   "notes": "Adaptive/Columns2"
+  },
+  {
+   "id": "osui.ColumnsMediumRight",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-columns-medium-right-minimal",
+   "notes": "Adaptive/ColumnsMediumRight"
+  },
+  {
+   "id": "osui.ColumnsMediumRight",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-columns-medium-right-typical",
+   "notes": "Adaptive/ColumnsMediumRight"
+  },
+  {
+   "id": "osui.Columns4",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-columns4-minimal",
+   "notes": "Adaptive/Columns4"
+  },
+  {
+   "id": "osui.Columns4",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-columns4-typical",
+   "notes": "Adaptive/Columns4"
+  },
+  {
+   "id": "osui.ColumnsSmallLeft",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-columns-small-left-minimal",
+   "notes": "Adaptive/ColumnsSmallLeft"
+  },
+  {
+   "id": "osui.ColumnsSmallLeft",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-columns-small-left-typical",
+   "notes": "Adaptive/ColumnsSmallLeft"
+  },
+  {
+   "id": "osui.ProgressBar",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-progress-bar-minimal",
+   "notes": "Numbers/ProgressBar"
+  },
+  {
+   "id": "osui.ProgressBar",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-progress-bar-typical",
+   "notes": "Numbers/ProgressBar"
+  },
+  {
+   "id": "osui.Counter",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "osui-datepicker-handler",
+   "notes": "Numbers/Counter"
+  },
+  {
+   "id": "osui.Counter",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "osui-datepicker-handler",
+   "notes": "Numbers/Counter"
+  },
+  {
+   "id": "osui.Badge",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-badge-minimal",
+   "notes": "Numbers/Badge"
+  },
+  {
+   "id": "osui.Badge",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-badge-typical",
+   "notes": "Numbers/Badge"
+  },
+  {
+   "id": "osui.IconBadge",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-icon-badge-minimal",
+   "notes": "Numbers/IconBadge"
+  },
+  {
+   "id": "osui.IconBadge",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-icon-badge-typical",
+   "notes": "Numbers/IconBadge"
+  },
+  {
+   "id": "osui.Rating",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "screen-spec-cards-reactive",
+   "notes": "Numbers/Rating"
+  },
+  {
+   "id": "osui.Rating",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "screen-spec-cards-reactive",
+   "notes": "Numbers/Rating"
+  },
+  {
+   "id": "osui.ProgressCircle",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-progress-circle-minimal",
+   "notes": "Numbers/ProgressCircle"
+  },
+  {
+   "id": "osui.ProgressCircle",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-progress-circle-typical",
+   "notes": "Numbers/ProgressCircle"
+  },
+  {
+   "id": "osui.TabsHeaderItem",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "osui-patterns",
+   "notes": "Navigation/TabsHeaderItem"
+  },
+  {
+   "id": "osui.TabsHeaderItem",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-osui-tabs",
+   "notes": "Navigation/TabsHeaderItem"
+  },
+  {
+   "id": "osui.Submenu",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-submenu-minimal",
+   "notes": "Navigation/Submenu"
+  },
+  {
+   "id": "osui.Submenu",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-submenu-typical",
+   "notes": "Navigation/Submenu"
+  },
+  {
+   "id": "osui.Tabs",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "osui-patterns",
+   "notes": "Navigation/Tabs"
+  },
+  {
+   "id": "osui.Tabs",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "osui-patterns",
+   "notes": "Navigation/Tabs"
+  },
+  {
+   "id": "osui.TimelineItem",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-timeline-item-minimal",
+   "notes": "Navigation/TimelineItem"
+  },
+  {
+   "id": "osui.TimelineItem",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-timeline-item-typical",
+   "notes": "Navigation/TimelineItem"
+  },
+  {
+   "id": "osui.BottomBarItem",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-bottom-bar-item-minimal",
+   "notes": "Navigation/BottomBarItem (modulo Mobile: ex-base-mobile)"
+  },
+  {
+   "id": "osui.BottomBarItem",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-bottom-bar-item-typical",
+   "notes": "Navigation/BottomBarItem (modulo Mobile: ex-base-mobile)"
+  },
+  {
+   "id": "osui.SectionIndexItem",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-section-index-item-minimal",
+   "notes": "Navigation/SectionIndexItem"
+  },
+  {
+   "id": "osui.SectionIndexItem",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-section-index-item-typical",
+   "notes": "Navigation/SectionIndexItem"
+  },
+  {
+   "id": "osui.Breadcrumbs",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-breadcrumbs-minimal",
+   "notes": "Navigation/Breadcrumbs"
+  },
+  {
+   "id": "osui.Breadcrumbs",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-breadcrumbs-item-typical",
+   "notes": "Navigation/Breadcrumbs"
+  },
+  {
+   "id": "osui.Pagination",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "screen-spec-table-reactive",
+   "notes": "Navigation/Pagination"
+  },
+  {
+   "id": "osui.Pagination",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "screen-spec-table-reactive",
+   "notes": "Navigation/Pagination"
+  },
+  {
+   "id": "osui.Wizard",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-wizard-minimal",
+   "notes": "Navigation/Wizard"
+  },
+  {
+   "id": "osui.Wizard",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-wizard-item-typical",
+   "notes": "Navigation/Wizard"
+  },
+  {
+   "id": "osui.BreadcrumbsItem",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-breadcrumbs-item-minimal",
+   "notes": "Navigation/BreadcrumbsItem"
+  },
+  {
+   "id": "osui.BreadcrumbsItem",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-breadcrumbs-item-typical",
+   "notes": "Navigation/BreadcrumbsItem"
+  },
+  {
+   "id": "osui.TabsContentItem",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "osui-patterns",
+   "notes": "Navigation/TabsContentItem"
+  },
+  {
+   "id": "osui.TabsContentItem",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-osui-tabs",
+   "notes": "Navigation/TabsContentItem"
+  },
+  {
+   "id": "osui.WizardItem",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-wizard-item-minimal",
+   "notes": "Navigation/WizardItem"
+  },
+  {
+   "id": "osui.WizardItem",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-wizard-item-typical",
+   "notes": "Navigation/WizardItem"
+  },
+  {
+   "id": "osui.SectionIndex",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-section-index-minimal",
+   "notes": "Navigation/SectionIndex"
+  },
+  {
+   "id": "osui.SectionIndex",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-section-index-item-typical",
+   "notes": "Navigation/SectionIndex"
+  },
+  {
+   "id": "osui.OverflowMenu",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-overflow-menu-minimal",
+   "notes": "Navigation/OverflowMenu"
+  },
+  {
+   "id": "osui.OverflowMenu",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-overflow-menu-typical",
+   "notes": "Navigation/OverflowMenu"
+  },
+  {
+   "id": "osui.DropdownServerSide",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-dropdown-server-side-minimal",
+   "notes": "Advanced/DropdownServerSide"
+  },
+  {
+   "id": "osui.DropdownServerSide",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-dropdown-server-side-typical",
+   "notes": "Advanced/DropdownServerSide"
+  },
+  {
+   "id": "osui.DropdownServerSideItem",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-dropdown-server-side-item-minimal",
+   "notes": "Advanced/DropdownServerSideItem"
+  },
+  {
+   "id": "osui.DropdownServerSideItem",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-dropdown-server-side-item-typical",
+   "notes": "Advanced/DropdownServerSideItem"
+  },
+  {
+   "id": "osui.RangeSliderInterval",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-range-slider-interval-minimal",
+   "notes": "Interaction/RangeSliderInterval"
+  },
+  {
+   "id": "osui.RangeSliderInterval",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-range-slider-interval-typical",
+   "notes": "Interaction/RangeSliderInterval"
+  },
+  {
+   "id": "osui.MonthPicker",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-month-picker-minimal",
+   "notes": "Interaction/MonthPicker"
+  },
+  {
+   "id": "osui.MonthPicker",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-month-picker-typical",
+   "notes": "Interaction/MonthPicker"
+  },
+  {
+   "id": "osui.ScrollableArea",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-scrollable-area-minimal",
+   "notes": "Interaction/ScrollableArea"
+  },
+  {
+   "id": "osui.ScrollableArea",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-scrollable-area-typical",
+   "notes": "Interaction/ScrollableArea"
+  },
+  {
+   "id": "osui.Carousel",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "screen-spec-cards-mobile",
+   "notes": "Interaction/Carousel"
+  },
+  {
+   "id": "osui.Carousel",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "screen-spec-cards-mobile",
+   "notes": "Interaction/Carousel"
+  },
+  {
+   "id": "osui.Notification",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-notification-minimal",
+   "notes": "Interaction/Notification"
+  },
+  {
+   "id": "osui.Notification",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-notification-typical",
+   "notes": "Interaction/Notification"
+  },
+  {
+   "id": "osui.InputWithIcon",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-input-with-icon-minimal",
+   "notes": "Interaction/InputWithIcon"
+  },
+  {
+   "id": "osui.InputWithIcon",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-input-with-icon-typical",
+   "notes": "Interaction/InputWithIcon"
+  },
+  {
+   "id": "osui.DatePickerRange",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-date-picker-range-minimal",
+   "notes": "Interaction/DatePickerRange"
+  },
+  {
+   "id": "osui.DatePickerRange",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-date-picker-range-typical",
+   "notes": "Interaction/DatePickerRange"
+  },
+  {
+   "id": "osui.RangeSlider",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-range-slider-minimal",
+   "notes": "Interaction/RangeSlider"
+  },
+  {
+   "id": "osui.RangeSlider",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-range-slider-typical",
+   "notes": "Interaction/RangeSlider"
+  },
+  {
+   "id": "osui.Video",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-video-minimal",
+   "notes": "Interaction/Video"
+  },
+  {
+   "id": "osui.Video",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-video-typical",
+   "notes": "Interaction/Video"
+  },
+  {
+   "id": "osui.DatePicker",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "osui-datepicker-handler",
+   "notes": "Interaction/DatePicker"
+  },
+  {
+   "id": "osui.DatePicker",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "osui-datepicker-handler",
+   "notes": "Interaction/DatePicker"
+  },
+  {
+   "id": "osui.ActionSheet",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-action-sheet-minimal",
+   "notes": "Interaction/ActionSheet (modulo Mobile: ex-base-mobile)"
+  },
+  {
+   "id": "osui.ActionSheet",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-action-sheet-typical",
+   "notes": "Interaction/ActionSheet (modulo Mobile: ex-base-mobile)"
+  },
+  {
+   "id": "osui.Sidebar",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-sidebar-minimal",
+   "notes": "Interaction/Sidebar"
+  },
+  {
+   "id": "osui.Sidebar",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-sidebar-typical",
+   "notes": "Interaction/Sidebar"
+  },
+  {
+   "id": "osui.TimePicker",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-time-picker-minimal",
+   "notes": "Interaction/TimePicker"
+  },
+  {
+   "id": "osui.TimePicker",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-time-picker-typical",
+   "notes": "Interaction/TimePicker"
+  },
+  {
+   "id": "osui.DropdownTags",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-dropdown-tags-minimal",
+   "notes": "Interaction/DropdownTags"
+  },
+  {
+   "id": "osui.DropdownTags",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-dropdown-tags-typical",
+   "notes": "Interaction/DropdownTags"
+  },
+  {
+   "id": "osui.Search",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "screen-spec-table-reactive",
+   "notes": "Interaction/Search"
+  },
+  {
+   "id": "osui.Search",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "proven-existing",
+   "job": "screen-spec-table-reactive",
+   "notes": "Interaction/Search"
+  },
+  {
+   "id": "osui.Animate",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-animate-minimal",
+   "notes": "Interaction/Animate"
+  },
+  {
+   "id": "osui.Animate",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-animate-typical",
+   "notes": "Interaction/Animate"
+  },
+  {
+   "id": "osui.BottomSheet",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-bottom-sheet-minimal",
+   "notes": "Interaction/BottomSheet (modulo Mobile: ex-base-mobile)"
+  },
+  {
+   "id": "osui.BottomSheet",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-bottom-sheet-typical",
+   "notes": "Interaction/BottomSheet (modulo Mobile: ex-base-mobile)"
+  },
+  {
+   "id": "osui.FloatingActions",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-floating-actions-minimal",
+   "notes": "Interaction/FloatingActions"
+  },
+  {
+   "id": "osui.FloatingActions",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-floating-actions-typical",
+   "notes": "Interaction/FloatingActions"
+  },
+  {
+   "id": "osui.LightboxImage",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-lightbox-image-minimal",
+   "notes": "Interaction/LightboxImage"
+  },
+  {
+   "id": "osui.LightboxImage",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-lightbox-image-typical",
+   "notes": "Interaction/LightboxImage"
+  },
+  {
+   "id": "osui.AnimatedLabel",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-animated-label-minimal",
+   "notes": "Interaction/AnimatedLabel"
+  },
+  {
+   "id": "osui.AnimatedLabel",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-animated-label-typical",
+   "notes": "Interaction/AnimatedLabel"
+  },
+  {
+   "id": "osui.DropdownSearch",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/cap-dropdown-search-minimal",
+   "notes": "Interaction/DropdownSearch"
+  },
+  {
+   "id": "osui.DropdownSearch",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/cap-dropdown-search-typical",
+   "notes": "Interaction/DropdownSearch"
+  },
+  {
+   "id": "osui.StackedCards",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-stacked-cards-minimal",
+   "notes": "Interaction/StackedCards"
+  },
+  {
+   "id": "osui.StackedCards",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-stacked-cards-typical",
+   "notes": "Interaction/StackedCards"
+  },
+  {
+   "id": "osui.FloatingActionsItem",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-floating-actions-item-minimal",
+   "notes": "Interaction/FloatingActionsItem"
+  },
+  {
+   "id": "osui.FloatingActionsItem",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-floating-actions-item-typical",
+   "notes": "Interaction/FloatingActionsItem"
+  },
+  {
+   "id": "osui.ButtonLoading",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-button-loading-minimal",
+   "notes": "Utilities/ButtonLoading"
+  },
+  {
+   "id": "osui.ButtonLoading",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-button-loading-typical",
+   "notes": "Utilities/ButtonLoading"
+  },
+  {
+   "id": "osui.Separator",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-separator-minimal",
+   "notes": "Utilities/Separator"
+  },
+  {
+   "id": "osui.TouchEvents",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-touch-events-minimal",
+   "notes": "Utilities/TouchEvents"
+  },
+  {
+   "id": "osui.TouchEvents",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-touch-events-typical",
+   "notes": "Utilities/TouchEvents"
+  },
+  {
+   "id": "osui.InlineSVG",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-inline-svg-minimal",
+   "notes": "Utilities/InlineSVG"
+  },
+  {
+   "id": "osui.InlineSVG",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-inline-svg-typical",
+   "notes": "Utilities/InlineSVG"
+  },
+  {
+   "id": "osui.SwipeEvents",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "blocked",
+   "job": null,
+   "notes": "Utilities/SwipeEvents: nenhum fixture referencia o bloco (reactive-ui e mobile-ui); exige reference ao produtor OutSystemsUI, que nao esta versionado."
+  },
+  {
+   "id": "osui.SwipeEvents",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "blocked",
+   "job": null,
+   "notes": "Utilities/SwipeEvents: nenhum fixture referencia o bloco (reactive-ui e mobile-ui); exige reference ao produtor OutSystemsUI, que nao esta versionado."
+  },
+  {
+   "id": "osui.MarginContainer",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-margin-container-minimal",
+   "notes": "Utilities/MarginContainer"
+  },
+  {
+   "id": "osui.MarginContainer",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-margin-container-typical",
+   "notes": "Utilities/MarginContainer"
+  },
+  {
+   "id": "osui.AlignCenter",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-align-center-minimal",
+   "notes": "Utilities/AlignCenter"
+  },
+  {
+   "id": "osui.AlignCenter",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-align-center-typical",
+   "notes": "Utilities/AlignCenter"
+  },
+  {
+   "id": "osui.MouseEvents",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "hidden-reference-block",
+   "notes": "Utilities/MouseEvents"
+  },
+  {
+   "id": "osui.MouseEvents",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-mouse-events-typical",
+   "notes": "Utilities/MouseEvents"
+  },
+  {
+   "id": "osui.CenterContent",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-center-content-minimal",
+   "notes": "Utilities/CenterContent"
+  },
+  {
+   "id": "osui.CenterContent",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/osui-center-content-typical",
+   "notes": "Utilities/CenterContent"
+  },
+  {
+   "id": "osui.AppFeedbackHelp",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/osui-app-feedback-help-minimal",
+   "notes": "AppFeedback/AppFeedbackHelp"
+  },
+  {
+   "id": "pattern.list-filter-pagination",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "screen-list-reactive",
+   "notes": "Lista com pesquisa, filtro por static, Table e Pagination (sessões reais de clientes)."
+  },
+  {
+   "id": "pattern.list-filter-pagination",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-list-filter-pagination",
+   "notes": "Lista com pesquisa, filtro por static, Table e Pagination (sessões reais de clientes)."
+  },
+  {
+   "id": "pattern.form-validation-save",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "screen-form-reactive",
+   "notes": "Form com validacao no cliente e no servidor; create/update com o record como expressao."
+  },
+  {
+   "id": "pattern.form-validation-save",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-form-validation-save",
+   "notes": "Form com validacao no cliente e no servidor; create/update com o record como expressao."
+  },
+  {
+   "id": "pattern.master-detail",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "consume-reference-screens",
+   "notes": "Mestre-detalhe numa tela (Columns2, Link com argumento, Refresh Data)."
+  },
+  {
+   "id": "pattern.master-detail",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-master-detail",
+   "notes": "Mestre-detalhe numa tela (Columns2, Link com argumento, Refresh Data)."
+  },
+  {
+   "id": "pattern.producer-public-action",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "producer-public",
+   "notes": "Produtor com entidade, structure e server action publicas."
+  },
+  {
+   "id": "pattern.producer-public-action",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-producer-public-action",
+   "notes": "Produtor com entidade, structure e server action publicas."
+  },
+  {
+   "id": "pattern.consumer-reference-action",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "consume-reference",
+   "notes": "Op reference + chamada da action do produtor; ao vivo producer = nome do modulo e captureProducers."
+  },
+  {
+   "id": "pattern.consumer-reference-action",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-consumer-reference-action",
+   "notes": "Op reference + chamada da action do produtor; ao vivo producer = nome do modulo e captureProducers."
+  },
+  {
+   "id": "pattern.static-dropdown",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "static-entity",
+   "notes": "Static com registros num Dropdown e Entities.X.Y no OnInitialize."
+  },
+  {
+   "id": "pattern.static-dropdown",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-static-dropdown",
+   "notes": "Static com registros num Dropdown e Entities.X.Y no OnInitialize."
+  },
+  {
+   "id": "pattern.timer",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "pacote-laneE-timer-schedule",
+   "notes": "Timer com Schedule e action que trabalha em lote."
+  },
+  {
+   "id": "pattern.timer",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-timer-typical",
+   "notes": "Timer com Schedule e action que trabalha em lote."
+  },
+  {
+   "id": "pattern.role-check-screen",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "security-config-reactive",
+   "notes": "Roles da tela, CheckXRole no OnInitialize e no servidor; If no lugar de Visible."
+  },
+  {
+   "id": "pattern.role-check-screen",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-role-check-screen",
+   "notes": "Roles da tela, CheckXRole no OnInitialize e no servidor; If no lugar de Visible."
+  },
+  {
+   "id": "pattern.osui-buttongroup",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "gallery-native-reactive",
+   "notes": "Button Group (widget nativo no Reactive O11) com OnChange."
+  },
+  {
+   "id": "pattern.osui-buttongroup",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-osui-buttongroup",
+   "notes": "Button Group (widget nativo no Reactive O11) com OnChange."
+  },
+  {
+   "id": "pattern.osui-tabs",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "proven-existing",
+   "job": "osui-patterns",
+   "notes": "Tabs com aba ativa em variavel e OnTabChange."
+  },
+  {
+   "id": "pattern.osui-tabs",
+   "kind": "pattern",
+   "level": "typical",
+   "status": "new",
+   "job": "examples/pat-osui-tabs",
+   "notes": "Tabs com aba ativa em variavel e OnTabChange."
+  },
+  {
+   "id": "pattern.anonymous-screen",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/pat-anonymous-screen",
+   "notes": "Roles declarados uma vez por tela: [Anonymous, Registered] ou [Registered]."
+  },
+  {
+   "id": "pattern.base-showcase",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/ex-base",
+   "notes": "Base dos exemplos de widget: tela Showcase e dados Task/Priority."
+  },
+  {
+   "id": "pattern.base-showcase-mobile",
+   "kind": "pattern",
+   "level": "minimal",
+   "status": "new",
+   "job": "examples/ex-base-mobile",
+   "notes": "Base mobile dos exemplos (ActionSheet, BottomSheet, BottomBarItem)."
+  },
+  {
+   "id": "pattern.backoffice-crud",
+   "kind": "pattern",
+   "level": "rich",
+   "status": "new",
+   "job": "examples/crud-all",
+   "notes": "CRUD back-office numa transacao (um merge): as cinco partes abaixo."
+  },
+  {
+   "id": "pattern.backoffice-crud.01-data",
+   "kind": "pattern",
+   "level": "rich",
+   "status": "new",
+   "job": "examples/crud-01-data",
+   "notes": "Parte 01 (dados), base job: da parte anterior."
+  },
+  {
+   "id": "pattern.backoffice-crud.02-logic",
+   "kind": "pattern",
+   "level": "rich",
+   "status": "new",
+   "job": "examples/crud-02-logic",
+   "notes": "Parte 02 (logica), base job: da parte anterior."
+  },
+  {
+   "id": "pattern.backoffice-crud.03-screens",
+   "kind": "pattern",
+   "level": "rich",
+   "status": "new",
+   "job": "examples/crud-03-screens",
+   "notes": "Parte 03 (telas), base job: da parte anterior."
+  },
+  {
+   "id": "pattern.backoffice-crud.04-edit",
+   "kind": "pattern",
+   "level": "rich",
+   "status": "new",
+   "job": "examples/crud-04-edit",
+   "notes": "Parte 04 (formulario), base job: da parte anterior."
+  },
+  {
+   "id": "pattern.backoffice-crud.05-list",
+   "kind": "pattern",
+   "level": "rich",
+   "status": "new",
+   "job": "examples/crud-05-list",
+   "notes": "Parte 05 (lista e apagar com confirmacao), base job: da parte anterior."
+  }
+ ],
+ "pending": [
+  {
+   "id": "logic.app-event",
+   "kind": "capability",
+   "level": "minimal",
+   "state": "todo",
+   "notes": "So a prova rica (cat-b-app-events); exemplo minimo ainda nao escrito."
+  },
+  {
+   "id": "ui.flow-comment",
+   "kind": "capability",
+   "level": "typical",
+   "state": "not-applicable",
+   "notes": "Comentario do fluxo nao tem dado nem evento: o minimo ja e o uso tipico."
+  },
+  {
+   "id": "ui.widget.text",
+   "kind": "widget",
+   "level": "typical",
+   "state": "not-applicable",
+   "notes": "Texto estatico (nasce no Button/Link): nao tem dado nem evento."
+  },
+  {
+   "id": "ui.web.cell",
+   "kind": "widget",
+   "level": "typical",
+   "state": "todo",
+   "notes": "ICellWidget (Traditional): exemplo tipico ainda nao escrito."
+  },
+  {
+   "id": "ui.web.checkbox",
+   "kind": "widget",
+   "level": "typical",
+   "state": "todo",
+   "notes": "ICheckBoxWidget (Traditional): exemplo tipico ainda nao escrito."
+  },
+  {
+   "id": "ui.web.combobox",
+   "kind": "widget",
+   "level": "typical",
+   "state": "todo",
+   "notes": "IComboBoxWidget (Traditional): exemplo tipico ainda nao escrito."
+  },
+  {
+   "id": "ui.web.radiobutton",
+   "kind": "widget",
+   "level": "typical",
+   "state": "todo",
+   "notes": "IRadioButtonWidget (Traditional): exemplo tipico ainda nao escrito."
+  },
+  {
+   "id": "ui.web.inputpassword",
+   "kind": "widget",
+   "level": "typical",
+   "state": "todo",
+   "notes": "IInputPasswordWidget (Traditional): exemplo tipico ainda nao escrito."
+  },
+  {
+   "id": "ui.web.inputfilename",
+   "kind": "widget",
+   "level": "typical",
+   "state": "todo",
+   "notes": "IInputFilenameWidget (Traditional): exemplo tipico ainda nao escrito."
+  },
+  {
+   "id": "ui.web.listrecords",
+   "kind": "widget",
+   "level": "typical",
+   "state": "todo",
+   "notes": "IListRecordsWidget (Traditional): exemplo tipico ainda nao escrito."
+  },
+  {
+   "id": "ui.web.editrecord",
+   "kind": "widget",
+   "level": "typical",
+   "state": "todo",
+   "notes": "IEditRecordWidget (Traditional): exemplo tipico ainda nao escrito."
+  },
+  {
+   "id": "ui.web.showrecord",
+   "kind": "widget",
+   "level": "typical",
+   "state": "todo",
+   "notes": "IShowRecordWidget (Traditional): exemplo tipico ainda nao escrito."
+  },
+  {
+   "id": "ui.web.table",
+   "kind": "widget",
+   "level": "typical",
+   "state": "todo",
+   "notes": "ITableWidget (Traditional): exemplo tipico ainda nao escrito."
+  },
+  {
+   "id": "ui.web.row",
+   "kind": "widget",
+   "level": "typical",
+   "state": "todo",
+   "notes": "IRowWidget (Traditional): exemplo tipico ainda nao escrito."
+  },
+  {
+   "id": "ui.web.text",
+   "kind": "widget",
+   "level": "typical",
+   "state": "todo",
+   "notes": "ITextWidget (Web) (Traditional): exemplo tipico ainda nao escrito."
+  },
+  {
+   "id": "ui.web.if",
+   "kind": "widget",
+   "level": "typical",
+   "state": "todo",
+   "notes": "IIfWidget (Web) (Traditional): exemplo tipico ainda nao escrito."
+  },
+  {
+   "id": "ui.web.editabletable",
+   "kind": "widget",
+   "level": "typical",
+   "state": "todo",
+   "notes": "IEditableTable (Traditional): exemplo tipico ainda nao escrito."
+  },
+  {
+   "id": "ui.web.editabletablecell",
+   "kind": "widget",
+   "level": "typical",
+   "state": "todo",
+   "notes": "IEditableTableCell (Traditional): exemplo tipico ainda nao escrito."
+  },
+  {
+   "id": "ui.web.form",
+   "kind": "widget",
+   "level": "typical",
+   "state": "todo",
+   "notes": "IForm (Web) (Traditional): exemplo tipico ainda nao escrito."
+  },
+  {
+   "id": "ui.web.label",
+   "kind": "widget",
+   "level": "typical",
+   "state": "todo",
+   "notes": "ILabel (Web) (Traditional): exemplo tipico ainda nao escrito."
+  },
+  {
+   "id": "ui.web.blockinstance",
+   "kind": "widget",
+   "level": "typical",
+   "state": "todo",
+   "notes": "IWebBlockInstanceWidget (Traditional): exemplo tipico ainda nao escrito."
+  },
+  {
+   "id": "osui.SectionGroup",
+   "kind": "pattern",
+   "level": "typical",
+   "state": "not-applicable",
+   "notes": "Content/SectionGroup: sem input obrigatorio, evento ou placeholder vazio; o minimo ja e o uso tipico."
+  },
+  {
+   "id": "osui.UserAvatar",
+   "kind": "pattern",
+   "level": "typical",
+   "state": "not-applicable",
+   "notes": "Content/UserAvatar: sem input obrigatorio, evento ou placeholder vazio; o minimo ja e o uso tipico."
+  },
+  {
+   "id": "osui.Separator",
+   "kind": "pattern",
+   "level": "typical",
+   "state": "not-applicable",
+   "notes": "Utilities/Separator: sem input obrigatorio, evento ou placeholder vazio; o minimo ja e o uso tipico."
+  },
+  {
+   "id": "osui.AppFeedbackHelp",
+   "kind": "pattern",
+   "level": "typical",
+   "state": "not-applicable",
+   "notes": "AppFeedback/AppFeedbackHelp: sem input obrigatorio, evento ou placeholder vazio; o minimo ja e o uso tipico."
+  }
+ ]
+}

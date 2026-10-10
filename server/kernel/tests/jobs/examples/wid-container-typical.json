@@ -1,0 +1,17 @@
+{
+ "description": "Container tipico: uma linha por tarefa numa List, alinhada a esquerda, com a classe CSS calculada pelos dados (Style com If sobre Task.Done), sem usar Visible.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetTaskCards", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "TaskCards", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetTaskCards.List"},
+  {"op": "create", "parent": "$list", "type": "IContainer", "name": "TaskCard", "as": "$box"},
+  {"op": "set", "target": "$box", "prop": "Align", "value": "Left"},
+  {"op": "set", "target": "$box", "prop": "Style", "value": "\"padding-s \" + If(GetTaskCards.List.Current.Task.Done, \"background-neutral-2\", \"background-neutral-0\")"},
+  {"op": "create", "parent": "$box", "type": "IExpression", "as": "$boxT"},
+  {"op": "set", "target": "$boxT", "prop": "Value", "value": "GetTaskCards.List.Current.Task.Title"}
+ ]
+}

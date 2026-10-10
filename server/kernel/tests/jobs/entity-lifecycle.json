@@ -1,0 +1,71 @@
+{
+ "description": "O11 (lote de dados, fase 3): o ciclo de vida do MODELO de entidades sobre um modelo herdado (job:spec-data: Contact com FK StatusId para a static Status, a action Contact_CountActive com aggregate e filtro `Contact.StatusId = Entities.Status.Active`). O espelho de tests/jobs-odc/entity-lifecycle.json. (1) LER entidade, atributos, o filho `Contact Identifier` (IIdentifierType) e os consumidores (usages da entidade sub-reporta as FKs, que se ligam ao filho identificador). (2) CRIAR entidade relacionada por spec com FK e indice unico COMPOSTO (ContactNote), e um atributo + um indice composto por verbos crus na entidade herdada. (3) EDITAR propriedades de atributos existentes (Length, IsMandatory, Description, DefaultValue, DataType de um atributo SEM consumidores). (4) o consumidor real ja existe (aggregate com filtro). (5) RENOMEAR entidade e atributos com consumidores: filtro e FK seguem por chave, o nome do indice nao. (6) MOVER um atributo. (7) INDICE: alterar Unique, apagar, recriar com outra composicao. (8) APAGAR um atributo sem consumidores. Execucao headless nao e migracao de banco publicado.",
+ "base": "job:spec-data",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "find", "name": "Contact", "_why": "(1) a entidade herdada e o filho `Contact Identifier`"},
+  {"op": "get", "target": "IServerEntity:Contact", "_why": "(1) Attributes 5 (Id, Name, Email, StatusId, CreatedOn), Public True"},
+  {"op": "dump", "target": "IServerEntity:Contact", "depth": 2, "_why": "(1) a arvore: atributos, o IIdentifierType, o SampleRecord, as entity actions"},
+  {"op": "get", "target": "IServerEntity:Contact/StatusId", "_why": "(1) a FK para a static: DataType Status Identifier, DefaultValue Entities.Status.Active"},
+  {"op": "get", "target": "IServerEntity:Contact/#IIdentifierType", "_why": "(1) o filho `Contact Identifier` (IIdentifierType) gerado pela plataforma: so se le; e a ele que as FKs de outras entidades se ligam"},
+  {"op": "usages", "target": "IServerEntity:Contact", "max": 20, "_why": "(1) consumidores da entidade: o aggregate de Contact_CountActive (source) e o registo anonimo; FKs de outras entidades nunca aparecem aqui"},
+  {"op": "usages", "target": "IServerEntity:Contact/StatusId", "max": 20, "_why": "(1) o filtro do aggregate cita a FK"},
+
+  {"op": "spec", "data": {"entities": [
+   {"name": "ContactNote", "description": "Nota de um contacto (lote de dados, fase 3)", "updateBehavior": "Optimized", "attributes": [
+    {"name": "ContactId", "type": "Contact Identifier", "mandatory": true, "deleteRule": "Delete"},
+    {"name": "Title", "type": "Text", "mandatory": true, "length": 80},
+    {"name": "Body", "type": "Text", "length": 2000},
+    {"name": "CreatedOn", "type": "Date Time", "default": "CurrDateTime()"}
+   ], "indexes": [
+    {"name": "UQ_ContactNote_ContactTitle", "unique": true, "attributes": ["ContactId", "Title"]}
+   ]}
+  ]}, "_why": "(2) entidade relacionada por spec: FK para a entidade HERDADA, indice unico composto (FK + Title)"},
+  {"op": "get", "target": "EntityIndex:UQ_ContactNote_ContactTitle", "_why": "(2) Unique true, Attributes [ContactId, Title], AttributeKeys por chave"},
+  {"op": "get", "target": "$ContactNote.ContactId", "_why": "(2) DataType = Contact Identifier; DeleteRule Delete"},
+  {"op": "dump", "target": "$ContactNote", "depth": 2, "_why": "(2) tambem no O11 a FK nasce com o seu AutoIndex_ContactId ao lado do indice do autor (medido em 2026-09-23; conta como consumidor da FK ao apagar)"},
+
+  {"op": "create", "parent": "IServerEntity:Contact", "type": "IEntityAttribute", "name": "Phone", "as": "$phone", "_why": "(2) atributo por verbo cru numa entidade herdada, enderecada por caminho"},
+  {"op": "set", "target": "$phone", "prop": "DataType", "value": "Phone Number"},
+  {"op": "set", "target": "$phone", "prop": "Description", "value": "Telefone (lote de dados, fase 3)"},
+  {"op": "create", "parent": "IServerEntity:Contact", "type": "EntityIndex", "name": "IX_Contact_EmailStatus", "args": {"unique": false, "attributes": ["IServerEntity:Contact/Email", "IServerEntity:Contact/StatusId"]}, "_why": "(2) indice composto por verbo cru sobre colunas herdadas"},
+  {"op": "get", "target": "EntityIndex:IX_Contact_EmailStatus", "_why": "(2) Unique false, Attributes [Email, StatusId]"},
+
+  {"op": "set", "target": "IServerEntity:Contact/Name", "prop": "Length", "value": 150, "_why": "(3) editar um atributo herdado: Length 100 -> 150"},
+  {"op": "set", "target": "IServerEntity:Contact/Name", "prop": "Description", "value": "Nome completo (editado pelo lote de dados)"},
+  {"op": "set", "target": "IServerEntity:Contact/CreatedOn", "prop": "IsMandatory", "value": true, "_why": "(3) obrigatoriedade: executa headless; num banco publicado com linhas sem valor isto NAO e provado aqui"},
+  {"op": "set", "target": "IServerEntity:Contact/Email", "prop": "DataType", "value": "Text", "_why": "(3) mudanca de tipo num atributo SEM consumidores de autoria (Email -> Text); com consumidores e o Verify quem decide"},
+  {"op": "set", "target": "IServerEntity:Contact/Email", "prop": "Length", "value": 250},
+  {"op": "get", "target": "IServerEntity:Contact/Email", "_why": "(3) DataType Text, Length 250"},
+  {"op": "get", "target": "IServerEntity:Contact/Name", "_why": "(3) Length 150, Description nova"},
+
+  {"op": "usages", "target": "IServerEntity:Contact/StatusId", "max": 20, "_why": "(4) ANTES do rename: o filtro do aggregate e o indice novo"},
+
+  {"op": "rename", "target": "IServerEntity:Contact", "name": "Person", "_why": "(5) rename da entidade com consumidores: aggregate, FK de ContactNote (por chave), indices; o filtro e reescrito pela plataforma"},
+  {"op": "get", "target": "IServerAction:Contact_CountActive/GetActive", "_why": "(5) o aggregate continua ligado por chave"},
+  {"op": "get", "target": "$ContactNote.ContactId", "_why": "(5) a FK segue: DataType agora `Person Identifier` (o mesmo IIdentifierType, renomeado com a entidade)"},
+  {"op": "rename", "target": "IServerEntity:Person/StatusId", "name": "StateId", "_why": "(5) rename de um atributo citado pelo filtro e por um indice"},
+  {"op": "dump", "target": "IServerAction:Contact_CountActive", "depth": 4, "_why": "(5) o filtro reescrito: Person.StateId = Entities.Status.Active"},
+  {"op": "get", "target": "EntityIndex:IX_Contact_EmailStatus", "_why": "(5) o indice segue por chave: Attributes [Email, StateId]; o NOME fica IX_Contact_EmailStatus"},
+  {"op": "usages", "target": "IServerEntity:Person/StateId", "max": 20, "_why": "(5) os mesmos consumidores sob o nome novo"},
+  {"op": "rename", "target": "IServerEntity:Person/Name", "name": "FullName", "_why": "(5) rename de um atributo sem consumidores de expressao; a Description escrita em (3) fica"},
+  {"op": "get", "target": "IServerEntity:Person/FullName", "_why": "(5) Length 150 e a Description continuam"},
+
+  {"op": "move", "target": "IServerEntity:Person/Phone", "after": "IServerEntity:Person/FullName", "_why": "(6) reordenar: o atributo novo (nascido no fim) passa para depois de FullName"},
+  {"op": "dump", "target": "IServerEntity:Person", "depth": 1, "_why": "(6) a ordem lida de volta"},
+
+  {"op": "set", "target": "EntityIndex:IX_Contact_EmailStatus", "prop": "Unique", "value": true, "_why": "(7) alterar a unicidade de um indice existente"},
+  {"op": "get", "target": "EntityIndex:IX_Contact_EmailStatus", "_why": "(7) Unique true"},
+  {"op": "set", "target": "EntityIndex:IX_Contact_EmailStatus", "prop": "Unique", "value": false},
+  {"op": "delete", "target": "EntityIndex:IX_Contact_EmailStatus", "_why": "(7) apagar um indice"},
+  {"op": "create", "parent": "IServerEntity:Person", "type": "EntityIndex", "name": "IX_Person_StateEmail", "args": {"unique": false, "attributes": ["IServerEntity:Person/StateId", "IServerEntity:Person/Email"]}, "_why": "(7) alterar a composicao/ordem dos atributos = apagar e recriar"},
+  {"op": "get", "target": "EntityIndex:IX_Person_StateEmail", "_why": "(7) Attributes [StateId, Email]"},
+
+  {"op": "usages", "target": "IServerEntity:Person/Phone", "max": 20, "_why": "(8) real 0"},
+  {"op": "delete", "target": "IServerEntity:Person/Phone", "_why": "(8) apagar um atributo sem consumidores: sem force, brokenConsumers 0"},
+  {"op": "get", "target": "IServerEntity:Person", "_why": "(8) Attributes 5 outra vez"},
+  {"op": "dump", "target": "IServerEntity:Person", "depth": 2},
+  {"op": "find", "name": "Contact", "_why": "(8) o nome antigo ja nao existe como entidade (fica so a action Contact_CountActive, que nao foi renomeada)"}
+ ]
+}

@@ -1,0 +1,12 @@
+{
+ "description": "UserAvatar do OSUI: a instancia com o nome que gera as iniciais.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "AvatarDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "UserAvatar1", "source": "IMobileBlock:UserAvatar", "as": "$av"},
+  {"op": "set", "target": "$av/Name", "prop": "Value", "value": "\"Ana Lima\""}
+ ]
+}

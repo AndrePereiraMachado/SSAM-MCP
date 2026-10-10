@@ -1,0 +1,47 @@
+{
+ "description": "Cobertura testada (fase 1, medir): life de OutSystems.Model.UI.Web.IPreparation (o11) em webBlock. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IWebFlow:MainFlow",
+   "type": "IWebBlock",
+   "name": "CovSWebBlock",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IPreparation",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IStartNode",
+   "as": "$a_s"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IEndNode",
+   "as": "$a_e"
+  },
+  {
+   "op": "link",
+   "from": "$a_s",
+   "to": "$a_e"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "UserReadOnlySessionsInScreens",
+   "value": true
+  }
+ ]
+}

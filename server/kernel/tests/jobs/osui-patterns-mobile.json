@@ -1,0 +1,350 @@
+{
+ "description": "Tela Mobile com padroes do OutSystems UI (Tabs, TabsHeaderItem, TabsContentItem, Accordion, AccordionItem, Card) montada so com a referencia gerada em docs/ui/OutSystemsUI",
+ "base": "tests/fixtures/mobile-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedElement",
+   "element": "Tabs1_OnTabChange (ScreenAction) / TabsId (InputParameter)",
+   "why": "Parametros obrigatorios do contrato OnTabChange; o handler de demonstracao nao usa esses valores."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "Tabs1_OnTabChange (ScreenAction) / ActiveTab (InputParameter)",
+   "why": "Parametros obrigatorios do contrato OnTabChange; o handler de demonstracao nao usa esses valores."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "Patterns",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:Layout"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/Title",
+   "type": "IExpression",
+   "as": "$title"
+  },
+  {
+   "op": "set",
+   "target": "$title",
+   "prop": "Value",
+   "value": "\"Patterns\""
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/Content",
+   "type": "IMobileBlockInstanceWidget",
+   "name": "Tabs1",
+   "as": "$tabs",
+   "empty": true,
+   "source": "IMobileBlock:Tabs"
+  },
+  {
+   "op": "set",
+   "target": "$tabs/StartingTab",
+   "prop": "Value",
+   "value": "0"
+  },
+  {
+   "op": "create",
+   "parent": "$tabs/Header",
+   "type": "IMobileBlockInstanceWidget",
+   "name": "TabsHeaderItem1",
+   "as": "$h1"
+  },
+  {
+   "op": "set",
+   "target": "$h1",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:TabsHeaderItem"
+  },
+  {
+   "op": "create",
+   "parent": "$h1/Title",
+   "type": "IExpression",
+   "as": "$h1t"
+  },
+  {
+   "op": "set",
+   "target": "$h1t",
+   "prop": "Value",
+   "value": "\"Detalhes\""
+  },
+  {
+   "op": "create",
+   "parent": "$tabs/Header",
+   "type": "IMobileBlockInstanceWidget",
+   "name": "TabsHeaderItem2",
+   "as": "$h2"
+  },
+  {
+   "op": "set",
+   "target": "$h2",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:TabsHeaderItem"
+  },
+  {
+   "op": "create",
+   "parent": "$h2/Title",
+   "type": "IExpression",
+   "as": "$h2t"
+  },
+  {
+   "op": "set",
+   "target": "$h2t",
+   "prop": "Value",
+   "value": "\"Perguntas\""
+  },
+  {
+   "op": "create",
+   "parent": "$tabs/Content",
+   "type": "IMobileBlockInstanceWidget",
+   "name": "TabsContentItem1",
+   "as": "$c1"
+  },
+  {
+   "op": "set",
+   "target": "$c1",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:TabsContentItem"
+  },
+  {
+   "op": "create",
+   "parent": "$c1/Content",
+   "type": "IMobileBlockInstanceWidget",
+   "name": "Card1",
+   "as": "$card"
+  },
+  {
+   "op": "set",
+   "target": "$card",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:Card"
+  },
+  {
+   "op": "set",
+   "target": "$card/UsePadding",
+   "prop": "Value",
+   "value": "True"
+  },
+  {
+   "op": "create",
+   "parent": "$card/Content",
+   "type": "IExpression",
+   "as": "$cardt"
+  },
+  {
+   "op": "set",
+   "target": "$cardt",
+   "prop": "Value",
+   "value": "\"Conteudo do cartao\""
+  },
+  {
+   "op": "create",
+   "parent": "$tabs/Content",
+   "type": "IMobileBlockInstanceWidget",
+   "name": "TabsContentItem2",
+   "as": "$c2"
+  },
+  {
+   "op": "set",
+   "target": "$c2",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:TabsContentItem"
+  },
+  {
+   "op": "create",
+   "parent": "$c2/Content",
+   "type": "IMobileBlockInstanceWidget",
+   "name": "Accordion1",
+   "as": "$acc",
+   "empty": true,
+   "source": "IMobileBlock:Accordion"
+  },
+  {
+   "op": "set",
+   "target": "$acc/MultipleItems",
+   "prop": "Value",
+   "value": "True"
+  },
+  {
+   "op": "create",
+   "parent": "$acc/Content",
+   "type": "IMobileBlockInstanceWidget",
+   "name": "AccordionItem1",
+   "as": "$a1"
+  },
+  {
+   "op": "set",
+   "target": "$a1",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:AccordionItem"
+  },
+  {
+   "op": "set",
+   "target": "$a1/StartsExpanded",
+   "prop": "Value",
+   "value": "True"
+  },
+  {
+   "op": "set",
+   "target": "$a1/Icon",
+   "prop": "Value",
+   "value": "Entities.AccordionIconType.PlusMinus"
+  },
+  {
+   "op": "create",
+   "parent": "$a1/Title",
+   "type": "IExpression",
+   "as": "$a1t"
+  },
+  {
+   "op": "set",
+   "target": "$a1t",
+   "prop": "Value",
+   "value": "\"Como reservar?\""
+  },
+  {
+   "op": "create",
+   "parent": "$a1/Content",
+   "type": "IExpression",
+   "as": "$a1c"
+  },
+  {
+   "op": "set",
+   "target": "$a1c",
+   "prop": "Value",
+   "value": "\"Escolha as datas e confirme.\""
+  },
+  {
+   "op": "create",
+   "parent": "$acc/Content",
+   "type": "IMobileBlockInstanceWidget",
+   "name": "AccordionItem2",
+   "as": "$a2"
+  },
+  {
+   "op": "set",
+   "target": "$a2",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:AccordionItem"
+  },
+  {
+   "op": "create",
+   "parent": "$a2/Title",
+   "type": "IExpression",
+   "as": "$a2t"
+  },
+  {
+   "op": "set",
+   "target": "$a2t",
+   "prop": "Value",
+   "value": "\"Posso cancelar?\""
+  },
+  {
+   "op": "create",
+   "parent": "$a2/Content",
+   "type": "IExpression",
+   "as": "$a2c"
+  },
+  {
+   "op": "set",
+   "target": "$a2c",
+   "prop": "Value",
+   "value": "\"Ate 48 h antes do check-in.\""
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAction",
+   "name": "Tabs1_OnTabChange",
+   "as": "$h"
+  },
+  {
+   "op": "create",
+   "parent": "$h",
+   "type": "IInputParameter",
+   "name": "TabsId",
+   "as": "$hp1"
+  },
+  {
+   "op": "set",
+   "target": "$hp1",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$h",
+   "type": "IInputParameter",
+   "name": "ActiveTab",
+   "as": "$hp2"
+  },
+  {
+   "op": "set",
+   "target": "$hp2",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$h",
+   "type": "IStartNode",
+   "name": "Start",
+   "as": "$hs"
+  },
+  {
+   "op": "create",
+   "parent": "$h",
+   "type": "IEndNode",
+   "name": "End",
+   "as": "$he"
+  },
+  {
+   "op": "link",
+   "from": "$hs",
+   "to": "$he"
+  },
+  {
+   "op": "layout",
+   "target": "$h"
+  },
+  {
+   "op": "set",
+   "target": "$tabs/OnTabChange",
+   "prop": "Handler",
+   "value": "$h"
+  },
+  {
+   "op": "set",
+   "target": "$tabs/OnTabChange/TabsId",
+   "prop": "Value",
+   "value": "TabsId"
+  },
+  {
+   "op": "set",
+   "target": "$tabs/OnTabChange/ActiveTab",
+   "prop": "Value",
+   "value": "ActiveTab"
+  },
+  {
+   "op": "get",
+   "target": "$tabs/OnTabChange"
+  },
+  {
+   "op": "dump",
+   "target": "$scr",
+   "depth": 9
+  }
+ ]
+}

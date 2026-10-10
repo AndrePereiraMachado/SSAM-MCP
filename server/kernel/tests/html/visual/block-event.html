@@ -1,0 +1,5 @@
+<div id="RatingPanel" class="wf-rating">
+  <span class="wf-rating-title">Rate this stay</span>
+  <Block id="RatingPicker1" name="WfRatingPicker" :Caption='"Que nota da a esta estadia?"' @OnRate="WfRateReceived"></Block>
+  <span class="wf-rating-echo">{{ "Ultima nota: " + IntegerToText(LastRating) + " (" + LastComment + ")" }}</span>
+</div>

@@ -1,0 +1,100 @@
+{
+ "description": "Cobertura testada (fase 2): del de OutSystems.Model.BusinessProcesses.IOutcome (odc) em ctxWorkflowDecision. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/blank-workflow.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IBusinessProcess",
+   "name": "CovSWorkflow",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "set",
+   "target": "$fs",
+   "prop": "TriggerMode",
+   "value": "Schedule"
+  },
+  {
+   "op": "set",
+   "target": "$fs",
+   "prop": "Frequency",
+   "value": "Daily"
+  },
+  {
+   "op": "set",
+   "target": "$fs/ScheduleConfiguration",
+   "prop": "CronExpression",
+   "value": "0 6 * * *"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "OutSystems.Model.BusinessProcesses.Nodes.IDecisionNode",
+   "name": "CovSDecision",
+   "as": "$d"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$d"
+  },
+  {
+   "op": "create",
+   "parent": "$d",
+   "type": "IOutcome",
+   "as": "$o1"
+  },
+  {
+   "op": "set",
+   "target": "$o1",
+   "prop": "Value",
+   "value": "True"
+  },
+  {
+   "op": "link",
+   "from": "$o1",
+   "to": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$d",
+   "type": "IOutcome",
+   "as": "$o2"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEndNode",
+   "as": "$fe2"
+  },
+  {
+   "op": "link",
+   "from": "$o2",
+   "to": "$fe2"
+  },
+  {
+   "op": "create",
+   "parent": "$d",
+   "type": "IOutcome",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

@@ -1,0 +1,11 @@
+{
+ "description": "A RECUSA do delete de uma FK cujo AutoIndex ainda existe: nas duas faixas cada FK nasce com um indice automatico (AutoIndex_<Atributo>) que conta como consumidor; sem apagar primeiro o indice, o delete do atributo e recusado a nomea-lo, mesmo sem consumidores de autor (o aggregate foi apagado antes). O caminho limpo (apagar o AutoIndex e depois a FK) esta em tests/jobs/entity-refactor.json (lote de dados, fase 3).",
+ "base": "job:spec-data",
+ "expectValid": true,
+ "expectError": ["delete: refused", "IEntityAttribute 'StatusId' is used by 1 consumer(s)", "EntityIndex:AutoIndex_StatusId/EntityIndexAttribute"],
+ "ops": [
+  {"op": "delete", "target": "IServerAction:Contact_CountActive"},
+  {"op": "usages", "target": "IServerEntity:Contact/StatusId"},
+  {"op": "delete", "target": "IServerEntity:Contact/StatusId"}
+ ]
+}

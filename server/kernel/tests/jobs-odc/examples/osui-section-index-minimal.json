@@ -1,0 +1,11 @@
+{
+ "description": "SectionIndex do OSUI: a instancia com empty (os itens de exemplo nascem sem ScrollToWidgetId).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "SectionIndexDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "SectionIndex1", "source": "IMobileBlock:SectionIndex", "empty": true, "as": "$si"}
+ ]
+}

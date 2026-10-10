@@ -1,0 +1,71 @@
+namespace ExceptionSearchOracle;
+
+internal static class FilterHelperThrows
+{
+    internal static OracleResult Run()
+    {
+        var result = new OracleResult("throwing-filter-helper-is-false-with-effects");
+        var original = new InvalidOperationException("original");
+        var helperFailure = new ApplicationException("helper");
+        var state = 0;
+        var firstCatchEntered = false;
+
+        bool FirstFilter(Exception exception)
+        {
+            result.Events.Add($"first.filter:{Identity.Of(exception, original, helper: helperFailure)}:state={state}");
+            return ThrowingHelper();
+        }
+
+        bool ThrowingHelper()
+        {
+            try
+            {
+                state += 1;
+                result.Events.Add($"helper.throw:helper:state={state}");
+                throw helperFailure;
+            }
+            finally
+            {
+                state += 10;
+                result.Events.Add($"helper.finally:state={state}");
+            }
+        }
+
+        bool FallbackFilter(Exception exception)
+        {
+            result.Events.Add($"fallback.filter:{Identity.Of(exception, original, helper: helperFailure)}:state={state}");
+            return true;
+        }
+
+        try
+        {
+            try
+            {
+                result.Events.Add("body.throw:original");
+                throw original;
+            }
+            finally
+            {
+                state += 100;
+                result.Events.Add($"body.finally:state={state}");
+            }
+        }
+        catch (Exception exception) when (FirstFilter(exception))
+        {
+            firstCatchEntered = true;
+            result.CaughtException = Identity.Of(exception, original, helper: helperFailure);
+            result.Events.Add("first.catch:unexpected");
+            result.ReturnValue = "first-catch";
+        }
+        catch (Exception exception) when (FallbackFilter(exception))
+        {
+            result.CaughtException = Identity.Of(exception, original, helper: helperFailure);
+            result.Events.Add($"fallback.catch:{result.CaughtException}:state={state}");
+            result.ReturnValue = "fallback";
+        }
+
+        result.State["state"] = state.ToString();
+        result.State["firstCatchEntered"] = firstCatchEntered ? "true" : "false";
+        return result;
+    }
+}

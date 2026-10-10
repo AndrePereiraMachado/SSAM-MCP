@@ -1,0 +1,13 @@
+{
+ "description": "Frente A (catalogo abrangente), faixa ODC: a RECUSA de ligar um ramo por um conector que o no nao tem. Num If os ramos sao TrueTarget/FalseTarget; 'Then' nao existe e o link tem de ser recusado com a lista dos conectores aceites, antes de tocar no fluxo. E o diagnostico que o contrato de logic.flow devolve quando a intencao usa o nome do ramo em vez do conector.",
+ "base": "job:logic-steps",
+ "expectValid": true,
+ "expectError": [
+  "has no connector 'Then'",
+  "TrueTarget",
+  "FalseTarget"
+ ],
+ "ops": [
+  {"op": "link", "from": "IServerAction:WfCov_Project_CloseOpenTasks/#IIfNode[1]", "connector": "Then", "to": "IServerAction:WfCov_Project_CloseOpenTasks/#IRaiseExceptionNode[1]"}
+ ]
+}

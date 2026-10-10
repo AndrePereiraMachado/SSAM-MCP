@@ -1,0 +1,46 @@
+{
+ "description": "ODC (cobertura E/D): o CICLO DE VIDA de um timer que JA EXISTIA. Nada e criado aqui: a base e job:timer-action, e tudo o que este job faz e MEXER no WfCovOverdueSweep que veio de la -- mudar o agendamento pelas duas vias, mudar o TimeoutInMinutes, a prioridade e a descricao, renomea-lo e apaga-lo. A pergunta que o job responde: o censo (anvil-odc census --oml .local/lane-odc/jobs/timer-action.oml) marca ITimer.ScheduleConfiguration (ISchedule) e ISchedule.ScheduleItems como readOnly, e dentro de cada item MinuteValues/HourValues tambem sao readOnly -- so Interval e WhenPublished se escrevem, e nenhum deles e o agendamento. Entao POR ONDE se muda o agendamento? Pelo PAI: o ITimer tem duas propriedades de escrita, CronSchedule e Schedule, e cada uma delas manda a plataforma DEITAR FORA a arvore ISchedule e construir outra (os IMinute/IHour voltam com CHAVES NOVAS, e isso e a prova de que ninguem edita o filho readOnly: ele e saida, nunca entrada). As duas vias sao inversas uma da outra e cada uma reescreve a outra propriedade. Fecha com rename (o filho derivado WakeTimerAction segue o nome sozinho) e delete (o timer sai sem consumidores; a server action que ele acordava fica orfa, e o Verify diz isso -- e por isso que ha uma mensagem declarada).",
+ "base": "job:timer-action",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedUserAction",
+   "element": "InsuranceApp (ESpace) / WfCovTask_SweepOverdue (ServerAction)",
+   "why": "Apagar o timer e apagar o UNICO consumidor da WfCovTask_SweepOverdue: a logica que ele acordava fica no modulo sem ninguem a chamar. O aviso e a consequencia declarada do delete, nao um defeito do job -- o ultimo usages prova-o com real=0. Apaga-la tambem calaria o aviso, mas este job e o ciclo de vida do TIMER e a evidencia de que apagar um timer nao leva a logica atras vale mais do que o silencio."
+  }
+ ],
+ "ops": [
+  {"op": "find", "type": "ITimer", "_why": "1. HERDADO, nao criado: o modulo chega a este job ja com UM timer, o do job:timer-action. Compare com o find do fim."},
+  {"op": "get", "target": "ITimer:WfCovOverdueSweep", "_why": "o estado que veio da base: CronSchedule '15 3 * * *', a derivada Schedule '03:15', TimeoutInMinutes 20, Priority Normal"},
+  {"op": "get", "target": "ITimer:WfCovOverdueSweep/ScheduleConfiguration", "_why": "o filho readOnly do censo: ScheduleItems traz 5 itens e a unica propriedade que ele deixa escrever e WhenPublished"},
+  {"op": "get", "target": "ITimer:WfCovOverdueSweep/ScheduleConfiguration/#IMinute", "_why": "GUARDE ESTA CHAVE: Interval AtOrOn e MinuteValues 1 (o minuto 15). Vai voltar outra depois do primeiro set."},
+  {"op": "get", "target": "ITimer:WfCovOverdueSweep/ScheduleConfiguration/#IDayOfWeek", "_why": "o '*' do cron nao e ausencia: e um IDayOfWeek com Interval Any e zero valores"},
+
+  {"op": "set", "target": "ITimer:WfCovOverdueSweep", "prop": "CronSchedule", "value": "*/15 8-18 * * 1-5", "_why": "2. VIA A: escrever o cron no PAI. E este o caminho que o censo esconde -- a arvore ISchedule e readOnly porque quem a constroi e a plataforma, a partir desta string (FromCronExpression). De 5 em 5 campos: de 15 em 15 minutos, das 8 as 18, de segunda a sexta."},
+  {"op": "get", "target": "ITimer:WfCovOverdueSweep", "_why": "os dois lados mexeram-se juntos: CronSchedule e o texto que escrevemos e Schedule, que e DERIVADA, expandiu-se na lista legivel ('08:00 08:15 ... Mon Tue Wed Thu Fri') em vez do '03:15' de antes"},
+  {"op": "get", "target": "ITimer:WfCovOverdueSweep/ScheduleConfiguration/#IMinute", "_why": "A PROVA: a chave do IMinute NAO e a de cima. O objeto nao foi editado -- foi deitado fora e construido outro, agora com Interval 'Every' (o */15) em vez de 'AtOrOn'. Um set no filho readOnly nao teria como fazer isto."},
+  {"op": "get", "target": "ITimer:WfCovOverdueSweep/ScheduleConfiguration/#IHour", "_why": "o mesmo na hora: Interval 'Between' e HourValues 2 (o inicio e o fim do 8-18), tambem com chave nova"},
+  {"op": "dump", "target": "ITimer:WfCovOverdueSweep", "depth": 3, "_why": "a arvore inteira reconstruida: cinco itens, porque FromCronExpression cria tambem os placeholders Any (IMonth, IDayOfMonth)"},
+
+  {"op": "set", "target": "ITimer:WfCovOverdueSweep", "prop": "Schedule", "value": "07:45", "_why": "3. VIA B, a inversa: Schedule tambem se escreve, e nao e so um texto bonito -- escrever a hora legivel manda a plataforma gerar o cron. Serve para o caso comum ('corre as 07:45') sem soletrar cron."},
+  {"op": "get", "target": "ITimer:WfCovOverdueSweep", "_why": "e CronSchedule apareceu sozinho como '45 7 * * *': as duas propriedades sao duas caras da MESMA arvore, cada escrita regenera a outra cara"},
+  {"op": "dump", "target": "ITimer:WfCovOverdueSweep", "depth": 3, "_why": "DIFERENCA ENTRE AS DUAS VIAS: por aqui a arvore fica com DOIS itens (IMinute, IHour) e nao cinco -- o construtor da hora legivel nao cria placeholders Any. Mesmo agendamento, forma diferente por dentro; nao conte itens para inferir o agendamento."},
+
+  {"op": "set", "target": "ITimer:WfCovOverdueSweep", "prop": "TimeoutInMinutes", "value": 45, "_why": "4. o resto da edicao, sobre valores que ja existiam: 20 -> 45"},
+  {"op": "set", "target": "ITimer:WfCovOverdueSweep", "prop": "Priority", "value": "High", "_why": "Normal -> High"},
+  {"op": "set", "target": "ITimer:WfCovOverdueSweep", "prop": "Description", "value": "Cobertura E: varre tarefas vencidas de 15 em 15 minutos no horario de trabalho"},
+  {"op": "get", "target": "ITimer:WfCovOverdueSweep", "_why": "as quatro edicoes num so read-back; repare que a Description ainda fala do */15 que ja nao esta la: texto escrito a mao nunca acompanha o modelo"},
+  {"op": "set", "target": "ITimer:WfCovOverdueSweep", "prop": "CronSchedule", "value": "*/15 8-18 * * 1-5", "_why": "por isso o conserto e a mao, do outro lado: repor o agendamento que a Description descreve"},
+  {"op": "get", "target": "ITimer:WfCovOverdueSweep", "_why": "estado final da edicao, coerente com a descricao"},
+
+  {"op": "usages", "target": "ITimer:WfCovOverdueSweep", "_why": "5. ANTES DE RENOMEAR: um timer e uma folha do grafo -- ninguem o consome (real 0). E ele que consome."},
+  {"op": "usages", "target": "IServerAction:WfCovTask_SweepOverdue", "_why": "do outro lado: a action tem exatamente UM consumidor real, este timer"},
+  {"op": "rename", "target": "ITimer:WfCovOverdueSweep", "name": "WfCovOverdueNightly", "_why": "6. REFATORAR: consumers 0 e expressionsRewritten 0 nao querem dizer que nada mexeu -- querem dizer que nada APONTA para um timer. O que mexe e o que esta DENTRO dele."},
+  {"op": "dump", "target": "ITimer:WfCovOverdueNightly", "depth": 2, "_why": "o filho derivado seguiu sozinho: o IActionSignature do timer passou de WakeWfCovOverdueSweep a WakeWfCovOverdueNightly. Nao ha op a pedir isso; e a plataforma a manter o que e dela."},
+  {"op": "usages", "target": "IServerAction:WfCovTask_SweepOverdue", "_why": "e a ligacao para a action sobreviveu ao rename, agora com o nome novo no caminho: consumidores ficam presos por CHAVE, nao por nome"},
+
+  {"op": "delete", "target": "ITimer:WfCovOverdueNightly", "_why": "7. APAGAR: sem force e com brokenConsumers 0, porque o usages de cima ja tinha dito que ninguem o consome. Apagar o que tem consumidores e a outra metade, provada em delete-logic-consumers."},
+  {"op": "find", "type": "ITimer", "_why": "a prova do delete, a fechar o arco do primeiro op: onde havia um timer o modulo devolve agora uma lista vazia"},
+  {"op": "usages", "target": "IServerAction:WfCovTask_SweepOverdue", "_why": "8. O QUE O DELETE CUSTOU: a action que o timer acordava continua no modulo, mas passou de real 1 a real 0. Apagar o agendador nao apaga a logica agendada -- e o UnusedUserAction declarado em expectedMessages e o Verify a dizer o mesmo."}
+ ]
+}

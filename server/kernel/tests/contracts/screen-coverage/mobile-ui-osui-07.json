@@ -1,0 +1,386 @@
+{
+  "fixture": "mobile-ui",
+  "features": [
+    "OutSystemsUI",
+    "OutSystemsUI:ColumnsSmallRight",
+    "OutSystemsUI:Counter",
+    "OutSystemsUI:DatePicker",
+    "OutSystemsUI:DatePickerRange",
+    "OutSystemsUI:DisplayOnDevice"
+  ],
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "tests/fixtures/outsystems-ui.oml",
+      "elements": [
+        "IMobileBlock:ColumnsSmallRight",
+        "IMobileBlock:Counter",
+        "IMobileBlock:DatePicker",
+        "IMobileBlock:DatePickerRange",
+        "IMobileBlock:DisplayOnDevice"
+      ]
+    }
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Ui30_ColumnsSmallRight",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:ColumnsSmallRight",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Column1": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Column2": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui31_Counter",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:Counter",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui32_DatePicker",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part2",
+            "type": "IExpression",
+            "properties": {
+              "Value": "LastEvent"
+            }
+          },
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:DatePicker",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Datepicker": [
+                {
+                  "name": "Part3",
+                  "type": "IInput",
+                  "properties": {
+                    "Variable": "Value2"
+                  }
+                }
+              ],
+              "Placeholder_SSPreview": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            },
+            "events": {
+              "OnSelected": {
+                "destination": "IMobileScreen:Ui32_DatePicker/Ui32_DatePicker_Event1",
+                "args": {
+                  "DatePickerId": "DatePickerId",
+                  "SelectedDateTime": "SelectedDateTime"
+                }
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "LastEvent",
+            "type": "Text"
+          },
+          {
+            "name": "Value2",
+            "type": "Text"
+          }
+        ]
+      },
+      {
+        "name": "Ui33_DatePickerRange",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part2",
+            "type": "IExpression",
+            "properties": {
+              "Value": "LastEvent"
+            }
+          },
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:DatePickerRange",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Datepicker": [
+                {
+                  "name": "Part3",
+                  "type": "IInput",
+                  "properties": {
+                    "Variable": "Value2"
+                  }
+                }
+              ],
+              "Placeholder_SSPreview": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            },
+            "events": {
+              "OnSelected": {
+                "destination": "IMobileScreen:Ui33_DatePickerRange/Ui33_DatePickerRange_Event2",
+                "args": {
+                  "DatePickerId": "DatePickerId",
+                  "SelectedStartDate": "SelectedStartDate",
+                  "SelectedEndDate": "SelectedEndDate"
+                }
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "LastEvent",
+            "type": "Text"
+          },
+          {
+            "name": "Value2",
+            "type": "Text"
+          }
+        ]
+      },
+      {
+        "name": "Ui34_DisplayOnDevice",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:DisplayOnDevice",
+            "args": {},
+            "slots": {
+              "OnDesktop": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "OnTablet": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "OnPhone": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "name": "Ui32_DatePicker_Event1",
+          "kind": "screen",
+          "owner": "IMobileScreen:Ui32_DatePicker",
+          "inputs": [
+            {
+              "name": "DatePickerId",
+              "type": "Text",
+              "mandatory": true
+            },
+            {
+              "name": "SelectedDateTime",
+              "type": "Date Time",
+              "mandatory": false
+            }
+          ],
+          "steps": [
+            {
+              "assign": {
+                "LastEvent": "DatePickerId"
+              }
+            },
+            {
+              "assign": {
+                "LastEvent": "DateTimeToText(SelectedDateTime)"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ui33_DatePickerRange_Event2",
+          "kind": "screen",
+          "owner": "IMobileScreen:Ui33_DatePickerRange",
+          "inputs": [
+            {
+              "name": "DatePickerId",
+              "type": "Text",
+              "mandatory": true
+            },
+            {
+              "name": "SelectedStartDate",
+              "type": "Date",
+              "mandatory": false
+            },
+            {
+              "name": "SelectedEndDate",
+              "type": "Date",
+              "mandatory": false
+            }
+          ],
+          "steps": [
+            {
+              "assign": {
+                "LastEvent": "DatePickerId"
+              }
+            },
+            {
+              "assign": {
+                "LastEvent": "DateToText(SelectedStartDate)"
+              }
+            },
+            {
+              "assign": {
+                "LastEvent": "DateToText(SelectedEndDate)"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "mutations": [
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui30_ColumnsSmallRight/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "ColumnsSmallRight"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui31_Counter/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Counter"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui32_DatePicker/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "DatePicker"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui33_DatePickerRange/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "DatePickerRange"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui34_DisplayOnDevice/Part1/OnDesktop/Part2",
+      "prop": "Text",
+      "value": "Changed",
+      "element": "DisplayOnDevice"
+    }
+  ]
+}

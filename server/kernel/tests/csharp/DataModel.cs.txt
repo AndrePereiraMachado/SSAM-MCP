@@ -1,0 +1,55 @@
+#nullable enable
+using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using Anvil.Authoring;
+
+[Entity, Index(nameof(Code), Unique = true)]
+public sealed class Unit
+{
+    public Id<Unit> Id { get; set; }
+    [MaxLength(12)] public string Code { get; set; } = "";
+    [MaxLength(100)] public string Name { get; set; } = "";
+    public Id<Person>? ManagerId { get; set; }
+    public CaseStage Stage { get; set; } = CaseStage.ready;
+}
+
+[Entity]
+public sealed class Person
+{
+    public Id<Person> Id { get; set; }
+    [MaxLength(120)] public string Name { get; set; } = "";
+    public Id<Unit> UnitId { get; set; }
+}
+
+[Entity, Index(nameof(UnitId), nameof(Sequence), Unique = true)]
+public sealed class Reading
+{
+    public Id<Reading> Id { get; set; }
+    public Id<Unit> UnitId { get; set; }
+    public long Sequence { get; set; }
+    public decimal? Measurement { get; set; }
+    [MaxLength(250)] public string? Note { get; set; }
+    public DateTime? ReviewedAt { get; set; }
+    public bool Validated { get; set; } = false;
+    [MaxLength(8)] public string UnitCode { get; set; } = "C";
+    public SampleStage Stage { get; set; } = SampleStage.Received;
+}
+
+[StaticEntity]
+public enum SampleStage { Received = 10, Catalogued = 40, Quarantine = 90 }
+public enum CaseStage { Ready = 10, ready = 40 }
+
+[StaticEntity]
+public sealed record AnalysisClass(int Code, [property: MaxLength(40)] string Label, int Days, decimal Fee, bool Active)
+{
+    public static readonly AnalysisClass Routine = new(5, "Routine", 3, 12.50m, true);
+    public static readonly AnalysisClass Special = new(20, "Special analysis", 8, 47.25m, true);
+    public static readonly AnalysisClass Historical = new(80, "Historical", 12, 0.00m, false);
+}
+
+public sealed record Address(string City, string PostalCode);
+public sealed record ReturnItem(string Code, int Quantity);
+public sealed record ReturnOrder(Address Destination, List<ReturnItem> Items, string? Note);
+public sealed record ValueLists(List<int> Counts, string[] Names, List<decimal?> Measurements,
+    List<List<string>> Rows, List<ReturnItem>? OptionalItems, DateOnly Day, TimeOnly Time, byte[] Bytes);

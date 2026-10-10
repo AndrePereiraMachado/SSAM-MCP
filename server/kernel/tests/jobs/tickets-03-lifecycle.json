@@ -1,0 +1,5356 @@
+{
+ "description": "Tickets: ciclo de vida (criar, atualizar, status, atribuir, prioridade, escalar, merge, cancelar, avaliar)",
+ "base": "job:tickets-02-helpers",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Ticket_Create",
+   "as": "$Ticket_Create"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create",
+   "prop": "Description",
+   "value": "Cria ticket com numero, equipa e prioridade da categoria, SLA, evento, watcher e notificacao a equipa"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IInputParameter",
+   "name": "Subject",
+   "as": "$Ticket_Create_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_in1",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IInputParameter",
+   "name": "Description",
+   "as": "$Ticket_Create_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_in2",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_in2",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IInputParameter",
+   "name": "TypeId",
+   "as": "$Ticket_Create_in3"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_in3",
+   "prop": "DataType",
+   "value": "TicketType Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IInputParameter",
+   "name": "ChannelId",
+   "as": "$Ticket_Create_in4"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_in4",
+   "prop": "DataType",
+   "value": "TicketChannel Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_in4",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IInputParameter",
+   "name": "CategoryId",
+   "as": "$Ticket_Create_in5"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_in5",
+   "prop": "DataType",
+   "value": "Category Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_in5",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IInputParameter",
+   "name": "PriorityId",
+   "as": "$Ticket_Create_in6"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_in6",
+   "prop": "DataType",
+   "value": "TicketPriority Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_in6",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IInputParameter",
+   "name": "RequesterId",
+   "as": "$Ticket_Create_in7"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_in7",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IOutputParameter",
+   "name": "TicketId",
+   "as": "$Ticket_Create_out8"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_out8",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IOutputParameter",
+   "name": "Number",
+   "as": "$Ticket_Create_out9"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_out9",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "ILocalVariable",
+   "name": "T",
+   "as": "$Ticket_Create_var10"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_var10",
+   "prop": "DataType",
+   "value": "Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "ILocalVariable",
+   "name": "W",
+   "as": "$Ticket_Create_var11"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_var11",
+   "prop": "DataType",
+   "value": "TicketWatcher"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "ILocalVariable",
+   "name": "Recipients",
+   "as": "$Ticket_Create_var12"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_var12",
+   "prop": "DataType",
+   "value": "User Identifier List"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IStartNode",
+   "as": "$Ticket_Create_start13"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IAggregateNode",
+   "name": "GetCategory",
+   "as": "$Ticket_Create_agg14"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_agg14",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Category"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_agg14",
+   "type": "IFilter",
+   "args": {
+    "condition": "Category.Id = CategoryId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_agg14",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IIfNode",
+   "name": "HasSubject",
+   "as": "$Ticket_Create_if15"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_if15",
+   "prop": "Label",
+   "value": "HasSubject"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_if15",
+   "prop": "Condition",
+   "value": "Trim(Subject) <> \"\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseNoSubject",
+   "as": "$Ticket_Create_raise16"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_raise16",
+   "prop": "Exception",
+   "value": "IUserException:ValidationFailed"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_raise16",
+   "prop": "ExceptionMessage",
+   "value": "\"Subject is required\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IAssignNode",
+   "name": "FillTicket",
+   "as": "$Ticket_Create_asg17"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_asg17",
+   "prop": "Label",
+   "value": "FillTicket"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_asg17",
+   "type": "IAssignment",
+   "as": "$Ticket_Create_a18"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a18",
+   "prop": "Variable",
+   "value": "T.Subject"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a18",
+   "prop": "Value",
+   "value": "Subject"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_asg17",
+   "type": "IAssignment",
+   "as": "$Ticket_Create_a19"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a19",
+   "prop": "Variable",
+   "value": "T.Description"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a19",
+   "prop": "Value",
+   "value": "Description"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_asg17",
+   "type": "IAssignment",
+   "as": "$Ticket_Create_a20"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a20",
+   "prop": "Variable",
+   "value": "T.TypeId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a20",
+   "prop": "Value",
+   "value": "TypeId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_asg17",
+   "type": "IAssignment",
+   "as": "$Ticket_Create_a21"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a21",
+   "prop": "Variable",
+   "value": "T.ChannelId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a21",
+   "prop": "Value",
+   "value": "If(ChannelId = NullIdentifier(), Entities.TicketChannel.Portal, ChannelId)"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_asg17",
+   "type": "IAssignment",
+   "as": "$Ticket_Create_a22"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a22",
+   "prop": "Variable",
+   "value": "T.CategoryId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a22",
+   "prop": "Value",
+   "value": "CategoryId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_asg17",
+   "type": "IAssignment",
+   "as": "$Ticket_Create_a23"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a23",
+   "prop": "Variable",
+   "value": "T.RequesterId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a23",
+   "prop": "Value",
+   "value": "RequesterId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_asg17",
+   "type": "IAssignment",
+   "as": "$Ticket_Create_a24"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a24",
+   "prop": "Variable",
+   "value": "T.CreatedBy"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a24",
+   "prop": "Value",
+   "value": "RequesterId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_asg17",
+   "type": "IAssignment",
+   "as": "$Ticket_Create_a25"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a25",
+   "prop": "Variable",
+   "value": "T.CreatedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a25",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_asg17",
+   "type": "IAssignment",
+   "as": "$Ticket_Create_a26"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a26",
+   "prop": "Variable",
+   "value": "T.UpdatedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a26",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_asg17",
+   "type": "IAssignment",
+   "as": "$Ticket_Create_a27"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a27",
+   "prop": "Variable",
+   "value": "T.StatusId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a27",
+   "prop": "Value",
+   "value": "Entities.TicketStatus.New"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_asg17",
+   "type": "IAssignment",
+   "as": "$Ticket_Create_a28"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a28",
+   "prop": "Variable",
+   "value": "T.Number"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a28",
+   "prop": "Value",
+   "value": "\"TMP\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_asg17",
+   "type": "IAssignment",
+   "as": "$Ticket_Create_a29"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a29",
+   "prop": "Variable",
+   "value": "T.PriorityId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a29",
+   "prop": "Value",
+   "value": "If(PriorityId <> NullIdentifier(), PriorityId, If(GetCategory.List.Empty or GetCategory.List.Current.Category.DefaultPriorityId = NullIdentifier(), Entities.TicketPriority.Medium, GetCategory.List.Current.Category.DefaultPriorityId))"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_asg17",
+   "type": "IAssignment",
+   "as": "$Ticket_Create_a30"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a30",
+   "prop": "Variable",
+   "value": "T.TeamId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a30",
+   "prop": "Value",
+   "value": "If(GetCategory.List.Empty, NullIdentifier(), GetCategory.List.Current.Category.DefaultTeamId)"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IExecuteServerActionNode",
+   "name": "CreateTicket",
+   "as": "$Ticket_Create_call31"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call31",
+   "prop": "Action",
+   "value": "IEntityActionSignature:CreateTicket"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call31/Source",
+   "prop": "Value",
+   "value": "T"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IExecuteServerActionNode",
+   "name": "NextNumber",
+   "as": "$Ticket_Create_call32"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call32",
+   "prop": "Action",
+   "value": "IServerAction:Ticket_NextNumber"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call32/TicketId",
+   "prop": "Value",
+   "value": "CreateTicket.Id"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IExecuteServerActionNode",
+   "name": "ComputeSla",
+   "as": "$Ticket_Create_call33"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call33",
+   "prop": "Action",
+   "value": "IServerAction:Sla_ComputeDueDates"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call33/PriorityId",
+   "prop": "Value",
+   "value": "T.PriorityId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call33/StartOn",
+   "prop": "Value",
+   "value": "T.CreatedOn"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IAssignNode",
+   "name": "SetNumberAndSla",
+   "as": "$Ticket_Create_asg34"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_asg34",
+   "prop": "Label",
+   "value": "SetNumberAndSla"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_asg34",
+   "type": "IAssignment",
+   "as": "$Ticket_Create_a35"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a35",
+   "prop": "Variable",
+   "value": "T.Id"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a35",
+   "prop": "Value",
+   "value": "CreateTicket.Id"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_asg34",
+   "type": "IAssignment",
+   "as": "$Ticket_Create_a36"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a36",
+   "prop": "Variable",
+   "value": "T.Number"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a36",
+   "prop": "Value",
+   "value": "NextNumber.Number"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_asg34",
+   "type": "IAssignment",
+   "as": "$Ticket_Create_a37"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a37",
+   "prop": "Variable",
+   "value": "T.FirstResponseDueOn"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a37",
+   "prop": "Value",
+   "value": "ComputeSla.FirstResponseDueOn"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_asg34",
+   "type": "IAssignment",
+   "as": "$Ticket_Create_a38"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a38",
+   "prop": "Variable",
+   "value": "T.ResolutionDueOn"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a38",
+   "prop": "Value",
+   "value": "ComputeSla.ResolutionDueOn"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_asg34",
+   "type": "IAssignment",
+   "as": "$Ticket_Create_a39"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a39",
+   "prop": "Variable",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a39",
+   "prop": "Value",
+   "value": "CreateTicket.Id"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_asg34",
+   "type": "IAssignment",
+   "as": "$Ticket_Create_a40"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a40",
+   "prop": "Variable",
+   "value": "Number"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a40",
+   "prop": "Value",
+   "value": "NextNumber.Number"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IExecuteServerActionNode",
+   "name": "UpdateTicket",
+   "as": "$Ticket_Create_call41"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call41",
+   "prop": "Action",
+   "value": "IEntityActionSignature:UpdateTicket"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call41/Source",
+   "prop": "Value",
+   "value": "T"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IExecuteServerActionNode",
+   "name": "WriteCreated",
+   "as": "$Ticket_Create_call42"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call42",
+   "prop": "Action",
+   "value": "IServerAction:Event_Write"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call42/TicketId",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call42/EventTypeId",
+   "prop": "Value",
+   "value": "Entities.TicketEventType.Created"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call42/ActorId",
+   "prop": "Value",
+   "value": "RequesterId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call42/FromValue",
+   "prop": "Value",
+   "value": "\"\""
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call42/ToValue",
+   "prop": "Value",
+   "value": "Number"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call42/Note",
+   "prop": "Value",
+   "value": "\"\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IAssignNode",
+   "name": "FillWatcher",
+   "as": "$Ticket_Create_asg43"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_asg43",
+   "prop": "Label",
+   "value": "FillWatcher"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_asg43",
+   "type": "IAssignment",
+   "as": "$Ticket_Create_a44"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a44",
+   "prop": "Variable",
+   "value": "W.TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a44",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_asg43",
+   "type": "IAssignment",
+   "as": "$Ticket_Create_a45"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a45",
+   "prop": "Variable",
+   "value": "W.UserId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a45",
+   "prop": "Value",
+   "value": "RequesterId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_asg43",
+   "type": "IAssignment",
+   "as": "$Ticket_Create_a46"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a46",
+   "prop": "Variable",
+   "value": "W.AddedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_a46",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IExecuteServerActionNode",
+   "name": "CreateWatcher",
+   "as": "$Ticket_Create_call47"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call47",
+   "prop": "Action",
+   "value": "IEntityActionSignature:CreateTicketWatcher"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call47/Source",
+   "prop": "Value",
+   "value": "W"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IAggregateNode",
+   "name": "GetMembersOfTeam",
+   "as": "$Ticket_Create_agg48"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_agg48",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:TeamMember"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create_agg48",
+   "type": "IFilter",
+   "args": {
+    "condition": "TeamMember.TeamId = T.TeamId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IForEachNode",
+   "name": "EachMember",
+   "as": "$Ticket_Create_fe49"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_fe49",
+   "prop": "Label",
+   "value": "EachMember"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_fe49",
+   "prop": "RecordList",
+   "value": "GetMembersOfTeam.List"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IExecuteServerActionNode",
+   "name": "AppendMember",
+   "as": "$Ticket_Create_call50"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call50",
+   "prop": "Action",
+   "value": "IActionSignature:ListAppend"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call50/List",
+   "prop": "Value",
+   "value": "Recipients"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call50/Element",
+   "prop": "Value",
+   "value": "GetMembersOfTeam.List.Current.TeamMember.UserId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IExecuteServerActionNode",
+   "name": "NotifyTeam",
+   "as": "$Ticket_Create_call51"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call51",
+   "prop": "Action",
+   "value": "IServerAction:Notification_Create"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call51/UserIds",
+   "prop": "Value",
+   "value": "Recipients"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call51/TicketId",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call51/Title",
+   "prop": "Value",
+   "value": "\"New ticket \" + Number"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Create_call51/Body",
+   "prop": "Value",
+   "value": "Subject"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Create",
+   "type": "IEndNode",
+   "as": "$Ticket_Create_end52"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Create_start13",
+   "to": "$Ticket_Create_if15"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Create_if15",
+   "to": "$Ticket_Create_raise16",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Create_if15",
+   "to": "$Ticket_Create_agg14",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Create_agg14",
+   "to": "$Ticket_Create_asg17"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Create_asg17",
+   "to": "$Ticket_Create_call31"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Create_call31",
+   "to": "$Ticket_Create_call32"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Create_call32",
+   "to": "$Ticket_Create_call33"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Create_call33",
+   "to": "$Ticket_Create_asg34"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Create_asg34",
+   "to": "$Ticket_Create_call41"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Create_call41",
+   "to": "$Ticket_Create_call42"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Create_call42",
+   "to": "$Ticket_Create_asg43"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Create_asg43",
+   "to": "$Ticket_Create_call47"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Create_call47",
+   "to": "$Ticket_Create_agg48"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Create_agg48",
+   "to": "$Ticket_Create_fe49"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Create_fe49",
+   "to": "$Ticket_Create_call50",
+   "connector": "CycleTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Create_call50",
+   "to": "$Ticket_Create_fe49"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Create_fe49",
+   "to": "$Ticket_Create_call51"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Create_call51",
+   "to": "$Ticket_Create_end52"
+  },
+  {
+   "op": "layout",
+   "target": "$Ticket_Create"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Ticket_Update",
+   "as": "$Ticket_Update"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update",
+   "prop": "Description",
+   "value": "Edita campos livres; recalcula equipa se a categoria mudou e nao ha assignee"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update",
+   "type": "IInputParameter",
+   "name": "TicketId",
+   "as": "$Ticket_Update_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_in1",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update",
+   "type": "IInputParameter",
+   "name": "ActorId",
+   "as": "$Ticket_Update_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_in2",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update",
+   "type": "IInputParameter",
+   "name": "Subject",
+   "as": "$Ticket_Update_in3"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_in3",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update",
+   "type": "IInputParameter",
+   "name": "Description",
+   "as": "$Ticket_Update_in4"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_in4",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_in4",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update",
+   "type": "IInputParameter",
+   "name": "TypeId",
+   "as": "$Ticket_Update_in5"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_in5",
+   "prop": "DataType",
+   "value": "TicketType Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update",
+   "type": "IInputParameter",
+   "name": "CategoryId",
+   "as": "$Ticket_Update_in6"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_in6",
+   "prop": "DataType",
+   "value": "Category Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_in6",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update",
+   "type": "ILocalVariable",
+   "name": "T",
+   "as": "$Ticket_Update_var7"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_var7",
+   "prop": "DataType",
+   "value": "Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update",
+   "type": "IStartNode",
+   "as": "$Ticket_Update_start8"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update",
+   "type": "IAggregateNode",
+   "name": "GetTicket",
+   "as": "$Ticket_Update_agg9"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update_agg9",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update_agg9",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.Id = TicketId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_agg9",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update",
+   "type": "IIfNode",
+   "name": "TicketFound",
+   "as": "$Ticket_Update_if10"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_if10",
+   "prop": "Label",
+   "value": "TicketFound"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_if10",
+   "prop": "Condition",
+   "value": "not GetTicket.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseTicketNotFound",
+   "as": "$Ticket_Update_raise11"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_raise11",
+   "prop": "Exception",
+   "value": "IUserException:NotFound"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_raise11",
+   "prop": "ExceptionMessage",
+   "value": "\"Ticket not found\""
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Update_if10",
+   "to": "$Ticket_Update_raise11",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update",
+   "type": "IAggregateNode",
+   "name": "GetCategory",
+   "as": "$Ticket_Update_agg12"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update_agg12",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Category"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update_agg12",
+   "type": "IFilter",
+   "args": {
+    "condition": "Category.Id = CategoryId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_agg12",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update",
+   "type": "IAssignNode",
+   "name": "Apply",
+   "as": "$Ticket_Update_asg13"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_asg13",
+   "prop": "Label",
+   "value": "Apply"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update_asg13",
+   "type": "IAssignment",
+   "as": "$Ticket_Update_a14"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_a14",
+   "prop": "Variable",
+   "value": "T"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_a14",
+   "prop": "Value",
+   "value": "GetTicket.List.Current.Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update_asg13",
+   "type": "IAssignment",
+   "as": "$Ticket_Update_a15"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_a15",
+   "prop": "Variable",
+   "value": "T.Subject"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_a15",
+   "prop": "Value",
+   "value": "Subject"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update_asg13",
+   "type": "IAssignment",
+   "as": "$Ticket_Update_a16"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_a16",
+   "prop": "Variable",
+   "value": "T.Description"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_a16",
+   "prop": "Value",
+   "value": "Description"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update_asg13",
+   "type": "IAssignment",
+   "as": "$Ticket_Update_a17"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_a17",
+   "prop": "Variable",
+   "value": "T.TypeId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_a17",
+   "prop": "Value",
+   "value": "TypeId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update_asg13",
+   "type": "IAssignment",
+   "as": "$Ticket_Update_a18"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_a18",
+   "prop": "Variable",
+   "value": "T.CategoryId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_a18",
+   "prop": "Value",
+   "value": "CategoryId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update_asg13",
+   "type": "IAssignment",
+   "as": "$Ticket_Update_a19"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_a19",
+   "prop": "Variable",
+   "value": "T.UpdatedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_a19",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update_asg13",
+   "type": "IAssignment",
+   "as": "$Ticket_Update_a20"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_a20",
+   "prop": "Variable",
+   "value": "T.TeamId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_a20",
+   "prop": "Value",
+   "value": "If(CategoryId <> GetTicket.List.Current.Ticket.CategoryId and GetTicket.List.Current.Ticket.AssigneeId = NullIdentifier() and not GetCategory.List.Empty, GetCategory.List.Current.Category.DefaultTeamId, GetTicket.List.Current.Ticket.TeamId)"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update",
+   "type": "IExecuteServerActionNode",
+   "name": "UpdateTicket",
+   "as": "$Ticket_Update_call21"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_call21",
+   "prop": "Action",
+   "value": "IEntityActionSignature:UpdateTicket"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_call21/Source",
+   "prop": "Value",
+   "value": "T"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update",
+   "type": "IExecuteServerActionNode",
+   "name": "WriteUpdated",
+   "as": "$Ticket_Update_call22"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_call22",
+   "prop": "Action",
+   "value": "IServerAction:Event_Write"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_call22/TicketId",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_call22/EventTypeId",
+   "prop": "Value",
+   "value": "Entities.TicketEventType.Updated"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_call22/ActorId",
+   "prop": "Value",
+   "value": "ActorId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_call22/FromValue",
+   "prop": "Value",
+   "value": "GetTicket.List.Current.Ticket.Subject"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_call22/ToValue",
+   "prop": "Value",
+   "value": "Subject"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Update_call22/Note",
+   "prop": "Value",
+   "value": "\"\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Update",
+   "type": "IEndNode",
+   "as": "$Ticket_Update_end23"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Update_start8",
+   "to": "$Ticket_Update_agg9"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Update_agg9",
+   "to": "$Ticket_Update_if10"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Update_if10",
+   "to": "$Ticket_Update_agg12",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Update_agg12",
+   "to": "$Ticket_Update_asg13"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Update_asg13",
+   "to": "$Ticket_Update_call21"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Update_call21",
+   "to": "$Ticket_Update_call22"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Update_call22",
+   "to": "$Ticket_Update_end23"
+  },
+  {
+   "op": "layout",
+   "target": "$Ticket_Update"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Ticket_ChangeStatus",
+   "as": "$Ticket_ChangeStatus"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus",
+   "prop": "Description",
+   "value": "Transicao validada pela matriz; datas de resolucao/fecho; evento; notificacao a requester e watchers"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "IInputParameter",
+   "name": "TicketId",
+   "as": "$Ticket_ChangeStatus_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_in1",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "IInputParameter",
+   "name": "NewStatusId",
+   "as": "$Ticket_ChangeStatus_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_in2",
+   "prop": "DataType",
+   "value": "TicketStatus Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "IInputParameter",
+   "name": "ActorId",
+   "as": "$Ticket_ChangeStatus_in3"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_in3",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_in3",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "IInputParameter",
+   "name": "Note",
+   "as": "$Ticket_ChangeStatus_in4"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_in4",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_in4",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "ILocalVariable",
+   "name": "T",
+   "as": "$Ticket_ChangeStatus_var5"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_var5",
+   "prop": "DataType",
+   "value": "Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "ILocalVariable",
+   "name": "OldStatusId",
+   "as": "$Ticket_ChangeStatus_var6"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_var6",
+   "prop": "DataType",
+   "value": "TicketStatus Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "IStartNode",
+   "as": "$Ticket_ChangeStatus_start7"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "IAggregateNode",
+   "name": "GetTicket",
+   "as": "$Ticket_ChangeStatus_agg8"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus_agg8",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus_agg8",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.Id = TicketId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_agg8",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "IIfNode",
+   "name": "TicketFound",
+   "as": "$Ticket_ChangeStatus_if9"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_if9",
+   "prop": "Label",
+   "value": "TicketFound"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_if9",
+   "prop": "Condition",
+   "value": "not GetTicket.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseTicketNotFound",
+   "as": "$Ticket_ChangeStatus_raise10"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_raise10",
+   "prop": "Exception",
+   "value": "IUserException:NotFound"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_raise10",
+   "prop": "ExceptionMessage",
+   "value": "\"Ticket not found\""
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangeStatus_if9",
+   "to": "$Ticket_ChangeStatus_raise10",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "IExecuteServerActionNode",
+   "name": "Permissions",
+   "as": "$Ticket_ChangeStatus_call11"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call11",
+   "prop": "Action",
+   "value": "IServerAction:User_Permissions"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call11/UserId",
+   "prop": "Value",
+   "value": "ActorId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "IExecuteServerActionNode",
+   "name": "CanTransition",
+   "as": "$Ticket_ChangeStatus_call12"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call12",
+   "prop": "Action",
+   "value": "IServerAction:Ticket_CanTransition"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call12/FromStatusId",
+   "prop": "Value",
+   "value": "GetTicket.List.Current.Ticket.StatusId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call12/ToStatusId",
+   "prop": "Value",
+   "value": "NewStatusId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call12/IsManager",
+   "prop": "Value",
+   "value": "Permissions.IsManager"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "IIfNode",
+   "name": "Allowed",
+   "as": "$Ticket_ChangeStatus_if13"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_if13",
+   "prop": "Label",
+   "value": "Allowed"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_if13",
+   "prop": "Condition",
+   "value": "CanTransition.Allowed"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseInvalid",
+   "as": "$Ticket_ChangeStatus_raise14"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_raise14",
+   "prop": "Exception",
+   "value": "IUserException:InvalidTransition"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_raise14",
+   "prop": "ExceptionMessage",
+   "value": "\"Transition not allowed\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "IAssignNode",
+   "name": "Apply",
+   "as": "$Ticket_ChangeStatus_asg15"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_asg15",
+   "prop": "Label",
+   "value": "Apply"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus_asg15",
+   "type": "IAssignment",
+   "as": "$Ticket_ChangeStatus_a16"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_a16",
+   "prop": "Variable",
+   "value": "OldStatusId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_a16",
+   "prop": "Value",
+   "value": "GetTicket.List.Current.Ticket.StatusId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus_asg15",
+   "type": "IAssignment",
+   "as": "$Ticket_ChangeStatus_a17"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_a17",
+   "prop": "Variable",
+   "value": "T"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_a17",
+   "prop": "Value",
+   "value": "GetTicket.List.Current.Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus_asg15",
+   "type": "IAssignment",
+   "as": "$Ticket_ChangeStatus_a18"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_a18",
+   "prop": "Variable",
+   "value": "T.StatusId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_a18",
+   "prop": "Value",
+   "value": "NewStatusId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus_asg15",
+   "type": "IAssignment",
+   "as": "$Ticket_ChangeStatus_a19"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_a19",
+   "prop": "Variable",
+   "value": "T.UpdatedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_a19",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus_asg15",
+   "type": "IAssignment",
+   "as": "$Ticket_ChangeStatus_a20"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_a20",
+   "prop": "Variable",
+   "value": "T.ResolvedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_a20",
+   "prop": "Value",
+   "value": "If(NewStatusId = Entities.TicketStatus.Resolved, CurrDateTime(), GetTicket.List.Current.Ticket.ResolvedOn)"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus_asg15",
+   "type": "IAssignment",
+   "as": "$Ticket_ChangeStatus_a21"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_a21",
+   "prop": "Variable",
+   "value": "T.ClosedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_a21",
+   "prop": "Value",
+   "value": "If(NewStatusId = Entities.TicketStatus.Closed, CurrDateTime(), GetTicket.List.Current.Ticket.ClosedOn)"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "IExecuteServerActionNode",
+   "name": "UpdateTicket",
+   "as": "$Ticket_ChangeStatus_call22"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call22",
+   "prop": "Action",
+   "value": "IEntityActionSignature:UpdateTicket"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call22/Source",
+   "prop": "Value",
+   "value": "T"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "IExecuteServerActionNode",
+   "name": "WriteStatus",
+   "as": "$Ticket_ChangeStatus_call23"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call23",
+   "prop": "Action",
+   "value": "IServerAction:Event_Write"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call23/TicketId",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call23/EventTypeId",
+   "prop": "Value",
+   "value": "If((OldStatusId = Entities.TicketStatus.Resolved or OldStatusId = Entities.TicketStatus.Closed) and NewStatusId = Entities.TicketStatus.Open, Entities.TicketEventType.Reopened, Entities.TicketEventType.StatusChanged)"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call23/ActorId",
+   "prop": "Value",
+   "value": "ActorId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call23/FromValue",
+   "prop": "Value",
+   "value": "IntegerToText(OldStatusId)"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call23/ToValue",
+   "prop": "Value",
+   "value": "IntegerToText(NewStatusId)"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call23/Note",
+   "prop": "Value",
+   "value": "Note"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "ILocalVariable",
+   "name": "Recipients",
+   "as": "$Ticket_ChangeStatus_var24"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_var24",
+   "prop": "DataType",
+   "value": "User Identifier List"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "IAggregateNode",
+   "name": "GetWatchers",
+   "as": "$Ticket_ChangeStatus_agg25"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus_agg25",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:TicketWatcher"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus_agg25",
+   "type": "IFilter",
+   "args": {
+    "condition": "TicketWatcher.TicketId = TicketId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "IForEachNode",
+   "name": "EachWatcher",
+   "as": "$Ticket_ChangeStatus_fe26"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_fe26",
+   "prop": "Label",
+   "value": "EachWatcher"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_fe26",
+   "prop": "RecordList",
+   "value": "GetWatchers.List"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "IExecuteServerActionNode",
+   "name": "AppendWatcher",
+   "as": "$Ticket_ChangeStatus_call27"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call27",
+   "prop": "Action",
+   "value": "IActionSignature:ListAppend"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call27/List",
+   "prop": "Value",
+   "value": "Recipients"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call27/Element",
+   "prop": "Value",
+   "value": "GetWatchers.List.Current.TicketWatcher.UserId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "IExecuteServerActionNode",
+   "name": "NotifyWatchers",
+   "as": "$Ticket_ChangeStatus_call28"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call28",
+   "prop": "Action",
+   "value": "IServerAction:Notification_Create"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call28/UserIds",
+   "prop": "Value",
+   "value": "Recipients"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call28/TicketId",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call28/Title",
+   "prop": "Value",
+   "value": "\"Ticket \" + T.Number + \" changed status\""
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangeStatus_call28/Body",
+   "prop": "Value",
+   "value": "Note"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangeStatus_agg25",
+   "to": "$Ticket_ChangeStatus_fe26"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangeStatus_fe26",
+   "to": "$Ticket_ChangeStatus_call27",
+   "connector": "CycleTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangeStatus_call27",
+   "to": "$Ticket_ChangeStatus_fe26"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangeStatus_fe26",
+   "to": "$Ticket_ChangeStatus_call28"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangeStatus",
+   "type": "IEndNode",
+   "as": "$Ticket_ChangeStatus_end29"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangeStatus_start7",
+   "to": "$Ticket_ChangeStatus_agg8"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangeStatus_agg8",
+   "to": "$Ticket_ChangeStatus_if9"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangeStatus_if9",
+   "to": "$Ticket_ChangeStatus_call11",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangeStatus_call11",
+   "to": "$Ticket_ChangeStatus_call12"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangeStatus_call12",
+   "to": "$Ticket_ChangeStatus_if13"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangeStatus_if13",
+   "to": "$Ticket_ChangeStatus_raise14",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangeStatus_if13",
+   "to": "$Ticket_ChangeStatus_asg15",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangeStatus_asg15",
+   "to": "$Ticket_ChangeStatus_call22"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangeStatus_call22",
+   "to": "$Ticket_ChangeStatus_call23"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangeStatus_call23",
+   "to": "$Ticket_ChangeStatus_agg25"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangeStatus_call28",
+   "to": "$Ticket_ChangeStatus_end29"
+  },
+  {
+   "op": "layout",
+   "target": "$Ticket_ChangeStatus"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Ticket_Assign",
+   "as": "$Ticket_Assign"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign",
+   "prop": "Description",
+   "value": "Atribui equipa e assignee (tem de ser membro); New passa a Open; evento; notifica o assignee"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign",
+   "type": "IInputParameter",
+   "name": "TicketId",
+   "as": "$Ticket_Assign_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_in1",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign",
+   "type": "IInputParameter",
+   "name": "TeamId",
+   "as": "$Ticket_Assign_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_in2",
+   "prop": "DataType",
+   "value": "Team Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign",
+   "type": "IInputParameter",
+   "name": "AssigneeId",
+   "as": "$Ticket_Assign_in3"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_in3",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_in3",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign",
+   "type": "IInputParameter",
+   "name": "ActorId",
+   "as": "$Ticket_Assign_in4"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_in4",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_in4",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign",
+   "type": "ILocalVariable",
+   "name": "T",
+   "as": "$Ticket_Assign_var5"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_var5",
+   "prop": "DataType",
+   "value": "Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign",
+   "type": "ILocalVariable",
+   "name": "Recipients",
+   "as": "$Ticket_Assign_var6"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_var6",
+   "prop": "DataType",
+   "value": "User Identifier List"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign",
+   "type": "IStartNode",
+   "as": "$Ticket_Assign_start7"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign",
+   "type": "IAggregateNode",
+   "name": "GetTicket",
+   "as": "$Ticket_Assign_agg8"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign_agg8",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign_agg8",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.Id = TicketId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_agg8",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign",
+   "type": "IIfNode",
+   "name": "TicketFound",
+   "as": "$Ticket_Assign_if9"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_if9",
+   "prop": "Label",
+   "value": "TicketFound"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_if9",
+   "prop": "Condition",
+   "value": "not GetTicket.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseTicketNotFound",
+   "as": "$Ticket_Assign_raise10"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_raise10",
+   "prop": "Exception",
+   "value": "IUserException:NotFound"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_raise10",
+   "prop": "ExceptionMessage",
+   "value": "\"Ticket not found\""
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Assign_if9",
+   "to": "$Ticket_Assign_raise10",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign",
+   "type": "IAggregateNode",
+   "name": "GetMembership",
+   "as": "$Ticket_Assign_agg11"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign_agg11",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:TeamMember"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign_agg11",
+   "type": "IFilter",
+   "args": {
+    "condition": "TeamMember.TeamId = TeamId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign_agg11",
+   "type": "IFilter",
+   "args": {
+    "condition": "TeamMember.UserId = AssigneeId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_agg11",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign",
+   "type": "IIfNode",
+   "name": "AssigneeOk",
+   "as": "$Ticket_Assign_if12"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_if12",
+   "prop": "Label",
+   "value": "AssigneeOk"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_if12",
+   "prop": "Condition",
+   "value": "AssigneeId = NullIdentifier() or not GetMembership.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseNotMember",
+   "as": "$Ticket_Assign_raise13"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_raise13",
+   "prop": "Exception",
+   "value": "IUserException:NotAllowed"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_raise13",
+   "prop": "ExceptionMessage",
+   "value": "\"Assignee is not a member of the team\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign",
+   "type": "IAssignNode",
+   "name": "Apply",
+   "as": "$Ticket_Assign_asg14"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_asg14",
+   "prop": "Label",
+   "value": "Apply"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign_asg14",
+   "type": "IAssignment",
+   "as": "$Ticket_Assign_a15"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_a15",
+   "prop": "Variable",
+   "value": "T"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_a15",
+   "prop": "Value",
+   "value": "GetTicket.List.Current.Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign_asg14",
+   "type": "IAssignment",
+   "as": "$Ticket_Assign_a16"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_a16",
+   "prop": "Variable",
+   "value": "T.TeamId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_a16",
+   "prop": "Value",
+   "value": "TeamId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign_asg14",
+   "type": "IAssignment",
+   "as": "$Ticket_Assign_a17"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_a17",
+   "prop": "Variable",
+   "value": "T.AssigneeId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_a17",
+   "prop": "Value",
+   "value": "AssigneeId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign_asg14",
+   "type": "IAssignment",
+   "as": "$Ticket_Assign_a18"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_a18",
+   "prop": "Variable",
+   "value": "T.UpdatedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_a18",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign_asg14",
+   "type": "IAssignment",
+   "as": "$Ticket_Assign_a19"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_a19",
+   "prop": "Variable",
+   "value": "T.StatusId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_a19",
+   "prop": "Value",
+   "value": "If(GetTicket.List.Current.Ticket.StatusId = Entities.TicketStatus.New, Entities.TicketStatus.Open, GetTicket.List.Current.Ticket.StatusId)"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign",
+   "type": "IExecuteServerActionNode",
+   "name": "UpdateTicket",
+   "as": "$Ticket_Assign_call20"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_call20",
+   "prop": "Action",
+   "value": "IEntityActionSignature:UpdateTicket"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_call20/Source",
+   "prop": "Value",
+   "value": "T"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign",
+   "type": "IExecuteServerActionNode",
+   "name": "WriteAssigned",
+   "as": "$Ticket_Assign_call21"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_call21",
+   "prop": "Action",
+   "value": "IServerAction:Event_Write"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_call21/TicketId",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_call21/EventTypeId",
+   "prop": "Value",
+   "value": "Entities.TicketEventType.Assigned"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_call21/ActorId",
+   "prop": "Value",
+   "value": "ActorId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_call21/FromValue",
+   "prop": "Value",
+   "value": "\"\""
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_call21/ToValue",
+   "prop": "Value",
+   "value": "\"\""
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_call21/Note",
+   "prop": "Value",
+   "value": "\"\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign",
+   "type": "IIfNode",
+   "name": "HasAssignee",
+   "as": "$Ticket_Assign_if22"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_if22",
+   "prop": "Label",
+   "value": "HasAssignee"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_if22",
+   "prop": "Condition",
+   "value": "AssigneeId <> NullIdentifier()"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign",
+   "type": "IExecuteServerActionNode",
+   "name": "AppendAssignee",
+   "as": "$Ticket_Assign_call23"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_call23",
+   "prop": "Action",
+   "value": "IActionSignature:ListAppend"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_call23/List",
+   "prop": "Value",
+   "value": "Recipients"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_call23/Element",
+   "prop": "Value",
+   "value": "AssigneeId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign",
+   "type": "IExecuteServerActionNode",
+   "name": "NotifyAssignee",
+   "as": "$Ticket_Assign_call24"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_call24",
+   "prop": "Action",
+   "value": "IServerAction:Notification_Create"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_call24/UserIds",
+   "prop": "Value",
+   "value": "Recipients"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_call24/TicketId",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_call24/Title",
+   "prop": "Value",
+   "value": "\"Ticket \" + T.Number + \" assigned to you\""
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Assign_call24/Body",
+   "prop": "Value",
+   "value": "T.Subject"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Assign",
+   "type": "IEndNode",
+   "as": "$Ticket_Assign_end25"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Assign_start7",
+   "to": "$Ticket_Assign_agg8"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Assign_agg8",
+   "to": "$Ticket_Assign_if9"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Assign_if9",
+   "to": "$Ticket_Assign_agg11",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Assign_agg11",
+   "to": "$Ticket_Assign_if12"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Assign_if12",
+   "to": "$Ticket_Assign_raise13",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Assign_if12",
+   "to": "$Ticket_Assign_asg14",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Assign_asg14",
+   "to": "$Ticket_Assign_call20"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Assign_call20",
+   "to": "$Ticket_Assign_call21"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Assign_call21",
+   "to": "$Ticket_Assign_if22"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Assign_if22",
+   "to": "$Ticket_Assign_call23",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Assign_if22",
+   "to": "$Ticket_Assign_end25",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Assign_call23",
+   "to": "$Ticket_Assign_call24"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Assign_call24",
+   "to": "$Ticket_Assign_end25"
+  },
+  {
+   "op": "layout",
+   "target": "$Ticket_Assign"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Ticket_ChangePriority",
+   "as": "$Ticket_ChangePriority"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority",
+   "prop": "Description",
+   "value": "Muda a prioridade e recalcula os prazos de SLA a partir da criacao"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangePriority",
+   "type": "IInputParameter",
+   "name": "TicketId",
+   "as": "$Ticket_ChangePriority_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_in1",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangePriority",
+   "type": "IInputParameter",
+   "name": "NewPriorityId",
+   "as": "$Ticket_ChangePriority_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_in2",
+   "prop": "DataType",
+   "value": "TicketPriority Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangePriority",
+   "type": "IInputParameter",
+   "name": "ActorId",
+   "as": "$Ticket_ChangePriority_in3"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_in3",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_in3",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangePriority",
+   "type": "IInputParameter",
+   "name": "Reason",
+   "as": "$Ticket_ChangePriority_in4"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_in4",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_in4",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangePriority",
+   "type": "ILocalVariable",
+   "name": "T",
+   "as": "$Ticket_ChangePriority_var5"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_var5",
+   "prop": "DataType",
+   "value": "Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangePriority",
+   "type": "IStartNode",
+   "as": "$Ticket_ChangePriority_start6"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangePriority",
+   "type": "IAggregateNode",
+   "name": "GetTicket",
+   "as": "$Ticket_ChangePriority_agg7"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangePriority_agg7",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangePriority_agg7",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.Id = TicketId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_agg7",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangePriority",
+   "type": "IIfNode",
+   "name": "TicketFound",
+   "as": "$Ticket_ChangePriority_if8"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_if8",
+   "prop": "Label",
+   "value": "TicketFound"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_if8",
+   "prop": "Condition",
+   "value": "not GetTicket.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangePriority",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseTicketNotFound",
+   "as": "$Ticket_ChangePriority_raise9"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_raise9",
+   "prop": "Exception",
+   "value": "IUserException:NotFound"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_raise9",
+   "prop": "ExceptionMessage",
+   "value": "\"Ticket not found\""
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangePriority_if8",
+   "to": "$Ticket_ChangePriority_raise9",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangePriority",
+   "type": "IExecuteServerActionNode",
+   "name": "ComputeSla",
+   "as": "$Ticket_ChangePriority_call10"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_call10",
+   "prop": "Action",
+   "value": "IServerAction:Sla_ComputeDueDates"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_call10/PriorityId",
+   "prop": "Value",
+   "value": "NewPriorityId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_call10/StartOn",
+   "prop": "Value",
+   "value": "GetTicket.List.Current.Ticket.CreatedOn"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangePriority",
+   "type": "IAssignNode",
+   "name": "Apply",
+   "as": "$Ticket_ChangePriority_asg11"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_asg11",
+   "prop": "Label",
+   "value": "Apply"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangePriority_asg11",
+   "type": "IAssignment",
+   "as": "$Ticket_ChangePriority_a12"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_a12",
+   "prop": "Variable",
+   "value": "T"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_a12",
+   "prop": "Value",
+   "value": "GetTicket.List.Current.Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangePriority_asg11",
+   "type": "IAssignment",
+   "as": "$Ticket_ChangePriority_a13"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_a13",
+   "prop": "Variable",
+   "value": "T.PriorityId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_a13",
+   "prop": "Value",
+   "value": "NewPriorityId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangePriority_asg11",
+   "type": "IAssignment",
+   "as": "$Ticket_ChangePriority_a14"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_a14",
+   "prop": "Variable",
+   "value": "T.FirstResponseDueOn"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_a14",
+   "prop": "Value",
+   "value": "ComputeSla.FirstResponseDueOn"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangePriority_asg11",
+   "type": "IAssignment",
+   "as": "$Ticket_ChangePriority_a15"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_a15",
+   "prop": "Variable",
+   "value": "T.ResolutionDueOn"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_a15",
+   "prop": "Value",
+   "value": "ComputeSla.ResolutionDueOn"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangePriority_asg11",
+   "type": "IAssignment",
+   "as": "$Ticket_ChangePriority_a16"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_a16",
+   "prop": "Variable",
+   "value": "T.UpdatedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_a16",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangePriority",
+   "type": "IExecuteServerActionNode",
+   "name": "UpdateTicket",
+   "as": "$Ticket_ChangePriority_call17"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_call17",
+   "prop": "Action",
+   "value": "IEntityActionSignature:UpdateTicket"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_call17/Source",
+   "prop": "Value",
+   "value": "T"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangePriority",
+   "type": "IExecuteServerActionNode",
+   "name": "WritePriority",
+   "as": "$Ticket_ChangePriority_call18"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_call18",
+   "prop": "Action",
+   "value": "IServerAction:Event_Write"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_call18/TicketId",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_call18/EventTypeId",
+   "prop": "Value",
+   "value": "Entities.TicketEventType.PriorityChanged"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_call18/ActorId",
+   "prop": "Value",
+   "value": "ActorId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_call18/FromValue",
+   "prop": "Value",
+   "value": "IntegerToText(GetTicket.List.Current.Ticket.PriorityId)"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_call18/ToValue",
+   "prop": "Value",
+   "value": "IntegerToText(NewPriorityId)"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_ChangePriority_call18/Note",
+   "prop": "Value",
+   "value": "Reason"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_ChangePriority",
+   "type": "IEndNode",
+   "as": "$Ticket_ChangePriority_end19"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangePriority_start6",
+   "to": "$Ticket_ChangePriority_agg7"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangePriority_agg7",
+   "to": "$Ticket_ChangePriority_if8"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangePriority_if8",
+   "to": "$Ticket_ChangePriority_call10",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangePriority_call10",
+   "to": "$Ticket_ChangePriority_asg11"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangePriority_asg11",
+   "to": "$Ticket_ChangePriority_call17"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangePriority_call17",
+   "to": "$Ticket_ChangePriority_call18"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_ChangePriority_call18",
+   "to": "$Ticket_ChangePriority_end19"
+  },
+  {
+   "op": "layout",
+   "target": "$Ticket_ChangePriority"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Ticket_Escalate",
+   "as": "$Ticket_Escalate"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate",
+   "prop": "Description",
+   "value": "Marca escalado, sobe um nivel de prioridade, avisa o manager da equipa"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate",
+   "type": "IInputParameter",
+   "name": "TicketId",
+   "as": "$Ticket_Escalate_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_in1",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate",
+   "type": "IInputParameter",
+   "name": "ActorId",
+   "as": "$Ticket_Escalate_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_in2",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_in2",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate",
+   "type": "IInputParameter",
+   "name": "Reason",
+   "as": "$Ticket_Escalate_in3"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_in3",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_in3",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate",
+   "type": "ILocalVariable",
+   "name": "T",
+   "as": "$Ticket_Escalate_var4"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_var4",
+   "prop": "DataType",
+   "value": "Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate",
+   "type": "ILocalVariable",
+   "name": "Recipients",
+   "as": "$Ticket_Escalate_var5"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_var5",
+   "prop": "DataType",
+   "value": "User Identifier List"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate",
+   "type": "IStartNode",
+   "as": "$Ticket_Escalate_start6"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate",
+   "type": "IAggregateNode",
+   "name": "GetTicket",
+   "as": "$Ticket_Escalate_agg7"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate_agg7",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate_agg7",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.Id = TicketId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_agg7",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate",
+   "type": "IIfNode",
+   "name": "TicketFound",
+   "as": "$Ticket_Escalate_if8"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_if8",
+   "prop": "Label",
+   "value": "TicketFound"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_if8",
+   "prop": "Condition",
+   "value": "not GetTicket.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseTicketNotFound",
+   "as": "$Ticket_Escalate_raise9"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_raise9",
+   "prop": "Exception",
+   "value": "IUserException:NotFound"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_raise9",
+   "prop": "ExceptionMessage",
+   "value": "\"Ticket not found\""
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Escalate_if8",
+   "to": "$Ticket_Escalate_raise9",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate",
+   "type": "IAssignNode",
+   "name": "MarkEscalated",
+   "as": "$Ticket_Escalate_asg10"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_asg10",
+   "prop": "Label",
+   "value": "MarkEscalated"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate_asg10",
+   "type": "IAssignment",
+   "as": "$Ticket_Escalate_a11"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_a11",
+   "prop": "Variable",
+   "value": "T"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_a11",
+   "prop": "Value",
+   "value": "GetTicket.List.Current.Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate_asg10",
+   "type": "IAssignment",
+   "as": "$Ticket_Escalate_a12"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_a12",
+   "prop": "Variable",
+   "value": "T.IsEscalated"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_a12",
+   "prop": "Value",
+   "value": "True"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate_asg10",
+   "type": "IAssignment",
+   "as": "$Ticket_Escalate_a13"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_a13",
+   "prop": "Variable",
+   "value": "T.UpdatedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_a13",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate",
+   "type": "IExecuteServerActionNode",
+   "name": "UpdateTicket",
+   "as": "$Ticket_Escalate_call14"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_call14",
+   "prop": "Action",
+   "value": "IEntityActionSignature:UpdateTicket"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_call14/Source",
+   "prop": "Value",
+   "value": "T"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate",
+   "type": "IExecuteServerActionNode",
+   "name": "RaisePriority",
+   "as": "$Ticket_Escalate_call15"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_call15",
+   "prop": "Action",
+   "value": "IServerAction:Ticket_ChangePriority"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_call15/TicketId",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_call15/NewPriorityId",
+   "prop": "Value",
+   "value": "If(T.PriorityId = Entities.TicketPriority.Low, Entities.TicketPriority.Medium, If(T.PriorityId = Entities.TicketPriority.Medium, Entities.TicketPriority.High, Entities.TicketPriority.Urgent))"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_call15/ActorId",
+   "prop": "Value",
+   "value": "ActorId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_call15/Reason",
+   "prop": "Value",
+   "value": "Reason"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate",
+   "type": "IExecuteServerActionNode",
+   "name": "WriteEscalated",
+   "as": "$Ticket_Escalate_call16"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_call16",
+   "prop": "Action",
+   "value": "IServerAction:Event_Write"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_call16/TicketId",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_call16/EventTypeId",
+   "prop": "Value",
+   "value": "Entities.TicketEventType.Escalated"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_call16/ActorId",
+   "prop": "Value",
+   "value": "ActorId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_call16/FromValue",
+   "prop": "Value",
+   "value": "\"\""
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_call16/ToValue",
+   "prop": "Value",
+   "value": "\"\""
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_call16/Note",
+   "prop": "Value",
+   "value": "Reason"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate",
+   "type": "IAggregateNode",
+   "name": "GetTeam",
+   "as": "$Ticket_Escalate_agg17"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate_agg17",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Team"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate_agg17",
+   "type": "IFilter",
+   "args": {
+    "condition": "Team.Id = T.TeamId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_agg17",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate",
+   "type": "IIfNode",
+   "name": "HasManager",
+   "as": "$Ticket_Escalate_if18"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_if18",
+   "prop": "Label",
+   "value": "HasManager"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_if18",
+   "prop": "Condition",
+   "value": "not GetTeam.List.Empty and GetTeam.List.Current.Team.ManagerId <> NullIdentifier()"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate",
+   "type": "IExecuteServerActionNode",
+   "name": "AppendManager",
+   "as": "$Ticket_Escalate_call19"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_call19",
+   "prop": "Action",
+   "value": "IActionSignature:ListAppend"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_call19/List",
+   "prop": "Value",
+   "value": "Recipients"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_call19/Element",
+   "prop": "Value",
+   "value": "GetTeam.List.Current.Team.ManagerId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate",
+   "type": "IExecuteServerActionNode",
+   "name": "NotifyManager",
+   "as": "$Ticket_Escalate_call20"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_call20",
+   "prop": "Action",
+   "value": "IServerAction:Notification_Create"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_call20/UserIds",
+   "prop": "Value",
+   "value": "Recipients"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_call20/TicketId",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_call20/Title",
+   "prop": "Value",
+   "value": "\"Ticket \" + T.Number + \" escalated\""
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Escalate_call20/Body",
+   "prop": "Value",
+   "value": "Reason"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Escalate",
+   "type": "IEndNode",
+   "as": "$Ticket_Escalate_end21"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Escalate_start6",
+   "to": "$Ticket_Escalate_agg7"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Escalate_agg7",
+   "to": "$Ticket_Escalate_if8"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Escalate_if8",
+   "to": "$Ticket_Escalate_asg10",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Escalate_asg10",
+   "to": "$Ticket_Escalate_call14"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Escalate_call14",
+   "to": "$Ticket_Escalate_call15"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Escalate_call15",
+   "to": "$Ticket_Escalate_call16"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Escalate_call16",
+   "to": "$Ticket_Escalate_agg17"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Escalate_agg17",
+   "to": "$Ticket_Escalate_if18"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Escalate_if18",
+   "to": "$Ticket_Escalate_call19",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Escalate_if18",
+   "to": "$Ticket_Escalate_end21",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Escalate_call19",
+   "to": "$Ticket_Escalate_call20"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Escalate_call20",
+   "to": "$Ticket_Escalate_end21"
+  },
+  {
+   "op": "layout",
+   "target": "$Ticket_Escalate"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Ticket_Merge",
+   "as": "$Ticket_Merge"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge",
+   "prop": "Description",
+   "value": "Funde a fonte no alvo: move comentarios, anexos e watchers, fecha a fonte com ParentTicketId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IInputParameter",
+   "name": "SourceTicketId",
+   "as": "$Ticket_Merge_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_in1",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IInputParameter",
+   "name": "TargetTicketId",
+   "as": "$Ticket_Merge_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_in2",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IInputParameter",
+   "name": "ActorId",
+   "as": "$Ticket_Merge_in3"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_in3",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_in3",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "ILocalVariable",
+   "name": "Src",
+   "as": "$Ticket_Merge_var4"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_var4",
+   "prop": "DataType",
+   "value": "Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "ILocalVariable",
+   "name": "C",
+   "as": "$Ticket_Merge_var5"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_var5",
+   "prop": "DataType",
+   "value": "TicketComment"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "ILocalVariable",
+   "name": "At",
+   "as": "$Ticket_Merge_var6"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_var6",
+   "prop": "DataType",
+   "value": "TicketAttachment"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "ILocalVariable",
+   "name": "W",
+   "as": "$Ticket_Merge_var7"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_var7",
+   "prop": "DataType",
+   "value": "TicketWatcher"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IStartNode",
+   "as": "$Ticket_Merge_start8"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IAggregateNode",
+   "name": "GetSource",
+   "as": "$Ticket_Merge_agg9"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge_agg9",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge_agg9",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.Id = SourceTicketId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_agg9",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IAggregateNode",
+   "name": "GetTarget",
+   "as": "$Ticket_Merge_agg10"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge_agg10",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge_agg10",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.Id = TargetTicketId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_agg10",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IIfNode",
+   "name": "BothFound",
+   "as": "$Ticket_Merge_if11"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_if11",
+   "prop": "Label",
+   "value": "BothFound"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_if11",
+   "prop": "Condition",
+   "value": "not GetSource.List.Empty and not GetTarget.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseNotFound",
+   "as": "$Ticket_Merge_raise12"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_raise12",
+   "prop": "Exception",
+   "value": "IUserException:NotFound"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_raise12",
+   "prop": "ExceptionMessage",
+   "value": "\"Ticket not found\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IIfNode",
+   "name": "BothOpen",
+   "as": "$Ticket_Merge_if13"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_if13",
+   "prop": "Label",
+   "value": "BothOpen"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_if13",
+   "prop": "Condition",
+   "value": "GetSource.List.Current.Ticket.StatusId <> Entities.TicketStatus.Closed and GetSource.List.Current.Ticket.StatusId <> Entities.TicketStatus.Cancelled and GetTarget.List.Current.Ticket.StatusId <> Entities.TicketStatus.Closed and GetTarget.List.Current.Ticket.StatusId <> Entities.TicketStatus.Cancelled"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseClosed",
+   "as": "$Ticket_Merge_raise14"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_raise14",
+   "prop": "Exception",
+   "value": "IUserException:InvalidTransition"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_raise14",
+   "prop": "ExceptionMessage",
+   "value": "\"Both tickets must be open to merge\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IAggregateNode",
+   "name": "GetComments",
+   "as": "$Ticket_Merge_agg15"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge_agg15",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:TicketComment"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge_agg15",
+   "type": "IFilter",
+   "args": {
+    "condition": "TicketComment.TicketId = SourceTicketId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IForEachNode",
+   "name": "EachComment",
+   "as": "$Ticket_Merge_fe16"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_fe16",
+   "prop": "Label",
+   "value": "EachComment"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_fe16",
+   "prop": "RecordList",
+   "value": "GetComments.List"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IAssignNode",
+   "name": "MoveComment",
+   "as": "$Ticket_Merge_asg17"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_asg17",
+   "prop": "Label",
+   "value": "MoveComment"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge_asg17",
+   "type": "IAssignment",
+   "as": "$Ticket_Merge_a18"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_a18",
+   "prop": "Variable",
+   "value": "C"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_a18",
+   "prop": "Value",
+   "value": "GetComments.List.Current.TicketComment"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge_asg17",
+   "type": "IAssignment",
+   "as": "$Ticket_Merge_a19"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_a19",
+   "prop": "Variable",
+   "value": "C.TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_a19",
+   "prop": "Value",
+   "value": "TargetTicketId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IExecuteServerActionNode",
+   "name": "UpdateComment",
+   "as": "$Ticket_Merge_call20"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_call20",
+   "prop": "Action",
+   "value": "IEntityActionSignature:UpdateTicketComment"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_call20/Source",
+   "prop": "Value",
+   "value": "C"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IAggregateNode",
+   "name": "GetAttachments",
+   "as": "$Ticket_Merge_agg21"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge_agg21",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:TicketAttachment"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge_agg21",
+   "type": "IFilter",
+   "args": {
+    "condition": "TicketAttachment.TicketId = SourceTicketId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IForEachNode",
+   "name": "EachAttachment",
+   "as": "$Ticket_Merge_fe22"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_fe22",
+   "prop": "Label",
+   "value": "EachAttachment"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_fe22",
+   "prop": "RecordList",
+   "value": "GetAttachments.List"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IAssignNode",
+   "name": "MoveAttachment",
+   "as": "$Ticket_Merge_asg23"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_asg23",
+   "prop": "Label",
+   "value": "MoveAttachment"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge_asg23",
+   "type": "IAssignment",
+   "as": "$Ticket_Merge_a24"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_a24",
+   "prop": "Variable",
+   "value": "At"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_a24",
+   "prop": "Value",
+   "value": "GetAttachments.List.Current.TicketAttachment"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge_asg23",
+   "type": "IAssignment",
+   "as": "$Ticket_Merge_a25"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_a25",
+   "prop": "Variable",
+   "value": "At.TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_a25",
+   "prop": "Value",
+   "value": "TargetTicketId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IExecuteServerActionNode",
+   "name": "UpdateAttachment",
+   "as": "$Ticket_Merge_call26"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_call26",
+   "prop": "Action",
+   "value": "IEntityActionSignature:UpdateTicketAttachment"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_call26/Source",
+   "prop": "Value",
+   "value": "At"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IAggregateNode",
+   "name": "GetWatchers",
+   "as": "$Ticket_Merge_agg27"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge_agg27",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:TicketWatcher"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge_agg27",
+   "type": "IFilter",
+   "args": {
+    "condition": "TicketWatcher.TicketId = SourceTicketId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IForEachNode",
+   "name": "EachWatcher",
+   "as": "$Ticket_Merge_fe28"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_fe28",
+   "prop": "Label",
+   "value": "EachWatcher"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_fe28",
+   "prop": "RecordList",
+   "value": "GetWatchers.List"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IAssignNode",
+   "name": "MoveWatcher",
+   "as": "$Ticket_Merge_asg29"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_asg29",
+   "prop": "Label",
+   "value": "MoveWatcher"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge_asg29",
+   "type": "IAssignment",
+   "as": "$Ticket_Merge_a30"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_a30",
+   "prop": "Variable",
+   "value": "W"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_a30",
+   "prop": "Value",
+   "value": "GetWatchers.List.Current.TicketWatcher"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge_asg29",
+   "type": "IAssignment",
+   "as": "$Ticket_Merge_a31"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_a31",
+   "prop": "Variable",
+   "value": "W.TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_a31",
+   "prop": "Value",
+   "value": "TargetTicketId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IExecuteServerActionNode",
+   "name": "UpdateWatcher",
+   "as": "$Ticket_Merge_call32"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_call32",
+   "prop": "Action",
+   "value": "IEntityActionSignature:UpdateTicketWatcher"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_call32/Source",
+   "prop": "Value",
+   "value": "W"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IAssignNode",
+   "name": "CloseSource",
+   "as": "$Ticket_Merge_asg33"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_asg33",
+   "prop": "Label",
+   "value": "CloseSource"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge_asg33",
+   "type": "IAssignment",
+   "as": "$Ticket_Merge_a34"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_a34",
+   "prop": "Variable",
+   "value": "Src"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_a34",
+   "prop": "Value",
+   "value": "GetSource.List.Current.Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge_asg33",
+   "type": "IAssignment",
+   "as": "$Ticket_Merge_a35"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_a35",
+   "prop": "Variable",
+   "value": "Src.StatusId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_a35",
+   "prop": "Value",
+   "value": "Entities.TicketStatus.Closed"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge_asg33",
+   "type": "IAssignment",
+   "as": "$Ticket_Merge_a36"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_a36",
+   "prop": "Variable",
+   "value": "Src.ParentTicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_a36",
+   "prop": "Value",
+   "value": "TargetTicketId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge_asg33",
+   "type": "IAssignment",
+   "as": "$Ticket_Merge_a37"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_a37",
+   "prop": "Variable",
+   "value": "Src.ClosedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_a37",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge_asg33",
+   "type": "IAssignment",
+   "as": "$Ticket_Merge_a38"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_a38",
+   "prop": "Variable",
+   "value": "Src.UpdatedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_a38",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IExecuteServerActionNode",
+   "name": "UpdateSource",
+   "as": "$Ticket_Merge_call39"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_call39",
+   "prop": "Action",
+   "value": "IEntityActionSignature:UpdateTicket"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_call39/Source",
+   "prop": "Value",
+   "value": "Src"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IExecuteServerActionNode",
+   "name": "WriteMergedSource",
+   "as": "$Ticket_Merge_call40"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_call40",
+   "prop": "Action",
+   "value": "IServerAction:Event_Write"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_call40/TicketId",
+   "prop": "Value",
+   "value": "SourceTicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_call40/EventTypeId",
+   "prop": "Value",
+   "value": "Entities.TicketEventType.Merged"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_call40/ActorId",
+   "prop": "Value",
+   "value": "ActorId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_call40/FromValue",
+   "prop": "Value",
+   "value": "GetSource.List.Current.Ticket.Number"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_call40/ToValue",
+   "prop": "Value",
+   "value": "GetTarget.List.Current.Ticket.Number"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_call40/Note",
+   "prop": "Value",
+   "value": "\"Merged into target\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IExecuteServerActionNode",
+   "name": "WriteMergedTarget",
+   "as": "$Ticket_Merge_call41"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_call41",
+   "prop": "Action",
+   "value": "IServerAction:Event_Write"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_call41/TicketId",
+   "prop": "Value",
+   "value": "TargetTicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_call41/EventTypeId",
+   "prop": "Value",
+   "value": "Entities.TicketEventType.Merged"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_call41/ActorId",
+   "prop": "Value",
+   "value": "ActorId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_call41/FromValue",
+   "prop": "Value",
+   "value": "GetSource.List.Current.Ticket.Number"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_call41/ToValue",
+   "prop": "Value",
+   "value": "GetTarget.List.Current.Ticket.Number"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Merge_call41/Note",
+   "prop": "Value",
+   "value": "\"Merged from source\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Merge",
+   "type": "IEndNode",
+   "as": "$Ticket_Merge_end42"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_start8",
+   "to": "$Ticket_Merge_agg9"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_agg9",
+   "to": "$Ticket_Merge_agg10"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_agg10",
+   "to": "$Ticket_Merge_if11"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_if11",
+   "to": "$Ticket_Merge_raise12",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_if11",
+   "to": "$Ticket_Merge_if13",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_if13",
+   "to": "$Ticket_Merge_raise14",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_if13",
+   "to": "$Ticket_Merge_agg15",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_agg15",
+   "to": "$Ticket_Merge_fe16"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_fe16",
+   "to": "$Ticket_Merge_asg17",
+   "connector": "CycleTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_asg17",
+   "to": "$Ticket_Merge_call20"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_call20",
+   "to": "$Ticket_Merge_fe16"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_fe16",
+   "to": "$Ticket_Merge_agg21"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_agg21",
+   "to": "$Ticket_Merge_fe22"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_fe22",
+   "to": "$Ticket_Merge_asg23",
+   "connector": "CycleTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_asg23",
+   "to": "$Ticket_Merge_call26"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_call26",
+   "to": "$Ticket_Merge_fe22"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_fe22",
+   "to": "$Ticket_Merge_agg27"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_agg27",
+   "to": "$Ticket_Merge_fe28"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_fe28",
+   "to": "$Ticket_Merge_asg29",
+   "connector": "CycleTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_asg29",
+   "to": "$Ticket_Merge_call32"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_call32",
+   "to": "$Ticket_Merge_fe28"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_fe28",
+   "to": "$Ticket_Merge_asg33"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_asg33",
+   "to": "$Ticket_Merge_call39"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_call39",
+   "to": "$Ticket_Merge_call40"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_call40",
+   "to": "$Ticket_Merge_call41"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Merge_call41",
+   "to": "$Ticket_Merge_end42"
+  },
+  {
+   "op": "layout",
+   "target": "$Ticket_Merge"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Ticket_Cancel",
+   "as": "$Ticket_Cancel"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Cancel",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Cancel",
+   "prop": "Description",
+   "value": "Cancela com verificacao de acesso; reusa a transicao"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Cancel",
+   "type": "IInputParameter",
+   "name": "TicketId",
+   "as": "$Ticket_Cancel_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Cancel_in1",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Cancel",
+   "type": "IInputParameter",
+   "name": "ActorId",
+   "as": "$Ticket_Cancel_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Cancel_in2",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Cancel",
+   "type": "IInputParameter",
+   "name": "Reason",
+   "as": "$Ticket_Cancel_in3"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Cancel_in3",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Cancel_in3",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Cancel",
+   "type": "IStartNode",
+   "as": "$Ticket_Cancel_start4"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Cancel",
+   "type": "IExecuteServerActionNode",
+   "name": "AssertAccess",
+   "as": "$Ticket_Cancel_call5"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Cancel_call5",
+   "prop": "Action",
+   "value": "IServerAction:Ticket_AssertAccess"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Cancel_call5/ViewerId",
+   "prop": "Value",
+   "value": "ActorId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Cancel_call5/TicketId",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Cancel_call5/Operation",
+   "prop": "Value",
+   "value": "\"cancel\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Cancel",
+   "type": "IExecuteServerActionNode",
+   "name": "Cancel",
+   "as": "$Ticket_Cancel_call6"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Cancel_call6",
+   "prop": "Action",
+   "value": "IServerAction:Ticket_ChangeStatus"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Cancel_call6/TicketId",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Cancel_call6/NewStatusId",
+   "prop": "Value",
+   "value": "Entities.TicketStatus.Cancelled"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Cancel_call6/ActorId",
+   "prop": "Value",
+   "value": "ActorId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Cancel_call6/Note",
+   "prop": "Value",
+   "value": "Reason"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Cancel",
+   "type": "IEndNode",
+   "as": "$Ticket_Cancel_end7"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Cancel_start4",
+   "to": "$Ticket_Cancel_call5"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Cancel_call5",
+   "to": "$Ticket_Cancel_call6"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Cancel_call6",
+   "to": "$Ticket_Cancel_end7"
+  },
+  {
+   "op": "layout",
+   "target": "$Ticket_Cancel"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Ticket_RateSatisfaction",
+   "as": "$Ticket_RateSatisfaction"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction",
+   "prop": "Description",
+   "value": "Avaliacao 1-5 pelo requester, uma vez, so em Resolved/Closed"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction",
+   "type": "IInputParameter",
+   "name": "TicketId",
+   "as": "$Ticket_RateSatisfaction_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_in1",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction",
+   "type": "IInputParameter",
+   "name": "RequesterId",
+   "as": "$Ticket_RateSatisfaction_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_in2",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction",
+   "type": "IInputParameter",
+   "name": "Score",
+   "as": "$Ticket_RateSatisfaction_in3"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_in3",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction",
+   "type": "ILocalVariable",
+   "name": "T",
+   "as": "$Ticket_RateSatisfaction_var4"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_var4",
+   "prop": "DataType",
+   "value": "Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction",
+   "type": "IStartNode",
+   "as": "$Ticket_RateSatisfaction_start5"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction",
+   "type": "IAggregateNode",
+   "name": "GetTicket",
+   "as": "$Ticket_RateSatisfaction_agg6"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction_agg6",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction_agg6",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.Id = TicketId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_agg6",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction",
+   "type": "IIfNode",
+   "name": "TicketFound",
+   "as": "$Ticket_RateSatisfaction_if7"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_if7",
+   "prop": "Label",
+   "value": "TicketFound"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_if7",
+   "prop": "Condition",
+   "value": "not GetTicket.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseTicketNotFound",
+   "as": "$Ticket_RateSatisfaction_raise8"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_raise8",
+   "prop": "Exception",
+   "value": "IUserException:NotFound"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_raise8",
+   "prop": "ExceptionMessage",
+   "value": "\"Ticket not found\""
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_RateSatisfaction_if7",
+   "to": "$Ticket_RateSatisfaction_raise8",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction",
+   "type": "IIfNode",
+   "name": "IsRequester",
+   "as": "$Ticket_RateSatisfaction_if9"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_if9",
+   "prop": "Label",
+   "value": "IsRequester"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_if9",
+   "prop": "Condition",
+   "value": "GetTicket.List.Current.Ticket.RequesterId = RequesterId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseNotRequester",
+   "as": "$Ticket_RateSatisfaction_raise10"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_raise10",
+   "prop": "Exception",
+   "value": "IUserException:NotAllowed"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_raise10",
+   "prop": "ExceptionMessage",
+   "value": "\"Only the requester can rate\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction",
+   "type": "IIfNode",
+   "name": "IsDone",
+   "as": "$Ticket_RateSatisfaction_if11"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_if11",
+   "prop": "Label",
+   "value": "IsDone"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_if11",
+   "prop": "Condition",
+   "value": "GetTicket.List.Current.Ticket.StatusId = Entities.TicketStatus.Resolved or GetTicket.List.Current.Ticket.StatusId = Entities.TicketStatus.Closed"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseNotDone",
+   "as": "$Ticket_RateSatisfaction_raise12"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_raise12",
+   "prop": "Exception",
+   "value": "IUserException:InvalidTransition"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_raise12",
+   "prop": "ExceptionMessage",
+   "value": "\"Ticket is not resolved\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction",
+   "type": "IIfNode",
+   "name": "NotRated",
+   "as": "$Ticket_RateSatisfaction_if13"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_if13",
+   "prop": "Label",
+   "value": "NotRated"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_if13",
+   "prop": "Condition",
+   "value": "GetTicket.List.Current.Ticket.SatisfactionScore = 0"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseRated",
+   "as": "$Ticket_RateSatisfaction_raise14"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_raise14",
+   "prop": "Exception",
+   "value": "IUserException:ValidationFailed"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_raise14",
+   "prop": "ExceptionMessage",
+   "value": "\"Already rated\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction",
+   "type": "IIfNode",
+   "name": "ScoreInRange",
+   "as": "$Ticket_RateSatisfaction_if15"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_if15",
+   "prop": "Label",
+   "value": "ScoreInRange"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_if15",
+   "prop": "Condition",
+   "value": "Score >= 1 and Score <= 5"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseRange",
+   "as": "$Ticket_RateSatisfaction_raise16"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_raise16",
+   "prop": "Exception",
+   "value": "IUserException:ValidationFailed"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_raise16",
+   "prop": "ExceptionMessage",
+   "value": "\"Score must be between 1 and 5\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction",
+   "type": "IAssignNode",
+   "name": "Apply",
+   "as": "$Ticket_RateSatisfaction_asg17"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_asg17",
+   "prop": "Label",
+   "value": "Apply"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction_asg17",
+   "type": "IAssignment",
+   "as": "$Ticket_RateSatisfaction_a18"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_a18",
+   "prop": "Variable",
+   "value": "T"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_a18",
+   "prop": "Value",
+   "value": "GetTicket.List.Current.Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction_asg17",
+   "type": "IAssignment",
+   "as": "$Ticket_RateSatisfaction_a19"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_a19",
+   "prop": "Variable",
+   "value": "T.SatisfactionScore"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_a19",
+   "prop": "Value",
+   "value": "Score"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction_asg17",
+   "type": "IAssignment",
+   "as": "$Ticket_RateSatisfaction_a20"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_a20",
+   "prop": "Variable",
+   "value": "T.UpdatedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_a20",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction",
+   "type": "IExecuteServerActionNode",
+   "name": "UpdateTicket",
+   "as": "$Ticket_RateSatisfaction_call21"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_call21",
+   "prop": "Action",
+   "value": "IEntityActionSignature:UpdateTicket"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_RateSatisfaction_call21/Source",
+   "prop": "Value",
+   "value": "T"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_RateSatisfaction",
+   "type": "IEndNode",
+   "as": "$Ticket_RateSatisfaction_end22"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_RateSatisfaction_start5",
+   "to": "$Ticket_RateSatisfaction_agg6"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_RateSatisfaction_agg6",
+   "to": "$Ticket_RateSatisfaction_if7"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_RateSatisfaction_if7",
+   "to": "$Ticket_RateSatisfaction_if9",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_RateSatisfaction_if9",
+   "to": "$Ticket_RateSatisfaction_raise10",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_RateSatisfaction_if9",
+   "to": "$Ticket_RateSatisfaction_if11",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_RateSatisfaction_if11",
+   "to": "$Ticket_RateSatisfaction_raise12",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_RateSatisfaction_if11",
+   "to": "$Ticket_RateSatisfaction_if13",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_RateSatisfaction_if13",
+   "to": "$Ticket_RateSatisfaction_raise14",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_RateSatisfaction_if13",
+   "to": "$Ticket_RateSatisfaction_if15",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_RateSatisfaction_if15",
+   "to": "$Ticket_RateSatisfaction_raise16",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_RateSatisfaction_if15",
+   "to": "$Ticket_RateSatisfaction_asg17",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_RateSatisfaction_asg17",
+   "to": "$Ticket_RateSatisfaction_call21"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_RateSatisfaction_call21",
+   "to": "$Ticket_RateSatisfaction_end22"
+  },
+  {
+   "op": "layout",
+   "target": "$Ticket_RateSatisfaction"
+  }
+ ]
+}

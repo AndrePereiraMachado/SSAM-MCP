@@ -1,0 +1,81 @@
+{
+ "description": "Cobertura testada (fase 2): del de OutSystems.Model.Logic.Mobile.Nodes.ISendEmailNode (odc) em lgServerFlowMobileEmail. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:Emails",
+   "type": "IMobileEmail",
+   "name": "CovSEmail",
+   "as": "$em"
+  },
+  {
+   "op": "set",
+   "target": "$em",
+   "prop": "Subject",
+   "value": "\"Cov\""
+  },
+  {
+   "op": "create",
+   "parent": "$em",
+   "type": "IContainer",
+   "name": "CovSBody",
+   "as": "$emb"
+  },
+  {
+   "op": "create",
+   "parent": "$emb",
+   "type": "IExpression",
+   "as": "$embx"
+  },
+  {
+   "op": "set",
+   "target": "$embx",
+   "prop": "Value",
+   "value": "\"Cov\""
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "CovSFlow",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "OutSystems.Model.Logic.Mobile.Nodes.ISendEmailNode",
+   "name": "CovASendEmailNode",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ],
+ "expectedMessages": [
+  {
+   "id": "UnusedUserAction",
+   "element": "WrightFlood (ESpace) / CovSFlow (ServerAction)",
+   "why": "ODC: um app nao expoe server action publica (o kernel recusa, como o Studio ao vivo); a action fica privada e sem consumidor neste job de cobertura"
+  }
+ ]
+}

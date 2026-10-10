@@ -1,0 +1,37 @@
+{
+ "description": "ODC (cobertura C): o screen-list-reactive.json espelhado na faixa ODC (assume a entidade WfCovTask e a tela WfCovTaskDetail do job screen-form): aggregate ordenado, List com ListItem, expressoes por item, OnClick do item -> WfCovTaskDetail(TaskId) e botao New no placeholder Actions.",
+ "base": "job:screen-form",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfCovTasks", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Tasks\""},
+
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetTasks", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:WfCovTask"}},
+  {"op": "create", "parent": "$agg", "type": "ISort", "as": "$sort"},
+  {"op": "set", "target": "$sort", "prop": "Attribute", "value": "WfCovTask.DueOn"},
+  {"op": "set", "target": "$sort", "prop": "SortDirection", "value": "Ascending"},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "TaskList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetTasks.List"},
+  {"op": "create", "parent": "$list", "type": "IListItem", "name": "TaskItem", "as": "$item"},
+  {"op": "delete", "target": "$item/RightActions/#IListItemAction", "_why": "o ListItem nasce com uma swipe action de exemplo sem destino (erro RequiredPropertyValue)"},
+  {"op": "create", "parent": "$item/Content", "type": "IExpression", "as": "$exTitle"},
+  {"op": "set", "target": "$exTitle", "prop": "Value", "value": "GetTasks.List.Current.WfCovTask.Title"},
+  {"op": "create", "parent": "$item/Content", "type": "IExpression", "as": "$exDue"},
+  {"op": "set", "target": "$exDue", "prop": "Value", "value": "GetTasks.List.Current.WfCovTask.DueOn"},
+  {"op": "set", "target": "$item/OnClick", "prop": "Destination", "value": "IMobileScreen:WfCovTaskDetail"},
+  {"op": "set", "target": "$item/OnClick/TaskId", "prop": "Value", "value": "GetTasks.List.Current.WfCovTask.Id"},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Actions", "type": "IButton", "name": "NewButton", "as": "$new"},
+  {"op": "set", "target": "$new/#ITextWidget", "prop": "Text", "value": "New task"},
+  {"op": "set", "target": "$new/OnClick", "prop": "Destination", "value": "IMobileScreen:WfCovTaskDetail"},
+  {"op": "set", "target": "$new/OnClick/TaskId", "prop": "Value", "value": "NullIdentifier()"},
+
+  {"op": "get", "target": "$item/OnClick"},
+  {"op": "dump", "target": "$scr", "depth": 7}
+ ]
+}

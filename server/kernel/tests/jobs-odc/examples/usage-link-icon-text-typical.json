@@ -1,0 +1,37 @@
+{
+ "description": "Link com icone e texto dinamico em cada linha de uma List: o texto vem do registro e o clique abre o detalhe passando o Id como argumento.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [{"name": "Name", "type": "Text", "length": 100, "mandatory": true}]}]}},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductDetail", "as": "$detail"},
+  {"op": "set", "target": "$detail/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$detail", "type": "IInputParameter", "name": "ProductId", "as": "$pid"},
+  {"op": "set", "target": "$pid", "prop": "DataType", "value": "Product Identifier"},
+  {"op": "create", "parent": "$detail/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$dTitle"},
+  {"op": "set", "target": "$dTitle", "prop": "Value", "value": "\"Product \" + ProductId"},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductLinks", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "ProductList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetProducts.List"},
+
+  {"op": "create", "parent": "$list", "type": "ILink", "name": "OpenLink", "as": "$lnk"},
+  {"op": "set", "target": "$lnk", "prop": "Style", "value": "\"display-flex align-items-center\""},
+  {"op": "delete", "target": "$lnk/#ITextWidget", "_why": "sem o texto fixo 'Link', o conteudo do Link e o que o job cria dentro dele"},
+  {"op": "create", "parent": "$lnk", "type": "IIcon", "name": "OpenIcon", "as": "$ico"},
+  {"op": "set", "target": "$ico", "prop": "Icon", "value": "caret-right"},
+  {"op": "set", "target": "$ico", "prop": "Weight", "value": "regular", "_why": "no ODC o nome do icone (Phosphor) so resolve junto com o Weight"},
+  {"op": "create", "parent": "$lnk", "type": "IExpression", "as": "$text"},
+  {"op": "set", "target": "$text", "prop": "Value", "value": "GetProducts.List.Current.Product.Name", "_why": "texto visivel e dinamico: uma Expression filha do Link"},
+  {"op": "set", "target": "$lnk/OnClick", "prop": "Destination", "value": "IMobileScreen:ProductDetail"},
+  {"op": "set", "target": "$lnk/OnClick/ProductId", "prop": "Value", "value": "GetProducts.List.Current.Product.Id"},
+
+  {"op": "get", "target": "$lnk/OnClick"},
+  {"op": "dump", "target": "$lnk", "depth": 3}
+ ]
+}

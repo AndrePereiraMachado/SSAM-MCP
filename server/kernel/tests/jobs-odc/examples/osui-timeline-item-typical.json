@@ -1,0 +1,29 @@
+{
+ "description": "TimelineItem do OSUI numa List: um item por evento do pedido, com titulo e data do registro, icone e IsActive no evento mais recente.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "OrderEvent", "attributes": [{"name": "Title", "type": "Text", "length": 100, "mandatory": true}, {"name": "HappenedOn", "type": "Date Time"}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "OrderTimeline", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Order timeline\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetEvents", "as": "$GetEvents"},
+  {"op": "create", "parent": "$GetEvents", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:OrderEvent"}},
+  {"op": "create", "parent": "$GetEvents", "type": "ISort", "as": "$GetEventsSort"},
+  {"op": "set", "target": "$GetEventsSort", "prop": "Attribute", "value": "OrderEvent.HappenedOn"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "EventList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetEvents.List"},
+  {"op": "create", "parent": "$list", "type": "IMobileBlockInstanceWidget", "name": "EventItem", "source": "IMobileBlock:TimelineItem", "as": "$ti"},
+  {"op": "set", "target": "$ti/IsActive", "prop": "Value", "value": "GetEvents.List.CurrentRowNumber = GetEvents.List.Length - 1"},
+  {"op": "set", "target": "$ti/Color", "prop": "Value", "value": "Entities.Color.Green"},
+  {"op": "create", "parent": "$ti/Icon", "type": "IIcon", "name": "DoneIcon", "as": "$icon1"},
+  {"op": "set", "target": "$icon1", "prop": "Icon", "value": "check"},
+  {"op": "set", "target": "$icon1", "prop": "Weight", "value": "regular"},
+  {"op": "create", "parent": "$ti/Title", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "GetEvents.List.Current.OrderEvent.Title"},
+  {"op": "create", "parent": "$ti/Content", "type": "IExpression", "as": "$expr2"},
+  {"op": "set", "target": "$expr2", "prop": "Value", "value": "FormatDateTime(GetEvents.List.Current.OrderEvent.HappenedOn, \"yyyy-MM-dd HH:mm\")"}
+ ]
+}

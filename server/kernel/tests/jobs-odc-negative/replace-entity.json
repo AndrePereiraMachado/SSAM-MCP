@@ -1,0 +1,35 @@
+{
+ "description": "ODC: a RECUSA de `replace` entre ENTIDADES: ReplaceReferences deixava o modulo com estruturas anonimas em falta (InvalidGlobalStateException 6 - eSpace has missing Anonymous Structures, medido em 2026-09-23). Desde o lote de dados da fase 3 o kernel recusa antes de tocar o modelo, nas duas faixas; alternativas provadas: rename da entidade, ou replace atributo a atributo (tests/jobs-odc/entity-refactor.json).",
+ "base": "job:data-full-model",
+ "expectValid": true,
+ "expectError": [
+  "replace: IServerEntity 'WfCovOrganization' is an entity and cannot be repointed",
+  "Rename it, or move the consumers to the other entity by hand"
+ ],
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "entities": [
+     {
+      "name": "WfCovOrg2",
+      "public": true,
+      "attributes": [
+       {
+        "name": "Name",
+        "type": "Text",
+        "mandatory": true,
+        "length": 100
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "replace",
+   "from": "IServerEntity:WfCovOrganization",
+   "to": "$WfCovOrg2"
+  }
+ ]
+}

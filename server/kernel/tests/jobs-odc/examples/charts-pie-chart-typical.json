@@ -1,0 +1,24 @@
+{
+ "description": "PieChart do OutSystemsCharts com dados: uma data action soma o total por regiao (aggregate com Group e Sum) e monta os DataPoint; o OnDataPointClick guarda a regiao clicada.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "SalesOrder", "attributes": [{"name": "Region", "type": "Text", "length": 50, "mandatory": true}, {"name": "Total", "type": "Currency"}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "SalesByPieChart", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Sales by region\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "ClickedRegion", "as": "$vClickedRegion"},
+  {"op": "set", "target": "$vClickedRegion", "prop": "DataType", "value": "Text"},
+  {"op": "logic", "data": {"actions": [{"name": "GetSalesPoints", "kind": "data", "owner": "IMobileScreen:SalesByPieChart", "fetch": "AtStart", "outputs": [{"name": "Points", "type": "DataPoint List"}], "vars": [{"name": "Point", "type": "DataPoint"}], "steps": [{"get": "SalesOrder", "as": "SumByRegion", "columns": [{"name": "Region", "kind": "Group", "attribute": "SalesOrder.Region"}, {"name": "RegionTotal", "kind": "Sum", "attribute": "SalesOrder.Total"}]}, {"foreach": "SumByRegion.List", "as": "EachRegion", "do": [{"assign": {"Point.Label": "SumByRegion.List.Current.Region", "Point.Value": "SumByRegion.List.Current.RegionTotal"}, "as": "Fill"}, {"call": "ListAppend", "as": "AddPoint", "args": {"List": "Points", "Element": "Point"}}]}]}]}},
+  {"op": "logic", "data": {"actions": [{"name": "PointClicked", "kind": "screen", "owner": "IMobileScreen:SalesByPieChart", "inputs": [{"name": "Label", "type": "Text"}], "steps": [{"assign": {"ClickedRegion": "Label"}, "as": "Keep"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "PieChart1", "source": "IMobileBlock:PieChart", "as": "$ch"},
+  {"op": "set", "target": "$ch/DataPointList", "prop": "Value", "value": "GetSalesPoints.Points"},
+  {"op": "set", "target": "$ch/Height", "prop": "Value", "value": "400"},
+  {"op": "set", "target": "$ch/OnDataPointClick", "prop": "Handler", "value": "IMobileScreen:SalesByPieChart/PointClicked", "_why": "o evento passa o DataPoint clicado"},
+  {"op": "set", "target": "$ch/OnDataPointClick/Label", "prop": "Value", "value": "DataPoint.Label"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "If(ClickedRegion = \"\", \"\", \"Region: \" + ClickedRegion)"}
+ ]
+}

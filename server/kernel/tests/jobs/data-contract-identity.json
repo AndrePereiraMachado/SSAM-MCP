@@ -1,0 +1,68 @@
+{
+ "description": "Contrato de dados ancorado na IDENTIDADE (fase 3, 2026-09-23): o que este job escreve e depois renomeia continua a ser aferido no fim, e o que a plataforma reescreve por causa dos renames deste job passa a ser o valor esperado, registado em dataContract.assertions[].platformRewrites. Tres casos, os tres nas duas faixas: (1) escrita seguida de renomeacao -- a Description de Notes e escrita e o atributo passa a Remarks; o valor de Label do registo Closed e escrito por CAMINHO (IStaticEntity:DcStage/Closed/Label) e o registo passa a Done por set Identifier (antes da fase 3 isto reprovava com 'has no child Closed': a assercao era ancorada por nome); (2) expressao reescrita legitimamente pela plataforma -- o DefaultValue de StageId e o filtro do aggregate citam Entities.DcStage.Closed e a static passa a DcCaseStage e o registo a Done; o Label 'Closed' do registo (igual ao nome antigo) e reescrito para 'Done' pela plataforma; a entidade DcCase passa a DcTicket e o Title a Subject (o indice unico do spec segue por chave); (3) o caso errado continua a ser recusado: nao cabe num job verde, esta em tests/Anvil.Tests/DataContractIdentityTests.cs (uma escrita que ja divergia antes do rename nao e absorvida). O que se le no fim: DefaultValue e filtro com os nomes novos, Label 'Done', o indice com Subject, usages do FK.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {
+   "static": [
+    {"name": "DcStage", "records": [
+     {"name": "Open", "label": "Open"},
+     {"name": "Closed", "label": "Closed"}
+    ]}
+   ],
+   "entities": [
+    {"name": "DcCase", "description": "Caso: FK para a static, texto e indices declarados no spec", "attributes": [
+     {"name": "Title", "type": "Text", "mandatory": true, "length": 100},
+     {"name": "StageId", "type": "DcStage Identifier", "default": "Entities.DcStage.Open"},
+     {"name": "Notes", "type": "Text", "length": 500}
+    ], "indexes": [
+     {"name": "UQ_DcCase_Title", "unique": true, "attributes": ["Title"]},
+     {"name": "IX_DcCase_StageTitle", "unique": false, "attributes": ["StageId", "Title"]}
+    ]}
+   ]
+  }},
+
+  {"op": "set", "target": "IStaticEntity:DcStage/Closed/Label", "prop": "Value", "value": "\"Closed\"", "_why": "(1) valor de registo escrito por CAMINHO antes de o Identifier do registo mudar: a assercao fica ancorada na chave do registo e do atributo (@registo/@atributo), nao nos nomes"},
+  {"op": "set", "target": "$DcCase.StageId", "prop": "DefaultValue", "value": "Entities.DcStage.Closed", "_why": "(2) expressao que cita a static E o registo; os dois sao renomeados a seguir e a plataforma reescreve o texto"},
+  {"op": "set", "target": "$DcCase.Notes", "prop": "Description", "value": "Notas do caso", "_why": "(1) escrita num atributo que e renomeado a seguir"},
+
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "DcCase_CountClosed", "as": "$act", "_why": "consumidor real: aggregate com filtro que cita o FK e o registo"},
+  {"op": "set", "target": "$act", "prop": "Public", "value": true, "_why": "publica: uma server action privada sem chamador leva UnusedUserAction (medido nas duas faixas)"},
+  {"op": "create", "parent": "$act", "type": "IOutputParameter", "name": "Count", "as": "$out"},
+  {"op": "set", "target": "$out", "prop": "DataType", "value": "Long Integer"},
+  {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$s0"},
+  {"op": "create", "parent": "$act", "type": "IAggregateNode", "name": "GetClosed", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "$DcCase"}},
+  {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "DcCase.StageId = Entities.DcStage.Closed"}, "as": "$flt"},
+  {"op": "create", "parent": "$act", "type": "IAssignNode", "name": "SetCount", "as": "$as"},
+  {"op": "set", "target": "$as", "prop": "Label", "value": "SetCount"},
+  {"op": "create", "parent": "$as", "type": "IAssignment", "as": "$a1"},
+  {"op": "set", "target": "$a1", "prop": "Variable", "value": "Count"},
+  {"op": "set", "target": "$a1", "prop": "Value", "value": "GetClosed.Count"},
+  {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$s9"},
+  {"op": "link", "from": "$s0", "to": "$agg"},
+  {"op": "link", "from": "$agg", "to": "$as"},
+  {"op": "link", "from": "$as", "to": "$s9"},
+  {"op": "layout", "target": "$act"},
+
+  {"op": "get", "target": "$DcCase.StageId", "_why": "ANTES: DefaultValue Entities.DcStage.Closed"},
+  {"op": "get", "target": "$flt", "_why": "ANTES: Condition DcCase.StageId = Entities.DcStage.Closed"},
+  {"op": "get", "target": "IStaticEntity:DcStage/Closed/Label", "_why": "ANTES: Value \"Closed\""},
+  {"op": "get", "target": "EntityIndex:UQ_DcCase_Title", "_why": "ANTES: Attributes [Title]"},
+
+  {"op": "rename", "target": "$DcStage", "name": "DcCaseStage", "_why": "(2) rename da static: o DefaultValue e o filtro sao reescritos pela plataforma; dataContractRewrites no resultado diz quantas assercoes deste job foram absorvidas"},
+  {"op": "set", "target": "IStaticEntity:DcCaseStage/Closed", "prop": "Identifier", "value": "Done", "_why": "(2) rename do registo por set Identifier: reescreve Entities.DcCaseStage.Closed -> .Done nas expressoes e o Label \"Closed\" -> \"Done\" (a plataforma reescreve o Label igual ao nome antigo)"},
+  {"op": "rename", "target": "$DcCase.Notes", "name": "Remarks", "_why": "(1) rename do atributo com Description escrita por este job"},
+  {"op": "rename", "target": "$DcCase.Title", "name": "Subject", "_why": "o indice unico declarado no spec segue por chave (AttributeKeys), nao por nome"},
+  {"op": "rename", "target": "$DcCase", "name": "DcTicket", "_why": "rename da entidade com o aggregate como consumidor"},
+
+  {"op": "get", "target": "$DcCase.StageId", "_why": "DEPOIS: DefaultValue Entities.DcCaseStage.Done"},
+  {"op": "get", "target": "$flt", "_why": "DEPOIS: o filtro reescrito pela plataforma"},
+  {"op": "get", "target": "IStaticEntity:DcCaseStage/Done/Label", "_why": "DEPOIS: Value \"Done\" (reescrito pela plataforma; o contrato aceita porque a escrita batia antes do set Identifier)"},
+  {"op": "get", "target": "EntityIndex:UQ_DcCase_Title", "_why": "DEPOIS: Attributes [Subject]; o nome do indice nao segue"},
+  {"op": "get", "target": "$DcCase.Notes", "_why": "DEPOIS: Remarks com a Description escrita antes do rename"},
+  {"op": "usages", "target": "$DcCase.StageId", "_why": "o filtro continua a citar o FK depois dos renames"},
+  {"op": "dump", "target": "$DcCase", "depth": 2}
+ ]
+}

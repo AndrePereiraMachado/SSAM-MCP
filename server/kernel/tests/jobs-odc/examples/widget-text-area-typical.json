@@ -1,0 +1,35 @@
+{
+ "description": "Text Area de um registro: edita a descricao do produto lido pelo input da tela, mostra os caracteres restantes e grava com uma server action.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [
+   {"name": "Name", "type": "Text", "length": 100, "mandatory": true},
+   {"name": "Description", "type": "Text", "length": 500}]}]}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "Product_Save", "kind": "server", "inputs": [{"name": "Product", "type": "Product"}],
+    "steps": [{"update": "Product", "record": "Product", "as": "SaveProduct"}]}]}},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "EditDescription", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "IInputParameter", "name": "ProductId", "as": "$pid"},
+  {"op": "set", "target": "$pid", "prop": "DataType", "value": "Product Identifier"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProduct", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "Product.Id = ProductId"}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "SaveDescription", "kind": "screen", "owner": "IMobileScreen:EditDescription",
+    "steps": [{"call": "Product_Save", "as": "Save", "args": {"Product": "GetProduct.List.Current.Product"}}]}]}},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "ITextArea", "name": "DescriptionTextArea", "as": "$ta"},
+  {"op": "set", "target": "$ta", "prop": "Variable", "value": "GetProduct.List.Current.Product.Description", "_why": "o Text Area escreve no atributo do registro do aggregate"},
+  {"op": "set", "target": "$ta", "prop": "TextLines", "value": 6},
+  {"op": "set", "target": "$ta", "prop": "Prompt", "value": "\"Describe the product\""},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$left"},
+  {"op": "set", "target": "$left", "prop": "Value", "value": "500 - Length(GetProduct.List.Current.Product.Description) + \" characters left\""},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IButton", "name": "SaveButton", "as": "$btn"},
+  {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "Save"},
+  {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "IMobileScreen:EditDescription/SaveDescription"}
+ ]
+}

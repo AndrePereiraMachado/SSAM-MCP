@@ -1,0 +1,100 @@
+{
+ "description": "ODC (cobertura C): tres tipos que nunca tinham nascido por job nesta faixa, no mesmo modulo. (1) IMobileEmail -- no ODC o email vive num IMobileFlow, o mesmo tipo de flow da tela e do bloco (IMobileFlow.CreateEmail), e herda o Theme desse flow: por isso entra no flow Emails, que a fixture mantem com o EmailTheme, e nao no MainFlow, que da FlowThemeTooBigForEmails; espelha tests/jobs/email-traditional.json. (2) IPopover -- o widget do plugin NRWidgets, que JA NASCE completo: os dois placeholders TopContent e BottomContent, e dentro do TopContent um gatilho pronto (ITextWidget 'More' + IIcon); o job so acrescenta conteudo, nunca cria os placeholders. (3) ITextMetadata -- metadata de ferramenta pendurada num IScreenAggregate, o unico pai real (com o IAggregateNode) nos 363 exemplares do corpus; nasce por CreateMetadata<T>(name, managedBy), por isso o args.managedBy e obrigatorio e Name/ManagedBy ficam readOnly depois do nascimento. A tela liga tudo: o botao chama a server action que envia o email, o aggregate alimenta o popover, e a metadata viaja pendurada no aggregate.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "entities": [
+     {
+      "name": "WfCovNotice",
+      "description": "Cobertura C: entidade minima, so para haver um aggregate real onde pendurar a ITextMetadata",
+      "attributes": [
+       {"name": "Title", "type": "Text", "mandatory": true, "length": 100},
+       {"name": "SentTo", "type": "Email"}
+      ]
+     }
+    ]
+   }
+  },
+
+  {"op": "create", "parent": "IMobileFlow:Emails", "type": "IMobileEmail", "name": "WfCovWelcomeEmail", "as": "$em", "_why": "1. o email: no ODC o pai e um IMobileFlow qualquer (IMobileFlow.CreateEmail), o MESMO tipo que segura telas e blocos -- nao ha um tipo de flow proprio para emails como no SS11. Mas o flow NAO e indiferente: o email herda o Theme do flow, e um flow com o tema da app (>14KB) da logo o aviso FlowThemeTooBigForEmails. Por isso vai para o flow Emails, que a propria fixture mantem com o EmailTheme e onde ja vivem o ChangeEmail e o ResetPassword"},
+  {"op": "create", "parent": "$em", "type": "IInputParameter", "name": "UserName", "as": "$emIn"},
+  {"op": "set", "target": "$emIn", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$em", "prop": "Subject", "value": "\"Welcome to InsuranceApp, \" + UserName", "_why": "Subject e propriedade-expressao (IEmail.SetSubject): no modelo aparece como ITextBasedExpression filho do email, nao como texto"},
+  {"op": "set", "target": "$em", "prop": "Description", "value": "Cobertura C: email de boas-vindas criado headless na faixa ODC"},
+  {"op": "create", "parent": "$em", "type": "IContainer", "name": "Body", "as": "$emBody", "_why": "o conteudo vive dentro de um IContainer: e o unico widget de topo dos dois emails que a fixture ja traz (censo: IContainer 2, de 2 emails)"},
+  {"op": "create", "parent": "$emBody", "type": "IExpression", "as": "$emText"},
+  {"op": "set", "target": "$emText", "prop": "Value", "value": "\"Hello \" + UserName + \", your InsuranceApp account is ready.\""},
+
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfCovSendWelcome", "as": "$sa", "_why": "2. quem envia: o ISendEmailNode so existe dentro de uma action de servidor"},
+  {"op": "create", "parent": "$sa", "type": "IInputParameter", "name": "Recipient", "as": "$saTo"},
+  {"op": "set", "target": "$saTo", "prop": "DataType", "value": "Email"},
+  {"op": "create", "parent": "$sa", "type": "IInputParameter", "name": "UserName", "as": "$saName"},
+  {"op": "set", "target": "$saName", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$sa", "type": "IStartNode", "as": "$s0"},
+  {"op": "create", "parent": "$sa", "type": "ISendEmailNode", "name": "SendWelcome", "as": "$send"},
+  {"op": "set", "target": "$send", "prop": "Email", "value": "$em", "_why": "Email e propriedade de objeto; e ela que faz nascer um IArgument por input do email"},
+  {"op": "set", "target": "$send", "prop": "To", "value": "Recipient", "_why": "To e expressao de texto; o input Email entra sem conversao. Attachments/Bcc/Cc/From ficam por preencher, como nos dois envios reais da fixture"},
+  {"op": "set", "target": "$send/UserName", "prop": "Value", "value": "UserName"},
+  {"op": "create", "parent": "$sa", "type": "IEndNode", "as": "$s9"},
+  {"op": "link", "from": "$s0", "to": "$send"},
+  {"op": "link", "from": "$send", "to": "$s9"},
+  {"op": "layout", "target": "$sa"},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfCovNoticeBoard", "as": "$scr", "_why": "3. a tela que segura o aggregate (com a metadata) e o popover, e que chama o envio"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Notices\""},
+
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetNotices", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "$WfCovNotice"}},
+  {"op": "create", "parent": "$agg", "type": "ITextMetadata", "name": "WfCovNote", "args": {"managedBy": "anvil"}, "as": "$md", "_why": "4. a metadata: CreateMetadata<T>(name, managedBy) nao tem default para managedBy, por isso o args e OBRIGATORIO; Name e ManagedBy ficam readOnly depois disto e nao ha segunda oportunidade"},
+  {"op": "set", "target": "$md", "prop": "Value", "value": "aggregate escrito pelo job email-popover-metadata"},
+  {"op": "set", "target": "$md", "prop": "Hidden", "value": true, "_why": "Hidden True nos 363 exemplares do corpus: metadata de ferramenta nao se mostra ao autor"},
+
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Recipient", "as": "$vTo"},
+  {"op": "set", "target": "$vTo", "prop": "DataType", "value": "Email"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "UserName", "as": "$vName"},
+  {"op": "set", "target": "$vName", "prop": "DataType", "value": "Text"},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "Board", "as": "$box"},
+  {"op": "create", "parent": "$box", "type": "IPopover", "name": "WfCovMenu", "as": "$pop", "_why": "5. o popover: resolve por CreateWidget<T> where T : IMobileWidget, como qualquer widget da tela"},
+  {"op": "set", "target": "$pop", "prop": "PopoverWidth", "value": 320, "_why": "int? e a UNICA propriedade propria do Popover; Style ('popover'), MarginLeft ('Adaptive') e Visible ja vem preenchidos de fabrica, e Width e o layout comum a qualquer widget do ODC"},
+  {"op": "set", "target": "$pop", "prop": "Width", "value": "320px"},
+  {"op": "create", "parent": "$pop/TopContent", "type": "IExpression", "as": "$popTop", "_why": "TopContent e BottomContent JA NASCEM com o widget (dois IContent) e o TopContent ja traz o gatilho de fabrica (ITextWidget 'More' + IIcon): referem-se pela propriedade que devolve objeto, como $tbl/HeaderRow, e o que aqui se cria SOMA-SE ao que ja la esta"},
+  {"op": "set", "target": "$popTop", "prop": "Value", "value": "\"Notices\""},
+  {"op": "create", "parent": "$pop/BottomContent", "type": "IExpression", "as": "$popBottom"},
+  {"op": "set", "target": "$popBottom", "prop": "Value", "value": "GetNotices.List.Length"},
+
+  {"op": "create", "parent": "$box", "type": "IInput", "name": "RecipientInput", "as": "$inTo"},
+  {"op": "set", "target": "$inTo", "prop": "Variable", "value": "Recipient"},
+  {"op": "create", "parent": "$box", "type": "IInput", "name": "UserNameInput", "as": "$inName"},
+  {"op": "set", "target": "$inName", "prop": "Variable", "value": "UserName"},
+  {"op": "create", "parent": "$box", "type": "IButton", "name": "SendButton", "as": "$btn"},
+  {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "Send welcome"},
+
+  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "SendWelcomeNow", "as": "$act"},
+  {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$a0"},
+  {"op": "create", "parent": "$act", "type": "IExecuteServerActionNode", "name": "CallSendWelcome", "as": "$call"},
+  {"op": "set", "target": "$call", "prop": "Action", "value": "IServerAction:WfCovSendWelcome"},
+  {"op": "set", "target": "$call/Recipient", "prop": "Value", "value": "Recipient"},
+  {"op": "set", "target": "$call/UserName", "prop": "Value", "value": "UserName"},
+  {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$a9"},
+  {"op": "link", "from": "$a0", "to": "$call"},
+  {"op": "link", "from": "$call", "to": "$a9"},
+  {"op": "layout", "target": "$act"},
+  {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$act"},
+
+  {"op": "get", "target": "$md", "_why": "le de volta a metadata: Name, ManagedBy, Value e Hidden depois do save/reload"},
+  {"op": "get", "target": "$pop", "_why": "le de volta o PopoverWidth"},
+  {"op": "get", "target": "$send", "_why": "le de volta o no de envio: Email apontado e To preenchido"},
+  {"op": "usages", "target": "$em", "_why": "prova que o email tem consumidor real: o ISendEmailNode"},
+  {"op": "dump", "target": "$em", "depth": 4},
+  {"op": "dump", "target": "$agg", "depth": 3},
+  {"op": "dump", "target": "$pop", "depth": 3},
+  {"op": "dump", "target": "$sa", "depth": 3}
+ ]
+}

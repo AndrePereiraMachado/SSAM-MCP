@@ -1,0 +1,15 @@
+{
+ "_leia": "runtime: evidencia com falha -> exit 1 (o job reabre).",
+ "stage": "runtime",
+ "mode": "integrador",
+ "fromReport": "runtime.report.json",
+ "review": "runtime-fail.review.json",
+ "exitCode": 1,
+ "mustFind": [
+  {
+   "rule": "T4",
+   "severity": "erro",
+   "stage": "runtime"
+  }
+ ]
+}

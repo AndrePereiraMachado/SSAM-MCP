@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "odc-portal-api": {
+      "command": "node",
+      "args": ["/ABSOLUTE/PATH/ODC-Portal-API/runtime/server.mjs"],
+      "env": {
+        "ODC_PORTAL_ORIGIN": "https://YOUR-ORGANIZATION.outsystems.dev"
+      }
+    }
+  }
+}

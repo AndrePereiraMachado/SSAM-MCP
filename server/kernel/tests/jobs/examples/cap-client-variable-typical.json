@@ -1,0 +1,23 @@
+{
+ "description": "Client variable tipica: LastTaskSearch guarda a pesquisa no navegador (sobrevive a navegacao); o Input escreve nela, o filtro do aggregate le Client.LastTaskSearch e o OnChange refaz a consulta.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IClientVariable", "name": "LastTaskSearch", "as": "$cv"},
+  {"op": "set", "target": "$cv", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$cv", "prop": "Description", "value": "Ultima pesquisa de tarefas do usuario neste navegador"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetSearchedTasks", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "Task.Title like \"%\" + Client.LastTaskSearch + \"%\""}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "SearchChanged", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Refaz a consulta com a pesquisa guardada",
+    "steps": [{"node": "IRefreshDataNode", "as": "RefreshSearched", "properties": {"DataSource": "IScreenAggregate:GetSearchedTasks"}}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IInput", "name": "RememberedSearch", "as": "$in"},
+  {"op": "set", "target": "$in", "prop": "Variable", "value": "Client.LastTaskSearch"},
+  {"op": "set", "target": "$in", "prop": "Prompt", "value": "\"Search tasks\""},
+  {"op": "set", "target": "$in/OnChange", "prop": "Destination", "value": "IScreenAction:SearchChanged"},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$count"},
+  {"op": "set", "target": "$count", "prop": "Value", "value": "GetSearchedTasks.Count + \" task(s)\""}
+ ]
+}

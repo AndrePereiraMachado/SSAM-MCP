@@ -1,0 +1,27 @@
+{
+ "description": "NEG N1 (OutSystems padroes): aggregate gerado por `get` sem `set $<Action>.<as> Description` e no nativo (`node`) sem properties.Description.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {
+   "entities": [{"name": "NegNote", "public": true, "description": "Nota de teste do controle negativo N1 de nos sem descricao.",
+    "attributes": [{"name": "Body", "type": "Text", "length": 200, "description": "Texto da nota mostrado no painel do controle."}]}],
+   "structures": [{"name": "NegNoteRow", "public": true, "description": "Linha de nota devolvida pelo controle negativo N1.",
+    "attributes": [{"name": "Body", "type": "Text", "description": "Texto da nota copiado do registro."}]}]
+  }},
+  {"op": "logic", "data": {"actions": [
+   {"name": "GetLatestNoteBody", "kind": "server", "public": true,
+    "description": "Le a nota mais recente; o aggregate e o no JSON ficam sem descricao de proposito (controle N1).",
+    "inputs": [{"name": "Row", "type": "NegNoteRow", "description": "Linha usada so para exercitar o no JSON sem descricao."}],
+    "outputs": [
+     {"name": "NoteBody", "type": "Text", "description": "Texto da nota mais recente encontrada."},
+     {"name": "RowText", "type": "Text", "description": "Linha serializada devolvida ao chamador do controle."}],
+    "steps": [
+     {"get": "NegNote", "as": "ReadLatestNote", "max": 1},
+     {"node": "IJSONSerializeNode", "as": "EncodeRow", "properties": {"Data": "Row", "DateFormat": "ISO", "SerializeDefaultValues": true}},
+     {"assign": {"NoteBody": "ReadLatestNote.List.Current.NegNote.Body", "RowText": "EncodeRow.JSON"}, "as": "Return the latest note"}
+    ]}
+  ]}}
+ ]
+}

@@ -1,0 +1,15 @@
+{
+ "_leia": "Controle negativo S2: estagio job no modo autor; a ferramenta tem de dar exit 1 e acusar S2.",
+ "stage": "job",
+ "mode": "autor",
+ "module": "DomainApp",
+ "exitCode": 1,
+ "mustFind": [
+  {
+   "rule": "S2",
+   "severity": "erro",
+   "stage": "job",
+   "contains": "SaveAndNotify"
+  }
+ ]
+}

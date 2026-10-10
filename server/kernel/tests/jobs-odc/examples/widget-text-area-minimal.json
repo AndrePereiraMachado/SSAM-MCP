@@ -1,0 +1,15 @@
+{
+ "description": "Text Area: um ITextArea ligado a uma variavel Text, com quatro linhas visiveis.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "TextAreaDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Notes", "as": "$notes"},
+  {"op": "set", "target": "$notes", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "ITextArea", "name": "NotesTextArea", "as": "$ta"},
+  {"op": "set", "target": "$ta", "prop": "Variable", "value": "Notes"},
+  {"op": "set", "target": "$ta", "prop": "TextLines", "value": 4}
+ ]
+}

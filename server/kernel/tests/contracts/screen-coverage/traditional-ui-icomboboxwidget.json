@@ -1,0 +1,67 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "native-widget",
+    "web:IComboBoxWidget"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Subject",
+            "type": "IComboBoxWidget",
+            "properties": {
+              "Variable": "Choice",
+              "SourceEntity": "IEntitySignature:User",
+              "SourceAttribute": "IEntitySignature:User/Name",
+              "IsMandatory": "False"
+            }
+          },
+          {
+            "name": "Submit",
+            "type": "IButtonWidget",
+            "properties": {
+              "Label": "\"Submit\""
+            },
+            "events": {
+              "OnClick": {
+                "destination": "IWebScreen:Coverage/Handle1"
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Choice",
+            "type": "User Identifier"
+          }
+        ]
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "name": "Handle1",
+          "kind": "screen",
+          "owner": "IWebScreen:Coverage",
+          "steps": []
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IWebScreen:Coverage/Subject",
+    "prop": "IsMandatory",
+    "value": "True"
+  }
+}

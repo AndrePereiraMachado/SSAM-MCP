@@ -1,0 +1,110 @@
+{
+  "schemaVersion": "ssam-discovery-fragment/1",
+  "contract": "ssam-catalog-contribution/1",
+  "front": "C",
+  "title": "ODC External Libraries: generate, build, upload, publish, tag and reference a C# library headless (odc_external_library), declared and not yet proven live",
+  "reviewedAt": "2026-10-05",
+  "synonyms": {
+    "external library": [
+      "external libraries",
+      "biblioteca externa",
+      "bibliotecas externas",
+      "external logic",
+      "logica externa"
+    ]
+  },
+  "capabilities": [
+    {
+      "id": "integration.external-library-odc",
+      "lanes": [
+        "odc"
+      ],
+      "category": "integration",
+      "title": "External Library (ODC)",
+      "keywords": [
+        "external library",
+        "biblioteca externa",
+        "external logic",
+        "logica externa",
+        "dotnet external library",
+        "publish external library",
+        "publicar biblioteca externa"
+      ],
+      "summary": "External Library: odc_external_library.",
+      "route": {
+        "kind": "operations",
+        "operation": "odc_external_library {action:\"build\"|\"deploy\"|\"status\"|\"discard\", spec, authorize:\"<user's words naming the library>\", operationUuid:\"<new uuid>\"}"
+      },
+      "contract": [],
+      "guidance": "Create or update an External Library (C# actions and structures) from a spec in one call. odc_external_library {action:\"deploy\", spec, authorize, operationUuid} builds it headless (anvil-odc external-library build: net10.0 project with the pinned OutSystems.ExternalLibraries.SDK, dotnet publish -r linux-x64, deterministic zip that passes the one-.deps.json, .NET 10 and 90 MB gates), then in the same call uploads it (bridge portal-upload with the Studio session, or the vault API Client), follows the generation, publishes the job through the Portal session (externalLibraries.publishJob), applies the release tag (next patch, or 1.0.0) and reads back revision, tag and .NET 10 runtime. spec = {name, structures?, actions:[{name, inputs?, outputs?, body}], packages?:[{name, version}], usings?, namespace?}; example: {name:\"SSAMTextTools\", actions:[{name:\"Reverse\", inputs:[{name:\"Text\",type:\"Text\"}], outputs:[{name:\"Result\",type:\"Text\"}], body:\"Result = new string(Text.Reverse().ToArray());\"}]}. build (no tenant), status (reads) and discard (an open job, destructive) are the other actions. Every refusal comes before any change, with every problem at once (EXTERNAL_LIBRARY_SPEC_INVALID, WORDS_MUST_NAME_LIBRARY, CORPORATE_TENANT_GUARD, WEB_SIGN_IN_REQUIRED, PORTAL_CONTRACT_CHANGED, BRIDGE_UPGRADE_REQUIRED, NAME_TAKEN_BY_OTHER_ASSET, GENERATION_PENDING with the discard continuation, CONSUMERS_WOULD_BREAK when an element removed or changed has consumers and the words do not name each one, TAG_TAKEN with the next free tag). Bodies use the declared parameter names. The machine needs the .NET 10 SDK and NuGet access (DOTNET_SDK_MISSING, NUGET_RESTORE_FAILED). A lost answer is UNCERTAIN: the same call with the same operationUuid reads the exact state (job by file name, publication by library, tag by revision) and continues. The answer lists the consumers left outdated: each refreshes its reference (studio_refresh_references) and is published again; then reference the library from an app with reference.external-library-odc. Deleting the library: odc_asset_delete (the words name the library and every consumer).",
+      "platforms": {
+        "odc": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "Declared, not proven live: the Studio token on the External Library API (GET /uploads), the presigned PUT from the bridge, the internal publish route through the Portal window, the tag and the .NET 10 readback wait for the live proof with the owner.",
+              "origin": "docs/INTEGRACOES-GITSSAM.md section 7 (extlib live proofs); platforms/odc/docs/BIBLIOTECAS-EXTERNAS.md"
+            },
+            {
+              "text": "The SDK version is pinned (OutSystems.ExternalLibraries.SDK 1.5.0) and every library targets net10.0 on linux-x64; the upload limit enforced before sending is 90 MB.",
+              "origin": "kernel/src/Anvil.Core.Odc/Adapters.ODC/ExternalLibraries/ExternalLibraryProject.cs (SdkVersion), ExternalLibraryPackage.cs (MaxBytes)"
+            },
+            {
+              "text": "Only a C# body over the declared parameters is authored; source mode (an existing project), migration of an O11 extension and username/password Portal login are out of scope.",
+              "origin": "docs/INTEGRACOES-GITSSAM.md section 6 and D6"
+            }
+          ]
+        }
+      },
+      "depends": [],
+      "recommends": [
+        "reference.external-library-odc",
+        "ops.references-refresh"
+      ],
+      "alternatives": []
+    },
+    {
+      "id": "reference.external-library-odc",
+      "lanes": [
+        "odc"
+      ],
+      "category": "reference",
+      "title": "External Library as producer (ODC)",
+      "keywords": [
+        "reference external library",
+        "referenciar biblioteca externa",
+        "use external library",
+        "usar biblioteca externa",
+        "external library action",
+        "acao da biblioteca externa"
+      ],
+      "summary": "External Library producer: studio_deliver.",
+      "route": {
+        "kind": "operations",
+        "operation": "studio_deliver {module, feature, owners, changes, job:{ops:[{op:\"reference\", producer:\"<Library>\", elements:[\"IServerAction:<Action>\"]}]}}"
+      },
+      "contract": [],
+      "guidance": "Reference an External Library from an app: its server actions and structures through the existing reference job. studio_deliver {module, job:{ops:[{op:\"reference\", producer:\"<Library>\", elements:[\"IServerAction:<Action>\", \"IStructure:<Structure>\"]}, ...]}, owners, changes}: the delivery captures the library's public signature from the consumer session (bridge reference-snapshot, capability reference-snapshot:external-library), the kernel imports it as an External Library dependency (OdcReferenceImporter) and the job then calls the actions like any server action. odc_external_library deploy answers this job as its continuation. The library must be published and tagged (odc_external_library deploy does both). A bridge older than reference-snapshot:external-library refuses the producer: the delivery answers BRIDGE_UPGRADE_REQUIRED before the build (reopen the ODC Studio, studio_attach). Only actions and structures of an External Library are referenceable.",
+      "platforms": {
+        "odc": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "Declared, not proven live: the format of the External Library signature the native service returns, its import into a consumer and a runtime call wait for the live proof.",
+              "origin": "docs/INTEGRACOES-GITSSAM.md section 7 (extlib live proofs); kernel/tests/Anvil.Tests.Odc/OdcExternalLibraryTests.cs (envelope accepted offline)"
+            }
+          ]
+        }
+      },
+      "depends": [],
+      "recommends": [
+        "integration.external-library-odc"
+      ],
+      "alternatives": []
+    }
+  ],
+  "unavailable": [],
+  "coverage": []
+}

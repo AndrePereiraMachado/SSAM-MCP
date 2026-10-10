@@ -1,0 +1,57 @@
+{
+ "description": "Role numa tela: role Approver, tela Approvals restrita a ela (Roles declarado uma vez), OnInitialize chama CheckApproverRole e guarda HasRole numa variavel; o botao de aprovacao fica dentro de um If sobre ela (nunca Visible) e a server action confere o mesmo role no servidor antes de gravar.",
+ "base": "reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IRole", "name": "Approver", "as": "$role"},
+  {"op": "set", "target": "$role", "prop": "Description", "value": "Pode aprovar pedidos"},
+  {"op": "create", "parent": "@espace", "type": "IUserException", "name": "AccessDenied", "as": "$exc"},
+  {"op": "spec", "data": {"entities": [{"name": "Request", "attributes": [
+   {"name": "Title", "type": "Text", "mandatory": true, "length": 100},
+   {"name": "Approved", "type": "Boolean"}]}]}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "Request_Approve", "kind": "server", "description": "Aprova o pedido; so para o role Approver",
+    "inputs": [{"name": "RequestId", "type": "Request Identifier"}],
+    "vars": [{"name": "Item", "type": "Request"}],
+    "steps": [
+     {"if": "not CheckApproverRole(GetUserId())", "label": "IsApprover?", "then": [{"raise": "AccessDenied", "message": "\"Only approvers can approve\""}]},
+     {"get": "Request", "as": "GetRequest", "where": "Request.Id = RequestId", "max": 1},
+     {"assign": {"Item": "GetRequest.List.Current.Request", "Item.Approved": "True"}, "as": "MarkApproved"},
+     {"update": "Request", "record": "Item", "as": "UpdateRequest"}]}]}},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "Approvals", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "set", "target": "$scr", "prop": "Roles", "value": ["IRole:Approver"]},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Approvals\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "IsApprover", "as": "$vRole"},
+  {"op": "set", "target": "$vRole", "prop": "DataType", "value": "Boolean"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetPendingRequests", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Request"}},
+  {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "not Request.Approved"}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "LoadPermissions", "kind": "screen", "owner": "IMobileScreen:Approvals", "description": "Le o role do usuario uma vez, ao abrir a tela",
+    "steps": [
+     {"call": "CheckApproverRole", "as": "CheckApprover", "args": {"UserId": "GetUserId()"}},
+     {"assign": {"IsApprover": "CheckApprover.HasRole"}, "as": "KeepRole"}]},
+   {"name": "ApproveOnClick", "kind": "screen", "owner": "IMobileScreen:Approvals", "description": "Aprova e recarrega a lista",
+    "inputs": [{"name": "RequestId", "type": "Request Identifier"}],
+    "steps": [
+     {"call": "Request_Approve", "as": "Approve", "args": {"RequestId": "RequestId"}},
+     {"node": "IRefreshDataNode", "as": "RefreshPending", "properties": {"DataSource": "IScreenAggregate:GetPendingRequests"}}]}]}},
+  {"op": "set", "target": "$scr/OnInitialize", "prop": "Destination", "value": "IScreenAction:LoadPermissions"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "PendingList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetPendingRequests.List"},
+  {"op": "create", "parent": "$list", "type": "IContainer", "name": "PendingRow", "as": "$row"},
+  {"op": "create", "parent": "$row", "type": "IExpression", "as": "$itemTitle"},
+  {"op": "set", "target": "$itemTitle", "prop": "Value", "value": "GetPendingRequests.List.Current.Request.Title"},
+  {"op": "create", "parent": "$row", "type": "IIfWidget", "name": "CanApprove", "as": "$if"},
+  {"op": "set", "target": "$if", "prop": "Condition", "value": "IsApprover"},
+  {"op": "create", "parent": "$if/TrueBranch", "type": "IButton", "name": "ApproveButton", "as": "$btn"},
+  {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "Approve"},
+  {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "IScreenAction:ApproveOnClick"},
+  {"op": "set", "target": "$btn/OnClick/RequestId", "prop": "Value", "value": "GetPendingRequests.List.Current.Request.Id"},
+  {"op": "get", "target": "$scr"}
+ ]
+}

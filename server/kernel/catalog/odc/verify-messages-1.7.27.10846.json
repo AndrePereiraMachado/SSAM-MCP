@@ -1,0 +1,1715 @@
+[
+  {
+    "id": "ActionCallingAndOutputFormatMayBeIncompatible"
+  },
+  {
+    "id": "ActionsWithValidationsCanNotBeUDFs"
+  },
+  {
+    "id": "AdvancedQuery_AuroraLikeWarning"
+  },
+  {
+    "id": "AllExceptionsInNonGlobalFlow"
+  },
+  {
+    "id": "AmbiguousRelationsQuery"
+  },
+  {
+    "id": "AnonymousAccess_NoPermissions"
+  },
+  {
+    "id": "AnonymousAccess_NoPermissionsNoRoles"
+  },
+  {
+    "id": "ArgumentRequiredExpression"
+  },
+  {
+    "id": "AssertFailure_CustomClient"
+  },
+  {
+    "id": "AssertFailure_WebReference"
+  },
+  {
+    "id": "AssertFailure_WebService"
+  },
+  {
+    "id": "AssertWarning_WebReference"
+  },
+  {
+    "id": "AssertWarning_WebService"
+  },
+  {
+    "id": "AttributeMappingRequiredExpression"
+  },
+  {
+    "id": "AutoAdvanceTasksShouldNotLookAsInfoTasks"
+  },
+  {
+    "id": "BinaryDataParameter"
+  },
+  {
+    "id": "BinaryDataSessionVariable"
+  },
+  {
+    "id": "Block_ClientActionWithServerRequestsOnLifecycleEvent"
+  },
+  {
+    "id": "CallbackMissingInput"
+  },
+  {
+    "id": "CallbackMissingOutput"
+  },
+  {
+    "id": "CallbackWrongInputType"
+  },
+  {
+    "id": "CallbackWrongOutputType"
+  },
+  {
+    "id": "CannotUseCheckRoleBuiltInFunction"
+  },
+  {
+    "id": "ClientActionWithModelAssignmentOnLifecycleEvent"
+  },
+  {
+    "id": "ClientActionWithScreenDataAccessesOnLifecycleEvent"
+  },
+  {
+    "id": "ClientActionWithServerRequestsOnLifecycleEvent"
+  },
+  {
+    "id": "ClientActionWithVariablesUsedInScreenDataOnLifecycleEvent"
+  },
+  {
+    "id": "ClientSystemAction_NotExecutable"
+  },
+  {
+    "id": "ColumnSpanExceedsGridColumns"
+  },
+  {
+    "id": "ConsecutiveServerInteractions"
+  },
+  {
+    "id": "CrossJoinDataSet"
+  },
+  {
+    "id": "CrossJoinQuery"
+  },
+  {
+    "id": "CustomObjectError"
+  },
+  {
+    "id": "CustomObjectWarning"
+  },
+  {
+    "id": "DataActionMustBeRefreshed"
+  },
+  {
+    "id": "DataSetMustBeRefreshed"
+  },
+  {
+    "id": "DefaultScreenNotDefined"
+  },
+  {
+    "id": "DeprecatedSessionExceptionMessage"
+  },
+  {
+    "id": "DeprecatedThemeErrorHandler"
+  },
+  {
+    "id": "DeprecatedVerifySqlLiteral"
+  },
+  {
+    "id": "DescriptionMissing"
+  },
+  {
+    "id": "DisconnectedDestination"
+  },
+  {
+    "id": "DuplicateBreakpointPropertyOverride"
+  },
+  {
+    "id": "DuplicateBreakpointValue"
+  },
+  {
+    "id": "ESpaceConfiguration_DuplicateKeys"
+  },
+  {
+    "id": "ESpaceConfiguration_LegacySchema"
+  },
+  {
+    "id": "ESpaceConfiguration_MixedSchema"
+  },
+  {
+    "id": "ESpaceConfiguration_PrivateResource"
+  },
+  {
+    "id": "ESpaceConfiguration_SettingsNotSupported"
+  },
+  {
+    "id": "ESpaceConfiguration_SyntaxErrors"
+  },
+  {
+    "id": "EmailScreen_UnsupportedLocalVariableType"
+  },
+  {
+    "id": "EmptyDataAssert"
+  },
+  {
+    "id": "EmptyListItem"
+  },
+  {
+    "id": "EmptyOnExceptionHandler"
+  },
+  {
+    "id": "EmptySubTask"
+  },
+  {
+    "id": "EmptyTask"
+  },
+  {
+    "id": "EntityActionClientSide"
+  },
+  {
+    "id": "EntityActionInsideLoop"
+  },
+  {
+    "id": "Entity_SuggestPartialUpdateBehavior"
+  },
+  {
+    "id": "Entity_SuggestPartialUpdateBehavior_Many"
+  },
+  {
+    "id": "Entity_SuggestPartialUpdateBehavior_Text"
+  },
+  {
+    "id": "ErrorExtensionActionParameterRecordType"
+  },
+  {
+    "id": "EventHandlerMissingParam"
+  },
+  {
+    "id": "EventHandlerNotRequiredParam"
+  },
+  {
+    "id": "EventHandlerRequiredAction"
+  },
+  {
+    "id": "ExecuteActionClientSide_CallingActionNotAllowedInClient"
+  },
+  {
+    "id": "ExecuteActionClientSide_CallingEntityActionNotAllowedInClient"
+  },
+  {
+    "id": "ExecuteAction_ScreenServerAction"
+  },
+  {
+    "id": "ExpressionBinaryComparisonInDatabase"
+  },
+  {
+    "id": "ExpressionComparingDifferentIdentifiers"
+  },
+  {
+    "id": "ExpressionDateOverflow"
+  },
+  {
+    "id": "ExpressionDecimalOverflow"
+  },
+  {
+    "id": "ExpressionDivisionByZero"
+  },
+  {
+    "id": "ExpressionDuplicateAttribute"
+  },
+  {
+    "id": "ExpressionDuplicateParameter"
+  },
+  {
+    "id": "ExpressionIndexNotInteger"
+  },
+  {
+    "id": "ExpressionIntegerOverflow"
+  },
+  {
+    "id": "ExpressionInvalidExpressionType"
+  },
+  {
+    "id": "ExpressionInvalidExpressionTypeWithTypeConversion"
+  },
+  {
+    "id": "ExpressionInvalidIndex"
+  },
+  {
+    "id": "ExpressionInvalidOptionalParameter"
+  },
+  {
+    "id": "ExpressionInvalidParameter"
+  },
+  {
+    "id": "ExpressionInvalidRecordType"
+  },
+  {
+    "id": "ExpressionInvalidVariableType"
+  },
+  {
+    "id": "ExpressionLongIntegerOverflow"
+  },
+  {
+    "id": "ExpressionMissingTypeConversion"
+  },
+  {
+    "id": "ExpressionNotBooleanQueryCondition"
+  },
+  {
+    "id": "ExpressionRequiredExpression"
+  },
+  {
+    "id": "ExpressionShouldBeEscaped"
+  },
+  {
+    "id": "ExpressionTimeOverflow"
+  },
+  {
+    "id": "ExpressionUnexpectedExpresssionType"
+  },
+  {
+    "id": "ExpressionUnknownAttribute"
+  },
+  {
+    "id": "ExpressionUnknownFunction"
+  },
+  {
+    "id": "ExpressionUnknownObject"
+  },
+  {
+    "id": "ExpressionWrongNumberArguments"
+  },
+  {
+    "id": "ExternalEntitiesNotAllowedWithTheInKeyword"
+  },
+  {
+    "id": "FlowThemeTooBigForEmails"
+  },
+  {
+    "id": "ForEachMismatch"
+  },
+  {
+    "id": "GridDimensionsOverflow"
+  },
+  {
+    "id": "GridMismatch"
+  },
+  {
+    "id": "GridSingleDimensionOverflow"
+  },
+  {
+    "id": "HTMLInjection"
+  },
+  {
+    "id": "HiddenWarnings"
+  },
+  {
+    "id": "IconInBlockUnsupportedInCurrentTheme"
+  },
+  {
+    "id": "IgnoredAjaxRefresh"
+  },
+  {
+    "id": "IgnoredAjaxRefreshInEventHandler"
+  },
+  {
+    "id": "IgnoredInputFilenameContent"
+  },
+  {
+    "id": "ImageTooBig"
+  },
+  {
+    "id": "ImageWithoutBinary"
+  },
+  {
+    "id": "ImplicitSelfUserProvider"
+  },
+  {
+    "id": "IncompatibleUiFrameworkReferences"
+  },
+  {
+    "id": "InconsistentModelPluginVersions"
+  },
+  {
+    "id": "InfoTasksShouldOnlyHaveOnHoverPointer"
+  },
+  {
+    "id": "InputIteratedWrongVariable"
+  },
+  {
+    "id": "InputMandatoryMismatch"
+  },
+  {
+    "id": "InputMaxLengthMismatch_Input"
+  },
+  {
+    "id": "InputMaxLengthMismatch_InputPass"
+  },
+  {
+    "id": "InvalidAIArgumentParameterDataType"
+  },
+  {
+    "id": "InvalidAIArgumentParameterWithSpecificDataType"
+  },
+  {
+    "id": "InvalidActivityEntity"
+  },
+  {
+    "id": "InvalidAggregateAttribute_NoAttribute"
+  },
+  {
+    "id": "InvalidAggregateError"
+  },
+  {
+    "id": "InvalidAnonymousStructure_NoAttr"
+  },
+  {
+    "id": "InvalidArgumentForExternalFunction"
+  },
+  {
+    "id": "InvalidArgumentForExternalFunction_Detailed"
+  },
+  {
+    "id": "InvalidArgumentMapping"
+  },
+  {
+    "id": "InvalidAttributePropertyValue_InvalidDecimals"
+  },
+  {
+    "id": "InvalidAttributePropertyValue_PropBigger"
+  },
+  {
+    "id": "InvalidAttributePropertyValue_PropSmaller"
+  },
+  {
+    "id": "InvalidAttribute_BadAutoNumber"
+  },
+  {
+    "id": "InvalidAttribute_BadDeleteRule"
+  },
+  {
+    "id": "InvalidAttribute_BadExternalEntIDRule"
+  },
+  {
+    "id": "InvalidAttribute_BadExternalRule"
+  },
+  {
+    "id": "InvalidAttribute_BadReferenceToSyntheticEntity"
+  },
+  {
+    "id": "InvalidAttribute_CircularDependency"
+  },
+  {
+    "id": "InvalidAttribute_DatabaseUsingLocalStorageIdentifier"
+  },
+  {
+    "id": "InvalidAttribute_EntRefWithoutIdx"
+  },
+  {
+    "id": "InvalidAttribute_NameReservedInLocalStorage"
+  },
+  {
+    "id": "InvalidAttribute_ObjectRecord"
+  },
+  {
+    "id": "InvalidAttribute_RefCycle"
+  },
+  {
+    "id": "InvalidAttribute_SameNameInJSON"
+  },
+  {
+    "id": "InvalidAttribute_SortConstantExpression"
+  },
+  {
+    "id": "InvalidAttribute_SortDuplicatedExpression"
+  },
+  {
+    "id": "InvalidAttribute_StaticEntitySearchable"
+  },
+  {
+    "id": "InvalidAttribute_TextSearchableWithFileOnlyChunkingMethod"
+  },
+  {
+    "id": "InvalidBreakpointOverrideProperty"
+  },
+  {
+    "id": "InvalidBreakpointValue"
+  },
+  {
+    "id": "InvalidCSSStyle"
+  },
+  {
+    "id": "InvalidClientAction_UnsupportedParameterType"
+  },
+  {
+    "id": "InvalidColorFormat"
+  },
+  {
+    "id": "InvalidCustomObjectRecordDefinition"
+  },
+  {
+    "id": "InvalidCustomObjectRecordInDefinition"
+  },
+  {
+    "id": "InvalidCustomObjectRecordListInDefinition"
+  },
+  {
+    "id": "InvalidCustomObjectTypeEntityIdentifier"
+  },
+  {
+    "id": "InvalidCustomStructureParent"
+  },
+  {
+    "id": "InvalidDataAction_NoOutputs"
+  },
+  {
+    "id": "InvalidDataAction_OutputMustBeSet"
+  },
+  {
+    "id": "InvalidDataSet_AmbiguousRelations"
+  },
+  {
+    "id": "InvalidDataSet_EntitiesFromMixedConnections"
+  },
+  {
+    "id": "InvalidDataSet_InconsistentDependency"
+  },
+  {
+    "id": "InvalidDataSet_InvalidExecutionContext"
+  },
+  {
+    "id": "InvalidDataSet_LocalEntitiesInServerAggregate"
+  },
+  {
+    "id": "InvalidDataSet_LoopDependecy"
+  },
+  {
+    "id": "InvalidDataSet_MultipleDependecy"
+  },
+  {
+    "id": "InvalidDataSet_NoEntity"
+  },
+  {
+    "id": "InvalidDataSet_ServerEntitiesInLocalAggregate"
+  },
+  {
+    "id": "InvalidDataTypeInAggregation"
+  },
+  {
+    "id": "InvalidDatabaseType"
+  },
+  {
+    "id": "InvalidDecision_InsufficientOutcomes"
+  },
+  {
+    "id": "InvalidDefaultScreen_Property"
+  },
+  {
+    "id": "InvalidDestination_Link"
+  },
+  {
+    "id": "InvalidDuplicatedScript"
+  },
+  {
+    "id": "InvalidEntityActionInActionFlow_Cache"
+  },
+  {
+    "id": "InvalidEntityIdentifierInWebReference"
+  },
+  {
+    "id": "InvalidEntityIndex_DupIndexes"
+  },
+  {
+    "id": "InvalidEntityIndex_LongText"
+  },
+  {
+    "id": "InvalidEntityIndex_NoAttr"
+  },
+  {
+    "id": "InvalidEntityIndex_NoBinary"
+  },
+  {
+    "id": "InvalidEntityIndex_NoFile"
+  },
+  {
+    "id": "InvalidEntity_DifferentTenantIds"
+  },
+  {
+    "id": "InvalidEntity_IdType"
+  },
+  {
+    "id": "InvalidEntity_IsActive"
+  },
+  {
+    "id": "InvalidEntity_Label"
+  },
+  {
+    "id": "InvalidEntity_MultiID"
+  },
+  {
+    "id": "InvalidEntity_OneAttr"
+  },
+  {
+    "id": "InvalidEntity_OneAuto"
+  },
+  {
+    "id": "InvalidEntity_OneBin"
+  },
+  {
+    "id": "InvalidEntity_OnlyAuto"
+  },
+  {
+    "id": "InvalidEntity_OrderBy"
+  },
+  {
+    "id": "InvalidEntity_ProcessEventsWithNoId"
+  },
+  {
+    "id": "InvalidEntity_SearchableAttributesWithoutPrimaryKey"
+  },
+  {
+    "id": "InvalidEntity_StaticAttrType"
+  },
+  {
+    "id": "InvalidEntity_StaticId"
+  },
+  {
+    "id": "InvalidErrorHandler_AbortTrans"
+  },
+  {
+    "id": "InvalidErrorHandler_Log"
+  },
+  {
+    "id": "InvalidErrorHandler_MultiHandler"
+  },
+  {
+    "id": "InvalidExpression_StaticSort"
+  },
+  {
+    "id": "InvalidFlow_BadErrHandlerPath"
+  },
+  {
+    "id": "InvalidFlow_BadErrHandlerPermission"
+  },
+  {
+    "id": "InvalidFlow_BadErrHandlerScreen"
+  },
+  {
+    "id": "InvalidFlow_BadForEach"
+  },
+  {
+    "id": "InvalidFlow_BadLinkCondition"
+  },
+  {
+    "id": "InvalidFlow_MalformedAction"
+  },
+  {
+    "id": "InvalidFlow_NoOtherwise"
+  },
+  {
+    "id": "InvalidFlow_NoStart"
+  },
+  {
+    "id": "InvalidFlow_TooManyNodes"
+  },
+  {
+    "id": "InvalidFlow_UnreachableNode"
+  },
+  {
+    "id": "InvalidFork_InsufficientPaths"
+  },
+  {
+    "id": "InvalidFormat"
+  },
+  {
+    "id": "InvalidFunction_UnsupportedAsyncJSNode"
+  },
+  {
+    "id": "InvalidFunction_UnsupportedExecuteAction"
+  },
+  {
+    "id": "InvalidFunction_UnsupportedLocalStorage"
+  },
+  {
+    "id": "InvalidFunction_UnsupportedServerAction"
+  },
+  {
+    "id": "InvalidFunction_UnsupportedSystemAction"
+  },
+  {
+    "id": "InvalidFunction_WrongOutputParameters"
+  },
+  {
+    "id": "InvalidGlobalEventParameterType"
+  },
+  {
+    "id": "InvalidGoTo"
+  },
+  {
+    "id": "InvalidGoTo_DecisionOutcome"
+  },
+  {
+    "id": "InvalidGoTo_SelfReference"
+  },
+  {
+    "id": "InvalidGridUnitsOutsideGrid"
+  },
+  {
+    "id": "InvalidGroup_NoAttributeReference"
+  },
+  {
+    "id": "InvalidGroup_NoAttributeReference_SameName"
+  },
+  {
+    "id": "InvalidHTMLAttribute_Id"
+  },
+  {
+    "id": "InvalidHTMLAttribute_MustBeAnEvent"
+  },
+  {
+    "id": "InvalidHTMLAttribute_Replicated"
+  },
+  {
+    "id": "InvalidHTMLEvent_MatchingAttribute"
+  },
+  {
+    "id": "InvalidHTMLEvent_Replicated"
+  },
+  {
+    "id": "InvalidIconLibrary"
+  },
+  {
+    "id": "InvalidIdentifier"
+  },
+  {
+    "id": "InvalidInputsInActionFlow_Cache"
+  },
+  {
+    "id": "InvalidJoinCondition_DuplicatedSource"
+  },
+  {
+    "id": "InvalidJoinCondition_InvalidSource"
+  },
+  {
+    "id": "InvalidLayoutMissingPlacholdersListShowEdit"
+  },
+  {
+    "id": "InvalidLayoutMissingPlacholdersPopupsAndNormal"
+  },
+  {
+    "id": "InvalidMenu"
+  },
+  {
+    "id": "InvalidMobileNRBlockWithNavigations"
+  },
+  {
+    "id": "InvalidNRBlockWithNavigations"
+  },
+  {
+    "id": "InvalidNode_MultipleReferencesToAction"
+  },
+  {
+    "id": "InvalidOptionalPropertyValue_PropertyIn_WithPrevious"
+  },
+  {
+    "id": "InvalidOrderBy_OrderByParam"
+  },
+  {
+    "id": "InvalidOutcome_BadCondition"
+  },
+  {
+    "id": "InvalidOutcome_NoTarget"
+  },
+  {
+    "id": "InvalidOutputFormatAttributeDataType"
+  },
+  {
+    "id": "InvalidOutputFormatAttributeWithSpecificDataType"
+  },
+  {
+    "id": "InvalidOutputsInActionFlow_Cache"
+  },
+  {
+    "id": "InvalidParameter_Attr"
+  },
+  {
+    "id": "InvalidParameter_InButton"
+  },
+  {
+    "id": "InvalidParameter_InEmailLink"
+  },
+  {
+    "id": "InvalidParameter_InLink"
+  },
+  {
+    "id": "InvalidParameter_NoBasicTypes"
+  },
+  {
+    "id": "InvalidParameter_NoBinary"
+  },
+  {
+    "id": "InvalidParameter_NoBinaryEnt"
+  },
+  {
+    "id": "InvalidParameter_NoFile"
+  },
+  {
+    "id": "InvalidParameter_NoFileEnt"
+  },
+  {
+    "id": "InvalidParameter_NoNestedRecord"
+  },
+  {
+    "id": "InvalidParameter_NoRecord"
+  },
+  {
+    "id": "InvalidParameter_Phone"
+  },
+  {
+    "id": "InvalidPath_NoTarget"
+  },
+  {
+    "id": "InvalidPrimaryKey_BadType"
+  },
+  {
+    "id": "InvalidProcessEntity"
+  },
+  {
+    "id": "InvalidProperties_Exclusive"
+  },
+  {
+    "id": "InvalidPropertySelection_CustomRequires"
+  },
+  {
+    "id": "InvalidPropertySelection_EntityNoPrimKey"
+  },
+  {
+    "id": "InvalidPropertySelection_ListBox_ActiveAttr"
+  },
+  {
+    "id": "InvalidPropertySelection_ListBox_SourceAttr"
+  },
+  {
+    "id": "InvalidPropertySelection_SelRequires"
+  },
+  {
+    "id": "InvalidPropertySelection_SpecialSpecified"
+  },
+  {
+    "id": "InvalidPropertySelection_VarFilled"
+  },
+  {
+    "id": "InvalidPropertyValue_AttrBinary"
+  },
+  {
+    "id": "InvalidPropertyValue_AutoResizeAndSizes"
+  },
+  {
+    "id": "InvalidPropertyValue_Decimals"
+  },
+  {
+    "id": "InvalidPropertyValue_DefaultValue"
+  },
+  {
+    "id": "InvalidPropertyValue_DefaultValueBehavior"
+  },
+  {
+    "id": "InvalidPropertyValue_IDProperty"
+  },
+  {
+    "id": "InvalidPropertyValue_InvalidNull"
+  },
+  {
+    "id": "InvalidPropertyValue_Length"
+  },
+  {
+    "id": "InvalidPropertyValue_NoCache"
+  },
+  {
+    "id": "InvalidPropertyValue_NotInteger"
+  },
+  {
+    "id": "InvalidPropertyValue_NotLiteral"
+  },
+  {
+    "id": "InvalidPropertyValue_PropAtLeast"
+  },
+  {
+    "id": "InvalidPropertyValue_PropBigger"
+  },
+  {
+    "id": "InvalidPropertyValue_PropBiggerThan"
+  },
+  {
+    "id": "InvalidPropertyValue_PropNoMore"
+  },
+  {
+    "id": "InvalidPropertyValue_PropNumeric"
+  },
+  {
+    "id": "InvalidPropertyValue_PropNumericIn"
+  },
+  {
+    "id": "InvalidPropertyValue_PropRange"
+  },
+  {
+    "id": "InvalidPropertyValue_PropSmaller"
+  },
+  {
+    "id": "InvalidPropertyValue_Units"
+  },
+  {
+    "id": "InvalidPropertyValue_UnsupportedInputVariableType"
+  },
+  {
+    "id": "InvalidPropertyValue_UnsupportedJSNodeInputVariableType"
+  },
+  {
+    "id": "InvalidPropertyValue_UnsupportedJSNodeOutputVariableType"
+  },
+  {
+    "id": "InvalidPropertyValue_UnsupportedOutputVariableType"
+  },
+  {
+    "id": "InvalidPropertyValue_UseCookies"
+  },
+  {
+    "id": "InvalidPropertyValue_WrongWidgetUse"
+  },
+  {
+    "id": "InvalidProperty_SourceAttribute"
+  },
+  {
+    "id": "InvalidProperty_SourceEntity"
+  },
+  {
+    "id": "InvalidProperty_URLQuotes"
+  },
+  {
+    "id": "InvalidPublicNRBlock"
+  },
+  {
+    "id": "InvalidPublicScreenInMobileType"
+  },
+  {
+    "id": "InvalidPublic_ActionParameterNotPublic"
+  },
+  {
+    "id": "InvalidPublic_AttributeNotPublic"
+  },
+  {
+    "id": "InvalidPublic_BlockLinkParameterType"
+  },
+  {
+    "id": "InvalidPublic_MobileLocalEntity"
+  },
+  {
+    "id": "InvalidPublic_RequiredScriptNotPublic"
+  },
+  {
+    "id": "InvalidPublic_ScreenInputRecord"
+  },
+  {
+    "id": "InvalidPublic_ScreenInputRecordList"
+  },
+  {
+    "id": "InvalidPublic_ThemeBaseThemeNotPublic"
+  },
+  {
+    "id": "InvalidPublic_ThemeImageNotPublic"
+  },
+  {
+    "id": "InvalidPublic_ThemeOnExceptionNotPublic"
+  },
+  {
+    "id": "InvalidPublic_ThemeWebBlockNotPublic"
+  },
+  {
+    "id": "InvalidPublic_WebBlockEventParameterNotPublic"
+  },
+  {
+    "id": "InvalidPublic_WebBlockParameterNotPublic"
+  },
+  {
+    "id": "InvalidQueryOutput_NestedRecordOutput"
+  },
+  {
+    "id": "InvalidQueryParam_InlineNotText"
+  },
+  {
+    "id": "InvalidQuery_BadCondition"
+  },
+  {
+    "id": "InvalidQuery_NoEntity"
+  },
+  {
+    "id": "InvalidRecursiveContent"
+  },
+  {
+    "id": "InvalidRecursiveScript"
+  },
+  {
+    "id": "InvalidRefecenceInSystemESpace"
+  },
+  {
+    "id": "InvalidReferenceInMobileType"
+  },
+  {
+    "id": "InvalidReferenceInReactiveType"
+  },
+  {
+    "id": "InvalidReferenceInWebType"
+  },
+  {
+    "id": "InvalidResourceURL_Offline"
+  },
+  {
+    "id": "InvalidRestrictedDataSourceAggregate"
+  },
+  {
+    "id": "InvalidRestrictedDataSourceCombobox"
+  },
+  {
+    "id": "InvalidRestrictedEntityInSQL"
+  },
+  {
+    "id": "InvalidRestrictedForeignKey"
+  },
+  {
+    "id": "InvalidRunServerAction_ClientRoleAction"
+  },
+  {
+    "id": "InvalidSMSComPat_BadComPatSentence"
+  },
+  {
+    "id": "InvalidSMSComPat_BadPatSentence"
+  },
+  {
+    "id": "InvalidSMSComPat_BadPipe"
+  },
+  {
+    "id": "InvalidSMSComPat_BadRegExp"
+  },
+  {
+    "id": "InvalidSMSComPat_BadSyntax"
+  },
+  {
+    "id": "InvalidSMSComPat_BadText"
+  },
+  {
+    "id": "InvalidSQL_ClientEntity"
+  },
+  {
+    "id": "InvalidSQL_NoOutputStructure"
+  },
+  {
+    "id": "InvalidSQL_NoSpaces"
+  },
+  {
+    "id": "InvalidSQL_NotIsolatedParameter"
+  },
+  {
+    "id": "InvalidSQL_NotIsolatedParameterError"
+  },
+  {
+    "id": "InvalidSQL_ReservedPrefix"
+  },
+  {
+    "id": "InvalidSQL_StoredProcedureEntityReference"
+  },
+  {
+    "id": "InvalidSQL_UnknownAttribute"
+  },
+  {
+    "id": "InvalidSQL_UnknownEntity"
+  },
+  {
+    "id": "InvalidSQL_UnknownParam"
+  },
+  {
+    "id": "InvalidScreenDataSet_ServerEntitiesNotAllowdInClient"
+  },
+  {
+    "id": "InvalidSemanticSearch_MinimumScore_Value"
+  },
+  {
+    "id": "InvalidSemanticSearch_MixedTextAndFileSearchAttributes"
+  },
+  {
+    "id": "InvalidServerActionInFlow"
+  },
+  {
+    "id": "InvalidSimpleQueryOutput_NestedRecordOutput"
+  },
+  {
+    "id": "InvalidSpecialVariableType"
+  },
+  {
+    "id": "InvalidStructure_NoAttr"
+  },
+  {
+    "id": "InvalidTargetType"
+  },
+  {
+    "id": "InvalidTimeUnit"
+  },
+  {
+    "id": "InvalidTimeoutValue"
+  },
+  {
+    "id": "InvalidTransition_Property"
+  },
+  {
+    "id": "InvalidTriggerEvent_MissingEntityIdParameter"
+  },
+  {
+    "id": "InvalidTutorialType"
+  },
+  {
+    "id": "InvalidValidationParent"
+  },
+  {
+    "id": "InvalidVariable_MultiWidget"
+  },
+  {
+    "id": "InvalidVariable_MultiWidgetWarning"
+  },
+  {
+    "id": "InvalidVariable_SitePropertyInLib"
+  },
+  {
+    "id": "InvalidVariable_UnknownObjInVar"
+  },
+  {
+    "id": "InvalidVariable_UnknownVar"
+  },
+  {
+    "id": "InvalidVariable_UnknownVarIn"
+  },
+  {
+    "id": "InvalidWebBlockInEmail_OnNotify"
+  },
+  {
+    "id": "InvalidWebBlockInEmail_Widgets"
+  },
+  {
+    "id": "InvalidWebService_NoWebMethod"
+  },
+  {
+    "id": "IsolatedModuleCannotBeUserProvider"
+  },
+  {
+    "id": "IsolatedModuleCannotUseMultitenant"
+  },
+  {
+    "id": "IsolatedModuleUserProviderMustBeUsers"
+  },
+  {
+    "id": "IteratedServerInteraction"
+  },
+  {
+    "id": "JQueryVersion_DeprecatedVersion"
+  },
+  {
+    "id": "JQueryVersion_ProducerNotApplicable"
+  },
+  {
+    "id": "JQueryVersion_ProducerUsingNewer"
+  },
+  {
+    "id": "JQueryVersion_ProducerUsingOlder"
+  },
+  {
+    "id": "JSNodeTooLarge"
+  },
+  {
+    "id": "JavascriptInjection"
+  },
+  {
+    "id": "JavascriptNode_EmptyJs"
+  },
+  {
+    "id": "JavascriptNode_SyntaxErrors"
+  },
+  {
+    "id": "JavascriptNode_UnknownParam"
+  },
+  {
+    "id": "LibraryCanOnlyReferencesLibrariesAndExtensions"
+  },
+  {
+    "id": "LibraryCannotReferenceEntities"
+  },
+  {
+    "id": "LightweightExpression_ResourceNotDeployed"
+  },
+  {
+    "id": "LightweightExpression_UnknownObj"
+  },
+  {
+    "id": "LoginSecurity"
+  },
+  {
+    "id": "MandatoryOption"
+  },
+  {
+    "id": "MaxLengthWarn"
+  },
+  {
+    "id": "MaxRecordsMismatch"
+  },
+  {
+    "id": "MaxTimeoutValue"
+  },
+  {
+    "id": "MissingContent"
+  },
+  {
+    "id": "MissingDependency_MissingModelPluginReference"
+  },
+  {
+    "id": "MissingDependency_MissingReference"
+  },
+  {
+    "id": "MissingEntityFilter"
+  },
+  {
+    "id": "MissingWidgetContent"
+  },
+  {
+    "id": "MobileLibrariesShouldNotBeReferencedByNonMobileProjects"
+  },
+  {
+    "id": "MobileLibraryCannotHaveDownloadNode"
+  },
+  {
+    "id": "ModelFeature_BinarySettingsOutOfExtensibilityConfiguration_InDevelopment"
+  },
+  {
+    "id": "ModelFeature_DeleteRuleOnSystemReferences_Removed"
+  },
+  {
+    "id": "ModelFeature_EntitlementNotEnabled"
+  },
+  {
+    "id": "ModelFeature_InDevelopmentFeature"
+  },
+  {
+    "id": "ModelFeature_MultiTenant_Removed"
+  },
+  {
+    "id": "ModelFeature_MultiTenant_Removed_ESpace"
+  },
+  {
+    "id": "ModelFeature_MultiTenant_Removed_Entity"
+  },
+  {
+    "id": "ModelFeature_MultiTenant_Removed_SiteProperty"
+  },
+  {
+    "id": "ModelFeature_MultiTenant_Removed_Timer"
+  },
+  {
+    "id": "ModelFeature_NotAvailableInSomeEnvironments"
+  },
+  {
+    "id": "ModelFeature_NotEnabledInServer"
+  },
+  {
+    "id": "ModelFeature_NotKnownInServer"
+  },
+  {
+    "id": "ModelFeature_NotLoggedIn"
+  },
+  {
+    "id": "ModelFeature_RemovedFeature"
+  },
+  {
+    "id": "ModelFeature_RemovedFeature_ModelFeature_DeleteRuleOnSystemReferences"
+  },
+  {
+    "id": "ModelFeature_RemovedFeature_ModelFeature_TraditionalWeb"
+  },
+  {
+    "id": "ModelFeature_RemovedFeature_ModelFeature_WriteableSiteProperties"
+  },
+  {
+    "id": "ModelFeature_StrongDependency_Removed_UserAction"
+  },
+  {
+    "id": "ModelFeature_TechnicalPreview"
+  },
+  {
+    "id": "ModelFeature_TechnicalPreviewIsNowStable"
+  },
+  {
+    "id": "ModelFeature_TechnicalPreview_NotAvailableInSomeEnvironments"
+  },
+  {
+    "id": "ModelFeature_TraditionalWeb_Removed"
+  },
+  {
+    "id": "ModelFeature_WriteableSiteProperties_Removed"
+  },
+  {
+    "id": "NamedWidgetRequired"
+  },
+  {
+    "id": "NativeSplashScreen_BackgroundColorOverridingExtensibility"
+  },
+  {
+    "id": "NativeSplashScreen_CustomTypeMissingSplashScreen"
+  },
+  {
+    "id": "NoErrorHandlingForAllExceptions"
+  },
+  {
+    "id": "NoErrorHandlingInFlow"
+  },
+  {
+    "id": "NoErrorHandlingInTheme"
+  },
+  {
+    "id": "NoWidgetContent"
+  },
+  {
+    "id": "NonBasicRecordParameter"
+  },
+  {
+    "id": "NonBasicRecordSessionVariable"
+  },
+  {
+    "id": "OSUIPhIconLibraryCompatibility"
+  },
+  {
+    "id": "OSUIPhIconLibraryMigration"
+  },
+  {
+    "id": "OnDemandDataSetMustBeRefreshed"
+  },
+  {
+    "id": "OnlyImplicitCanBeMandatoryActivity"
+  },
+  {
+    "id": "OnlyImplicitCanBeMandatoryProcess"
+  },
+  {
+    "id": "OpenRedirect"
+  },
+  {
+    "id": "OpenRedirectNR"
+  },
+  {
+    "id": "OperatorIncompatibleTypes"
+  },
+  {
+    "id": "OperatorInvalidBinaryComparison"
+  },
+  {
+    "id": "OperatorInvalidFileComparison"
+  },
+  {
+    "id": "OtherScreenDataSourceListUseNotAllowed"
+  },
+  {
+    "id": "OutSystemsJQueryUsage"
+  },
+  {
+    "id": "OutSystemsJavascriptNamespaceUsage"
+  },
+  {
+    "id": "OutdatedTypeConversionMapping"
+  },
+  {
+    "id": "ParentOfPublicActivityMustBePublic"
+  },
+  {
+    "id": "ParserExpectedElement"
+  },
+  {
+    "id": "ParserExpressionOverflow"
+  },
+  {
+    "id": "ParserFunctionsOverflow"
+  },
+  {
+    "id": "ParserOutputOverflow"
+  },
+  {
+    "id": "ParserOverflow"
+  },
+  {
+    "id": "ParserUnexpectedElement"
+  },
+  {
+    "id": "ParserUnterminatedStringLiteral"
+  },
+  {
+    "id": "PointersNotAllowedInTasksThatLookAsInfoTasks"
+  },
+  {
+    "id": "PrivateUnusedGlobalEvent"
+  },
+  {
+    "id": "ProcessMissingInboxDetail"
+  },
+  {
+    "id": "QuantifierNotAllowedWithExternalEntities"
+  },
+  {
+    "id": "QuantifierOperatorRequiresList"
+  },
+  {
+    "id": "QueryEntitiesFromMixedConnectionsError"
+  },
+  {
+    "id": "RecordListParameter"
+  },
+  {
+    "id": "RecordListSessionVariable"
+  },
+  {
+    "id": "RecordLiteralFieldRequiredExpression"
+  },
+  {
+    "id": "RecursiveThemeHierarchy"
+  },
+  {
+    "id": "RecursiveTutorialBlocks"
+  },
+  {
+    "id": "RedundantWithWithout"
+  },
+  {
+    "id": "ReferenceParameterArgumentIteratedWrongVariable"
+  },
+  {
+    "id": "ReferenceParameterArgumentRequiredExpression"
+  },
+  {
+    "id": "ReferenceRole_IsPersistent"
+  },
+  {
+    "id": "Reminder"
+  },
+  {
+    "id": "RepeatedLocale"
+  },
+  {
+    "id": "RepeatedMetadata"
+  },
+  {
+    "id": "RequiredConnector_In"
+  },
+  {
+    "id": "RequiredConnector_Out"
+  },
+  {
+    "id": "RequiredCookiesProperty"
+  },
+  {
+    "id": "RequiredPropertyValue_Attribute"
+  },
+  {
+    "id": "RequiredPropertyValue_Filename"
+  },
+  {
+    "id": "RequiredPropertyValue_ID"
+  },
+  {
+    "id": "RequiredPropertyValue_Property"
+  },
+  {
+    "id": "RequiredPropertyValue_PropertyIn"
+  },
+  {
+    "id": "RequiredPropertyValue_PropertyIn_WithPrevious"
+  },
+  {
+    "id": "RequiredPropertyValue_URL"
+  },
+  {
+    "id": "RequiredVariable_Attribute"
+  },
+  {
+    "id": "RequiresValidationParent"
+  },
+  {
+    "id": "ResponsiveLayoutMismatch"
+  },
+  {
+    "id": "RuntimePropertyUsedOutsideCallCondition"
+  },
+  {
+    "id": "SEODefaultScreenPageRule"
+  },
+  {
+    "id": "SEODuplicatedPageName"
+  },
+  {
+    "id": "SEOInvalidPageNameChars"
+  },
+  {
+    "id": "SEOInvalidPageNameDoubleSlash"
+  },
+  {
+    "id": "SEOInvalidPageNamePattern"
+  },
+  {
+    "id": "SEOInvalidParamsOrder"
+  },
+  {
+    "id": "SEOReservedNamePageRule"
+  },
+  {
+    "id": "SQLInjection"
+  },
+  {
+    "id": "SQLInjectionInvalidEncodeSQL"
+  },
+  {
+    "id": "SQLInjectionInvalidReplace"
+  },
+  {
+    "id": "SQL_ColumnsMismatch"
+  },
+  {
+    "id": "SQL_Enumeration"
+  },
+  {
+    "id": "SQL_ExpandInlineNotValidated"
+  },
+  {
+    "id": "SQL_ExternalEntitiesCantBeUsed"
+  },
+  {
+    "id": "SQL_InputParameterPropagation"
+  },
+  {
+    "id": "SQL_InvalidQueryForCount"
+  },
+  {
+    "id": "SQL_InvalidUpdateReadOnly"
+  },
+  {
+    "id": "SQL_TenantId_wo_show_tenant_id"
+  },
+  {
+    "id": "SQL_Unrecognized"
+  },
+  {
+    "id": "SQL_WildcardNotValidated"
+  },
+  {
+    "id": "SQL_WrongMapping"
+  },
+  {
+    "id": "ScreenActionOutputsIgnored"
+  },
+  {
+    "id": "Script_SyntaxErrors"
+  },
+  {
+    "id": "SelfRefreshingAggregate"
+  },
+  {
+    "id": "SemanticSearch_EntityRequiresSearchAttributes"
+  },
+  {
+    "id": "SemanticSearch_RequiredSearchAttributes"
+  },
+  {
+    "id": "ServerActionInAnonymousScreen"
+  },
+  {
+    "id": "ServerActionInScreenAccessibleByEveryone"
+  },
+  {
+    "id": "SitePropertyDefaultValueTooLarge"
+  },
+  {
+    "id": "SplashScreenImageDimensionsInvalid"
+  },
+  {
+    "id": "SplashScreenImageSizeTooBig"
+  },
+  {
+    "id": "SplashScreen_ServerInteraction"
+  },
+  {
+    "id": "StaticEntityDuplicatedRecord"
+  },
+  {
+    "id": "StaticEntityInWebReference"
+  },
+  {
+    "id": "TasksWithSubTaskCanNotHaveValidations"
+  },
+  {
+    "id": "TestModelFeatureVerifyMessage"
+  },
+  {
+    "id": "TooManyNonGoToIncomingConnectors"
+  },
+  {
+    "id": "UnallowedTypeForClientVariable"
+  },
+  {
+    "id": "UnallowedTypeForEntityAttribute"
+  },
+  {
+    "id": "UnallowedTypeForExtensibilitySetting"
+  },
+  {
+    "id": "UnallowedTypeForQueryParameter"
+  },
+  {
+    "id": "UnallowedTypeForSetting"
+  },
+  {
+    "id": "UnaryOperatorIncompatibleType"
+  },
+  {
+    "id": "UnknownEditAppProperty"
+  },
+  {
+    "id": "UnknownMessage"
+  },
+  {
+    "id": "UnlinkedOutcome"
+  },
+  {
+    "id": "UnsubmitableInputs_NoLinks"
+  },
+  {
+    "id": "UnusedAction"
+  },
+  {
+    "id": "UnusedArgument"
+  },
+  {
+    "id": "UnusedCustomStructure"
+  },
+  {
+    "id": "UnusedElement"
+  },
+  {
+    "id": "UnusedEventHandler"
+  },
+  {
+    "id": "UnusedGlobalEvent"
+  },
+  {
+    "id": "UnusedLink"
+  },
+  {
+    "id": "UnusedOnNotify"
+  },
+  {
+    "id": "UnusedOnSkip"
+  },
+  {
+    "id": "UnusedOutcomeLink"
+  },
+  {
+    "id": "UnusedPlaceholderArgument"
+  },
+  {
+    "id": "UnusedRecordLiteralField"
+  },
+  {
+    "id": "UnusedReferenceGlobalEvent"
+  },
+  {
+    "id": "UnusedReferenceParameterArgument"
+  },
+  {
+    "id": "UnusedResource"
+  },
+  {
+    "id": "UnusedScreenData"
+  },
+  {
+    "id": "UnusedUserAction"
+  },
+  {
+    "id": "UserActionWontBeCached_NonSerializableParameters"
+  },
+  {
+    "id": "UsesOldStyleChoice"
+  },
+  {
+    "id": "ValidationsNotSupported"
+  },
+  {
+    "id": "ValidationsRequired"
+  },
+  {
+    "id": "Verify_Errors"
+  },
+  {
+    "id": "Verify_ErrorsAndWarnings"
+  },
+  {
+    "id": "Verify_OK"
+  },
+  {
+    "id": "Verify_Warnings"
+  },
+  {
+    "id": "VerticalSlideWithCurrentRow"
+  },
+  {
+    "id": "WebBlock_CustomEventNotTriggered"
+  },
+  {
+    "id": "Workflows_CallWorkflowProcessNotSet"
+  },
+  {
+    "id": "Workflows_ForkPathDiverges"
+  },
+  {
+    "id": "Workflows_ForkPathsNotFullyConverging"
+  },
+  {
+    "id": "Workflows_InfiniteCycle"
+  },
+  {
+    "id": "Workflows_InvalidConnector_DifferentFlowLevel"
+  },
+  {
+    "id": "Workflows_ScheduleDaysOfMonthNotSet"
+  },
+  {
+    "id": "Workflows_ScheduleDaysOfWeekNotSet"
+  },
+  {
+    "id": "Workflows_ScheduleHoursNotSet"
+  },
+  {
+    "id": "Workflows_ScheduleMinutesNotSet"
+  },
+  {
+    "id": "Workflows_ScheduleNotSet"
+  },
+  {
+    "id": "Workflows_UnsupportedDataType"
+  },
+  {
+    "id": "Worklflows_UnsupportedDataType_BinaryData"
+  },
+  {
+    "id": "Worklflows_UnsupportedNode_ConditionalStart"
+  },
+  {
+    "id": "notImplementedInAS__Type"
+  },
+  {
+    "id": "notImplementedInAS__property"
+  }
+]

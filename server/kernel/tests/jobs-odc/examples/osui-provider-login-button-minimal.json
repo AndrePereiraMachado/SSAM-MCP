@@ -1,0 +1,16 @@
+{
+ "description": "ProviderLoginButton do OSUI: o provedor obrigatorio (static entity do OSUI) e o evento obrigatorio OnClick.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProviderLoginDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Clicks", "as": "$vClicks"},
+  {"op": "set", "target": "$vClicks", "prop": "DataType", "value": "Integer"},
+  {"op": "logic", "data": {"actions": [{"name": "LoginClicked", "kind": "screen", "owner": "IMobileScreen:ProviderLoginDemo", "steps": [{"assign": {"Clicks": "Clicks + 1"}, "as": "Count"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ProviderLoginButton1", "source": "IMobileBlock:ProviderLoginButton", "as": "$pl"},
+  {"op": "set", "target": "$pl/IdentityProvider", "prop": "Value", "value": "Entities.IdentityProvider.Google"},
+  {"op": "set", "target": "$pl/OnClick", "prop": "Handler", "value": "IMobileScreen:ProviderLoginDemo/LoginClicked"}
+ ]
+}

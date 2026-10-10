@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Anvil.DebugTokenHook</AssemblyName>
+  </PropertyGroup>
+  <!-- SDK from the exact running Studio. Never load/copy Anvil.Bridge/Core or vendor replacements. -->
+  <ItemGroup>
+    <Reference Include="OutSystems.Communication"><HintPath>$(StudioDir)/OutSystems.Communication.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Communication.Identity"><HintPath>$(StudioDir)/OutSystems.Communication.Identity.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.RuntimeCommon"><HintPath>$(StudioDir)/OutSystems.RuntimeCommon.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.C5"><HintPath>$(StudioDir)/OutSystems.C5.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.MetaModel"><HintPath>$(StudioDir)/OutSystems.MetaModel.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Model.V1"><HintPath>$(StudioDir)/OutSystems.Model.V1.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Model.Implementation"><HintPath>$(StudioDir)/OutSystems.Model.Implementation.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Framework"><HintPath>$(StudioDir)/ServiceStudio.Framework.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Presenter"><HintPath>$(StudioDir)/ServiceStudio.Presenter.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.PluginAPI"><HintPath>$(StudioDir)/ServiceStudio.PluginAPI.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Common"><HintPath>$(StudioDir)/ServiceStudio.Common.dll</HintPath><Private>false</Private></Reference>
+    <!-- The running Studio's framework references Json 10; use that same assembly over net8's reference, without copying it. -->
+    <Reference Include="System.Text.Json"><HintPath>$(StudioDir)/System.Text.Json.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="System.Text.Encodings.Web"><HintPath>$(StudioDir)/System.Text.Encodings.Web.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="System.Diagnostics.DiagnosticSource" Condition="Exists('$(StudioDir)/System.Diagnostics.DiagnosticSource.dll')"><HintPath>$(StudioDir)/System.Diagnostics.DiagnosticSource.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.ServerCommunications"><HintPath>$(StudioDir)/ServiceStudio.ServerCommunications.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.ServerCommunications.API"><HintPath>$(StudioDir)/ServiceStudio.ServerCommunications.API.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Avalonia.Base"><HintPath>$(StudioDir)/Avalonia.Base.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Avalonia.Controls"><HintPath>$(StudioDir)/Avalonia.Controls.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

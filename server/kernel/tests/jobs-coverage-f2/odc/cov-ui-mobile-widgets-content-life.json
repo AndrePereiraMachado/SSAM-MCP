@@ -1,0 +1,44 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.UI.Mobile.Widgets.IContent (odc) em mobileContainer. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "CovSScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IContainer",
+   "name": "CovSBox",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IButton",
+   "name": "CovSBtn",
+   "as": "$btn"
+  },
+  {
+   "op": "get",
+   "target": "$btn/#IContent"
+  },
+  {
+   "op": "set",
+   "target": "$btn/#IContent",
+   "prop": "CustomStyle",
+   "value": "Cobertura fase 1"
+  }
+ ]
+}

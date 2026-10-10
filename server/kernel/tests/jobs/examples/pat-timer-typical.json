@@ -1,0 +1,25 @@
+{
+ "description": "Timer tipico: a server action Reminders_SendDue le os lembretes vencidos (get com where e max), marca cada um como enviado (foreach + update) e o timer SendDueReminders a agenda todo dia as 02:00 (Schedule no texto do Service Studio).",
+ "base": "blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Reminder", "attributes": [
+   {"name": "Message", "type": "Text", "mandatory": true, "length": 200},
+   {"name": "DueOn", "type": "Date Time"},
+   {"name": "Sent", "type": "Boolean"}]}]}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "Reminders_SendDue", "kind": "server", "description": "Marca como enviados os lembretes vencidos (lote de 100)",
+    "vars": [{"name": "Due", "type": "Reminder"}],
+    "steps": [
+     {"get": "Reminder", "as": "GetDueReminders", "where": ["not Reminder.Sent", "Reminder.DueOn <= CurrDateTime()"], "sort": "Reminder.DueOn", "max": 100},
+     {"foreach": "GetDueReminders.List", "as": "EachReminder", "do": [
+      {"assign": {"Due": "GetDueReminders.List.Current.Reminder", "Due.Sent": "True"}, "as": "MarkSent"},
+      {"update": "Reminder", "record": "Due", "as": "UpdateReminder"}]}]}]}},
+  {"op": "create", "parent": "@espace", "type": "ITimer", "name": "SendDueReminders", "as": "$timer"},
+  {"op": "set", "target": "$timer", "prop": "Action", "value": "IServerAction:Reminders_SendDue"},
+  {"op": "set", "target": "$timer", "prop": "Description", "value": "Envia os lembretes vencidos uma vez por dia"},
+  {"op": "set", "target": "$timer", "prop": "Schedule", "value": "Every day at 02:00"},
+  {"op": "get", "target": "$timer"}
+ ]
+}

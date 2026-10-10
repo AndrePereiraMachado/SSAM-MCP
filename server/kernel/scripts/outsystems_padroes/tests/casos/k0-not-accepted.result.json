@@ -1,0 +1,33 @@
+{
+ "ok": true,
+ "command": "apply",
+ "_fixture": "Envelope sintetico do run_job para o controle K0: accepted=false e um policyMessage. K0 nao aceita excecao.",
+ "data": {
+  "outPath": "C:\\fixture\\n4-preexisting-warning.oml",
+  "ops": 1,
+  "objects": 180,
+  "isValid": true,
+  "messages": 1,
+  "details": [],
+  "validation": {
+   "new": [],
+   "fixed": [],
+   "preexisting": [],
+   "unexpected": [],
+   "missingExpected": [],
+   "ambiguous": [],
+   "tolerated": []
+  },
+  "accepted": false,
+  "expectedValid": true,
+  "policyMessages": [
+   "Unexpected UnusedElement @ Integration_CS (ESpace) / X (SiteProperty): corrija ou declare em expectedMessages com why."
+  ],
+  "handles": {},
+  "results": [],
+  "coverage": {
+   "tipos": 0,
+   "porTipo": {}
+  }
+ }
+}

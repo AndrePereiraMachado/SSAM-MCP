@@ -1,0 +1,23 @@
+using System;
+using System.Collections.Generic;
+
+public record Reading(int Value, bool HasValue);
+
+public static class NullableMembers
+{
+    public static int ReadValue(Reading? input) => input!.Value;
+    public static bool ReadHasValue(Reading? input) => input!.HasValue;
+    public static int Guarded(Reading? input)
+    {
+        if (input == null) throw new ArgumentException("Reading required.");
+        return input.Value;
+    }
+    public static int TextLength(string? text) => text!.Length;
+    public static int ListCount(List<int>? values) => values!.Count;
+    public static int ArraySum(int[]? values)
+    {
+        int total = 0;
+        foreach (var value in values!) total += value;
+        return total;
+    }
+}

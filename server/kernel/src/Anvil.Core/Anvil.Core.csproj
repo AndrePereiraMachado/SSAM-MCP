@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Anvil.Core: Kernel (so o Model API V1 + tipos puros: ModelBuilder, FlowLayout, catalogo, verbos) e
+    Adapters.SS11 (o que toca internals do build 11.55.69: prologo do runtime, presenter mock, load/save,
+    merge, Service Center). As DLLs do Studio NAO sao copiadas (Private=false); em runtime vem da instalacao
+    do usuario (StudioAssemblies.Bind). Nenhum binario da OutSystems entra no pacote.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RollForward>Major</RollForward>
+    <SSDir Condition="'$(SSDir)' == ''">$(USERPROFILE)\OutSystems\Service Studio 11 - Anvil 4516\Service Studio</SSDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Kernel/ScreenVocabulary.json" />
+    <None Include="../../licenses/Esprima-3.0.6.txt" Link="licenses/Esprima-3.0.6.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Reference Include="OutSystems.Communication"><HintPath>$(SSDir)\OutSystems.Communication.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Communication.Identity"><HintPath>$(SSDir)\OutSystems.Communication.Identity.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.RuntimeCommon"><HintPath>$(SSDir)\OutSystems.RuntimeCommon.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.MetaModel"><HintPath>$(SSDir)\OutSystems.MetaModel.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Model.V1"><HintPath>$(SSDir)\OutSystems.Model.V1.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Model.Implementation"><HintPath>$(SSDir)\OutSystems.Model.Implementation.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.C5"><HintPath>$(SSDir)\OutSystems.C5.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.ServiceStudio.CrashAPI"><HintPath>$(SSDir)\OutSystems.ServiceStudio.CrashAPI.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Framework"><HintPath>$(SSDir)\ServiceStudio.Framework.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Common"><HintPath>$(SSDir)\ServiceStudio.Common.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Telemetry"><HintPath>$(SSDir)\ServiceStudio.Telemetry.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.UserSettings"><HintPath>$(SSDir)\ServiceStudio.UserSettings.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Presenter"><HintPath>$(SSDir)\ServiceStudio.Presenter.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.ServerCommunications"><HintPath>$(SSDir)\ServiceStudio.ServerCommunications.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.ServerCommunications.API"><HintPath>$(SSDir)\ServiceStudio.ServerCommunications.API.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.PluginAPI"><HintPath>$(SSDir)\ServiceStudio.PluginAPI.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.ServerCommunications.ServiceCenter"><HintPath>$(SSDir)\ServiceStudio.ServerCommunications.ServiceCenter.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Esprima" Version="3.0.6" />
+    <ProjectReference Include="../Anvil.CSharp/Anvil.CSharp.csproj" />
+  </ItemGroup>
+</Project>

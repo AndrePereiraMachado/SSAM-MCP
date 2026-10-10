@@ -1,0 +1,79 @@
+{
+  "schema": "independent-clr-exception-source-contract/1",
+  "expectationProvenance": "Authored by reasoning before the first compilation or CLR execution; expectations are never learned from actual outputs.",
+  "scope": "CLR source semantics only. No translator, native graph, O11 Verify, Studio, persistence, product integration, or public workflow is exercised.",
+  "cases": [
+    {
+      "id": "normal-order",
+      "method": "ReserveCredit",
+      "input": { "balance": 100, "argument": 12 },
+      "expected": { "returnValue": 88, "balance": 88, "events": ["request", "reserve", "audit", "done"], "handledOriginalFailure": false, "exception": null }
+    },
+    {
+      "id": "return-try-before-finally",
+      "method": "QuoteWithAudit",
+      "input": { "balance": 40, "argument": 7 },
+      "expected": { "returnValue": 47, "balance": 41, "events": ["quote", "audit"], "handledOriginalFailure": false, "exception": null }
+    },
+    {
+      "id": "return-catch-before-finally",
+      "method": "UseFallbackQuote",
+      "input": { "balance": 20, "argument": 6 },
+      "expected": { "returnValue": 16, "balance": 19, "events": ["request", "fallback", "audit"], "handledOriginalFailure": false, "exception": null }
+    },
+    {
+      "id": "typed-catch-precedes-base",
+      "method": "RejectUnavailableCredit",
+      "input": { "balance": 10, "argument": 0 },
+      "expected": { "returnValue": 9, "balance": 9, "events": ["check", "locked", "audit"], "handledOriginalFailure": false, "exception": null }
+    },
+    {
+      "id": "base-catch-matches-derived",
+      "method": "RejectUnavailableCredit",
+      "input": { "balance": 10, "argument": -1 },
+      "expected": { "returnValue": 8, "balance": 8, "events": ["check", "ArgumentException", "audit"], "handledOriginalFailure": false, "exception": null }
+    },
+    {
+      "id": "rethrow-preserves-original",
+      "method": "RethrowSettlementFailure",
+      "input": { "balance": 30, "argument": 4 },
+      "expected": { "returnValue": null, "balance": 27, "events": ["settlement", "retry", "audit"], "handledOriginalFailure": false, "exception": { "type": "System.InvalidOperationException", "message": "settlement unavailable", "sameOriginal": true, "originLine": 109 } }
+    },
+    {
+      "id": "finally-exception-replaces-return",
+      "method": "CleanupOverridesReturn",
+      "input": { "balance": 9, "argument": 3 },
+      "expected": { "returnValue": null, "balance": 11, "events": ["refund", "cleanup"], "handledOriginalFailure": false, "exception": { "type": "System.ApplicationException", "message": "cleanup failed", "sameOriginal": false, "originLine": 135 } }
+    },
+    {
+      "id": "finally-exception-replaces-failure",
+      "method": "CleanupOverridesFailure",
+      "input": { "balance": 8, "argument": 2 },
+      "expected": { "returnValue": null, "balance": 7, "events": ["post", "cleanup"], "handledOriginalFailure": false, "exception": { "type": "System.ApplicationException", "message": "cleanup failed", "sameOriginal": false, "originLine": 152 } }
+    },
+    {
+      "id": "filter-before-inner-finally",
+      "method": "ApproveWithFilter",
+      "input": { "balance": 10, "argument": 3 },
+      "expected": { "returnValue": 16, "balance": 16, "events": ["request", "policy", "release", "approved", "audit"], "handledOriginalFailure": false, "exception": null }
+    },
+    {
+      "id": "throwing-filter-is-false",
+      "method": "IgnoreBrokenFilter",
+      "input": { "balance": 5, "argument": 3 },
+      "expected": { "returnValue": 8, "balance": 8, "events": ["request", "policy", "InvalidOperationException", "audit"], "handledOriginalFailure": true, "exception": null }
+    },
+    {
+      "id": "nested-catch-finally-return",
+      "method": "CloseNestedReservation",
+      "input": { "balance": 20, "argument": 4 },
+      "expected": { "returnValue": 19, "balance": 22, "events": ["outer", "reserve", "cancel", "release", "resume", "audit"], "handledOriginalFailure": false, "exception": null }
+    },
+    {
+      "id": "continue-break-run-finally",
+      "method": "SumEligibleCharges",
+      "input": { "balance": 0, "argument": 5 },
+      "expected": { "returnValue": 4, "balance": 4, "events": ["check:0", "accepted:0", "release:0", "after:0", "check:1", "release:1", "check:2", "accepted:2", "release:2", "after:2", "check:3", "release:3", "done"], "handledOriginalFailure": false, "exception": null }
+    }
+  ]
+}

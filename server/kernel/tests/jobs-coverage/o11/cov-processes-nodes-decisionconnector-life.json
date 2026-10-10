@@ -1,0 +1,63 @@
+{
+ "description": "Cobertura testada (fase 1, medir): life de OutSystems.Model.Processes.Nodes.IDecisionConnector (o11) em processDecision. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IProcess",
+   "name": "CovSProcess",
+   "as": "$fp"
+  },
+  {
+   "op": "set",
+   "target": "$fp",
+   "prop": "Detail",
+   "value": "\"Cov\""
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "IDecisionNode",
+   "name": "CovSDecision",
+   "as": "$p"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IDecisionConnector",
+   "name": "CovADecisionConnector",
+   "args": {
+    "target": "$fe"
+   },
+   "as": "$a"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRDecisionConnector"
+  }
+ ]
+}

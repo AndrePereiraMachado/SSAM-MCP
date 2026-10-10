@@ -1,0 +1,241 @@
+{
+  "description": "Modelo de dados de uma biblioteca virtual: catalogo de obras, autores e categorias; edicoes digitais; emprestimos; estante pessoal; progresso e avaliacoes.",
+  "base": "tests/fixtures/blank-service.oml",
+  "expectValid": true,
+  "ops": [
+    {
+      "op": "spec",
+      "data": {
+        "static": [
+          {
+            "name": "BookFormat",
+            "records": [
+              { "name": "Ebook", "label": "E-book", "order": 1 },
+              { "name": "Audiobook", "label": "Audiobook", "order": 2 }
+            ]
+          },
+          {
+            "name": "BookStatus",
+            "records": [
+              { "name": "Draft", "label": "Rascunho", "order": 1 },
+              { "name": "Published", "label": "Publicado", "order": 2 },
+              { "name": "Archived", "label": "Arquivado", "order": 3 }
+            ]
+          },
+          {
+            "name": "LoanStatus",
+            "records": [
+              { "name": "Active", "label": "Ativo", "order": 1 },
+              { "name": "Returned", "label": "Devolvido", "order": 2 },
+              { "name": "Overdue", "label": "Em atraso", "order": 3 },
+              { "name": "Cancelled", "label": "Cancelado", "order": 4 }
+            ]
+          },
+          {
+            "name": "ReadingStatus",
+            "records": [
+              { "name": "WantToRead", "label": "Quero ler", "order": 1 },
+              { "name": "Reading", "label": "Lendo", "order": 2 },
+              { "name": "Finished", "label": "Concluido", "order": 3 },
+              { "name": "Abandoned", "label": "Abandonado", "order": 4 }
+            ]
+          },
+          {
+            "name": "ReviewStatus",
+            "records": [
+              { "name": "Pending", "label": "Pendente", "order": 1 },
+              { "name": "Published", "label": "Publicado", "order": 2 },
+              { "name": "Rejected", "label": "Rejeitado", "order": 3 }
+            ]
+          }
+        ],
+        "entities": [
+          {
+            "name": "Author",
+            "public": true,
+            "description": "Pessoa responsavel pela autoria de uma ou mais obras.",
+            "attributes": [
+              { "name": "Name", "type": "Text", "mandatory": true, "length": 150 },
+              { "name": "Biography", "type": "Text", "length": 4000 },
+              { "name": "BirthDate", "type": "Date" },
+              { "name": "Country", "type": "Text", "length": 100 },
+              { "name": "IsActive", "type": "Boolean", "default": "True" }
+            ]
+          },
+          {
+            "name": "Category",
+            "public": true,
+            "description": "Categoria utilizada para organizar e descobrir obras.",
+            "attributes": [
+              { "name": "Name", "type": "Text", "mandatory": true, "length": 100 },
+              { "name": "Description", "type": "Text", "length": 500 },
+              { "name": "IsActive", "type": "Boolean", "default": "True" }
+            ]
+          },
+          {
+            "name": "Book",
+            "public": true,
+            "description": "Obra bibliografica, independente do formato digital em que e distribuida.",
+            "attributes": [
+              { "name": "Title", "type": "Text", "mandatory": true, "length": 250 },
+              { "name": "Subtitle", "type": "Text", "length": 250 },
+              { "name": "Description", "type": "Text", "length": 8000 },
+              { "name": "ISBN", "type": "Text", "length": 20 },
+              { "name": "Publisher", "type": "Text", "length": 150 },
+              { "name": "Language", "type": "Text", "length": 10, "default": "\"pt-BR\"" },
+              { "name": "PublicationDate", "type": "Date" },
+              { "name": "CoverUrl", "type": "Text", "length": 1000 },
+              { "name": "StatusId", "type": "BookStatus Identifier", "mandatory": true, "default": "Entities.BookStatus.Draft" },
+              { "name": "IsFeatured", "type": "Boolean", "default": "False" },
+              { "name": "AddedOn", "type": "Date Time", "mandatory": true, "default": "CurrDateTime()" },
+              { "name": "AddedById", "type": "User Identifier" }
+            ]
+          },
+          {
+            "name": "DigitalEdition",
+            "public": true,
+            "description": "Arquivo ou edicao digital acessivel para uma obra.",
+            "attributes": [
+              { "name": "BookId", "type": "Book Identifier", "mandatory": true },
+              { "name": "FormatId", "type": "BookFormat Identifier", "mandatory": true },
+              { "name": "FileUrl", "type": "Text", "mandatory": true, "length": 1000 },
+              { "name": "FileSizeBytes", "type": "Long Integer" },
+              { "name": "PageCount", "type": "Integer" },
+              { "name": "DurationMinutes", "type": "Integer" },
+              { "name": "IsDownloadable", "type": "Boolean", "default": "False" },
+              { "name": "IsActive", "type": "Boolean", "default": "True" },
+              { "name": "PublishedOn", "type": "Date Time" }
+            ]
+          },
+          {
+            "name": "BookAuthor",
+            "public": true,
+            "description": "Associacao entre uma obra e seus autores, preservando a ordem de credito.",
+            "attributes": [
+              { "name": "BookId", "type": "Book Identifier", "mandatory": true },
+              { "name": "AuthorId", "type": "Author Identifier", "mandatory": true },
+              { "name": "IsPrimary", "type": "Boolean", "default": "False" },
+              { "name": "SortOrder", "type": "Integer", "default": "1" }
+            ]
+          },
+          {
+            "name": "BookCategory",
+            "public": true,
+            "description": "Associacao entre uma obra e suas categorias.",
+            "attributes": [
+              { "name": "BookId", "type": "Book Identifier", "mandatory": true },
+              { "name": "CategoryId", "type": "Category Identifier", "mandatory": true },
+              { "name": "IsPrimary", "type": "Boolean", "default": "False" }
+            ]
+          },
+          {
+            "name": "Loan",
+            "public": true,
+            "description": "Emprestimo de uma edicao digital para um leitor.",
+            "attributes": [
+              { "name": "DigitalEditionId", "type": "DigitalEdition Identifier", "mandatory": true },
+              { "name": "BorrowerId", "type": "User Identifier", "mandatory": true },
+              { "name": "StatusId", "type": "LoanStatus Identifier", "mandatory": true, "default": "Entities.LoanStatus.Active" },
+              { "name": "BorrowedOn", "type": "Date Time", "mandatory": true, "default": "CurrDateTime()" },
+              { "name": "DueOn", "type": "Date Time", "mandatory": true },
+              { "name": "ReturnedOn", "type": "Date Time" },
+              { "name": "RenewalCount", "type": "Integer", "default": "0" }
+            ]
+          },
+          {
+            "name": "ShelfItem",
+            "public": true,
+            "description": "Obra adicionada a estante pessoal do leitor.",
+            "attributes": [
+              { "name": "ReaderId", "type": "User Identifier", "mandatory": true },
+              { "name": "BookId", "type": "Book Identifier", "mandatory": true },
+              { "name": "ReadingStatusId", "type": "ReadingStatus Identifier", "mandatory": true, "default": "Entities.ReadingStatus.WantToRead" },
+              { "name": "IsFavorite", "type": "Boolean", "default": "False" },
+              { "name": "AddedOn", "type": "Date Time", "mandatory": true, "default": "CurrDateTime()" },
+              { "name": "StartedOn", "type": "Date Time" },
+              { "name": "FinishedOn", "type": "Date Time" }
+            ]
+          },
+          {
+            "name": "ReadingProgress",
+            "public": true,
+            "description": "Ultimo ponto de leitura de uma obra por leitor.",
+            "attributes": [
+              { "name": "ReaderId", "type": "User Identifier", "mandatory": true },
+              { "name": "BookId", "type": "Book Identifier", "mandatory": true },
+              { "name": "ProgressPercent", "type": "Decimal", "default": "0" },
+              { "name": "CurrentPage", "type": "Integer", "default": "0" },
+              { "name": "LastPosition", "type": "Text", "length": 100 },
+              { "name": "LastReadOn", "type": "Date Time", "mandatory": true, "default": "CurrDateTime()" }
+            ]
+          },
+          {
+            "name": "Review",
+            "public": true,
+            "description": "Avaliacao de uma obra feita por um leitor.",
+            "attributes": [
+              { "name": "BookId", "type": "Book Identifier", "mandatory": true },
+              { "name": "ReviewerId", "type": "User Identifier", "mandatory": true },
+              { "name": "Rating", "type": "Integer", "mandatory": true },
+              { "name": "Title", "type": "Text", "length": 150 },
+              { "name": "Body", "type": "Text", "length": 4000 },
+              { "name": "StatusId", "type": "ReviewStatus Identifier", "mandatory": true, "default": "Entities.ReviewStatus.Pending" },
+              { "name": "CreatedOn", "type": "Date Time", "mandatory": true, "default": "CurrDateTime()" },
+              { "name": "PublishedOn", "type": "Date Time" }
+            ]
+          }
+        ],
+        "structures": [
+          {
+            "name": "BookCard",
+            "public": true,
+            "attributes": [
+              { "name": "BookId", "type": "Book Identifier" },
+              { "name": "Title", "type": "Text" },
+              { "name": "PrimaryAuthor", "type": "Text" },
+              { "name": "CoverUrl", "type": "Text" },
+              { "name": "AverageRating", "type": "Decimal" },
+              { "name": "ReviewCount", "type": "Long Integer" },
+              { "name": "IsFeatured", "type": "Boolean" }
+            ]
+          },
+          {
+            "name": "ReaderDashboard",
+            "public": true,
+            "attributes": [
+              { "name": "BooksInShelf", "type": "Long Integer" },
+              { "name": "BooksReading", "type": "Long Integer" },
+              { "name": "BooksFinished", "type": "Long Integer" },
+              { "name": "ActiveLoans", "type": "Long Integer" },
+              { "name": "AverageRating", "type": "Decimal" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "set",
+      "target": "$Author",
+      "prop": "UpdateBehavior",
+      "value": "Optimized"
+    },
+    {
+      "op": "set",
+      "target": "$Book",
+      "prop": "UpdateBehavior",
+      "value": "Optimized"
+    },
+    {
+      "op": "set",
+      "target": "$DigitalEdition",
+      "prop": "UpdateBehavior",
+      "value": "Optimized"
+    },
+    {
+      "op": "set",
+      "target": "$Review",
+      "prop": "UpdateBehavior",
+      "value": "Optimized"
+    }
+  ]
+}

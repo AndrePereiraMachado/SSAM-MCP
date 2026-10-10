@@ -1,0 +1,23 @@
+{
+ "_leia": "expectedSiteProperties por estagio: com --plan-stage I2 a site property de I3 ainda nao e cobrada.",
+ "stage": "oml",
+ "mode": "autor",
+ "oml": "positive-conforming.oml",
+ "planStage": "I2",
+ "configOverride": {
+  "expectedSiteProperties": {
+   "Headless_CS": [
+    {
+     "name": "PosRequiredSwitch",
+     "fromStage": "I3"
+    }
+   ]
+  }
+ },
+ "exitCode": 0,
+ "mustNotFind": [
+  {
+   "rule": "E3"
+  }
+ ]
+}

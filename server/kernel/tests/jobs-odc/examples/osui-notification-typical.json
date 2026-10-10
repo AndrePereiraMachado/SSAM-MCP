@@ -1,0 +1,27 @@
+{
+ "description": "Notification do OSUI: abre de inicio por variavel, fica no rodape, e o OnToggle guarda se esta aberta; o texto vem de uma variavel.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "SaveNotice", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Notice\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "IsNoticeOpen", "as": "$vIsNoticeOpen"},
+  {"op": "set", "target": "$vIsNoticeOpen", "prop": "DataType", "value": "Boolean"},
+  {"op": "set", "target": "$vIsNoticeOpen", "prop": "DefaultValue", "value": "True"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "NoticeText", "as": "$vNoticeText"},
+  {"op": "set", "target": "$vNoticeText", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$vNoticeText", "prop": "DefaultValue", "value": "\"Your changes were saved\""},
+  {"op": "logic", "data": {"actions": [{"name": "NoticeToggled", "kind": "screen", "owner": "IMobileScreen:SaveNotice", "inputs": [{"name": "IsOpen", "type": "Boolean"}], "steps": [{"assign": {"IsNoticeOpen": "IsOpen"}, "as": "Remember"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Notification1", "source": "IMobileBlock:Notification", "as": "$nt"},
+  {"op": "set", "target": "$nt/StartsOpen", "prop": "Value", "value": "IsNoticeOpen"},
+  {"op": "set", "target": "$nt/Position", "prop": "Value", "value": "Entities.Position.Bottom"},
+  {"op": "set", "target": "$nt/Width", "prop": "Value", "value": "\"420px\""},
+  {"op": "set", "target": "$nt/OnToggle", "prop": "Handler", "value": "IMobileScreen:SaveNotice/NoticeToggled"},
+  {"op": "set", "target": "$nt/OnToggle/IsOpen", "prop": "Value", "value": "IsOpen"},
+  {"op": "create", "parent": "$nt/Content", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "NoticeText"}
+ ]
+}

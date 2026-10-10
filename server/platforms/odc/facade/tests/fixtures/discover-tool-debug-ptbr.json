@@ -1,0 +1,1632 @@
+{
+ "schema": "ssam-discover-tool-debug/1",
+ "note": "Natural pt-BR debugger requests (2026-10-04). Set verifier-2026-10-04: the requests the debugger check of 2026-10-04 found unrouted or misrouted (top-1 25/42 then); set own-2026-10-04: other phrasings of every ssam_debug, ssam_debug_run and ssam_debug_invoke verb, neighbours that must keep their own tool and model changes that must stay away from the debugger. They were fixed with general rules (the flow node \"nó\"/\"nós\" read before the accent is stripped; @node, @parado, @retornar, @chamar, @enquanto; route `explains` for the elements a debugger targets; byLane for the O11 run), never by copying them into tools.json; tests keep that true.",
+ "items": [
+  {
+   "intent": "ver as variáveis do nó",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "variables"
+    }
+   }
+  },
+  {
+   "intent": "ver as variáveis do nó",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "variables"
+    }
+   }
+  },
+  {
+   "intent": "a publicação do wrapper de debug ficou incerta, conferir pelas revisões",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "reconcile"
+    }
+   }
+  },
+  {
+   "intent": "tirar o wrapper de debug que ficou publicado",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "release"
+    }
+   }
+  },
+  {
+   "intent": "tirar o wrapper de debug que ficou publicado",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "release"
+    }
+   }
+  },
+  {
+   "intent": "mostrar em que nó o debugger está parado agora",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "status"
+    }
+   }
+  },
+  {
+   "intent": "mostrar em que nó o debugger está parado agora",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "status"
+    }
+   }
+  },
+  {
+   "intent": "avançar para o próximo nó no debugger",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-over"
+    }
+   }
+  },
+  {
+   "intent": "avançar para o próximo nó no debugger",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-over"
+    }
+   }
+  },
+  {
+   "intent": "acompanhar os nós da action GetQuotes enquanto eu uso o app",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "watch"
+    }
+   }
+  },
+  {
+   "intent": "acompanhar os nós da action GetQuotes enquanto eu uso o app",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "watch"
+    }
+   }
+  },
+  {
+   "intent": "quero acompanhar os nós da action GetQuotes enquanto navego no app, sem disparar nada",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "watch"
+    }
+   }
+  },
+  {
+   "intent": "quero acompanhar os nós da action GetQuotes enquanto navego no app, sem disparar nada",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "watch"
+    }
+   }
+  },
+  {
+   "intent": "seguir a execução até a action atual retornar",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-out"
+    }
+   }
+  },
+  {
+   "intent": "seguir a execução até a action atual retornar",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-out"
+    }
+   }
+  },
+  {
+   "intent": "step out da action atual",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-out"
+    }
+   }
+  },
+  {
+   "intent": "step out da action atual",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-out"
+    }
+   }
+  },
+  {
+   "intent": "voltar para a action que chamou, no debugger",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-out"
+    }
+   }
+  },
+  {
+   "intent": "voltar para a action que chamou, no debugger",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-out"
+    }
+   }
+  },
+  {
+   "intent": "pular para o próximo nó sem entrar na chamada",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-over"
+    }
+   }
+  },
+  {
+   "intent": "pular para o próximo nó sem entrar na chamada",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-over"
+    }
+   }
+  },
+  {
+   "intent": "chamar uma vez a entrada já existente da tela Location no FloodQuotes, sem navegador",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_invoke",
+    "verb": {
+     "field": "op",
+     "value": "run"
+    }
+   }
+  },
+  {
+   "intent": "chamar a entrada existente do app FloodQuotes uma vez com o usuário logado",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_invoke",
+    "verb": {
+     "field": "op",
+     "value": "run"
+    }
+   }
+  },
+  {
+   "intent": "executar a chamada da tela pelo envelope nativo, sem navegador",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_invoke",
+    "verb": {
+     "field": "op",
+     "value": "run"
+    }
+   }
+  },
+  {
+   "intent": "preparar a invocação da entrada existente da tela",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_invoke",
+    "verb": {
+     "field": "op",
+     "value": "prepare"
+    }
+   }
+  },
+  {
+   "intent": "depurar a action ValidateQuoteRequest com estes inputs",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "run"
+    }
+   }
+  },
+  {
+   "intent": "depurar a action ValidateQuoteRequest com estes inputs",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "verifier-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "run"
+    }
+   }
+  },
+  {
+   "intent": "quais são os valores das variáveis agora no debug",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "variables"
+    }
+   }
+  },
+  {
+   "intent": "quais são os valores das variáveis agora no debug",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "variables"
+    }
+   }
+  },
+  {
+   "intent": "mostrar o conteúdo da variável Total parada no nó",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "variables"
+    }
+   }
+  },
+  {
+   "intent": "mostrar o conteúdo da variável Total parada no nó",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "variables"
+    }
+   }
+  },
+  {
+   "intent": "ler os parâmetros do nó atual",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "variables"
+    }
+   }
+  },
+  {
+   "intent": "ler os parâmetros do nó atual",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "variables"
+    }
+   }
+  },
+  {
+   "intent": "em que nó parou?",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "status"
+    }
+   }
+  },
+  {
+   "intent": "em que nó parou?",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "status"
+    }
+   }
+  },
+  {
+   "intent": "o debugger parou em algum breakpoint?",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "status"
+    }
+   }
+  },
+  {
+   "intent": "o debugger parou em algum breakpoint?",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "status"
+    }
+   }
+  },
+  {
+   "intent": "onde a execução está pausada no debug",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "status"
+    }
+   }
+  },
+  {
+   "intent": "onde a execução está pausada no debug",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "status"
+    }
+   }
+  },
+  {
+   "intent": "ir para o próximo nó",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-over"
+    }
+   }
+  },
+  {
+   "intent": "ir para o próximo nó",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-over"
+    }
+   }
+  },
+  {
+   "intent": "passo seguinte no debug sem entrar na action chamada",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-over"
+    }
+   }
+  },
+  {
+   "intent": "passo seguinte no debug sem entrar na action chamada",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-over"
+    }
+   }
+  },
+  {
+   "intent": "entrar na action que o nó atual chama",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-into"
+    }
+   }
+  },
+  {
+   "intent": "entrar na action que o nó atual chama",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-into"
+    }
+   }
+  },
+  {
+   "intent": "descer para dentro da action chamada no debugger",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-into"
+    }
+   }
+  },
+  {
+   "intent": "descer para dentro da action chamada no debugger",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-into"
+    }
+   }
+  },
+  {
+   "intent": "sair da action atual e voltar ao chamador",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-out"
+    }
+   }
+  },
+  {
+   "intent": "sair da action atual e voltar ao chamador",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-out"
+    }
+   }
+  },
+  {
+   "intent": "continuar até a action retornar",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-out"
+    }
+   }
+  },
+  {
+   "intent": "continuar até a action retornar",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-out"
+    }
+   }
+  },
+  {
+   "intent": "continuar a execução depois da parada",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "continue"
+    }
+   }
+  },
+  {
+   "intent": "continuar a execução depois da parada",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "continue"
+    }
+   }
+  },
+  {
+   "intent": "deixar a requisição seguir no debug",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "continue"
+    }
+   }
+  },
+  {
+   "intent": "deixar a requisição seguir no debug",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "continue"
+    }
+   }
+  },
+  {
+   "intent": "encerrar o debugger",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "stop"
+    }
+   }
+  },
+  {
+   "intent": "encerrar o debugger",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "stop"
+    }
+   }
+  },
+  {
+   "intent": "parar a sessão de depuração da action",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "stop"
+    }
+   }
+  },
+  {
+   "intent": "parar a sessão de depuração da action",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "stop"
+    }
+   }
+  },
+  {
+   "intent": "colocar breakpoint no nó Assign da action GetQuotes",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "start"
+    }
+   }
+  },
+  {
+   "intent": "colocar breakpoint no nó Assign da action GetQuotes",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "start"
+    }
+   }
+  },
+  {
+   "intent": "debugar a server action ValidateQuoteRequest",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "start"
+    }
+   }
+  },
+  {
+   "intent": "debugar a server action ValidateQuoteRequest",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "start"
+    }
+   }
+  },
+  {
+   "intent": "acompanhar a action GetQuotes enquanto navego, sem invocar",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "watch"
+    }
+   }
+  },
+  {
+   "intent": "acompanhar a action GetQuotes enquanto navego, sem invocar",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "watch"
+    }
+   }
+  },
+  {
+   "intent": "monitorar os nós da action enquanto eu clico no app",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "watch"
+    }
+   }
+  },
+  {
+   "intent": "monitorar os nós da action enquanto eu clico no app",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "watch"
+    }
+   }
+  },
+  {
+   "intent": "vigiar os nós da action GetQuotes",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "watch"
+    }
+   }
+  },
+  {
+   "intent": "vigiar os nós da action GetQuotes",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "watch"
+    }
+   }
+  },
+  {
+   "intent": "remover o wrapper de debug publicado",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "release"
+    }
+   }
+  },
+  {
+   "intent": "remover o wrapper de debug publicado",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "release"
+    }
+   }
+  },
+  {
+   "intent": "despublicar o wrapper de depuração",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "release"
+    }
+   }
+  },
+  {
+   "intent": "despublicar o wrapper de depuração",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "release"
+    }
+   }
+  },
+  {
+   "intent": "conferir a publicação incerta do wrapper de debug",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "reconcile"
+    }
+   }
+  },
+  {
+   "intent": "conferir a publicação incerta do wrapper de debug",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "reconcile"
+    }
+   }
+  },
+  {
+   "intent": "o wrapper de debug ficou incerto, reconciliar pelas revisões",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "reconcile"
+    }
+   }
+  },
+  {
+   "intent": "o wrapper de debug ficou incerto, reconciliar pelas revisões",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "reconcile"
+    }
+   }
+  },
+  {
+   "intent": "ver se o wrapper de debug ainda está publicado",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "status"
+    }
+   }
+  },
+  {
+   "intent": "ver se o wrapper de debug ainda está publicado",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "status"
+    }
+   }
+  },
+  {
+   "intent": "autorizo publicar o wrapper de debug no tenant",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "authorize"
+    }
+   }
+  },
+  {
+   "intent": "rodar a action CalcularFrete com os inputs Peso=3 e Cep=01001000",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "run"
+    }
+   }
+  },
+  {
+   "intent": "rodar a action CalcularFrete com os inputs Peso=3 e Cep=01001000",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "run"
+    }
+   }
+  },
+  {
+   "intent": "testar a server action em dois cenários com trace",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "run"
+    }
+   }
+  },
+  {
+   "intent": "testar a server action em dois cenários com trace",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "run"
+    }
+   }
+  },
+  {
+   "intent": "invocar uma vez a entrada da tela Location",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_invoke",
+    "verb": {
+     "field": "op",
+     "value": "run"
+    }
+   }
+  },
+  {
+   "intent": "chamar a entrada da tela Home sem navegador",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_invoke",
+    "verb": {
+     "field": "op",
+     "value": "run"
+    }
+   }
+  },
+  {
+   "intent": "ver o resultado da chamada da entrada existente",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_invoke",
+    "verb": {
+     "field": "op",
+     "value": "status"
+    }
+   }
+  },
+  {
+   "intent": "esquecer o envelope da entrada",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_invoke",
+    "verb": {
+     "field": "op",
+     "value": "forget"
+    }
+   }
+  },
+  {
+   "intent": "preparar a chamada da entrada existente da tela Location",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_invoke",
+    "verb": {
+     "field": "op",
+     "value": "prepare"
+    }
+   }
+  },
+  {
+   "intent": "executar a entrada nativa Refresh sem wrapper",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "execution",
+     "value": "native-entry"
+    }
+   }
+  },
+  {
+   "intent": "publicar o módulo Vendas",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_publish"
+   }
+  },
+  {
+   "intent": "publicar o módulo Vendas",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_publish"
+   }
+  },
+  {
+   "intent": "nós precisamos publicar o módulo Vendas",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_publish"
+   }
+  },
+  {
+   "intent": "acompanhar o deploy do app",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_operation_status",
+    "verb": {
+     "field": "kind",
+     "value": "deployment"
+    }
+   }
+  },
+  {
+   "intent": "seguir a requisição pelos logs do service center",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "trace"
+    }
+   }
+  },
+  {
+   "intent": "voltar a publicação anterior do módulo",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "not",
+    "tool": "ssam_debug"
+   }
+  },
+  {
+   "intent": "o que a action GetQuotes retorna?",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "not",
+    "tool": "ssam_debug"
+   }
+  },
+  {
+   "intent": "o que a action GetQuotes retorna?",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "not",
+    "tool": "ssam_debug"
+   }
+  },
+  {
+   "intent": "criar uma ação que retorna os consumidores do módulo",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "not",
+    "tool": "ssam_debug"
+   }
+  },
+  {
+   "intent": "criar uma ação que retorna os consumidores do módulo",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "not",
+    "tool": "ssam_debug"
+   }
+  },
+  {
+   "intent": "chamar a action de deploy do módulo de integração dentro do fluxo de aprovação",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "not",
+    "tool": "ssam_debug"
+   }
+  },
+  {
+   "intent": "chamar a action de deploy do módulo de integração dentro do fluxo de aprovação",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "not",
+    "tool": "ssam_debug"
+   }
+  },
+  {
+   "intent": "voltar a action para a versão anterior",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "not",
+    "tool": "ssam_debug"
+   }
+  },
+  {
+   "intent": "voltar a action para a versão anterior",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "not",
+    "tool": "ssam_debug"
+   }
+  },
+  {
+   "intent": "criar uma variável local na action",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "none"
+   }
+  },
+  {
+   "intent": "criar uma variável local na action",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "none"
+   }
+  },
+  {
+   "intent": "adicionar um nó Assign no fluxo da action",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "none"
+   }
+  },
+  {
+   "intent": "adicionar um nó Assign no fluxo da action",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "own-2026-10-04",
+   "expect": {
+    "kind": "none"
+   }
+  },
+  {
+   "intent": "rodar 5 cenários da action CalcularPremio",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "native-entry-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "run"
+    }
+   }
+  },
+  {
+   "intent": "rodar 5 cenários da action CalcularPremio",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "native-entry-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "run"
+    }
+   }
+  },
+  {
+   "intent": "ver o caminho que a action ValidarPedido percorreu",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "native-entry-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "run"
+    }
+   }
+  },
+  {
+   "intent": "ver o caminho que a action ValidarPedido percorreu",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "native-entry-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "run"
+    }
+   }
+  },
+  {
+   "intent": "mostrar o percurso da action CalcularFrete em cada cenário",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "native-entry-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "run"
+    }
+   }
+  },
+  {
+   "intent": "mostrar o percurso da action CalcularFrete em cada cenário",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "native-entry-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "run"
+    }
+   }
+  },
+  {
+   "intent": "ver as variáveis da action CalcularFrete com estes inputs",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "native-entry-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "run"
+    }
+   }
+  },
+  {
+   "intent": "ver as variáveis da action CalcularFrete com estes inputs",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "native-entry-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "run"
+    }
+   }
+  },
+  {
+   "intent": "depurar a action CalcularPremio com estes inputs",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "native-entry-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "run"
+    }
+   }
+  },
+  {
+   "intent": "qual entrada pública chega na action CalcularFrete",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "native-entry-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "execution",
+     "value": "native-entry"
+    }
+   }
+  },
+  {
+   "intent": "qual entrada pública chega na action CalcularFrete",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "native-entry-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "execution",
+     "value": "native-entry"
+    }
+   }
+  },
+  {
+   "intent": "preparar a depuração da action CalcularFrete",
+   "lang": "pt",
+   "lane": "odc",
+   "set": "native-entry-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "prepare"
+    }
+   }
+  },
+  {
+   "intent": "preparar a depuração da action CalcularFrete",
+   "lang": "pt",
+   "lane": "o11",
+   "set": "native-entry-2026-10-04",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug_run",
+    "verb": {
+     "field": "op",
+     "value": "prepare"
+    }
+   }
+  }
+ ]
+}

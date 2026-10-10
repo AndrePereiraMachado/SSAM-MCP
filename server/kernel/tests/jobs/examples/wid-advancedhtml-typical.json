@@ -1,0 +1,12 @@
+{
+ "description": "HTML Element (IAdvancedHtml) tipico pela op html visual: section com aria-label, titulo h2 e paragrafo com expressoes ligadas ao aggregate; as tags viram HTML Elements nativos e os atributos extended properties.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetSummaryTasks", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "html", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent",
+   "html": "<section class=\"task-summary\" aria-label=\"Task summary\"><h2>{{ GetSummaryTasks.Count + \" tasks\" }}</h2><p>First: {{ GetSummaryTasks.List.Current.Task.Title }}</p></section>"}
+ ]
+}

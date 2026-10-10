@@ -1,0 +1,16 @@
+{
+ "description": "LightboxImage (OutSystemsUI, Interaction) tipico; a Image de exemplo passa a External com Url; eventos Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastLightboxObj", "as": "$vLastLightboxObj"},
+  {"op": "set", "target": "$vLastLightboxObj", "prop": "DataType", "value": "Object"},
+  {"op": "logic", "data": {"actions": [{"name": "LightboxImageDemoInitialized", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de Initialized", "inputs": [{"name": "LightboxObj", "type": "Object"}],"steps": [{"assign": {"LastLightboxObj": "LightboxObj"},"as": "KeepInitialized"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "LightboxImageDemo", "source": "IMobileBlock:LightboxImage", "as": "$b"},
+  {"op": "set", "target": "$b/Thumbnail/#IImage", "prop": "Type", "value": "External"},
+  {"op": "set", "target": "$b/Thumbnail/#IImage", "prop": "Url", "value": "\"https://www.example.com/photo.jpg\""},
+  {"op": "set", "target": "$b/Initialized", "prop": "Handler", "value": "IScreenAction:LightboxImageDemoInitialized"},
+  {"op": "set", "target": "$b/Initialized/LightboxObj", "prop": "Value", "value": "LightboxObj"}
+ ]
+}

@@ -1,0 +1,21 @@
+{
+ "description": "Alert do OSUI ligado a dados: AlertType muda por expressao (Warning ou Success) e a mensagem vem do Count do aggregate, dentro de um If.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [{"name": "Name", "type": "Text", "length": 100, "mandatory": true}, {"name": "Price", "type": "Currency"}, {"name": "ImageUrl", "type": "Text", "length": 500}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "StockAlert", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Stock\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$GetProducts"},
+  {"op": "create", "parent": "$GetProducts", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IIfWidget", "name": "HasData", "as": "$if"},
+  {"op": "set", "target": "$if", "prop": "Condition", "value": "GetProducts.IsDataFetched"},
+  {"op": "create", "parent": "$if/TrueBranch", "type": "IMobileBlockInstanceWidget", "name": "Alert1", "source": "IMobileBlock:Alert", "as": "$al"},
+  {"op": "set", "target": "$al/AlertType", "prop": "Value", "value": "If(GetProducts.List.Empty, Entities.Alert.Warning, Entities.Alert.Success)"},
+  {"op": "create", "parent": "$al/MessageText", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "If(GetProducts.List.Empty, \"No products in stock\", GetProducts.Count + \" products in stock\")"}
+ ]
+}

@@ -1,0 +1,10 @@
+{
+  "description": "probe da assinatura Headless_CS",
+  "base": "tests/fixtures/reactive-ui.oml",
+  "expectValid": true,
+  "ops": [
+    {"op":"reference","producer":"Headless_CS","elements":["IServerEntity:Game"],"as":"$cs"},
+    {"op":"find","type":"IReference","max":20},
+    {"op":"find","name":"Game","max":20}
+  ]
+}

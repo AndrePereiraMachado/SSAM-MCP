@@ -1,0 +1,111 @@
+{
+ "description": "Cobertura testada (fase 1, medir): so leitura. get de uma instancia existente de cada tipo concreto encontrado na fixture traditional-ui (endereco @chave).",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "get",
+   "target": "@gXaJuPMrTUiNsh44VXXM0A"
+  },
+  {
+   "op": "get",
+   "target": "@eWqpuGZyQEeAtHQyamdC1w"
+  },
+  {
+   "op": "get",
+   "target": "@4eekAI9S8kqH7yQcZ0nr5Q"
+  },
+  {
+   "op": "get",
+   "target": "@cuLAOM+CSEiZPeWDMwks5g"
+  },
+  {
+   "op": "get",
+   "target": "@mNHmvH+ZA0eX9VeIDlypYA.#OnClick"
+  },
+  {
+   "op": "get",
+   "target": "@BbMHRqCXQkq1gjmwLdiXNA"
+  },
+  {
+   "op": "get",
+   "target": "@2LV0YvOfsUaxGwHwRoJ0GA.#Preparation"
+  },
+  {
+   "op": "get",
+   "target": "@ar2A_uU37EmHg_64XWStKw"
+  },
+  {
+   "op": "get",
+   "target": "@9FO6WoHVQE+KQOzqQ_YWew"
+  },
+  {
+   "op": "get",
+   "target": "@JoYyDsv550eqmo6CQKHjkg"
+  },
+  {
+   "op": "get",
+   "target": "@au7r8rFYhkqY+mG4V9WxTw"
+  },
+  {
+   "op": "get",
+   "target": "@y+dETUbAJUW+iTEdU9cL_w"
+  },
+  {
+   "op": "get",
+   "target": "@owiqQp4KDkaiV11FT6aIpw"
+  },
+  {
+   "op": "get",
+   "target": "@MIaL9c4z6kq6hTYUctUtBQ"
+  },
+  {
+   "op": "get",
+   "target": "@mE09xVGnx0icE8XyF4TrYQ"
+  },
+  {
+   "op": "get",
+   "target": "@ie82VcTLXkq+efXg4MxHmg"
+  },
+  {
+   "op": "get",
+   "target": "@hNaJcHw1EkarGSzT0Ydjjg"
+  },
+  {
+   "op": "get",
+   "target": "@C0JZgq2w0kmcWDJs1kEz6g"
+  },
+  {
+   "op": "get",
+   "target": "@EMWy8Q8lukucqo2c43xGxA"
+  },
+  {
+   "op": "get",
+   "target": "@zFCcPAtBtUuRiV9a5MK2vA"
+  },
+  {
+   "op": "get",
+   "target": "@mNHmvH+ZA0eX9VeIDlypYA"
+  },
+  {
+   "op": "get",
+   "target": "@d3mwcvQxVkGpygWNsy5qcw"
+  },
+  {
+   "op": "get",
+   "target": "@LmTqfhT_WEW48v7hs6VxIg"
+  },
+  {
+   "op": "get",
+   "target": "@KCmwAKtsQE6nv8lF4E6ypA"
+  },
+  {
+   "op": "get",
+   "target": "@z66P7lcFS0u13Ie3eqcIPw"
+  },
+  {
+   "op": "get",
+   "target": "@gB1dD58jG0q+OLgeOns4uw"
+  }
+ ]
+}

@@ -1,0 +1,15 @@
+{
+ "description": "ButtonLoading (OutSystemsUI, Utilities) minimo: instancia como o Studio cria ao arrastar o bloco; o Button de exemplo ganha OnClick; inputs obrigatorios IsLoading com valores simples.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAction", "name": "ButtonLoadingDemoOnClick", "as": "$hButtonLoadingDemoOnClick"},
+  {"op": "create", "parent": "$hButtonLoadingDemoOnClick", "type": "IStartNode", "as": "$hButtonLoadingDemoOnClickS"},
+  {"op": "create", "parent": "$hButtonLoadingDemoOnClick", "type": "IEndNode", "as": "$hButtonLoadingDemoOnClickE"},
+  {"op": "link", "from": "$hButtonLoadingDemoOnClickS", "to": "$hButtonLoadingDemoOnClickE"},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ButtonLoadingDemo", "source": "IMobileBlock:ButtonLoading", "as": "$b"},
+  {"op": "set", "target": "$b/Button/#IButton/OnClick", "prop": "Destination", "value": "IScreenAction:ButtonLoadingDemoOnClick"},
+  {"op": "set", "target": "$b/IsLoading", "prop": "Value", "value": "False"}
+ ]
+}

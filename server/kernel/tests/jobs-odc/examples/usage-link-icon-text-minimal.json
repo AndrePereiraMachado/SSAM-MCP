@@ -1,0 +1,21 @@
+{
+ "description": "Link com icone e texto visivel: o texto padrao do Link sai e entram um Icon e uma Expression dentro dele; o clique navega para outra tela.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "LinkWithIcon", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "ILink", "name": "ProfileLink", "as": "$lnk"},
+  {"op": "delete", "target": "$lnk/#ITextWidget", "_why": "o Link nasce com o texto 'Link'; para ter icone + texto, o texto padrao sai e os filhos entram no Link"},
+  {"op": "create", "parent": "$lnk", "type": "IIcon", "name": "ProfileIcon", "as": "$ico"},
+  {"op": "set", "target": "$ico", "prop": "Icon", "value": "user"},
+  {"op": "set", "target": "$ico", "prop": "Weight", "value": "regular", "_why": "no ODC o nome do icone (Phosphor) so resolve junto com o Weight"},
+  {"op": "create", "parent": "$lnk", "type": "IExpression", "as": "$text"},
+  {"op": "set", "target": "$text", "prop": "Value", "value": "\" My profile\""},
+  {"op": "set", "target": "$lnk/OnClick", "prop": "Destination", "value": "IMobileScreen:UserProfile", "_why": "UserProfile e uma tela que o app ja tem"},
+
+  {"op": "dump", "target": "$lnk", "depth": 3}
+ ]
+}

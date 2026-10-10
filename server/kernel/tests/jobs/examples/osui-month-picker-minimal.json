@@ -1,0 +1,17 @@
+{
+ "description": "MonthPicker (OutSystemsUI, Interaction) minimo: instancia como o Studio cria ao arrastar o bloco; evento obrigatorio OnSelected ligado a uma screen action vazia; o Input de exemplo do placeholder MonthPicker ligado a uma variavel Text.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "PickedText", "as": "$vPickedText"},
+  {"op": "set", "target": "$vPickedText", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAction", "name": "MonthPickerDemoOnSelected", "as": "$hMonthPickerDemoOnSelected"},
+  {"op": "create", "parent": "$hMonthPickerDemoOnSelected", "type": "IStartNode", "as": "$hMonthPickerDemoOnSelectedS"},
+  {"op": "create", "parent": "$hMonthPickerDemoOnSelected", "type": "IEndNode", "as": "$hMonthPickerDemoOnSelectedE"},
+  {"op": "link", "from": "$hMonthPickerDemoOnSelectedS", "to": "$hMonthPickerDemoOnSelectedE"},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "MonthPickerDemo", "source": "IMobileBlock:MonthPicker", "as": "$b"},
+  {"op": "set", "target": "$b/MonthPicker/#IInput", "prop": "Variable", "value": "PickedText"},
+  {"op": "set", "target": "$b/OnSelected", "prop": "Handler", "value": "IScreenAction:MonthPickerDemoOnSelected"}
+ ]
+}

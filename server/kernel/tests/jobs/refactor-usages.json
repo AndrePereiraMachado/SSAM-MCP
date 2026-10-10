@@ -1,0 +1,47 @@
+{
+ "description": "Refatoracao: usages de entidade/atributo, rename de atributo usado em aggregate, expressoes e argumentos (propaga por chave), delete seguro",
+ "base": "job:screen-form-reactive",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "usages",
+   "target": "IServerEntity:Contact"
+  },
+  {
+   "op": "usages",
+   "target": "IServerEntity:Contact/Name"
+  },
+  {
+   "op": "rename",
+   "target": "IServerEntity:Contact/Name",
+   "name": "FullName"
+  },
+  {
+   "op": "usages",
+   "target": "IServerEntity:Contact/FullName",
+   "max": 5
+  },
+  {
+   "op": "rename",
+   "target": "IServerAction:Contact_Save",
+   "name": "Contact_Upsert"
+  },
+  {
+   "op": "get",
+   "target": "IScreenAction:Save/Contact_Upsert"
+  },
+  {
+   "op": "delete",
+   "target": "IMobileScreen:ContactDetail/#IMobileBlockInstanceWidget/MainContent/ContactForm/Phone_Input",
+   "_why": "primeiro o consumidor (widget), depois o atributo"
+  },
+  {
+   "op": "delete",
+   "target": "IServerEntity:Contact/Phone"
+  },
+  {
+   "op": "usages",
+   "target": "IServerEntity:Contact"
+  }
+ ]
+}

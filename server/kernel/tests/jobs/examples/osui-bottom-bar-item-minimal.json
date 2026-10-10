@@ -1,0 +1,9 @@
+{
+ "description": "BottomBarItem (OutSystemsUI, Navigation) minimo: instancia como o Studio cria ao arrastar o bloco.",
+ "base": "job:ex-base-mobile",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/Content", "type": "IMobileBlockInstanceWidget", "name": "BottomBarItemDemo", "source": "IMobileBlock:BottomBarItem", "as": "$b"}
+ ]
+}

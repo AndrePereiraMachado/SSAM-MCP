@@ -1,0 +1,23 @@
+{
+ "description": "CardBackground do OSUI: cor de fundo, altura minima, imagem externa no BackgroundImage e texto do destaque ligado a uma variavel.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "PromoBanner", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Promo\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Headline", "as": "$vHeadline"},
+  {"op": "set", "target": "$vHeadline", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$vHeadline", "prop": "DefaultValue", "value": "\"Summer sale\""},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "CardBackground1", "source": "IMobileBlock:CardBackground", "empty": true, "as": "$cb"},
+  {"op": "set", "target": "$cb/Color", "prop": "Value", "value": "Entities.Color.Primary"},
+  {"op": "set", "target": "$cb/MinHeight", "prop": "Value", "value": "200"},
+  {"op": "create", "parent": "$cb/BackgroundImage", "type": "IImage", "name": "BannerImage", "as": "$img"},
+  {"op": "set", "target": "$img", "prop": "Type", "value": "External"},
+  {"op": "set", "target": "$img", "prop": "Url", "value": "\"https://picsum.photos/800/200\""},
+  {"op": "create", "parent": "$cb/Content", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "Headline"}
+ ]
+}

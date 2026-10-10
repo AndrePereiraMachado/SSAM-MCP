@@ -1,0 +1,59 @@
+{
+ "description": "Cobertura testada (fase 2): move into (spec CovSEntityMv) de OutSystems.Model.Data.IEntityIndex (odc) em entity. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "entities": [
+     {
+      "name": "CovSEntity",
+      "attributes": [
+       {
+        "name": "Title",
+        "type": "Text",
+        "length": 50
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$CovSEntity",
+   "type": "EntityIndex",
+   "name": "CovAEntityIndex",
+   "args": {
+    "unique": false,
+    "attributes": [
+     "$CovSEntity.Title"
+    ]
+   },
+   "as": "$a"
+  },
+  {
+   "op": "spec",
+   "data": {
+    "entities": [
+     {
+      "name": "CovSEntityMv",
+      "attributes": [
+       {
+        "name": "Title",
+        "type": "Text",
+        "length": 50
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "into": "$CovSEntityMv"
+  }
+ ]
+}

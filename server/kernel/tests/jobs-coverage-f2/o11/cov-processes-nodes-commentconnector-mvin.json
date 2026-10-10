@@ -1,0 +1,63 @@
+{
+ "description": "Cobertura testada (fase 2): move into (copy of ICommentNode) de OutSystems.Model.Processes.Nodes.ICommentConnector (o11) em processComment. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IProcess",
+   "name": "CovSProcess",
+   "as": "$fp"
+  },
+  {
+   "op": "set",
+   "target": "$fp",
+   "prop": "Detail",
+   "value": "\"Cov\""
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "ICommentNode",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "OutSystems.Model.Processes.Nodes.ICommentConnector",
+   "args": {
+    "target": "$fe"
+   },
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "ICommentNode",
+   "as": "$p_mv"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "into": "$p_mv"
+  }
+ ]
+}

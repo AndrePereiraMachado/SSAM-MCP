@@ -1,0 +1,9 @@
+{
+ "description": "PROVA VIVA (dono, O11): import OpenAPI de duas operacoes pelo o11_deliver (a bridge roda o importador do plugin REST numa copia destacada do modulo, sem rede). Nao roda na suite: o importador O11 precisa do workspace do Studio.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {"op": "rest", "data": {"client": {"name": "OrdersApi"},
+    "openapi": {"path": "tests/fixtures/openapi/orders-3.0.json", "operations": ["getOrder", "POST /orders"]}}}
+ ]
+}

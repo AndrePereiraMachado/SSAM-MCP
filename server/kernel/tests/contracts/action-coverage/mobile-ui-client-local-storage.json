@@ -1,0 +1,97 @@
+{
+  "fixture": "mobile-ui",
+  "features": [
+    "client-CRUD",
+    "client-aggregate"
+  ],
+  "contract": {
+    "data": {
+      "clientEntities": [
+        {
+          "name": "CoverageDraft",
+          "attributes": [
+            {
+              "name": "Text",
+              "type": "Text"
+            }
+          ]
+        }
+      ]
+    },
+    "logic": {
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "client",
+          "public": true,
+          "inputs": [
+            {
+              "name": "Id",
+              "type": "Long Integer"
+            },
+            {
+              "name": "Text",
+              "type": "Text"
+            }
+          ],
+          "vars": [
+            {
+              "name": "Value",
+              "type": "CoverageDraft"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "Count",
+              "type": "Integer"
+            }
+          ],
+          "steps": [
+            {
+              "assign": {
+                "Value.Id": "LongIntegerToIdentifier(Id)",
+                "Value.Text": "Text"
+              }
+            },
+            {
+              "create": "CoverageDraft",
+              "record": "Value",
+              "as": "CreateDraft"
+            },
+            {
+              "update": "CoverageDraft",
+              "record": "Value",
+              "as": "UpdateDraft"
+            },
+            {
+              "save": "CoverageDraft",
+              "record": "Value",
+              "as": "SaveDraft"
+            },
+            {
+              "get": "CoverageDraft",
+              "as": "ReadDrafts",
+              "where": "CoverageDraft.Id = Value.Id and CoverageDraft.Text = Value.Text",
+              "max": "10"
+            },
+            {
+              "delete": "CoverageDraft",
+              "id": "Value.Id",
+              "as": "DeleteDraft"
+            },
+            {
+              "assign": {
+                "Count": "ReadDrafts.List.Length"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IClientAction:Coverage/ReadDrafts",
+    "prop": "MaxRecords",
+    "value": "1"
+  }
+}

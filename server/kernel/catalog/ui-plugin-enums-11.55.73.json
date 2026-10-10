@@ -1,0 +1,48 @@
+{
+  "ServiceStudio.Plugin.NRWidgets.Enumerations.Align": [
+    "Default",
+    "Left",
+    "Center",
+    "Right"
+  ],
+  "ServiceStudio.Plugin.NRWidgets.Enumerations.DropdownMode": [
+    "Text",
+    "Custom"
+  ],
+  "ServiceStudio.Plugin.NRWidgets.Enumerations.IconSize": [
+    "FontSize",
+    "Twotimes",
+    "Threetimes",
+    "Fourtimes"
+  ],
+  "ServiceStudio.Plugin.NRWidgets.Enumerations.Type": [
+    "Static",
+    "External",
+    "Binary"
+  ],
+  "ServiceStudio.Plugin.NRWidgets.Enumerations.InputType": [
+    "Text",
+    "Password",
+    "Number",
+    "Time",
+    "Date",
+    "Datetime",
+    "Phone",
+    "Email",
+    "Search"
+  ],
+  "ServiceStudio.Plugin.NRWidgets.Enumerations.Mode": [
+    "Default",
+    "Custom"
+  ],
+  "ServiceStudio.Plugin.NRWidgets.Enumerations.Accept": [
+    "Image",
+    "Video",
+    "Any"
+  ],
+  "ServiceStudio.Plugin.Widgets.Enumerations.LabelsPosition": [
+    "Top",
+    "Left",
+    "Right"
+  ]
+}

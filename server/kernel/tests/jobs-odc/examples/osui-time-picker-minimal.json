@@ -1,0 +1,17 @@
+{
+ "description": "TimePicker do OSUI: o Input de exemplo ligado a uma variavel Time e o evento obrigatorio OnSelected guardando a hora.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "TimePickerDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "PickedTime", "as": "$vPickedTime"},
+  {"op": "set", "target": "$vPickedTime", "prop": "DataType", "value": "Time"},
+  {"op": "logic", "data": {"actions": [{"name": "TimePicked", "kind": "screen", "owner": "IMobileScreen:TimePickerDemo", "inputs": [{"name": "SelectedTime", "type": "Time"}], "steps": [{"assign": {"PickedTime": "SelectedTime"}, "as": "Keep"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "TimePicker1", "source": "IMobileBlock:TimePicker", "as": "$tp"},
+  {"op": "set", "target": "$tp/Timepicker/#IInput", "prop": "Variable", "value": "PickedTime"},
+  {"op": "set", "target": "$tp/OnSelected", "prop": "Handler", "value": "IMobileScreen:TimePickerDemo/TimePicked"},
+  {"op": "set", "target": "$tp/OnSelected/SelectedTime", "prop": "Value", "value": "SelectedTime"}
+ ]
+}

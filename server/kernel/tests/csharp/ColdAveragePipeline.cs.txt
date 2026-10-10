@@ -1,0 +1,104 @@
+using Anvil.Authoring;
+
+namespace ColdAveragePipeline;
+
+[Entity]
+public sealed record AverageLedgerEntry
+{
+    public Id<AverageLedgerEntry> Id { get; init; }
+    public int TenantId { get; init; }
+    public bool Posted { get; init; }
+    public string? Desk { get; init; }
+    public decimal Amount { get; init; }
+    public decimal? Fee { get; init; }
+}
+
+public sealed record AmountAverageRow(
+    string? Desk,
+    int EntryCount,
+    decimal AverageAmount,
+    decimal DifferenceFromTarget,
+    decimal ProjectedAmount);
+
+public sealed record FeeAverageRow(
+    string? Desk,
+    int EntryCount,
+    int PricedEntryCount,
+    decimal? AverageFee,
+    decimal? DifferenceFromTarget,
+    decimal? ProjectedFee,
+    decimal BudgetedFee);
+
+public static class AverageLedgerReports
+{
+    [ServerAction]
+    public static List<AmountAverageRow> ByAmountAverage(
+        IDataSession data,
+        int tenantId,
+        decimal minimumAverage,
+        decimal targetAmount,
+        decimal projectionMultiplier,
+        int skip,
+        int take)
+    {
+        return data.Query<AverageLedgerEntry>()
+            .Where(entry => entry.TenantId == tenantId && entry.Posted)
+            .GroupBy(entry => entry.Desk)
+            .Select(group => new
+            {
+                Desk = group.Key,
+                EntryCount = group.Count(),
+                AverageAmount = group.Average(entry => entry.Amount)
+            })
+            .Where(group => group.AverageAmount >= minimumAverage)
+            .OrderByDescending(group => group.AverageAmount)
+            .ThenBy(group => group.Desk, StringComparer.Ordinal)
+            .Skip(skip)
+            .Take(take)
+            .Select(group => new AmountAverageRow(
+                group.Desk,
+                group.EntryCount,
+                group.AverageAmount,
+                group.AverageAmount - targetAmount,
+                group.AverageAmount * projectionMultiplier))
+            .ToList();
+    }
+
+    [ServerAction]
+    public static List<FeeAverageRow> ByFeeAverage(
+        IDataSession data,
+        int tenantId,
+        decimal minimumAverage,
+        bool includeUnpriced,
+        decimal targetFee,
+        decimal projectionMultiplier,
+        int skip,
+        int take)
+    {
+        return data.Query<AverageLedgerEntry>()
+            .Where(entry => entry.TenantId == tenantId && entry.Posted)
+            .GroupBy(entry => entry.Desk)
+            .Select(group => new
+            {
+                Desk = group.Key,
+                EntryCount = group.Count(),
+                PricedEntryCount = group.Count(entry => entry.Fee.HasValue),
+                AverageFee = group.Average(entry => entry.Fee)
+            })
+            .Where(group => group.AverageFee >= minimumAverage ||
+                (includeUnpriced && group.AverageFee == null))
+            .OrderByDescending(group => group.AverageFee)
+            .ThenBy(group => group.Desk, StringComparer.Ordinal)
+            .Skip(skip)
+            .Take(take)
+            .Select(group => new FeeAverageRow(
+                group.Desk,
+                group.EntryCount,
+                group.PricedEntryCount,
+                group.AverageFee,
+                group.AverageFee - targetFee,
+                group.AverageFee * projectionMultiplier,
+                (group.AverageFee ?? 0m) * projectionMultiplier))
+            .ToList();
+    }
+}

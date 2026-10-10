@@ -1,0 +1,160 @@
+{
+ "description": "Tela Reactive de lista com navegacao (assume a entidade Contact e a tela ContactDetail do job screen-form-reactive): aggregate ordenado, List com ListItem, expressoes por item, OnClick do item -> ContactDetail(ContactId)",
+ "base": "job:screen-form-reactive",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "Contacts",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/Title",
+   "type": "IExpression",
+   "as": "$title"
+  },
+  {
+   "op": "set",
+   "target": "$title",
+   "prop": "Value",
+   "value": "\"Contacts\""
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAggregate",
+   "name": "GetContacts",
+   "as": "$agg"
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Contact"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "ISort",
+   "as": "$sort"
+  },
+  {
+   "op": "set",
+   "target": "$sort",
+   "prop": "Attribute",
+   "value": "Contact.Name"
+  },
+  {
+   "op": "set",
+   "target": "$sort",
+   "prop": "SortDirection",
+   "value": "Ascending"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IList",
+   "name": "ContactList",
+   "as": "$list"
+  },
+  {
+   "op": "set",
+   "target": "$list",
+   "prop": "Source",
+   "value": "GetContacts.List"
+  },
+  {
+   "op": "create",
+   "parent": "$list",
+   "type": "IListItem",
+   "name": "ContactItem",
+   "as": "$item"
+  },
+  {
+   "op": "delete",
+   "target": "$item/RightActions/#IListItemAction",
+   "_why": "o ListItem nasce com uma swipe action de exemplo sem destino (erro RequiredPropertyValue)"
+  },
+  {
+   "op": "create",
+   "parent": "$item/Content",
+   "type": "IExpression",
+   "as": "$exName"
+  },
+  {
+   "op": "set",
+   "target": "$exName",
+   "prop": "Value",
+   "value": "GetContacts.List.Current.Contact.Name"
+  },
+  {
+   "op": "create",
+   "parent": "$item/Content",
+   "type": "IExpression",
+   "as": "$exEmail"
+  },
+  {
+   "op": "set",
+   "target": "$exEmail",
+   "prop": "Value",
+   "value": "GetContacts.List.Current.Contact.Email"
+  },
+  {
+   "op": "set",
+   "target": "$item/OnClick",
+   "prop": "Destination",
+   "value": "IMobileScreen:ContactDetail"
+  },
+  {
+   "op": "set",
+   "target": "$item/OnClick/ContactId",
+   "prop": "Value",
+   "value": "GetContacts.List.Current.Contact.Id"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/Actions",
+   "type": "IButton",
+   "name": "NewButton",
+   "as": "$new"
+  },
+  {
+   "op": "set",
+   "target": "$new/#ITextWidget",
+   "prop": "Text",
+   "value": "New contact"
+  },
+  {
+   "op": "set",
+   "target": "$new/OnClick",
+   "prop": "Destination",
+   "value": "IMobileScreen:ContactDetail"
+  },
+  {
+   "op": "set",
+   "target": "$new/OnClick/ContactId",
+   "prop": "Value",
+   "value": "NullIdentifier()"
+  },
+  {
+   "op": "get",
+   "target": "$item/OnClick"
+  },
+  {
+   "op": "dump",
+   "target": "$scr",
+   "depth": 7
+  }
+ ]
+}

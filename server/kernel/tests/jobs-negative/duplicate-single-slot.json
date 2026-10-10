@@ -1,0 +1,17 @@
+{
+ "description": "A RECUSA de `duplicate` no mesmo pai de um tipo que o pai guarda uma vez so (faixa O11): a Preparation de um bloco. A colagem nativa falhava a meio ('Object should be null: Preparation'); o kernel recusa antes e manda passar `parent` com outro bloco sem Preparation (o caminho valido esta em tests/jobs/duplicate-into-parent-traditional.json).",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "expectError": [
+  "duplicate: IWebBlock 'DupSlot' keeps only one IPreparation",
+  "pass `parent` with another IWebBlock that has none yet"
+ ],
+ "ops": [
+  {"op": "create", "parent": "IWebFlow:MainFlow", "type": "IWebBlock", "name": "DupSlot", "as": "$block"},
+  {"op": "create", "parent": "$block", "type": "IPreparation", "as": "$prep"},
+  {"op": "create", "parent": "$prep", "type": "IStartNode", "as": "$start"},
+  {"op": "create", "parent": "$prep", "type": "IEndNode", "as": "$end"},
+  {"op": "link", "from": "$start", "to": "$end"},
+  {"op": "duplicate", "target": "$prep", "as": "$copy"}
+ ]
+}

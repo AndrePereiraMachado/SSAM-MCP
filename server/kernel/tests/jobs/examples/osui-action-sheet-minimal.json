@@ -1,0 +1,10 @@
+{
+ "description": "ActionSheet (OutSystemsUI, Interaction) minimo: instancia como o Studio cria ao arrastar o bloco; inputs obrigatorios IsOpen com valores simples.",
+ "base": "job:ex-base-mobile",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/Content", "type": "IMobileBlockInstanceWidget", "name": "ActionSheetDemo", "source": "IMobileBlock:ActionSheet", "as": "$b"},
+  {"op": "set", "target": "$b/IsOpen", "prop": "Value", "value": "False"}
+ ]
+}

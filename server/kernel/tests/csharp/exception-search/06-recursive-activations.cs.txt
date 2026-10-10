@@ -1,0 +1,61 @@
+namespace ExceptionSearchOracle;
+
+internal static class RecursiveActivations
+{
+    internal static OracleResult Run()
+    {
+        var result = new OracleResult("recursive-same-region-selects-frame-and-cleanup-order");
+        var original = new InvalidOperationException("original");
+        var caughtDepth = -1;
+        var cleanupOrder = new List<int>();
+        var finalLocals = new Dictionary<int, int>();
+
+        void Recurse(int depth)
+        {
+            var frameLocal = depth * 10;
+            result.Events.Add($"enter:{depth}:local={frameLocal}");
+
+            bool Filter(Exception exception)
+            {
+                result.Events.Add($"filter:{depth}:{Identity.Of(exception, original)}:local={frameLocal}");
+                frameLocal++;
+                return depth == 2;
+            }
+
+            try
+            {
+                if (depth == 0)
+                {
+                    result.Events.Add("throw:0:original");
+                    throw original;
+                }
+
+                Recurse(depth - 1);
+                result.Events.Add($"after-child:{depth}:local={frameLocal}");
+            }
+            catch (Exception exception) when (Filter(exception))
+            {
+                caughtDepth = depth;
+                result.CaughtException = Identity.Of(exception, original);
+                result.Events.Add($"catch:{depth}:{result.CaughtException}:local={frameLocal}");
+                frameLocal += 100;
+            }
+            finally
+            {
+                cleanupOrder.Add(depth);
+                finalLocals[depth] = frameLocal;
+                result.Events.Add($"finally:{depth}:local={frameLocal}");
+            }
+
+            result.Events.Add($"return:{depth}:local={frameLocal}");
+        }
+
+        Recurse(3);
+        result.ReturnValue = "completed";
+        result.State["caughtDepth"] = caughtDepth.ToString();
+        result.State["cleanupOrder"] = string.Join(",", cleanupOrder);
+        foreach (var depth in finalLocals.Keys.OrderBy(value => value))
+            result.State[$"frameLocal{depth}"] = finalLocals[depth].ToString();
+        return result;
+    }
+}

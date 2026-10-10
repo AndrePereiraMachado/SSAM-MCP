@@ -1,0 +1,11 @@
+{
+ "description": "Tabs do OSUI: a instancia com as tres abas de exemplo (TabsHeaderItem e TabsContentItem) que ja nascem validas.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "TabsDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Tabs1", "source": "IMobileBlock:Tabs", "as": "$tabs"}
+ ]
+}

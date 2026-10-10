@@ -1,0 +1,23 @@
+{
+ "description": "DropdownSearch do OSUI: OptionsList com uma lista literal de opcoes e o evento obrigatorio OnChanged ligado a uma screen action que guarda o valor escolhido.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "PickCategory", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "ChosenValue", "as": "$chosen"},
+  {"op": "set", "target": "$chosen", "prop": "DataType", "value": "Text"},
+  {"op": "logic", "_why": "o handler declara so o input que usa; o argumento liga-o ao parametro do evento", "data": {"actions": [
+   {"name": "CategoryChosen", "kind": "screen", "owner": "IMobileScreen:PickCategory",
+    "inputs": [{"name": "Selection", "type": "DropdownOption List"}],
+    "steps": [{"assign": {"ChosenValue": "If(Selection.Empty, \"\", Selection[0].Value)"}, "as": "KeepChoice"}]}]}},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "CategorySearch", "source": "IMobileBlock:DropdownSearch", "as": "$dd"},
+  {"op": "set", "target": "$dd/OptionsList", "prop": "Value", "value": "[{Value: \"B\", Label: \"Books\"}, {Value: \"G\", Label: \"Games\"}]", "_why": "input obrigatorio do tipo DropdownOption List: uma lista literal serve"},
+  {"op": "set", "target": "$dd/OnChanged", "prop": "Handler", "value": "IMobileScreen:PickCategory/CategoryChosen", "_why": "OnChanged e obrigatorio: sem handler o Verify da erro EventHandlerRequiredAction"},
+  {"op": "set", "target": "$dd/OnChanged/Selection", "prop": "Value", "value": "SelectedOptionList"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$show"},
+  {"op": "set", "target": "$show", "prop": "Value", "value": "\"Chosen: \" + ChosenValue"}
+ ]
+}

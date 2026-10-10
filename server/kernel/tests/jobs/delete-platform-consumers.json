@@ -1,0 +1,43 @@
+{
+ "description": "APAGAR, sem force, elementos cujos consumidores a plataforma mantem sozinha (cobertura testada, fase 2): o IArgument com que o no SQL passa o parametro que ele mesmo declara (sai junto com o ISQLInputParameter), a propriedade OnBeforeRequestCallback do cliente REST (o plugin limpa-a quando o callback sai) e o IDecisionOutcomeNode de cada conector de uma Decision de processo (a plataforma regenera o fluxo interno da decisao). Antes os tres recusavam o delete. A Decision fica com dois conectores (um End para cada) e perde um, e o End desse ramo sai a seguir: o fluxo da decisao volta a ser Start -> Outcome e o Verify nao muda. Apagar o UNICO conector deixa, como no Studio, a decisao sem saida (erro do Verify, nao recusa do kernel).",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"structures": [{"name": "DelPlatRow", "attributes": [{"name": "Title", "type": "Text"}]}]}},
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "DelPlatQuery", "as": "$act"},
+  {"op": "set", "target": "$act", "prop": "Public", "value": true},
+  {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$s"},
+  {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$e"},
+  {"op": "create", "parent": "$act", "type": "ISQLNode", "name": "DelPlatSql", "as": "$sql"},
+  {"op": "set", "target": "$sql", "prop": "Statement", "value": "SELECT 1"},
+  {"op": "create", "parent": "$sql", "type": "ISQLOutput", "name": "List", "args": {"entityOrStructure": "$DelPlatRow"}},
+  {"op": "link", "from": "$s", "to": "$sql"},
+  {"op": "link", "from": "$sql", "to": "$e"},
+  {"op": "create", "parent": "$sql", "type": "ISQLInputParameter", "name": "Unused", "as": "$param"},
+  {"op": "usages", "target": "$param", "_why": "count 1, real 0: o IArgument do proprio no SQL, derived true"},
+  {"op": "delete", "target": "$param", "_why": "sem force: o argumento sai com o parametro"},
+
+  {"op": "create", "parent": "@espace", "type": "IRestClient", "name": "DelPlatApi", "as": "$api"},
+  {"op": "set", "target": "$api", "prop": "BaseURL", "value": "https://example.com"},
+  {"op": "create", "parent": "$api", "type": "IRestAction", "name": "DelPlatGet", "as": "$get"},
+  {"op": "set", "target": "$get", "prop": "URLPath", "value": "/items"},
+  {"op": "create", "parent": "$api", "type": "IRestCallbackActionFlow", "name": "DelPlatCallback", "as": "$callback"},
+  {"op": "usages", "target": "$callback", "_why": "count 1, real 0: CustomProperty OnBeforeRequestCallback do proprio cliente, derived true"},
+  {"op": "delete", "target": "$callback"},
+
+  {"op": "create", "parent": "@espace", "type": "IProcess", "name": "DelPlatProcess", "as": "$proc"},
+  {"op": "set", "target": "$proc", "prop": "Detail", "value": "\"Proof\""},
+  {"op": "create", "parent": "$proc", "type": "IStartNode", "as": "$ps"},
+  {"op": "create", "parent": "$proc", "type": "IEndNode", "as": "$pe"},
+  {"op": "create", "parent": "$proc", "type": "IEndNode", "as": "$pe2"},
+  {"op": "create", "parent": "$proc", "type": "IDecisionNode", "name": "DelPlatDecision", "as": "$dec"},
+  {"op": "link", "from": "$ps", "to": "$dec"},
+  {"op": "create", "parent": "$dec", "type": "IDecisionConnector", "name": "Approved", "args": {"target": "$pe"}, "as": "$yes"},
+  {"op": "create", "parent": "$dec", "type": "IDecisionConnector", "name": "Rejected", "args": {"target": "$pe2"}, "as": "$no"},
+  {"op": "usages", "target": "$no", "_why": "count 1, real 0: o IDecisionOutcomeNode gerado para o conector, derived true"},
+  {"op": "delete", "target": "$no", "_why": "sem force: a plataforma refaz o fluxo da decisao so com Approved"},
+  {"op": "delete", "target": "$pe2", "_why": "o End do ramo que saiu ficou sem conector de entrada"},
+  {"op": "dump", "target": "$dec", "depth": 2}
+ ]
+}

@@ -1,0 +1,16 @@
+{
+ "description": "ODC: op rest-expose sobre a fixture do InsuranceApp: servico WfSpecZoneService com GET /zone/{Postcode} mapeado para a server action WfSpecZone_Get; espelha tests/jobs/rest-spec-expose.json.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"structures": [{"name": "WfSpecZoneInfo", "public": true, "attributes": [{"name": "Zone", "type": "Text"}, {"name": "IsHighRisk", "type": "Boolean"}]}]}},
+  {"op": "logic", "data": {"actions": [{"name": "WfSpecZone_Get", "inputs": [{"name": "Postcode", "type": "Text"}], "outputs": [{"name": "Info", "type": "WfSpecZoneInfo"}],
+    "steps": [{"assign": {"Info.Zone": "Postcode", "Info.IsHighRisk": "Length(Postcode) > 5"}}]}]}},
+  {"op": "rest-expose", "data": {
+    "service": {"name": "WfSpecZoneService"},
+    "methods": [{"name": "WfSpecGetZone", "http": "GET", "path": "/zone/{Postcode}", "inputs": [{"name": "Postcode", "type": "Text", "in": "url"}],
+                 "outputs": [{"name": "Info", "type": "WfSpecZoneInfo"}], "action": "IServerAction:WfSpecZone_Get"}]}},
+  {"op": "get", "target": "IRestServiceAction:WfSpecGetZone"}
+ ]
+}

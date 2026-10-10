@@ -1,0 +1,39 @@
+<component name="ValueCard">
+  <script type="module">
+    export let summary = { title: 'Valores nativos', enabled: true, amount: 1.5 };
+    export let rows = [
+      { id: '9223372036854775807', title: 'A', score: 1, tags: ['inicial'] },
+      { id: '9007199254740993', title: 'B', score: 2, tags: ['outro'] }
+    ];
+    export let edits = 0;
+    export function onInitialize() { summary.title = 'Pronto'; }
+    export function change() {
+      summary.amount += 0.5;
+      rows = rows.map(row => ({ ...row, score: row.score + 1, tags: [...row.tags, 'editado'] }));
+      edits += 1;
+    }
+    export function clear() { rows = []; }
+  </script>
+  <style>
+    article { padding:24px; background:white; border:1px solid #dce3ed; border-radius:16px; }
+    h2 { color:#192b40; font-size:22px; }
+    .rows { white-space:pre-wrap; overflow-wrap:anywhere; }
+    button { padding:12px 18px; background:#315ddc; color:white; border:0; border-radius:8px; margin-right:12px; }
+  </style>
+  <article>
+    <h2>{{summary.title}}</h2>
+    <p class="amount">Valor: {{summary.amount}}</p>
+    <p class="edits">Edições: {{edits}}</p>
+    <p class="rows">{{rows.map(row => row.id + ': ' + row.title + ' / ' + row.score + ' / ' + row.tags.join(',')).join('\n')}}</p>
+    <button id="Change" onclick="change()">Alterar</button>
+    <button id="Clear" onclick="clear()">Limpar</button>
+  </article>
+</component>
+<component name="ValueGallery" kind="screen" roles="Anonymous,Registered">
+  <style>
+    main { max-width:1080px; margin:40px auto; padding:24px; }
+    .cards { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }
+    @media(max-width:650px) { .cards { grid-template-columns:1fr; } }
+  </style>
+  <main><h1>Records e arrays em JavaScript</h1><div class="cards"><ValueCard id="First"></ValueCard><ValueCard id="Second"></ValueCard></div></main>
+</component>

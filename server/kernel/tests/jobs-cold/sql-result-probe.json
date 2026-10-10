@@ -1,0 +1,28 @@
+{
+  "description": "Probe local para confirmar acesso a campos de resultado de ISQLNode.",
+  "base": "job:virtual-game-store-data",
+  "expectValid": true,
+  "ops": [
+    { "op": "create", "parent": "@espace", "type": "IServerAction", "name": "SQLResultProbe", "as": "$a" },
+    { "op": "create", "parent": "$a", "type": "IInputParameter", "name": "GameId", "as": "$a/GameId" },
+    { "op": "set", "target": "$a/GameId", "prop": "DataType", "value": "Game Identifier" },
+    { "op": "create", "parent": "$a", "type": "IOutputParameter", "name": "Title", "as": "$a/Title" },
+    { "op": "set", "target": "$a/Title", "prop": "DataType", "value": "Text" },
+    { "op": "create", "parent": "$a", "type": "IStartNode", "name": "Start", "as": "$start" },
+    { "op": "create", "parent": "$a", "type": "ISQLNode", "name": "GetGameSql", "as": "$sql" },
+    { "op": "set", "target": "$sql", "prop": "Statement", "value": "SELECT {Game}.* FROM {Game} WHERE {Game}.[Id] = @GameId" },
+    { "op": "create", "parent": "$sql", "type": "ISQLInputParameter", "name": "GameId", "as": "$sql/GameId" },
+    { "op": "set", "target": "$sql/GameId", "prop": "DataType", "value": "Game Identifier" },
+    { "op": "set", "target": "$sql/arg:GameId", "prop": "Value", "value": "GameId" },
+    { "op": "create", "parent": "$sql", "type": "ISQLOutput", "name": "List", "as": "$sql/List", "args": { "entityOrStructure": "Game" } },
+    { "op": "create", "parent": "$a", "type": "IAssignNode", "name": "SetTitle", "as": "$assign" },
+    { "op": "create", "parent": "$assign", "type": "IAssignment", "as": "$assign/Title" },
+    { "op": "set", "target": "$assign/Title", "prop": "Variable", "value": "Title" },
+    { "op": "set", "target": "$assign/Title", "prop": "Value", "value": "GetGameSql.List.Current.Game.Title" },
+    { "op": "create", "parent": "$a", "type": "IEndNode", "name": "End", "as": "$end" },
+    { "op": "link", "from": "$start", "to": "$sql" },
+    { "op": "link", "from": "$sql", "to": "$assign" },
+    { "op": "link", "from": "$assign", "to": "$end" },
+    { "op": "layout", "target": "$a" }
+  ]
+}

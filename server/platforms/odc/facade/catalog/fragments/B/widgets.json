@@ -1,0 +1,2177 @@
+{
+ "schemaVersion": "ssam-discovery-fragment/1",
+ "contract": "ssam-catalog-contribution/1",
+ "front": "B",
+ "title": "Native widgets of the Reactive/Mobile context: content and layout widgets, form inputs, lists and tables, the native dropdown",
+ "reviewedAt": "2026-09-23",
+ "synonyms": {},
+ "capabilities": [
+  {
+   "id": "ui.widget",
+   "category": "ui",
+   "title": "Content and layout widgets: container, text widget, expression widget, HTML element, icon, If widget, button, link, image widget",
+   "keywords": [
+    "widget",
+    "container",
+    "text widget",
+    "expression widget",
+    "html element",
+    "icon",
+    "if widget",
+    "conditional content",
+    "button",
+    "link",
+    "image widget",
+    "caption",
+    "style class"
+   ],
+   "summary": "Native widgets created under an existing parent (a layout placeholder, a container, a placeholder content): IContainer (Style = CSS classes), ITextWidget (literal text; a button caption), IExpression (an OutSystems expression, never JavaScript), IAdvancedHtml (an HTML element by Tag), IIcon (Icon, Weight on ODC), IIfWidget (Condition; True/False branches born with it), IButton/ILink (their OnClick binding is an event), IImage (an image of the module by name, or an URL). Each is addressed by path (`IMobileScreen:<Screen>/<path>/<Widget>`, `#Type[n]`, `**Type[n]`).",
+   "route": {
+    "kind": "job",
+    "operation": "create {parent: <widget path>, type: IContainer|IExpression|IAdvancedHtml|IIcon|IIfWidget|IButton|ILink|IImage, name?, as}; set Style/Value/Tag/Icon/Condition/Text; move/duplicate/delete by path; or html-visual"
+   },
+   "contract": [
+    "verbs.verbs.create",
+    "verbs.verbs.set",
+    "verbs.verbs.move",
+    "verbs.verbs.duplicate",
+    "verbs.verbs.delete",
+    "verbs.verbs.usages",
+    "verbs.references",
+    "html-visual.tags"
+   ],
+   "depends": [
+    {
+     "id": "ui.screen",
+     "unless": "the parent screen or block already exists (address it by path)"
+    }
+   ],
+   "alternatives": [
+    {
+     "id": "ui.html-visual",
+     "when": "several widgets are easier to write as an HTML fragment (div, text, {{ expr }}, i, button, a, img, div[if])"
+    }
+   ],
+   "guidance": "Property names are read from the native contract of the installed Studio (--expand <id>:native) and from html-visual.tags, not curated here. A widget is born with default text (a button 'Button', a link 'Link'): set the caption on its ITextWidget child. Move only reorders inside the same parent; to reparent, create at the new parent and delete the old widget. Before deleting a widget, check usages (a Label's TargetWidget points at inputs).",
+   "example": {
+    "ops": [
+     "create",
+     "set"
+    ],
+    "max": 20
+   },
+   "elements": [
+    {
+     "role": "container",
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IContainer",
+       "jobType": "IContainer",
+       "address": "<parent path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IContainer",
+       "jobType": "IContainer",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "text",
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.UI.Mobile.Widgets.ITextWidget",
+       "jobType": "ITextWidget",
+       "address": "<widget path>/#ITextWidget"
+      },
+      "o11": {
+       "native": "OutSystems.Model.UI.Mobile.Widgets.ITextWidget",
+       "jobType": "ITextWidget",
+       "address": "<widget path>/#ITextWidget"
+      }
+     }
+    },
+    {
+     "role": "expression",
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IExpression",
+       "jobType": "IExpression",
+       "address": "<parent path>/<Name> | #IExpression[n]"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IExpression",
+       "jobType": "IExpression",
+       "address": "<parent path>/<Name> | #IExpression[n]"
+      }
+     }
+    },
+    {
+     "role": "html element",
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IAdvancedHtml",
+       "jobType": "IAdvancedHtml",
+       "address": "<parent path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IAdvancedHtml",
+       "jobType": "IAdvancedHtml",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "icon",
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IIcon",
+       "jobType": "IIcon",
+       "address": "<parent path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IIcon",
+       "jobType": "IIcon",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "if",
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.UI.Mobile.Widgets.IIfWidget",
+       "jobType": "IIfWidget",
+       "address": "<parent path>/<Name>"
+      },
+      "o11": {
+       "native": "OutSystems.Model.UI.Mobile.Widgets.IIfWidget",
+       "jobType": "IIfWidget",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "button",
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IButton",
+       "jobType": "IButton",
+       "address": "<parent path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IButton",
+       "jobType": "IButton",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "link",
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.ILink",
+       "jobType": "ILink",
+       "address": "<parent path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.ILink",
+       "jobType": "ILink",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "image",
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IImage",
+       "jobType": "IImage",
+       "address": "<parent path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IImage",
+       "jobType": "IImage",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    }
+   ],
+   "operations": {
+    "create": {
+     "route": "create {parent: <widget path>, type, name?, as}",
+     "preconditions": [
+      "the parent is an existing container, placeholder or placeholder content of a screen or block",
+      "an icon needs Weight on ODC (html-visual rejects <i> without weight)"
+     ],
+     "roles": {
+      "container": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-basic"
+        ]
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "refactor-move"
+        ]
+       }
+      },
+      "text": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "block-events"
+        ],
+        "scope": "literal text created by html-visual and inside blocks"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "html-visual-alert",
+         "html-visual-list"
+        ],
+        "scope": "literal text created by html-visual (Text, StyleClasses)"
+       }
+      },
+      "expression": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-basic"
+        ]
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-form-reactive"
+        ]
+       }
+      },
+      "html element": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "html-visual-alert"
+        ],
+        "scope": "created by html-visual from section/p/h*/span... (Tag = the element)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ],
+        "scope": "raw create + Tag"
+       }
+      },
+      "icon": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "html-visual-alert"
+        ],
+        "scope": "<i icon weight> through html-visual"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ]
+       }
+      },
+      "if": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-widget-gallery"
+        ],
+        "scope": "cat-b-widget-gallery: create (op 57)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "table-if-reactive"
+        ],
+        "scope": "Condition set; True/False branches are born with it"
+       }
+      },
+      "button": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-basic"
+        ]
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-form-reactive"
+        ]
+       }
+      },
+      "link": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-widget-gallery"
+        ],
+        "scope": "cat-b-widget-gallery: create (op 48)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive",
+         "html-dashboard-reactive"
+        ],
+        "scope": "a link in a container, its text child set and OnClick Destination bound to a screen action (gallery-native-reactive ops 75-77); a navigation link from an html-visual <a>, then Style (html-dashboard-reactive)",
+        "note": "consume-reference-screens (suite job without a stamp) also creates a link that navigates to a screen of a referenced module with its input argument"
+       }
+      },
+      "image": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-widget-gallery"
+        ],
+        "scope": "cat-b-widget-gallery: create (op 52)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ],
+        "scope": "Type and Url"
+       }
+      }
+     }
+    },
+    "set": {
+     "route": "set {target: <widget path>, prop, value}",
+     "preconditions": [
+      "Style is an expression with the CSS class names (quoted)",
+      "Value of an IExpression is an OutSystems expression"
+     ],
+     "roles": {
+      "container": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "block-events"
+        ],
+        "scope": "Style"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ],
+        "scope": "Style"
+       }
+      },
+      "text": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-basic",
+         "block-events"
+        ],
+        "scope": "Text: a button caption inside IContent (screen-basic); Text and StyleClasses (block-events)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-form-reactive"
+        ],
+        "scope": "Text (a caption beside the widget on O11)"
+       }
+      },
+      "expression": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-basic",
+         "screen-block-edit"
+        ],
+        "scope": "Value (screen-basic); Style (screen-block-edit)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-form-reactive"
+        ],
+        "scope": "Value"
+       }
+      },
+      "html element": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "html-visual-alert"
+        ],
+        "scope": "Tag"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ],
+        "scope": "Tag"
+       }
+      },
+      "icon": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "html-visual-alert"
+        ],
+        "scope": "Icon, Style"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ],
+        "scope": "Icon"
+       }
+      },
+      "if": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-widget-gallery"
+        ],
+        "scope": "cat-b-widget-gallery: set Condition (op 58)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "table-if-reactive"
+        ],
+        "scope": "Condition"
+       }
+      },
+      "button": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "html-visual-alert"
+        ],
+        "scope": "Style; the OnClick binding is ui.event"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "html-visual-alert",
+         "html-dashboard-reactive"
+        ],
+        "scope": "Style (html-visual-alert); Style and Enabled (html-dashboard-reactive)"
+       }
+      },
+      "image": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-widget-gallery"
+        ],
+        "scope": "cat-b-widget-gallery: set Type, Url (ops 53-54)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ],
+        "scope": "Type, Url"
+       }
+      },
+      "link": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "html-dashboard-reactive"
+        ],
+        "scope": "Style"
+       },
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-link-style"
+        ],
+        "scope": "cat-b-link-style: set Style, Enabled (ops 14-15)"
+       }
+      }
+     }
+    },
+    "read": {
+     "route": "get/dump by path",
+     "preconditions": [],
+     "roles": {
+      "container": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "refactor-move"
+        ],
+        "scope": "dump of the container subtree"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "refactor-move"
+        ],
+        "scope": "dump after move"
+       }
+      },
+      "text": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "rename-interface-propagation",
+         "rename-logic-propagation"
+        ],
+        "scope": "get of a caption after the renames: the text is not rewritten"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "rename-interface-propagation",
+         "rename-logic-propagation"
+        ],
+        "scope": "get of a caption after the renames: the text is not rewritten"
+       }
+      },
+      "button": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-block-edit"
+        ],
+        "scope": "get of an inherited button"
+       }
+      },
+      "expression": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "rename-interface-propagation",
+         "rename-data-propagation"
+        ],
+        "scope": "get of expressions after renames: the references are rewritten by key"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "rename-interface-propagation",
+         "rename-logic-propagation"
+        ],
+        "scope": "get of expressions after renames"
+       }
+      },
+      "image": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-widget-gallery"
+        ],
+        "scope": "cat-b-widget-gallery: get (op 72)"
+       }
+      },
+      "if": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-widget-gallery"
+        ],
+        "scope": "cat-b-widget-gallery: get (op 73)"
+       }
+      },
+      "link": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-link-style"
+        ],
+        "scope": "cat-b-link-style: get (op 16)"
+       },
+       "o11": {
+        "status": "undetermined",
+        "note": "no stamped O11 job reads an ILink with get/dump (the O11 links are created and styled by gallery-native-reactive and html-dashboard-reactive, never read back)"
+       }
+      }
+     }
+    },
+    "move": {
+     "route": "move {target, first|last|before|after} (same parent only)",
+     "preconditions": [
+      "move reorders: `before`/`after` must name a sibling (refused otherwise); `into` changes the parent (the Studio's own move: new key, consumers rebound)"
+     ],
+     "roles": {
+      "container": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "refactor-move"
+        ],
+        "negative": [
+         "move-foreign-sibling"
+        ],
+        "scope": "first/last/before/after inside the same parent"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "refactor-move"
+        ],
+        "negative": [
+         "move-foreign-sibling"
+        ],
+        "scope": "idem"
+       }
+      },
+      "expression": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-block-edit"
+        ],
+        "scope": "reorder inside an inherited list item"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-screen-replace-delete"
+        ],
+        "scope": "cat-b-screen-replace-delete: an expression moved before its sibling inside the same container (op 26)"
+       }
+      }
+     }
+    },
+    "duplicate": {
+     "route": "duplicate {target, as, parent?}",
+     "preconditions": [],
+     "roles": {
+      "container": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "refactor-duplicate"
+        ],
+        "scope": "a container with its children"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "refactor-duplicate"
+        ],
+        "scope": "idem"
+       }
+      }
+     }
+    },
+    "delete": {
+     "route": "usages then delete {target}",
+     "preconditions": [
+      "refused while another widget points at it (a Label TargetWidget)"
+     ],
+     "roles": {
+      "expression": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "block-reuse"
+        ],
+        "scope": "an example expression inside a placeholder content"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "delete-data-consumers"
+        ],
+        "scope": "an expression that read an attribute about to be deleted"
+       }
+      },
+      "button": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "delete-screen"
+        ],
+        "scope": "a button deleted with its navigation"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-screen-replace-delete"
+        ],
+        "scope": "cat-b-screen-replace-delete: a button deleted with its navigation (op 35, no force, brokenConsumers 0)"
+       }
+      },
+      "image": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-spec-cards-reactive",
+         "screen-spec-store-reactive"
+        ],
+        "scope": "the example image of a card removed by the `screen` archetype expansion (the op expands to create/set/delete)"
+       }
+      }
+     }
+    }
+   },
+   "platforms": {
+    "odc": {
+     "proofs": [
+      "screen-basic",
+      "screen-list",
+      "html-visual-alert",
+      "html-visual-list",
+      "block-events",
+      "block-reuse",
+      "refactor-move",
+      "refactor-duplicate",
+      "screen-block-edit",
+      "delete-screen",
+      "rename-interface-propagation",
+      "rename-logic-propagation",
+      "rename-data-propagation",
+      "cat-b-widget-gallery",
+      "cat-b-link-style"
+     ],
+     "negative": [
+      "move-foreign-sibling"
+     ],
+     "context": {
+      "kinds": [
+       "MobileScreen",
+       "MobileBlock"
+      ]
+     },
+     "limits": [
+      {
+       "text": "A button's, link's or label's caption lives inside IContent on ODC: address it with `$btn/#ITextWidget` (the `#Type` search looks in IContent too).",
+       "origin": "kernel/docs/NAO-DA.md 'Legenda de botao/link/label' (CONFIRMED)"
+      },
+      {
+       "text": "A widget is born with default text and an icon needs Weight on ODC.",
+       "origin": "kernel/docs/NAO-DA.md 'Widget nasce com texto padrao' (CONFIRMED, C# route; no job)"
+      },
+      {
+       "text": "IIfWidget, ILink and the image widget have no ODC suite job: they are accepted by the verbs and by html-visual but not measured on this lane.",
+       "origin": "kernel/tests/jobs-odc (scan 2026-09-23)"
+      }
+     ],
+     "differences": [
+      "captions inside IContent"
+     ]
+    },
+    "o11": {
+     "proofs": [
+      "gallery-native-reactive",
+      "widgets-reactive",
+      "table-if-reactive",
+      "refactor-move",
+      "refactor-duplicate",
+      "screen-form-reactive",
+      "consume-reference-screens",
+      "delete-data-consumers",
+      "html-visual-alert",
+      "html-visual-list",
+      "rename-interface-propagation",
+      "rename-logic-propagation",
+      "html-dashboard-reactive",
+      "screen-spec-cards-reactive",
+      "screen-spec-store-reactive",
+      "cat-b-screen-replace-delete"
+     ],
+     "negative": [
+      "move-foreign-sibling"
+     ],
+     "context": {
+      "kinds": [
+       "MobileScreen",
+       "MobileBlock"
+      ]
+     },
+     "limits": [
+      {
+       "text": "On O11 a button's caption sits beside the button (not inside IContent); `#ITextWidget` finds it in both lanes.",
+       "origin": "kernel/docs/NAO-DA.md 'Legenda de botao/link/label'"
+      },
+      {
+       "text": "The Reactive widget contract tests (tests/contracts/screen-coverage, 51 reactive + 52 mobile cases: native Verify, reload, 3-way merge, rejected mutation) run outside the job suites; their evidence is not stamped with kernel/Studio identity and is historical here.",
+       "origin": "kernel/tests/Anvil.Tests/ScreenCoverageTests.cs; kernel/.local/screen-coverage/*/evidence.json (2026-09-22)"
+      }
+     ],
+     "differences": [
+      "captions beside the widget"
+     ]
+    }
+   }
+  },
+  {
+   "id": "ui.input",
+   "category": "ui",
+   "title": "Value widgets bound to a variable: textbox, checkbox, switch, textarea, radio, upload, button group",
+   "keywords": [
+    "textbox",
+    "text box",
+    "text input",
+    "input widget",
+    "input de texto",
+    "campo de texto",
+    "caixa de texto",
+    "checkbox",
+    "switch",
+    "toggle",
+    "textarea",
+    "text area",
+    "radio",
+    "radio group",
+    "upload",
+    "file upload",
+    "button group",
+    "label widget",
+    "bind variable",
+    "mandatory field"
+   ],
+   "summary": "Value widgets bind a variable or an attribute path through `Variable` (IInput, ICheckbox, ISwitch, ITextArea, IRadioGroup, IButtonGroup; IUpload: FileContent/FileName); IForm groups them for validation; IRadioButton/IButtonGroupItem carry their `Value`; ILabel points at one of them with `TargetWidget`. Mandatory comes from the attribute or `set Mandatory True`. What `Variable` names is declared elsewhere and referenced by name.",
+   "route": {
+    "kind": "job",
+    "operation": "create {parent, type: IForm|IInput|ICheckbox|ISwitch|ITextArea|IRadioGroup|IRadioButton|IUpload|IButtonGroup|IButtonGroupItem|ILabel}; set Variable/Prompt/Mandatory/InputType/Value/TargetWidget"
+   },
+   "contract": [
+    "verbs.verbs.create",
+    "verbs.verbs.set",
+    "verbs.verbs.delete",
+    "verbs.verbs.usages",
+    "verbs.references",
+    "html-visual.tags"
+   ],
+   "depends": [
+    {
+     "id": "ui.screen",
+     "unless": "the parent screen or block already exists (address it by path)"
+    }
+   ],
+   "alternatives": [
+    {
+     "id": "ui.html-visual",
+     "when": "input/checkbox/textarea/label written as an HTML fragment (bind names an existing variable)"
+    }
+   ],
+   "guidance": "Bind to what exists: `Variable` names a local variable (`Name`) or an aggregate attribute (`GetX.List.Current.<Entity>.<Attr>`). A widget referenced by a Label's TargetWidget cannot be deleted before the label (usages lists it).",
+   "example": {
+    "ops": [
+     "create",
+     "set"
+    ],
+    "max": 20
+   },
+   "elements": [
+    {
+     "role": "form",
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IForm",
+       "jobType": "IForm",
+       "address": "<parent path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IForm",
+       "jobType": "IForm",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "input",
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IInput",
+       "jobType": "IInput",
+       "address": "<parent path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IInput",
+       "jobType": "IInput",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "checkbox",
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.ICheckbox",
+       "jobType": "ICheckbox",
+       "address": "<parent path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.ICheckbox",
+       "jobType": "ICheckbox",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "switch",
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.ISwitch",
+       "jobType": "ISwitch",
+       "address": "<parent path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.ISwitch",
+       "jobType": "ISwitch",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "text area",
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.ITextArea",
+       "jobType": "ITextArea",
+       "address": "<parent path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.ITextArea",
+       "jobType": "ITextArea",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "radio group",
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IRadioGroup",
+       "jobType": "IRadioGroup",
+       "address": "<parent path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IRadioGroup",
+       "jobType": "IRadioGroup",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "radio button",
+     "child": true,
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IRadioButton",
+       "jobType": "IRadioButton",
+       "address": "<radio group path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IRadioButton",
+       "jobType": "IRadioButton",
+       "address": "<radio group path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "upload",
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IUpload",
+       "jobType": "IUpload",
+       "address": "<parent path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IUpload",
+       "jobType": "IUpload",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "button group",
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IButtonGroup",
+       "jobType": "IButtonGroup",
+       "address": "<parent path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IButtonGroup",
+       "jobType": "IButtonGroup",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "button group item",
+     "child": true,
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IButtonGroupItem",
+       "jobType": "IButtonGroupItem",
+       "address": "<button group path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IButtonGroupItem",
+       "jobType": "IButtonGroupItem",
+       "address": "<button group path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "label",
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.ILabel",
+       "jobType": "ILabel",
+       "address": "<parent path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.ILabel",
+       "jobType": "ILabel",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    }
+   ],
+   "operations": {
+    "create": {
+     "route": "create {parent, type, name?, as}",
+     "preconditions": [
+      "radio buttons are created under their radio group, button group items under their button group"
+     ],
+     "roles": {
+      "form": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-form"
+        ]
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-form-reactive"
+        ]
+       }
+      },
+      "input": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-form"
+        ]
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-form-reactive"
+        ]
+       }
+      },
+      "checkbox": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-form"
+        ]
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ]
+       }
+      },
+      "switch": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-widget-gallery"
+        ],
+        "scope": "cat-b-widget-gallery: create (op 36)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ]
+       }
+      },
+      "text area": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-widget-gallery"
+        ],
+        "scope": "cat-b-widget-gallery: create (op 33)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ]
+       }
+      },
+      "radio group": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-choice-table"
+        ],
+        "scope": "cat-b-choice-table: create (op 14)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ]
+       }
+      },
+      "radio button": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-choice-table"
+        ],
+        "scope": "cat-b-choice-table: create (ops 20, 24)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ]
+       }
+      },
+      "upload": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-choice-table"
+        ],
+        "scope": "cat-b-choice-table: create (op 43)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ]
+       }
+      },
+      "button group": {
+       "odc": {
+        "status": "not-applicable",
+        "note": "the C# route drops the items created in a Content on save and no ODC job creates IButtonGroup (declared; see the unavailable entry button-group-native)",
+        "alternative": "IRadioGroup/IRadioButton"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ],
+        "scope": "IButtonGroup with two IButtonGroupItem (Variable, Value)"
+       }
+      },
+      "button group item": {
+       "odc": {
+        "status": "not-applicable",
+        "note": "see button group",
+        "alternative": "IRadioButton"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ]
+       }
+      },
+      "label": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "html-visual-alert"
+        ],
+        "scope": "<label for> through html-visual"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ]
+       }
+      }
+     }
+    },
+    "set": {
+     "route": "set {target, prop, value}",
+     "preconditions": [
+      "Variable names an existing variable or aggregate attribute",
+      "IDropdown has EmptyValue, not Prompt (ui.dropdown)"
+     ],
+     "roles": {
+      "input": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-form",
+         "html-visual-alert"
+        ],
+        "scope": "Variable (screen-form); InputType, Prompt, Variable through html-visual (html-visual-alert)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-form-reactive"
+        ],
+        "scope": "Variable, Prompt, Mandatory"
+       }
+      },
+      "checkbox": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-form"
+        ],
+        "scope": "Variable"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ],
+        "scope": "Variable"
+       }
+      },
+      "switch": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-widget-gallery"
+        ],
+        "scope": "cat-b-widget-gallery: set Variable (qualified ledger)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ],
+        "scope": "Variable (a Boolean attribute added to the entity)"
+       }
+      },
+      "text area": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-widget-gallery"
+        ],
+        "scope": "cat-b-widget-gallery: set TextLines, Variable (op 35)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ],
+        "scope": "Variable, TextLines, Prompt"
+       }
+      },
+      "radio group": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-choice-table"
+        ],
+        "scope": "cat-b-choice-table: set Variable (op 15)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ],
+        "scope": "Variable"
+       }
+      },
+      "radio button": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-choice-table"
+        ],
+        "scope": "cat-b-choice-table: set Value (qualified ledger)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ],
+        "scope": "Value"
+       }
+      },
+      "upload": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-choice-table"
+        ],
+        "scope": "cat-b-choice-table: set FileContent, FileName (ops 44-45)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ],
+        "scope": "FileContent, FileName"
+       }
+      },
+      "button group": {
+       "odc": {
+        "status": "not-applicable",
+        "note": "see create",
+        "alternative": "IRadioGroup"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ],
+        "scope": "Variable"
+       }
+      },
+      "button group item": {
+       "odc": {
+        "status": "not-applicable",
+        "note": "see create",
+        "alternative": "IRadioButton"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ],
+        "scope": "Value"
+       }
+      },
+      "label": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "html-visual-alert"
+        ],
+        "scope": "TargetWidget"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ],
+        "scope": "TargetWidget"
+       }
+      }
+     }
+    },
+    "read": {
+     "route": "get/dump by path",
+     "preconditions": [],
+     "roles": {
+      "input": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-form"
+        ],
+        "scope": "get of an input bound to the record"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-form-reactive",
+         "rename-logic-propagation"
+        ],
+        "scope": "get of an input bound to the record"
+       }
+      },
+      "switch": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "refactor-contact-reactive"
+        ],
+        "scope": "get after binding Variable to a new Boolean attribute"
+       },
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-widget-gallery"
+        ],
+        "scope": "cat-b-widget-gallery: get (op 75)"
+       }
+      },
+      "text area": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-widget-gallery"
+        ],
+        "scope": "cat-b-widget-gallery: get (op 76)"
+       }
+      },
+      "radio group": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-choice-table"
+        ],
+        "scope": "cat-b-choice-table: dump/get (ops 16, 48)"
+       }
+      },
+      "radio button": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-choice-table"
+        ],
+        "scope": "cat-b-choice-table: get (op 49)"
+       }
+      },
+      "upload": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-choice-table"
+        ],
+        "scope": "cat-b-choice-table: get (op 52)"
+       }
+      }
+     }
+    },
+    "usages": {
+     "route": "usages {target}",
+     "preconditions": [],
+     "roles": {
+      "input": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-widget-gallery"
+        ],
+        "scope": "cat-b-widget-gallery: usages (op 77), consumers 1"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "delete-interface-consumers"
+        ],
+        "scope": "the Label TargetWidget that points at the input"
+       }
+      }
+     }
+    },
+    "delete": {
+     "route": "usages then delete {target}",
+     "preconditions": [
+      "an input referenced by a label's TargetWidget is refused until the label is deleted"
+     ],
+     "roles": {
+      "input": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-widget-gallery"
+        ],
+        "scope": "cat-b-widget-gallery: delete (op 79), no force, brokenConsumers 0"
+       },
+       "o11": {
+        "status": "conditional",
+        "proofs": [
+         "delete-data-consumers",
+         "refactor-usages"
+        ],
+        "negative": [
+         "delete-widget-in-use"
+        ],
+        "scope": "an input bound to an attribute about to be deleted; refused while a Label targets it"
+       }
+      },
+      "label": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-widget-gallery"
+        ],
+        "scope": "cat-b-widget-gallery: delete (op 78), no force, brokenConsumers 0"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "delete-interface-consumers"
+        ],
+        "scope": "the label deleted first, then its target input"
+       }
+      },
+      "radio button": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-choice-table"
+        ],
+        "scope": "cat-b-choice-table: delete (ops 17-19), no force, brokenConsumers 0"
+       }
+      }
+     }
+    }
+   },
+   "platforms": {
+    "odc": {
+     "proofs": [
+      "screen-form",
+      "delete-screen",
+      "screen-basic",
+      "client-storage",
+      "html-visual-alert",
+      "cat-b-widget-gallery",
+      "cat-b-choice-table"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileScreen",
+       "ServerEntity"
+      ],
+      "signatures": [
+       "ServerEntity"
+      ]
+     },
+     "limits": [
+      {
+       "text": "Switch, text area, radio group/button and upload have no ODC suite job; button group items are dropped by the C# route (button-group-native).",
+       "origin": "kernel/tests/jobs-odc (scan 2026-09-23); platforms/odc/docs/ONDE-FORAM-AS-8-HORAS.md:57,64"
+      }
+     ],
+     "differences": []
+    },
+    "o11": {
+     "proofs": [
+      "screen-form-reactive",
+      "gallery-native-reactive",
+      "widgets-reactive",
+      "refactor-contact-reactive",
+      "delete-interface-consumers",
+      "delete-data-consumers",
+      "rename-logic-propagation",
+      "refactor-usages"
+     ],
+     "negative": [
+      "delete-widget-in-use"
+     ],
+     "context": {
+      "kinds": [
+       "MobileScreen",
+       "ServerEntity"
+      ],
+      "signatures": [
+       "ServerEntity"
+      ]
+     },
+     "limits": [
+      {
+       "text": "Deleting an input refers back to its consumers: a Label's TargetWidget blocks the delete until the label goes.",
+       "origin": "jobs-negative/delete-widget-in-use; job:delete-interface-consumers"
+      }
+     ],
+     "differences": []
+    }
+   },
+   "recommends": [
+    {
+     "id": "logic.screen-action",
+     "when": "the screen variables Variable binds and the action that saves them"
+    }
+   ]
+  },
+  {
+   "id": "ui.list",
+   "supersedes": [
+    "ui.list"
+   ],
+   "category": "ui",
+   "title": "Lists, list items and TableRecords with item navigation",
+   "keywords": [
+    "list",
+    "list item",
+    "records list",
+    "row click",
+    "navigate to detail",
+    "sorted",
+    "table records",
+    "tablerecords",
+    "header cell",
+    "row cell",
+    "swipe action"
+   ],
+   "summary": "IScreenAggregate with ISort, IList with Source `GetX.List`, IListItem with expressions in its content, `set $item/OnClick Destination IMobileScreen:Detail` plus one argument Value per detail parameter; ITableRecords with Source and one IHeaderCell + IRowCell pair per column.",
+   "route": {
+    "kind": "job",
+    "operation": "screen-list.json pattern: create IList + set Source; create IListItem; delete the example IListItemAction; or ITableRecords + IHeaderCell/IRowCell; or the fragment {\"op\":\"html\",\"parent\":\"<widget path>\",\"html\":\"<div list=\\\"GetOrders.List\\\" as=\\\"Order\\\">{{Order.Order.Number}}<div list=\\\"<list of the row>\\\" as=\\\"Item\\\">{{Item.Name}}</div></div>\"} (lists nest in the fragment; as names the row)"
+   },
+   "contract": [
+    "verbs.verbs.create",
+    "verbs.verbs.set",
+    "verbs.verbs.delete"
+   ],
+   "depends": [
+    {
+     "id": "ui.screen",
+     "unless": "the screen already exists (place the list under IMobileScreen:Name/...)"
+    }
+   ],
+   "alternatives": [
+    {
+     "id": "ui.html-visual",
+     "when": "the list body is easier as `<div list as>` HTML"
+    }
+   ],
+   "guidance": null,
+   "example": {
+    "ops": [
+     "create",
+     "set",
+     "delete"
+    ],
+    "max": 24
+   },
+   "elements": [
+    {
+     "role": "list",
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IList",
+       "jobType": "IList",
+       "address": "<parent path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IList",
+       "jobType": "IList",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "list item",
+     "child": true,
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IListItem",
+       "jobType": "IListItem",
+       "address": "<list path>/content/<Item>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IListItem",
+       "jobType": "IListItem",
+       "address": "<list path>/<Item>"
+      }
+     }
+    },
+    {
+     "role": "list item action",
+     "child": true,
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IListItemAction",
+       "jobType": "IListItemAction",
+       "address": "<item path>/RightActions/#IListItemAction"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IListItemAction",
+       "jobType": "IListItemAction",
+       "address": "<item path>/RightActions/#IListItemAction"
+      }
+     }
+    },
+    {
+     "role": "table",
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.ITableRecords",
+       "jobType": "ITableRecords",
+       "address": "<parent path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.ITableRecords",
+       "jobType": "ITableRecords",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "header cell",
+     "child": true,
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IHeaderCell",
+       "jobType": "IHeaderCell",
+       "address": "<table path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IHeaderCell",
+       "jobType": "IHeaderCell",
+       "address": "<table path>/<Name>"
+      }
+     }
+    },
+    {
+     "role": "row cell",
+     "child": true,
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IRowCell",
+       "jobType": "IRowCell",
+       "address": "<table path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IRowCell",
+       "jobType": "IRowCell",
+       "address": "<table path>/<Name>"
+      }
+     }
+    }
+   ],
+   "operations": {
+    "create": {
+     "route": "create {parent, type: IList|IListItem|ITableRecords|IHeaderCell|IRowCell}",
+     "preconditions": [
+      "a ListItem is born with an example swipe action without destination: delete `$item/RightActions/#IListItemAction`"
+     ],
+     "roles": {
+      "list": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-list"
+        ]
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-list-reactive"
+        ]
+       }
+      },
+      "list item": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-list"
+        ]
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-list-reactive"
+        ]
+       }
+      },
+      "table": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-choice-table"
+        ],
+        "scope": "cat-b-choice-table: create (op 32)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "table-if-reactive"
+        ]
+       }
+      },
+      "header cell": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-choice-table"
+        ],
+        "scope": "cat-b-choice-table: create (op 35)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "table-if-reactive"
+        ]
+       }
+      },
+      "row cell": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-choice-table"
+        ],
+        "scope": "cat-b-choice-table: create (op 38)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "table-if-reactive"
+        ]
+       }
+      }
+     }
+    },
+    "set": {
+     "route": "set {target: <list|table>, prop: Source, value: 'GetX.List'} ; Style/AnimateItems",
+     "preconditions": [
+      "the Source list must be in scope of the screen (a data action or aggregate of the same screen)"
+     ],
+     "roles": {
+      "list": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-list",
+         "screen-block-edit"
+        ],
+        "scope": "Source (screen-list); Style and AnimateItems of an inherited list (screen-block-edit)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-list-reactive"
+        ],
+        "scope": "Source",
+        "note": "jobs-negative/dataaction-list-scope and structure-list-scope exercise out-of-scope list sources but declare no expectError, so they are not refusal proofs"
+       }
+      },
+      "table": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-choice-table"
+        ],
+        "scope": "cat-b-choice-table: set Source (op 33)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "table-if-reactive"
+        ],
+        "scope": "Source"
+       }
+      }
+     }
+    },
+    "read": {
+     "route": "get/dump by path",
+     "preconditions": [],
+     "roles": {
+      "list": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-block-edit"
+        ],
+        "scope": "get of an inherited list before and after Style/AnimateItems"
+       }
+      },
+      "table": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-choice-table"
+        ],
+        "scope": "cat-b-choice-table: dump/get (ops 34, 50)"
+       }
+      },
+      "header cell": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-choice-table"
+        ],
+        "scope": "cat-b-choice-table: get (op 51)"
+       }
+      }
+     }
+    },
+    "delete": {
+     "route": "delete {target}",
+     "preconditions": [],
+     "roles": {
+      "list item action": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-list"
+        ],
+        "scope": "the example swipe action born with the item"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-list-reactive",
+         "gallery-native-reactive"
+        ],
+        "scope": "idem"
+       }
+      }
+     }
+    }
+   },
+   "platforms": {
+    "odc": {
+     "proofs": [
+      "screen-list",
+      "data-action",
+      "block-events-types",
+      "client-storage",
+      "html-visual-list",
+      "screen-block-edit",
+      "cat-b-choice-table"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileScreen"
+      ]
+     },
+     "limits": [
+      {
+       "text": "A ListItem is born with an example swipe action without destination: delete `$item/RightActions/#IListItemAction`. On ODC the children of a List live inside an IContent (paths show IList:X/IContent:content/...).",
+       "origin": "job:screen-list; job:data-action usages note; kernel/docs/NAO-DA.md 'Filhos de uma IList' (line 806)"
+      },
+      {
+       "text": "ITableRecords (table with columns) has no ODC job; it is accepted by the verbs, measured on O11 only.",
+       "origin": "index: no ODC job creates ITableRecords"
+      }
+     ],
+     "differences": [
+      "list children under IContent"
+     ]
+    },
+    "o11": {
+     "proofs": [
+      "screen-list-reactive",
+      "data-action-reactive",
+      "table-if-reactive",
+      "screen-search-refresh-reactive",
+      "local-storage-mobile",
+      "gallery-native-reactive"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileScreen"
+      ]
+     },
+     "limits": [
+      {
+       "text": "The Source of a list must be a list in scope of the screen (a data action or aggregate of the same screen); jobs-negative/dataaction-list-scope and structure-list-scope exercise the out-of-scope case without a declared expectError (not counted as refusal proofs).",
+       "origin": "kernel/tests/jobs-negative/dataaction-list-scope.json, structure-list-scope.json"
+      }
+     ],
+     "differences": [
+      "list children directly under the list (no IContent)"
+     ]
+    }
+   }
+  },
+  {
+   "id": "ui.dropdown",
+   "supersedes": [
+    "ui.dropdown"
+   ],
+   "category": "ui",
+   "title": "Native dropdown (IDropdown) bound to a list",
+   "keywords": [
+    "dropdown",
+    "select",
+    "combo",
+    "options",
+    "values",
+    "labels",
+    "choose"
+   ],
+   "summary": "Native IDropdown bound to an option list (List, Values, Labels) and to a variable or record field (Variable); EmptyValue (not Prompt) is the text of the empty option. The visual `html` op maps `<select>` to it. Its property names for the installed Studio are in the native contract (--expand ui.dropdown:native).",
+   "route": {
+    "kind": "job",
+    "operation": "create IDropdown under a container; set List/Values/Labels/Variable/EmptyValue with raw verbs; or the fragment {\"op\":\"html\",\"parent\":\"<widget path>\",\"html\":\"<select bind=\\\"Var\\\" options=\\\"GetItems.List\\\" value=\\\"GetItems.List.Current.Item.Id\\\" label=\\\"GetItems.List.Current.Item.Label\\\"/>\"} (never <option> elements)"
+   },
+   "contract": [
+    "verbs.verbs.create",
+    "verbs.verbs.set",
+    "html-visual.tags"
+   ],
+   "depends": [
+    {
+     "id": "ui.screen",
+     "unless": "the screen already exists (place the widget under IMobileScreen:Name/...)"
+    }
+   ],
+   "alternatives": [],
+   "guidance": "When the user must type to search, the answer on ODC is the OutSystemsUI DropdownSearch block (ui.dropdown-search), whose contract is the block signature in the module; the native dropdown has no search behaviour of its own.",
+   "example": {
+    "ops": [
+     "create",
+     "set"
+    ],
+    "max": 12
+   },
+   "elements": [
+    {
+     "role": "dropdown",
+     "platforms": {
+      "odc": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IDropdown",
+       "jobType": "IDropdown",
+       "address": "<parent path>/<Name>"
+      },
+      "o11": {
+       "native": "ServiceStudio.Plugin.NRWidgets.IDropdown",
+       "jobType": "IDropdown",
+       "address": "<parent path>/<Name>"
+      }
+     }
+    }
+   ],
+   "operations": {
+    "create": {
+     "route": "create {parent, type: IDropdown, name?, as}",
+     "preconditions": [],
+     "roles": {
+      "dropdown": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-widget-gallery"
+        ],
+        "scope": "cat-b-widget-gallery: create (op 38)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ]
+       }
+      }
+     }
+    },
+    "set": {
+     "route": "set {target, prop: List|Values|Labels|Variable|EmptyValue, value}",
+     "preconditions": [
+      "the empty option text is EmptyValue: `set Prompt` is refused and the refusal lists the writable expression properties"
+     ],
+     "roles": {
+      "dropdown": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-widget-gallery"
+        ],
+        "scope": "cat-b-widget-gallery: set List, Values, Labels, Variable (ops 39-41)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "gallery-native-reactive"
+        ],
+        "scope": "List, Values, Labels, Variable, EmptyValue",
+        "note": "set Prompt is exercised by jobs-negative/dropdown-prompt, which declares no expectError (not a refusal proof)"
+       }
+      }
+     }
+    },
+    "read": {
+     "route": "get by path",
+     "preconditions": [],
+     "roles": {
+      "dropdown": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-widget-gallery"
+        ],
+        "scope": "cat-b-widget-gallery: get (op 70)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "widgets-reactive"
+        ],
+        "scope": "get after setting the bindings"
+       }
+      }
+     }
+    }
+   },
+   "platforms": {
+    "odc": {
+     "proofs": [
+      "cat-b-widget-gallery"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileScreen"
+      ]
+     },
+     "limits": [
+      {
+       "text": "No ODC job creates an IDropdown: the kernel accepts it (verbs + Model API) and it is proven on O11 (gallery-native-reactive.json, widgets-reactive.json); deliver it directly (studio_deliver validates the job on a fresh capture and refuses before any change); a headless proof (ssam_job) only when the person asks for one.",
+       "origin": "index: ODC jobs; kernel/tests/jobs (O11)"
+      },
+      {
+       "text": "The native dropdown has no search behaviour of its own (O11 vocabulary: DropdownMode Text|Custom; confirm the ODC members with the native contract).",
+       "origin": "ScreenVocabulary.json (O11 11.55.69) IDropdown; ODC Model API index NRWidgets IDropdown"
+      }
+     ],
+     "differences": []
+    },
+    "o11": {
+     "proofs": [
+      "gallery-native-reactive",
+      "widgets-reactive"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileScreen"
+      ]
+     },
+     "limits": [
+      {
+       "text": "IDropdown has EmptyValue, not Prompt (description of jobs-negative/dropdown-prompt: the kernel reports the writable expression properties); that job declares no expectError, so the refusal text is not recorded as a proof.",
+       "origin": "kernel/tests/jobs-negative/dropdown-prompt.json"
+      }
+     ],
+     "differences": []
+    }
+   }
+  }
+ ],
+ "unavailable": [
+  {
+   "id": "button-group-native",
+   "supersedes": [
+    "button-group-native"
+   ],
+   "lanes": [
+    "odc"
+   ],
+   "keywords": [
+    "button group",
+    "buttongroup",
+    "toggle buttons",
+    "segmented"
+   ],
+   "reason": "On ODC the native Button Group cannot be authored by the C# route (items created in a Content are silently dropped on save; the builder does not create ButtonGroupItem) and no ODC job creates IButtonGroup. On O11 it is proven by jobs (gallery-native-reactive, widgets-reactive): see ui.input.",
+   "evidence": "platforms/odc/docs/ONDE-FORAM-AS-8-HORAS.md:57,64 (measurement); platforms/odc/studio/shared/AuthoringUi.cs:74-77 comment; index: ODC jobs",
+   "negative": {
+    "odc": []
+   },
+   "alternative": "IRadioGroup/IRadioButton (ui.input)"
+  }
+ ],
+ "coverage": []
+}

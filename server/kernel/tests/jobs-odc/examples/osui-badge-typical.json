@@ -1,0 +1,22 @@
+{
+ "description": "Badge do OSUI com dados: Number do Count do aggregate, cor e forma, ao lado do texto Carrinho.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "CartLine", "attributes": [{"name": "ProductName", "type": "Text", "length": 100, "mandatory": true}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CartBadge", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Cart\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetLines", "as": "$GetLines"},
+  {"op": "create", "parent": "$GetLines", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:CartLine"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "ITextWidget", "as": "$text1"},
+  {"op": "set", "target": "$text1", "prop": "Text", "value": "Cart"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Badge1", "source": "IMobileBlock:Badge", "as": "$bd"},
+  {"op": "set", "target": "$bd/Number", "prop": "Value", "value": "GetLines.Count"},
+  {"op": "set", "target": "$bd/Color", "prop": "Value", "value": "Entities.Color.Red"},
+  {"op": "set", "target": "$bd/Shape", "prop": "Value", "value": "Entities.Shape.Rounded"},
+  {"op": "set", "target": "$bd/Size", "prop": "Value", "value": "Entities.Size.Small"}
+ ]
+}

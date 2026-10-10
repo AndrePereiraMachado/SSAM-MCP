@@ -1,0 +1,55 @@
+{
+ "ok": true,
+ "error": null,
+ "data": {
+  "accepted": false,
+  "isValid": false,
+  "expectedValid": false,
+  "validation": {
+   "new": [
+    {
+     "id": "ExpressionUnknownFunction",
+     "type": "Error",
+     "key": "[\"ExpressionUnknownFunction\",\"29vBXLFcbkiBw3zCsyWNlg\",[\"Value\"],[\"Right\"]]",
+     "path": "Headless_CS (ESpace) / Text_Tail (ServerAction) / CalculaCauda (AssignNode) / Assignment",
+     "detail": "Invalid Expression | Unknown function 'Right' in expression."
+    },
+    {
+     "id": "UnusedUserAction",
+     "type": "Warning",
+     "key": "[\"UnusedUserAction\",\"UGsbYqFXz0Gj9BKbtu0Dxg\",[],[\"Text_Tail\"]]",
+     "path": "Headless_CS (ESpace) / Text_Tail (ServerAction)",
+     "detail": "Unused User Action | 'Text_Tail' action is never used in this module. Consider deleting it."
+    }
+   ],
+   "fixed": [],
+   "preexisting": [],
+   "unexpected": [
+    {
+     "id": "ExpressionUnknownFunction",
+     "type": "Error",
+     "key": "[\"ExpressionUnknownFunction\",\"29vBXLFcbkiBw3zCsyWNlg\",[\"Value\"],[\"Right\"]]",
+     "path": "Headless_CS (ESpace) / Text_Tail (ServerAction) / CalculaCauda (AssignNode) / Assignment",
+     "detail": "Invalid Expression | Unknown function 'Right' in expression."
+    },
+    {
+     "id": "UnusedUserAction",
+     "type": "Warning",
+     "key": "[\"UnusedUserAction\",\"UGsbYqFXz0Gj9BKbtu0Dxg\",[],[\"Text_Tail\"]]",
+     "path": "Headless_CS (ESpace) / Text_Tail (ServerAction)",
+     "detail": "Unused User Action | 'Text_Tail' action is never used in this module. Consider deleting it."
+    }
+   ],
+   "missingExpected": [],
+   "ambiguous": [],
+   "tolerated": []
+  },
+  "details": [
+   "Error ExpressionUnknownFunction: Invalid Expression | Unknown function 'Right' in expression. @ Headless_CS (ESpace) / Text_Tail (ServerAction) / CalculaCauda (AssignNode) / Assignment",
+   "Warning UnusedUserAction: Unused User Action | 'Text_Tail' action is never used in this module. Consider deleting it. @ Headless_CS (ESpace) / Text_Tail (ServerAction)",
+   "Hint ExpressionUnknownFunction: Corrigir o nome da funcao {0} ou marcar a action como Function e adicionar a dependencia.",
+   "Hint UnusedUserAction: Apagar a action nao usada ou passar a chama-la / marca-la Public.",
+   "Hint UnknownFunction: 'Right(' nao existe (nem built-in, nem funcao deste modulo ou referenciada); parecidas: Substr, Length; catalogo: docs/functions.md ou `anvil functions --find Right` @ Headless_CS (ESpace) / Text_Tail (ServerAction) / CalculaCauda (AssignNode) / Assignment / Expression \"Right(Value, 1)\""
+  ]
+ }
+}

@@ -1,0 +1,136 @@
+{
+ "description": "Cobertura testada (fase 1, medir): life de OutSystems.Model.Expressions.IListLiteralItem (odc) em uiOdcListLiteral. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedElement",
+   "element": "WrightFlood (ESpace) / CovSCallee (ServerAction) / Tags (InputParameter)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  },
+  {
+   "id": "UnusedUserAction",
+   "element": "WrightFlood (ESpace) / CovSFlow (ServerAction)",
+   "why": "ODC: um app nao expoe server action publica (o kernel recusa, como o Studio ao vivo); a action fica privada e sem consumidor neste job de cobertura"
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "CovSCallee",
+   "as": "$cal"
+  },
+  {
+   "op": "create",
+   "parent": "$cal",
+   "type": "IInputParameter",
+   "name": "Tags",
+   "as": "$ct"
+  },
+  {
+   "op": "set",
+   "target": "$ct",
+   "prop": "DataType",
+   "value": "Text List"
+  },
+  {
+   "op": "create",
+   "parent": "$cal",
+   "type": "IStartNode",
+   "as": "$c0"
+  },
+  {
+   "op": "create",
+   "parent": "$cal",
+   "type": "IEndNode",
+   "as": "$c9"
+  },
+  {
+   "op": "link",
+   "from": "$c0",
+   "to": "$c9"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "CovSFlow",
+   "as": "$fp"
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "IExecuteServerActionNode",
+   "name": "CovSCall",
+   "as": "$call"
+  },
+  {
+   "op": "set",
+   "target": "$call",
+   "prop": "Action",
+   "value": "$cal"
+  },
+  {
+   "op": "set",
+   "target": "$call/Tags",
+   "prop": "Value",
+   "value": "[\"a\"]"
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$call"
+  },
+  {
+   "op": "link",
+   "from": "$call",
+   "to": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$call/Tags/#IListLiteralExpression",
+   "type": "IListLiteralItem",
+   "as": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Value",
+   "value": "\"b\""
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Value",
+   "value": "\"c\""
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "move",
+   "target": "$b",
+   "first": true
+  }
+ ]
+}

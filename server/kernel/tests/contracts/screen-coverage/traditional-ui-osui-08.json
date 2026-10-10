@@ -1,0 +1,269 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "OutSystemsUI",
+    "OutSystemsUIWeb:DropdownSelect",
+    "OutSystemsUIWeb:Email3Rows",
+    "OutSystemsUIWeb:EmailSection",
+    "OutSystemsUIWeb:Fieldset",
+    "OutSystemsUIWeb:FileUpload"
+  ],
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "tests/fixtures/outsystems-ui-web.oml",
+      "elements": [
+        "IWebBlock:DropdownSelect",
+        "IWebBlock:Email3Rows",
+        "IWebBlock:EmailSection",
+        "IWebBlock:Fieldset",
+        "IWebBlock:FileUpload"
+      ]
+    }
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Ui35_DropdownSelect",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part2",
+            "type": "IInputWidget",
+            "properties": {
+              "Variable": "Value1"
+            }
+          },
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:DropdownSelect",
+            "args": {
+              "WidgetId": "Part2.Id",
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {}
+          },
+          {
+            "name": "Part3",
+            "type": "IButtonWidget",
+            "properties": {
+              "Label": "\"Submit\""
+            },
+            "events": {
+              "OnClick": {
+                "destination": "IWebScreen:Ui35_DropdownSelect/Ui35_DropdownSelect_Submit"
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value1",
+            "type": "Text"
+          }
+        ]
+      },
+      {
+        "name": "Ui36_Email3Rows",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:Email3Rows",
+            "args": {},
+            "slots": {
+              "Row1": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Row2": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Row3": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui37_EmailSection",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:EmailSection",
+            "args": {},
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui38_Fieldset",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:Fieldset",
+            "args": {
+              "Title": "\"Coverage\"",
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui39_FileUpload",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:FileUpload",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "EmptyMessage": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Text"
+                  }
+                }
+              ],
+              "UploadWidget": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Upload"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "name": "Ui35_DropdownSelect_Submit",
+          "kind": "screen",
+          "owner": "IWebScreen:Ui35_DropdownSelect",
+          "steps": []
+        }
+      ]
+    }
+  },
+  "mutations": [
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui35_DropdownSelect/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "DropdownSelect"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui36_Email3Rows/Part1/Row1/Part2",
+      "prop": "Text",
+      "value": "Changed",
+      "element": "Email3Rows"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui37_EmailSection/Part1/Content/Part2",
+      "prop": "Text",
+      "value": "Changed",
+      "element": "EmailSection"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui38_Fieldset/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Fieldset"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui39_FileUpload/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "FileUpload"
+    }
+  ]
+}

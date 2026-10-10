@@ -1,0 +1,27 @@
+{
+ "ok": false,
+ "lane": "odc",
+ "verb": "job",
+ "exitCode": 1,
+ "result": {
+  "lane": "odc",
+  "via": "processo frio odc",
+  "ok": false,
+  "command": "apply",
+  "elapsedMs": 11700,
+  "error": "op #46 (delete ): InvalidOperationException: delete: refused, IServerAction 'WfProof_Save' is used by 2 consumer(s): IMobileFlow:MainFlow/IMobileScreen:WfProofScreen/IScreenAction:SaveIt/IExecuteServerActionNode:SaveFromScreen; IServerAction:WfProof_Import/IExecuteServerActionNode:SaveOne (list them with usages, fix or remove those usages, or pass \"force\": true to break them)"
+ },
+ "stderr": [
+  "#36 create ok",
+  "#37 create ok",
+  "#38 set ok",
+  "#39 set ok",
+  "#40 create ok",
+  "#41 link ok",
+  "#42 link ok",
+  "#43 layout ok",
+  "#44 set ok",
+  "#45 usages ok"
+ ],
+ "laneFrom": "--lane"
+}

@@ -1,0 +1,26 @@
+{
+ "description": "Input numerico com evento: InputType Number ligado a uma variavel Integer, MaxLength, e OnChange numa screen action que limita o valor e recalcula o total.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "QuantityPicker", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Quantity", "as": "$qty"},
+  {"op": "set", "target": "$qty", "prop": "DataType", "value": "Integer"},
+  {"op": "set", "target": "$qty", "prop": "DefaultValue", "value": "1"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Total", "as": "$total"},
+  {"op": "set", "target": "$total", "prop": "DataType", "value": "Currency"},
+  {"op": "logic", "data": {"actions": [
+   {"name": "QuantityChanged", "kind": "screen", "owner": "IMobileScreen:QuantityPicker",
+    "steps": [{"assign": {"Quantity": "Min(Max(Quantity, 1), 99)", "Total": "Quantity * 9.90"}, "as": "Recalculate"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IInput", "name": "QuantityInput", "as": "$in"},
+  {"op": "set", "target": "$in", "prop": "Variable", "value": "Quantity"},
+  {"op": "set", "target": "$in", "prop": "InputType", "value": "Number", "_why": "variavel Integer pede InputType Number"},
+  {"op": "set", "target": "$in", "prop": "MaxLength", "value": 2},
+  {"op": "set", "target": "$in/OnChange", "prop": "Destination", "value": "IMobileScreen:QuantityPicker/QuantityChanged"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$show"},
+  {"op": "set", "target": "$show", "prop": "Value", "value": "\"Total: \" + FormatCurrency(Total, \"$\", 2, \".\", \",\")"},
+  {"op": "get", "target": "$in"}
+ ]
+}

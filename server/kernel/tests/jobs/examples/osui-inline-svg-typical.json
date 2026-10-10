@@ -1,0 +1,14 @@
+{
+ "description": "InlineSVG (OutSystemsUI, Utilities) tipico; eventos Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastInlineSVGId", "as": "$vLastInlineSVGId"},
+  {"op": "set", "target": "$vLastInlineSVGId", "prop": "DataType", "value": "Text"},
+  {"op": "logic", "data": {"actions": [{"name": "InlineSVGDemoInitialized", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de Initialized", "inputs": [{"name": "InlineSVGId", "type": "Text"}],"steps": [{"assign": {"LastInlineSVGId": "InlineSVGId"},"as": "KeepInitialized"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "InlineSVGDemo", "source": "IMobileBlock:InlineSVG", "as": "$b"},
+  {"op": "set", "target": "$b/Initialized", "prop": "Handler", "value": "IScreenAction:InlineSVGDemoInitialized"},
+  {"op": "set", "target": "$b/Initialized/InlineSVGId", "prop": "Value", "value": "InlineSVGId"}
+ ]
+}

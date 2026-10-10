@@ -1,0 +1,40 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.UI.Mobile.Widgets.IPlaceholderContentWidget (o11) em mobileScreen. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "CovSScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "get",
+   "target": "$scr/#IMobileBlockInstanceWidget/MainContent"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "prop": "CustomStyle",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "duplicate",
+   "target": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "as": "$b"
+  },
+  {
+   "op": "move",
+   "target": "$b",
+   "first": true
+  }
+ ]
+}

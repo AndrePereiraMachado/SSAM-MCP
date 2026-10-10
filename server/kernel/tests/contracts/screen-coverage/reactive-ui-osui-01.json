@@ -1,0 +1,306 @@
+{
+  "fixture": "reactive-ui",
+  "features": [
+    "OutSystemsUI",
+    "OutSystemsUI:Accordion",
+    "OutSystemsUI:AccordionItem",
+    "OutSystemsUI:ActionSheet",
+    "OutSystemsUI:Alert",
+    "OutSystemsUI:AlignCenter"
+  ],
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "tests/fixtures/outsystems-ui.oml",
+      "elements": [
+        "IMobileBlock:Accordion",
+        "IMobileBlock:AccordionItem",
+        "IMobileBlock:ActionSheet",
+        "IMobileBlock:Alert",
+        "IMobileBlock:AlignCenter"
+      ]
+    }
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Ui0_Accordion",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:Accordion",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "IMobileBlockInstanceWidget",
+                  "properties": {},
+                  "source": "IMobileBlock:AccordionItem",
+                  "args": {
+                    "ExtendedClass": "\"coverage\""
+                  },
+                  "slots": {
+                    "Title": [
+                      {
+                        "name": "Part3",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Component content"
+                        }
+                      }
+                    ],
+                    "CustomIcon": [
+                      {
+                        "name": "Part4",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Component content"
+                        }
+                      }
+                    ],
+                    "Content": [
+                      {
+                        "name": "Part5",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Component content"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui1_AccordionItem",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:AccordionItem",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Title": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "CustomIcon": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Content": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui2_ActionSheet",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:ActionSheet",
+            "args": {
+              "IsOpen": "True",
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Button1": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Button2": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Button3": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Button4": [
+                {
+                  "name": "Part5",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Button5": [
+                {
+                  "name": "Part6",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui3_Alert",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:Alert",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "MessageText": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui4_AlignCenter",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:AlignCenter",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      }
+    ]
+  },
+  "mutations": [
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui0_Accordion/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Accordion"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui1_AccordionItem/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "AccordionItem"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui2_ActionSheet/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "ActionSheet"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui3_Alert/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Alert"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui4_AlignCenter/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "AlignCenter"
+    }
+  ]
+}

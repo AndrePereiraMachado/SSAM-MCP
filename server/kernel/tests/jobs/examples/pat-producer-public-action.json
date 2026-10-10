@@ -1,0 +1,25 @@
+{
+ "description": "Produtor (modulo Service): entidade Supplier publica, structure publica SupplierSummary e server action publica Supplier_GetSummary. E o lado produtor de pat-consumer-reference-action.",
+ "base": "blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {
+   "entities": [{"name": "Supplier", "public": true, "attributes": [
+    {"name": "Name", "type": "Text", "mandatory": true, "length": 100},
+    {"name": "Country", "type": "Text", "length": 50},
+    {"name": "Rating", "type": "Integer"}]}],
+   "structures": [{"name": "SupplierSummary", "public": true, "attributes": [
+    {"name": "Title", "type": "Text"},
+    {"name": "IsTopRated", "type": "Boolean"}]}]}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "Supplier_GetSummary", "kind": "server", "public": true, "description": "Resumo de um fornecedor para outros modulos",
+    "inputs": [{"name": "SupplierId", "type": "Supplier Identifier"}],
+    "outputs": [{"name": "Summary", "type": "SupplierSummary"}],
+    "steps": [
+     {"get": "Supplier", "as": "GetSupplier", "where": "Supplier.Id = SupplierId", "max": 1},
+     {"assign": {
+      "Summary.Title": "GetSupplier.List.Current.Supplier.Name + \" (\" + GetSupplier.List.Current.Supplier.Country + \")\"",
+      "Summary.IsTopRated": "GetSupplier.List.Current.Supplier.Rating >= 4"}, "as": "FillSummary"}]}]}}
+ ]
+}

@@ -1,0 +1,95 @@
+{
+  "fixture": "mobile-ui",
+  "features": [
+    "native-widget",
+    "mobile:IRowCell"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Table",
+            "type": "ITableRecords",
+            "properties": {
+              "Source": "Rows"
+            },
+            "slots": {
+              "HeaderRow": [
+                {
+                  "name": "Part4",
+                  "type": "IHeaderCell",
+                  "properties": {},
+                  "children": [
+                    {
+                      "name": "Part3",
+                      "type": "ITextWidget",
+                      "properties": {
+                        "Text": "Name"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "Row": [
+                {
+                  "name": "Subject",
+                  "type": "IRowCell",
+                  "properties": {
+                    "Style": "\"coverage\""
+                  },
+                  "children": [
+                    {
+                      "name": "Part2",
+                      "type": "ITextWidget",
+                      "properties": {
+                        "Text": "Content"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Rows",
+            "type": "ScreenRow List"
+          }
+        ]
+      }
+    ],
+    "data": {
+      "structures": [
+        {
+          "name": "ScreenRow",
+          "attributes": [
+            {
+              "name": "Name",
+              "type": "Text"
+            },
+            {
+              "name": "Value",
+              "type": "Integer"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IMobileScreen:Coverage/Table/Row/Subject",
+    "prop": "Style",
+    "value": "\"changed\""
+  }
+}

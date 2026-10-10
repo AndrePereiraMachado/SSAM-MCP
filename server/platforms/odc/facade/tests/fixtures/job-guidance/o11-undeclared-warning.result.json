@@ -1,0 +1,38 @@
+{
+ "ok": true,
+ "error": null,
+ "data": {
+  "accepted": false,
+  "isValid": true,
+  "expectedValid": true,
+  "validation": {
+   "new": [
+    {
+     "id": "UnusedUserAction",
+     "type": "Warning",
+     "key": "[\"UnusedUserAction\",\"271cKHZB\\u002BU\\u002BPiB3P2b14Tw\",[],[\"UnusedWarningProbe\"]]",
+     "path": "Headless_CS (ESpace) / UnusedWarningProbe (ServerAction)",
+     "detail": "Unused User Action | 'UnusedWarningProbe' action is never used in this module. Consider deleting it."
+    }
+   ],
+   "fixed": [],
+   "preexisting": [],
+   "unexpected": [
+    {
+     "id": "UnusedUserAction",
+     "type": "Warning",
+     "key": "[\"UnusedUserAction\",\"271cKHZB\\u002BU\\u002BPiB3P2b14Tw\",[],[\"UnusedWarningProbe\"]]",
+     "path": "Headless_CS (ESpace) / UnusedWarningProbe (ServerAction)",
+     "detail": "Unused User Action | 'UnusedWarningProbe' action is never used in this module. Consider deleting it."
+    }
+   ],
+   "missingExpected": [],
+   "ambiguous": [],
+   "tolerated": []
+  },
+  "details": [
+   "Warning UnusedUserAction: Unused User Action | 'UnusedWarningProbe' action is never used in this module. Consider deleting it. @ Headless_CS (ESpace) / UnusedWarningProbe (ServerAction)",
+   "Hint UnusedUserAction: Apagar a action nao usada ou passar a chama-la / marca-la Public."
+  ]
+ }
+}

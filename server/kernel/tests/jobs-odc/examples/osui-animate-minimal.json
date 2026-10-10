@@ -1,0 +1,14 @@
+{
+ "description": "Animate do OSUI: o input obrigatorio AnimationType (static entity do OSUI) e um texto animado no Content.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "AnimateDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Animate1", "source": "IMobileBlock:Animate", "as": "$an"},
+  {"op": "set", "target": "$an/AnimationType", "prop": "Value", "value": "Entities.AnimationType.FadeIn"},
+  {"op": "create", "parent": "$an/Content", "type": "ITextWidget", "as": "$text1"},
+  {"op": "set", "target": "$text1", "prop": "Text", "value": "Welcome!"}
+ ]
+}

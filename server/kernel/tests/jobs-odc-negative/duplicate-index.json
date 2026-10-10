@@ -1,0 +1,16 @@
+{
+ "description": "ODC: a RECUSA de `duplicate` sobre um indice (a copia nativa falhava com \"The clipboard objects cannot be pasted into this target: Condition is false\"); desde o lote de dados da fase 3 o kernel recusa antes, com a alternativa.",
+ "base": "job:data-full-model",
+ "expectValid": true,
+ "expectError": [
+  "duplicate: EntityIndex 'IX_WfCovTask_ProjectDone' cannot be duplicated",
+  "create another EntityIndex with a different composition"
+ ],
+ "ops": [
+  {
+   "op": "duplicate",
+   "target": "EntityIndex:IX_WfCovTask_ProjectDone",
+   "as": "$copy"
+  }
+ ]
+}

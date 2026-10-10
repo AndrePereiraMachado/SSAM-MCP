@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<!-- Synthetic Service Center Error Log page (shape of O11 11.x Traditional Web Forms); no customer data. -->
+<html><head><title>Error Log - Service Center</title></head><body>
+<form method="post" action="Error_Logs.aspx" id="WebForm1">
+<input type="hidden" name="__OSVSTATE" value="state-page-1">
+<input type="hidden" name="__VIEWSTATE" value="">
+<label for="wtApp">Application</label>
+<select id="wtApp" name="wt12$wtApplication_Selector"><option value="0" selected>(All)</option><option value="7">Billing</option></select>
+<label for="wtMod">Module</label>
+<select id="wtMod" name="wt12$wtEspace_Selector"><option value="0" selected>(All)</option><option value="42">Orders</option></select>
+<label for="wtMsg">Message</label><input id="wtMsg" name="wt12$wtInput1" type="text" value="">
+<input id="wtStack" name="wt12$wtEnableSearchStackTrace" type="checkbox" value="on"><label for="wtStack">Search in stack</label>
+<input type="submit" name="wt12$wtFilterButton" value="Filter">
+<input type="submit" name="wt12$wtExportButton" value="Export to excel">
+<table>
+<tr><th>Instant</th><th>Module</th><th>Tenant</th><th>Message</th><th>Source</th><th>Server</th><th></th></tr>
+<tr><td>2026-10-01 10:00:00</td><td>Orders</td><td>Users</td><td>NullReference in Checkout</td><td>Orders</td><td>web01</td><td><a href="Show_Error.aspx?Error_Id=e-101">Detail</a></td></tr>
+<tr><td>2026-10-01 09:58:12</td><td>Orders</td><td>Users</td><td>Timeout calling PaymentsAPI</td><td>Orders</td><td>web01</td><td><a href="Show_Error.aspx?Error_Id=e-100">Detail</a></td></tr>
+</table>
+<a id="wt12_wtNext" href="#" onclick="OsAjax(arguments[0] || window.event,'wt12_wtNext','wt12$wtNextLink','','__OSVSTATE,'); return false;">Next</a>
+</form>
+<div id="RecentItems"><a href="eSpace_Edit.aspx?EspaceId=42">Orders</a></div>
+</body></html>

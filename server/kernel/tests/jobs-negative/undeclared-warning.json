@@ -1,0 +1,6 @@
+{
+ "description": "Job valido no Verify e aceito desde A03 (atritos 2, so Error bloqueia): apaga o unico chamador de uma action que o job nao criou (UnusedSeedProbe, da base) e nao declara o aviso UnusedUserAction que ela passa a ter. O aviso volta com veredito nonblocking, sem expectedMessages.",
+ "base": "job:pacote-laneB-unused-seed",
+ "expectValid": true,
+ "ops": [{"op": "delete", "target": "IServerAction:UnusedSeedCaller"}]
+}

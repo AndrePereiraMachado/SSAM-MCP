@@ -1,0 +1,24 @@
+{
+ "description": "FloatingContent do OSUI como barra fixa: largura total no rodape, total do carrinho calculado e botao de checkout.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CheckoutBar", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Checkout\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "CartTotal", "as": "$vCartTotal"},
+  {"op": "set", "target": "$vCartTotal", "prop": "DataType", "value": "Currency"},
+  {"op": "set", "target": "$vCartTotal", "prop": "DefaultValue", "value": "42.5"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "FloatingContent1", "source": "IMobileBlock:FloatingContent", "as": "$fl"},
+  {"op": "set", "target": "$fl/Position", "prop": "Value", "value": "Entities.Position.Bottom"},
+  {"op": "set", "target": "$fl/UseFullWidth", "prop": "Value", "value": "True"},
+  {"op": "set", "target": "$fl/UseMargin", "prop": "Value", "value": "False"},
+  {"op": "create", "parent": "$fl/Content", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "\"Total: \" + FormatCurrency(CartTotal, \"$\", 2, \".\", \",\")"},
+  {"op": "create", "parent": "$fl/Content", "type": "IButton", "name": "CheckoutButton", "as": "$bCheckoutButton"},
+  {"op": "set", "target": "$bCheckoutButton/#ITextWidget", "prop": "Text", "value": "Checkout"},
+  {"op": "set", "target": "$bCheckoutButton/OnClick", "prop": "Destination", "value": "IMobileScreen:UserProfile"}
+ ]
+}

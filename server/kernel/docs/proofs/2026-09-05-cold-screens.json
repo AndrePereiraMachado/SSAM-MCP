@@ -1,0 +1,172 @@
+{
+  "date": "2026-09-05",
+  "lane": "ss5",
+  "documentationOnly": ".local/lane-ss5/screen-section-3.4.md",
+  "job": "tests/jobs/screen-spec-store-reactive.json",
+  "declaredOps": 2,
+  "declaredVerbs": [
+    "spec",
+    "screen"
+  ],
+  "screens": [
+    "Home",
+    "Catalog",
+    "GameDetail"
+  ],
+  "attempts": [
+    {
+      "number": 1,
+      "command": "python -B scripts/run_job.py .local/lane-ss5/cold-screen-app.json",
+      "exitCode": 0,
+      "ok": true,
+      "isValid": true,
+      "accepted": true,
+      "objects": 12013,
+      "messages": 0,
+      "applyMs": 7601,
+      "wallMsReportedByRunner": 9449,
+      "viaWorker": true,
+      "delta": {
+        "new": 0,
+        "fixed": 0,
+        "preexisting": 0,
+        "unexpected": 0,
+        "missingExpected": 0,
+        "ambiguous": 0
+      },
+      "rawOutput": ".local/lane-ss5/cold-screen-attempt-1.stdout.txt"
+    }
+  ],
+  "maxAttempts": 2,
+  "attemptsUsed": 1,
+  "jobCorrections": 0,
+  "expectationsChanged": false,
+  "readings": {
+    "preventive": 1,
+    "reactive": 0,
+    "entries": [
+      {
+        "phase": "preventive",
+        "kind": "guide",
+        "path": ".local/lane-ss5/screen-section-3.4.md",
+        "reason": "Unica documentacao permitida; aprender o contrato de spec/screen, navegacao, dashboard, carousel, filtros e paginacao antes de escrever o job."
+      }
+    ],
+    "ownJobReads": 0,
+    "stdoutReads": {
+      "runJob": 1,
+      "publicQueries": 5
+    },
+    "publicQueriesForCreation": {
+      "beforeErrors": 0,
+      "afterErrors": 0
+    },
+    "publicQueriesForStep20": 5,
+    "note": "As cinco consultas ocorreram depois da validacao bem-sucedida, exclusivamente como verificacao do passo 20. Nenhuma orientou a criacao nem foi consulta reativa a erro."
+  },
+  "publicQueries": [
+    {
+      "command": "dotnet .local/lane-ss5/cli/anvil.dll api --op screen",
+      "phase": "post-validation-step-20",
+      "reason": "Consulta explicitamente solicitada para verificar o passo 20 depois de validar o app.",
+      "exitCode": 0,
+      "ok": true,
+      "rawOutput": ".local/lane-ss5/cold-screen-api_screen.stdout.json"
+    },
+    {
+      "command": "dotnet .local/lane-ss5/cli/anvil.dll api --op spec",
+      "phase": "post-validation-step-20",
+      "reason": "Consulta explicitamente solicitada para verificar o passo 20 depois de validar o app.",
+      "exitCode": 0,
+      "ok": true,
+      "rawOutput": ".local/lane-ss5/cold-screen-api_spec.stdout.json"
+    },
+    {
+      "command": "dotnet .local/lane-ss5/cli/anvil.dll where-can --name IServiceAction",
+      "phase": "post-validation-step-20",
+      "reason": "Consulta explicitamente solicitada para verificar o passo 20 depois de validar o app.",
+      "exitCode": 0,
+      "ok": true,
+      "rawOutput": ".local/lane-ss5/cold-screen-where_service_action.stdout.json"
+    },
+    {
+      "command": "dotnet .local/lane-ss5/cli/anvil.dll verify-message --name RequiredConnector_Out",
+      "phase": "post-validation-step-20",
+      "reason": "Consulta explicitamente solicitada para verificar o passo 20 depois de validar o app.",
+      "exitCode": 0,
+      "ok": true,
+      "rawOutput": ".local/lane-ss5/cold-screen-verify_required_connector.stdout.json"
+    },
+    {
+      "command": "dotnet .local/lane-ss5/cli/anvil.dll recipe --find tickets-all --ops --max 3",
+      "phase": "post-validation-step-20",
+      "reason": "Consulta explicitamente solicitada para verificar o passo 20 depois de validar o app.",
+      "exitCode": 0,
+      "ok": true,
+      "rawOutput": ".local/lane-ss5/cold-screen-recipe_tickets.stdout.json"
+    }
+  ],
+  "featureEvidence": {
+    "Home": "dashboard com GetHighlights.Count e card.layout=carousel; jogos ordenados por Rating Descending e Title Ascending; action para Catalog; cards para GameDetail com GameId.",
+    "Catalog": "cards com busca por Title, filtro GenreId de Genre, paginacao implicita do contrato screen/cards, action para Home e cards para GameDetail com GameId.",
+    "GameDetail": "input GameId obrigatorio, source.where Game.Id = GameId, duas tabs; actions para Catalog e Home.",
+    "Data": "spec declara Genre com Adventure/Strategy/Puzzle e entidade Game com Title/Description/Price/Rating/GenreId."
+  },
+  "limitations": [
+    "Prova de compilacao/Verify sobre fixture: nao houve merge, bridge, publish, execucao no browser nem prova visual/interativa.",
+    "O modelo Game e sintetico, mas nao foram semeados registros persistidos de jogos. O guia mostra records para static entities, sem contrato para semear registros de entities. As tres opcoes de Genre sao os unicos records declarados.",
+    "Destaques significa jogos ordenados pela maior Rating. O guia documenta uma unica source para dashboard e card; nao orienta como contar todos os jogos enquanto se filtra independentemente o carousel.",
+    "A paginacao e os handlers sao gerados implicitamente pelo contrato screen; sem inspecao manual dos objetos gerados nesta avaliacao.",
+    "where-can relatou evidencia de fixtures com studioVersion 11.55.73.64880; a consulta foi executada pelo CLI SS5 e nao constitui acesso ao SS4.",
+    "recipe --find tickets-all --ops --max 3 retornou opCount 3131, exatamente 3 ops e truncated=true, mas a primeira op spec e grande e as duas rows descritivas vieram duplicadas."
+  ],
+  "compliance": {
+    "onlySS5": true,
+    "trackedFilesModified": false,
+    "build": false,
+    "restart": false,
+    "bridgeCalls": false,
+    "merge": false,
+    "publish": false,
+    "manualWidgetOrEventCreation": false,
+    "implementationOrOtherSessionFilesRead": false
+  },
+  "finalResult": {
+    "isValid": true,
+    "accepted": true,
+    "newMessages": 0,
+    "unexpected": 0
+  },
+  "originalJob": ".local/lane-ss5/cold-screen-app.json",
+  "postEvaluation": {
+    "promotedWithoutChanges": true,
+    "recipeDuplicateRows": "Found by independent evaluator; deduplicated in CommandSurface and covered by SurfaceTests.",
+    "maxUnit": "--max bounds declared ops, not bytes or nested spec elements; documented in AGENTS.",
+    "recipeFixedRuntime": {
+      "lane": "ss5",
+      "rows": 1,
+      "ops": 3,
+      "opCount": 3131,
+      "wallMs": 614
+    },
+    "sharedCheckoutSuite": {
+      "passed": 237,
+      "failed": 1,
+      "total": 238,
+      "duration": "5m12s",
+      "failure": "Untracked hire-business-actions: op #279 Candidate_MergeDuplicates repeats node alias Collision0",
+      "scope": "Other session work, preserved unchanged",
+      "trx": ".local/lane-ss5/test-results/cold-screen-final.trx"
+    },
+    "isolatedSuite": {
+      "passed": 229,
+      "failed": 0,
+      "total": 229,
+      "duration": "4m7s",
+      "baseline": "3402449",
+      "overlay": "Only this task: recipe deduplication, regression assertion, identical promoted screen job, guide and evidence",
+      "lane": "ss5",
+      "trx": ".local/lane-ss5/test-results/cold-screen-isolated.trx"
+    }
+  }
+}

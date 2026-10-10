@@ -1,0 +1,23 @@
+{
+ "description": "TextArea tipico: ligado ao campo Notes de um record local, com limite de 500 caracteres e 4 linhas; OnChange atualiza o contador de caracteres mostrado ao lado.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "DraftTask", "as": "$vTask"},
+  {"op": "set", "target": "$vTask", "prop": "DataType", "value": "Task"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "NotesLength", "as": "$vLen"},
+  {"op": "set", "target": "$vLen", "prop": "DataType", "value": "Integer"},
+  {"op": "logic", "data": {"actions": [
+   {"name": "NotesOnChange", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Conta os caracteres escritos",
+    "steps": [{"assign": {"NotesLength": "Length(DraftTask.Notes)"}, "as": "CountChars"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "ITextArea", "name": "NotesTextArea", "as": "$ta"},
+  {"op": "set", "target": "$ta", "prop": "Variable", "value": "DraftTask.Notes"},
+  {"op": "set", "target": "$ta", "prop": "MaxLength", "value": 500},
+  {"op": "set", "target": "$ta", "prop": "TextLines", "value": 4},
+  {"op": "set", "target": "$ta", "prop": "Prompt", "value": "\"Notes\""},
+  {"op": "set", "target": "$ta/OnChange", "prop": "Destination", "value": "IScreenAction:NotesOnChange"},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$counter"},
+  {"op": "set", "target": "$counter", "prop": "Value", "value": "NotesLength + \"/500\""}
+ ]
+}

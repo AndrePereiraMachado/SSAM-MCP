@@ -1,0 +1,29 @@
+{
+ "description": "Cobertura testada (fase 2): move into (folder:Roles) de OutSystems.Model.Logic.IRole (o11) em espace. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IRole",
+   "name": "CovARole",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IFolder",
+   "name": "CovSMvFolder",
+   "args": {
+    "parentFolder": "Roles"
+   },
+   "as": "$mvp"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "into": "$mvp"
+  }
+ ]
+}

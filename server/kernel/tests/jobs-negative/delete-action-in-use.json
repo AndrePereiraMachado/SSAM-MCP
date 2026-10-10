@@ -1,0 +1,30 @@
+{
+ "description": "A RECUSA do delete de logica: Contact_Save e chamada por outra server action (Contact_Import) e pela screen action Save. Sem force o delete tem de ser recusado E a mensagem tem de nomear os dois chamadores (o caminho limpo, com replace, esta em tests/jobs/delete-logic-consumers.json).",
+ "base": "job:screen-form-reactive",
+ "expectValid": true,
+ "expectError": [
+  "delete: refused",
+  "IServerAction 'Contact_Save' is used by 2 consumer(s)",
+  "IServerAction:Contact_Import/IExecuteServerActionNode:SaveOne",
+  "IScreenAction:Save/IExecuteServerActionNode:Contact_Save",
+  "pass \"force\": true to break them"
+ ],
+ "ops": [
+  {"op": "set", "target": "IServerEntity:Contact", "prop": "Public", "value": true},
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "Contact_Import", "as": "$imp"},
+  {"op": "set", "target": "$imp", "prop": "Public", "value": true},
+  {"op": "create", "parent": "$imp", "type": "IInputParameter", "name": "Contact", "as": "$impIn"},
+  {"op": "set", "target": "$impIn", "prop": "DataType", "value": "Contact"},
+  {"op": "create", "parent": "$imp", "type": "IStartNode", "as": "$i0"},
+  {"op": "create", "parent": "$imp", "type": "IExecuteServerActionNode", "name": "SaveOne", "as": "$iCall"},
+  {"op": "set", "target": "$iCall", "prop": "Action", "value": "IServerAction:Contact_Save"},
+  {"op": "set", "target": "$iCall/Contact", "prop": "Value", "value": "Contact"},
+  {"op": "create", "parent": "$imp", "type": "IEndNode", "as": "$i9"},
+  {"op": "link", "from": "$i0", "to": "$iCall"},
+  {"op": "link", "from": "$iCall", "to": "$i9"},
+  {"op": "layout", "target": "$imp"},
+
+  {"op": "usages", "target": "IServerAction:Contact_Save"},
+  {"op": "delete", "target": "IServerAction:Contact_Save"}
+ ]
+}

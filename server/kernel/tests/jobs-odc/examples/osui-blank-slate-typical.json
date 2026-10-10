@@ -1,0 +1,31 @@
+{
+ "description": "BlankSlate do OSUI como estado vazio: aparece num If quando o aggregate volta vazio, com icone, texto e um botao que leva a outra tela.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "CartLine", "attributes": [{"name": "ProductName", "type": "Text", "length": 100, "mandatory": true}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "EmptyCart", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Cart\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetLines", "as": "$GetLines"},
+  {"op": "create", "parent": "$GetLines", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:CartLine"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IIfWidget", "name": "IsEmpty", "as": "$if"},
+  {"op": "set", "target": "$if", "prop": "Condition", "value": "GetLines.IsDataFetched and GetLines.List.Empty"},
+  {"op": "create", "parent": "$if/TrueBranch", "type": "IMobileBlockInstanceWidget", "name": "BlankSlate1", "source": "IMobileBlock:BlankSlate", "as": "$bs"},
+  {"op": "set", "target": "$bs/FullHeight", "prop": "Value", "value": "False"},
+  {"op": "create", "parent": "$bs/Icon", "type": "IIcon", "name": "CartIcon", "as": "$icon1"},
+  {"op": "set", "target": "$icon1", "prop": "Icon", "value": "shopping-cart"},
+  {"op": "set", "target": "$icon1", "prop": "Weight", "value": "regular"},
+  {"op": "create", "parent": "$bs/Content", "type": "ITextWidget", "as": "$text1"},
+  {"op": "set", "target": "$text1", "prop": "Text", "value": "Your cart is empty."},
+  {"op": "create", "parent": "$bs/Actions", "type": "IButton", "name": "BrowseButton", "as": "$bBrowseButton"},
+  {"op": "set", "target": "$bBrowseButton/#ITextWidget", "prop": "Text", "value": "Go to profile"},
+  {"op": "set", "target": "$bBrowseButton/OnClick", "prop": "Destination", "value": "IMobileScreen:UserProfile"},
+  {"op": "create", "parent": "$if/FalseBranch", "type": "IList", "name": "LineList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetLines.List"},
+  {"op": "create", "parent": "$list", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "GetLines.List.Current.CartLine.ProductName"}
+ ]
+}

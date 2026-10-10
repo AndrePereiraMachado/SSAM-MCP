@@ -1,0 +1,31 @@
+public sealed class Packet
+{
+    public byte[] Data { get; set; } = null!;
+    public byte[] Alias { get; set; } = null!;
+    public int Allocations { get; set; }
+}
+
+public static class PacketRules
+{
+    public static byte[] Allocate(Packet packet, int length)
+    {
+        packet.Allocations++;
+        var data = new byte[length];
+        packet.Data = data;
+        packet.Alias = data;
+        return data;
+    }
+
+    public static byte[] Rewrite(Packet packet, byte[] data)
+    {
+        packet.Data = data;
+        packet.Alias = data;
+        data[0] = unchecked((byte)(data[0] + 3));
+        checked { packet.Alias[1]++; }
+        return packet.Data;
+    }
+
+    public static byte Read(byte[] data, int index) => data[index];
+
+    public static int?[] Measurements(int length) => new int?[length];
+}

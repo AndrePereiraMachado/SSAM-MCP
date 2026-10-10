@@ -1,0 +1,12 @@
+{
+ "description": "Container: um IContainer no placeholder MainContent da tela, com classes CSS em Style.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ContainerDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "Panel", "as": "$box"},
+  {"op": "set", "target": "$box", "prop": "Style", "value": "\"card padding-m\"", "_why": "Style e expressao: classes literais vao entre aspas"}
+ ]
+}

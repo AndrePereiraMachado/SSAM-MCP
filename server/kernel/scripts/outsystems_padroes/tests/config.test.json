@@ -1,0 +1,31 @@
+{
+ "schema": "outsystems-padroes-config/1",
+ "_leia": "Config de projeto dos casos de teste, com nomes neutros. configOverride de cada .expect.json troca chaves de topo desta config só naquele caso.",
+ "modules": {
+  "Integration_CS": "Core",
+  "Engine_Core_CS": "Core",
+  "Engine_Sample_CS": "Core",
+  "Engine_CW": "Core",
+  "Domain_CS": "Core",
+  "EngineApp": "End-user",
+  "DomainApp": "End-user"
+ },
+ "forbiddenRefs": [
+  {"from": "Engine*", "to": "Domain*", "why": "o motor genérico nunca referencia o domínio"}
+ ],
+ "integrationModules": ["Integration_CS"],
+ "longRunning": ["InvokeModel", "RunModelStep", "DrainRuns"],
+ "asyncStarters": ["StartRun", "QueueRun"],
+ "guardActions": ["Auth_Require*", "Require*Role", "Guard_*", "Require*Lease", "Require*Token", "Require*"],
+ "libraries": ["OutSystemsUI", "OutSystemsCharts", "Engine_CW"],
+ "timeoutPolicy": {"restTimeoutSeconds": 60},
+ "subjectEntities": ["Subject\\w*"],
+ "p7": {
+  "protectedEntities": ["Protected\\w*"],
+  "allowedEntities": ["ProtectedRunExcerpt"],
+  "entryPatterns": ["^Handle\\w+Tool$", "^Tool_", "^Runner_"],
+  "forbiddenCalls": ["_Impl$"],
+  "siteSwitches": ["IsFeatureHardEnabled"]
+ },
+ "approvers": ["usuario"]
+}

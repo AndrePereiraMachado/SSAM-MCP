@@ -1,0 +1,16 @@
+{
+ "description": "ODC: a RECUSA do delete de uma structure usada como tipo. A WfCovAddress e o tipo do input Address da WfCovQuote_Build e do atributo aninhado WfCovPolicyQuote.Address; sem force o delete e recusado e a mensagem nomeia os consumidores (6: o input, o atributo aninhado e as expressoes que leem os campos; o registo anonimo `WfCovAddress Record` ja nao conta enquanto ninguem o usar, e um consumidor dentro de outro nao se repete; a ordem muda entre corridas, por isso so a contagem e os dois caminhos estaveis sao esperados). O caminho limpo (reapontar com replace e apagar a origem sem force) esta em tests/jobs-odc/structure-refactor.json.",
+ "base": "job:structure-nested",
+ "expectValid": true,
+ "expectError": [
+  "delete: refused",
+  "IStructure 'WfCovAddress' is used by 6 consumer(s)",
+  "IServerAction:WfCovQuote_Build/IInputParameter:Address",
+  "IStructure:WfCovPolicyQuote/IStructureAttribute:Address",
+  "pass \"force\": true to break them"
+ ],
+ "ops": [
+  {"op": "usages", "target": "IStructure:WfCovAddress", "max": 30},
+  {"op": "delete", "target": "IStructure:WfCovAddress"}
+ ]
+}

@@ -1,0 +1,67 @@
+{
+ "description": "Cobertura testada (fase 2): del de OutSystems.Model.BusinessProcesses.Nodes.IAutomaticActivityNode (odc) em ctxWorkflowService. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/blank-workflow.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "reference",
+   "producer": "tests/fixtures/odc/blank-mobile-producer.oml",
+   "elements": [
+    "IServiceAction:CovSService"
+   ]
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IBusinessProcess",
+   "name": "CovSWorkflow",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "set",
+   "target": "$fs",
+   "prop": "TriggerMode",
+   "value": "Schedule"
+  },
+  {
+   "op": "set",
+   "target": "$fs",
+   "prop": "Frequency",
+   "value": "Daily"
+  },
+  {
+   "op": "set",
+   "target": "$fs/ScheduleConfiguration",
+   "prop": "CronExpression",
+   "value": "0 6 * * *"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "OutSystems.Model.BusinessProcesses.Nodes.IAutomaticActivityNode",
+   "name": "CovAAutomaticActivityNode",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

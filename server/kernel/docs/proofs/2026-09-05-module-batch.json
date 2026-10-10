@@ -1,0 +1,105 @@
+{
+  "date": "2026-09-05",
+  "lane": "ss4",
+  "studio": "11.55.73.64880",
+  "scenario": "2 Service modules and 1 Reactive template module; personal environment; one run per implementation",
+  "before": {
+    "elapsedMs": 81352,
+    "application": "ZZBatchBefore260905",
+    "modules": [
+      {
+        "name": "ZZBatchBefore260905_A",
+        "objects": 170,
+        "valid": true,
+        "verifyMessages": 0,
+        "preparationMs": null,
+        "startOffsetMs": null,
+        "startMs": 677,
+        "publicationMs": 23252,
+        "completed": true,
+        "hasErrors": false
+      },
+      {
+        "name": "ZZBatchBefore260905_B",
+        "objects": 170,
+        "valid": true,
+        "verifyMessages": 0,
+        "preparationMs": null,
+        "startOffsetMs": null,
+        "startMs": 455,
+        "publicationMs": 15014,
+        "completed": true,
+        "hasErrors": false
+      },
+      {
+        "name": "ZZBatchBefore260905_UI",
+        "objects": 11153,
+        "valid": true,
+        "verifyMessages": 0,
+        "preparationMs": null,
+        "startOffsetMs": null,
+        "startMs": 2082,
+        "publicationMs": 23083,
+        "completed": true,
+        "hasErrors": false
+      }
+    ]
+  },
+  "after": {
+    "elapsedMs": 59111,
+    "application": "ZZBatchAfter260905",
+    "modules": [
+      {
+        "name": "ZZBatchAfter260905_A",
+        "objects": 170,
+        "valid": true,
+        "verifyMessages": 0,
+        "preparationMs": 910,
+        "startOffsetMs": 0,
+        "startMs": 447,
+        "publicationMs": 31358,
+        "completed": true,
+        "hasErrors": false
+      },
+      {
+        "name": "ZZBatchAfter260905_B",
+        "objects": 170,
+        "valid": true,
+        "verifyMessages": 0,
+        "preparationMs": 88,
+        "startOffsetMs": 449,
+        "startMs": 459,
+        "publicationMs": 25827,
+        "completed": true,
+        "hasErrors": false
+      },
+      {
+        "name": "ZZBatchAfter260905_UI",
+        "objects": 11153,
+        "valid": true,
+        "verifyMessages": 0,
+        "preparationMs": 5645,
+        "startOffsetMs": 909,
+        "startMs": 2283,
+        "publicationMs": 40755,
+        "completed": true,
+        "hasErrors": false
+      }
+    ]
+  },
+  "reductionPercent": 27.34,
+  "allSubmittedByMs": 3192,
+  "checks": {
+    "repeatedBatchSkippedWithoutPublishing": true,
+    "otherApplicationNameConflictRejected": true,
+    "caseInsensitiveDuplicateRejected": true,
+    "workerLoadedModulesAfter": 0,
+    "regressionSuitePassed": 249,
+    "finalTargetedTestsPassed": 20
+  },
+  "limits": [
+    "Model preparation remains on the runtime execution thread. Server publication jobs overlap.",
+    "One before/after sample; server scheduling affects elapsed time.",
+    "Test applications retained: cleanup simulation returned application not found; no deletion attempted."
+  ]
+}

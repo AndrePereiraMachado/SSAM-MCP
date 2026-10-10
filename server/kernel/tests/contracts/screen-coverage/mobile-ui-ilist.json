@@ -1,0 +1,69 @@
+{
+  "fixture": "mobile-ui",
+  "features": [
+    "native-widget",
+    "mobile:IList"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Subject",
+            "type": "IList",
+            "properties": {
+              "Source": "Rows",
+              "Style": "\"coverage\""
+            },
+            "children": [
+              {
+                "name": "Part2",
+                "type": "ITextWidget",
+                "properties": {
+                  "Text": "Content"
+                }
+              }
+            ]
+          }
+        ],
+        "vars": [
+          {
+            "name": "Rows",
+            "type": "ScreenRow List"
+          }
+        ]
+      }
+    ],
+    "data": {
+      "structures": [
+        {
+          "name": "ScreenRow",
+          "attributes": [
+            {
+              "name": "Name",
+              "type": "Text"
+            },
+            {
+              "name": "Value",
+              "type": "Integer"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IMobileScreen:Coverage/Subject",
+    "prop": "Style",
+    "value": "\"changed\""
+  }
+}

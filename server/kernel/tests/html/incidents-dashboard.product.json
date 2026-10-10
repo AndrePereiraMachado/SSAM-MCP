@@ -1,0 +1,17 @@
+[
+  {
+    "op": "reference",
+    "producer": "Incidents_CS",
+    "elements": [
+      "IServerAction:GetDashboardMetricsForPeriod",
+      "IServerAction:GetIncidentsNearDue",
+      "IServerAction:GetIncidentList",
+      "IStructure:IncidentStatusMetric",
+      "IStructure:IncidentPriorityMetric",
+      "IStaticEntity:IncidentStatus",
+      "IStaticEntity:IncidentPriority",
+      "IServerEntity:Incident",
+      "IServerAction:GetIncidentListBySla"
+    ]
+  }
+]

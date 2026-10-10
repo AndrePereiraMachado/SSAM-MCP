@@ -1,0 +1,73 @@
+public sealed record PostingJournal
+{
+    public List<string> Entries { get; } = new List<string>();
+    public int Total { get; set; }
+}
+public static class JournalRules
+{
+    public static int Run(bool fail, int amount)
+    {
+        var journal = new PostingJournal();
+        var alias = journal;
+        var entries = journal.Entries;
+        Apply(journal, alias, entries, amount, fail);
+        return journal.Total * 100 + entries.Count;
+    }
+    private static void Apply(PostingJournal left, PostingJournal right, List<string> entries, int amount, bool fail)
+    {
+        left.Total += amount;
+        entries.Add("before:" + amount);
+        right.Entries.Add("shared");
+        Leaf(fail);
+        right.Total += 1;
+        entries.Add("after");
+    }
+    private static void Leaf(bool fail)
+    {
+        if (fail) throw new InvalidOperationException("leaf failed");
+    }
+    public static bool Same(bool shared)
+    {
+        var left = new PostingJournal();
+        var right = shared ? left : new PostingJournal();
+        return SamePair(left, right);
+    }
+    private static bool SamePair(PostingJournal left, PostingJournal right)
+        => object.ReferenceEquals(left, right);
+    public static int Fresh()
+    {
+        var first = new PostingJournal();
+        var second = new PostingJournal();
+        first.Entries.Add("first");
+        return first.Entries.Count * 10 + second.Entries.Count;
+    }
+    public static int Rebind()
+    {
+        var first = new PostingJournal();
+        var second = new PostingJournal();
+        return RebindPair(first, second);
+    }
+    private static int RebindPair(PostingJournal first, PostingJournal second)
+    {
+        var receiver = first;
+        receiver.Total = Touch(first, receiver = second);
+        return first.Total * 100 + first.Entries.Count * 10 + receiver.Entries.Count;
+    }
+    private static int Touch(PostingJournal first, PostingJournal second)
+    {
+        first.Total = 40;
+        first.Entries.Add("rhs");
+        second.Entries.Add("replacement");
+        return 9;
+    }
+    public static int NullRequired()
+    {
+        PostingJournal journal = null!;
+        return Require(journal);
+    }
+    private static int Require(PostingJournal journal)
+    {
+        ArgumentNullException.ThrowIfNull(journal);
+        return journal.Total;
+    }
+}

@@ -1,0 +1,19 @@
+{
+ "_leia": "ODC: os detectores de hoje só leem O11. Um job com violação (L3) no ODC não passa calado: nenhum achado, cada regra 'não checada no ODC ainda', AR1 'não se aplica ao ODC' e exit 3.",
+ "stage": "job",
+ "platform": "odc",
+ "mode": "autor",
+ "module": "Domain_CS",
+ "jobs": [
+  "l3-nested-if.json"
+ ],
+ "exitCode": 3,
+ "maxFindings": 0,
+ "ruleStatus": {
+  "L1": "nao-checada-odc",
+  "L3": "nao-checada-odc",
+  "N1": "nao-checada-odc",
+  "P7": "nao-checada-odc",
+  "AR1": "nao-se-aplica"
+ }
+}

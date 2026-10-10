@@ -1,0 +1,21 @@
+{
+ "description": "Table: um ITableRecords com Source no aggregate e uma coluna (IHeaderCell em HeaderRow + IRowCell em Row).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [{"name": "Name", "type": "Text", "length": 100, "mandatory": true}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "TableDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "ITableRecords", "name": "ProductTable", "as": "$tbl"},
+  {"op": "set", "target": "$tbl", "prop": "Source", "value": "GetProducts.List"},
+  {"op": "create", "parent": "$tbl/HeaderRow", "type": "IHeaderCell", "name": "NameHeader", "as": "$h"},
+  {"op": "create", "parent": "$h/Content", "type": "IExpression", "as": "$hText"},
+  {"op": "set", "target": "$hText", "prop": "Value", "value": "\"Product\""},
+  {"op": "create", "parent": "$tbl/Row", "type": "IRowCell", "name": "NameCell", "as": "$c"},
+  {"op": "create", "parent": "$c/Content", "type": "IExpression", "as": "$cText"},
+  {"op": "set", "target": "$cText", "prop": "Value", "value": "GetProducts.List.Current.Product.Name"}
+ ]
+}

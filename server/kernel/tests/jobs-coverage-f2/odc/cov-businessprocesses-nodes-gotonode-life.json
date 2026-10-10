@@ -1,0 +1,202 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.BusinessProcesses.Nodes.IGoToNode (odc) em ctxWorkflowWait. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/blank-workflow.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IBusinessProcess",
+   "name": "CovSWorkflow",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "set",
+   "target": "$fs",
+   "prop": "TriggerMode",
+   "value": "Schedule"
+  },
+  {
+   "op": "set",
+   "target": "$fs",
+   "prop": "Frequency",
+   "value": "Daily"
+  },
+  {
+   "op": "set",
+   "target": "$fs/ScheduleConfiguration",
+   "prop": "CronExpression",
+   "value": "0 6 * * *"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "OutSystems.Model.BusinessProcesses.Nodes.IWaitActivityNode",
+   "name": "CovSWait",
+   "as": "$w"
+  },
+  {
+   "op": "set",
+   "target": "$w",
+   "prop": "TimeoutMode",
+   "value": "Basic"
+  },
+  {
+   "op": "set",
+   "target": "$w",
+   "prop": "TimeoutBasicTime",
+   "value": 1
+  },
+  {
+   "op": "set",
+   "target": "$w",
+   "prop": "TimeoutUnit",
+   "value": "Days"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$w"
+  },
+  {
+   "op": "link",
+   "from": "$w",
+   "to": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IGoToNode",
+   "as": "$a"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$a"
+  },
+  {
+   "op": "link",
+   "from": "$a",
+   "to": "$w"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRGoToNode"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "OutSystems.Model.BusinessProcesses.Nodes.IDecisionNode",
+   "name": "CovSDecision",
+   "as": "$dd"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$dd"
+  },
+  {
+   "op": "create",
+   "parent": "$dd",
+   "type": "IOutcome",
+   "as": "$dd_o1"
+  },
+  {
+   "op": "set",
+   "target": "$dd_o1",
+   "prop": "Value",
+   "value": "True"
+  },
+  {
+   "op": "link",
+   "from": "$dd_o1",
+   "to": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$dd",
+   "type": "IOutcome",
+   "as": "$dd_o2"
+  },
+  {
+   "op": "link",
+   "from": "$dd_o2",
+   "to": "$b"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "OutSystems.Model.BusinessProcesses.Nodes.IWaitActivityNode",
+   "name": "CovSWait2",
+   "as": "$w2"
+  },
+  {
+   "op": "set",
+   "target": "$w2",
+   "prop": "TimeoutMode",
+   "value": "Basic"
+  },
+  {
+   "op": "set",
+   "target": "$w2",
+   "prop": "TimeoutBasicTime",
+   "value": 1
+  },
+  {
+   "op": "set",
+   "target": "$w2",
+   "prop": "TimeoutUnit",
+   "value": "Days"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEndNode",
+   "as": "$fe2"
+  },
+  {
+   "op": "link",
+   "from": "$w2",
+   "to": "$fe2"
+  },
+  {
+   "op": "link",
+   "from": "$b",
+   "to": "$w2"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "x": 600,
+   "y": 400
+  }
+ ]
+}

@@ -1,0 +1,21 @@
+using System.Reflection;
+using System.Text.Json;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+var source=File.ReadAllText(Path.Combine(AppContext.BaseDirectory,"Domain.cs.txt"));
+var tree=CSharpSyntaxTree.ParseText(source,path:"Domain.cs",options:new CSharpParseOptions(LanguageVersion.CSharp12));
+var refs=((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator).Select(p=>MetadataReference.CreateFromFile(p));
+var compilation=CSharpCompilation.Create("HighCodeDomainProbe",[tree],refs,new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,nullableContextOptions:NullableContextOptions.Enable));
+var errors=compilation.GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error).ToArray();if(errors.Length>0)throw new Exception(string.Join("\n",errors.Select(e=>e.ToString())));
+var semantic=compilation.GetSemanticModel(tree);
+var properties=tree.GetRoot().DescendantNodes().OfType<PropertyDeclarationSyntax>().Select(p=>(IPropertySymbol)semantic.GetDeclaredSymbol(p)!).Where(p=>p.ContainingType.Name=="Incident").Select(p=>new {p.Name,type=p.Type.ToDisplayString(),nullable=p.NullableAnnotation.ToString(),attributes=p.GetAttributes().Select(a=>new{name=a.AttributeClass!.Name,args=a.ConstructorArguments.Select(v=>v.Value)})}).ToArray();
+var enumValues=tree.GetRoot().DescendantNodes().OfType<EnumMemberDeclarationSyntax>().Select(p=>(IFieldSymbol)semantic.GetDeclaredSymbol(p)!).Select(p=>new {p.Name,p.ConstantValue}).ToArray();
+var operations=tree.GetRoot().DescendantNodes().Select(n=>semantic.GetOperation(n)).Where(o=>o!=null).Select(o=>o!.Kind.ToString()).Distinct().Order().ToArray();
+using var stream=new MemoryStream();var emit=compilation.Emit(stream);if(!emit.Success)throw new Exception("Emit failed");var assembly=Assembly.Load(stream.ToArray());var rules=assembly.GetType("Rules")!;var priority=assembly.GetType("IncidentPriority")!;
+var cases=new[]{(10,4320),(20,1440),(30,480),(40,120)};
+foreach(var (code,expected) in cases)if((int)rules.GetMethod("SlaMinutes")!.Invoke(null,[Enum.ToObject(priority,code)])! != expected)throw new Exception("Rule mismatch");
+try { rules.GetMethod("SlaMinutes")!.Invoke(null,[Enum.ToObject(priority,99)]);throw new Exception("Unknown priority accepted"); }catch(TargetInvocationException ex) when(ex.InnerException is ArgumentOutOfRangeException){}
+var integerHalf=rules.GetMethod("Half")!.Invoke(null,[3]);var decimalHalf=rules.GetMethod("DecimalHalf")!.Invoke(null,[3]);if(!Equals(integerHalf,1)||!Equals(decimalHalf,1.5m))throw new Exception("Division semantics mismatch");
+var broken=CSharpSyntaxTree.ParseText("class Broken { int Run() => Unknown(1); }",path:"Broken.cs",options:new CSharpParseOptions(LanguageVersion.CSharp12));var bad=compilation.AddSyntaxTrees(broken).GetDiagnostics().Where(d=>d.Severity==DiagnosticSeverity.Error).Select(d=>new {d.Id,message=d.GetMessage(),file=d.Location.GetLineSpan().Path,line=d.Location.GetLineSpan().StartLinePosition.Line+1,column=d.Location.GetLineSpan().StartLinePosition.Character+1}).ToArray();if(!bad.Any(d=>d.Id=="CS0103"))throw new Exception("Missing source diagnostic");
+Console.WriteLine(JsonSerializer.Serialize(new {passed=true,properties,enumValues,operations,pureRuleCases=7,integerHalf,decimalHalf,sourceDiagnostics=bad,nativeTranslationImplemented=false,outSystemsBehaviorEquivalenceProven=false},new JsonSerializerOptions{WriteIndented=true}));

@@ -1,0 +1,52 @@
+{
+ "_leia": "Estagio oml sobre o OML do composto Reactive (template da plataforma sai como info).",
+ "stage": "oml,truechange",
+ "mode": "autor",
+ "oml": "o-composite-reactive.oml",
+ "resultForOml": "o-composite-reactive.result.json",
+ "exitCode": 1,
+ "mustFind": [
+  {
+   "rule": "U1",
+   "stage": "oml",
+   "severity": "erro",
+   "contains": "DetailPanel"
+  },
+  {
+   "rule": "U4",
+   "stage": "oml",
+   "severity": "erro",
+   "contains": "color: red"
+  },
+  {
+   "rule": "L5",
+   "stage": "oml",
+   "severity": "erro",
+   "contains": "CopyToClipboard"
+  },
+  {
+   "rule": "S1",
+   "stage": "oml",
+   "severity": "erro",
+   "contains": "OnReady"
+  },
+  {
+   "rule": "S2",
+   "stage": "oml",
+   "severity": "erro",
+   "contains": "SaveAndNotify"
+  }
+ ],
+ "mustNotFind": [
+  {
+   "rule": "E2",
+   "severity": "erro",
+   "contains": "LastURL"
+  },
+  {
+   "rule": "L5",
+   "severity": "erro",
+   "contains": "GetUsername"
+  }
+ ]
+}

@@ -1,0 +1,13 @@
+{
+ "description": "IconBadge (OutSystemsUI, Numbers) tipico; inputs obrigatorios Number ligados a variaveis da tela.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "NumberValue", "as": "$vNumberValue"},
+  {"op": "set", "target": "$vNumberValue", "prop": "DataType", "value": "Long Integer"},
+  {"op": "set", "target": "$vNumberValue", "prop": "DefaultValue", "value": "3"},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "IconBadgeDemo", "source": "IMobileBlock:IconBadge", "as": "$b"},
+  {"op": "set", "target": "$b/Number", "prop": "Value", "value": "NumberValue"}
+ ]
+}

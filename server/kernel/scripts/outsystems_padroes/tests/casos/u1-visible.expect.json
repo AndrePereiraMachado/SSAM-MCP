@@ -1,0 +1,15 @@
+{
+ "_leia": "Controle negativo U1: estagio job no modo autor; a ferramenta tem de dar exit 1 e acusar U1.",
+ "stage": "job",
+ "mode": "autor",
+ "module": "DomainApp",
+ "exitCode": 1,
+ "mustFind": [
+  {
+   "rule": "U1",
+   "severity": "erro",
+   "stage": "job",
+   "contains": "Visible"
+  }
+ ]
+}

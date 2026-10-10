@@ -1,0 +1,26 @@
+{
+ "_fixture": "result.json sintetico do deliver (Delivery.cs:167-185) para o estagio T pos-merge: entregue, 0 erros novos, 1 warning novo.",
+ "delivered": true,
+ "newErrors": 0,
+ "stage": "complete",
+ "validation": {
+  "new": [
+   {
+    "id": "UnusedAction",
+    "type": "Warning",
+    "key": "[\"UnusedAction\",\"DlvKey0000000000000000A\",[],[]]",
+    "path": "Domain_CS (ESpace) / ReadLegacyQueue (ServerAction)",
+    "detail": "Unused Action | 'ReadLegacyQueue' is never used."
+   }
+  ],
+  "fixed": [],
+  "preexisting": [],
+  "newErrors": 0
+ },
+ "contract": {
+  "unexpected": [],
+  "missingExpected": [],
+  "ambiguous": [],
+  "tolerated": []
+ }
+}

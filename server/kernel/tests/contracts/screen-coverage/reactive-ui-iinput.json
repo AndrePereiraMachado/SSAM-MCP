@@ -1,0 +1,44 @@
+{
+  "fixture": "reactive-ui",
+  "features": [
+    "native-widget",
+    "mobile:IInput"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Subject",
+            "type": "IInput",
+            "properties": {
+              "Variable": "Value",
+              "Prompt": "\"Enter value\"",
+              "Style": "\"coverage\""
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value",
+            "type": "Text"
+          }
+        ]
+      }
+    ]
+  },
+  "mutation": {
+    "target": "IMobileScreen:Coverage/Subject",
+    "prop": "Style",
+    "value": "\"changed\""
+  }
+}

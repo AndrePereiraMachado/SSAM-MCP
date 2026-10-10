@@ -1,0 +1,58 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "native-widget",
+    "web:IInputFilenameWidget"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Subject",
+            "type": "IInputFilenameWidget",
+            "properties": {
+              "StyleClasses": "coverage"
+            }
+          },
+          {
+            "name": "Submit",
+            "type": "IButtonWidget",
+            "properties": {
+              "Label": "\"Submit\""
+            },
+            "events": {
+              "OnClick": {
+                "destination": "IWebScreen:Coverage/Handle1"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "name": "Handle1",
+          "kind": "screen",
+          "owner": "IWebScreen:Coverage",
+          "steps": []
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IWebScreen:Coverage/Subject",
+    "prop": "StyleClasses",
+    "value": "changed"
+  }
+}

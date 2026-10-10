@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Anvil.Xif: O11 .NET extensions (XIF) without Integration Studio. Pure rules only: the spec, the XIF package (zlib + XML),
+    the Roslyn merge of the action bodies into the stubs the environment generates, the net472 compilation and the public
+    contract diff. No Studio and no Integration Studio assembly is referenced here; the installed Integration Studio is driven
+    by the separate net472 x86 host Anvil.Xif.Engine. The net472 reference assemblies come from the MIT package
+    Microsoft.NETFramework.ReferenceAssemblies.net472 and are copied to ref/net472 next to the output; no OutSystems DLL is
+    ever part of this project.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RollForward>Major</RollForward>
+    <Description>Headless O11 .NET extensions (XIF): spec, package, source merge, net472 compiler and contract diff.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Anvil.CSharp/Anvil.CSharp.csproj" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net472" Version="1.0.3" GeneratePathProperty="true" ExcludeAssets="all" PrivateAssets="all" />
+  </ItemGroup>
+  <!-- The compile references of an extension (.NET Framework 4.7.2). The UI and designer assemblies stay out: an extension
+       runs inside the web application of the platform. -->
+  <ItemGroup Condition="'$(PkgMicrosoft_NETFramework_ReferenceAssemblies_net472)' != ''">
+    <XifReference Include="$(PkgMicrosoft_NETFramework_ReferenceAssemblies_net472)\build\.NETFramework\v4.7.2\*.dll"
+                  Exclude="$(PkgMicrosoft_NETFramework_ReferenceAssemblies_net472)\build\.NETFramework\v4.7.2\Presentation*.dll;$(PkgMicrosoft_NETFramework_ReferenceAssemblies_net472)\build\.NETFramework\v4.7.2\System.Windows*.dll;$(PkgMicrosoft_NETFramework_ReferenceAssemblies_net472)\build\.NETFramework\v4.7.2\WindowsBase.dll;$(PkgMicrosoft_NETFramework_ReferenceAssemblies_net472)\build\.NETFramework\v4.7.2\System.Design.dll;$(PkgMicrosoft_NETFramework_ReferenceAssemblies_net472)\build\.NETFramework\v4.7.2\System.Activities*.dll;$(PkgMicrosoft_NETFramework_ReferenceAssemblies_net472)\build\.NETFramework\v4.7.2\System.Workflow*.dll;$(PkgMicrosoft_NETFramework_ReferenceAssemblies_net472)\build\.NETFramework\v4.7.2\Microsoft.Build*.dll;$(PkgMicrosoft_NETFramework_ReferenceAssemblies_net472)\build\.NETFramework\v4.7.2\ReachFramework.dll;$(PkgMicrosoft_NETFramework_ReferenceAssemblies_net472)\build\.NETFramework\v4.7.2\UIAutomation*.dll;$(PkgMicrosoft_NETFramework_ReferenceAssemblies_net472)\build\.NETFramework\v4.7.2\System.Speech.dll;$(PkgMicrosoft_NETFramework_ReferenceAssemblies_net472)\build\.NETFramework\v4.7.2\System.Printing.dll;$(PkgMicrosoft_NETFramework_ReferenceAssemblies_net472)\build\.NETFramework\v4.7.2\Microsoft.VisualBasic.Compatibility*.dll" />
+    <XifReference Include="$(PkgMicrosoft_NETFramework_ReferenceAssemblies_net472)\build\.NETFramework\v4.7.2\Facades\*.dll" Subfolder="Facades\" />
+    <None Include="@(XifReference)" Link="ref\net472\%(Subfolder)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,82 @@
+{
+ "description": "Frente B (catalogo abrangente), faixa O11 Reactive: porta de tests/jobs-odc/ui-flow-comment.json e da parte popover/metadata de tests/jobs-odc/email-popover-metadata.json. (1) Comment do canvas do fluxo de UI: tipo QUALIFICADO OutSystems.Model.UI.Mobile.IComment (o nome nu tambem existe em UI.Web); no O11 a interface tem Text e IsReminder gravaveis e nenhum Name (model-api-11.55.69), por isso o name do create nao e prova de nada; dois comentarios, o segundo com IsReminder=true (a mensagem Reminder esta declarada) e separado com move x/y. (2) O fluxo IMobileFlow:MainFlow lido com get e dump, onde os comentarios aparecem ao lado das telas. (3) IPopover do plugin NRWidgets, numa tela: no O11 as proprias propriedades gravaveis sao PopoverWidth e Style (nao ha Width), e TopContent/BottomContent nascem com o widget. (4) ITextMetadata pendurada num IScreenAggregate por CreateMetadata<T>(name, managedBy) (IAggregate no O11), com Value e Hidden. O email do job ODC fica FORA: o runtime O11 11.55.87 nao carrega OutSystems.Model.UI.Mobile.IMobileEmail (overlays-email.json, limite o11). Nada aqui foi corrido nativamente ainda.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "Reminder",
+   "element": "MainFlow (MobileFlow) / CommentNode",
+   "why": "IsReminder=true faz a plataforma emitir uma mensagem Reminder com o texto do proprio comentario: e o significado da propriedade e o que este job prova (igual ao job ODC ui-flow-comment). O comentario com IsReminder=false nao emite nada. No O11 o elemento sai como CommentNode (o comentario do fluxo nao tem nome; medido na sonda B-006 fase 1)."
+  }
+ ],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "OutSystems.Model.UI.Mobile.IComment", "name": "CatBFlowNote", "as": "$note",
+   "_why": "nome qualificado: o nu IComment casa tambem com OutSystems.Model.UI.Web.IComment"},
+  {"op": "set", "target": "$note", "prop": "Text", "value": "Prova O11: comentario no canvas do fluxo de UI"},
+  {"op": "get", "target": "$note",
+   "_why": "estado de omissao: IsReminder=False, posicao dada pela plataforma, name"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "OutSystems.Model.UI.Mobile.IComment", "as": "$reminder"},
+  {"op": "set", "target": "$reminder", "prop": "Text", "value": "Prova O11: este comentario esta marcado como Is Reminder"},
+  {"op": "set", "target": "$reminder", "prop": "IsReminder", "value": true,
+   "_why": "booleana recebe JSON true; e esta escrita que faz nascer a mensagem Reminder declarada"},
+  {"op": "get", "target": "$reminder"},
+  {"op": "move", "target": "$reminder", "x": 3196, "y": 1040,
+   "_why": "so desenho: x/y no canvas do fluxo de UI; o resultado devolve a posicao que ficou"},
+  {"op": "get", "target": "$reminder",
+   "_why": "confirma HorizontalPosition/VerticalPosition depois do move"},
+
+  {
+   "op": "spec",
+   "data": {
+    "entities": [
+     {
+      "name": "CatBNotice",
+      "description": "Cobertura O11: entidade minima, so para haver um aggregate real onde pendurar a ITextMetadata",
+      "attributes": [
+       {"name": "Title", "type": "Text", "mandatory": true, "length": 100}
+      ]
+     }
+    ]
+   }
+  },
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CatBNoticeBoard", "as": "$scr",
+   "_why": "a tela que segura o aggregate (com a metadata) e o popover"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Notices\""},
+
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetNotices", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "$CatBNotice"}},
+  {"op": "create", "parent": "$agg", "type": "ITextMetadata", "name": "CatBNote", "args": {"managedBy": "anvil"}, "as": "$md",
+   "_why": "CreateMetadata<T>(name, managedBy) de IAggregate no O11: managedBy sem default, por isso o args e obrigatorio; Name e ManagedBy sao readOnly em IMetadata"},
+  {"op": "set", "target": "$md", "prop": "Value", "value": "aggregate escrito pelo job cat-b-flow-comment-popover"},
+  {"op": "set", "target": "$md", "prop": "Hidden", "value": true},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "Board", "as": "$box"},
+  {"op": "create", "parent": "$box", "type": "IPopover", "name": "CatBMenu", "as": "$pop",
+   "_why": "ServiceStudio.Plugin.NRWidgets.IPopover por CreateWidget<T>, como qualquer widget da tela"},
+  {"op": "set", "target": "$pop", "prop": "PopoverWidth", "value": 320,
+   "_why": "Nullable<Int32>, propriedade propria do Popover no O11"},
+  {"op": "set", "target": "$pop", "prop": "Style", "value": "\"popover\"",
+   "_why": "no O11 nao ha Width no IPopover; Style e expressao (SetStyle)"},
+  {"op": "create", "parent": "$pop/TopContent", "type": "IExpression", "as": "$popTop",
+   "_why": "TopContent e BottomContent nascem com o widget: referem-se pela propriedade que devolve o IContent"},
+  {"op": "set", "target": "$popTop", "prop": "Value", "value": "\"Notices\""},
+  {"op": "create", "parent": "$pop/BottomContent", "type": "IExpression", "as": "$popBottom"},
+  {"op": "set", "target": "$popBottom", "prop": "Value", "value": "IntegerToText(GetNotices.List.Length)",
+   "_why": "o aggregate alimenta o popover: sem leitor ele ficaria sem uso"},
+
+  {"op": "get", "target": "$md",
+   "_why": "le de volta a metadata: Name, ManagedBy, Value e Hidden"},
+  {"op": "get", "target": "$pop",
+   "_why": "le de volta PopoverWidth e Style"},
+  {"op": "dump", "target": "$agg", "depth": 3,
+   "_why": "a metadata aparece como filha do aggregate"},
+  {"op": "dump", "target": "$pop", "depth": 3,
+   "_why": "o que o popover trouxe de fabrica e o que o job acrescentou"},
+  {"op": "get", "target": "IMobileFlow:MainFlow",
+   "_why": "o fluxo de UI lido por si: Nodes e Theme"},
+  {"op": "dump", "target": "IMobileFlow:MainFlow", "depth": 1,
+   "_why": "os dois comentarios sao filhos do FLUXO, ao lado das telas"}
+ ]
+}

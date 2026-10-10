@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Synthetic WSDL for the soap op tests (SoapPlanTests, jobs-negative/soap-method-not-found): one service, a SOAP 1.1
+     and a SOAP 1.2 port over the same port type. No real endpoint: example.invalid never resolves. -->
+<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+    xmlns:soap12="http://schemas.xmlsoap.org/wsdl/soap12/" xmlns:s="http://www.w3.org/2001/XMLSchema"
+    xmlns:tns="http://example.invalid/calculator" targetNamespace="http://example.invalid/calculator">
+  <wsdl:types>
+    <s:schema elementFormDefault="qualified" targetNamespace="http://example.invalid/calculator">
+      <s:complexType name="tOperands">
+        <s:sequence>
+          <s:element name="A" type="s:int" />
+          <s:element name="B" type="s:int" />
+        </s:sequence>
+      </s:complexType>
+      <s:element name="Add"><s:complexType><s:sequence><s:element name="intA" type="s:int" /><s:element name="intB" type="s:int" /></s:sequence></s:complexType></s:element>
+      <s:element name="AddResponse"><s:complexType><s:sequence><s:element name="AddResult" type="s:int" /></s:sequence></s:complexType></s:element>
+      <s:element name="Subtract"><s:complexType><s:sequence><s:element name="Operands" type="tns:tOperands" /></s:sequence></s:complexType></s:element>
+      <s:element name="SubtractResponse"><s:complexType><s:sequence><s:element name="SubtractResult" type="s:int" /></s:sequence></s:complexType></s:element>
+    </s:schema>
+  </wsdl:types>
+  <wsdl:message name="AddSoapIn"><wsdl:part name="parameters" element="tns:Add" /></wsdl:message>
+  <wsdl:message name="AddSoapOut"><wsdl:part name="parameters" element="tns:AddResponse" /></wsdl:message>
+  <wsdl:message name="SubtractSoapIn"><wsdl:part name="parameters" element="tns:Subtract" /></wsdl:message>
+  <wsdl:message name="SubtractSoapOut"><wsdl:part name="parameters" element="tns:SubtractResponse" /></wsdl:message>
+  <wsdl:portType name="CalculatorSoapPortType">
+    <wsdl:operation name="Add"><wsdl:input message="tns:AddSoapIn" /><wsdl:output message="tns:AddSoapOut" /></wsdl:operation>
+    <wsdl:operation name="Subtract"><wsdl:input message="tns:SubtractSoapIn" /><wsdl:output message="tns:SubtractSoapOut" /></wsdl:operation>
+  </wsdl:portType>
+  <wsdl:binding name="CalculatorSoapBinding" type="tns:CalculatorSoapPortType">
+    <soap:binding transport="http://schemas.xmlsoap.org/soap/http" />
+    <wsdl:operation name="Add"><soap:operation soapAction="http://example.invalid/calculator/Add" style="document" /><wsdl:input><soap:body use="literal" /></wsdl:input><wsdl:output><soap:body use="literal" /></wsdl:output></wsdl:operation>
+    <wsdl:operation name="Subtract"><soap:operation soapAction="http://example.invalid/calculator/Subtract" style="document" /><wsdl:input><soap:body use="literal" /></wsdl:input><wsdl:output><soap:body use="literal" /></wsdl:output></wsdl:operation>
+  </wsdl:binding>
+  <wsdl:binding name="CalculatorSoap12Binding" type="tns:CalculatorSoapPortType">
+    <soap12:binding transport="http://schemas.xmlsoap.org/soap/http" />
+    <wsdl:operation name="Add"><soap12:operation soapAction="http://example.invalid/calculator/Add" style="document" /><wsdl:input><soap12:body use="literal" /></wsdl:input><wsdl:output><soap12:body use="literal" /></wsdl:output></wsdl:operation>
+    <wsdl:operation name="Subtract"><soap12:operation soapAction="http://example.invalid/calculator/Subtract" style="document" /><wsdl:input><soap12:body use="literal" /></wsdl:input><wsdl:output><soap12:body use="literal" /></wsdl:output></wsdl:operation>
+  </wsdl:binding>
+  <wsdl:service name="Calculator">
+    <wsdl:port name="CalculatorSoap" binding="tns:CalculatorSoapBinding"><soap:address location="https://example.invalid/calculator.asmx" /></wsdl:port>
+    <wsdl:port name="CalculatorSoap12" binding="tns:CalculatorSoap12Binding"><soap12:address location="https://example.invalid/calculator.asmx" /></wsdl:port>
+  </wsdl:service>
+</wsdl:definitions>

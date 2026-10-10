@@ -1,0 +1,62 @@
+{
+ "description": "Cobertura testada (fase 2): move into (folder:Structures) de ServiceStudio.Plugin.SOAP.ISOAPStructurePolymorphic (o11) em soapClient. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedCustomStructure",
+   "element": "Headless_CS (ESpace) / CovSSoap (SOAPClient) / CovASOAPStructurePolymorphic (SOAPStructurePolymorphic)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISOAPClient",
+   "name": "CovSSoap",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "ISOAPStructurePolymorphic",
+   "name": "CovASOAPStructurePolymorphic",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "ISOAPStructureAttributePolymorphic",
+   "name": "Title",
+   "as": "$aat"
+  },
+  {
+   "op": "set",
+   "target": "$aat",
+   "prop": "MinOccurrencies",
+   "value": "0"
+  },
+  {
+   "op": "set",
+   "target": "$aat",
+   "prop": "MaxOccurrencies",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IFolder",
+   "name": "CovSMvFolder",
+   "args": {
+    "parentFolder": "Structures"
+   },
+   "as": "$mvp"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "into": "$mvp"
+  }
+ ]
+}

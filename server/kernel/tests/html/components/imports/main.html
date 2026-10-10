@@ -1,0 +1,15 @@
+<component name="ImportGallery" kind="screen" roles="Anonymous,Registered">
+  <script type="module">
+    import { Panel as Primary } from './panel.html';
+    import { Panel as Secondary } from './panel.html';
+  </script>
+  <style>
+    :root { max-width:1080px; margin:40px auto; padding:24px; color:#192b40; }
+    h1 { font-size:32px; letter-spacing:-1px; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }
+    @media(max-width:600px) { .grid { grid-template-columns:1fr; } }
+  </style>
+  <h1>Componentes importados</h1>
+  <p>Dois aliases compartilham a definição. Cada instância conserva seu estado.</p>
+  <div class="grid"><Primary id="First"></Primary><Secondary id="Second"></Secondary></div>
+</component>

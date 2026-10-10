@@ -1,0 +1,12 @@
+{
+ "ok": false,
+ "lane": "o11",
+ "verb": "job",
+ "exitCode": 1,
+ "output": [
+  "result: <fixtures>\\o11-delete-attribute-in-use.result.json",
+  "== delete-attribute-in-use.json: ok=False op #2 (delete ): InvalidOperationException: delete: refused, IEntityAttribute 'Email' is used by 2 consumer(s): IMobileFlow:MainFlow/IMobileScreen:ContactDetail/IScreenAggregate:GetContactById/DataTable/ICombineSourcesOperation:Contacts/IFilter/IExpression; IMobileFlow:MainFlow/IMobileScreen:ContactDetail/IMobileBlockInstanceWidget/IPlaceholderContentWidget:MainContent/IForm:ContactForm/IMobileWidget:content/IInput:Email_Input/CustomProperty:Variable/IExpression (list them with usages, fix or remove those usages, or pass \"force\": true to break them)",
+  "   via process | 7122 ms de parede"
+ ],
+ "laneFrom": "--lane"
+}

@@ -1,0 +1,20 @@
+{
+ "description": "ODC: a RECUSA do delete de uma FK cujo AutoIndex ainda existe: cada FK nasce com um indice automatico que conta como consumidor; sem o apagar primeiro, o delete do atributo e recusado a nomea-lo. O caminho limpo (apagar o AutoIndex e depois a FK) esta em tests/jobs-odc/entity-refactor.json e em delete-entity-whole.json.",
+ "base": "job:data-full-model",
+ "expectValid": true,
+ "expectError": [
+  "delete: refused",
+  "IEntityAttribute 'PriorityId' is used by 1 consumer(s)",
+  "EntityIndex:AutoIndex_PriorityId/EntityIndexAttribute"
+ ],
+ "ops": [
+  {
+   "op": "usages",
+   "target": "IServerEntity:WfCovTask/PriorityId"
+  },
+  {
+   "op": "delete",
+   "target": "IServerEntity:WfCovTask/PriorityId"
+  }
+ ]
+}

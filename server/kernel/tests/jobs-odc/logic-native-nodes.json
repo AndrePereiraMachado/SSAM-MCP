@@ -1,0 +1,140 @@
+{
+ "description": "ODC (cobertura C): os seis nos nativos que faltavam na faixa, num app minimo sobre a fixture do InsuranceApp. Client-side, em IScreenAction de um IMobileScreen: IMessageNode (os quatro Type), IDestinationNode (com argumento para o input da tela destino) e IDownloadNode. Server-side, em IServerAction: IJSONSerializeNode/IJSONDeserializeNode (record e lista, os dois SerializeDefaultValues) e IRecordListToExcelNode/IExcelToRecordListNode. O censo dos 45 modulos ODC reais diz onde cada um pode viver: Message e Destination nunca aparecem em IServerAction, Download so em IScreenAction (38 de 38) e RecordListToExcel so em IServerAction (9 de 9); este job segue esse recorte e liga as duas metades, porque o binario que o no de Excel produz atravessa a server action e chega ao Download da tela.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfNode_Envelope_Roundtrip (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "structures": [
+     {
+      "name": "WfNodeLine",
+      "public": true,
+      "description": "Cobertura C: linha exportada para Excel e serializada em JSON; publica porque as server actions que a expoem sao shareable (no ODC, uma action shareable so expoe tipos shareable, e isso e ERRO, nao aviso)",
+      "attributes": [
+       {"name": "Label", "type": "Text"},
+       {"name": "Amount", "type": "Integer"},
+       {"name": "DueOn", "type": "Date Time", "description": "Da sentido ao DateFormat ISO dos nos de JSON e fica de fora do AttributeSelection do Excel de proposito"}
+      ]
+     },
+     {
+      "name": "WfNodeEnvelope",
+      "public": true,
+      "description": "Cobertura C: tipo composto com record aninhado e lista, para provar os dois RuntimeTypeKind que o IJSONSerializeNode aceita em Data",
+      "attributes": [
+       {"name": "Line", "type": "WfNodeLine"},
+       {"name": "Lines", "type": "WfNodeLine List"},
+       {"name": "IssuedOn", "type": "Date Time"}
+      ]
+     }
+    ]
+   }
+  },
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfNodeTarget", "as": "$target"},
+  {"op": "set", "target": "$target/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$target", "type": "IInputParameter", "name": "Note", "as": "$note"},
+  {"op": "set", "target": "$note", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$target/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$noteText"},
+  {"op": "set", "target": "$noteText", "prop": "Value", "value": "Note", "_why": "o input da tela destino tem de ser lido por alguem, senao nasce UnusedElement; e ele que recebe o argumento do IDestinationNode"},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfNodeProof", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Lines", "as": "$lines"},
+  {"op": "set", "target": "$lines", "prop": "DataType", "value": "WfNodeLine List"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "Actions", "as": "$box"},
+  {"op": "create", "parent": "$box", "type": "IButton", "name": "NotifyButton", "as": "$btnNotify"},
+  {"op": "set", "target": "$btnNotify/#ITextWidget", "prop": "Text", "value": "Notify"},
+  {"op": "create", "parent": "$box", "type": "IButton", "name": "GoButton", "as": "$btnGo"},
+  {"op": "set", "target": "$btnGo/#ITextWidget", "prop": "Text", "value": "Go to target"},
+  {"op": "create", "parent": "$box", "type": "IButton", "name": "DownloadButton", "as": "$btnDownload"},
+  {"op": "set", "target": "$btnDownload/#ITextWidget", "prop": "Text", "value": "Download Excel"},
+
+  {
+   "op": "logic",
+   "_why": "as cinco actions numa so op logic: o compilador ordena por dependencia, logo a server action do Excel nasce antes da screen action que a chama",
+   "data": {
+    "actions": [
+     {
+      "name": "WfNode_Envelope_Roundtrip",
+      "kind": "server",
+      "description": "Cobertura C: ida e volta de JSON. A saida do IJSONSerializeNode e <as>.JSON (texto) e a do IJSONDeserializeNode e <as>.Data (do tipo declarado em DataType). Encode prova Data de RuntimeTypeKind Record e SerializeDefaultValues true; EncodeLines prova Data de tipo List e o outro valor. DataType aceita o vocabulario do set DataType: uma structure em Decode, um '<X> List' em DecodeLines.",
+      "inputs": [{"name": "Value", "type": "WfNodeEnvelope"}],
+      "outputs": [
+       {"name": "Result", "type": "WfNodeEnvelope"},
+       {"name": "OnlyLines", "type": "WfNodeLine List"}
+      ],
+      "steps": [
+       {"node": "IJSONSerializeNode", "as": "Encode", "properties": {"Data": "Value", "DateFormat": "ISO", "SerializeDefaultValues": true}},
+       {"node": "IJSONDeserializeNode", "as": "Decode", "properties": {"JSONString": "Encode.JSON", "DataType": "WfNodeEnvelope", "DateFormat": "ISO"}},
+       {"node": "IJSONSerializeNode", "as": "EncodeLines", "properties": {"Data": "Value.Lines", "DateFormat": "ISO", "SerializeDefaultValues": false}},
+       {"node": "IJSONDeserializeNode", "as": "DecodeLines", "properties": {"JSONString": "EncodeLines.JSON", "DataType": "WfNodeLine List", "DateFormat": "ISO"}},
+       {"assign": {"Result": "Decode.Data", "OnlyLines": "DecodeLines.Data"}, "as": "TakeDecoded"}
+      ]
+     },
+     {
+      "name": "WfNode_Lines_ToExcel",
+      "kind": "server",
+      "description": "Cobertura C: ida e volta de Excel. A saida binaria do IRecordListToExcelNode e o PROPRIO nome do no (Export), sem sufixo: e assim que o IExcelToRecordListNode a le em FileContent e que o Assign a entrega ao output. AttributeSelection nomeia atributos do tipo do record list e DueOn fica de fora; um nome errado so apareceria no Verify.",
+      "inputs": [{"name": "Lines", "type": "WfNodeLine List"}],
+      "outputs": [
+       {"name": "File", "type": "Binary Data"},
+       {"name": "Count", "type": "Integer"}
+      ],
+      "steps": [
+       {"node": "IRecordListToExcelNode", "as": "Export", "properties": {"RecordList": "Lines", "AttributeSelection": ["Label", "Amount"]}},
+       {"node": "IExcelToRecordListNode", "as": "Import", "properties": {"FileContent": "Export", "SheetName": "\"\"", "DataType": "WfNodeLine List"}},
+       {"assign": {"File": "Export", "Count": "Import.Length"}, "as": "TakeExport"}
+      ]
+     },
+     {
+      "name": "WfNodeNotify",
+      "kind": "screen",
+      "owner": "IMobileScreen:WfNodeProof",
+      "description": "Cobertura C: os quatro Type do IMessageNode. O no nao e terminal, logo o End do ramo e gerado sozinho; o Label sai do 'as' sem nenhum set no job; e Message e expressao, nao literal (o ultimo le a variavel da tela dona da screen action).",
+      "steps": [
+       {"node": "IMessageNode", "as": "NoticeInfo", "properties": {"Message": "\"Draft loaded\"", "Type": "Info"}},
+       {"node": "IMessageNode", "as": "NoticeSuccess", "properties": {"Message": "\"Draft saved\"", "Type": "Success"}},
+       {"node": "IMessageNode", "as": "NoticeWarning", "properties": {"Message": "\"Draft has no lines\"", "Type": "Warning"}},
+       {"node": "IMessageNode", "as": "NoticeError", "properties": {"Message": "\"Could not export \" + IntegerToText(Lines.Length) + \" line(s)\"", "Type": "Error"}}
+      ]
+     },
+     {
+      "name": "WfNodeGoToTarget",
+      "kind": "screen",
+      "owner": "IMobileScreen:WfNodeProof",
+      "description": "Cobertura C: IDestinationNode. Destination e campo reference (ITipo:Nome, nunca alias operacional nem @chave); args vira um set <no>/arg:<Nome> prop Value, que e como se passa input da tela destino; e o no e terminal, nao leva IEndNode a seguir.",
+      "steps": [
+       {"node": "IDestinationNode", "as": "Go", "properties": {"Destination": "IMobileScreen:WfNodeTarget", "Transition": "Inherited"}, "args": {"Note": "\"Arrived from the proof screen\""}}
+      ]
+     },
+     {
+      "name": "WfNodeDownloadExport",
+      "kind": "screen",
+      "owner": "IMobileScreen:WfNodeProof",
+      "description": "Cobertura C: IDownloadNode, que vive SO em IScreenAction. Screen action Reactive/Mobile nao aceita output parameters, por isso o binario vem da server action chamada aqui. MimeType e exigido pelo kernel (nao tem default) embora nenhum dos 38 casos reais o escreva. Terminal: ultimo no do ramo.",
+      "steps": [
+       {"call": "WfNode_Lines_ToExcel", "as": "RunExport", "args": {"Lines": "Lines"}},
+       {"node": "IDownloadNode", "as": "Download", "properties": {"FileContent": "RunExport.File", "FileName": "\"wf-lines.xlsx\"", "MimeType": "\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\"", "SaveToDisk": true}}
+      ]
+     }
+    ]
+   }
+  },
+
+  {"op": "set", "target": "$btnNotify/OnClick", "prop": "Destination", "value": "IMobileScreen:WfNodeProof/WfNodeNotify"},
+  {"op": "set", "target": "$btnGo/OnClick", "prop": "Destination", "value": "IMobileScreen:WfNodeProof/WfNodeGoToTarget"},
+  {"op": "set", "target": "$btnDownload/OnClick", "prop": "Destination", "value": "IMobileScreen:WfNodeProof/WfNodeDownloadExport"},
+
+  {"op": "dump", "target": "IMobileScreen:WfNodeProof/WfNodeNotify", "depth": 3, "_why": "le de volta os quatro IMessageNode: o Label vindo do 'as' e cada Type"},
+  {"op": "get", "target": "IMobileScreen:WfNodeProof/WfNodeGoToTarget/#IDestinationNode", "_why": "prova Destination e Transition; o no de destino nao tem Name proprio, enderece-o por #Tipo"},
+  {"op": "get", "target": "IMobileScreen:WfNodeProof/WfNodeDownloadExport/#IDownloadNode", "_why": "prova FileContent, FileName, MimeType e SaveToDisk"},
+  {"op": "get", "target": "IServerAction:WfNode_Envelope_Roundtrip/Encode", "_why": "os nos de JSON e de Excel TEM Name proprio: enderecam-se pelo nome do 'as'"},
+  {"op": "get", "target": "IServerAction:WfNode_Envelope_Roundtrip/DecodeLines"},
+  {"op": "get", "target": "IServerAction:WfNode_Lines_ToExcel/Export"},
+  {"op": "get", "target": "IServerAction:WfNode_Lines_ToExcel/Import"},
+  {"op": "usages", "target": "IServerAction:WfNode_Lines_ToExcel", "_why": "a screen action do Download tem de aparecer como consumidor: e assim que o binario do Excel atravessa para o client-side"},
+  {"op": "find", "name": "WfNodeTarget"}
+ ]
+}

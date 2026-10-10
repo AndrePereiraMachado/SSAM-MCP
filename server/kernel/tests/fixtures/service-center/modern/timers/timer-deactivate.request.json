@@ -1,0 +1,26 @@
+{
+  "kind": "sc_web.fetch request (Web Forms postback)",
+  "request": {
+    "host": "sc.example.test",
+    "action": "fetch",
+    "method": "POST",
+    "path": "/ServiceCenter/eSpace_Timer_Edit.aspx",
+    "form": {
+      "__OSVSTATE": "U1NBTS1TWU5USEVUSUMtT1NWU1RBVEUvdGltZXItYWN0aXZl",
+      "__VIEWSTATE": "",
+      "__VIEWSTATEGENERATOR": "A1B2C3D4",
+      "wt9$wtHeader$wt129$wt275$wtSearchInput": "",
+      "wt9$wtHeader$wt129$wt275$wt12": "",
+      "wt9$wt7$wt1$wtButtonNameField": "",
+      "wt9$wt7$wt1$wtScreenNameField": "",
+      "wt9$wtContentMain$wtSchedule_Recurrence": "__ossli_0",
+      "wt9$wtContentMain$wtSchedule_Time": "03:00",
+      "wt9$wtContentMain$wtSchedule_Interval": "",
+      "wt9$wtContentMain$wtTimeout": "20",
+      "wt9$wtContentTop$wtDeactivateButton": "Deactivate"
+    },
+    "accept": "html"
+  },
+  "expectedResponseFixture": "web/timers/timer-edit.inactive.html",
+  "notes": "Deactivate (pause). Verify by re-reading the page: the Activate button must appear."
+}

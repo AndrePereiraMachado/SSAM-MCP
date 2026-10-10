@@ -1,0 +1,20 @@
+{
+ "schema": "outsystems-padroes/1",
+ "_fixture": "Relatorio anterior sintetico com um runtimeTest (T4) para o estagio runtime.",
+ "module": "DomainApp",
+ "runtimeTests": [
+  {
+   "testId": "fixture0000a",
+   "rule": "T4",
+   "module": "DomainApp",
+   "action": "FilterUrgentTasks",
+   "node": "KeepUrgent",
+   "listAction": "ListFilter",
+   "condition": "Tasks.Current.IsUrgent",
+   "path": "ClientAction:FilterUrgentTasks/ExecuteClientActionNode:KeepUrgent",
+   "stages": [
+    "job"
+   ]
+  }
+ ]
+}

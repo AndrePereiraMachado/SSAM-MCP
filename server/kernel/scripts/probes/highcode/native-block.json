@@ -1,0 +1,448 @@
+{
+  "base": "reactive-ui.oml",
+  "expectValid": true,
+  "ops": [
+    {
+      "op": "create",
+      "parent": "IMobileFlow:MainFlow",
+      "type": "IMobileBlock",
+      "name": "ResearchCard",
+      "as": "$card"
+    },
+    {
+      "op": "set",
+      "target": "$card",
+      "prop": "Public",
+      "value": true
+    },
+    {
+      "op": "create",
+      "parent": "$card",
+      "type": "IInputParameter",
+      "name": "Title",
+      "as": "$title"
+    },
+    {
+      "op": "set",
+      "target": "$title",
+      "prop": "DataType",
+      "value": "Text"
+    },
+    {
+      "op": "set",
+      "target": "$title",
+      "prop": "IsMandatory",
+      "value": true
+    },
+    {
+      "op": "create",
+      "parent": "$card",
+      "type": "ILocalVariable",
+      "name": "Counter",
+      "as": "$counter"
+    },
+    {
+      "op": "set",
+      "target": "$counter",
+      "prop": "DataType",
+      "value": "Integer"
+    },
+    {
+      "op": "create",
+      "parent": "$card",
+      "type": "IBlockEvent",
+      "name": "Changed",
+      "as": "$changed"
+    },
+    {
+      "op": "set",
+      "target": "$changed",
+      "prop": "IsMandatory",
+      "value": true
+    },
+    {
+      "op": "create",
+      "parent": "$changed",
+      "type": "IInputParameter",
+      "name": "Value",
+      "as": "$value"
+    },
+    {
+      "op": "set",
+      "target": "$value",
+      "prop": "DataType",
+      "value": "Integer"
+    },
+    {
+      "op": "create",
+      "parent": "$card",
+      "type": "IExpression",
+      "name": "Caption",
+      "as": "$caption"
+    },
+    {
+      "op": "set",
+      "target": "$caption",
+      "prop": "Value",
+      "value": "Title + \": \" + IntegerToText(Counter)"
+    },
+    {
+      "op": "create",
+      "parent": "$card",
+      "type": "IButton",
+      "name": "Increment",
+      "as": "$button"
+    },
+    {
+      "op": "set",
+      "target": "$button/#ITextWidget",
+      "prop": "Text",
+      "value": "Increment"
+    },
+    {
+      "op": "create",
+      "parent": "$card",
+      "type": "OutSystems.Model.UI.Mobile.Widgets.IPlaceholderWidget",
+      "name": "Footer",
+      "as": "$footer"
+    },
+    {
+      "op": "logic",
+      "data": {
+        "actions": [
+          {
+            "name": "Increment",
+            "kind": "screen",
+            "owner": "IMobileBlock:ResearchCard",
+            "steps": [
+              {
+                "assign": {
+                  "Counter": "Counter + 1"
+                }
+              },
+              {
+                "node": "ITriggerNode",
+                "as": "Notify",
+                "properties": {
+                  "Event": "IMobileBlock:ResearchCard/Changed"
+                },
+                "args": {
+                  "Value": "Counter"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "set",
+      "target": "$button/OnClick",
+      "prop": "Destination",
+      "value": "IMobileBlock:ResearchCard/Increment"
+    },
+    {
+      "op": "create",
+      "parent": "IMobileFlow:MainFlow",
+      "type": "IMobileScreen",
+      "name": "Research1",
+      "as": "$screen0"
+    },
+    {
+      "op": "set",
+      "target": "$screen0/#IMobileBlockInstanceWidget",
+      "prop": "SourceBlock",
+      "value": "IMobileBlock:LayoutBlank",
+      "empty": true
+    },
+    {
+      "op": "create",
+      "parent": "$screen0",
+      "type": "ILocalVariable",
+      "name": "LastValue",
+      "as": "$screen0.last"
+    },
+    {
+      "op": "set",
+      "target": "$screen0.last",
+      "prop": "DataType",
+      "value": "Integer"
+    },
+    {
+      "op": "logic",
+      "data": {
+        "actions": [
+          {
+            "name": "Research1Receive",
+            "kind": "screen",
+            "owner": "IMobileScreen:Research1",
+            "inputs": [
+              {
+                "name": "Value",
+                "type": "Integer"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "LastValue": "Value"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "create",
+      "parent": "$screen0/#IMobileBlockInstanceWidget/Content",
+      "type": "IMobileBlockInstanceWidget",
+      "name": "Card1",
+      "source": "IMobileBlock:ResearchCard",
+      "empty": true,
+      "as": "$screen0.card0"
+    },
+    {
+      "op": "set",
+      "target": "$screen0.card0/Title",
+      "prop": "Value",
+      "value": "\"Research1 instance 1\""
+    },
+    {
+      "op": "set",
+      "target": "$screen0.card0/Changed",
+      "prop": "Handler",
+      "value": "IMobileScreen:Research1/Research1Receive"
+    },
+    {
+      "op": "set",
+      "target": "$screen0.card0/Changed/Value",
+      "prop": "Value",
+      "value": "Value"
+    },
+    {
+      "op": "create",
+      "parent": "$screen0.card0/Footer",
+      "type": "ITextWidget",
+      "name": "FooterText",
+      "as": "$screen0.card0.footer"
+    },
+    {
+      "op": "set",
+      "target": "$screen0.card0.footer",
+      "prop": "Text",
+      "value": "Research1 footer 1"
+    },
+    {
+      "op": "create",
+      "parent": "$screen0/#IMobileBlockInstanceWidget/Content",
+      "type": "IMobileBlockInstanceWidget",
+      "name": "Card2",
+      "source": "IMobileBlock:ResearchCard",
+      "empty": true,
+      "as": "$screen0.card1"
+    },
+    {
+      "op": "set",
+      "target": "$screen0.card1/Title",
+      "prop": "Value",
+      "value": "\"Research1 instance 2\""
+    },
+    {
+      "op": "set",
+      "target": "$screen0.card1/Changed",
+      "prop": "Handler",
+      "value": "IMobileScreen:Research1/Research1Receive"
+    },
+    {
+      "op": "set",
+      "target": "$screen0.card1/Changed/Value",
+      "prop": "Value",
+      "value": "Value"
+    },
+    {
+      "op": "create",
+      "parent": "$screen0.card1/Footer",
+      "type": "ITextWidget",
+      "name": "FooterText",
+      "as": "$screen0.card1.footer"
+    },
+    {
+      "op": "set",
+      "target": "$screen0.card1.footer",
+      "prop": "Text",
+      "value": "Research1 footer 2"
+    },
+    {
+      "op": "create",
+      "parent": "$screen0/#IMobileBlockInstanceWidget/Content",
+      "type": "IExpression",
+      "name": "Received",
+      "as": "$screen0.received"
+    },
+    {
+      "op": "set",
+      "target": "$screen0.received",
+      "prop": "Value",
+      "value": "LastValue"
+    },
+    {
+      "op": "create",
+      "parent": "IMobileFlow:MainFlow",
+      "type": "IMobileScreen",
+      "name": "Research2",
+      "as": "$screen1"
+    },
+    {
+      "op": "set",
+      "target": "$screen1/#IMobileBlockInstanceWidget",
+      "prop": "SourceBlock",
+      "value": "IMobileBlock:LayoutBlank",
+      "empty": true
+    },
+    {
+      "op": "create",
+      "parent": "$screen1",
+      "type": "ILocalVariable",
+      "name": "LastValue",
+      "as": "$screen1.last"
+    },
+    {
+      "op": "set",
+      "target": "$screen1.last",
+      "prop": "DataType",
+      "value": "Integer"
+    },
+    {
+      "op": "logic",
+      "data": {
+        "actions": [
+          {
+            "name": "Research2Receive",
+            "kind": "screen",
+            "owner": "IMobileScreen:Research2",
+            "inputs": [
+              {
+                "name": "Value",
+                "type": "Integer"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "LastValue": "Value"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "create",
+      "parent": "$screen1/#IMobileBlockInstanceWidget/Content",
+      "type": "IMobileBlockInstanceWidget",
+      "name": "Card1",
+      "source": "IMobileBlock:ResearchCard",
+      "empty": true,
+      "as": "$screen1.card0"
+    },
+    {
+      "op": "set",
+      "target": "$screen1.card0/Title",
+      "prop": "Value",
+      "value": "\"Research2 instance 1\""
+    },
+    {
+      "op": "set",
+      "target": "$screen1.card0/Changed",
+      "prop": "Handler",
+      "value": "IMobileScreen:Research2/Research2Receive"
+    },
+    {
+      "op": "set",
+      "target": "$screen1.card0/Changed/Value",
+      "prop": "Value",
+      "value": "Value"
+    },
+    {
+      "op": "create",
+      "parent": "$screen1.card0/Footer",
+      "type": "ITextWidget",
+      "name": "FooterText",
+      "as": "$screen1.card0.footer"
+    },
+    {
+      "op": "set",
+      "target": "$screen1.card0.footer",
+      "prop": "Text",
+      "value": "Research2 footer 1"
+    },
+    {
+      "op": "create",
+      "parent": "$screen1/#IMobileBlockInstanceWidget/Content",
+      "type": "IMobileBlockInstanceWidget",
+      "name": "Card2",
+      "source": "IMobileBlock:ResearchCard",
+      "empty": true,
+      "as": "$screen1.card1"
+    },
+    {
+      "op": "set",
+      "target": "$screen1.card1/Title",
+      "prop": "Value",
+      "value": "\"Research2 instance 2\""
+    },
+    {
+      "op": "set",
+      "target": "$screen1.card1/Changed",
+      "prop": "Handler",
+      "value": "IMobileScreen:Research2/Research2Receive"
+    },
+    {
+      "op": "set",
+      "target": "$screen1.card1/Changed/Value",
+      "prop": "Value",
+      "value": "Value"
+    },
+    {
+      "op": "create",
+      "parent": "$screen1.card1/Footer",
+      "type": "ITextWidget",
+      "name": "FooterText",
+      "as": "$screen1.card1.footer"
+    },
+    {
+      "op": "set",
+      "target": "$screen1.card1.footer",
+      "prop": "Text",
+      "value": "Research2 footer 2"
+    },
+    {
+      "op": "create",
+      "parent": "$screen1/#IMobileBlockInstanceWidget/Content",
+      "type": "IExpression",
+      "name": "Received",
+      "as": "$screen1.received"
+    },
+    {
+      "op": "set",
+      "target": "$screen1.received",
+      "prop": "Value",
+      "value": "LastValue"
+    },
+    {
+      "op": "dump",
+      "target": "IMobileBlock:ResearchCard",
+      "depth": 2
+    },
+    {
+      "op": "get",
+      "target": "IMobileScreen:Research1/#IMobileBlockInstanceWidget/Content/Card1"
+    },
+    {
+      "op": "get",
+      "target": "IMobileScreen:Research2/#IMobileBlockInstanceWidget/Content/Card2"
+    }
+  ]
+}

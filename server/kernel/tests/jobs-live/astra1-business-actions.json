@@ -1,0 +1,2762 @@
+{
+  "description": "Astra1_CS: regras nativas para descoberta, swipe aleatorio, undo/restart e chat simulado; DTOs publicos e dados privados. Sem publicacao ou carga de dados.",
+  "base": "tests/fixtures/blank-service.oml",
+  "expectValid": true,
+  "expectedMessages": [],
+  "ops": [
+    {
+      "op": "spec",
+      "data": {
+        "structures": [
+          {
+            "name": "DiscoveryFilter",
+            "public": true,
+            "attributes": [
+              {
+                "name": "SexId",
+                "type": "HorseSex Identifier"
+              },
+              {
+                "name": "BreedId",
+                "type": "HorseBreed Identifier"
+              },
+              {
+                "name": "DisciplineId",
+                "type": "HorseDiscipline Identifier"
+              },
+              {
+                "name": "AgeMin",
+                "type": "Integer"
+              },
+              {
+                "name": "AgeMax",
+                "type": "Integer"
+              },
+              {
+                "name": "HeightMinInches",
+                "type": "Integer"
+              },
+              {
+                "name": "HeightMaxInches",
+                "type": "Integer"
+              },
+              {
+                "name": "StudbookOnly",
+                "type": "Boolean"
+              }
+            ]
+          },
+          {
+            "name": "HorseDTO",
+            "public": true,
+            "attributes": [
+              {
+                "name": "Id",
+                "type": "Long Integer"
+              },
+              {
+                "name": "Name",
+                "type": "Text"
+              },
+              {
+                "name": "Tagline",
+                "type": "Text"
+              },
+              {
+                "name": "Bio",
+                "type": "Text"
+              },
+              {
+                "name": "BreedId",
+                "type": "HorseBreed Identifier"
+              },
+              {
+                "name": "SexId",
+                "type": "HorseSex Identifier"
+              },
+              {
+                "name": "DisciplineId",
+                "type": "HorseDiscipline Identifier"
+              },
+              {
+                "name": "CoatColorId",
+                "type": "HorseCoatColor Identifier"
+              },
+              {
+                "name": "AgeYears",
+                "type": "Integer"
+              },
+              {
+                "name": "HeightInInches",
+                "type": "Integer"
+              },
+              {
+                "name": "Temperament",
+                "type": "Text"
+              },
+              {
+                "name": "City",
+                "type": "Text"
+              },
+              {
+                "name": "Region",
+                "type": "Text"
+              },
+              {
+                "name": "IsVaccinated",
+                "type": "Boolean"
+              },
+              {
+                "name": "IsStudbookVerified",
+                "type": "Boolean"
+              },
+              {
+                "name": "IsOTTB",
+                "type": "Boolean"
+              },
+              {
+                "name": "FoalCount",
+                "type": "Integer"
+              },
+              {
+                "name": "RibbonCount",
+                "type": "Integer"
+              },
+              {
+                "name": "PhotoId",
+                "type": "Long Integer"
+              },
+              {
+                "name": "DistanceMiles",
+                "type": "Decimal"
+              },
+              {
+                "name": "HasDistance",
+                "type": "Boolean"
+              }
+            ]
+          },
+          {
+            "name": "HorsePhotoDTO",
+            "public": true,
+            "attributes": [
+              {
+                "name": "Id",
+                "type": "Long Integer"
+              },
+              {
+                "name": "MimeType",
+                "type": "Text"
+              },
+              {
+                "name": "AltText",
+                "type": "Text"
+              },
+              {
+                "name": "SourcePageUrl",
+                "type": "Text"
+              },
+              {
+                "name": "Author",
+                "type": "Text"
+              },
+              {
+                "name": "License",
+                "type": "Text"
+              },
+              {
+                "name": "LicenseUrl",
+                "type": "Text"
+              },
+              {
+                "name": "SortOrder",
+                "type": "Integer"
+              }
+            ]
+          },
+          {
+            "name": "HorseQuirkDTO",
+            "public": true,
+            "attributes": [
+              {
+                "name": "Label",
+                "type": "Text"
+              },
+              {
+                "name": "SortOrder",
+                "type": "Integer"
+              }
+            ]
+          },
+          {
+            "name": "MatchDTO",
+            "public": true,
+            "attributes": [
+              {
+                "name": "Id",
+                "type": "Long Integer"
+              },
+              {
+                "name": "HorseId",
+                "type": "Long Integer"
+              },
+              {
+                "name": "CreatedOn",
+                "type": "Date Time"
+              },
+              {
+                "name": "StatusId",
+                "type": "MatchStatus Identifier"
+              }
+            ]
+          },
+          {
+            "name": "MessageDTO",
+            "public": true,
+            "attributes": [
+              {
+                "name": "Id",
+                "type": "Long Integer"
+              },
+              {
+                "name": "SenderTypeId",
+                "type": "MessageSenderType Identifier"
+              },
+              {
+                "name": "Body",
+                "type": "Text"
+              },
+              {
+                "name": "InReplyToMessageId",
+                "type": "Long Integer"
+              },
+              {
+                "name": "CreatedOn",
+                "type": "Date Time"
+              }
+            ]
+          },
+          {
+            "name": "CommandResult",
+            "public": true,
+            "attributes": [
+              {
+                "name": "RoundId",
+                "type": "Long Integer"
+              },
+              {
+                "name": "DecisionId",
+                "type": "Long Integer"
+              },
+              {
+                "name": "HorseId",
+                "type": "Long Integer"
+              },
+              {
+                "name": "MatchId",
+                "type": "Long Integer"
+              },
+              {
+                "name": "MessageId",
+                "type": "Long Integer"
+              },
+              {
+                "name": "ReplyId",
+                "type": "Long Integer"
+              },
+              {
+                "name": "HasNewMatch",
+                "type": "Boolean"
+              },
+              {
+                "name": "WasUndone",
+                "type": "Boolean"
+              }
+            ]
+          },
+          {
+            "name": "CountDTO",
+            "public": false,
+            "attributes": [
+              {
+                "name": "Total",
+                "type": "Integer"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "create",
+      "parent": "@espace",
+      "type": "IUserException",
+      "name": "AstraValidation",
+      "as": "$AstraValidation"
+    },
+    {
+      "op": "create",
+      "parent": "@espace",
+      "type": "ISiteProperty",
+      "name": "MatchChancePercent",
+      "as": "$MatchChancePercent"
+    },
+    {
+      "op": "set",
+      "target": "$MatchChancePercent",
+      "prop": "DataType",
+      "value": "Integer"
+    },
+    {
+      "op": "set",
+      "target": "$MatchChancePercent",
+      "prop": "DefaultValue",
+      "value": "60"
+    },
+    {
+      "op": "create",
+      "parent": "@espace",
+      "type": "ISiteProperty",
+      "name": "DemoReplyText",
+      "as": "$DemoReplyText"
+    },
+    {
+      "op": "set",
+      "target": "$DemoReplyText",
+      "prop": "DataType",
+      "value": "Text"
+    },
+    {
+      "op": "set",
+      "target": "$DemoReplyText",
+      "prop": "DefaultValue",
+      "value": "\"Neigh! Busy munching hay. Tell me more about those carrots.\""
+    },
+    {
+      "op": "logic",
+      "data": {
+        "actions": [
+          {
+            "name": "Context_Require",
+            "kind": "server",
+            "public": false,
+            "description": "Resolve o usuario no servidor; serializa escritas por perfil quando solicitado.",
+            "inputs": [
+              {
+                "name": "LockProfile",
+                "type": "Boolean"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Profile",
+                "type": "DemoProfile"
+              }
+            ],
+            "vars": [],
+            "steps": [
+              {
+                "if": "GetUserId() = NullIdentifier()",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"Autenticação necessária.\""
+                  }
+                ]
+              },
+              {
+                "get": "DemoProfile",
+                "as": "ReadProfile",
+                "where": "DemoProfile.UserId = GetUserId()",
+                "max": 1
+              },
+              {
+                "if": "ReadProfile.List.Empty",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"Inicialize a descoberta antes de continuar.\""
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "Profile": "ReadProfile.List.Current.DemoProfile"
+                }
+              },
+              {
+                "if": "LockProfile",
+                "then": [
+                  {
+                    "call": "GetDemoProfileForUpdate",
+                    "as": "Lock",
+                    "args": {
+                      "Id": "Profile.Id"
+                    }
+                  },
+                  {
+                    "assign": {
+                      "Profile": "Lock.Record.DemoProfile"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Round_Require",
+            "kind": "server",
+            "public": false,
+            "description": "Round Require",
+            "inputs": [
+              {
+                "name": "ProfileId",
+                "type": "DemoProfile Identifier"
+              },
+              {
+                "name": "RoundId",
+                "type": "Long Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Round",
+                "type": "DiscoveryRound"
+              }
+            ],
+            "vars": [],
+            "steps": [
+              {
+                "get": "DiscoveryRound",
+                "as": "ReadRound",
+                "where": "DiscoveryRound.Id = LongIntegerToIdentifier(RoundId) and DiscoveryRound.DemoProfileId = ProfileId and DiscoveryRound.ClosedOn = NullDate()",
+                "max": 1
+              },
+              {
+                "if": "ReadRound.List.Empty",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"Rodada inválida ou encerrada. Atualize a descoberta.\""
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "Round": "ReadRound.List.Current.DiscoveryRound"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Filter_Validate",
+            "kind": "server",
+            "public": false,
+            "description": "Filter Validate",
+            "inputs": [
+              {
+                "name": "Filters",
+                "type": "DiscoveryFilter"
+              }
+            ],
+            "outputs": [],
+            "vars": [],
+            "steps": [
+              {
+                "if": "Filters.AgeMin < 3 or Filters.AgeMax > 25 or Filters.AgeMin > Filters.AgeMax",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"Intervalo de idade inválido.\""
+                  }
+                ]
+              },
+              {
+                "if": "Filters.HeightMinInches < 52 or Filters.HeightMaxInches > 72 or Filters.HeightMinInches > Filters.HeightMaxInches",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"Intervalo de altura inválido.\""
+                  }
+                ]
+              },
+              {
+                "if": "Filters.SexId <> NullIdentifier()",
+                "then": [
+                  {
+                    "get": "HorseSex",
+                    "as": "ValidateSexId",
+                    "where": "HorseSex.Id = Filters.SexId",
+                    "max": 1
+                  },
+                  {
+                    "if": "ValidateSexId.List.Empty",
+                    "then": [
+                      {
+                        "raise": "AstraValidation",
+                        "message": "\"Filtro de catálogo inválido.\""
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "if": "Filters.BreedId <> NullIdentifier()",
+                "then": [
+                  {
+                    "get": "HorseBreed",
+                    "as": "ValidateBreedId",
+                    "where": "HorseBreed.Id = Filters.BreedId",
+                    "max": 1
+                  },
+                  {
+                    "if": "ValidateBreedId.List.Empty",
+                    "then": [
+                      {
+                        "raise": "AstraValidation",
+                        "message": "\"Filtro de catálogo inválido.\""
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "if": "Filters.DisciplineId <> NullIdentifier()",
+                "then": [
+                  {
+                    "get": "HorseDiscipline",
+                    "as": "ValidateDisciplineId",
+                    "where": "HorseDiscipline.Id = Filters.DisciplineId",
+                    "max": 1
+                  },
+                  {
+                    "if": "ValidateDisciplineId.List.Empty",
+                    "then": [
+                      {
+                        "raise": "AstraValidation",
+                        "message": "\"Filtro de catálogo inválido.\""
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Horse_Map",
+            "kind": "server",
+            "public": false,
+            "description": "Horse Map",
+            "inputs": [
+              {
+                "name": "Source",
+                "type": "Horse"
+              },
+              {
+                "name": "ActorId",
+                "type": "Horse Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Item",
+                "type": "HorseDTO"
+              }
+            ],
+            "vars": [],
+            "steps": [
+              {
+                "assign": {
+                  "Item.Id": "Source.Id",
+                  "Item.Name": "Source.Name",
+                  "Item.Tagline": "Source.Tagline",
+                  "Item.Bio": "Source.Bio",
+                  "Item.BreedId": "Source.BreedId",
+                  "Item.SexId": "Source.SexId",
+                  "Item.DisciplineId": "Source.DisciplineId",
+                  "Item.CoatColorId": "Source.CoatColorId",
+                  "Item.AgeYears": "Source.AgeYears",
+                  "Item.HeightInInches": "Source.HeightInInches",
+                  "Item.Temperament": "Source.Temperament",
+                  "Item.City": "Source.City",
+                  "Item.Region": "Source.Region",
+                  "Item.IsVaccinated": "Source.IsVaccinated",
+                  "Item.IsStudbookVerified": "Source.IsStudbookVerified",
+                  "Item.IsOTTB": "Source.IsOTTB",
+                  "Item.FoalCount": "Source.FoalCount",
+                  "Item.RibbonCount": "Source.RibbonCount"
+                }
+              },
+              {
+                "get": "HorsePhoto",
+                "as": "ReadPhoto",
+                "where": "HorsePhoto.HorseId = Source.Id",
+                "sort": [
+                  "HorsePhoto.SortOrder",
+                  "Ascending"
+                ],
+                "max": 1
+              },
+              {
+                "if": "not ReadPhoto.List.Empty",
+                "then": [
+                  {
+                    "assign": {
+                      "Item.PhotoId": "ReadPhoto.List.Current.HorsePhoto.Id"
+                    }
+                  }
+                ]
+              },
+              {
+                "get": "DemoDistance",
+                "as": "ReadDistance",
+                "where": "DemoDistance.ActorHorseId = ActorId and DemoDistance.TargetHorseId = Source.Id",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "Item.HasDistance": "not ReadDistance.List.Empty"
+                }
+              },
+              {
+                "if": "Item.HasDistance",
+                "then": [
+                  {
+                    "assign": {
+                      "Item.DistanceMiles": "ReadDistance.List.Current.DemoDistance.Miles"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Candidates_Query",
+            "kind": "server",
+            "public": false,
+            "description": "Predicado unico para listagem, contador e validacao do swipe; SQL parametrizado com exclusao de historico e matches ativos.",
+            "inputs": [
+              {
+                "name": "ProfileId",
+                "type": "DemoProfile Identifier"
+              },
+              {
+                "name": "ActorId",
+                "type": "Horse Identifier"
+              },
+              {
+                "name": "RoundId",
+                "type": "Long Integer"
+              },
+              {
+                "name": "TargetId",
+                "type": "Long Integer"
+              },
+              {
+                "name": "Filters",
+                "type": "DiscoveryFilter"
+              },
+              {
+                "name": "StartIndex",
+                "type": "Integer"
+              },
+              {
+                "name": "MaxRecords",
+                "type": "Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Items",
+                "type": "Horse List"
+              },
+              {
+                "name": "Total",
+                "type": "Integer"
+              }
+            ],
+            "vars": [],
+            "steps": [
+              {
+                "get": "Horse",
+                "as": "ReadCandidates",
+                "sql": true,
+                "statement": "SELECT {Horse}.* FROM {Horse} WHERE {Horse}.[IsActive] = 1 AND {Horse}.[Id] <> @ActorId\nAND (@TargetId = 0 OR {Horse}.[Id] = @TargetId)\nAND (@SexId = 0 OR {Horse}.[SexId] = @SexId)\nAND (@BreedId = 0 OR {Horse}.[BreedId] = @BreedId)\nAND (@DisciplineId = 0 OR {Horse}.[DisciplineId] = @DisciplineId)\nAND {Horse}.[AgeYears] BETWEEN @AgeMin AND @AgeMax\nAND {Horse}.[HeightInInches] BETWEEN @HeightMin AND @HeightMax\nAND (@StudbookOnly = 0 OR {Horse}.[IsStudbookVerified] = 1)\nAND NOT EXISTS (SELECT 1 FROM {SwipeDecision} WHERE {SwipeDecision}.[DemoProfileId] = @ProfileId AND {SwipeDecision}.[RoundId] = @RoundId AND {SwipeDecision}.[TargetHorseId] = {Horse}.[Id] AND {SwipeDecision}.[UndoneOn] = @NullDate)\nAND NOT EXISTS (SELECT 1 FROM {HorseMatch} WHERE {HorseMatch}.[DemoProfileId] = @ProfileId AND {HorseMatch}.[TargetHorseId] = {Horse}.[Id] AND {HorseMatch}.[MatchStatusId] = @ActiveStatus) ORDER BY {Horse}.[DisplayOrder], {Horse}.[Id] OFFSET @Start ROWS FETCH NEXT @PageSize ROWS ONLY",
+                "params": {
+                  "ActorId": {
+                    "type": "Horse Identifier",
+                    "value": "ActorId"
+                  },
+                  "TargetId": {
+                    "type": "Long Integer",
+                    "value": "TargetId"
+                  },
+                  "ProfileId": {
+                    "type": "DemoProfile Identifier",
+                    "value": "ProfileId"
+                  },
+                  "RoundId": {
+                    "type": "Long Integer",
+                    "value": "RoundId"
+                  },
+                  "NullDate": {
+                    "type": "Date Time",
+                    "value": "NullDate()"
+                  },
+                  "ActiveStatus": {
+                    "type": "MatchStatus Identifier",
+                    "value": "Entities.MatchStatus.Active"
+                  },
+                  "SexId": {
+                    "type": "HorseSex Identifier",
+                    "value": "Filters.SexId"
+                  },
+                  "BreedId": {
+                    "type": "HorseBreed Identifier",
+                    "value": "Filters.BreedId"
+                  },
+                  "DisciplineId": {
+                    "type": "HorseDiscipline Identifier",
+                    "value": "Filters.DisciplineId"
+                  },
+                  "AgeMin": {
+                    "type": "Integer",
+                    "value": "Filters.AgeMin"
+                  },
+                  "AgeMax": {
+                    "type": "Integer",
+                    "value": "Filters.AgeMax"
+                  },
+                  "HeightMin": {
+                    "type": "Integer",
+                    "value": "Filters.HeightMinInches"
+                  },
+                  "HeightMax": {
+                    "type": "Integer",
+                    "value": "Filters.HeightMaxInches"
+                  },
+                  "StudbookOnly": {
+                    "type": "Boolean",
+                    "value": "Filters.StudbookOnly"
+                  },
+                  "Start": {
+                    "type": "Integer",
+                    "value": "StartIndex"
+                  },
+                  "PageSize": {
+                    "type": "Integer",
+                    "value": "MaxRecords"
+                  }
+                },
+                "max": "MaxRecords"
+              },
+              {
+                "get": "CountDTO",
+                "as": "CountCandidates",
+                "sql": true,
+                "statement": "SELECT COUNT(1) FROM {Horse} WHERE {Horse}.[IsActive] = 1 AND {Horse}.[Id] <> @ActorId\nAND (@TargetId = 0 OR {Horse}.[Id] = @TargetId)\nAND (@SexId = 0 OR {Horse}.[SexId] = @SexId)\nAND (@BreedId = 0 OR {Horse}.[BreedId] = @BreedId)\nAND (@DisciplineId = 0 OR {Horse}.[DisciplineId] = @DisciplineId)\nAND {Horse}.[AgeYears] BETWEEN @AgeMin AND @AgeMax\nAND {Horse}.[HeightInInches] BETWEEN @HeightMin AND @HeightMax\nAND (@StudbookOnly = 0 OR {Horse}.[IsStudbookVerified] = 1)\nAND NOT EXISTS (SELECT 1 FROM {SwipeDecision} WHERE {SwipeDecision}.[DemoProfileId] = @ProfileId AND {SwipeDecision}.[RoundId] = @RoundId AND {SwipeDecision}.[TargetHorseId] = {Horse}.[Id] AND {SwipeDecision}.[UndoneOn] = @NullDate)\nAND NOT EXISTS (SELECT 1 FROM {HorseMatch} WHERE {HorseMatch}.[DemoProfileId] = @ProfileId AND {HorseMatch}.[TargetHorseId] = {Horse}.[Id] AND {HorseMatch}.[MatchStatusId] = @ActiveStatus)",
+                "params": {
+                  "ActorId": {
+                    "type": "Horse Identifier",
+                    "value": "ActorId"
+                  },
+                  "TargetId": {
+                    "type": "Long Integer",
+                    "value": "TargetId"
+                  },
+                  "ProfileId": {
+                    "type": "DemoProfile Identifier",
+                    "value": "ProfileId"
+                  },
+                  "RoundId": {
+                    "type": "Long Integer",
+                    "value": "RoundId"
+                  },
+                  "NullDate": {
+                    "type": "Date Time",
+                    "value": "NullDate()"
+                  },
+                  "ActiveStatus": {
+                    "type": "MatchStatus Identifier",
+                    "value": "Entities.MatchStatus.Active"
+                  },
+                  "SexId": {
+                    "type": "HorseSex Identifier",
+                    "value": "Filters.SexId"
+                  },
+                  "BreedId": {
+                    "type": "HorseBreed Identifier",
+                    "value": "Filters.BreedId"
+                  },
+                  "DisciplineId": {
+                    "type": "HorseDiscipline Identifier",
+                    "value": "Filters.DisciplineId"
+                  },
+                  "AgeMin": {
+                    "type": "Integer",
+                    "value": "Filters.AgeMin"
+                  },
+                  "AgeMax": {
+                    "type": "Integer",
+                    "value": "Filters.AgeMax"
+                  },
+                  "HeightMin": {
+                    "type": "Integer",
+                    "value": "Filters.HeightMinInches"
+                  },
+                  "HeightMax": {
+                    "type": "Integer",
+                    "value": "Filters.HeightMaxInches"
+                  },
+                  "StudbookOnly": {
+                    "type": "Boolean",
+                    "value": "Filters.StudbookOnly"
+                  }
+                },
+                "max": 1
+              },
+              {
+                "assign": {
+                  "Items": "ReadCandidates.List",
+                  "Total": "CountCandidates.List.Current.List.Total"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Discovery_Initialize",
+            "kind": "server",
+            "public": true,
+            "description": "Inicializa contexto autenticado, filtros e rodada. Requer catalogo previamente carregado; nao popula dados.",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "Actor",
+                "type": "HorseDTO"
+              },
+              {
+                "name": "Filters",
+                "type": "DiscoveryFilter"
+              },
+              {
+                "name": "RoundId",
+                "type": "Long Integer"
+              }
+            ],
+            "vars": [
+              {
+                "name": "Profile",
+                "type": "DemoProfile"
+              },
+              {
+                "name": "Preference",
+                "type": "DiscoveryPreference"
+              },
+              {
+                "name": "Round",
+                "type": "DiscoveryRound"
+              }
+            ],
+            "steps": [
+              {
+                "if": "GetUserId() = NullIdentifier()",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"Autenticação necessária.\""
+                  }
+                ]
+              },
+              {
+                "get": "DemoProfile",
+                "as": "ReadMyProfile",
+                "where": "DemoProfile.UserId = GetUserId()",
+                "max": 1
+              },
+              {
+                "if": "ReadMyProfile.List.Empty",
+                "then": [
+                  {
+                    "get": "Horse",
+                    "as": "ReadHayden",
+                    "where": "Horse.SeedCode = \"hayden\" and Horse.IsActive",
+                    "max": 1
+                  },
+                  {
+                    "if": "ReadHayden.List.Empty",
+                    "then": [
+                      {
+                        "raise": "AstraValidation",
+                        "message": "\"Catálogo demo não carregado: falta Hayden (SeedCode hayden).\""
+                      }
+                    ]
+                  },
+                  {
+                    "assign": {
+                      "Profile.UserId": "GetUserId()",
+                      "Profile.ActorHorseId": "ReadHayden.List.Current.Horse.Id",
+                      "Profile.CreatedOn": "CurrDateTime()"
+                    }
+                  },
+                  {
+                    "create": "DemoProfile",
+                    "record": "Profile",
+                    "as": "CreateProfile"
+                  },
+                  {
+                    "assign": {
+                      "Profile.Id": "CreateProfile.Id"
+                    }
+                  }
+                ],
+                "else": [
+                  {
+                    "assign": {
+                      "Profile": "ReadMyProfile.List.Current.DemoProfile"
+                    }
+                  }
+                ]
+              },
+              {
+                "call": "GetDemoProfileForUpdate",
+                "as": "Lock",
+                "args": {
+                  "Id": "Profile.Id"
+                }
+              },
+              {
+                "assign": {
+                  "Profile": "Lock.Record.DemoProfile"
+                }
+              },
+              {
+                "get": "DiscoveryPreference",
+                "as": "ReadPreference",
+                "where": "DiscoveryPreference.DemoProfileId = Profile.Id",
+                "max": 1
+              },
+              {
+                "if": "ReadPreference.List.Empty",
+                "then": [
+                  {
+                    "assign": {
+                      "Filters.SexId": "NullIdentifier()",
+                      "Filters.BreedId": "NullIdentifier()",
+                      "Filters.DisciplineId": "NullIdentifier()",
+                      "Filters.AgeMin": "3",
+                      "Filters.AgeMax": "20",
+                      "Filters.HeightMinInches": "52",
+                      "Filters.HeightMaxInches": "70",
+                      "Filters.StudbookOnly": "False"
+                    }
+                  },
+                  {
+                    "assign": {
+                      "Preference.DemoProfileId": "Profile.Id",
+                      "Preference.UpdatedOn": "CurrDateTime()",
+                      "Preference.SexId": "Filters.SexId",
+                      "Preference.BreedId": "Filters.BreedId",
+                      "Preference.DisciplineId": "Filters.DisciplineId",
+                      "Preference.AgeMin": "Filters.AgeMin",
+                      "Preference.AgeMax": "Filters.AgeMax",
+                      "Preference.HeightMinInches": "Filters.HeightMinInches",
+                      "Preference.HeightMaxInches": "Filters.HeightMaxInches",
+                      "Preference.StudbookOnly": "Filters.StudbookOnly"
+                    }
+                  },
+                  {
+                    "create": "DiscoveryPreference",
+                    "record": "Preference",
+                    "as": "CreatePreference"
+                  }
+                ],
+                "else": [
+                  {
+                    "assign": {
+                      "Filters.SexId": "ReadPreference.List.Current.DiscoveryPreference.SexId",
+                      "Filters.BreedId": "ReadPreference.List.Current.DiscoveryPreference.BreedId",
+                      "Filters.DisciplineId": "ReadPreference.List.Current.DiscoveryPreference.DisciplineId",
+                      "Filters.AgeMin": "ReadPreference.List.Current.DiscoveryPreference.AgeMin",
+                      "Filters.AgeMax": "ReadPreference.List.Current.DiscoveryPreference.AgeMax",
+                      "Filters.HeightMinInches": "ReadPreference.List.Current.DiscoveryPreference.HeightMinInches",
+                      "Filters.HeightMaxInches": "ReadPreference.List.Current.DiscoveryPreference.HeightMaxInches",
+                      "Filters.StudbookOnly": "ReadPreference.List.Current.DiscoveryPreference.StudbookOnly"
+                    }
+                  }
+                ]
+              },
+              {
+                "get": "DiscoveryRound",
+                "as": "ReadOpenRound",
+                "where": "DiscoveryRound.DemoProfileId = Profile.Id and DiscoveryRound.ClosedOn = NullDate()",
+                "sort": [
+                  "DiscoveryRound.Id",
+                  "Descending"
+                ],
+                "max": 1
+              },
+              {
+                "if": "ReadOpenRound.List.Empty",
+                "then": [
+                  {
+                    "assign": {
+                      "Round.DemoProfileId": "Profile.Id",
+                      "Round.StartedOn": "CurrDateTime()"
+                    }
+                  },
+                  {
+                    "create": "DiscoveryRound",
+                    "record": "Round",
+                    "as": "CreateRound"
+                  },
+                  {
+                    "assign": {
+                      "RoundId": "CreateRound.Id"
+                    }
+                  }
+                ],
+                "else": [
+                  {
+                    "assign": {
+                      "RoundId": "ReadOpenRound.List.Current.DiscoveryRound.Id"
+                    }
+                  }
+                ]
+              },
+              {
+                "get": "Horse",
+                "as": "ReadActor",
+                "where": "Horse.Id = Profile.ActorHorseId and Horse.IsActive",
+                "max": 1
+              },
+              {
+                "if": "ReadActor.List.Empty",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"Personagem ativo indisponível.\""
+                  }
+                ]
+              },
+              {
+                "call": "Horse_Map",
+                "as": "MapActor",
+                "args": {
+                  "Source": "ReadActor.List.Current.Horse",
+                  "ActorId": "Profile.ActorHorseId"
+                }
+              },
+              {
+                "assign": {
+                  "Actor": "MapActor.Item"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Discovery_GetPreferences",
+            "kind": "server",
+            "public": true,
+            "description": "Discovery GetPreferences",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "Filters",
+                "type": "DiscoveryFilter"
+              }
+            ],
+            "vars": [],
+            "steps": [
+              {
+                "call": "Context_Require",
+                "as": "Context",
+                "args": {
+                  "LockProfile": "False"
+                }
+              },
+              {
+                "get": "DiscoveryPreference",
+                "as": "ReadPreference",
+                "where": "DiscoveryPreference.DemoProfileId = Context.Profile.Id",
+                "max": 1
+              },
+              {
+                "if": "ReadPreference.List.Empty",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"Preferências não inicializadas.\""
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "Filters.SexId": "ReadPreference.List.Current.DiscoveryPreference.SexId",
+                  "Filters.BreedId": "ReadPreference.List.Current.DiscoveryPreference.BreedId",
+                  "Filters.DisciplineId": "ReadPreference.List.Current.DiscoveryPreference.DisciplineId",
+                  "Filters.AgeMin": "ReadPreference.List.Current.DiscoveryPreference.AgeMin",
+                  "Filters.AgeMax": "ReadPreference.List.Current.DiscoveryPreference.AgeMax",
+                  "Filters.HeightMinInches": "ReadPreference.List.Current.DiscoveryPreference.HeightMinInches",
+                  "Filters.HeightMaxInches": "ReadPreference.List.Current.DiscoveryPreference.HeightMaxInches",
+                  "Filters.StudbookOnly": "ReadPreference.List.Current.DiscoveryPreference.StudbookOnly"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Discovery_SavePreferences",
+            "kind": "server",
+            "public": true,
+            "description": "Persiste filtros validados sem apagar historico da rodada.",
+            "inputs": [
+              {
+                "name": "Filters",
+                "type": "DiscoveryFilter"
+              }
+            ],
+            "outputs": [],
+            "vars": [
+              {
+                "name": "Preference",
+                "type": "DiscoveryPreference"
+              }
+            ],
+            "steps": [
+              {
+                "call": "Context_Require",
+                "as": "Context",
+                "args": {
+                  "LockProfile": "True"
+                }
+              },
+              {
+                "call": "Filter_Validate",
+                "as": "Validate",
+                "args": {
+                  "Filters": "Filters"
+                }
+              },
+              {
+                "get": "DiscoveryPreference",
+                "as": "ReadPreference",
+                "where": "DiscoveryPreference.DemoProfileId = Context.Profile.Id",
+                "max": 1
+              },
+              {
+                "if": "not ReadPreference.List.Empty",
+                "then": [
+                  {
+                    "assign": {
+                      "Preference": "ReadPreference.List.Current.DiscoveryPreference"
+                    }
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "Preference.DemoProfileId": "Context.Profile.Id",
+                  "Preference.UpdatedOn": "CurrDateTime()",
+                  "Preference.SexId": "Filters.SexId",
+                  "Preference.BreedId": "Filters.BreedId",
+                  "Preference.DisciplineId": "Filters.DisciplineId",
+                  "Preference.AgeMin": "Filters.AgeMin",
+                  "Preference.AgeMax": "Filters.AgeMax",
+                  "Preference.HeightMinInches": "Filters.HeightMinInches",
+                  "Preference.HeightMaxInches": "Filters.HeightMaxInches",
+                  "Preference.StudbookOnly": "Filters.StudbookOnly"
+                }
+              },
+              {
+                "save": "DiscoveryPreference",
+                "record": "Preference",
+                "as": "SavePreference"
+              }
+            ]
+          },
+          {
+            "name": "Discovery_ResetPreferences",
+            "kind": "server",
+            "public": true,
+            "description": "Discovery ResetPreferences",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "Filters",
+                "type": "DiscoveryFilter"
+              }
+            ],
+            "vars": [],
+            "steps": [
+              {
+                "assign": {
+                  "Filters.SexId": "NullIdentifier()",
+                  "Filters.BreedId": "NullIdentifier()",
+                  "Filters.DisciplineId": "NullIdentifier()",
+                  "Filters.AgeMin": "3",
+                  "Filters.AgeMax": "20",
+                  "Filters.HeightMinInches": "52",
+                  "Filters.HeightMaxInches": "70",
+                  "Filters.StudbookOnly": "False"
+                }
+              },
+              {
+                "call": "Discovery_SavePreferences",
+                "as": "SaveDefaults",
+                "args": {
+                  "Filters": "Filters"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Discovery_GetCandidates",
+            "kind": "server",
+            "public": true,
+            "description": "Consulta paginada, sem binarios de foto, com filtros e exclusao de decisoes/matches ativos.",
+            "inputs": [
+              {
+                "name": "RoundId",
+                "type": "Long Integer"
+              },
+              {
+                "name": "Filters",
+                "type": "DiscoveryFilter"
+              },
+              {
+                "name": "StartIndex",
+                "type": "Integer",
+                "default": "0"
+              },
+              {
+                "name": "MaxRecords",
+                "type": "Integer",
+                "default": "20"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Items",
+                "type": "HorseDTO List"
+              },
+              {
+                "name": "Total",
+                "type": "Integer"
+              },
+              {
+                "name": "HasMore",
+                "type": "Boolean"
+              }
+            ],
+            "vars": [],
+            "steps": [
+              {
+                "call": "Context_Require",
+                "as": "Context",
+                "args": {
+                  "LockProfile": "False"
+                }
+              },
+              {
+                "call": "Round_Require",
+                "as": "CurrentRound",
+                "args": {
+                  "ProfileId": "Context.Profile.Id",
+                  "RoundId": "RoundId"
+                }
+              },
+              {
+                "call": "Filter_Validate",
+                "as": "Validate",
+                "args": {
+                  "Filters": "Filters"
+                }
+              },
+              {
+                "if": "StartIndex < 0 or MaxRecords < 1 or MaxRecords > 50",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"Paginação inválida: máximo de 50 registros.\""
+                  }
+                ]
+              },
+              {
+                "call": "Candidates_Query",
+                "as": "Read",
+                "args": {
+                  "ProfileId": "Context.Profile.Id",
+                  "ActorId": "Context.Profile.ActorHorseId",
+                  "RoundId": "RoundId",
+                  "TargetId": "0",
+                  "Filters": "Filters",
+                  "StartIndex": "StartIndex",
+                  "MaxRecords": "MaxRecords"
+                }
+              },
+              {
+                "assign": {
+                  "Total": "Read.Total",
+                  "HasMore": "StartIndex + Read.Items.Length < Read.Total"
+                }
+              },
+              {
+                "foreach": "Read.Items",
+                "as": "MapEachHorse",
+                "do": [
+                  {
+                    "call": "Horse_Map",
+                    "as": "Map",
+                    "args": {
+                      "Source": "Read.Items.Current",
+                      "ActorId": "Context.Profile.ActorHorseId"
+                    }
+                  },
+                  {
+                    "call": "ListAppend",
+                    "as": "Append",
+                    "args": {
+                      "List": "Items",
+                      "Element": "Map.Item"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Discovery_CountCandidates",
+            "kind": "server",
+            "public": true,
+            "description": "Discovery CountCandidates",
+            "inputs": [
+              {
+                "name": "RoundId",
+                "type": "Long Integer"
+              },
+              {
+                "name": "Filters",
+                "type": "DiscoveryFilter"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Total",
+                "type": "Integer"
+              }
+            ],
+            "vars": [],
+            "steps": [
+              {
+                "call": "Discovery_GetCandidates",
+                "as": "Read",
+                "args": {
+                  "RoundId": "RoundId",
+                  "Filters": "Filters",
+                  "StartIndex": "0",
+                  "MaxRecords": "1"
+                }
+              },
+              {
+                "assign": {
+                  "Total": "Read.Total"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Horse_GetDetail",
+            "kind": "server",
+            "public": true,
+            "description": "Horse GetDetail",
+            "inputs": [
+              {
+                "name": "HorseId",
+                "type": "Long Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Horse",
+                "type": "HorseDTO"
+              },
+              {
+                "name": "Photos",
+                "type": "HorsePhotoDTO List"
+              },
+              {
+                "name": "Quirks",
+                "type": "HorseQuirkDTO List"
+              }
+            ],
+            "vars": [
+              {
+                "name": "Photo",
+                "type": "HorsePhotoDTO"
+              },
+              {
+                "name": "Quirk",
+                "type": "HorseQuirkDTO"
+              }
+            ],
+            "steps": [
+              {
+                "call": "Context_Require",
+                "as": "Context",
+                "args": {
+                  "LockProfile": "False"
+                }
+              },
+              {
+                "get": "Horse",
+                "as": "ReadHorse",
+                "where": "Horse.Id = LongIntegerToIdentifier(HorseId) and Horse.IsActive",
+                "max": 1
+              },
+              {
+                "if": "ReadHorse.List.Empty",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"Cavalo não encontrado.\""
+                  }
+                ]
+              },
+              {
+                "call": "Horse_Map",
+                "as": "Map",
+                "args": {
+                  "Source": "ReadHorse.List.Current.Horse",
+                  "ActorId": "Context.Profile.ActorHorseId"
+                }
+              },
+              {
+                "assign": {
+                  "Horse": "Map.Item"
+                }
+              },
+              {
+                "get": "HorsePhoto",
+                "as": "ReadPhotos",
+                "where": "HorsePhoto.HorseId = LongIntegerToIdentifier(HorseId)",
+                "sort": [
+                  "HorsePhoto.SortOrder",
+                  "Ascending"
+                ]
+              },
+              {
+                "foreach": "ReadPhotos.List",
+                "as": "EachPhoto",
+                "do": [
+                  {
+                    "assign": {
+                      "Photo.Id": "ReadPhotos.List.Current.HorsePhoto.Id",
+                      "Photo.MimeType": "ReadPhotos.List.Current.HorsePhoto.MimeType",
+                      "Photo.AltText": "ReadPhotos.List.Current.HorsePhoto.AltText",
+                      "Photo.SourcePageUrl": "ReadPhotos.List.Current.HorsePhoto.SourcePageUrl",
+                      "Photo.Author": "ReadPhotos.List.Current.HorsePhoto.Author",
+                      "Photo.License": "ReadPhotos.List.Current.HorsePhoto.License",
+                      "Photo.LicenseUrl": "ReadPhotos.List.Current.HorsePhoto.LicenseUrl",
+                      "Photo.SortOrder": "ReadPhotos.List.Current.HorsePhoto.SortOrder"
+                    }
+                  },
+                  {
+                    "call": "ListAppend",
+                    "as": "AppendPhoto",
+                    "args": {
+                      "List": "Photos",
+                      "Element": "Photo"
+                    }
+                  }
+                ]
+              },
+              {
+                "get": "HorseQuirk",
+                "as": "ReadQuirks",
+                "where": "HorseQuirk.HorseId = LongIntegerToIdentifier(HorseId)",
+                "sort": [
+                  "HorseQuirk.SortOrder",
+                  "Ascending"
+                ]
+              },
+              {
+                "foreach": "ReadQuirks.List",
+                "as": "EachQuirk",
+                "do": [
+                  {
+                    "assign": {
+                      "Quirk.Label": "ReadQuirks.List.Current.HorseQuirk.Label",
+                      "Quirk.SortOrder": "ReadQuirks.List.Current.HorseQuirk.SortOrder"
+                    }
+                  },
+                  {
+                    "call": "ListAppend",
+                    "as": "AppendQuirk",
+                    "args": {
+                      "List": "Quirks",
+                      "Element": "Quirk"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Horse_GetPhoto",
+            "kind": "server",
+            "public": true,
+            "description": "Horse GetPhoto",
+            "inputs": [
+              {
+                "name": "PhotoId",
+                "type": "Long Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Image",
+                "type": "Binary Data"
+              },
+              {
+                "name": "MimeType",
+                "type": "Text"
+              },
+              {
+                "name": "AltText",
+                "type": "Text"
+              }
+            ],
+            "vars": [],
+            "steps": [
+              {
+                "if": "GetUserId() = NullIdentifier()",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"Autenticação necessária.\""
+                  }
+                ]
+              },
+              {
+                "get": "HorsePhoto",
+                "as": "ReadPhoto",
+                "where": "HorsePhoto.Id = LongIntegerToIdentifier(PhotoId)",
+                "max": 1
+              },
+              {
+                "if": "ReadPhoto.List.Empty",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"Foto não encontrada.\""
+                  }
+                ]
+              },
+              {
+                "get": "Horse",
+                "as": "ReadHorse",
+                "where": "Horse.Id = ReadPhoto.List.Current.HorsePhoto.HorseId and Horse.IsActive",
+                "max": 1
+              },
+              {
+                "if": "ReadHorse.List.Empty",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"Cavalo indisponível.\""
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "Image": "ReadPhoto.List.Current.HorsePhoto.Image",
+                  "MimeType": "ReadPhoto.List.Current.HorsePhoto.MimeType",
+                  "AltText": "ReadPhoto.List.Current.HorsePhoto.AltText"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Match_Require",
+            "kind": "server",
+            "public": false,
+            "description": "Match Require",
+            "inputs": [
+              {
+                "name": "ProfileId",
+                "type": "DemoProfile Identifier"
+              },
+              {
+                "name": "MatchId",
+                "type": "Long Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Match",
+                "type": "HorseMatch"
+              }
+            ],
+            "vars": [],
+            "steps": [
+              {
+                "get": "HorseMatch",
+                "as": "ReadMatch",
+                "where": "HorseMatch.Id = LongIntegerToIdentifier(MatchId) and HorseMatch.DemoProfileId = ProfileId and HorseMatch.MatchStatusId = Entities.MatchStatus.Active",
+                "max": 1
+              },
+              {
+                "if": "ReadMatch.List.Empty",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"Match não encontrado ou encerrado.\""
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "Match": "ReadMatch.List.Current.HorseMatch"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Match_Get",
+            "kind": "server",
+            "public": true,
+            "description": "Match Get",
+            "inputs": [
+              {
+                "name": "MatchId",
+                "type": "Long Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Match",
+                "type": "MatchDTO"
+              },
+              {
+                "name": "Actor",
+                "type": "HorseDTO"
+              },
+              {
+                "name": "Horse",
+                "type": "HorseDTO"
+              }
+            ],
+            "vars": [],
+            "steps": [
+              {
+                "call": "Context_Require",
+                "as": "Context",
+                "args": {
+                  "LockProfile": "False"
+                }
+              },
+              {
+                "call": "Match_Require",
+                "as": "Read",
+                "args": {
+                  "ProfileId": "Context.Profile.Id",
+                  "MatchId": "MatchId"
+                }
+              },
+              {
+                "assign": {
+                  "Match.Id": "Read.Match.Id",
+                  "Match.HorseId": "Read.Match.TargetHorseId",
+                  "Match.CreatedOn": "Read.Match.CreatedOn",
+                  "Match.StatusId": "Read.Match.MatchStatusId"
+                }
+              },
+              {
+                "get": "Horse",
+                "as": "ReadTarget",
+                "where": "Horse.Id = Read.Match.TargetHorseId",
+                "max": 1
+              },
+              {
+                "get": "Horse",
+                "as": "ReadActor",
+                "where": "Horse.Id = Context.Profile.ActorHorseId",
+                "max": 1
+              },
+              {
+                "call": "Horse_Map",
+                "as": "MapTarget",
+                "args": {
+                  "Source": "ReadTarget.List.Current.Horse",
+                  "ActorId": "Context.Profile.ActorHorseId"
+                }
+              },
+              {
+                "call": "Horse_Map",
+                "as": "MapActor",
+                "args": {
+                  "Source": "ReadActor.List.Current.Horse",
+                  "ActorId": "Context.Profile.ActorHorseId"
+                }
+              },
+              {
+                "assign": {
+                  "Horse": "MapTarget.Item",
+                  "Actor": "MapActor.Item"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Match_GetList",
+            "kind": "server",
+            "public": true,
+            "description": "Match GetList",
+            "inputs": [
+              {
+                "name": "StartIndex",
+                "type": "Integer",
+                "default": "0"
+              },
+              {
+                "name": "MaxRecords",
+                "type": "Integer",
+                "default": "20"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Items",
+                "type": "MatchDTO List"
+              },
+              {
+                "name": "Total",
+                "type": "Long Integer"
+              }
+            ],
+            "vars": [
+              {
+                "name": "Item",
+                "type": "MatchDTO"
+              }
+            ],
+            "steps": [
+              {
+                "call": "Context_Require",
+                "as": "Context",
+                "args": {
+                  "LockProfile": "False"
+                }
+              },
+              {
+                "if": "StartIndex < 0 or MaxRecords < 1 or MaxRecords > 50",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"Paginação inválida.\""
+                  }
+                ]
+              },
+              {
+                "get": "HorseMatch",
+                "as": "ReadMatches",
+                "where": "HorseMatch.DemoProfileId = Context.Profile.Id and HorseMatch.MatchStatusId = Entities.MatchStatus.Active",
+                "sort": [
+                  "HorseMatch.Id",
+                  "Descending"
+                ],
+                "start": "StartIndex",
+                "max": "MaxRecords"
+              },
+              {
+                "assign": {
+                  "Total": "ReadMatches.Count"
+                }
+              },
+              {
+                "foreach": "ReadMatches.List",
+                "as": "EachMatch",
+                "do": [
+                  {
+                    "assign": {
+                      "Item.Id": "ReadMatches.List.Current.HorseMatch.Id",
+                      "Item.HorseId": "ReadMatches.List.Current.HorseMatch.TargetHorseId",
+                      "Item.CreatedOn": "ReadMatches.List.Current.HorseMatch.CreatedOn",
+                      "Item.StatusId": "ReadMatches.List.Current.HorseMatch.MatchStatusId"
+                    }
+                  },
+                  {
+                    "call": "ListAppend",
+                    "as": "Append",
+                    "args": {
+                      "List": "Items",
+                      "Element": "Item"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Swipe_Submit",
+            "kind": "server",
+            "public": true,
+            "description": "Like sorteia uma vez no servidor (0-99); Pass nunca sorteia. Resultado congelado por request e por cavalo/rodada; perfil bloqueado durante a transacao.",
+            "inputs": [
+              {
+                "name": "RoundId",
+                "type": "Long Integer"
+              },
+              {
+                "name": "HorseId",
+                "type": "Long Integer"
+              },
+              {
+                "name": "DecisionTypeId",
+                "type": "SwipeDecisionType Identifier"
+              },
+              {
+                "name": "RequestId",
+                "type": "Text"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Result",
+                "type": "CommandResult"
+              }
+            ],
+            "vars": [
+              {
+                "name": "Decision",
+                "type": "SwipeDecision"
+              },
+              {
+                "name": "MatchRecord",
+                "type": "HorseMatch"
+              }
+            ],
+            "steps": [
+              {
+                "call": "Context_Require",
+                "as": "Context",
+                "args": {
+                  "LockProfile": "True"
+                }
+              },
+              {
+                "if": "Length(Trim(RequestId)) = 0 or Length(RequestId) > 36",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"RequestId deve conter de 1 a 36 caracteres.\""
+                  }
+                ]
+              },
+              {
+                "if": "DecisionTypeId <> Entities.SwipeDecisionType.Like and DecisionTypeId <> Entities.SwipeDecisionType.Pass",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"Decisão inválida.\""
+                  }
+                ]
+              },
+              {
+                "get": "SwipeDecision",
+                "as": "Previous",
+                "where": "SwipeDecision.DemoProfileId = Context.Profile.Id and SwipeDecision.RequestId = RequestId",
+                "max": 1
+              },
+              {
+                "if": "not Previous.List.Empty",
+                "then": [
+                  {
+                    "if": "Previous.List.Current.SwipeDecision.RoundId <> LongIntegerToIdentifier(RoundId) or Previous.List.Current.SwipeDecision.TargetHorseId <> LongIntegerToIdentifier(HorseId) or Previous.List.Current.SwipeDecision.DecisionTypeId <> DecisionTypeId",
+                    "then": [
+                      {
+                        "raise": "AstraValidation",
+                        "message": "\"RequestId já usado para outra decisão.\""
+                      }
+                    ]
+                  },
+                  {
+                    "assign": {
+                      "Result.DecisionId": "Previous.List.Current.SwipeDecision.Id",
+                      "Result.HorseId": "HorseId",
+                      "Result.RoundId": "RoundId",
+                      "Result.HasNewMatch": "Previous.List.Current.SwipeDecision.IsMatch",
+                      "Result.WasUndone": "Previous.List.Current.SwipeDecision.UndoneOn <> NullDate()"
+                    }
+                  },
+                  {
+                    "get": "HorseMatch",
+                    "as": "PreviousMatch",
+                    "where": "HorseMatch.CreatedFromDecisionId = Previous.List.Current.SwipeDecision.Id",
+                    "max": 1
+                  },
+                  {
+                    "if": "not PreviousMatch.List.Empty",
+                    "then": [
+                      {
+                        "assign": {
+                          "Result.MatchId": "PreviousMatch.List.Current.HorseMatch.Id"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "return": true
+                  }
+                ]
+              },
+              {
+                "call": "Round_Require",
+                "as": "CurrentRound",
+                "args": {
+                  "ProfileId": "Context.Profile.Id",
+                  "RoundId": "RoundId"
+                }
+              },
+              {
+                "call": "Discovery_GetPreferences",
+                "as": "Preferences",
+                "args": {}
+              },
+              {
+                "call": "Candidates_Query",
+                "as": "Eligible",
+                "args": {
+                  "ProfileId": "Context.Profile.Id",
+                  "ActorId": "Context.Profile.ActorHorseId",
+                  "RoundId": "RoundId",
+                  "TargetId": "HorseId",
+                  "Filters": "Preferences.Filters",
+                  "StartIndex": "0",
+                  "MaxRecords": "1"
+                }
+              },
+              {
+                "if": "HorseId <= 0 or Eligible.Total <> 1",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"Candidato indisponível nesta rodada ou fora dos filtros.\""
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "Decision.DemoProfileId": "Context.Profile.Id",
+                  "Decision.RoundId": "LongIntegerToIdentifier(RoundId)",
+                  "Decision.TargetHorseId": "LongIntegerToIdentifier(HorseId)",
+                  "Decision.DecisionTypeId": "DecisionTypeId",
+                  "Decision.RequestId": "RequestId",
+                  "Decision.CreatedOn": "CurrDateTime()"
+                }
+              },
+              {
+                "if": "DecisionTypeId = Entities.SwipeDecisionType.Like",
+                "then": [
+                  {
+                    "if": "Site.MatchChancePercent < 0 or Site.MatchChancePercent > 100",
+                    "then": [
+                      {
+                        "raise": "AstraValidation",
+                        "message": "\"MatchChancePercent deve estar entre 0 e 100.\""
+                      }
+                    ]
+                  },
+                  {
+                    "get": "SwipeDecision",
+                    "as": "PriorDraw",
+                    "where": "SwipeDecision.DemoProfileId = Context.Profile.Id and SwipeDecision.RoundId = LongIntegerToIdentifier(RoundId) and SwipeDecision.TargetHorseId = LongIntegerToIdentifier(HorseId) and SwipeDecision.HasDraw",
+                    "sort": [
+                      "SwipeDecision.Id",
+                      "Descending"
+                    ],
+                    "max": 1
+                  },
+                  {
+                    "if": "PriorDraw.List.Empty",
+                    "then": [
+                      {
+                        "assign": {
+                          "Decision.HasDraw": "True",
+                          "Decision.MatchChanceUsed": "Site.MatchChancePercent",
+                          "Decision.DrawValue": "TextToInteger(GeneratePassword(2, False))"
+                        }
+                      },
+                      {
+                        "assign": {
+                          "Decision.IsMatch": "Decision.DrawValue < Decision.MatchChanceUsed"
+                        }
+                      }
+                    ],
+                    "else": [
+                      {
+                        "assign": {
+                          "Decision.HasDraw": "True",
+                          "Decision.MatchChanceUsed": "PriorDraw.List.Current.SwipeDecision.MatchChanceUsed",
+                          "Decision.DrawValue": "PriorDraw.List.Current.SwipeDecision.DrawValue",
+                          "Decision.IsMatch": "PriorDraw.List.Current.SwipeDecision.IsMatch"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "create": "SwipeDecision",
+                "record": "Decision",
+                "as": "CreateDecision"
+              },
+              {
+                "assign": {
+                  "Decision.Id": "CreateDecision.Id",
+                  "Result.DecisionId": "CreateDecision.Id",
+                  "Result.RoundId": "RoundId",
+                  "Result.HorseId": "HorseId",
+                  "Result.HasNewMatch": "Decision.IsMatch"
+                }
+              },
+              {
+                "if": "Decision.IsMatch",
+                "then": [
+                  {
+                    "get": "HorseMatch",
+                    "as": "ExistingMatch",
+                    "where": "HorseMatch.DemoProfileId = Context.Profile.Id and HorseMatch.TargetHorseId = LongIntegerToIdentifier(HorseId)",
+                    "max": 1
+                  },
+                  {
+                    "if": "not ExistingMatch.List.Empty",
+                    "then": [
+                      {
+                        "assign": {
+                          "MatchRecord": "ExistingMatch.List.Current.HorseMatch"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "assign": {
+                      "MatchRecord.DemoProfileId": "Context.Profile.Id",
+                      "MatchRecord.TargetHorseId": "LongIntegerToIdentifier(HorseId)",
+                      "MatchRecord.CreatedFromDecisionId": "Decision.Id",
+                      "MatchRecord.CreatedOn": "CurrDateTime()",
+                      "MatchRecord.ClosedOn": "NullDate()",
+                      "MatchRecord.MatchStatusId": "Entities.MatchStatus.Active"
+                    }
+                  },
+                  {
+                    "save": "HorseMatch",
+                    "record": "MatchRecord",
+                    "as": "SaveMatch"
+                  },
+                  {
+                    "assign": {
+                      "Result.MatchId": "SaveMatch.Id"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Receipt_Read",
+            "kind": "server",
+            "public": false,
+            "description": "Undo/restart usam a chave canonica RoundId no campo legado PayloadHash (sem digest); compara conteudo antes de devolver o recibo.",
+            "inputs": [
+              {
+                "name": "ProfileId",
+                "type": "DemoProfile Identifier"
+              },
+              {
+                "name": "RequestId",
+                "type": "Text"
+              },
+              {
+                "name": "Kind",
+                "type": "Text"
+              },
+              {
+                "name": "RoundId",
+                "type": "Long Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Found",
+                "type": "Boolean"
+              },
+              {
+                "name": "Result",
+                "type": "CommandResult"
+              }
+            ],
+            "vars": [],
+            "steps": [
+              {
+                "get": "OperationReceipt",
+                "as": "ReadReceipt",
+                "where": "OperationReceipt.DemoProfileId = ProfileId and OperationReceipt.RequestId = RequestId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "Found": "not ReadReceipt.List.Empty"
+                }
+              },
+              {
+                "if": "Found",
+                "then": [
+                  {
+                    "if": "ReadReceipt.List.Current.OperationReceipt.Kind <> Kind or ReadReceipt.List.Current.OperationReceipt.PayloadHash <> LongIntegerToText(RoundId)",
+                    "then": [
+                      {
+                        "raise": "AstraValidation",
+                        "message": "\"RequestId já usado com outro comando ou rodada.\""
+                      }
+                    ]
+                  },
+                  {
+                    "node": "IJSONDeserializeNode",
+                    "as": "Decode",
+                    "properties": {
+                      "JSONString": "ReadReceipt.List.Current.OperationReceipt.ResultJson",
+                      "DataType": "CommandResult",
+                      "DateFormat": "ISO"
+                    }
+                  },
+                  {
+                    "assign": {
+                      "Result": "Decode.Data"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Receipt_Write",
+            "kind": "server",
+            "public": false,
+            "description": "Receipt Write",
+            "inputs": [
+              {
+                "name": "ProfileId",
+                "type": "DemoProfile Identifier"
+              },
+              {
+                "name": "RequestId",
+                "type": "Text"
+              },
+              {
+                "name": "Kind",
+                "type": "Text"
+              },
+              {
+                "name": "RoundId",
+                "type": "Long Integer"
+              },
+              {
+                "name": "Result",
+                "type": "CommandResult"
+              }
+            ],
+            "outputs": [],
+            "vars": [
+              {
+                "name": "Receipt",
+                "type": "OperationReceipt"
+              }
+            ],
+            "steps": [
+              {
+                "node": "IJSONSerializeNode",
+                "as": "Encode",
+                "properties": {
+                  "Data": "Result",
+                  "SerializeDefaultValues": true,
+                  "DateFormat": "ISO"
+                }
+              },
+              {
+                "assign": {
+                  "Receipt.DemoProfileId": "ProfileId",
+                  "Receipt.RequestId": "RequestId",
+                  "Receipt.Kind": "Kind",
+                  "Receipt.PayloadHash": "LongIntegerToText(RoundId)",
+                  "Receipt.ResultJson": "Encode.JSON",
+                  "Receipt.CreatedOn": "CurrDateTime()"
+                }
+              },
+              {
+                "create": "OperationReceipt",
+                "record": "Receipt",
+                "as": "CreateReceipt"
+              }
+            ]
+          },
+          {
+            "name": "Swipe_UndoLast",
+            "kind": "server",
+            "public": true,
+            "description": "Desfaz apenas a ultima decisao da rodada. Fecha match sem conversa; bloqueia reversao se ja houver mensagens.",
+            "inputs": [
+              {
+                "name": "RoundId",
+                "type": "Long Integer"
+              },
+              {
+                "name": "RequestId",
+                "type": "Text"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Result",
+                "type": "CommandResult"
+              }
+            ],
+            "vars": [
+              {
+                "name": "Decision",
+                "type": "SwipeDecision"
+              },
+              {
+                "name": "MatchRecord",
+                "type": "HorseMatch"
+              }
+            ],
+            "steps": [
+              {
+                "call": "Context_Require",
+                "as": "Context",
+                "args": {
+                  "LockProfile": "True"
+                }
+              },
+              {
+                "if": "Length(Trim(RequestId)) = 0 or Length(RequestId) > 36",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"RequestId deve conter de 1 a 36 caracteres.\""
+                  }
+                ]
+              },
+              {
+                "call": "Receipt_Read",
+                "as": "Receipt",
+                "args": {
+                  "ProfileId": "Context.Profile.Id",
+                  "RequestId": "RequestId",
+                  "Kind": "\"Undo\"",
+                  "RoundId": "RoundId"
+                }
+              },
+              {
+                "if": "Receipt.Found",
+                "then": [
+                  {
+                    "assign": {
+                      "Result": "Receipt.Result"
+                    }
+                  },
+                  {
+                    "return": true
+                  }
+                ]
+              },
+              {
+                "call": "Round_Require",
+                "as": "CurrentRound",
+                "args": {
+                  "ProfileId": "Context.Profile.Id",
+                  "RoundId": "RoundId"
+                }
+              },
+              {
+                "get": "SwipeDecision",
+                "as": "LastDecision",
+                "where": "SwipeDecision.DemoProfileId = Context.Profile.Id and SwipeDecision.RoundId = LongIntegerToIdentifier(RoundId) and SwipeDecision.UndoneOn = NullDate()",
+                "sort": [
+                  "SwipeDecision.Id",
+                  "Descending"
+                ],
+                "max": 1
+              },
+              {
+                "if": "LastDecision.List.Empty",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"Não há decisão para desfazer.\""
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "Decision": "LastDecision.List.Current.SwipeDecision"
+                }
+              },
+              {
+                "get": "HorseMatch",
+                "as": "RelatedMatch",
+                "where": "HorseMatch.CreatedFromDecisionId = Decision.Id and HorseMatch.DemoProfileId = Context.Profile.Id",
+                "max": 1
+              },
+              {
+                "if": "not RelatedMatch.List.Empty",
+                "then": [
+                  {
+                    "get": "Message",
+                    "as": "Conversation",
+                    "where": "Message.HorseMatchId = RelatedMatch.List.Current.HorseMatch.Id",
+                    "max": 1
+                  },
+                  {
+                    "if": "not Conversation.List.Empty",
+                    "then": [
+                      {
+                        "raise": "AstraValidation",
+                        "message": "\"Não é possível desfazer um match que já possui mensagens.\""
+                      }
+                    ]
+                  },
+                  {
+                    "assign": {
+                      "MatchRecord": "RelatedMatch.List.Current.HorseMatch",
+                      "MatchRecord.MatchStatusId": "Entities.MatchStatus.Closed",
+                      "MatchRecord.ClosedOn": "CurrDateTime()",
+                      "Result.MatchId": "RelatedMatch.List.Current.HorseMatch.Id"
+                    }
+                  },
+                  {
+                    "update": "HorseMatch",
+                    "record": "MatchRecord",
+                    "as": "CloseMatch"
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "Decision.UndoneOn": "CurrDateTime()"
+                }
+              },
+              {
+                "update": "SwipeDecision",
+                "record": "Decision",
+                "as": "UndoDecision"
+              },
+              {
+                "assign": {
+                  "Result.WasUndone": "True",
+                  "Result.DecisionId": "Decision.Id",
+                  "Result.HorseId": "Decision.TargetHorseId",
+                  "Result.RoundId": "RoundId"
+                }
+              },
+              {
+                "call": "Receipt_Write",
+                "as": "StoreReceipt",
+                "args": {
+                  "ProfileId": "Context.Profile.Id",
+                  "RequestId": "RequestId",
+                  "Kind": "\"Undo\"",
+                  "RoundId": "RoundId",
+                  "Result": "Result"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Discovery_Restart",
+            "kind": "server",
+            "public": true,
+            "description": "Nova rodada reapresenta passes e likes sem match; preserva matches ativos e conversas. Reenvio devolve a rodada original.",
+            "inputs": [
+              {
+                "name": "RoundId",
+                "type": "Long Integer"
+              },
+              {
+                "name": "RequestId",
+                "type": "Text"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Result",
+                "type": "CommandResult"
+              }
+            ],
+            "vars": [
+              {
+                "name": "OldRound",
+                "type": "DiscoveryRound"
+              },
+              {
+                "name": "NewRound",
+                "type": "DiscoveryRound"
+              }
+            ],
+            "steps": [
+              {
+                "call": "Context_Require",
+                "as": "Context",
+                "args": {
+                  "LockProfile": "True"
+                }
+              },
+              {
+                "if": "Length(Trim(RequestId)) = 0 or Length(RequestId) > 36",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"RequestId deve conter de 1 a 36 caracteres.\""
+                  }
+                ]
+              },
+              {
+                "call": "Receipt_Read",
+                "as": "Receipt",
+                "args": {
+                  "ProfileId": "Context.Profile.Id",
+                  "RequestId": "RequestId",
+                  "Kind": "\"Restart\"",
+                  "RoundId": "RoundId"
+                }
+              },
+              {
+                "if": "Receipt.Found",
+                "then": [
+                  {
+                    "assign": {
+                      "Result": "Receipt.Result"
+                    }
+                  },
+                  {
+                    "return": true
+                  }
+                ]
+              },
+              {
+                "call": "Round_Require",
+                "as": "CurrentRound",
+                "args": {
+                  "ProfileId": "Context.Profile.Id",
+                  "RoundId": "RoundId"
+                }
+              },
+              {
+                "assign": {
+                  "OldRound": "CurrentRound.Round",
+                  "OldRound.ClosedOn": "CurrDateTime()"
+                }
+              },
+              {
+                "update": "DiscoveryRound",
+                "record": "OldRound",
+                "as": "CloseRound"
+              },
+              {
+                "assign": {
+                  "NewRound.DemoProfileId": "Context.Profile.Id",
+                  "NewRound.StartedOn": "CurrDateTime()"
+                }
+              },
+              {
+                "create": "DiscoveryRound",
+                "record": "NewRound",
+                "as": "CreateRound"
+              },
+              {
+                "assign": {
+                  "Result.RoundId": "CreateRound.Id"
+                }
+              },
+              {
+                "call": "Receipt_Write",
+                "as": "StoreReceipt",
+                "args": {
+                  "ProfileId": "Context.Profile.Id",
+                  "RequestId": "RequestId",
+                  "Kind": "\"Restart\"",
+                  "RoundId": "RoundId",
+                  "Result": "Result"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Chat_GetMessages",
+            "kind": "server",
+            "public": true,
+            "description": "Pagina por Id crescente; somente conversa de um match ativo do usuario autenticado.",
+            "inputs": [
+              {
+                "name": "MatchId",
+                "type": "Long Integer"
+              },
+              {
+                "name": "AfterMessageId",
+                "type": "Long Integer",
+                "default": "0"
+              },
+              {
+                "name": "MaxRecords",
+                "type": "Integer",
+                "default": "50"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Items",
+                "type": "MessageDTO List"
+              },
+              {
+                "name": "HasMore",
+                "type": "Boolean"
+              }
+            ],
+            "vars": [
+              {
+                "name": "Item",
+                "type": "MessageDTO"
+              }
+            ],
+            "steps": [
+              {
+                "call": "Context_Require",
+                "as": "Context",
+                "args": {
+                  "LockProfile": "False"
+                }
+              },
+              {
+                "call": "Match_Require",
+                "as": "Match",
+                "args": {
+                  "ProfileId": "Context.Profile.Id",
+                  "MatchId": "MatchId"
+                }
+              },
+              {
+                "if": "AfterMessageId < 0 or MaxRecords < 1 or MaxRecords > 100",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"Paginação inválida.\""
+                  }
+                ]
+              },
+              {
+                "get": "Message",
+                "as": "ReadMessages",
+                "where": "Message.HorseMatchId = LongIntegerToIdentifier(MatchId) and IdentifierToLongInteger(Message.Id) > AfterMessageId",
+                "sort": [
+                  "Message.Id",
+                  "Ascending"
+                ],
+                "max": "MaxRecords + 1"
+              },
+              {
+                "assign": {
+                  "HasMore": "ReadMessages.List.Length > MaxRecords"
+                }
+              },
+              {
+                "foreach": "ReadMessages.List",
+                "as": "EachMessage",
+                "max": "MaxRecords",
+                "do": [
+                  {
+                    "assign": {
+                      "Item.Id": "ReadMessages.List.Current.Message.Id",
+                      "Item.SenderTypeId": "ReadMessages.List.Current.Message.SenderTypeId",
+                      "Item.Body": "ReadMessages.List.Current.Message.Body",
+                      "Item.CreatedOn": "ReadMessages.List.Current.Message.CreatedOn",
+                      "Item.InReplyToMessageId": "ReadMessages.List.Current.Message.InReplyToMessageId"
+                    }
+                  },
+                  {
+                    "call": "ListAppend",
+                    "as": "Append",
+                    "args": {
+                      "List": "Items",
+                      "Element": "Item"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Chat_SendMessage",
+            "kind": "server",
+            "public": true,
+            "description": "Envia texto e resposta generica na mesma transacao; idempotencia por match/request; nao chama IA nem integra mensageria real.",
+            "inputs": [
+              {
+                "name": "MatchId",
+                "type": "Long Integer"
+              },
+              {
+                "name": "Body",
+                "type": "Text"
+              },
+              {
+                "name": "RequestId",
+                "type": "Text"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Result",
+                "type": "CommandResult"
+              }
+            ],
+            "vars": [
+              {
+                "name": "Human",
+                "type": "Message"
+              },
+              {
+                "name": "Reply",
+                "type": "Message"
+              }
+            ],
+            "steps": [
+              {
+                "call": "Context_Require",
+                "as": "Context",
+                "args": {
+                  "LockProfile": "True"
+                }
+              },
+              {
+                "if": "Length(Trim(RequestId)) = 0 or Length(RequestId) > 36",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"RequestId deve conter de 1 a 36 caracteres.\""
+                  }
+                ]
+              },
+              {
+                "call": "Match_Require",
+                "as": "Match",
+                "args": {
+                  "ProfileId": "Context.Profile.Id",
+                  "MatchId": "MatchId"
+                }
+              },
+              {
+                "if": "Length(Trim(Body)) = 0 or Length(Trim(Body)) > 2000",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"Mensagem deve conter de 1 a 2000 caracteres.\""
+                  }
+                ]
+              },
+              {
+                "get": "Message",
+                "as": "PreviousMessage",
+                "where": "Message.HorseMatchId = LongIntegerToIdentifier(MatchId) and Message.ClientRequestId = RequestId and Message.SenderTypeId = Entities.MessageSenderType.User",
+                "max": 1
+              },
+              {
+                "if": "not PreviousMessage.List.Empty",
+                "then": [
+                  {
+                    "if": "PreviousMessage.List.Current.Message.Body <> Trim(Body)",
+                    "then": [
+                      {
+                        "raise": "AstraValidation",
+                        "message": "\"RequestId já usado para outro texto.\""
+                      }
+                    ]
+                  },
+                  {
+                    "get": "Message",
+                    "as": "PreviousReply",
+                    "where": "Message.InReplyToMessageId = PreviousMessage.List.Current.Message.Id and Message.SenderTypeId = Entities.MessageSenderType.SimulatedHorse",
+                    "max": 1
+                  },
+                  {
+                    "if": "PreviousReply.List.Empty",
+                    "then": [
+                      {
+                        "raise": "AstraValidation",
+                        "message": "\"Resposta da operação anterior não encontrada.\""
+                      }
+                    ]
+                  },
+                  {
+                    "assign": {
+                      "Result.MatchId": "MatchId",
+                      "Result.MessageId": "PreviousMessage.List.Current.Message.Id",
+                      "Result.ReplyId": "PreviousReply.List.Current.Message.Id"
+                    }
+                  },
+                  {
+                    "return": true
+                  }
+                ]
+              },
+              {
+                "if": "Length(Trim(Site.DemoReplyText)) = 0 or Length(Site.DemoReplyText) > 2000",
+                "then": [
+                  {
+                    "raise": "AstraValidation",
+                    "message": "\"DemoReplyText deve conter de 1 a 2000 caracteres.\""
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "Human.HorseMatchId": "LongIntegerToIdentifier(MatchId)",
+                  "Human.SenderTypeId": "Entities.MessageSenderType.User",
+                  "Human.Body": "Trim(Body)",
+                  "Human.ClientRequestId": "RequestId",
+                  "Human.CreatedOn": "CurrDateTime()"
+                }
+              },
+              {
+                "create": "Message",
+                "record": "Human",
+                "as": "CreateHuman"
+              },
+              {
+                "assign": {
+                  "Reply.HorseMatchId": "LongIntegerToIdentifier(MatchId)",
+                  "Reply.SenderTypeId": "Entities.MessageSenderType.SimulatedHorse",
+                  "Reply.Body": "Site.DemoReplyText",
+                  "Reply.ClientRequestId": "RequestId",
+                  "Reply.InReplyToMessageId": "CreateHuman.Id",
+                  "Reply.CreatedOn": "CurrDateTime()"
+                }
+              },
+              {
+                "create": "Message",
+                "record": "Reply",
+                "as": "CreateReply"
+              },
+              {
+                "assign": {
+                  "Result.MatchId": "MatchId",
+                  "Result.MessageId": "CreateHuman.Id",
+                  "Result.ReplyId": "CreateReply.Id"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

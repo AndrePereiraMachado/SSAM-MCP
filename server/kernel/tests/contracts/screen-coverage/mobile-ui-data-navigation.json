@@ -1,0 +1,176 @@
+{
+  "fixture": "mobile-ui",
+  "features": [
+    "screen-query",
+    "data-action",
+    "OnAfterFetch",
+    "navigation",
+    "input-argument",
+    "entity-list"
+  ],
+  "contract": {
+    "data": {
+      "entities": [
+        {
+          "name": "Note",
+          "attributes": [
+            {
+              "name": "Title",
+              "type": "Text",
+              "length": 100
+            }
+          ]
+        }
+      ]
+    },
+    "screens": [
+      {
+        "name": "Notes",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "inputs": [
+          {
+            "name": "Search",
+            "type": "Text",
+            "mandatory": false,
+            "default": "\"\""
+          }
+        ],
+        "vars": [
+          {
+            "name": "Loaded",
+            "type": "Integer"
+          }
+        ],
+        "queries": [
+          {
+            "get": "Note",
+            "as": "ReadNotes",
+            "where": "Note.Title like \"%\" + Search + \"%\"",
+            "max": 10,
+            "start": 0
+          }
+        ],
+        "sourceEvents": {
+          "ReadNotes": {
+            "destination": "IMobileScreen:Notes/NotesFetched"
+          }
+        },
+        "widgets": [
+          {
+            "name": "List",
+            "type": "IList",
+            "properties": {
+              "Source": "ReadNotes.List"
+            },
+            "children": [
+              {
+                "name": "OpenDetail",
+                "type": "ILink",
+                "children": [
+                  {
+                    "name": "Caption",
+                    "type": "IExpression",
+                    "properties": {
+                      "Value": "ReadNotes.List.Current.Note.Title"
+                    }
+                  }
+                ],
+                "events": {
+                  "OnClick": {
+                    "destination": "IMobileScreen:NoteDetail",
+                    "args": {
+                      "NoteId": "ReadNotes.List.Current.Note.Id"
+                    },
+                    "transition": "Fade"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "Count",
+            "type": "IExpression",
+            "properties": {
+              "Value": "Loaded"
+            }
+          }
+        ]
+      },
+      {
+        "name": "NoteDetail",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "inputs": [
+          {
+            "name": "NoteId",
+            "type": "Note Identifier",
+            "mandatory": true
+          }
+        ],
+        "widgets": [
+          {
+            "name": "Name",
+            "type": "IExpression",
+            "properties": {
+              "Value": "LoadNote.Record.Title"
+            }
+          }
+        ]
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "name": "NotesFetched",
+          "kind": "screen",
+          "owner": "IMobileScreen:Notes",
+          "steps": [
+            {
+              "assign": {
+                "Loaded": "ReadNotes.List.Length"
+              }
+            }
+          ]
+        },
+        {
+          "name": "LoadNote",
+          "kind": "data",
+          "owner": "IMobileScreen:NoteDetail",
+          "fetch": "AtStart",
+          "timeout": 30,
+          "outputs": [
+            {
+              "name": "Record",
+              "type": "Note"
+            }
+          ],
+          "steps": [
+            {
+              "get": "Note",
+              "as": "SelectedNote",
+              "where": "Note.Id = NoteId",
+              "max": 1
+            },
+            {
+              "assign": {
+                "Record": "SelectedNote.List.Current.Note"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IMobileScreen:Notes/ReadNotes/**IFilter",
+    "prop": "Condition",
+    "value": "Note.Title <> Search"
+  }
+}

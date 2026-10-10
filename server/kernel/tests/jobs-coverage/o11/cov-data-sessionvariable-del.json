@@ -1,0 +1,18 @@
+{
+ "description": "Cobertura testada (fase 1, medir): del de OutSystems.Model.Data.ISessionVariable (o11) em espaceWeb. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISessionVariable",
+   "name": "CovASessionVariable",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

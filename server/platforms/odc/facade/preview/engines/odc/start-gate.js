@@ -1,0 +1,1 @@
+window.startReviewedNativeScreen(window.__candidateExecutionConfig).catch(error=>{window.__candidateEntryFailure={message:error.message,stack:error.stack};console.error(error);document.getElementById('reactContainer').textContent='Entrada interrompida: '+error.message;});

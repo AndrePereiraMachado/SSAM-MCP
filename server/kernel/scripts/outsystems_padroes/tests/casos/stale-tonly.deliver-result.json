@@ -1,0 +1,18 @@
+{
+ "_fixture": "result.json sintetico de deliver limpo: entregue, 0 erros novos, nenhum warning.",
+ "delivered": true,
+ "newErrors": 0,
+ "stage": "complete",
+ "validation": {
+  "new": [],
+  "fixed": [],
+  "preexisting": [],
+  "newErrors": 0
+ },
+ "contract": {
+  "unexpected": [],
+  "missingExpected": [],
+  "ambiguous": [],
+  "tolerated": []
+ }
+}

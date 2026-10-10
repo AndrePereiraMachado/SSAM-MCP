@@ -1,0 +1,27 @@
+{
+ "description": "Frente B (catalogo abrangente), faixa ODC: escrever propriedades do PROPRIO ILink (Style, Enabled) e le-las de volta. cat-b-widget-gallery ja cria um link, mas so mexe nos objetos filhos (a legenda #ITextWidget e o evento OnClick); o set de link no ODC ficou por medir. O link navega para uma tela sem input, criada antes (a primeira tela criada sem Studio vira a DefaultScreen no ODC, e aqui isso nao importa: nada e apagado).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CatBLinkHome", "as": "$home", "_why": "1. a tela do link e a tela de destino"},
+  {"op": "set", "target": "$home/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$home/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$homeTitle"},
+  {"op": "set", "target": "$homeTitle", "prop": "Value", "value": "\"Links\""},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CatBLinkTarget", "as": "$target"},
+  {"op": "set", "target": "$target/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$target/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$targetTitle"},
+  {"op": "set", "target": "$targetTitle", "prop": "Value", "value": "\"Target\""},
+  {"op": "create", "parent": "$home", "type": "ILocalVariable", "name": "CanOpen", "as": "$can"},
+  {"op": "set", "target": "$can", "prop": "DataType", "value": "Boolean"},
+  {"op": "set", "target": "$can", "prop": "DefaultValue", "value": "True"},
+
+  {"op": "create", "parent": "$home/#IMobileBlockInstanceWidget/MainContent", "type": "ILink", "name": "OpenTarget_Link", "as": "$lnk", "_why": "2. o link e as SUAS propriedades"},
+  {"op": "set", "target": "$lnk/#ITextWidget", "prop": "Text", "value": "Open target"},
+  {"op": "set", "target": "$lnk/OnClick", "prop": "Destination", "value": "$target"},
+  {"op": "set", "target": "$lnk", "prop": "Style", "value": "\"text-primary\""},
+  {"op": "set", "target": "$lnk", "prop": "Enabled", "value": "CanOpen"},
+  {"op": "get", "target": "$lnk", "_why": "3. LER DE VOLTA: Style e Enabled no proprio link"},
+  {"op": "dump", "target": "$home", "depth": 6}
+ ]
+}

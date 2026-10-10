@@ -1,0 +1,10 @@
+{
+ "description": "Bloqueado: o arquetipo cards da op screen falha no ODC ao criar o card dentro da List da Gallery (o IContent da List some); use os verbos (usage-gallery-data-action-typical) ate o kernel corrigir.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectError": ["(create ): InvalidOperationException: Sequence contains no elements"],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [{"name": "Title", "type": "Text", "length": 120, "mandatory": true}]}]}},
+  {"op": "screen", "data": {"screens": [
+   {"name": "Catalog", "kind": "cards", "title": "Products", "source": {"entity": "Product", "as": "GetProducts"}, "card": {"title": "Title"}}]}}
+ ]
+}

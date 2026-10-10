@@ -1,0 +1,294 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "OutSystemsUI",
+    "OutSystemsUIWeb:SearchBalloon",
+    "OutSystemsUIWeb:Section",
+    "OutSystemsUIWeb:SectionIndex",
+    "OutSystemsUIWeb:Separator",
+    "OutSystemsUIWeb:Sidebar"
+  ],
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "tests/fixtures/outsystems-ui-web.oml",
+      "elements": [
+        "IWebBlock:SearchBalloon",
+        "IWebBlock:Section",
+        "IWebBlock:SectionIndex",
+        "IWebBlock:Separator",
+        "IWebBlock:Sidebar"
+      ]
+    }
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Ui70_SearchBalloon",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:SearchBalloon",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Icon": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Icon"
+                  }
+                }
+              ],
+              "Input": [
+                {
+                  "name": "Part3",
+                  "type": "IInputWidget",
+                  "properties": {
+                    "Variable": "Value1"
+                  }
+                }
+              ],
+              "Actions": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Answers": [
+                {
+                  "name": "Part6",
+                  "type": "IListRecordsWidget",
+                  "properties": {
+                    "SourceRecordList": "Value2"
+                  },
+                  "children": [
+                    {
+                      "name": "Part5",
+                      "type": "ITextWidget",
+                      "properties": {
+                        "Text": "Component content"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "Part7",
+            "type": "IButtonWidget",
+            "properties": {
+              "Label": "\"Submit\""
+            },
+            "events": {
+              "OnClick": {
+                "destination": "IWebScreen:Ui70_SearchBalloon/Ui70_SearchBalloon_Submit"
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value1",
+            "type": "Text"
+          },
+          {
+            "name": "Value2",
+            "type": "Text List"
+          }
+        ]
+      },
+      {
+        "name": "Ui71_Section",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:Section",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Title": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Actions": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui72_SectionIndex",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:SectionIndex",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {}
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui73_Separator",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:Separator",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {}
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui74_Sidebar",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:Sidebar",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Header": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Content": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "name": "Ui70_SearchBalloon_Submit",
+          "kind": "screen",
+          "owner": "IWebScreen:Ui70_SearchBalloon",
+          "steps": []
+        }
+      ]
+    }
+  },
+  "mutations": [
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui70_SearchBalloon/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "SearchBalloon"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui71_Section/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Section"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui72_SectionIndex/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "SectionIndex"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui73_Separator/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Separator"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui74_Sidebar/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Sidebar"
+    }
+  ]
+}

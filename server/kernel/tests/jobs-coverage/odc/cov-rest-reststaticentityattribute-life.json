@@ -1,0 +1,129 @@
+{
+ "description": "Cobertura testada (fase 1, medir): life de ServiceStudio.Plugin.REST.IRestStaticEntityAttribute (odc) em restStaticValid. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IRestClient",
+   "name": "CovSApi",
+   "as": "$api"
+  },
+  {
+   "op": "set",
+   "target": "$api",
+   "prop": "BaseURL",
+   "value": "https://example.com"
+  },
+  {
+   "op": "create",
+   "parent": "$api",
+   "type": "IRestStructure",
+   "name": "CovSRestBody",
+   "as": "$body"
+  },
+  {
+   "op": "create",
+   "parent": "$body",
+   "type": "IRestStructureAttribute",
+   "name": "CovSTitle",
+   "as": "$bodyt"
+  },
+  {
+   "op": "set",
+   "target": "$bodyt",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$api",
+   "type": "IRestAction",
+   "name": "CovSGet",
+   "as": "$m"
+  },
+  {
+   "op": "set",
+   "target": "$m",
+   "prop": "HTTPMethod",
+   "value": "GET"
+  },
+  {
+   "op": "set",
+   "target": "$m",
+   "prop": "URLPath",
+   "value": "/cov"
+  },
+  {
+   "op": "set",
+   "target": "$m",
+   "prop": "ResponseFormat",
+   "value": "JSON"
+  },
+  {
+   "op": "create",
+   "parent": "$m",
+   "type": "IRestActionOutput",
+   "name": "Response",
+   "as": "$mout"
+  },
+  {
+   "op": "set",
+   "target": "$mout",
+   "prop": "DataType",
+   "value": "CovSRestBody"
+  },
+  {
+   "op": "set",
+   "target": "$mout",
+   "prop": "OutputPlacement",
+   "value": "BodyPlacement"
+  },
+  {
+   "op": "create",
+   "parent": "$api",
+   "type": "IRestStaticEntity",
+   "name": "CovSRestStatic",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IRestStaticEntityAttribute",
+   "name": "CovARestStaticEntityAttribute",
+   "as": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Length",
+   "value": 50
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Label",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRRestStaticEntityAttribute"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "move",
+   "target": "$b",
+   "first": true
+  }
+ ]
+}

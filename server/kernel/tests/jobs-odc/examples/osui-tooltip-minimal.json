@@ -1,0 +1,15 @@
+{
+ "description": "Tooltip do OSUI: o gatilho no Content e o texto no placeholder Tooltip.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "TooltipDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Tooltip1", "source": "IMobileBlock:Tooltip", "as": "$tt"},
+  {"op": "create", "parent": "$tt/Content", "type": "ITextWidget", "as": "$text1"},
+  {"op": "set", "target": "$text1", "prop": "Text", "value": "Hover me"},
+  {"op": "create", "parent": "$tt/Tooltip", "type": "ITextWidget", "as": "$text2"},
+  {"op": "set", "target": "$text2", "prop": "Text", "value": "Help text"}
+ ]
+}

@@ -1,0 +1,40 @@
+{
+ "description": "Popup de confirmacao: o botao Remover abre o popup, Cancelar fecha, e Confirmar chama a server action com o Id escolhido e fecha.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [{"name": "Name", "type": "Text", "length": 100, "mandatory": true}]}]}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "Product_Delete", "kind": "server", "inputs": [{"name": "ProductId", "type": "Product Identifier"}],
+    "steps": [{"delete": "Product", "id": "ProductId", "as": "DeleteProduct"}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "RemoveProduct", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "IInputParameter", "name": "ProductId", "as": "$pid"},
+  {"op": "set", "target": "$pid", "prop": "DataType", "value": "Product Identifier"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "ConfirmOpen", "as": "$open"},
+  {"op": "set", "target": "$open", "prop": "DataType", "value": "Boolean"},
+  {"op": "logic", "data": {"actions": [
+   {"name": "AskRemove", "kind": "screen", "owner": "IMobileScreen:RemoveProduct", "steps": [{"assign": {"ConfirmOpen": "True"}, "as": "Open"}]},
+   {"name": "CancelRemove", "kind": "screen", "owner": "IMobileScreen:RemoveProduct", "steps": [{"assign": {"ConfirmOpen": "False"}, "as": "Close"}]},
+   {"name": "ConfirmRemove", "kind": "screen", "owner": "IMobileScreen:RemoveProduct",
+    "steps": [{"call": "Product_Delete", "as": "Remove", "args": {"ProductId": "ProductId"}},
+              {"assign": {"ConfirmOpen": "False"}, "as": "Close"},
+              {"node": "IMessageNode", "as": "Removed", "properties": {"Message": "\"Product removed\"", "Type": "Info"}}]}]}},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IButton", "name": "RemoveButton", "as": "$remove"},
+  {"op": "set", "target": "$remove/#ITextWidget", "prop": "Text", "value": "Remove"},
+  {"op": "set", "target": "$remove/OnClick", "prop": "Destination", "value": "IMobileScreen:RemoveProduct/AskRemove"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IPopup", "name": "ConfirmPopup", "as": "$pop"},
+  {"op": "set", "target": "$pop", "prop": "ShowPopup", "value": "ConfirmOpen"},
+  {"op": "create", "parent": "$pop/Content", "type": "IExpression", "as": "$question"},
+  {"op": "set", "target": "$question", "prop": "Value", "value": "\"Remove this product?\""},
+  {"op": "create", "parent": "$pop/Content", "type": "IButton", "name": "CancelButton", "as": "$cancel"},
+  {"op": "set", "target": "$cancel/#ITextWidget", "prop": "Text", "value": "Cancel"},
+  {"op": "set", "target": "$cancel/OnClick", "prop": "Destination", "value": "IMobileScreen:RemoveProduct/CancelRemove"},
+  {"op": "create", "parent": "$pop/Content", "type": "IButton", "name": "ConfirmButton", "as": "$confirm"},
+  {"op": "set", "target": "$confirm/#ITextWidget", "prop": "Text", "value": "Remove"},
+  {"op": "set", "target": "$confirm", "prop": "Style", "value": "\"btn btn-error\""},
+  {"op": "set", "target": "$confirm/OnClick", "prop": "Destination", "value": "IMobileScreen:RemoveProduct/ConfirmRemove"}
+ ]
+}

@@ -1,0 +1,17 @@
+{
+ "description": "DropdownTags do OSUI: OptionsList com lista literal e o evento obrigatorio OnChanged guardando quantas tags foram escolhidas.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "TagsDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "ChosenCount", "as": "$vChosenCount"},
+  {"op": "set", "target": "$vChosenCount", "prop": "DataType", "value": "Integer"},
+  {"op": "logic", "data": {"actions": [{"name": "TagsChanged", "kind": "screen", "owner": "IMobileScreen:TagsDemo", "inputs": [{"name": "Selection", "type": "DropdownOption List"}], "steps": [{"assign": {"ChosenCount": "Selection.Length"}, "as": "Count"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "DropdownTags1", "source": "IMobileBlock:DropdownTags", "as": "$dt"},
+  {"op": "set", "target": "$dt/OptionsList", "prop": "Value", "value": "[{Value: \"red\", Label: \"Red\"}, {Value: \"blue\", Label: \"Blue\"}]"},
+  {"op": "set", "target": "$dt/OnChanged", "prop": "Handler", "value": "IMobileScreen:TagsDemo/TagsChanged"},
+  {"op": "set", "target": "$dt/OnChanged/Selection", "prop": "Value", "value": "SelectedOptionList"}
+ ]
+}

@@ -1,0 +1,29 @@
+{
+  "kind": "sc_web.fetch request (Web Forms postback)",
+  "request": {
+    "host": "sc.example.test",
+    "action": "fetch",
+    "method": "POST",
+    "path": "/ServiceCenter/DatabaseConnection_Edit.aspx",
+    "form": {
+      "__OSVSTATE": "U1NBTS1TWU5USEVUSUMtT1NWU1RBVEUvZGItbmV3",
+      "__VIEWSTATE": "",
+      "__VIEWSTATEGENERATOR": "A1B2C3D4",
+      "wt9$wtHeader$wt129$wt275$wtSearchInput": "",
+      "wt9$wtHeader$wt129$wt275$wt12": "",
+      "wt9$wt7$wt1$wtButtonNameField": "",
+      "wt9$wt7$wt1$wtScreenNameField": "",
+      "wt9$wtContentMain$wtConnection_Name": "SampleWarehouse",
+      "wt9$wtContentMain$wtDBMSInput": "SqlServer",
+      "wt9$wtContentMain$wtConfigMode": "False",
+      "wt9$wtContentMain$wtDBParams$ctl00$wt173": "svc_reader",
+      "wt9$wtContentMain$wtDBParams$ctl02$wt133": "<SECRET-INJECTED-IN-STUDIO-PROCESS>",
+      "wt9$wtContentMain$wtDBParams$ctl06$wt173": "db.example.test",
+      "wt9$wtContentMain$wtDBParams$ctl08$wt173": "warehouse",
+      "wt9$wtContentMain$wtCreateButton": "Create"
+    },
+    "accept": "html"
+  },
+  "expectedResponseFixture": "web/dbconnections/dbconnections-list.html",
+  "notes": "Create. The password is a placeholder: O11 sc_web has no secretRefs (GAP); the value must be injected inside the Studio process from the vault target SSAM/O11/<host>/DB/<name>, never through the agent. Verify by re-reading the list (exact name). Non-SqlServer DBMS needs a DBMS-switch postback first (GSC:860-867)."
+}

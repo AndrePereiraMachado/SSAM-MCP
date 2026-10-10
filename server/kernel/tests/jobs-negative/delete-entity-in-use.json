@@ -1,0 +1,10 @@
+{
+ "description": "A RECUSA do delete de uma ENTIDADE com consumidores: Contact e a fonte do aggregate de Contact_CountActive (o filtro cita-a e o output do aggregate e o tipo `Contact Record List`, feito do registo anonimo `Contact Record` que a plataforma mantem). Sem force o delete e recusado E a mensagem nomeia o aggregate: o filtro esta dentro dele e nao se repete, e o registo anonimo em uso aponta para quem o usa. O registo anonimo e o tipo `Contact List` sozinhos ja nao recusam (cobertura testada, fase 2): uma entidade sem consumidores de autor apaga-se sem force (tests/jobs/delete-generated-companions.json).",
+ "base": "job:spec-data",
+ "expectValid": true,
+ "expectError": ["delete: refused", "IServerEntity 'Contact' is used by 1 consumer(s)", "IServerAction:Contact_CountActive/IAggregateNode:GetActive", "pass \"force\": true to break them"],
+ "ops": [
+  {"op": "usages", "target": "IServerEntity:Contact"},
+  {"op": "delete", "target": "IServerEntity:Contact"}
+ ]
+}

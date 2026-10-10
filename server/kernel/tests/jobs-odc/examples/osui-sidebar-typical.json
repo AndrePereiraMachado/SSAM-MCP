@@ -1,0 +1,30 @@
+{
+ "description": "Sidebar do OSUI: abre pela esquerda com overlay, largura fixa, StartsOpen por variavel, OnToggle guardando o estado e um Checkbox de filtro no Content.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "FiltersSidebar", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Filters\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "IsSidebarOpen", "as": "$vIsSidebarOpen"},
+  {"op": "set", "target": "$vIsSidebarOpen", "prop": "DataType", "value": "Boolean"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "OnlyInStock", "as": "$vOnlyInStock"},
+  {"op": "set", "target": "$vOnlyInStock", "prop": "DataType", "value": "Boolean"},
+  {"op": "logic", "data": {"actions": [{"name": "SidebarToggled", "kind": "screen", "owner": "IMobileScreen:FiltersSidebar", "inputs": [{"name": "IsOpen", "type": "Boolean"}], "steps": [{"assign": {"IsSidebarOpen": "IsOpen"}, "as": "Remember"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Sidebar1", "source": "IMobileBlock:Sidebar", "as": "$sb"},
+  {"op": "set", "target": "$sb/StartsOpen", "prop": "Value", "value": "IsSidebarOpen"},
+  {"op": "set", "target": "$sb/Direction", "prop": "Value", "value": "Entities.Direction.Left"},
+  {"op": "set", "target": "$sb/HasOverlay", "prop": "Value", "value": "True"},
+  {"op": "set", "target": "$sb/Width", "prop": "Value", "value": "\"320px\""},
+  {"op": "set", "target": "$sb/OnToggle", "prop": "Handler", "value": "IMobileScreen:FiltersSidebar/SidebarToggled"},
+  {"op": "set", "target": "$sb/OnToggle/IsOpen", "prop": "Value", "value": "IsOpen"},
+  {"op": "create", "parent": "$sb/Header", "type": "ITextWidget", "as": "$text1"},
+  {"op": "set", "target": "$text1", "prop": "Text", "value": "Filters"},
+  {"op": "create", "parent": "$sb/Content", "type": "ICheckbox", "name": "InStockCheckbox", "as": "$cb"},
+  {"op": "set", "target": "$cb", "prop": "Variable", "value": "OnlyInStock"},
+  {"op": "create", "parent": "$sb/Content", "type": "ITextWidget", "as": "$text2"},
+  {"op": "set", "target": "$text2", "prop": "Text", "value": "Only in stock"}
+ ]
+}

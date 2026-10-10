@@ -1,0 +1,63 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.Logic.IClientAction (odc) em espace. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedUserAction",
+   "element": "WrightFlood (ESpace) / CovRClientAction (ClientAction)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  },
+  {
+   "id": "UnusedUserAction",
+   "element": "WrightFlood (ESpace) / CovRClientAction2 (ClientAction)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IClientAction",
+   "name": "CovAClientAction",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IStartNode",
+   "as": "$a_s"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IEndNode",
+   "as": "$a_e"
+  },
+  {
+   "op": "link",
+   "from": "$a_s",
+   "to": "$a_e"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRClientAction"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  }
+ ]
+}

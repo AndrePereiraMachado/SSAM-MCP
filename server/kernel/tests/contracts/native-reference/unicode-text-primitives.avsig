@@ -1,0 +1,33 @@
+{
+  "FormatVersion": 1,
+  "Environment": "fixture.invalid",
+  "ModuleKey": "b183dba3-1a2d-4eb6-ae0d-24e0fdb65070",
+  "ApplicationKey": "00000000-0000-0000-0000-006f74686572",
+  "ModuleKind": "Extension",
+  "ModuleType": "WebResponsive",
+  "Name": "ZZHighCodePrimitives",
+  "Description": "Private laboratory prototype of typed framework intrinsics. Contains no authored business code or dynamic code executor.",
+  "Icon": "",
+  "JQueryVersion": "",
+  "ExtensibilityConfigurations": "",
+  "DatabaseName": "",
+  "SignatureHash": "f5856a3b-3a6f-32c1-b844-342cdb00c89e",
+  "SignatureBinary": "4AAAAQB8CFNpZ25hdHVyZXgMQ3JlYXRlZEJ5VG9vbEgCVW5zcGVjaWZpZWR4GUNvbXBhdGliaWxpdHlTaWduYXR1cmVIYXNoSA1FY0VrM0w2NlJDaFZRUUVvb0lpOWNneBNFbGVtZW50c09yZGVyVmVyc2lvbkgbZDI0MWJhMjctYWJiZS01ZTQ0LTQ2ODQtNGEwZjIzMDNhY2My8DwSQW5vbnltb3VzVHlwZXNOYW1lc/A8EEVsZW1lbnRTaWduYXR1cmVzfA9FbGVtZW50U2lnbmF0dXJleApPcmlnaW5hbEtleUgNWUFjeVBISkgza204NVFxNzUyeUZZdwFIDTBOdkhEbVliZ2lmVnU1MFV6YnRaa1F4EEZ1bGxTaWduYXR1cmVIYXNoSA1hc2RZR3RfRktMdXJqcnc3Z1hnWFhR8HwOUmVmZXJlbmNlQWN0aW9ueAtPcmlnaW5hbE5hbWVIBUNTaGFycFRleHRUcmlteAlJc0Z1bmN0aW9uQlllcwODeApEZXNjcmlwdGlvbkhWU291cmNlLW93bmVkIC5ORVQgVW5pY29kZSB3aGl0ZXNwYWNlIHRyaW0gYnkgVVRGLTE2IGNoYXJhY3RlciBzZW1hbnRpY3M7IGZpeGVkIHR5cGVkIHByaW1pdGl2ZS7wPARJbWFnZfA8DklucHV0UGFyYW1ldGVyc3wnVmFyaWFibGVzLlJlZmVyZW5jZUdlbmVyaWNJbnB1dFBhcmFtZXRlcngDTmFtZURWYWx1ZXgKSXNNYW5kYXRvcnmHeANUeXBlSA4ldVJPT0JYUHZRRXlVNzZOV08rMXV4UQNIDTJTT0xaclVSMWthdWs4aFhSMjV5dUHwPAtEZWZhdWx0VmFsdWXwPBJUZXN0QXR0cmlidXRlVmFsdWVz/0cIRkxlYWRpbmcJh3gESW5kZXhAMQpIDiVvRDBmeHZjN2hVT1hfMzA1eklYSWxnA0gNTVo1YVpMM3lUa3VhRzhiYzliWGhfZ/AI8An/RwhHVHJhaWxpbmcJhwtAMgqOA0gNSllOQ1VtZ0U0RXVfeXJONXpScnFtUfAI8An/8DwPT3V0cHV0UGFyYW1ldGVyc3woVmFyaWFibGVzLlJlZmVyZW5jZUdlbmVyaWNPdXRwdXRQYXJhbWV0ZXIIRVJlc3VsdAtAMwqKA0gNZGRNRGsyTHc1VVdlSERnb1h1SUNDQfAI///wQwNIDVBIU3phcHJseVVXZkl3c1R6QmphMEEBSA1XTWFUUGo2R0VTaDFMMkUxRGdaUXBnBEgNaWVZclZTUE1uRktGbFZRQUg3UjMxQfBEBUgMQ1NoYXJwVGV4dFV0ZjE2TGVuZ3RoBocDlgdIWFNvdXJjZS1vd25lZCAuTkVUIHN0cmluZy5MZW5ndGggaW4gVVRGLTE2IGNvZGUgdW5pdHMuIE5vIHNvdXJjZSBleGVjdXRpb24gb3IgdGhpcmQtcGFydHkgcnVudGltZS7wBfAGRwiJCYcKigNIDUdCN3RwUENhdlVPQVlhYVVtU0dKZXfwCPAJ//AKSwiTC40KSA4lajJMYzBwaEswa3VnZ2lqNGdRWWZBdwNIDUQ0dE5VQ2EwWmsyRk54U3VhUE9EVXfwCP//8EMDSA1pNUZBdmd6STJVT0VKN1U0YnZLYlJ3AUgNOWdmRmVNQzBiQ2xOTkMzNjZnSWw2ZwRIDXlrX0Nwa3dnRGpYUkYzdWJkOUtXRnfwRAVID0NTaGFycFRleHRDb21wYXJlT3JkaW5hbAaHA54HSFxVVEYtMTYgb3JkaW5hbCBjb21wYXJpc29uIGRlbGVnYXRlZCBkaXJlY3RseSB0byB0aGUgaW5zdGFsbGVkIC5ORVQgZnJhbWV3b3JrOyBzb3VyY2Utb3duZWQgcHJpbWl0aXZlLvAF8AZHCENMZWZ0CYcKigNIDUloTHRfNVIxb0U2ZHF6d2NzYk1nV2fwCPAJ/0cIRFJpZ2h0CYcLjQqKA0gNMGZtdnFsRkJtRWlxY1hHeUJDZFNOUfAI8An/8ApLCJMLkQqcA0gNb2hfb2FKX1BWMDJVVVE4aXdLSktkZ/AI///wQwNIH285dURzUzBhdGs2dURTVGdfYlpRY0EuI0V4dGVuc2lvbkNvbnRlbnQBSA03WlhhWDdzekpqTjltVTFBX0NGVVdnBKnwfBhSZWZlcmVuY2VFeHRlbnNpb25Db250ZW50A6j///8=",
+  "Elements": [
+    {
+      "Kind": "action",
+      "Name": "CSharpTextCompareOrdinal",
+      "Key": "i5FAvgzI2UOEJ7U4bvKbRw"
+    },
+    {
+      "Kind": "action",
+      "Name": "CSharpTextUtf16Length",
+      "Key": "PHSzaprlyUWfIwsTzBja0A"
+    },
+    {
+      "Kind": "action",
+      "Name": "CSharpTextTrim",
+      "Key": "YAcyPHJH3km85Qq752yFYw"
+    }
+  ]
+}

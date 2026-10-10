@@ -1,0 +1,68 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.Data.IStructureAttribute (odc) em structure. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedElement",
+   "element": "WrightFlood (ESpace) / CovSStructure (Structure)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "structures": [
+     {
+      "name": "CovSStructure",
+      "attributes": [
+       {
+        "name": "Title",
+        "type": "Text"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$CovSStructure",
+   "type": "IStructureAttribute",
+   "name": "CovAStructureAttribute",
+   "as": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Label",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRStructureAttribute"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "move",
+   "target": "$b",
+   "first": true
+  }
+ ]
+}

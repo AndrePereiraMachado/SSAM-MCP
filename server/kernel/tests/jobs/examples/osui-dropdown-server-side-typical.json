@@ -1,0 +1,31 @@
+{
+ "description": "DropdownServerSide (OutSystemsUI, Advanced) tipico; criado vazio e preenchido com conteudo proprio; placeholders BalloonContent, BalloonFooter, BalloonSearchInput, BalloonSearchInputIcon, SelectedValues com dados do aggregate de tarefas; eventos OnToggle, Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastDropdownServerSideId", "as": "$vLastDropdownServerSideId"},
+  {"op": "set", "target": "$vLastDropdownServerSideId", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastIsOpen", "as": "$vLastIsOpen"},
+  {"op": "set", "target": "$vLastIsOpen", "prop": "DataType", "value": "Boolean"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetShowcaseTasks", "as": "$tasks"},
+  {"op": "create", "parent": "$tasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "logic", "data": {"actions": [{"name": "DropdownServerSideDemoOnToggle", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de OnToggle", "inputs": [{"name": "DropdownServerSideId", "type": "Text"}, {"name": "IsOpen", "type": "Boolean"}],"steps": [{"assign": {"LastDropdownServerSideId": "DropdownServerSideId", "LastIsOpen": "IsOpen"},"as": "KeepOnToggle"}]}, {"name": "DropdownServerSideDemoInitialized", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de Initialized", "inputs": [{"name": "DropdownServerSideId", "type": "Text"}],"steps": [{"assign": {"LastDropdownServerSideId": "DropdownServerSideId"},"as": "KeepInitialized"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "DropdownServerSideDemo", "source": "IMobileBlock:DropdownServerSide", "empty": true,"as": "$b"},
+  {"op": "set", "target": "$b/OnToggle", "prop": "Handler", "value": "IScreenAction:DropdownServerSideDemoOnToggle"},
+  {"op": "set", "target": "$b/OnToggle/DropdownServerSideId", "prop": "Value", "value": "DropdownServerSideId"},
+  {"op": "set", "target": "$b/OnToggle/IsOpen", "prop": "Value", "value": "IsOpen"},
+  {"op": "set", "target": "$b/Initialized", "prop": "Handler", "value": "IScreenAction:DropdownServerSideDemoInitialized"},
+  {"op": "set", "target": "$b/Initialized/DropdownServerSideId", "prop": "Value", "value": "DropdownServerSideId"},
+  {"op": "create", "parent": "$b/BalloonContent", "type": "IExpression", "as": "$ph1"},
+  {"op": "set", "target": "$ph1", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/BalloonFooter", "type": "IExpression", "as": "$ph2"},
+  {"op": "set", "target": "$ph2", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/BalloonSearchInput", "type": "IExpression", "as": "$ph3"},
+  {"op": "set", "target": "$ph3", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/BalloonSearchInputIcon", "type": "IExpression", "as": "$ph4"},
+  {"op": "set", "target": "$ph4", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/SelectedValues", "type": "IExpression", "as": "$ph5"},
+  {"op": "set", "target": "$ph5", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""}
+ ]
+}

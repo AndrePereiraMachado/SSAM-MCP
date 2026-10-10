@@ -1,0 +1,3568 @@
+{
+ "description": "Tickets: equipas, membros, categorias e politicas de SLA",
+ "base": "job:tickets-04-collab",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Team_Create",
+   "as": "$Team_Create"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Create",
+   "type": "IInputParameter",
+   "name": "Name",
+   "as": "$Team_Create_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_in1",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Create",
+   "type": "IInputParameter",
+   "name": "Description",
+   "as": "$Team_Create_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_in2",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_in2",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Create",
+   "type": "IInputParameter",
+   "name": "Email",
+   "as": "$Team_Create_in3"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_in3",
+   "prop": "DataType",
+   "value": "Email"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_in3",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Create",
+   "type": "IInputParameter",
+   "name": "ManagerId",
+   "as": "$Team_Create_in4"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_in4",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_in4",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Create",
+   "type": "IOutputParameter",
+   "name": "TeamId",
+   "as": "$Team_Create_out5"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_out5",
+   "prop": "DataType",
+   "value": "Team Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Create",
+   "type": "ILocalVariable",
+   "name": "T",
+   "as": "$Team_Create_var6"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_var6",
+   "prop": "DataType",
+   "value": "Team"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Create",
+   "type": "IStartNode",
+   "as": "$Team_Create_start7"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Create",
+   "type": "IAssignNode",
+   "name": "Fill",
+   "as": "$Team_Create_asg8"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_asg8",
+   "prop": "Label",
+   "value": "Fill"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Create_asg8",
+   "type": "IAssignment",
+   "as": "$Team_Create_a9"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_a9",
+   "prop": "Variable",
+   "value": "T.Name"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_a9",
+   "prop": "Value",
+   "value": "Name"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Create_asg8",
+   "type": "IAssignment",
+   "as": "$Team_Create_a10"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_a10",
+   "prop": "Variable",
+   "value": "T.Description"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_a10",
+   "prop": "Value",
+   "value": "Description"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Create_asg8",
+   "type": "IAssignment",
+   "as": "$Team_Create_a11"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_a11",
+   "prop": "Variable",
+   "value": "T.Email"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_a11",
+   "prop": "Value",
+   "value": "Email"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Create_asg8",
+   "type": "IAssignment",
+   "as": "$Team_Create_a12"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_a12",
+   "prop": "Variable",
+   "value": "T.ManagerId"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_a12",
+   "prop": "Value",
+   "value": "ManagerId"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Create_asg8",
+   "type": "IAssignment",
+   "as": "$Team_Create_a13"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_a13",
+   "prop": "Variable",
+   "value": "T.IsActive"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_a13",
+   "prop": "Value",
+   "value": "True"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Create",
+   "type": "IExecuteServerActionNode",
+   "name": "CreateTeam",
+   "as": "$Team_Create_call14"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_call14",
+   "prop": "Action",
+   "value": "IEntityActionSignature:CreateTeam"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_call14/Source",
+   "prop": "Value",
+   "value": "T"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Create",
+   "type": "IAssignNode",
+   "name": "SetOutput",
+   "as": "$Team_Create_asg15"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_asg15",
+   "prop": "Label",
+   "value": "SetOutput"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Create_asg15",
+   "type": "IAssignment",
+   "as": "$Team_Create_a16"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_a16",
+   "prop": "Variable",
+   "value": "TeamId"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Create_a16",
+   "prop": "Value",
+   "value": "CreateTeam.Id"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Create",
+   "type": "IEndNode",
+   "as": "$Team_Create_end17"
+  },
+  {
+   "op": "link",
+   "from": "$Team_Create_start7",
+   "to": "$Team_Create_asg8"
+  },
+  {
+   "op": "link",
+   "from": "$Team_Create_asg8",
+   "to": "$Team_Create_call14"
+  },
+  {
+   "op": "link",
+   "from": "$Team_Create_call14",
+   "to": "$Team_Create_asg15"
+  },
+  {
+   "op": "link",
+   "from": "$Team_Create_asg15",
+   "to": "$Team_Create_end17"
+  },
+  {
+   "op": "layout",
+   "target": "$Team_Create"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Team_Update",
+   "as": "$Team_Update"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Update",
+   "type": "IInputParameter",
+   "name": "TeamId",
+   "as": "$Team_Update_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_in1",
+   "prop": "DataType",
+   "value": "Team Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Update",
+   "type": "IInputParameter",
+   "name": "Name",
+   "as": "$Team_Update_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_in2",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Update",
+   "type": "IInputParameter",
+   "name": "Description",
+   "as": "$Team_Update_in3"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_in3",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_in3",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Update",
+   "type": "IInputParameter",
+   "name": "Email",
+   "as": "$Team_Update_in4"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_in4",
+   "prop": "DataType",
+   "value": "Email"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_in4",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Update",
+   "type": "IInputParameter",
+   "name": "ManagerId",
+   "as": "$Team_Update_in5"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_in5",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_in5",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Update",
+   "type": "ILocalVariable",
+   "name": "T",
+   "as": "$Team_Update_var6"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_var6",
+   "prop": "DataType",
+   "value": "Team"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Update",
+   "type": "IStartNode",
+   "as": "$Team_Update_start7"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Update",
+   "type": "IAggregateNode",
+   "name": "GetTeam",
+   "as": "$Team_Update_agg8"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Update_agg8",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Team"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Update_agg8",
+   "type": "IFilter",
+   "args": {
+    "condition": "Team.Id = TeamId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_agg8",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Update",
+   "type": "IIfNode",
+   "name": "TeamFound",
+   "as": "$Team_Update_if9"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_if9",
+   "prop": "Label",
+   "value": "TeamFound"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_if9",
+   "prop": "Condition",
+   "value": "not GetTeam.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Update",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseTeamNotFound",
+   "as": "$Team_Update_raise10"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_raise10",
+   "prop": "Exception",
+   "value": "IUserException:NotFound"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_raise10",
+   "prop": "ExceptionMessage",
+   "value": "\"Team not found\""
+  },
+  {
+   "op": "link",
+   "from": "$Team_Update_if9",
+   "to": "$Team_Update_raise10",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Update",
+   "type": "IAssignNode",
+   "name": "Apply",
+   "as": "$Team_Update_asg11"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_asg11",
+   "prop": "Label",
+   "value": "Apply"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Update_asg11",
+   "type": "IAssignment",
+   "as": "$Team_Update_a12"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_a12",
+   "prop": "Variable",
+   "value": "T"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_a12",
+   "prop": "Value",
+   "value": "GetTeam.List.Current.Team"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Update_asg11",
+   "type": "IAssignment",
+   "as": "$Team_Update_a13"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_a13",
+   "prop": "Variable",
+   "value": "T.Name"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_a13",
+   "prop": "Value",
+   "value": "Name"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Update_asg11",
+   "type": "IAssignment",
+   "as": "$Team_Update_a14"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_a14",
+   "prop": "Variable",
+   "value": "T.Description"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_a14",
+   "prop": "Value",
+   "value": "Description"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Update_asg11",
+   "type": "IAssignment",
+   "as": "$Team_Update_a15"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_a15",
+   "prop": "Variable",
+   "value": "T.Email"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_a15",
+   "prop": "Value",
+   "value": "Email"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Update_asg11",
+   "type": "IAssignment",
+   "as": "$Team_Update_a16"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_a16",
+   "prop": "Variable",
+   "value": "T.ManagerId"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_a16",
+   "prop": "Value",
+   "value": "ManagerId"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Update",
+   "type": "IExecuteServerActionNode",
+   "name": "UpdateTeam",
+   "as": "$Team_Update_call17"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_call17",
+   "prop": "Action",
+   "value": "IEntityActionSignature:UpdateTeam"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Update_call17/Source",
+   "prop": "Value",
+   "value": "T"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Update",
+   "type": "IEndNode",
+   "as": "$Team_Update_end18"
+  },
+  {
+   "op": "link",
+   "from": "$Team_Update_start7",
+   "to": "$Team_Update_agg8"
+  },
+  {
+   "op": "link",
+   "from": "$Team_Update_agg8",
+   "to": "$Team_Update_if9"
+  },
+  {
+   "op": "link",
+   "from": "$Team_Update_if9",
+   "to": "$Team_Update_asg11",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Team_Update_asg11",
+   "to": "$Team_Update_call17"
+  },
+  {
+   "op": "link",
+   "from": "$Team_Update_call17",
+   "to": "$Team_Update_end18"
+  },
+  {
+   "op": "layout",
+   "target": "$Team_Update"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Team_Deactivate",
+   "as": "$Team_Deactivate"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate",
+   "prop": "Description",
+   "value": "Exige zero tickets abertos ou uma equipa para onde reatribuir"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate",
+   "type": "IInputParameter",
+   "name": "TeamId",
+   "as": "$Team_Deactivate_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_in1",
+   "prop": "DataType",
+   "value": "Team Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate",
+   "type": "IInputParameter",
+   "name": "ReassignToTeamId",
+   "as": "$Team_Deactivate_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_in2",
+   "prop": "DataType",
+   "value": "Team Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_in2",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate",
+   "type": "IInputParameter",
+   "name": "ActorId",
+   "as": "$Team_Deactivate_in3"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_in3",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_in3",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate",
+   "type": "ILocalVariable",
+   "name": "T",
+   "as": "$Team_Deactivate_var4"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_var4",
+   "prop": "DataType",
+   "value": "Team"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate",
+   "type": "ILocalVariable",
+   "name": "Tk",
+   "as": "$Team_Deactivate_var5"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_var5",
+   "prop": "DataType",
+   "value": "Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate",
+   "type": "IStartNode",
+   "as": "$Team_Deactivate_start6"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate",
+   "type": "IAggregateNode",
+   "name": "GetTeam",
+   "as": "$Team_Deactivate_agg7"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate_agg7",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Team"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate_agg7",
+   "type": "IFilter",
+   "args": {
+    "condition": "Team.Id = TeamId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_agg7",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate",
+   "type": "IIfNode",
+   "name": "TeamFound",
+   "as": "$Team_Deactivate_if8"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_if8",
+   "prop": "Label",
+   "value": "TeamFound"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_if8",
+   "prop": "Condition",
+   "value": "not GetTeam.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseTeamNotFound",
+   "as": "$Team_Deactivate_raise9"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_raise9",
+   "prop": "Exception",
+   "value": "IUserException:NotFound"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_raise9",
+   "prop": "ExceptionMessage",
+   "value": "\"Team not found\""
+  },
+  {
+   "op": "link",
+   "from": "$Team_Deactivate_if8",
+   "to": "$Team_Deactivate_raise9",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate",
+   "type": "IAggregateNode",
+   "name": "GetOpenTickets",
+   "as": "$Team_Deactivate_agg10"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate_agg10",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate_agg10",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.TeamId = TeamId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate_agg10",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.StatusId <> Entities.TicketStatus.Closed"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate_agg10",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.StatusId <> Entities.TicketStatus.Cancelled"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate",
+   "type": "IIfNode",
+   "name": "CanDeactivate",
+   "as": "$Team_Deactivate_if11"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_if11",
+   "prop": "Label",
+   "value": "CanDeactivate"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_if11",
+   "prop": "Condition",
+   "value": "GetOpenTickets.List.Empty or ReassignToTeamId <> NullIdentifier()"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseOpen",
+   "as": "$Team_Deactivate_raise12"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_raise12",
+   "prop": "Exception",
+   "value": "IUserException:ValidationFailed"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_raise12",
+   "prop": "ExceptionMessage",
+   "value": "\"Team has open tickets: pass ReassignToTeamId\""
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate",
+   "type": "IForEachNode",
+   "name": "EachOpen",
+   "as": "$Team_Deactivate_fe13"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_fe13",
+   "prop": "Label",
+   "value": "EachOpen"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_fe13",
+   "prop": "RecordList",
+   "value": "GetOpenTickets.List"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate",
+   "type": "IAssignNode",
+   "name": "Reassign",
+   "as": "$Team_Deactivate_asg14"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_asg14",
+   "prop": "Label",
+   "value": "Reassign"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate_asg14",
+   "type": "IAssignment",
+   "as": "$Team_Deactivate_a15"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_a15",
+   "prop": "Variable",
+   "value": "Tk"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_a15",
+   "prop": "Value",
+   "value": "GetOpenTickets.List.Current.Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate_asg14",
+   "type": "IAssignment",
+   "as": "$Team_Deactivate_a16"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_a16",
+   "prop": "Variable",
+   "value": "Tk.TeamId"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_a16",
+   "prop": "Value",
+   "value": "ReassignToTeamId"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate_asg14",
+   "type": "IAssignment",
+   "as": "$Team_Deactivate_a17"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_a17",
+   "prop": "Variable",
+   "value": "Tk.AssigneeId"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_a17",
+   "prop": "Value",
+   "value": "NullIdentifier()"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate_asg14",
+   "type": "IAssignment",
+   "as": "$Team_Deactivate_a18"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_a18",
+   "prop": "Variable",
+   "value": "Tk.UpdatedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_a18",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate",
+   "type": "IExecuteServerActionNode",
+   "name": "UpdateTicket",
+   "as": "$Team_Deactivate_call19"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_call19",
+   "prop": "Action",
+   "value": "IEntityActionSignature:UpdateTicket"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_call19/Source",
+   "prop": "Value",
+   "value": "Tk"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate",
+   "type": "IExecuteServerActionNode",
+   "name": "WriteAssigned",
+   "as": "$Team_Deactivate_call20"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_call20",
+   "prop": "Action",
+   "value": "IServerAction:Event_Write"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_call20/TicketId",
+   "prop": "Value",
+   "value": "Tk.Id"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_call20/EventTypeId",
+   "prop": "Value",
+   "value": "Entities.TicketEventType.Assigned"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_call20/ActorId",
+   "prop": "Value",
+   "value": "ActorId"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_call20/FromValue",
+   "prop": "Value",
+   "value": "\"\""
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_call20/ToValue",
+   "prop": "Value",
+   "value": "\"\""
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_call20/Note",
+   "prop": "Value",
+   "value": "\"Team deactivated\""
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate",
+   "type": "IAssignNode",
+   "name": "Deactivate",
+   "as": "$Team_Deactivate_asg21"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_asg21",
+   "prop": "Label",
+   "value": "Deactivate"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate_asg21",
+   "type": "IAssignment",
+   "as": "$Team_Deactivate_a22"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_a22",
+   "prop": "Variable",
+   "value": "T"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_a22",
+   "prop": "Value",
+   "value": "GetTeam.List.Current.Team"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate_asg21",
+   "type": "IAssignment",
+   "as": "$Team_Deactivate_a23"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_a23",
+   "prop": "Variable",
+   "value": "T.IsActive"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_a23",
+   "prop": "Value",
+   "value": "False"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate",
+   "type": "IExecuteServerActionNode",
+   "name": "UpdateTeam",
+   "as": "$Team_Deactivate_call24"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_call24",
+   "prop": "Action",
+   "value": "IEntityActionSignature:UpdateTeam"
+  },
+  {
+   "op": "set",
+   "target": "$Team_Deactivate_call24/Source",
+   "prop": "Value",
+   "value": "T"
+  },
+  {
+   "op": "create",
+   "parent": "$Team_Deactivate",
+   "type": "IEndNode",
+   "as": "$Team_Deactivate_end25"
+  },
+  {
+   "op": "link",
+   "from": "$Team_Deactivate_start6",
+   "to": "$Team_Deactivate_agg7"
+  },
+  {
+   "op": "link",
+   "from": "$Team_Deactivate_agg7",
+   "to": "$Team_Deactivate_if8"
+  },
+  {
+   "op": "link",
+   "from": "$Team_Deactivate_if8",
+   "to": "$Team_Deactivate_agg10",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Team_Deactivate_agg10",
+   "to": "$Team_Deactivate_if11"
+  },
+  {
+   "op": "link",
+   "from": "$Team_Deactivate_if11",
+   "to": "$Team_Deactivate_raise12",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Team_Deactivate_if11",
+   "to": "$Team_Deactivate_fe13",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Team_Deactivate_fe13",
+   "to": "$Team_Deactivate_asg14",
+   "connector": "CycleTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Team_Deactivate_asg14",
+   "to": "$Team_Deactivate_call19"
+  },
+  {
+   "op": "link",
+   "from": "$Team_Deactivate_call19",
+   "to": "$Team_Deactivate_call20"
+  },
+  {
+   "op": "link",
+   "from": "$Team_Deactivate_call20",
+   "to": "$Team_Deactivate_fe13"
+  },
+  {
+   "op": "link",
+   "from": "$Team_Deactivate_fe13",
+   "to": "$Team_Deactivate_asg21"
+  },
+  {
+   "op": "link",
+   "from": "$Team_Deactivate_asg21",
+   "to": "$Team_Deactivate_call24"
+  },
+  {
+   "op": "link",
+   "from": "$Team_Deactivate_call24",
+   "to": "$Team_Deactivate_end25"
+  },
+  {
+   "op": "layout",
+   "target": "$Team_Deactivate"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "TeamMember_Add",
+   "as": "$TeamMember_Add"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Add",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Add",
+   "type": "IInputParameter",
+   "name": "TeamId",
+   "as": "$TeamMember_Add_in1"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Add_in1",
+   "prop": "DataType",
+   "value": "Team Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Add",
+   "type": "IInputParameter",
+   "name": "UserId",
+   "as": "$TeamMember_Add_in2"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Add_in2",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Add",
+   "type": "IInputParameter",
+   "name": "IsLead",
+   "as": "$TeamMember_Add_in3"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Add_in3",
+   "prop": "DataType",
+   "value": "Boolean"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Add",
+   "type": "ILocalVariable",
+   "name": "M",
+   "as": "$TeamMember_Add_var4"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Add_var4",
+   "prop": "DataType",
+   "value": "TeamMember"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Add",
+   "type": "IStartNode",
+   "as": "$TeamMember_Add_start5"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Add",
+   "type": "IAggregateNode",
+   "name": "GetMember",
+   "as": "$TeamMember_Add_agg6"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Add_agg6",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:TeamMember"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Add_agg6",
+   "type": "IFilter",
+   "args": {
+    "condition": "TeamMember.TeamId = TeamId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Add_agg6",
+   "type": "IFilter",
+   "args": {
+    "condition": "TeamMember.UserId = UserId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Add_agg6",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Add",
+   "type": "IIfNode",
+   "name": "Exists",
+   "as": "$TeamMember_Add_if7"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Add_if7",
+   "prop": "Label",
+   "value": "Exists"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Add_if7",
+   "prop": "Condition",
+   "value": "not GetMember.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Add",
+   "type": "IAssignNode",
+   "name": "Fill",
+   "as": "$TeamMember_Add_asg8"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Add_asg8",
+   "prop": "Label",
+   "value": "Fill"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Add_asg8",
+   "type": "IAssignment",
+   "as": "$TeamMember_Add_a9"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Add_a9",
+   "prop": "Variable",
+   "value": "M.TeamId"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Add_a9",
+   "prop": "Value",
+   "value": "TeamId"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Add_asg8",
+   "type": "IAssignment",
+   "as": "$TeamMember_Add_a10"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Add_a10",
+   "prop": "Variable",
+   "value": "M.UserId"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Add_a10",
+   "prop": "Value",
+   "value": "UserId"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Add_asg8",
+   "type": "IAssignment",
+   "as": "$TeamMember_Add_a11"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Add_a11",
+   "prop": "Variable",
+   "value": "M.IsLead"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Add_a11",
+   "prop": "Value",
+   "value": "IsLead"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Add_asg8",
+   "type": "IAssignment",
+   "as": "$TeamMember_Add_a12"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Add_a12",
+   "prop": "Variable",
+   "value": "M.JoinedOn"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Add_a12",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Add",
+   "type": "IExecuteServerActionNode",
+   "name": "CreateMember",
+   "as": "$TeamMember_Add_call13"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Add_call13",
+   "prop": "Action",
+   "value": "IEntityActionSignature:CreateTeamMember"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Add_call13/Source",
+   "prop": "Value",
+   "value": "M"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Add",
+   "type": "IEndNode",
+   "as": "$TeamMember_Add_end14"
+  },
+  {
+   "op": "link",
+   "from": "$TeamMember_Add_start5",
+   "to": "$TeamMember_Add_agg6"
+  },
+  {
+   "op": "link",
+   "from": "$TeamMember_Add_agg6",
+   "to": "$TeamMember_Add_if7"
+  },
+  {
+   "op": "link",
+   "from": "$TeamMember_Add_if7",
+   "to": "$TeamMember_Add_end14",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$TeamMember_Add_if7",
+   "to": "$TeamMember_Add_asg8",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$TeamMember_Add_asg8",
+   "to": "$TeamMember_Add_call13"
+  },
+  {
+   "op": "link",
+   "from": "$TeamMember_Add_call13",
+   "to": "$TeamMember_Add_end14"
+  },
+  {
+   "op": "layout",
+   "target": "$TeamMember_Add"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "TeamMember_Remove",
+   "as": "$TeamMember_Remove"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove",
+   "prop": "Description",
+   "value": "Reatribui os tickets abertos do membro ao lead (ou deixa sem assignee)"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove",
+   "type": "IInputParameter",
+   "name": "TeamId",
+   "as": "$TeamMember_Remove_in1"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_in1",
+   "prop": "DataType",
+   "value": "Team Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove",
+   "type": "IInputParameter",
+   "name": "UserId",
+   "as": "$TeamMember_Remove_in2"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_in2",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove",
+   "type": "IInputParameter",
+   "name": "ActorId",
+   "as": "$TeamMember_Remove_in3"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_in3",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_in3",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove",
+   "type": "ILocalVariable",
+   "name": "Tk",
+   "as": "$TeamMember_Remove_var4"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_var4",
+   "prop": "DataType",
+   "value": "Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove",
+   "type": "IStartNode",
+   "as": "$TeamMember_Remove_start5"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove",
+   "type": "IAggregateNode",
+   "name": "GetMember",
+   "as": "$TeamMember_Remove_agg6"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove_agg6",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:TeamMember"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove_agg6",
+   "type": "IFilter",
+   "args": {
+    "condition": "TeamMember.TeamId = TeamId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove_agg6",
+   "type": "IFilter",
+   "args": {
+    "condition": "TeamMember.UserId = UserId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_agg6",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove",
+   "type": "IIfNode",
+   "name": "Exists",
+   "as": "$TeamMember_Remove_if7"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_if7",
+   "prop": "Label",
+   "value": "Exists"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_if7",
+   "prop": "Condition",
+   "value": "not GetMember.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove",
+   "type": "IAggregateNode",
+   "name": "GetLead",
+   "as": "$TeamMember_Remove_agg8"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove_agg8",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:TeamMember"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove_agg8",
+   "type": "IFilter",
+   "args": {
+    "condition": "TeamMember.TeamId = TeamId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove_agg8",
+   "type": "IFilter",
+   "args": {
+    "condition": "TeamMember.IsLead"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove_agg8",
+   "type": "IFilter",
+   "args": {
+    "condition": "TeamMember.UserId <> UserId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_agg8",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove",
+   "type": "IAggregateNode",
+   "name": "GetOpenTickets",
+   "as": "$TeamMember_Remove_agg9"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove_agg9",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove_agg9",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.TeamId = TeamId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove_agg9",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.AssigneeId = UserId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove_agg9",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.StatusId <> Entities.TicketStatus.Closed"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove_agg9",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.StatusId <> Entities.TicketStatus.Cancelled"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove",
+   "type": "IForEachNode",
+   "name": "EachOpen",
+   "as": "$TeamMember_Remove_fe10"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_fe10",
+   "prop": "Label",
+   "value": "EachOpen"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_fe10",
+   "prop": "RecordList",
+   "value": "GetOpenTickets.List"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove",
+   "type": "IAssignNode",
+   "name": "Reassign",
+   "as": "$TeamMember_Remove_asg11"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_asg11",
+   "prop": "Label",
+   "value": "Reassign"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove_asg11",
+   "type": "IAssignment",
+   "as": "$TeamMember_Remove_a12"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_a12",
+   "prop": "Variable",
+   "value": "Tk"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_a12",
+   "prop": "Value",
+   "value": "GetOpenTickets.List.Current.Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove_asg11",
+   "type": "IAssignment",
+   "as": "$TeamMember_Remove_a13"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_a13",
+   "prop": "Variable",
+   "value": "Tk.AssigneeId"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_a13",
+   "prop": "Value",
+   "value": "If(GetLead.List.Empty, NullIdentifier(), GetLead.List.Current.TeamMember.UserId)"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove_asg11",
+   "type": "IAssignment",
+   "as": "$TeamMember_Remove_a14"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_a14",
+   "prop": "Variable",
+   "value": "Tk.UpdatedOn"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_a14",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove",
+   "type": "IExecuteServerActionNode",
+   "name": "UpdateTicket",
+   "as": "$TeamMember_Remove_call15"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_call15",
+   "prop": "Action",
+   "value": "IEntityActionSignature:UpdateTicket"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_call15/Source",
+   "prop": "Value",
+   "value": "Tk"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove",
+   "type": "IExecuteServerActionNode",
+   "name": "WriteAssigned",
+   "as": "$TeamMember_Remove_call16"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_call16",
+   "prop": "Action",
+   "value": "IServerAction:Event_Write"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_call16/TicketId",
+   "prop": "Value",
+   "value": "Tk.Id"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_call16/EventTypeId",
+   "prop": "Value",
+   "value": "Entities.TicketEventType.Assigned"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_call16/ActorId",
+   "prop": "Value",
+   "value": "ActorId"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_call16/FromValue",
+   "prop": "Value",
+   "value": "\"\""
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_call16/ToValue",
+   "prop": "Value",
+   "value": "\"\""
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_call16/Note",
+   "prop": "Value",
+   "value": "\"Member removed\""
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove",
+   "type": "IExecuteServerActionNode",
+   "name": "DeleteMember",
+   "as": "$TeamMember_Remove_call17"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_call17",
+   "prop": "Action",
+   "value": "IEntityActionSignature:DeleteTeamMember"
+  },
+  {
+   "op": "set",
+   "target": "$TeamMember_Remove_call17/Id",
+   "prop": "Value",
+   "value": "GetMember.List.Current.TeamMember.Id"
+  },
+  {
+   "op": "create",
+   "parent": "$TeamMember_Remove",
+   "type": "IEndNode",
+   "as": "$TeamMember_Remove_end18"
+  },
+  {
+   "op": "link",
+   "from": "$TeamMember_Remove_start5",
+   "to": "$TeamMember_Remove_agg6"
+  },
+  {
+   "op": "link",
+   "from": "$TeamMember_Remove_agg6",
+   "to": "$TeamMember_Remove_if7"
+  },
+  {
+   "op": "link",
+   "from": "$TeamMember_Remove_if7",
+   "to": "$TeamMember_Remove_end18",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$TeamMember_Remove_if7",
+   "to": "$TeamMember_Remove_agg8",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$TeamMember_Remove_agg8",
+   "to": "$TeamMember_Remove_agg9"
+  },
+  {
+   "op": "link",
+   "from": "$TeamMember_Remove_agg9",
+   "to": "$TeamMember_Remove_fe10"
+  },
+  {
+   "op": "link",
+   "from": "$TeamMember_Remove_fe10",
+   "to": "$TeamMember_Remove_asg11",
+   "connector": "CycleTarget"
+  },
+  {
+   "op": "link",
+   "from": "$TeamMember_Remove_asg11",
+   "to": "$TeamMember_Remove_call15"
+  },
+  {
+   "op": "link",
+   "from": "$TeamMember_Remove_call15",
+   "to": "$TeamMember_Remove_call16"
+  },
+  {
+   "op": "link",
+   "from": "$TeamMember_Remove_call16",
+   "to": "$TeamMember_Remove_fe10"
+  },
+  {
+   "op": "link",
+   "from": "$TeamMember_Remove_fe10",
+   "to": "$TeamMember_Remove_call17"
+  },
+  {
+   "op": "link",
+   "from": "$TeamMember_Remove_call17",
+   "to": "$TeamMember_Remove_end18"
+  },
+  {
+   "op": "layout",
+   "target": "$TeamMember_Remove"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Category_Create",
+   "as": "$Category_Create"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create",
+   "prop": "Description",
+   "value": "Profundidade maxima 3"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create",
+   "type": "IInputParameter",
+   "name": "Name",
+   "as": "$Category_Create_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_in1",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create",
+   "type": "IInputParameter",
+   "name": "ParentCategoryId",
+   "as": "$Category_Create_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_in2",
+   "prop": "DataType",
+   "value": "Category Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_in2",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create",
+   "type": "IInputParameter",
+   "name": "DefaultTeamId",
+   "as": "$Category_Create_in3"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_in3",
+   "prop": "DataType",
+   "value": "Team Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_in3",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create",
+   "type": "IInputParameter",
+   "name": "DefaultPriorityId",
+   "as": "$Category_Create_in4"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_in4",
+   "prop": "DataType",
+   "value": "TicketPriority Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_in4",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create",
+   "type": "IOutputParameter",
+   "name": "CategoryId",
+   "as": "$Category_Create_out5"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_out5",
+   "prop": "DataType",
+   "value": "Category Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create",
+   "type": "ILocalVariable",
+   "name": "C",
+   "as": "$Category_Create_var6"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_var6",
+   "prop": "DataType",
+   "value": "Category"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create",
+   "type": "IStartNode",
+   "as": "$Category_Create_start7"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create",
+   "type": "IAggregateNode",
+   "name": "GetParent",
+   "as": "$Category_Create_agg8"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create_agg8",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Category"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create_agg8",
+   "type": "IFilter",
+   "args": {
+    "condition": "Category.Id = ParentCategoryId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_agg8",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create",
+   "type": "IAggregateNode",
+   "name": "GetGrandParent",
+   "as": "$Category_Create_agg9"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create_agg9",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Category"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create_agg9",
+   "type": "IFilter",
+   "args": {
+    "condition": "Category.Id = GetParent.List.Current.Category.ParentCategoryId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_agg9",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create",
+   "type": "IIfNode",
+   "name": "DepthOk",
+   "as": "$Category_Create_if10"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_if10",
+   "prop": "Label",
+   "value": "DepthOk"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_if10",
+   "prop": "Condition",
+   "value": "GetGrandParent.List.Empty or GetGrandParent.List.Current.Category.ParentCategoryId = NullIdentifier()"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseDepth",
+   "as": "$Category_Create_raise11"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_raise11",
+   "prop": "Exception",
+   "value": "IUserException:ValidationFailed"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_raise11",
+   "prop": "ExceptionMessage",
+   "value": "\"Categories can only nest 3 levels\""
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create",
+   "type": "IAssignNode",
+   "name": "Fill",
+   "as": "$Category_Create_asg12"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_asg12",
+   "prop": "Label",
+   "value": "Fill"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create_asg12",
+   "type": "IAssignment",
+   "as": "$Category_Create_a13"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_a13",
+   "prop": "Variable",
+   "value": "C.Name"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_a13",
+   "prop": "Value",
+   "value": "Name"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create_asg12",
+   "type": "IAssignment",
+   "as": "$Category_Create_a14"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_a14",
+   "prop": "Variable",
+   "value": "C.ParentCategoryId"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_a14",
+   "prop": "Value",
+   "value": "ParentCategoryId"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create_asg12",
+   "type": "IAssignment",
+   "as": "$Category_Create_a15"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_a15",
+   "prop": "Variable",
+   "value": "C.DefaultTeamId"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_a15",
+   "prop": "Value",
+   "value": "DefaultTeamId"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create_asg12",
+   "type": "IAssignment",
+   "as": "$Category_Create_a16"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_a16",
+   "prop": "Variable",
+   "value": "C.DefaultPriorityId"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_a16",
+   "prop": "Value",
+   "value": "DefaultPriorityId"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create_asg12",
+   "type": "IAssignment",
+   "as": "$Category_Create_a17"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_a17",
+   "prop": "Variable",
+   "value": "C.IsActive"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_a17",
+   "prop": "Value",
+   "value": "True"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create",
+   "type": "IExecuteServerActionNode",
+   "name": "CreateCategory",
+   "as": "$Category_Create_call18"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_call18",
+   "prop": "Action",
+   "value": "IEntityActionSignature:CreateCategory"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_call18/Source",
+   "prop": "Value",
+   "value": "C"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create",
+   "type": "IAssignNode",
+   "name": "SetOutput",
+   "as": "$Category_Create_asg19"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_asg19",
+   "prop": "Label",
+   "value": "SetOutput"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create_asg19",
+   "type": "IAssignment",
+   "as": "$Category_Create_a20"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_a20",
+   "prop": "Variable",
+   "value": "CategoryId"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Create_a20",
+   "prop": "Value",
+   "value": "CreateCategory.Id"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Create",
+   "type": "IEndNode",
+   "as": "$Category_Create_end21"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Create_start7",
+   "to": "$Category_Create_agg8"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Create_agg8",
+   "to": "$Category_Create_agg9"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Create_agg9",
+   "to": "$Category_Create_if10"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Create_if10",
+   "to": "$Category_Create_raise11",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Create_if10",
+   "to": "$Category_Create_asg12",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Create_asg12",
+   "to": "$Category_Create_call18"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Create_call18",
+   "to": "$Category_Create_asg19"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Create_asg19",
+   "to": "$Category_Create_end21"
+  },
+  {
+   "op": "layout",
+   "target": "$Category_Create"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Category_Update",
+   "as": "$Category_Update"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Update",
+   "type": "IInputParameter",
+   "name": "CategoryId",
+   "as": "$Category_Update_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_in1",
+   "prop": "DataType",
+   "value": "Category Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Update",
+   "type": "IInputParameter",
+   "name": "Name",
+   "as": "$Category_Update_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_in2",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Update",
+   "type": "IInputParameter",
+   "name": "ParentCategoryId",
+   "as": "$Category_Update_in3"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_in3",
+   "prop": "DataType",
+   "value": "Category Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_in3",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Update",
+   "type": "IInputParameter",
+   "name": "DefaultTeamId",
+   "as": "$Category_Update_in4"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_in4",
+   "prop": "DataType",
+   "value": "Team Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_in4",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Update",
+   "type": "IInputParameter",
+   "name": "DefaultPriorityId",
+   "as": "$Category_Update_in5"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_in5",
+   "prop": "DataType",
+   "value": "TicketPriority Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_in5",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Update",
+   "type": "ILocalVariable",
+   "name": "C",
+   "as": "$Category_Update_var6"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_var6",
+   "prop": "DataType",
+   "value": "Category"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Update",
+   "type": "IStartNode",
+   "as": "$Category_Update_start7"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Update",
+   "type": "IAggregateNode",
+   "name": "GetCategory",
+   "as": "$Category_Update_agg8"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Update_agg8",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Category"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Update_agg8",
+   "type": "IFilter",
+   "args": {
+    "condition": "Category.Id = CategoryId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_agg8",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Update",
+   "type": "IIfNode",
+   "name": "CategoryFound",
+   "as": "$Category_Update_if9"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_if9",
+   "prop": "Label",
+   "value": "CategoryFound"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_if9",
+   "prop": "Condition",
+   "value": "not GetCategory.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Update",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseCategoryNotFound",
+   "as": "$Category_Update_raise10"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_raise10",
+   "prop": "Exception",
+   "value": "IUserException:NotFound"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_raise10",
+   "prop": "ExceptionMessage",
+   "value": "\"Category not found\""
+  },
+  {
+   "op": "link",
+   "from": "$Category_Update_if9",
+   "to": "$Category_Update_raise10",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Update",
+   "type": "IIfNode",
+   "name": "NotSelfParent",
+   "as": "$Category_Update_if11"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_if11",
+   "prop": "Label",
+   "value": "NotSelfParent"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_if11",
+   "prop": "Condition",
+   "value": "ParentCategoryId <> CategoryId"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Update",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseSelf",
+   "as": "$Category_Update_raise12"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_raise12",
+   "prop": "Exception",
+   "value": "IUserException:ValidationFailed"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_raise12",
+   "prop": "ExceptionMessage",
+   "value": "\"A category cannot be its own parent\""
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Update",
+   "type": "IAssignNode",
+   "name": "Apply",
+   "as": "$Category_Update_asg13"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_asg13",
+   "prop": "Label",
+   "value": "Apply"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Update_asg13",
+   "type": "IAssignment",
+   "as": "$Category_Update_a14"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_a14",
+   "prop": "Variable",
+   "value": "C"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_a14",
+   "prop": "Value",
+   "value": "GetCategory.List.Current.Category"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Update_asg13",
+   "type": "IAssignment",
+   "as": "$Category_Update_a15"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_a15",
+   "prop": "Variable",
+   "value": "C.Name"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_a15",
+   "prop": "Value",
+   "value": "Name"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Update_asg13",
+   "type": "IAssignment",
+   "as": "$Category_Update_a16"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_a16",
+   "prop": "Variable",
+   "value": "C.ParentCategoryId"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_a16",
+   "prop": "Value",
+   "value": "ParentCategoryId"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Update_asg13",
+   "type": "IAssignment",
+   "as": "$Category_Update_a17"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_a17",
+   "prop": "Variable",
+   "value": "C.DefaultTeamId"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_a17",
+   "prop": "Value",
+   "value": "DefaultTeamId"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Update_asg13",
+   "type": "IAssignment",
+   "as": "$Category_Update_a18"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_a18",
+   "prop": "Variable",
+   "value": "C.DefaultPriorityId"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_a18",
+   "prop": "Value",
+   "value": "DefaultPriorityId"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Update",
+   "type": "IExecuteServerActionNode",
+   "name": "UpdateCategory",
+   "as": "$Category_Update_call19"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_call19",
+   "prop": "Action",
+   "value": "IEntityActionSignature:UpdateCategory"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Update_call19/Source",
+   "prop": "Value",
+   "value": "C"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Update",
+   "type": "IEndNode",
+   "as": "$Category_Update_end20"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Update_start7",
+   "to": "$Category_Update_agg8"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Update_agg8",
+   "to": "$Category_Update_if9"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Update_if9",
+   "to": "$Category_Update_if11",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Update_if11",
+   "to": "$Category_Update_raise12",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Update_if11",
+   "to": "$Category_Update_asg13",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Update_asg13",
+   "to": "$Category_Update_call19"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Update_call19",
+   "to": "$Category_Update_end20"
+  },
+  {
+   "op": "layout",
+   "target": "$Category_Update"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Category_Deactivate",
+   "as": "$Category_Deactivate"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Deactivate",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Category_Deactivate",
+   "prop": "Description",
+   "value": "So sem filhos ativos"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Deactivate",
+   "type": "IInputParameter",
+   "name": "CategoryId",
+   "as": "$Category_Deactivate_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Deactivate_in1",
+   "prop": "DataType",
+   "value": "Category Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Deactivate",
+   "type": "ILocalVariable",
+   "name": "C",
+   "as": "$Category_Deactivate_var2"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Deactivate_var2",
+   "prop": "DataType",
+   "value": "Category"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Deactivate",
+   "type": "IStartNode",
+   "as": "$Category_Deactivate_start3"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Deactivate",
+   "type": "IAggregateNode",
+   "name": "GetCategory",
+   "as": "$Category_Deactivate_agg4"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Deactivate_agg4",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Category"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Deactivate_agg4",
+   "type": "IFilter",
+   "args": {
+    "condition": "Category.Id = CategoryId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Category_Deactivate_agg4",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Deactivate",
+   "type": "IIfNode",
+   "name": "CategoryFound",
+   "as": "$Category_Deactivate_if5"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Deactivate_if5",
+   "prop": "Label",
+   "value": "CategoryFound"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Deactivate_if5",
+   "prop": "Condition",
+   "value": "not GetCategory.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Deactivate",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseCategoryNotFound",
+   "as": "$Category_Deactivate_raise6"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Deactivate_raise6",
+   "prop": "Exception",
+   "value": "IUserException:NotFound"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Deactivate_raise6",
+   "prop": "ExceptionMessage",
+   "value": "\"Category not found\""
+  },
+  {
+   "op": "link",
+   "from": "$Category_Deactivate_if5",
+   "to": "$Category_Deactivate_raise6",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Deactivate",
+   "type": "IAggregateNode",
+   "name": "GetChildren",
+   "as": "$Category_Deactivate_agg7"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Deactivate_agg7",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Category"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Deactivate_agg7",
+   "type": "IFilter",
+   "args": {
+    "condition": "Category.ParentCategoryId = CategoryId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Deactivate_agg7",
+   "type": "IFilter",
+   "args": {
+    "condition": "Category.IsActive"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Category_Deactivate_agg7",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Deactivate",
+   "type": "IIfNode",
+   "name": "NoChildren",
+   "as": "$Category_Deactivate_if8"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Deactivate_if8",
+   "prop": "Label",
+   "value": "NoChildren"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Deactivate_if8",
+   "prop": "Condition",
+   "value": "GetChildren.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Deactivate",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseChildren",
+   "as": "$Category_Deactivate_raise9"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Deactivate_raise9",
+   "prop": "Exception",
+   "value": "IUserException:ValidationFailed"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Deactivate_raise9",
+   "prop": "ExceptionMessage",
+   "value": "\"Deactivate the child categories first\""
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Deactivate",
+   "type": "IAssignNode",
+   "name": "Apply",
+   "as": "$Category_Deactivate_asg10"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Deactivate_asg10",
+   "prop": "Label",
+   "value": "Apply"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Deactivate_asg10",
+   "type": "IAssignment",
+   "as": "$Category_Deactivate_a11"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Deactivate_a11",
+   "prop": "Variable",
+   "value": "C"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Deactivate_a11",
+   "prop": "Value",
+   "value": "GetCategory.List.Current.Category"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Deactivate_asg10",
+   "type": "IAssignment",
+   "as": "$Category_Deactivate_a12"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Deactivate_a12",
+   "prop": "Variable",
+   "value": "C.IsActive"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Deactivate_a12",
+   "prop": "Value",
+   "value": "False"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Deactivate",
+   "type": "IExecuteServerActionNode",
+   "name": "UpdateCategory",
+   "as": "$Category_Deactivate_call13"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Deactivate_call13",
+   "prop": "Action",
+   "value": "IEntityActionSignature:UpdateCategory"
+  },
+  {
+   "op": "set",
+   "target": "$Category_Deactivate_call13/Source",
+   "prop": "Value",
+   "value": "C"
+  },
+  {
+   "op": "create",
+   "parent": "$Category_Deactivate",
+   "type": "IEndNode",
+   "as": "$Category_Deactivate_end14"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Deactivate_start3",
+   "to": "$Category_Deactivate_agg4"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Deactivate_agg4",
+   "to": "$Category_Deactivate_if5"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Deactivate_if5",
+   "to": "$Category_Deactivate_agg7",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Deactivate_agg7",
+   "to": "$Category_Deactivate_if8"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Deactivate_if8",
+   "to": "$Category_Deactivate_raise9",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Deactivate_if8",
+   "to": "$Category_Deactivate_asg10",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Deactivate_asg10",
+   "to": "$Category_Deactivate_call13"
+  },
+  {
+   "op": "link",
+   "from": "$Category_Deactivate_call13",
+   "to": "$Category_Deactivate_end14"
+  },
+  {
+   "op": "layout",
+   "target": "$Category_Deactivate"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "SlaPolicy_Upsert",
+   "as": "$SlaPolicy_Upsert"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert",
+   "prop": "Description",
+   "value": "Uma politica ativa por (prioridade, alvo)"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert",
+   "type": "IInputParameter",
+   "name": "PriorityId",
+   "as": "$SlaPolicy_Upsert_in1"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_in1",
+   "prop": "DataType",
+   "value": "TicketPriority Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert",
+   "type": "IInputParameter",
+   "name": "TargetId",
+   "as": "$SlaPolicy_Upsert_in2"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_in2",
+   "prop": "DataType",
+   "value": "SlaTarget Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert",
+   "type": "IInputParameter",
+   "name": "Minutes",
+   "as": "$SlaPolicy_Upsert_in3"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_in3",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert",
+   "type": "IInputParameter",
+   "name": "BusinessHoursOnly",
+   "as": "$SlaPolicy_Upsert_in4"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_in4",
+   "prop": "DataType",
+   "value": "Boolean"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert",
+   "type": "IOutputParameter",
+   "name": "SlaPolicyId",
+   "as": "$SlaPolicy_Upsert_out5"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_out5",
+   "prop": "DataType",
+   "value": "SlaPolicy Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert",
+   "type": "ILocalVariable",
+   "name": "Pol",
+   "as": "$SlaPolicy_Upsert_var6"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_var6",
+   "prop": "DataType",
+   "value": "SlaPolicy"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert",
+   "type": "IStartNode",
+   "as": "$SlaPolicy_Upsert_start7"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert",
+   "type": "IAggregateNode",
+   "name": "GetPolicy",
+   "as": "$SlaPolicy_Upsert_agg8"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert_agg8",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:SlaPolicy"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert_agg8",
+   "type": "IFilter",
+   "args": {
+    "condition": "SlaPolicy.PriorityId = PriorityId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert_agg8",
+   "type": "IFilter",
+   "args": {
+    "condition": "SlaPolicy.TargetId = TargetId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert_agg8",
+   "type": "IFilter",
+   "args": {
+    "condition": "SlaPolicy.IsActive"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_agg8",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert",
+   "type": "IIfNode",
+   "name": "Exists",
+   "as": "$SlaPolicy_Upsert_if9"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_if9",
+   "prop": "Label",
+   "value": "Exists"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_if9",
+   "prop": "Condition",
+   "value": "not GetPolicy.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert",
+   "type": "IAssignNode",
+   "name": "ApplyExisting",
+   "as": "$SlaPolicy_Upsert_asg10"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_asg10",
+   "prop": "Label",
+   "value": "ApplyExisting"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert_asg10",
+   "type": "IAssignment",
+   "as": "$SlaPolicy_Upsert_a11"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_a11",
+   "prop": "Variable",
+   "value": "Pol"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_a11",
+   "prop": "Value",
+   "value": "GetPolicy.List.Current.SlaPolicy"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert_asg10",
+   "type": "IAssignment",
+   "as": "$SlaPolicy_Upsert_a12"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_a12",
+   "prop": "Variable",
+   "value": "Pol.Minutes"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_a12",
+   "prop": "Value",
+   "value": "Minutes"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert_asg10",
+   "type": "IAssignment",
+   "as": "$SlaPolicy_Upsert_a13"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_a13",
+   "prop": "Variable",
+   "value": "Pol.BusinessHoursOnly"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_a13",
+   "prop": "Value",
+   "value": "BusinessHoursOnly"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert",
+   "type": "IAssignNode",
+   "name": "FillNew",
+   "as": "$SlaPolicy_Upsert_asg14"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_asg14",
+   "prop": "Label",
+   "value": "FillNew"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert_asg14",
+   "type": "IAssignment",
+   "as": "$SlaPolicy_Upsert_a15"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_a15",
+   "prop": "Variable",
+   "value": "Pol.PriorityId"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_a15",
+   "prop": "Value",
+   "value": "PriorityId"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert_asg14",
+   "type": "IAssignment",
+   "as": "$SlaPolicy_Upsert_a16"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_a16",
+   "prop": "Variable",
+   "value": "Pol.TargetId"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_a16",
+   "prop": "Value",
+   "value": "TargetId"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert_asg14",
+   "type": "IAssignment",
+   "as": "$SlaPolicy_Upsert_a17"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_a17",
+   "prop": "Variable",
+   "value": "Pol.Minutes"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_a17",
+   "prop": "Value",
+   "value": "Minutes"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert_asg14",
+   "type": "IAssignment",
+   "as": "$SlaPolicy_Upsert_a18"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_a18",
+   "prop": "Variable",
+   "value": "Pol.BusinessHoursOnly"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_a18",
+   "prop": "Value",
+   "value": "BusinessHoursOnly"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert_asg14",
+   "type": "IAssignment",
+   "as": "$SlaPolicy_Upsert_a19"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_a19",
+   "prop": "Variable",
+   "value": "Pol.IsActive"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_a19",
+   "prop": "Value",
+   "value": "True"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert_asg14",
+   "type": "IAssignment",
+   "as": "$SlaPolicy_Upsert_a20"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_a20",
+   "prop": "Variable",
+   "value": "Pol.Name"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_a20",
+   "prop": "Value",
+   "value": "\"SLA \" + IntegerToText(PriorityId) + \"/\" + IntegerToText(TargetId)"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert",
+   "type": "IExecuteServerActionNode",
+   "name": "SavePolicy",
+   "as": "$SlaPolicy_Upsert_call21"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_call21",
+   "prop": "Action",
+   "value": "IEntityActionSignature:CreateOrUpdateSlaPolicy"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_call21/Source",
+   "prop": "Value",
+   "value": "Pol"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert",
+   "type": "IAssignNode",
+   "name": "SetOutput",
+   "as": "$SlaPolicy_Upsert_asg22"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_asg22",
+   "prop": "Label",
+   "value": "SetOutput"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert_asg22",
+   "type": "IAssignment",
+   "as": "$SlaPolicy_Upsert_a23"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_a23",
+   "prop": "Variable",
+   "value": "SlaPolicyId"
+  },
+  {
+   "op": "set",
+   "target": "$SlaPolicy_Upsert_a23",
+   "prop": "Value",
+   "value": "SavePolicy.Id"
+  },
+  {
+   "op": "create",
+   "parent": "$SlaPolicy_Upsert",
+   "type": "IEndNode",
+   "as": "$SlaPolicy_Upsert_end24"
+  },
+  {
+   "op": "link",
+   "from": "$SlaPolicy_Upsert_start7",
+   "to": "$SlaPolicy_Upsert_agg8"
+  },
+  {
+   "op": "link",
+   "from": "$SlaPolicy_Upsert_agg8",
+   "to": "$SlaPolicy_Upsert_if9"
+  },
+  {
+   "op": "link",
+   "from": "$SlaPolicy_Upsert_if9",
+   "to": "$SlaPolicy_Upsert_asg10",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$SlaPolicy_Upsert_if9",
+   "to": "$SlaPolicy_Upsert_asg14",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$SlaPolicy_Upsert_asg10",
+   "to": "$SlaPolicy_Upsert_call21"
+  },
+  {
+   "op": "link",
+   "from": "$SlaPolicy_Upsert_asg14",
+   "to": "$SlaPolicy_Upsert_call21"
+  },
+  {
+   "op": "link",
+   "from": "$SlaPolicy_Upsert_call21",
+   "to": "$SlaPolicy_Upsert_asg22"
+  },
+  {
+   "op": "link",
+   "from": "$SlaPolicy_Upsert_asg22",
+   "to": "$SlaPolicy_Upsert_end24"
+  },
+  {
+   "op": "layout",
+   "target": "$SlaPolicy_Upsert"
+  }
+ ]
+}

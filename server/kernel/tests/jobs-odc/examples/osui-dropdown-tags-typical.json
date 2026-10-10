@@ -1,0 +1,24 @@
+{
+ "description": "DropdownTags do OSUI com dados: uma data action monta as opcoes a partir dos produtos, o Prompt muda e o OnChanged guarda a lista escolhida numa variavel.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [{"name": "Name", "type": "Text", "length": 100, "mandatory": true}, {"name": "Price", "type": "Currency"}, {"name": "ImageUrl", "type": "Text", "length": 500}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductTagsPicker", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Tags\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Chosen", "as": "$vChosen"},
+  {"op": "set", "target": "$vChosen", "prop": "DataType", "value": "DropdownOption List"},
+  {"op": "logic", "data": {"actions": [{"name": "GetProductOptions", "kind": "data", "owner": "IMobileScreen:ProductTagsPicker", "fetch": "AtStart", "outputs": [{"name": "Options", "type": "DropdownOption List"}], "vars": [{"name": "Option", "type": "DropdownOption"}], "steps": [{"get": "Product", "as": "ReadProducts", "sort": "Product.Name"}, {"foreach": "ReadProducts.List", "as": "EachProduct", "do": [{"assign": {"Option.Value": "LongIntegerToText(ReadProducts.List.Current.Product.Id)", "Option.Label": "ReadProducts.List.Current.Product.Name"}, "as": "Fill"}, {"call": "ListAppend", "as": "AddOption", "args": {"List": "Options", "Element": "Option"}}]}]}]}},
+  {"op": "logic", "data": {"actions": [{"name": "TagsChanged", "kind": "screen", "owner": "IMobileScreen:ProductTagsPicker", "inputs": [{"name": "Selection", "type": "DropdownOption List"}], "steps": [{"assign": {"Chosen": "Selection"}, "as": "Keep"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "DropdownTags1", "source": "IMobileBlock:DropdownTags", "as": "$dt"},
+  {"op": "set", "target": "$dt/OptionsList", "prop": "Value", "value": "GetProductOptions.Options"},
+  {"op": "set", "target": "$dt/Prompt", "prop": "Value", "value": "\"Pick products\""},
+  {"op": "set", "target": "$dt/OnChanged", "prop": "Handler", "value": "IMobileScreen:ProductTagsPicker/TagsChanged"},
+  {"op": "set", "target": "$dt/OnChanged/Selection", "prop": "Value", "value": "SelectedOptionList"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "Chosen.Length + \" chosen\""}
+ ]
+}

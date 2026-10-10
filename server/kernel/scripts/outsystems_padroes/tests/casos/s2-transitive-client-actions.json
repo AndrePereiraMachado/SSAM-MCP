@@ -1,0 +1,37 @@
+{
+ "description": "NEG S2 (OutSystems padroes): a screen action chama uma client action que vai ao servidor e depois chama outra server action (2 idas no mesmo caminho).",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "logic", "data": {"actions": [
+   {"name": "RecordVisit", "kind": "server",
+    "description": "Registra a visita a tela; primeira ida ao servidor do controle S2.",
+    "outputs": [{"name": "IsRecorded", "type": "Boolean", "description": "Confirma que a visita foi registrada."}],
+    "steps": [{"assign": {"IsRecorded": "True"}, "as": "Confirm the visit record"}]},
+   {"name": "RecordAudit", "kind": "server",
+    "description": "Registra a auditoria da acao; segunda ida ao servidor do controle S2.",
+    "outputs": [{"name": "IsAudited", "type": "Boolean", "description": "Confirma que a auditoria foi gravada."}],
+    "steps": [{"assign": {"IsAudited": "True"}, "as": "Confirm the audit record"}]},
+   {"name": "NotifyVisit", "kind": "client",
+    "description": "Client action que so repassa ao servidor; esconde uma ida ao servidor do controle S2.",
+    "steps": [{"call": "RecordVisit", "as": "SaveVisit"}]}
+  ]}},
+  {"op": "create", "parent": "@espace", "type": "IRole", "name": "NegS2Viewer", "as": "$role"},
+  {"op": "set", "target": "$role", "prop": "Description", "value": "Perfil que pode abrir a tela do controle negativo S2."},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "NegTwoCallsScreen", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "set", "target": "$scr", "prop": "Description", "value": "Tela cujo botao faz duas idas ao servidor (violacao proposital da S2)."},
+  {"op": "link", "from": "$scr", "connector": "Roles", "to": "$role"},
+  {"op": "logic", "data": {"actions": [
+   {"name": "SaveAndNotify", "kind": "screen", "owner": "IMobileScreen:NegTwoCallsScreen",
+    "description": "Notifica a visita e grava a auditoria em duas chamadas (violacao proposital da S2).",
+    "steps": [
+     {"call": "NotifyVisit", "as": "Notify"},
+     {"call": "RecordAudit", "as": "Audit"}
+    ]}
+  ]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IButton", "name": "SaveButton", "as": "$btn"},
+  {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$scr/SaveAndNotify"}
+ ]
+}

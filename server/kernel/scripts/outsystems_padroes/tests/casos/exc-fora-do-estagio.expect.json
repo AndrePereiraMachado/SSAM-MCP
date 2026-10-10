@@ -1,0 +1,24 @@
+{
+ "_leia": "Registro com stages=[I9] nao vale em I3: o achado fica sem excecao (exit 1).",
+ "stage": "job",
+ "mode": "autor",
+ "module": "Domain_CS",
+ "jobs": [
+  "l6-json-text-param.json"
+ ],
+ "planStage": "I3",
+ "exceptions": "exc-estagio-i9.exceptions.json",
+ "configOverride": {
+  "approvers": [
+   "autoteste"
+  ]
+ },
+ "exitCode": 1,
+ "mustFind": [
+  {
+   "rule": "L6",
+   "contains": "SummaryJson",
+   "excepted": false
+  }
+ ]
+}

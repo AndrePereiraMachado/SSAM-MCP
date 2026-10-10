@@ -1,0 +1,10 @@
+{
+ "description": "Job NEGATIVO (tem de falhar na COMPILACAO, antes de tocar no modelo): a spec de logica tem uma chave que nao existe ('inputz'); a mensagem lista as chaves permitidas. Mostra que o esquema e fechado.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": false,
+ "ops": [
+  {"op": "logic", "data": {"actions": [
+   {"name": "Broken", "inputz": [{"name": "X", "type": "Text"}], "steps": []}
+  ]}}
+ ]
+}

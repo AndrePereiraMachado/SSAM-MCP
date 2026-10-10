@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <DefineConstants>$(DefineConstants);ODC</DefineConstants>
+    <StudioDir Condition="'$(StudioDir)' == ''">$(ProgramFiles)/OutSystems/ODC Studio/ODC Studio</StudioDir>
+  </PropertyGroup>
+  <Import Project="../NativeReferences.props" />
+  <ItemGroup><Compile Include="TransportFactory.cs" /></ItemGroup>
+</Project>

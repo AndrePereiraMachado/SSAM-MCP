@@ -1,0 +1,34 @@
+{
+ "description": "Op html visual (WS4): um fragmento HTML vira widgets nativos dentro de uma tela que ja existe. O alerta traz painel, icone, titulo, tres textos, dois inputs e um botao; variaveis e acao sao nativas e o fragmento so as liga pelo nome.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "PinAlerts", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Pin alerts\""},
+
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "PinNumber", "as": "$vPin"},
+  {"op": "set", "target": "$vPin", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "AlertNote", "as": "$vNote"},
+  {"op": "set", "target": "$vNote", "prop": "DataType", "value": "Text"},
+
+  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "RetrySearch", "as": "$act"},
+  {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$a0"},
+  {"op": "create", "parent": "$act", "type": "IAssignNode", "as": "$a1"},
+  {"op": "set", "target": "$a1", "prop": "Label", "value": "ClearNote"},
+  {"op": "create", "parent": "$a1", "type": "IAssignment", "as": "$a1v"},
+  {"op": "set", "target": "$a1v", "prop": "Variable", "value": "AlertNote"},
+  {"op": "set", "target": "$a1v", "prop": "Value", "value": "\"\""},
+  {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$a9"},
+  {"op": "link", "from": "$a0", "to": "$a1"},
+  {"op": "link", "from": "$a1", "to": "$a9"},
+  {"op": "layout", "target": "$act"},
+
+  {"op": "html", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "file": "tests/html/visual/alert.html"},
+
+  {"op": "dump", "target": "$scr", "depth": 9},
+  {"op": "get", "target": "IMobileTheme:Headless_UI"}
+ ]
+}

@@ -1,0 +1,114 @@
+# Build context of docker/ssam-server/Dockerfile: the SSAM tree without history, local state, build outputs or secrets.
+# Every file this context keeps ends up in the image (COPY . /app, plus what the build stages compile from it), so the
+# guard platforms/odc/facade/tests/hosted-image-denylist.test.mjs reads exactly this set against the client names of
+# docker/ssam-server/client-denylist.json (owner rule of 2026-10-07: client content may ship, client NAMES may not).
+.git
+**/.git
+.claude
+**/.claude
+**/.local
+**/bin
+**/obj
+**/node_modules
+**/TestResults
+**/__pycache__
+*.user
+*.credentials.json
+.ssam-local.json
+.env
+**/.env
+**/tokens.json
+**/*.pfx
+**/*.key
+.dockerignore
+
+# ---- what .gitignore keeps out of the repository stays out of the image too: Studio captures, lab work, journals
+platforms/odc/lab
+platforms/odc/snapshots
+platforms/odc/journal
+platforms/odc/output
+platforms/odc/tmp
+platforms/odc/.backup-*
+**/*.oml
+**/*.oap
+**/*.osp
+# the job bases the image serves: the neutral fixtures and the anonymized ODC lane fixture (with their sidecars)
+!kernel/tests/fixtures/*.oml
+!kernel/tests/fixtures/odc/blank-*.oml
+!kernel/tests/fixtures/odc/insurance-reactive-r8.oml
+kernel/tests/fixtures/odc/*.json
+!kernel/tests/fixtures/odc/blank-*.oml.json
+!kernel/tests/fixtures/odc/insurance-reactive-r8.oml.json
+
+# ---- the publisher's lists and release tooling (the client list itself never ships)
+docker/ssam-server/client-denylist.json
+scripts/release
+platforms/odc/tenants.json
+
+# ---- not run by the hosted server: tests, benches, evidence and the history of the work on client modules
+tests
+docs/evidence
+agent/tests
+platforms/odc/tests
+platforms/odc/facade/tests
+platforms/odc/portal/tests
+platforms/odc/portal/research
+platforms/odc/docs
+!platforms/odc/docs/model-api
+platforms/odc/jobs
+platforms/odc/studio/builder/smoke-*
+kernel/docs/proofs
+kernel/docs/specs
+kernel/docs/tasks
+kernel/docs/mapa
+kernel/tests/Anvil.*
+kernel/tests/Shared
+kernel/tests/SSAM.*
+kernel/tests/RuntimeConnect
+kernel/tests/*.py
+kernel/tests/archive
+kernel/tests/access
+kernel/tests/jobs-live
+kernel/tests/jobs-cold
+kernel/tests/jobs-coverage
+kernel/tests/jobs-coverage-f2
+kernel/tests/fixtures/hmisjha
+kernel/tests/fixtures/flow-layout-*.json
+kernel/docs/PROVAS.md
+kernel/docs/GITSSAM-O-QUE-SE-APROVEITA.md
+kernel/docs/architecture/2026-09-04-arquitetura-produto.md
+kernel/scripts/base_cache_check.py
+kernel/scripts/outsystems_padroes/tests
+platforms/odc/portal/*.md
+# the developers' history in docs/ (the hosted server reads docs/CONHECIMENTO-DO-TIME.md and serves the coverage
+# matrices docs/COBERTURA-EXEMPLOS-*.md; it reads nothing else there)
+docs/COBERTURA-DESCOBERTA-FASE1.md
+docs/DEBUGGER-*.md
+docs/HANDOFF-*.md
+docs/FASE2-AGENTE.md
+docs/LAYOUT-MOTOR.md
+docs/LOTE-DADOS-FASE3.md
+docs/MEDICAO-VELOCIDADE.md
+docs/MIGRACAO.md
+docs/O11-BRIDGE-FINA.md
+docs/OPERACOES-O11.md
+docs/PILOTO-FASE2.md
+docs/PACOTE-*.md
+docs/proofs
+# work done for clients: its scripts, html sources and browser contracts carry the client in the file name
+kernel/scripts/*dcips*
+kernel/tests/html/dcips-*
+kernel/tests/browser/dcips-*
+kernel/tests/ui/dcips-*
+# Windows-only credential prompts of the Portal lane (the hosted server runs no Windows prompt)
+platforms/odc/portal/runtime/*.ps1
+# the ODC Studio bridge runs in the customer's Studio, never in the hosted server (the image does not build it)
+platforms/odc/studio/bridge
+# the builder's features are the owner's lab and the logic of client apps; a hosted customer delivers jobs, not features
+platforms/odc/studio/builder/features
+# compose secrets (NGROK_AUTHTOKEN): never inside the image
+.env
+.env.*
+!.env.example
+# the Studio installers come in through their own build context (installers), read by the studio-* stages only
+docker/installers

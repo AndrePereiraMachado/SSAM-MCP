@@ -1,0 +1,22 @@
+{
+ "description": "ProgressCircle do OSUI ligado a uma variavel: Progress, cor, tamanho e o percentual escrito no Content.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "GoalProgress", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Goal\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Percent", "as": "$vPercent"},
+  {"op": "set", "target": "$vPercent", "prop": "DataType", "value": "Integer"},
+  {"op": "set", "target": "$vPercent", "prop": "DefaultValue", "value": "60"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ProgressCircle1", "source": "IMobileBlock:ProgressCircle", "empty": true, "as": "$pc"},
+  {"op": "set", "target": "$pc/Progress", "prop": "Value", "value": "Percent"},
+  {"op": "set", "target": "$pc/ProgressColor", "prop": "Value", "value": "Entities.Color.Primary"},
+  {"op": "set", "target": "$pc/Size", "prop": "Value", "value": "\"120px\""},
+  {"op": "set", "target": "$pc/Thickness", "prop": "Value", "value": "10"},
+  {"op": "create", "parent": "$pc/Content", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "Percent + \"%\""}
+ ]
+}

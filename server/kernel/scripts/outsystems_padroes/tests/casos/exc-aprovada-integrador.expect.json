@@ -1,0 +1,24 @@
+{
+ "_leia": "Excecao aprovada e com elemento concreto cobre o achado no integrador: sem erro bloqueante; sobra so revisao (exit 3).",
+ "stage": "job",
+ "mode": "integrador",
+ "module": "Domain_CS",
+ "jobs": [
+  "l6-json-text-param.json"
+ ],
+ "exceptions": "exc-aprovada.exceptions.json",
+ "configOverride": {
+  "approvers": [
+   "autoteste"
+  ]
+ },
+ "exitCode": 3,
+ "maxBlockingErrors": 0,
+ "mustFind": [
+  {
+   "rule": "L6",
+   "contains": "SummaryJson",
+   "excepted": true
+  }
+ ]
+}

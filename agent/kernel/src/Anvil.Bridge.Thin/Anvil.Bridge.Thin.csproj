@@ -1,0 +1,90 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Anvil.Bridge (thin): the bridge the customer agent pack loads into the customer's Service Studio in hosted mode
+    (docs/O11-BRIDGE-FINA.md). Same assembly name and entry point as the full bridge (Anvil.Bridge.dll,
+    Anvil.Bridge.Server.Start(int), plus the release hook's Start(int, string, string)), so Anvil.RuntimeHook and
+    Anvil.Connect stay unchanged; told apart at run time by flavor "thin" in ping and bridge_manifest. Only primitive
+    Studio operations: the kernel logic runs on the server.
+    References ONLY the Service Studio DLLs (Private=false) and the BCL: no ProjectReference, no PackageReference. The
+    AnvilThinBridgeBoundary target fails the build if a kernel assembly ever reaches the reference list.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>Anvil.Bridge</AssemblyName>
+    <RootNamespace>Anvil.Bridge</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RollForward>Major</RollForward>
+    <SSDir Condition="'$(SSDir)' == ''">$(USERPROFILE)\OutSystems\Service Studio 11 - Anvil 4516\Service Studio</SSDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The references of Anvil.Bridge.csproj minus ServiceStudio.Commands, .Merge and .Undo: absent from Service Studio
+         11.55.91 (their namespaces live in other Studio assemblies). -->
+    <Reference Include="OutSystems.Communication"><HintPath>$(SSDir)\OutSystems.Communication.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Communication.Identity"><HintPath>$(SSDir)\OutSystems.Communication.Identity.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.RuntimeCommon"><HintPath>$(SSDir)\OutSystems.RuntimeCommon.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.MetaModel"><HintPath>$(SSDir)\OutSystems.MetaModel.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Model.V1"><HintPath>$(SSDir)\OutSystems.Model.V1.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Model.Implementation"><HintPath>$(SSDir)\OutSystems.Model.Implementation.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.C5"><HintPath>$(SSDir)\OutSystems.C5.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Framework"><HintPath>$(SSDir)\ServiceStudio.Framework.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Common"><HintPath>$(SSDir)\ServiceStudio.Common.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Presenter"><HintPath>$(SSDir)\ServiceStudio.Presenter.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.ServerCommunications"><HintPath>$(SSDir)\ServiceStudio.ServerCommunications.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.ServerCommunications.API"><HintPath>$(SSDir)\ServiceStudio.ServerCommunications.API.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.ServerCommunications.ServiceCenter"><HintPath>$(SSDir)\ServiceStudio.ServerCommunications.ServiceCenter.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Communication.Rest"><HintPath>$(SSDir)\OutSystems.Communication.Rest.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="WebViewControl.Avalonia"><HintPath>$(SSDir)\WebViewControl.Avalonia.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Xilium.CefGlue"><HintPath>$(SSDir)\Xilium.CefGlue.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.PluginAPI"><HintPath>$(SSDir)\ServiceStudio.PluginAPI.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Avalonia.Base"><HintPath>$(SSDir)\Avalonia.Base.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Avalonia.Controls"><HintPath>$(SSDir)\Avalonia.Controls.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Avalonia.Desktop"><HintPath>$(SSDir)\Avalonia.Desktop.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Shared with the full bridge by link: one copy only (docs/O11-BRIDGE-FINA.md section 2.2). No linked file may
+         have a release overlay. -->
+    <Compile Include="..\Anvil.Bridge\Studio.cs" Link="Shared\Studio.cs" />
+    <Compile Include="..\Anvil.Bridge\Reads.cs" Link="Shared\Reads.cs" />
+    <Compile Include="..\Anvil.Bridge\Dialogs.cs" Link="Shared\Dialogs.cs" />
+    <Compile Include="..\Anvil.Bridge\WindowsHandler.cs" Link="Shared\WindowsHandler.cs" />
+    <Compile Include="..\Anvil.Bridge\OpenHandler.cs" Link="Shared\OpenHandler.cs" />
+    <Compile Include="..\Anvil.Bridge\PublishHandler.cs" Link="Shared\PublishHandler.cs" />
+    <Compile Include="..\Anvil.Bridge\PublishConfirmation.cs" Link="Shared\PublishConfirmation.cs" />
+    <Compile Include="..\Anvil.Bridge\PublishLog.cs" Link="Shared\PublishLog.cs" />
+    <Compile Include="..\Anvil.Bridge\PublishLogHandler.cs" Link="Shared\PublishLogHandler.cs" />
+    <Compile Include="..\Anvil.Bridge\SilentModeLease.cs" Link="Shared\SilentModeLease.cs" />
+    <Compile Include="..\Anvil.Bridge\ScApiHandler.cs" Link="Shared\ScApiHandler.cs" />
+    <Compile Include="..\Anvil.Bridge\ScOperations.cs" Link="Shared\ScOperations.cs" />
+    <!-- 16th release: the pure SOAP part of sc_api integration-studio (no Studio type), which ScApiHandler uses. -->
+    <Compile Include="..\Anvil.Bridge\ScIntegrationStudioSoap.cs" Link="Shared\ScIntegrationStudioSoap.cs" />
+    <Compile Include="..\Anvil.Bridge\ScVault.cs" Link="Shared\ScVault.cs" />
+    <!-- ScProtocol.cs and ScSecrets.cs are copies in this folder, not links: their release overlays
+         (scripts/release/overlay/kernel/src/Anvil.Bridge) make them use Ssam.Runtime and Anvil.Core, so a linked copy
+         would not compile in a staged release tree. CopiedFilesTests keeps each copy identical to the full bridge's file
+         and refuses a link to any file that has a release overlay. -->
+    <Compile Include="..\Anvil.Bridge\ScWebHandler.cs" Link="Shared\ScWebHandler.cs" />
+    <!-- Ninth release (docs/O11-BRIDGE-FINA.md section 14): the rollback proof and the dialogs seen of a publication
+         (pure, no Studio type) and the Studio's own Refresh References (its error count is Reads.ErrorCount). -->
+    <Compile Include="..\Anvil.Bridge\MergeRollbackProof.cs" Link="Shared\MergeRollbackProof.cs" />
+    <Compile Include="..\Anvil.Bridge\RefreshReferencesHandler.cs" Link="Shared\RefreshReferencesHandler.cs" />
+    <!-- Atritos 3 (lane mb2 and D5): the dialogs seen in every tab and window (DialogScope), the Manage Dependencies dialog
+         answered without stopping SSAM (DependenciesDialog); ScWindowLifetime lives in ScProtocol.cs (the copy above). -->
+    <Compile Include="..\Anvil.Bridge\DialogScope.cs" Link="Shared\DialogScope.cs" />
+    <Compile Include="..\Anvil.Bridge\DependenciesDialog.cs" Link="Shared\DependenciesDialog.cs" />
+    <!-- 20th product release (UI freeze of 2026-10-08): the bounded UI gate every Studio UI call goes through (Ui.Run,
+         UiGate, ModuleGate, HeadlessPublications); pure apart from Avalonia's dispatcher. -->
+    <Compile Include="..\Anvil.Bridge\Ui.cs" Link="Shared\Ui.cs" />
+    <Compile Include="..\Anvil.Bridge\UiGate.cs" Link="Shared\UiGate.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Anvil.Bridge.Thin.Tests" />
+  </ItemGroup>
+  <!-- Boundary guard: no kernel or product assembly may ever be compiled into the thin bridge. -->
+  <Target Name="AnvilThinBridgeBoundary" AfterTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <_AnvilThinForbiddenReference Include="@(ReferencePath)" Condition="$([System.String]::Copy('%(Filename)').StartsWith('Anvil.')) Or $([System.String]::Copy('%(Filename)').StartsWith('SSAM.')) Or '%(Filename)' == 'Esprima'" />
+    </ItemGroup>
+    <Error Condition="'@(_AnvilThinForbiddenReference)' != ''" Text="The thin bridge must reference only the Service Studio DLLs and the BCL; forbidden references: @(_AnvilThinForbiddenReference->'%(Filename)', ', ')" />
+  </Target>
+</Project>

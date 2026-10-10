@@ -1,0 +1,13 @@
+{
+ "_leia": "POSITIVO L7: URL/esquema em record e default de Static Entity e dominio fixo; nenhum achado L7.",
+ "stage": "job",
+ "mode": "autor",
+ "module": "Domain_CS",
+ "exitCode": 0,
+ "maxBlockingErrors": 0,
+ "mustNotFind": [
+  {
+   "rule": "L7"
+  }
+ ]
+}

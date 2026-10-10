@@ -1,0 +1,30 @@
+{
+ "description": "ODC (piloto de contratos partilhados, fase 2): REFATORAR registos e a propria static entity que este job nao criou - reapontar, apagar, duplicar. A base e job:static-entity-lifecycle, por isso a WfClaimPhase ja tem os registos Intake, Assessment, Closed e WfEscalated, e o default herdado de WfClaimFile.StageId diz Entities.WfClaimPhase.WfEscalated (o unico consumidor real de um registo). Tres coisas que so um job de refatoracao mede: (A) `replace` entre dois registos da mesma entidade reescreve a expressao do consumidor (Entities.WfClaimPhase.WfEscalated -> Entities.WfClaimPhase.Closed) e deixa o registo de origem sem consumidores - e o passo que torna o delete seguinte possivel SEM force; (B) `delete` de um registo sem consumidores e aceite, e o registo desaparece da entidade (Records 4 -> 3); (C) `duplicate` da static entity inteira copia a entidade com atributos E registos (nome com o sufixo da plataforma), e a copia nasce sem consumidores. O `move` de um registo nao entra aqui: a ordem de leitura de registos e o valor de Order (OrderByAttribute), nao a posicao na arvore - ver a recusa medida em tests/jobs-odc-negative/move-static-record.json. Tudo e lido antes e depois com get/usages/dump: o contador do verbo nao entrega nada sozinho.",
+ "base": "job:static-entity-lifecycle",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "get", "target": "IServerEntity:WfClaimFile/StageId", "_why": "(0) ANTES: o default herdado diz Entities.WfClaimPhase.WfEscalated - escrito pelo job da base (13a). E a expressao que o replace (2) tem de reescrever sem que este job lhe toque."},
+  {"op": "usages", "target": "IStaticEntity:WfClaimPhase/WfEscalated", "max": 20, "_why": "(1a) ANTES: real 1 - o default da WfClaimFile.StageId. Comparar com o usages (3a), que tem de dar real 0."},
+  {"op": "usages", "target": "IStaticEntity:WfClaimPhase/Closed", "max": 20, "_why": "(1b) ANTES: real 0 - o registo de destino ainda nao e citado por ninguem. Comparar com o usages (3b)."},
+
+  {"op": "replace", "from": "IStaticEntity:WfClaimPhase/WfEscalated", "to": "IStaticEntity:WfClaimPhase/Closed", "_why": "(2) MUDANCA 1 - REAPONTAR: todos os consumidores externos do registo WfEscalated passam a citar Closed. Os dois lados sao IStaticEntityRecord, por isso nao ha force. O kernel verifica no proprio modelo que 0 consumidores ficaram na origem e que todos foram encontrados no destino; se nao, o op falha. O texto da expressao e reescrito pela plataforma (ReplaceReferences), nao por este job."},
+  {"op": "get", "target": "IServerEntity:WfClaimFile/StageId", "_why": "(2b) DEPOIS: o DefaultValue diz Entities.WfClaimPhase.Closed. Ninguem escreveu este texto - comparar com o get (0)."},
+  {"op": "usages", "target": "IStaticEntity:WfClaimPhase/WfEscalated", "max": 20, "_why": "(3a) real 0: o registo de origem ficou orfao. E isto que faz o delete (4) passar sem force."},
+  {"op": "usages", "target": "IStaticEntity:WfClaimPhase/Closed", "max": 20, "_why": "(3b) real 1: o consumidor que estava em WfEscalated esta agora aqui, com a mesma chave."},
+
+  {"op": "delete", "target": "IStaticEntity:WfClaimPhase/WfEscalated", "_why": "(4) MUDANCA 2 - APAGAR um registo SEM consumidores: aceite sem force (os IRecordAttributeValue do proprio registo sao filhos, nao consumidores). A recusa do mesmo delete COM o consumidor ainda ligado esta medida em tests/jobs-odc-negative/delete-static-record-in-use.json."},
+  {"op": "get", "target": "IStaticEntity:WfClaimPhase", "_why": "(4b) DEPOIS: Records 3 (era 4 depois da base). Attributes continua 4: apagar um registo nao mexe no esquema."},
+  {"op": "find", "name": "WfEscalated", "_why": "(4c) lista vazia: o registo desapareceu do modulo."},
+
+  {"op": "duplicate", "target": "IStaticEntity:WfClaimPhase", "as": "$copy", "_why": "(5) MUDANCA 3 - DUPLICAR a static entity inteira. O nome da copia e o que a plataforma escolhe (sufixo), a copia entra no fim do ESpace e nasce SEM consumidores. Leia o get (5b) e o dump (5c) para saber o que foi copiado: atributos, registos e os valores por registo."},
+  {"op": "get", "target": "$copy", "_why": "(5b) a copia: EntityKind Static, Attributes 4, Records 3, Identifier/Label/OrderBy a apontar para os atributos COPIADOS (chaves novas), Name com o sufixo da plataforma."},
+  {"op": "dump", "target": "$copy", "depth": 3, "_why": "(5c) a arvore da copia: 4 IEntityAttribute, 3 IStaticEntityRecord com os mesmos Identifier (Intake, Assessment, Closed) e um IRecordAttributeValue por atributo com os mesmos textos - chaves todas novas."},
+  {"op": "usages", "target": "$copy", "max": 20, "_why": "(5d) real 0 salvo o IAttribute do registo anonimo que a plataforma gera para a copia: ninguem de fora cita a entidade duplicada."},
+  {"op": "usages", "target": "IStaticEntity:WfClaimPhase", "max": 30, "_why": "(5e) o original mantem os seus consumidores (o default e o IAttribute do seu registo anonimo): duplicar nao move consumidores."},
+
+  {"op": "delete", "target": "$copy", "force": true, "_why": "(6) LIMPEZA com force declarado: a copia nao tem consumidores de autor, mas no ODC cada entidade traz um IAnonymousStructure '<Nome> Record' que a cita (o IAttribute desse registo anonimo), e esse consumidor gerado pela plataforma nao e derivado para o kernel - a mesma razao pela qual delete-entity-whole.json precisa de force. Aqui o force so quebra esse consumidor gerado; nenhum consumidor de autor existe (usages 5d)."},
+  {"op": "find", "name": "WfClaimPhase", "_why": "(7) FIM: so o original (e o seu registo anonimo) respondem por este nome; a copia e o seu registo anonimo desapareceram."},
+  {"op": "dump", "target": "IStaticEntity:WfClaimPhase", "depth": 3, "_why": "(8) a arvore final do original: 4 atributos e 3 registos (Intake, Assessment, Closed), o consumidor herdado a apontar para Closed."}
+ ]
+}

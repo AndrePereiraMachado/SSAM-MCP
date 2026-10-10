@@ -1,0 +1,22 @@
+#nullable enable
+public sealed class Cell { public int Value; }
+public static class R
+{
+    public static string DefaultText(string value = "é😀") { var c = new Cell(); c.Value++; return Describe(value); }
+    public static string DefaultNull(string? value = null) { var c = new Cell(); c.Value++; return Describe(value); }
+    public static string DefaultEmpty(string value = "") { var c = new Cell(); c.Value++; return Describe(value); }
+    public static string Pair(string? left = "left", string? right = "right") { var c = new Cell(); c.Value++; return Describe(left) + "/" + Describe(right); }
+    private static string Describe(string? value) { if (value == null) return "null"; return "text:" + value.Length + ":" + value; }
+    private static string Helper(Cell c, string? value = null, string suffix = "tail") { c.Value++; return Describe(value) + "/" + suffix; }
+    private static string Stamp(Cell c, string label) { c.Value = c.Value * 10 + 1; return label + c.Value; }
+    public static string Calls(int mode)
+    {
+        var c = new Cell();
+        if (mode == 0) return Helper(c);
+        if (mode == 1) return Helper(c, "");
+        if (mode == 2) return Helper(c, suffix: "", value: null);
+        if (mode == 3) return DefaultText() + "/" + DefaultNull() + "/" + DefaultEmpty();
+        var result = Helper(suffix: Stamp(c, "S"), value: Stamp(c, "V"), c: c);
+        return result + "/" + c.Value;
+    }
+}

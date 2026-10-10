@@ -1,0 +1,953 @@
+# SSAM Hybrid: playbook para agentes (LLM) sem contexto
+
+Guia de desenvolvimento do kernel. Sessao de app trabalha so pelo MCP `ssam` (regras no `AGENTS.md` da raiz) e nao le
+este arquivo: `ssam_discover` e `ssam_reference` respondem a partir dele.
+
+Este repositorio compila intencao para OutSystems O11 e entrega no Service Studio aberto por merge. Voce nao precisa
+saber nada de antemao: cada tarefa abaixo diz quando usar, onde pode, que exemplo copiar e como verificar. Leia so o que
+a sua tarefa pede. Se algo aqui nao bater com o que o codigo faz, o codigo manda e este arquivo esta errado: corrija-o.
+
+## Fluxo controlado de app (dados e actions declaradas)
+
+Autoria de componentes por HTML/CSS/JavaScript: consulte `docs/UI-HIGH-CODE.md` e
+`tests/html/components/gallery.html`. No perfil controlado, a fonte inteira entra em `propose.uiSource`;
+o Hybrid gera o contrato nativo e os bindings. Para manutencao autorizada, `deliver --spec arquivo.html`
+usa o mesmo controlador. O recorte provado cobre componentes, composicao, eventos, estado, lifecycle e
+controles basicos e imports relativos de arquivos HTML (`uiSource` aceita tambem `{entry, files}`).
+Blocks de referencias registradas aceitam `import { Block } from 'outsystems:Modulo/Flow'`;
+o compilador usa a assinatura e o nome original do produtor, inclusive com aliases locais no Studio.
+Objetos/arrays literais em estado local inferem estruturas/listas nativas: exemplo `tests/html/components/values.html`.
+Map/spread e listas vazias depois da inicializacao funcionam; IDs grandes devem permanecer texto. Arrays inicialmente
+vazios, datas/null sem tipo declarado e inputs/eventos compostos ainda nao estao implementados.
+Aquisicao automatica de dependencias, imports de actions/tipos, repeticao visual e chamadas assincronas ainda
+nao estao completos nessa entrada. Nao confundir a cobertura do backend com suporte universal a HTML/CSS/JS.
+Para jobs ODC, a aquisicao candidata de assinaturas publicas de bibliotecas (incluindo sistema) esta documentada
+em `../platforms/odc/docs/AQUISICAO-DEPENDENCIAS.md`. Ela usa `reference` antes das edicoes e `studio_deliver`;
+nao abre o produtor protegido como OML. Verifique o estado de liberacao: prova viva e ativacao ainda pendentes.
+O Dashboard legado ainda usa a receita anterior enquanto essas capacidades convergem.
+
+O perfil opcional `ssam-app` usa `context`, `propose`, `continue` e `status` do MCP ssam_hybrid.
+O cliente registra o pedido original; o Hybrid fixa o contrato, gera o delta e retoma a mesma tarefa depois de falhas.
+A prova le dados e grafo de actions independentemente dos ops emitidos. O esquema de logic inclui switch, handlers,
+JSON, JavaScript, Excel e os nos nativos declarados de UI/email. Screen actions e preparacoes usam owners existentes;
+o mapa de widgets e gerado por scripts/action_coverage_report.py a partir dos testes de recarga/merge.
+Politicas em `docs/CONTRATO-MODULO.md`. Detalhes de ativacao e limites em `docs/APP.md`; estado da
+instalacao/prova viva em `docs/tasks/2026-09-05-plano-fluxo-controlado.md`. Perfil configurado nao equivale a prova viva.
+
+Nesta sessao de app, CLI, shell, arquivos de infraestrutura e publicacao nao sao ferramentas de recuperacao.
+Falta de capacidade e bloqueio especifico. O certificado cobre o contrato declarado e as politicas de acesso geradas;
+nao comprova toda regra de negocio nem substitui testes executando as actions no servidor.
+Nao migre automaticamente tarefas legadas em andamento; o perfil de manutencao e as outras sessoes ficam separados.
+
+O CLI abaixo continua disponivel para manutencao, provas e compatibilidade durante a migracao. `deliver --spec`
+verifica o contrato do modulo (data/roles/exceptions/logic); `deliver --resume <taskId>` retoma sem substituir job/alvo/checks. `--job` legado
+nao se torna uma entrada alternativa dentro da sessao de app controlada.
+
+## Entrega de app: caminho direto
+
+Criar entidades/actions/telas no OutSystems e uma tarefa de APP. Corrigir o compilador, a bridge ou o worker e
+MANUTENCAO DO ANVIL. Nao transforme uma entrega de app em manutencao: se uma capacidade faltar, reporte o bloqueio
+com o comando e a capacidade ausente; nao abra src/ nem implemente infraestrutura por iniciativa propria.
+
+Para uma spec aprovada: escreva um job compacto com spec/logic/screen, rode `anvil check-job --job <job>.json` e
+`anvil deliver --module <Modulo> --job <job>.json --checks <nomes>`. O deliver ja faz snapshot, apply, Verify,
+merge unico e delta; nao e necessario aplicar o mesmo job antes, rodar todos os jobs de exemplo, e aplica-lo outra
+vez para entregar. Use `run_job.py` separadamente quando a tarefa for uma prova em fixture, sem entrega ao Studio.
+Se houve erro, corrija todos os diagnosticos retornados e repita apenas o que falhou. Nao rode duas suites em paralelo
+na mesma faixa. Uma falha de job de outra sessao nao autoriza conserta-lo nem bloquear a entrega do seu app.
+
+O worker arranca automaticamente. Nao rode build/restart para criar um app quando o CLI ja esta disponivel;
+`build.py` e para mudanca de codigo C# ou instalacao ausente. Para jobs/specs, o Verify do proprio job e o delta
+vivo sao os gates de entrega. A suite completa e gate de manutencao do Anvil e CI, nao pre-condicao de cada app.
+Mantenha verificacoes de regras de negocio proporcionais ao pedido; Verify nao prova autorizacao nem transacoes.
+
+`check-job` nao carrega o Studio: valida sintaxe de spec/logic, nomes/aliases/ciclos e parametros sem uso antes de
+reconstruir bases. Devolve todas as falhas independentes, contagem de actions publicas/helpers, corpos identicos e
+endpoints que terminam sempre em excecao. Nao reporte esses endpoints como integracoes implementadas. Corpos
+identicos com nomes diferentes pedem revisao de intencao e consumidores; nao apague APIs diferentes automaticamente.
+`timings` em apply mostra load, Verify, apply, diagnosticos, save e release. Compare o mesmo job/base/runtime;
+conte separadamente escrita pela LLM, espera, ferramenta e retrabalho. Metas do dono: 2-3 min para modelo aprovado
+com ~111 entidades e 5-10 min para ~170 actions; nao reduza escopo, autorizacao ou validacao para caber no prazo.
+
+SQL (`SqlPreflight.cs`, chamado pelo `check-job` e pelo apply): todo SQL do job (logic `get` com `sql:true`, `ISQLNode`
+criado no job, `set ... Statement` num no existente) e lido antes do Studio e recusado com `op #N (SQL <onde>, line L)`
+e motivo: aspas, colchetes, chaves, comentarios e parenteses desbalanceados; `{Entidade}`/`{Entidade}.[Atributo]` fora
+do job, da base e das referencias; `@Param` sem `ISQLInputParameter`; atributo comparado direto com parametro de tipo
+incompativel (Text x numero, data x numero, booleano x Text/data, binario; use CAST para converter); Expand Inline que
+nao e Text; expressao OutSystems dentro do SQL. So no O11 (SQL Server): LIMIT, ILIKE, `::tipo`, TRUE/FALSE, `==`,
+funcoes de outros bancos (NOW, IFNULL, LENGTH...), string entre aspas duplas, virgula sobrando, AND/OR/WHERE sem
+condicao, ORDER BY em subconsulta sem TOP/OFFSET (erro 1033). O que depende da base sai em `unresolvedSql` e e conferido
+contra a base carregada antes da primeira mutacao. Parametro declarado e nao usado num no cru fica com o Verify
+(UnusedElement). Lacunas: semantica do banco (colunas sem `{}`, ambiguidade, GROUP BY, conversoes de valor, mapeamento
+para a estrutura de saida, permissoes) continua aparecendo so ao executar; ver `tests/Anvil.Tests/SqlPreflightTests.cs`.
+
+Upgrade do banco (`DatabaseUpgradeRules.cs`, no apply de todo build/deliver, sobre o modelo efetivo base + job, antes de
+salvar o candidato): o que a publicacao recusaria e o TrueChange deixa passar e recusado com `op #N (<verbo> Entidade.Atributo)`
+e a troca exata. So no O11 (SQL Server): Delete Rule Delete e `ON DELETE CASCADE`, e o banco recusa uma tabela alcancada por
+dois caminhos de cascata (duas FKs Delete da mesma tabela para a mesma tabela contam como dois) ou um ciclo de cascata (erro
+1785; na publicacao "Could not create foreign key constraint ... circular dependency between entities"). A recusa lista as
+referencias a trocar para Ignore ou Protect (primeiro as do job, depois a que resolve mais conflitos, depois o ultimo salto
+do caminho mais longo): aplicar todas sempre passa. O ODC (PostgreSQL) aceita os dois casos e nao recusa. Nas duas faixas:
+entidade com mais colunas do que o banco aceita (1024 SQL Server, 1600 PostgreSQL). Auto-referencia com Delete, indice com
+Text > 2000 ou Binary e FK para extensao ja sao erros do TrueChange. Fora (dependem das linhas que ja existem): valores
+orfaos sob FK nova, duplicatas sob indice unico novo, conversao de tipo ou reducao de Length. Negativo
+`data-cascade-multiple-paths.json`; testes em `tests/Anvil.Tests/DatabaseUpgradeRulesTests.cs`.
+
+Acesso a dados (`QueryInLoopRule.cs`, `AggregateConsolidationRule.cs`, chamados no fim de `ModelSession.Apply`, sobre o
+modelo candidato, nas duas faixas; decisao do dono 2026-10-09): Aggregate ou SQL no corpo de um laco (ForEach, ou ciclo de
+If que volta; os lacos sao as componentes fortemente conexas do fluxo) que o job criou ou mudou, ou dentro de um laco que o
+job criou, e recusado com `QUERY_IN_LOOP` (op, ponteiro do passo, `flow`, `loop`, `query`, `fix` e `suggestion` com o
+aggregate com join antes do laco e o `ListFilter` dentro dele quando derivavel), junto com as outras falhas do apply.
+Escape: `"allowQueryInLoop": {"why": "<15+ caracteres>"}` no op (aceito em qualquer verbo de escrita, `VerbSurface`), vira
+`QUERY_IN_LOOP_ALLOWED` no recibo. Laco legado num fluxo tocado: aviso HIGH. `AGGREGATES_MERGEABLE`: aggregates do mesmo
+fluxo/tela, mesma entidade ou ligados por FK, lidos juntos: aviso HIGH com o aggregate unico sugerido. Os avisos HIGH vao
+para `highWarnings` do recibo do apply; a entrega O11 (`Delivery.cs`) e a fachada os poem primeiro em `warnings` e em
+`highWarnings`. Limites: fluxos que o job nao tocou nao sao lidos; a origem do no e o op que o criou (ou o primeiro op que
+cita o fluxo). Testes: `tests/Shared/QueryRulesScenarios.cs` (O11 e ODC).
+
+Regressao do motor: `performance-lookup.json` prova tipos compartilhados e chamada de action declarada adiante.
+
+## Dados: uma spec, uma entrega e uma prova
+
+Registros de negocio ja publicados: `ssam data --lane o11` / MCP `o11_data` usa o cliente nativo
+Edit Data em processo headless, com credencial privada e recibos por operationId. Nao criar actions/timers
+para seed quando esse caminho atende. Contrato e prova: `../docs/O11-DADOS-HEADLESS.md`.
+Sem `--host` e sem `--credentials` (ou com `--studio`), `anvil data` usa o Studio ja logado da faixa (SSO incluido),
+sem credencial, pelas operacoes `data-read`/`data-write` da bridge (`EnvironmentData`).
+
+Para tabelas relacionadas, use uma unica op `spec` com `static`, `entities` e `structures`. O compilador declara todos
+os tipos e seus identificadores antes dos campos: a ordem entre entidades da mesma spec nao exige entregas separadas,
+inclusive com FKs circulares. O caso completo provado e `hire-data-model.json` (65 entidades, 46 static, indices);
+`api --op spec` informa as chaves. Nao expanda manualmente static entities que a spec ja suporta.
+`attributes` de static aceita configurar `Label` existente; `records` aceita valores dos atributos adicionais como
+expressoes OutSystems. `updateBehavior: "Optimized"` corresponde a Changed Attributes e e o padrao de toda entidade de
+servidor criada pela spec (o Studio o sugere para muitos atributos, Binary Data e texto longo); declare `updateBehavior`
+so para outro valor (ex. `"Full"`). `indexes` da entidade aceita
+`{"name":"IX_Status","attributes":["StatusId"],"unique":false}`; nomes sao atributos da propria entidade, em ordem.
+`type: "Long Text"` em atributo de spec gera `Text` com Length 2000000 quando o pedido nao define outro comprimento;
+nao e um tipo primitivo do Model API. Nos verbos crus, use DataType Text e Length explicitamente. Comprimento omitido
+em Text simples continua sendo o padrao do Studio; nao prometa texto longo sem prova do comprimento.
+
+`check-job` verifica referencias a tipos declarados adiante no mesmo job, enums conhecidos e comprimentos invalidos,
+e devolve os erros independentes juntos. Tipos que podem vir da base aparecem em `unresolvedTypes`: isso NAO comprova
+que existem. O apply confere os tipos externos contra a base antes de mutar quando nao ha importacao de referencias
+pendente; com `reference`, a resolucao final depende do produtor carregado. `api --name <Enum>` lista valores aceitos;
+a consulta de uma interface tambem inclui `enumValues`. Nao adivinhe o texto do menu como nome do enum.
+
+`deliver` guarda hashes do job, partes e produtores job:, verifica as propriedades declaradas dos dados no modelo gerado,
+faz um merge e tira um snapshot posterior. O `dataProof` compara existencia, nomes, tipos, comprimentos, obrigatoriedade,
+valores de registros e indices com a declaracao executada. Falha nessa prova impede `delivered=true`, mesmo com Verify
+sem erros. E prova dos dados declarados no job, nao interpretacao automatica da especificacao em linguagem natural.
+Use `dataContract.dataSummary` no apply ou `dataProof.dataSummary` no deliver para conferir a especificacao:
+traz tabelas, campos com tipos legiveis/comprimentos/obrigatoriedade, valores dos records e colunas dos indices.
+Esse resumo ja vem da leitura do modelo; nao e preciso acrescentar get/dump para cada campo ao job de criacao.
+O run_job.py grava o resultado integral ao lado do OML, com sufixo .result.json, e imprime esse caminho; leia-o sem reaplicar.
+Antes de confirmar conclusao, use `anvil check-delivery --result <pasta-da-entrega>/result.json`: exige entrega bem-sucedida
+e arquivos ainda iguais aos da prova. Se o job mudou depois do merge, a edicao NAO esta entregue. Esse comando verifica
+o recibo e seus arquivos locais; nao comprova que nao houve edicao manual posterior no Studio. Nao declare campos,
+indices ou integracoes que nao aparecem na prova. A receita testada e `hire-data-model.json`.
+
+## Criacao inicial de aplicacao e modulos
+
+Use uma chamada `anvil create-app --name <App> --kind Reactive --modules <App>_CS:Service,<App>_UI:Reactive --out <pasta>`
+(entrada publica: `ssam create-app --lane o11 ...`). Para acrescentar modulos, `anvil add-modules --app <App> --modules <lista> --out <pasta>`.
+
+**Autenticacao: o Studio ja logado, inclusive SSO.** Sem `--credentials`, `inventory`, `download`, `create-app`,
+`add-modules` e os demais comandos de ambiente usam o Service Studio da faixa ja autenticado (bridge 4516 no SS4, 4536
+no SS5; `--bridge-port` sobrepoe): o CLI pede um lease `environment_session` e cada chamada ao servidor e executada
+DENTRO do Studio, com a sessao dele (`ConnectedEnvironment` -> `EnvironmentSessionHandler` -> `EnvironmentOperations`).
+Nenhum segredo sai do Studio; `--read-only` continua recusando escrita; resposta perdida de uma escrita nao e repetida.
+Ambientes com "SSO login is mandatory" recusam o caminho antigo; `--credentials <arquivo>` fica so para ambientes que
+ainda aceitam usuario e senha. Operacoes atendidas pelo Studio: ver `EnvironmentOperations.Names`; outra chamada ao
+servidor falha com `NotSupportedException` explicita (sem NullReference). Prova, operacoes cobertas e lacunas:
+`docs/proofs/2026-09-25-o11-connected-environment.md`. Com lease read-only o proprio cliente recusa as operacoes de
+escrita (`ConnectedEnvironment.WriteOperations`); `anvil signature` so abre esse lease e recusa `--credentials`.
+Esses comandos criam a casca da aplicacao, preparam e verificam TODOS os novos modulos, e iniciam todas as publicacoes
+antes de esperar os resultados. Nao chame create-module e espere publicar repetidamente para criar um conjunto.
+A preparacao do modelo usa a thread unica do runtime; os jobs de publicacao se sobrepoem no servidor. O template e
+baixado uma vez por lote. E o fluxo de criacao inicial, sem referencias entre os novos modulos do lote.
+Falha de preparacao impede todos os novos envios. Falha de publicacao retorna o resultado de cada modulo, sem rollback
+ou repeticao automatica: confira a versao se a resposta for incerta. `ok`/`Succeeded` so sao true com sucesso confirmado;
+`PreparationMs`, `PublishStartOffsetMs` e `Publish.TotalMs` permitem medir o lote. Modulos existentes na mesma app sao
+preservados (`Skipped`); nomes duplicados ou de outra app sao recusados. A publicacao aqui cria os modulos iniciais;
+as alteracoes de produto continuam pelo fluxo deliver, com publicacao pelo humano.
+
+## 0. O laco, sempre o mesmo
+
+1. **Base**: um OML. Para provar, um fixture de `tests/fixtures` (`blank-service.oml` = modulo Service; `reactive-ui.oml`;
+   `mobile-ui.oml`; `traditional-ui.oml`). Para entregar, o snapshot do modulo aberto no Studio (`anvil deliver` faz isso).
+2. **Job**: um JSON `{"description","base","expectValid":true,"expectedMessages":[],"ops":[...]}` em `tests/jobs/`.
+   `base` e o fixture ou `job:<outro-job>` (aplica esse antes; procura em `tests/jobs/`). Ops sao os verbos da secao 2.
+   O job pode viver noutra pasta (o caminho e explicito no comando); `ok=False` na saida = o verbo falhou e nada foi salvo.
+   Um job = um ficheiro: corrija o MESMO ficheiro (o git guarda as versoes); tarefa diferente = nome pela intencao. Nomes com
+   sufixo de versao (`-v2`, `_v3`, `(1)`) sao recusados pelo runner dentro de `tests/` (`job 'x-v2' has a version suffix ...`).
+   O OML resultante fica em `.local/jobs/<job>.oml` (para inspecionar com `find`/`dump`; outro job usa `job:<nome>`).
+   No JSON, `base` e `producer` aceitam somente fixture em `tests/fixtures`, `job:<nome>` ou nome de snapshot ligado no comando
+   (`--producer Headless_CS=<snapshot.oml>`, repetivel). Caminhos `.local`/OMLs mutaveis no JSON sao recusados. `--base <snapshot.oml>`
+   explicito sobrepoe o campo `base` para entrega; sem ele o C# resolve a base. Cadeias e compostos resolvem cada fonte na pasta
+   do job que a declara, depois em `tests/jobs`; produtores ficam em `<work>/producers/<corrida>/`, sem cache entre corridas.
+   `tests/archive/` guarda jobs de entregas passadas que ja nao correm nesta maquina (a base deles era um arquivo de
+   trabalho em `.local`, ou um snapshot de produtor que o repositorio nao guarda): e historico, nao prova. Nenhum teste
+   varre essa pasta; nao copie de la sem reconferir a base. O que vale como exemplo esta em `tests/jobs`.
+   Job COMPOSTO: `{"base": ..., "jobs": ["job:parte-1", "job:parte-2", ...]}` concatena os ops das partes na ordem dada, numa
+   unica transacao (o `base` das partes e ignorado). E assim que um app inteiro se entrega com UM merge: `tickets-all.json`
+   (8 partes, 3.131 ops). Mesma lista de partes = mesmos ops, sempre.
+3. **Aplicar e verificar**: `python scripts/run_job.py tests/jobs/<job>.json` (se o CLI ainda nao estiver instalado, ou apos mudar C#: `python scripts/build.py`,
+   que para o worker, constroi o CLI da faixa e volta a subi-lo; `dotnet build` solto falha com o worker de pe). Se vai correr varios jobs, suba o worker residente uma vez
+   (`python scripts/anvil_worker.py start`): o mesmo comando passa a correr em processo quente (apply de 5 s -> 0,4 s num job
+   pequeno; a saida diz `via worker`); depois de um build faca `anvil_worker.py restart`. Leia a saida: `ok=True` e `isValid=True`; cada mensagem vem como
+   `Severity Id: Titulo @ caminho`; o caminho usa o Name de cada dono, o Label quando o no nao tem Name (If, Assign, Switch)
+   e o texto quando e uma expressao (`... / CalculaCauda (AssignNode) / Assignment / Expression "Right(Value, 1)"`). Depois das
+   mensagens vem linhas `Hint UnknownFunction: 'X(' nao existe ...; parecidas: A, B` (checagem deterministica contra o catalogo
+   de funcoes do Studio, antes de voce ler o Verify). Erro = corrigir (secao 4). Warning novo nao bloqueia (A03): volta como
+   `nonblocking` (na entrega, em `warnings` com id, path e fix). So bloqueiam os de seguranca (`SecurityWarnings`) e o anonimo abaixo.
+   Excecao: o warning especifico de Anonymous Role (CustomObjectWarning sobre expor Server Action sem autenticacao)
+   nao bloqueia; fica visivel em `tolerated`. Outros CustomObjectWarning e erros continuam sujeitos ao contrato.
+   Essa tolerancia nao altera roles nem substitui a autorizacao das actions no servidor.
+   Contrato de mensagens (opcional): `expectedMessages` lista apenas mensagens NOVAS: `{"id":"UnusedElement","element":"Tabs1_OnTabChange (ScreenAction) / TabsId (InputParameter)","why":"Parametro do contrato do evento nao usado neste exemplo"}`.
+   `element` e o caminho exato mostrado pelo runner ou um sufixo de um nivel ou mais (o nome antes de ` (` basta); se houver
+   empate, vira `ambiguous` com os candidatos: inclua mais pais. Com `"all":true` o `element` pode faltar: cobre toda mensagem do id.
+   Os ids vem do kernel que roda (pasta do assembly), nunca so da pasta do job ou do cwd; sem lista, so a forma e conferida e o
+   recibo traz a nota `VERIFY_IDS_UNCHECKED`. Um erro de `expectedMessages` e problema do preflight (`EXPECTED_MESSAGES_INVALID`,
+   ponteiro `/expectedMessages/<i>`), junto com os outros. `set <Tela> AnonymousAccess true` (ou `Roles` com Anonymous) declara
+   a familia anonima da tela inteira (`anonymous-declared-by-job`; o recibo lista `anonymousExposure`); tela ja anonima na base idem.
+   `why` e obrigatorio. O campo numerico antigo foi removido. Expectativa sem mensagem correspondente tambem
+   falha (`missingExpected`); corrigir um aviso nao compensa criar outro. Mensagens preexistentes nao precisam ser declaradas.
+   `validation` devolve `new`, `fixed`, `preexisting`, `unexpected`, `missingExpected`, `ambiguous`; `accepted` exige contrato
+   satisfeito e `isValid == expectValid` (padrao true). O apply salva para diagnostico mesmo se `accepted=false`; `run_job.py`
+   devolve exit 1 e `proof_merge.py` recusa o merge. Exemplos: `undeclared-warning.json` (aceito, aviso nonblocking) e `stale-expected.json`.
+   Cada parte de composto mantem seu contrato para rodar isoladamente; o composto avalia so a sua propria lista, sem heranca.
+   O cliente agora faz auto-arranque do worker (desligue com `ANVIL_WORKER=0`). Pedidos concorrentes aguardam na fila;
+   `ping` responde enquanto corre um comando e mostra `busy/currentCommand/runningMs/queued/commands`.
+   `queuedMs` mede a espera. A cada 5000 comandos (configuravel por `ANVIL_WORKER_MAX_COMMANDS`) ou heap >2 GB em
+   dois comandos, o worker drena e o proximo pedido arranca outro PID. Logs: `worker-<porta>-<pid>.log` na faixa.
+   Cache de bases (BaseModelCache, ligado em todo worker das duas faixas; processo frio e `dotnet test` nao o usam): com a
+   fila vazia, o worker carrega e percorre uma instancia NOVA das ultimas bases usadas; o proximo apply da mesma base
+   (mesmo caminho, tamanho, data, sha256 dos bytes recalculado a cada pedido, Studio, kernel e parametros de load) TOMA-a
+   uma vez e liberta-a como sempre. Nenhum modelo usado por um job volta ao cache. O resultado traz `baseCache` (`hit`,
+   `key`, `acquireMs`, `prefetch`, `evicted`) e `timings.baseAcquireMs`; num acerto `loadMs` fica perto de 0. Medido em
+   rondas quentes: find num modulo O11 de cliente 2,3-2,5 s -> 0,9-1,2 s (O11); logic no fixture ODC 4,6 s -> 2,3-2,4 s (ODC). Um pedido que
+   chega durante a preparacao espera se for apply da mesma base; qualquer outro cancela-a (e ela recomeca depois). Limites:
+   2 bases (`ANVIL_BASE_CACHE_ENTRIES`), 1 GB estimado (`ANVIL_BASE_CACHE_MB`), 20 min sem uso; as reservas saem antes
+   das regras de memoria (heap vivo 1,5 GB, working set 2 GB). `ping` mostra `baseCache` (chaves sha16, hits, misses,
+   prefetches, cancels, evictions, bytes) e `loadedModules` ja desconta as reservas (`cachedModules`); a piscina manda
+   o apply ao worker livre que tem a base. Bases `job:` construidas na corrida nao entram. `ANVIL_BASE_CACHE=off` no
+   ambiente do worker e so interruptor de emergencia do operador, nao opcao de uso. Prova: `scripts/base_cache_check.py`.
+   Perda de ligacao depois do envio tem resultado desconhecido: confira o resultado antes de repetir uma escrita.
+4. **Suite**: ao mudar o Anvil (C#/bridge/worker/compiladores), `dotnet test tests/Anvil.Tests` deve ficar verde antes do commit.
+   Para entrega de app que altera somente job/spec, check-job + Verify/delta da entrega validam o proprio trabalho; a suite
+   completa fica para CI/manutencao. Jobs de outras sessoes em desenvolvimento ficam fora dessa entrega.
+5. **Entregar**: `anvil deliver --module <Modulo> --job tests/jobs/<job>.json --checks <Nome1,Nome2>`
+   (CLI da faixa: `dotnet .local/cli/anvil.dll` no SS4; `.local/lane-ss5/cli/anvil.dll` no SS5).
+   Studio aberto e logado: o comando ativa o modulo, regista um snapshot, aplica o job sobre ele, faz UM merge auto
+   e valida o delta desde o snapshot e os nomes pedidos. Sem `--base` e sem `--publish`. Para varias partes, use `jobs`.
+   Jobs so de prova nao entram: antes de registrar a tarefa ou chamar a bridge, o deliver recusa job em
+   a pasta de prova K1 de `tests/jobs-live` (`NonDeliverableJobs`) ou com a marca `NEVER DELIVER` numa descricao (do job ou de elemento).
+   `delivered=true` exige contrato satisfeito antes/depois do merge, nenhum erro novo e checks encontrados. Falhas dao
+   exit 1, com stage/error e os artefatos em `<work>/deliver/<id>/result.json`; um merge ja aplicado fica para revisao,
+   com Ctrl+Z normal do Studio. `unchanged=true` e sucesso sem mudanca; conflito/cancelamento nao sao sucesso.
+   `snapshot_module` devolve `snapshot_id`/sha256. A bridge recusa base cujos bytes nao correspondam a um snapshot
+   deste modulo registado nesta sessao e recusa foreign com outra chave de modulo, mesmo em chamadas manuais.
+   `get_errors since=<snapshot_id>` devolve `new/fixed/preexisting/newErrors`. O estado completo continua disponivel.
+   `python scripts/proof_merge.py --module ... --job ... --checks ...` e so um wrapper de `deliver`; `--publish` nesse
+   script e apenas para provas em modulos de teste. No produto quem publica e o humano. Tickets-all: 3.131 ops,
+   uma chamada de merge, 27,6 s no SS5, zero erros novos e um aviso declarado.
+6. **Registrar**: uma linha em `docs/PROVAS.md` (data, prova, numeros, comando) e commit.
+
+Definicao de pronto: job valido (Verify 0 erros, warnings so os esperados), checks apropriados ao escopo, merge com TrueChange 0 erros,
+nomes encontrados no Studio, linha em PROVAS.md.
+
+### Layout e nomes de decisoes
+
+Motor compartilhado: `FlowGraphLayout` da revisao Anvil `d4d8ece` (13/09), integrado nesta raiz;
+`layout` informa `engineRevision: anvil-d4d8ece`. Nao usar os checkouts preservados como dependencia.
+`flow-layout-decisions.json`, `FlowGraphLayoutTests` e `NativeFlowPolicyTests` provam Ifs aninhados,
+reencontros, branches opcionais na coluna principal, handlers laterais, retornos e loops.
+O layout usa espacamento de 80 px, preserva nos de trabalho e a semantica True/False. Pode separar
+um End de action compartilhado em copias terminais equivalentes (`separatedEnds`); nunca duplica
+End de processo. O contrato aceita essas copias somente nas arestas terminais declaradas e continua
+recusando nos orfaos, desabilitados ou reconvergencias de trabalho alteradas. If/while sem `as` exibem a condicao;
+`label` permite um titulo explicito sem mudar o alias. O tradutor C# preserva o predicado original no label.
+Ao aplicar `layout` em actions existentes, apenas labels genericos If/While numerados sao substituidos;
+nomes significativos sao preservados. Para corrigir um modulo existente, entregue ops `layout` sobre
+as actions selecionadas, por snapshot/merge normal. Atualizar o CLI nao reorganiza modulos automaticamente.
+`ModelSession.Apply` aplica o mesmo motor no fim de jobs que criam/removem/religam nos ou mudam
+coordenadas. Flows nao alterados e jobs somente de leitura sao preservados. `flowLayoutEngine` no
+recibo identifica o motor usado; `automaticLayouts` lista os flows normalizados pela transacao.
+Conector sem alvo (a condicao de um Switch copiado) ou cujo alvo nao e no de logica (comentario ligado ao End de um
+processo ou a uma tela do fluxo de UI) nao e aresta do layout: antes derrubava o job fora de qualquer op
+(`layout-unfollowed-connectors.json`, nas duas faixas). Origem, integracao e limites: `../docs/LAYOUT-MOTOR.md`. Nao afirmar que todos os conectores sao ortogonais:
+rejoins compartilhados e retornos de loop podem continuar diagonais.
+
+## 1. Quero criar... (tabela por tarefa)
+
+Antes de abrir exemplos, use `anvil recipe --find <tarefa>`: devolve a linha desta tabela, o job testado,
+descricao e contagem de ops. Para ver ops, `recipe --find <nome> --ops --max 20` limita o total de ops; uma op spec pode conter muitos elementos.
+`anvil where-can --name <Interface>` compara os quatro fixtures e verifica o hash do catalogo. `no-parent`
+significa pai nao alcancavel ate profundidade 4; Library ainda nao tem fixture nem prova. O comando recusa mapas antigos.
+Para a linguagem compacta, `anvil api --op logic|spec|screen|html` expoe as mesmas listas fechadas usadas pelo compilador.
+Aqui `anvil` significa `dotnet .local/cli/anvil.dll` no SS4 ou `dotnet .local/lane-ss5/cli/anvil.dll` no SS5.
+
+| Tarefa | Quando usar | Onde pode | Copie de (tests/jobs) | Verifique |
+|---|---|---|---|---|
+| Modelo de dados completo | Entidades relacionadas, static com valores adicionais, texto longo e indices em uma spec | Service | `hire-data-model.json` (65 entidades, 46 static, 73 indices) | dataProof apos merge e check-delivery com hashes atuais |
+| Entidade (tabela) | Dado persistido no servidor. Id Long Integer AutoNumber e IdentifierAttribute sao obrigatorios; FK = `<Entidade> Identifier`; `set $ent Public true` (+ `ExposeReadOnly true`) para outros modulos lerem; o mesmo `set ... Public true` vale para structures, actions e roles | Service, Reactive, Mobile, Traditional (nao Library) | `spec-data.json` (1 op `spec`) ou `smoke-data-logic.json` (verbo a verbo) | `find` da entidade; Verify sem `InvalidEntity_*` |
+| Static entity | Lista fixa de valores (status, tipo) usada como FK e em expressoes `Entities.X.Y` | Idem entidade | `spec-data.json` (records) ou `static-entity.json`; manutencao de uma static herdada (registo novo, `set Identifier` para renomear um registo, `rename` da entidade, usages): `static-entity-lifecycle.json`; refatoracao (replace entre registos, delete de registo sem consumidores, duplicate da entidade): `static-record-refactor.json`; apagar a propria static entity sem consumidores de autor passa sem force (`delete-generated-companions.json`: o `<Entidade> Record` anonimo so conta se alguem o usar) | records visiveis no `dump`; recusas provadas em `tests/jobs-negative` (`rename-static-record.json`, `set-identifier-clash.json`, `delete-static-record-in-use.json`, `move-static-record.json`) |
+| Structure | Tipo composto para inputs/outputs, REST, listas em memoria; Public se sair do modulo | Todos | `producer-public.json`, `spec-data.json`; manutencao de uma structure herdada (atributo novo, DataType, rename de atributo com expressao consumidora, rename da structure): `structure-lifecycle.json`; refatoracao (move de atributo, duplicate da structure, replace entre structures = reapontamento provado, delete da origem sem force depois do replace; o registo anonimo da origem sobrevive orfao, limpeza nao provada): `structure-refactor.json` | usada como `DataType` sem erro; recusas em `tests/jobs-negative` (`delete-structure-attribute-in-use.json`, `delete-structure-in-use.json`, `rename-structure-clash.json`) |
+| Client entity (local storage) | Dados offline no dispositivo. Id Long Integer SEM AutoNumber (o Verify recusa `IsAutoNumber Yes` em client entity); gravar com `IExecuteClientActionNode` + `IEntityActionSignature:CreateOrUpdateX` numa client action | Mobile apenas | `local-storage-mobile.json`, `local-storage-notes-mobile.json` (com Accordion e recarga) | aggregate de tela com `args.isClientSide: true` |
+| Site property | Configuracao de servidor editavel no Service Center | Service, Reactive, Mobile, Traditional | `security-config-reactive.json` | `get` mostra DefaultValue |
+| Client variable | Estado no cliente que sobrevive a navegacao (filtro atual, preferencias) | Reactive, Mobile | `security-config-reactive.json` | usada numa expressao sem erro |
+| Session variable | Estado de sessao no servidor | Traditional apenas (sem job ainda: `ISessionVariable` no `@espace`) | - | Verify |
+| Role | Restringir tela ou action a um perfil | Reactive, Mobile, Traditional, Service | `security-config-reactive.json` (`link` em `Roles` da tela) | `get` da tela: `Roles` > 0 (no `get`, propriedades-expressao aparecem como `@chave.#Prop`; use `dump` para ver o texto) |
+| Server action | Logica de servidor: consultar, gravar, calcular, chamar REST. A tela chama um wrapper, nao a entity action (Security Warning) | Service, Reactive, Mobile, Traditional | `smoke-data-logic.json` (aggregate, If, Assign, Execute, Raise), `producer-public.json`, `aggregate-full.json` (join, sort, group) | `layout` sem sobreposicao; `find` da action |
+| Action por SPEC de logica (preferir para server/service actions de negocio) | Uma op `logic` declara inputs/outputs/vars e os passos (get, assign, call, save/create/update/delete, if/then/else, foreach, raise); Start, End, ligacoes e layout sao gerados; esquema FECHADO: chave errada, entidade/action/exception inexistente ou nome repetido falham na compilacao com a lista do permitido (secao 2.1) | Service, Reactive, Mobile, Traditional | `logic-spec-services.json` (5 actions: 4 service com call+assign, 1 server com todas as formas); negativo `logic-unknown-key.json`; `cat-a-reset-typed-values.json` (action nova que repoe saidas tipadas nos valores neutros com duas exclusoes, chamada inserida num ramo de um If herdado: liga-se primeiro o no novo ao sucessor e so depois se reaponta o conector do ramo); negativo `cat-a-link-unknown-connector.json` (conector que o no nao tem) | `find` da action; nos com os nomes do `as` |
+| Service action | Expor logica de um modulo Service a outros modulos por chamada remota, sem referencia forte a entidades | Service apenas (o mapa recusa em UI) | `service-action.json`, `service-action-update.json` (le, muda e grava) | consumidor a chama com `IExecuteServerActionNode` |
+| Client action | Logica no browser/dispositivo: JavaScript, local storage, formatacao sem servidor. Chamar de uma screen action: `create IExecuteClientActionNode` + `set Action IClientAction:X` + `$no/<Input>` | Reactive, Mobile | `client-js-reactive.json`, `client-js-format-reactive.json`, `local-storage-mobile.json` | se JS, `set JavaScript` com `$parameters` |
+| Screen action | Reacao a evento de tela (botao, link, evento de bloco); chama server e client actions | Telas Reactive, Mobile e Traditional | `screen-form-reactive.json`, `osui-patterns.json` (handler de evento), `cat-b-screen-lifecycle.json` (ciclo de vida: OnInitialize/OnReady/OnDestroy da tela e OnParametersChanged do bloco ligados a screen actions; o mesmo cenario em `tests/jobs-odc`) | `set $btn/OnClick Destination` sem `RequiredPropertyValue` |
+| Data action | Dados da tela vindos de logica (REST, calculo, lista montada) em vez de aggregate | Telas e blocos Reactive/Mobile | `data-action-reactive.json` | output usado na tela (`GetX.Saida`) |
+| Aggregate | Ler entidades com filtro (`IFilter` args.condition, pode citar inputs), join (`IJoin` LeftSource/RightSource/JoinType/Condition), sort (`ISort`), group by (`IGroupByAttribute`), agregacoes (`IAggregateAttribute` + `AggregationType` Count/Sum/Max/Min/Avg; no ODC a interface chama-se `IAggregatedAttribute`, e o `get` compacto da spec de logica escolhe o nome da faixa: `tests/jobs-odc/logic-aggregate-columns.json`), coluna calculada (`ICalculatedAttribute` + `set Value <expressao>`), `set MaxRecords` | Actions (`IAggregateNode`), telas (`IScreenAggregate`), preparations | `aggregate-full.json` (join + Count), `aggregate-sum-calc.json` (Sum/Max/Min/Avg + calculada), `screen-form-reactive.json` | sem group by: `GetX.List.Current.Entidade.Attr`; COM group by ou agregacao: `GetX.List.Current.<NomeDaColuna>` (sem o alias da entidade); `GetX.List.Length` |
+| SQL | Consulta que o aggregate nao expressa: `ISQLNode` + `set Statement` (`{Entidade}.[Attr]`, `@Param`), `ISQLInputParameter` com `DataType`, `ISQLOutput` com `args.entityOrStructure` (entidade ou structure), argumento `set $sql/arg:Param Value`, resultado em `<No>.List` (`<Structure> List`) | Actions de servidor | `sql-input-output.json`; receita `src/Anvil.Core/Recipes/TemporadaRecipe.cs` (Home_Search) | output usado num Assign; `SQL_Enumeration` e so sugestao (use `{X}.*` se quiser 0 avisos) |
+| Timer | Tarefa agendada ou disparada por action. A agenda e o `Schedule` (ex. `"10:00 14:30"`) ou o `CronSchedule` do timer; um `ITimeOfDay` fica com `Interval` Any (a hora e o seu Hour/Minute; `AtOrOn` e recusado porque a plataforma cai ao ordenar dois itens: `tests/jobs-odc-negative/timeofday-interval-atoron.json`) . O11: `Schedule` em texto, `"Every 60 minutes"`, `"Every day at 00:00"`, `"Every Monday at 00:05"` | Service, Reactive, Mobile, Traditional | `pacote-laneE-timer-schedule.json` (O11, as tres agendas), `process-human-traditional.json`; ODC: `tests/jobs-odc/timer-time-of-day.json` | `Action` definida; `get` le o `Schedule` |
+| Imagem | Imagem do modulo (logo, icone) e, so em Traditional, a versao por idioma (`ILocalizedImage`, recusada pela plataforma em Reactive, Mobile e ODC) | Reactive, Mobile, Traditional (nao Service) | `image-localized.json` (`args.binary` em base64, `create ILocale` com `args.culture`); ODC: `tests/jobs-odc/image-create.json`; negativos `image-binary-not-base64.json` e `tests/jobs-odc-negative/localized-image-reactive.json` | `get`: Width, Height e OriginalFormat lidos do binario |
+| Processo (BPT) | Fluxo com passos automaticos e humanos, durabilidade e taskbox. Human Activity: `set $human Destination IWebScreen:Tela` e depois os inputs da tela viram argumentos `$human/<Input>`. Editar: a atividade automatica ja NASCE com Start e End proprios (criar os seus da `InvalidFlow_TooManyNodes`), e `link` entre nos de processo ACRESCENTA conector em vez de substituir, por isso inserir um passo no meio exige apagar antes o conector que existia. Apagar uma atividade exige apagar antes o conector que a consome (o `usages` mostra-o como conector do no anterior) | Service, Reactive, Traditional; Human Activity so com tela Traditional como destino | `process-bpt.json`, `process-human-traditional.json`, `process-expense-traditional.json`, `process-edit-delete.json` (editar e apagar) | `Detail` definido; `layout` do processo |
+| REST consumido | Chamar API externa. Query string vai no proprio `URLPath` (`/latest?from={from}&to={to}`) com um input `UrlPlacement` por `{param}`; structures aninhadas: crie a filha antes e use o nome dela como `DataType` do atributo; literais Text em argumentos levam aspas (`"\"EUR\""`) | Service, Reactive, Mobile, Traditional | `rest-consume-get.json`, `rest-consume-post.json` (auth, headers), `rest-consume-call.json`, `rest-query-nested.json` (query string, structure aninhada) | Verify; depois publicar e chamar |
+| REST exposto | Expor endpoint | Idem | `rest-expose.json` | `IRestServiceAction` ja nasce com Start/End |
+| REST numa op (consumir, expor, OpenAPI) | Cliente ou servico inteiro numa chamada: op `rest` (client, methods, structures, openapi, remove, breaks) e op `rest-expose` (service, methods com action/arguments/results ou steps, remove); secao 2.2 | Todos | `rest-spec-consume.json`, `rest-spec-expose.json`, `rest-spec-edit-delete.json` (redeclarar no lugar e remover); ODC: `tests/jobs-odc/rest-spec-consume.json`, `rest-openapi-import.json`; negativos `rest-spec-invalid-path.json`, `rest-delete-consumers.json` | resultado `integration` (imported/updated/removed) |
+| SOAP (O11) | Consumir web service SOAP do WSDL: op `soap` (wsdl, port, methods, refresh, remove) pelo `o11_deliver` (import do proprio Studio pela bridge, depois um merge); ODC: `SOAP_LANE_UNSUPPORTED` | O11 | negativo `soap-method-not-found.json`; ao vivo `tests/jobs-live/soap-import-calculator.json` | resultado `integration.selection` (porta); tipos exatos do WSDL |
+| Email | Email transacional | Traditional apenas (flow `Emails`) | `email-traditional.json`, `email-digest-foreach-traditional.json` (ForEach + timer) | `ISendEmailNode` com `Email` e `To` |
+| Referencia a outro modulo | Usar entidade, action ou bloco publico de outro modulo: `{"op":"reference","producer":"job:producer-public" ou "Headless_CS","elements":["IServerEntity:Product","IServerAction:Product_GetById"]}`; `job:` procura na pasta do job e em tests/jobs; snapshot nomeado ligado por `--producer Headless_CS=<oml>`; caminhos diretos so de fixtures; as structures que os elementos usam vem junto. Produtor sem OML local (extensao .NET, eSpace ou (System)): `anvil signature --producer <Nome> --elements "<Tipo:Nome>" --out <abs>.avsig` captura a assinatura do servidor so leitura pelo Studio logado (guarda de VersionId, fechamento de tipos) e o job liga `--producer <Nome>=<.avsig>` (`System=<.avsig>` para o (System)), com os refs `.avsig` como primeiros ops; `elements: []` refresca uma referencia existente; no deliver, `--capture-producer Nome[=Produtor]` captura na pasta da tarefa (uma vez por produtor; a retomada captura so as que faltam) e re-atesta antes do apply e do merge (`docs/proofs/2026-09-26-o11-manage-dependencies.md`) | Todos | `consume-reference.json`, `consume-reference-screens.json` (tela com Table e detalhe); ao vivo `tests/jobs-live/consume-headless-cs.json` | `find` do elemento; TrueChange sem `OutdatedReference` |
+| Papeis de usuarios finais (O11) | Conceder/revogar papeis persistentes do PROPRIO modulo a contas existentes (demo = username nos defaults `DemoLoginUsernames`/`OpsDemoLoginUsernames` do modulo dono, lidos do OML; o flag do manifesto so confirma; o `ReconcileAccess` gerado reconfere `Site.<allowlist>` em tempo de execucao antes de criar conta ou conceder a linha demo), por manifesto versionado; nunca senha, UserManager ou papeis do Users | Modulo dono do papel (referencia (System) User) | manifestos em `tests/access/` (nao sao jobs): `anvil access plan --manifest <m>` (ou `ssam access plan --lane o11`) le os papeis dos OMLs atuais, gera e prova um job privado por modulo dono; `access apply --words "..."` so prepara (comandos `deliver` com `--expected-environment` e recibo so com hashes); executar e so `--execute` no CLI (o MCP `o11_access` nunca executa), com a mesma `--port`/`--deliver-work` do preparo (senao recusa); contrato e prova em `docs/proofs/2026-09-26-o11-access.md` | recibo do plano ok, 0 mensagens novas, `publicActions 0`; depois da publicacao o usuario confere no app Users |
+| Spec de telas | Catalogo, tabela, detalhe, formulario ou dashboard usando blocos do modulo (secao 3.4) | Reactive/Mobile | `screen-spec-cards-reactive.json`, `screen-spec-cards-mobile.json`, `screen-spec-table-reactive.json`, `screen-spec-detail-tabs-reactive.json`, `screen-spec-form-reactive.json`, `screen-spec-dashboard-reactive.json`, `screen-spec-store-reactive.json` | 0 mensagens novas; find de CardSectioned, Pagination, Search, Tabs, Rating |
+| Autoria HTML/CSS | Pagina inteira escrita em HTML/CSS pela LLM com manifesto tipado por chave `data-av` (secao 3.5): tags, ordem, classes e atributos preservados; dados, filtros, datas, eventos, valores derivados e funcoes JS so pelo manifesto; CSS escopado e instalado no tema; tela existente atualizada com identidade preservada | Reactive/Mobile | `html-dashboard-reactive.json`, `html-dashboard-update.json` (delta), `tests/jobs-live/html-dashboard-incidents.json` (produto); fonte `tests/html/incidents-dashboard.html` via `scripts/gen_html_job.py` | 0 mensagens novas; find de Dashboard, LoadDashboard, Page, Recent, PeriodStart |
+| Tela Reactive/Mobile | Secao 3.1 | Reactive, Mobile | `screen-reactive.json` (minima: layout, aggregate, List), `screen-form-reactive.json`, `screen-list-reactive.json`, `screen-search-refresh-reactive.json` (pesquisa com `like`, Table, Refresh Data), `table-if-reactive.json`, `widgets-reactive.json`, `gallery-native-reactive.json`; portas O11 da frente B de jobs ODC provados: `cat-b-app-events.json` (external site e eventos de aplicacao), `cat-b-block-placeholder.json` (placeholder de bloco com conteudo de exemplo e instancias), `cat-b-flow-comment-popover.json` (comentario do fluxo de UI e popover/metadata), `cat-b-theme-resource.json` (tema, script e recurso: nascimento, edicao, refatoracao e delecao) | `dump` da tela; TrueChange |
+| Tela Traditional | Secao 3.2 | Traditional | `screen-crud-traditional.json`, `osui-web-patterns.json`, `cat-b-traditional-gallery.json` (widgets web que nenhum job criava, a partir dos contratos de screen-coverage) | idem |
+| Padrao do OutSystems UI | Accordion, Tabs, Card, DatePicker, Carousel... (secao 3.3) | Reactive/Mobile: OutSystemsUI; Traditional: OutSystemsUIWeb | `osui-patterns.json`, `osui-datepicker-handler.json` (DatePicker, Tag, Tooltip, Counter), `osui-patterns-mobile.json`, `osui-web-patterns.json`; contrato em `docs/ui/<Modulo>/blocks/<Bloco>.md` | `docs/ui/gallery-reactive.md` diz se o bloco nasce limpo |
+| App inteiro (referencia) | Data model de 20 entidades + 40 server actions + timers + service actions de um help desk, gerados por script (`scripts/gen_tickets.py`) em 8 jobs encadeados (para provar por partes) mais o job composto `tickets-all.json` (`jobs`: as 8 partes numa transacao; e ele que entrega tudo num merge so) | Service | `tickets-all.json`, `tickets-01-data.json`, `tickets-02-helpers.json`, `tickets-03-lifecycle.json`, `tickets-04-collab.json`, `tickets-05-org.json`, `tickets-06-sla.json`, `tickets-07-read.json`, `tickets-08-services.json` | cada parte com Verify 0 erros; specs em docs/specs/tickets-*.md |
+| Refatorar | Saber quem usa, renomear, repontar, apagar sem quebrar. `usages` devolve `count` (todos os referers), `real` (uso de verdade) e `entries` com `derived` true para o que o Studio mantem sozinho (lista de atributos de aggregate, sample records e, no ODC, o `IRecordAttributeValue` do registo de exemplo; tambem o que a plataforma gera com o alvo e acerta ao apaga-lo, secao 2 **Apagar com consumidores**); `rename` devolve `consumers` e `expressionsRewritten`; `replace` (secao 2) reponta todos os consumidores de um objeto para outro; `duplicate` copia no mesmo pai com o sufixo da plataforma e SEM consumidores; `move` reordena dentro do mesmo pai e devolve a ordem que ficou; `delete` devolve `brokenConsumers`; para reescrever uma action use `logic` com `replace:true`, que recria no mesmo comando e verifica os consumidores | Todos | `refactor-usages.json`, `refactor-contact-reactive.json`, `refactor-replace-action.json`, `rename-data-propagation.json`, `rename-logic-propagation.json`, `rename-interface-propagation.json`, `rename-indexed-attribute.json`, `refactor-duplicate.json`, `refactor-move.json`, `delete-data-consumers.json`, `delete-logic-consumers.json`, `delete-interface-consumers.json`, `cat-b-screen-replace-delete.json` (tela: `replace` dos consumidores, `move`, `delete` sem force; botao apagado, expressao reordenada, UI flow renomeado; o mesmo cenario em `tests/jobs-odc`) | `usages` antes e depois; Verify 0 erros |
+| Evento de bloco | O bloco fala com quem o instancia: `IBlockEvent` no bloco (um `IInputParameter` por parametro, `IsMandatory`), `ITriggerNode` numa screen action do bloco para disparar (`set $trg Event $ev`, argumentos em `$trg/<Param>`), e na tela `set $b/<Evento> Handler $acao` mais `set $b/<Evento>/<Param> Value`. O argumento e EXPRESSAO, num escopo SOMADO: enxerga os parametros do evento E as variaveis da tela, por isso o handler pode ter nomes fora do contrato. Tipos: lista e registo passam (lista de estrutura le-se `Var.Current.<Attr>`, SEM o nivel do aggregate). Mudar o contrato depois quebra **quem dispara**, nao quem consome (`ArgumentRequiredExpression` no ITriggerNode). Duas instancias do mesmo bloco tem handlers independentes e o bloco continua com UM trigger. O consumidor nao precisa de ser tela: um bloco instancia outro e o handler do evento de baixo dispara o de cima. `IsMandatory` sem handler NAO e recusa do kernel nem aviso: e **erro** do Verify (`EventHandlerRequiredAction`), cobrado por INSTANCIA. O `IEventHandler` nasce com a instancia mesmo vazio, logo conta em `usages` e o `delete` do evento e recusado ate sem handler ligado; para apagar, na ordem: o IEventHandler, religar o predecessor e tirar o ITriggerNode, o IBlockEvent, e por fim a screen action que ficou orfa (senao `UnusedAction`) | Blocos Reactive e Mobile | `block-events-reactive.json` (criar e consumir), `block-events-update.json` (mudar o contrato, por `job:`), `block-events-types-reactive.json` (lista, registo, identificador e mais cinco tipos), `block-events-two-instances-reactive.json` (duas instancias, escopo somado), `block-events-nested-reactive.json` (bloco dentro de bloco), `block-events-mandatory-reactive.json` (obrigatorio sem handler: erro), `block-events-delete-reactive.json` (apagar na ordem certa), `cat-b-block-rename.json` (renomear o evento e o no trigger: os consumidores seguem por chave) e `tests/jobs-negative/delete-block-event-in-use.json` (a recusa); na faixa ODC, `tests/jobs-odc/block-events` liga pela autoria visual (que liga por NOME, sem remapear), com `block-events-types`, `block-events-two-instances`, `block-events-nested`, `block-events-mandatory` e `tests/jobs-odc-negative/delete-block-event-in-use` | `usages` do evento: um ITriggerNode e um IEventHandler por instancia; Verify 0 erros |
+
+### Modelo de recrutamento e indices
+
+`hire-business-actions.json` acrescenta o núcleo de actions Hire e dados de apoio; contratos e limites em `docs/specs/hire-business-actions.md`.
+
+`hire-data-model.json` cria o modelo Hire: 65 entidades de negocio, 46 static entities, atributos, FKs,
+auditoria e indices. Dicionario: `docs/specs/hire-data-model.md`; gerador: `scripts/gen_hire_data.py`.
+Indices usam o verbo existente `create`, tipo nativo `EntityIndex` (ausente no Model API V1):
+`{"op":"create","parent":"$Candidate","type":"EntityIndex","name":"IX_Name","args":{"unique":false,"attributes":["$Candidate.OrganizationId","$Candidate.FullName"]}}`.
+A ordem de `attributes` e preservada; `unique:true` cria chave unica. Os atributos devem pertencer ao pai (server entity propria),
+sem repeticoes; argumentos desconhecidos sao recusados. `get EntityIndex:Nome` mostra Unique e Attributes, inclusive apos reload.
+O adapter SS11 usa os construtores publicos do Studio dentro da mesma transacao do job. Nao cria novo verbo.
+Regras medidas no lote de dados (2026-09-23, as duas faixas; `docs/NAO-DA.md`, seccao "Lote de dados"): o nome tem no maximo 28
+caracteres (o Studio trunca em silencio; no `create` o kernel escreve o nome truncado e relata em `nameTruncations`, no
+`rename` recusa) e nao pode colidir na entidade; o mesmo indice de novo e no-op (`indexNoOps`); `rename EntityIndex:Nome` funciona nas
+duas faixas (pela classe nativa); `set EntityIndex:Nome Unique true|false` funciona; `move` de indice e `duplicate` de indice sao
+recusados (dois indices com a mesma composicao nao existem); a composicao muda-se apagando e recriando; no ODC `move
+EntityIndex:X/<Attr> first|last|...` reordena os atributos do indice, no O11 nao (recusa). Toda FK nasce com `AutoIndex_<Attr>`, que
+conta como consumidor: apagar a FK exige apagar o AutoIndex antes; `replace` de FK arrasta o AutoIndex antigo (apagar o AutoIndex
+antigo depois do replace). O tipo identificador enderecа-se por `IServerEntity:E/#IIdentifierType` (so leitura, gerado pela
+plataforma; as FKs de outras entidades apontam para ele, por isso `usages` da entidade sub-reporta as FKs; o `delete` da entidade
+ve-as, porque olha os consumidores dos filhos: `tests/jobs-negative/delete-entity-fk-in-use.json`). `replace` entre entidades e recusado (renomear, ou reapontar atributo a atributo). `set DataType` numa FK com
+DefaultValue e recusado ate `set DefaultValue ""`. Provas: `entity-lifecycle.json`, `entity-refactor.json`,
+`data-contract-identity.json` (em `tests/jobs` e `tests/jobs-odc`) e os negativos `index-name-too-long`, `index-name-clash`,
+`index-foreign-attribute`, `index-duplicate-composition`, `duplicate-index`, `move-index`, `move-index-attribute` (O11),
+`delete-fk-attribute-autoindex`, `replace-entity`, `fk-type-change-with-default`, `delete-entity-in-use`.
+
+## 2. Os verbos (docs/architecture/2026-09-04-modelo-de-verbos.md)
+
+Escrita: `create` (parent, type, name?, args?, as?, source?, empty?), `set` (target, prop, value), `link` (from, connector?, to),
+`reference` (producer, elements[]), `move`, `duplicate`, `delete` (target, force?), `layout` (target = action, preparation ou processo),
+`rename` (target, name), `replace` (from, to, force?), `spec` (data). Leitura: `get`, `find` (name?, type?), `dump` (target, depth), `usages` (target).
+
+Referencias a objetos: `$alias` (definido por `as`), `@espace`, `@<ObjectKey>`, `Tipo:Nome` (ex. `IServerEntity:Booking`,
+`IMobileBlock:Tabs`; vale para elementos referenciados de outros modulos), `$pai/Filho` (filho por nome; argumento pelo nome do
+parametro; placeholder pelo nome; handler de evento pelo nome do evento; propriedade que devolve objeto: `$btn/OnClick`,
+`$tela/OnReady`, `$tbl/HeaderRow`), `$pai/#Tipo[n]` (n-esimo filho do tipo), `$pai/**Tipo[n]` (n-esimo descendente),
+`$no/arg:Nome` e `$no/param:Nome` quando parametro e argumento tem o mesmo nome (no JavaScript).
+Regras do motor (atritos 3): um alias responde com e sem `$`. `**Tipo[n]` segue a ordem do documento (pre-ordem, widgets na
+ordem da tela). Os ramos de um If widget respondem a `True`/`False` e a `#IIfBranchWidget[n]`. Um `set <x>/<Evento>/<Arg>`
+escrito antes do `Destination` do mesmo evento roda logo depois dele (`reorderedArguments`). Argumento que nao existe num
+Execute ou evento lista os inputs do que ele chama. `delete` apaga junto os conteudos vazios de um placeholder
+(`cascaded`) e espera o fim do job quando um op seguinte remove os consumidores (`pending`).
+`set` cru: `Style` num widget sem Style vai para `StyleClasses` ou para a propriedade estendida `class`; numa
+propriedade-expressao, palavras soltas viram texto entre aspas e `Tipo:Entidade/Atributo` vira `Entidade.Atributo`
+(`expressionRewrites`); aspas desbalanceadas e propriedade que o elemento da base nao escreve sao recusadas antes do
+primeiro op (`EXPRESSION_SYNTAX`, `PROPERTY_NOT_WRITABLE`). Campo com tipo JSON errado: `JSON_SHAPE` com ponteiro e patch;
+job em array solto vale como `{"ops":[...]}`. Refresh Data de Data Action fica sem Max. Records. No ODC, nome de icone
+FontAwesome vira o da tabela de conversao do Studio (`iconConversions`), nome desconhecido e `ICON_UNKNOWN`, e referencia
+a `User` ou a entidade de outro app fica com Delete Rule `Ignore` (`Protect` explicito: `ODC_DELETE_RULE_FORCED`).
+Variaveis locais: `create ILocalVariable` na action ou na tela + `set DataType`; guardar o output de um Execute = `IAssignNode`
+com `IAssignment` (`Variable` = a variavel, `Value` = `<NomeDoNo>.<Output>`).
+Dentro de expressoes: output de um no = `<NomeDoNo>.<Output>` (`GetUsers.List`, `MakeSlug.Slug`, `CreateOrUpdateX.Id`); argumento de um
+Execute = `set $call/<Input> prop Value`; parametros da action pelo nome (`Title`); variavel local pelo nome; `Entities.X.Y` para static.
+
+Tipos no `set DataType`: "Text", "Integer", "Long Integer", "Decimal", "Boolean", "Date", "Time", "Date Time", "Currency",
+"Email", "Phone Number", "Binary Data", "Object", "<Entidade> Identifier", "<Entidade>" ou "<Structure>" (record, inclusive de
+modulos referenciados), "<X> List" (cria a lista se preciso). Expressoes sao texto OutSystems: `set` de `Condition`, `Value`,
+`Variable`, `Source`, `DefaultValue`, `ExceptionMessage`, e de qualquer propriedade que devolva expressao (Mandatory, Enabled...).
+Valores no `set`: propriedade booleana ou numerica recebe JSON (`true`, `50`); propriedade-expressao recebe texto OutSystems entre
+aspas do JSON (`"True"`, `"\"Ola\""`, `"GetX.List.Current.User.Name"`); `name` e opcional em widgets sem logica (Expression, Container).
+Byte[] (o conteudo de uma imagem: `args.binary` de `create IImage`/`ILocalizedImage`) vai como texto base64 do ficheiro, nunca como
+caminho. Um tipo cujo unico factory e `GetOrCreate<X>` usa-o no `create` (`ILocale` com `args.culture`, ex. `PT_PT`). Uma lista so de
+leitura que o Model API edita por um par `Add...`/`Remove...` (ODC: `ISemanticSearchNode.SearchAttributes`) recebe no `set` um array
+de referencias e fica exatamente com ele (`tests/jobs-odc/semantic-search-attributes.json`).
+Colecoes que o Model API muda por metodos recebem a lista inteira tambem em `Roles` (Add/Remove da colecao); no Semantic Search
+os itens podem ser o atributo (`$Entidade.Attr`) ou o seu `AsSearchable` (`tests/jobs-odc/logic-semantic-search.json`).
+Funcoes de expressao: SO as do catalogo do Studio CARREGADO, e o catalogo DEPENDE DA FAIXA -- 121 no SS11
+(`docs/functions.md`) e 128 no ODC Studio, que tem mais sete: `NullFile`, `Size`, `MIMEType`, `IsTemp`,
+`IsOwnedByCurrentApp` (File), `GetAppName` (Organization) e `CheckEndUserRole` (Roles). Por isso `docs/functions.md`
+NAO serve de lista fechada para um job ODC; o runner le o catalogo em runtime e ja aceita as 128 na faixa ODC.
+Consulta (que responde pela faixa em que corre): `dotnet .local/cli/anvil.dll functions --find <parte do nome>` ou
+`--name Substr`, que da a assinatura, os tipos, onde vale e exemplos.
+Nomes de outras linguagens NAO existem (Right, Left, Mid, Len, ToText, ToString, Now, Today, IIf, DateDiff...): o runner devolve
+`Hint UnknownFunction` com as parecidas (Right -> Substr/Length) antes do Verify; exemplo negativo em `tests/jobs-negative/unknown-function.json`.
+Operadores: `and`, `or`, `not`, `=`, `<>`, `<`, `>`, `+`, `-`, `*`, `/`. As mais usadas: `Substr(t, inicio0, n)`, `Length(t)`, `Index(t, sub)`,
+`Replace`, `Trim`, `ToUpper`, `IntegerToText`, `LongIntegerToText`, `DecimalToText`, `TextToInteger`, `DateTimeToText`, `FormatDateTime(dt, "yyyy-MM-dd")`,
+`FormatDecimal`, `CurrDate()`, `CurrDateTime()`, `AddMinutes/AddHours/AddDays`, `DiffMinutes/DiffHours/DiffDays`, `NullIdentifier()`,
+`NullDate()`, `NullTextIdentifier()`, `If(cond, a, b)`, `GetUserId()`, `CheckRole(RoleId, UserId)`.
+Enums pelo nome: JoinType None/Inner/Right/Left/Full; Sort Ascending/Descending; AggregationType Count/Sum/Avg/Max/Min;
+AutoNumber Yes/No; Method Submit/Ajax/Navigate. If: `link from $if connector TrueTarget|FalseTarget to $no`.
+
+Gravar e ler registros dentro de uma action: `create IExecuteServerActionNode` + `set $no Action IEntityActionSignature:CreateOrUpdateX`
+(ou UpdateX, CreateX, DeleteX, GetX) + `set $no/Source Value <record>` (Delete/Get: `$no/Id`); o output fica em `<NomeDoNo>.Id`.
+Ler: `IAggregateNode` + `IAliasedSource` (args.dataSource) + `IFilter` (args.condition) e usar `GetX.List.Current.Entidade.Atributo`.
+Nao de ao aggregate o nome padrao do Studio (`Get<Entidade>s`, ex. GetTeamMembers): ao receber filtro ele e renomeado sozinho
+(GetTeamMembersByTeamId) e as expressoes que o citam quebram; use outro nome (GetMembersOfTeam).
+Fluxos: `link from $a to $b` liga pelo conector padrao (`Target`); `connector` escolhe outro: If `TrueTarget|FalseTarget`, ForEach
+`CycleTarget` (entra no ciclo; o `Target` e a saida), Switch pelos seus conectores; varios nos podem ligar ao mesmo `IEndNode`.
+ForEach: `create IForEachNode` + `set Label` + `set RecordList "GetX.List"`, `link ... connector CycleTarget to $primeiroDoCiclo`,
+`link $ultimoDoCiclo to $foreach` (volta) e `link $foreach to $depois` (saida); dentro do ciclo use `GetX.List.Current.X.Attr`.
+Consulta rapida de qualquer interface do Model API (propriedades gravaveis, o que cria): `dotnet .local/cli/anvil.dll api --name IForEachNode`.
+If: `link ... connector TrueTarget|FalseTarget`; em If, Assign e ForEach o `name`
+do create e descartado, o que aparece e o `Label` (faca `set ... Label`).
+Op `spec` (dados em 1 op): `{"op":"spec","data":{"static":[{"name":"X","records":[{"name":"A","label":"A","order":1}]}],
+"entities":[{"name":"E","public":true,"description":"...","attributes":[{"name":"A","type":"Text","mandatory":true,"length":50,"default":"\"x\""}]}],
+"clientEntities":[...],"structures":[{"name":"S","public":true,"attributes":[{"name":"A","type":"Text"}]}]}}`; `id`, `label` e `order` dos records
+sao opcionais (default = posicao, nome e posicao; `id` inteiro positivo e unico na static); aliases gerados: `$E`, `$E.A`, `$X.A`, `$S`.
+Atributo de structure aceita `length` e `label`. Valor de spec vira o literal que o Studio guarda (`true` = `True`, palavra solta
+de Text entre aspas), relatado em `expressionRewrites`; texto de registro maior que o atributo e recusado com o fix exato
+(`SPEC_VALUE_TOO_LONG`). Indice igual a um existente e no-op (`indexNoOps`). Nome de atributo ou indice com mais de 28
+caracteres fica como o Studio guarda (os 28 primeiros, numerado se repetir) e a prova de dados espera esse nome (`nameTruncations`).
+Structure que uma structure publica usa vira publica; autorreferencia com Delete Rule `Delete` fica `Protect` (relatados).
+Convencoes que a API nao diz: Id Long Integer AutoNumber + IdentifierAttribute; static entity com Id Integer SEM AutoNumber
+(SEMPRE: o ODC Studio recusa ao vivo 'StaticEntity Auto Number', que o Verify headless nao apanha; a spec poe `IsAutoNumber No`
+e preenche o Id de cada registo com o `id` do registo ou a posicao 1..n; nos verbos crus o preflight recusa `IsAutoNumber Yes`
+num atributo de static entity e exige `$registo/Id prop Value` em cada registo novo), Label, Order;
+If/Assign/ForEach usam `Label`; `layout` sempre no fim de cada fluxo (nada na diagonal); server action wrapper em vez de entity
+action direta a partir da tela; `delete` recusa se ha consumidores (use `usages`, ou `force`); `rename` recusa colisao de nome.
+
+**Repontar consumidores (op `replace`).** `{"op":"replace","from":"<ref>","to":"<ref>"}` faz TODO consumidor de `from`
+passar a apontar para `to`. Nao e busca e substituicao de texto: e o mesmo `AbstractObject.ReplaceReferences` que o
+proprio Studio usa ao clonar e ao apagar, publico nas duas plataformas (no ODC ele ainda aparece na API como
+`IObjectSignature.ReplaceReferences`). Quem reescreve por dentro sao as implementacoes da plataforma: expressoes
+religam o binding, SQL e JavaScript regeneram o texto. O no consumidor mantem a MESMA chave. Tipos diferentes exigem
+`force` (trocar por outro tipo quase sempre quebra o Verify). Literais, descricoes, URLs e CSS nunca propagam, como no
+`rename`. Depois do replace o alvo antigo fica sem consumidores e o `delete` nao precisa de `force`. Provas:
+`refactor-replace-action.json` (a tela passa a chamar a action nova e a antiga e apagada) e, na faixa ODC,
+`tests/jobs-odc/refactor-replace-action.json`.
+
+**Apagar com consumidores (op `delete`).** O `delete` recusa quando o alvo tem consumidores reais, e a mensagem
+NOMEIA cada um pelo caminho (`delete: refused, <alvo> is used by N consumer(s): <caminho>; ... or pass "force": true
+to break them`); usos derivados nao contam (lista de atributos do aggregate, registo de exemplo, e no ODC o
+`IRecordAttributeValue`). As duas metades estao provadas. Caminho limpo: `delete-data-consumers.json` (atributo usado
+por filtro de aggregate, Expression, argumento e Input, que saem um a um), `delete-logic-consumers.json` (action
+chamada por outra action e por uma tela: `replace` reponta as duas e so entao o delete passa) e
+`delete-interface-consumers.json` (Label com `TargetWidget` e bloco proprio instanciado). Recusa, em
+`tests/jobs-negative/`: `delete-attribute-in-use.json`, `delete-action-in-use.json`, `delete-block-in-use.json` e
+`delete-widget-in-use.json`. Na faixa ODC: `tests/jobs-odc/delete-data-consumers`, `delete-logic-consumers`,
+`delete-data-in-use` e `delete-attribute-no-consumers` (este prova que o registo de exemplo nao bloqueia o delete).
+Para apagar um no no meio de um fluxo, religue o predecessor ANTES: o conector de entrada conta como consumidor.
+O delete olha os consumidores do alvo E dos seus filhos (a FK que cita o tipo identificador de uma entidade, o Execute
+de uma action de entidade, a expressao que le um atributo); um consumidor dentro de outro (o IArgument de um Execute
+que ja conta) nao se repete. Tambem nao contam, porque a plataforma os acerta sozinha ao apagar (o Studio apaga e o
+modulo fica valido): o IDecisionOutcomeNode de cada conector de Decision (o fluxo da decisao e regenerado), a
+propriedade `On*Callback` do cliente/servico REST que guarda o callback, o IArgument do no SQL para o parametro que ele
+declara, e a DefaultScreen do modulo (fica o aviso 'Unknown Default Screen' no ESpace; escolha outra tela com
+`set @espace DefaultScreen`). Os tipos gerados com o alvo -- o registo anonimo `<X> Record` e a lista `<X> List` de
+uma entidade/structure, a excecao `Not <Role>` -- so contam se alguem os usa, e entao a recusa nomeia QUEM os usa (a
+variavel, o handler). Provas: `delete-generated-companions.json`, `delete-platform-consumers.json`,
+`delete-default-screen.json` (e os dois primeiros em `tests/jobs-odc`); recusas `delete-entity-list-type-in-use.json`,
+`delete-role-exception-in-use.json`, `delete-entity-fk-in-use.json` (e os dois primeiros em `tests/jobs-odc-negative`).
+O registo anonimo de um elemento apagado fica orfao no modelo em memoria e nao vai para o OML gravado.
+
+**Renomear (op `rename`).** O `rename` recusa colisao de nome no mesmo escopo (`rename: 'X' clashes with an existing
+name in that scope (the Studio would use 'X2'); pick another name`) e devolve `consumers` e `expressionsRewritten`.
+Os consumidores ficam ligados por CHAVE e a plataforma regenera o texto do que e modelo: expressoes que citam
+entidade, atributo, parametro ou variavel; o `Statement` do SQL (`{Entidade}.[Atributo]`); o corpo de um
+`IJavaScriptNode` nos `$parameters.<Nome>`; o `URLPath` de um metodo REST exposto — INCLUSIVE o segmento com o nome
+do metodo, ou seja, a URL publica do endpoint muda sozinha e ninguem avisa que os consumidores externos partiram; o
+nome do no consumidor de uma action e o nome da instancia de um bloco (`ContactCard1` vira `PersonCard1` sozinho);
+`Destination`, `SourceBlock`, argumentos e os `Label` automaticos. NAO acompanha nada disto, e e preciso corrigir a
+mao: `Description`, `Label` escrito por `set`, literais de texto dentro de expressoes, nome de indice, nomes de
+aggregate/widget/parametro que citem o nome antigo, o `StyleSheet` da tela e do bloco, a classe CSS na propriedade
+`Style`, legendas de botao, o `window.<Global>` declarado dentro de um `IScript` e URLs escritas a mao.
+**Diferenca de plataforma:** na faixa O11 uma expressao `<No>.<Saida>` NAO e reescrita quando a action, o no ou a
+saida sao renomeados (o modulo cai com `ExpressionUnknownObject: Can't identify '<NomeAntigo>' element in
+expression`); na faixa ODC a mesma expressao e reescrita sozinha. Nas duas faixas o `rename` devolve
+`expressionsRewritten: 0` nesse caso, porque quem conta como consumidor e o NO, nao a expressao que le o no: quem
+confiar no numero entrega quebrado. Depois de renomear uma action, LEIA de volta com `get`/`dump` as expressoes que
+citam o no. Provas: `rename-data-propagation.json` (entidade, atributo, variavel, indice, SQL),
+`rename-logic-propagation.json` (script, client/server/screen action, parametros de JavaScript, REST exposto),
+`rename-interface-propagation.json` (tela, bloco, parametro de bloco, CSS e deep link) e a recusa em
+`tests/jobs-negative/rename-name-clash.json`; na faixa ODC, `tests/jobs-odc/rename-data-propagation.json`,
+`tests/jobs-odc/rename-logic-propagation.json`, `tests/jobs-odc/rename-interface-propagation.json` e
+`tests/jobs-odc-negative/rename-name-clash.json`. Um `EntityIndex` segue o rename dos atributos que cobre (o `get`
+mostra `Attributes` ja com o nome novo) e o contrato de dados afere isso por CHAVE, por isso renomear um atributo
+indexado no MESMO job que cria o indice e entrega valida: `rename-indexed-attribute.json`.
+O `rename` escreve o nome que o Studio mostra para o TIPO do alvo e devolve-o em `property`: `Name` na maioria;
+`Identifier` num registo de static entity (com a mesma recusa de colisao e os consumidores reescritos); `Label` nos nos
+If, Assign, ForEach, Switch e Message e na condicao de Switch (o rotulo repete-se, nao ha colisao); `Property` de um
+Extended Property e `Event` de um Extended Event. O contrato de dados afere essa mesma propriedade. Recusa curta, sem
+"Cannot find handler": conectores (`connectors have no name`), tipos sem nome nenhum (Start, End, Raise Exception,
+Filter, Sort, Join, GroupBy, Assignment, Comment, itens de agenda: `has no name`), o que mostra o nome de outro objeto
+(AddSource -> a fonte; destino -> a tela) e lugares fixos (system event, callbacks, Preparation: `has a fixed name`).
+Provas: `rename-name-property.json` (nas duas faixas) e as recusas `rename-connector.json`, `rename-no-name.json` e
+`rename-static-record.json` (colisao de Identifier) em `tests/jobs-negative` e `tests/jobs-odc-negative`.
+
+**Duplicar (op `duplicate`).** E o Ctrl+D do Studio: a copia entra no MESMO pai, no FIM da sequencia, e o nome ganha o
+sufixo que a PLATAFORMA escolhe (`Body` -> `Body2`, `Greet` -> `Greet2`) — o job nao escolhe o nome, renomeia a seguir
+se quiser outro. Copiar um contentor, uma action, uma entidade ou uma tela leva tudo o que esta dentro, e as
+referencias INTERNAS acompanham a copia (o botao copiado chama a action copiada), mas a copia nasce **sem
+consumidores**: quem usava o original continua a usar o original. E por isso que a copia de uma action aparece no
+Verify como `UnusedAction` — nao e defeito do job, e o significado da operacao; declare-a em `expectedMessages`.
+A copia de uma entidade traz os proprios `IEntityActionSignature` (`GetDupNotice2`, ...) e o proprio identificador.
+Provas: `refactor-duplicate.json` (atributo, entidade, widget, screen action e tela, com `usages` antes e depois a
+mostrar `real: 1` no original e `real: 0` na copia) e, na faixa ODC, `tests/jobs-odc/refactor-duplicate.json`.
+A copia e o copiar e colar nativo (ClipboardManager). `parent` cola noutro pai compativel (outra tela, outro UI flow,
+outro bloco); quando o pai do Model API nao aceita o tipo, a colagem vai para o contentor nativo dentro dele que aceita
+(o `content` de um IContainer, o Flows.Decision escondido debaixo de um IDecisionNode). O kernel recusa ANTES, com o
+motivo, o que a colagem nativa recusaria so com 'Condition is false': o tipo que a plataforma nao copia sozinho
+(CanBeRootOfImport falso: sort, join, fonte e operacao de agregado, conector, linha e celula de tabela, callbacks REST;
+duplique o dono), a copia que leva uma model feature que este Studio nao carrega (ColumnGap usa ModernLayouts; no ODC
+client entity, global events e expose SOAP tambem), o pai que nao aceita o tipo e o pai que ja tem o unico (Preparation,
+OnException: passe `parent`). Provas: `tests/jobs/duplicate-into-parent-traditional.json`,
+`tests/jobs/duplicate-into-parent-reactive.json`, `tests/jobs-odc/duplicate-into-parent.json`
+e as recusas `tests/jobs-negative/duplicate-*.json` e `tests/jobs-odc-negative/duplicate-*.json`.
+
+**Reordenar (op `move`).** Sem `into`, `move` REORDENA dentro do mesmo pai. Direcoes: `first`, `last`,
+`before: <irmao>`, `after: <irmao>`; e `x`/`y` para posicionar um no de fluxo no desenho (so desenho). Devolve a
+`order` que ficou, por isso a prova esta no proprio resultado do op e nao e preciso um `dump` a seguir. Funciona em
+tudo o que o modelo guarda como sequencia: atributos de entidade (a ordem das colunas), widgets dentro de um
+contentor (a ordem da pagina), parametros de entrada (a ordem que quem chama ve) e variaveis de tela. Duas recusas,
+com a mensagem que ensina: `before`/`after` de um objeto de OUTRO pai (a plataforma cairia em `Condition is false`) e
+um filho que o pai nao guarda em sequencia — as screen actions de uma tela, por exemplo, sao listadas pelo proprio
+Studio e nao tem ordem de autor; a mensagem lista entao as sequencias que aquele pai tem. Nota: a API deixa por um
+atributo a frente do proprio `Id`, coisa que a interface do Studio nao faz. Igual nas duas faixas. Provas:
+`refactor-move.json` e `tests/jobs-negative/move-foreign-sibling.json`, `tests/jobs-negative/move-not-a-sequence.json`;
+na faixa ODC, `tests/jobs-odc/refactor-move.json` e `tests/jobs-odc-negative/move-foreign-sibling.json`.
+
+**Mudar de pai (op `move` com `into`).** `{op:"move", target, into, first?|last?|before?|after?}` usa os dois caminhos do
+arrastar do Studio. Elemento de topo listado em pastas (action, entidade, structure, variavel de sitio/sessao/cliente,
+timer, tema, script, recurso, role...): `into` e um `IFolder` do MESMO ramo da arvore, ou `@espace` para sair de
+qualquer pasta; muda so `Folder`, a chave e os consumidores ficam iguais (`key.preserved: true`). Qualquer outro objeto
+(widget, tela, bloco, variavel local, parametro, atributo): o move nativo (`IModelServices.MoveObject`) recria o objeto
+no pai novo e religa cada consumidor; a CHAVE do objeto e dos descendentes com chave global e nova (`key.preserved:
+false`, `keysChanged`), porque a plataforma da chave nova a raiz de toda importacao. Os aliases do job, o contrato de
+dados e a prova de refatoracao seguem o objeto novo. `into` num contentor usa o contentor interno dele, como o `create`;
+`first`/`last`/`before`/`after` posicionam no pai novo. Recusas, com a mensagem que ensina: pai que nao aceita o tipo
+(o teste da propria plataforma), pasta de outro ramo, objeto publico (outros modulos o usam pela chave), consumidor que
+fica fora de alcance no pai novo, e erro novo no Verify (o que o objeto usa deixou de estar ao alcance: um no ligado,
+uma variavel da action antiga); o job inteiro nao entra. Igual nas duas faixas. Provas: `refactor-reparent.json`,
+`tests/jobs-negative/move-into-incompatible.json`, `tests/jobs-negative/move-into-out-of-reach.json`,
+`tests/jobs-negative/move-into-folder-branch.json`; na faixa ODC, `tests/jobs-odc/refactor-reparent.json` e os mesmos
+tres nomes em `tests/jobs-odc-negative`.
+
+**CSS do tema (op `set` de `StyleSheet`).** O CSS de um tema tem TRES metades no modelo e o Model API expoe so uma:
+`GeneratedStyleSheet` (o que o Theme Editor gera), `UserStyleSheet` (o CSS do autor, que e o que o Studio mostra e
+deixa editar) e `StyleSheet`, que e DERIVADA — `gerada + CRLF + autor`. Ler `StyleSheet` da a derivada; escrever
+`StyleSheet` grava a metade do AUTOR. Ou seja: `set StyleSheet` num tema com CSS do Theme Editor SUBSTITUI o CSS do
+autor, e o que volta no `get` seguinte e gerada + o seu texto, nao so o seu texto. Para ACRESCENTAR, leia antes
+(`get` do tema mostra as tres metades quando elas divergem) e escreva o todo, ou use o op `html`, que ja faz o ciclo
+e instala o bloco na metade do autor. O resultado do `set` diz onde o texto caiu (`styleSheet.wroteInto`,
+`userChars`, `generatedChars`). Num tema SEM Theme Editor as tres metades sao o mesmo texto e nada disto aparece.
+Vale nas duas faixas (o modelo e o mesmo); prova em `tests/jobs-odc/theme-css-halves.json` e nos numeros de
+`Anvil.Tests.Odc.ThemeCssTests`.
+
+**Codigo em varias linhas (CSS, SQL, JavaScript).** O texto de `StyleSheet` (tema, tela, bloco), `Statement` (no SQL,
+inclusive o `statement` da op `logic`) e `JavaScript` (no JavaScript, script, tela, bloco), e o bloco que a op `html`
+instala no tema, e formatado antes de chegar ao modelo, nas duas faixas (`src/Anvil.Core/Kernel/CodeFormat`). So muda
+espacos fora de strings, comentarios e literais, e so quando o texto nao esta formatado: uma linha unica com mais de 80
+caracteres e duas ou mais regras/clausulas/instrucoes, ou uma linha com mais de 120 caracteres que as tenha. CSS: uma
+declaracao por linha, 4 espacos, `}` sozinha, linha em branco entre regras, @media indentado. SQL: SELECT, FROM, cada
+JOIN, WHERE, GROUP BY, HAVING, ORDER BY e UNION na sua linha, colunas e AND/OR indentados, subconsulta indentada; a
+caixa das palavras nao muda. JavaScript: quebra depois de `{` de bloco e de `;`, indentacao por nivel; codigo ja em
+varias linhas fica como esta. Na escrita, um verificador independente prova que o texto formatado e o original sao o
+mesmo codigo (no JavaScript, o mesmo programa lido pelo Esprima); se nao forem, vai o ORIGINAL e o recibo leva a nota
+`FORMAT_SKIPPED` com o motivo. O recibo lista `formatted: [{element, language, linesBefore, linesAfter}]`. Provas:
+`code-format-reactive.json` e `tests/jobs-odc/code-format.json` (`CodeFormatJobTests`, `CodeFormatOdcTests`,
+`CodeFormatTests`).
+
+### 2.1 Spec de logica (op `logic`)
+
+```json
+{"op":"logic","data":{"actions":[{
+  "name":"Ticket_Cancel","kind":"server","public":true,"description":"...",
+  "inputs":[{"name":"TicketId","type":"Ticket Identifier"},{"name":"Reason","type":"Text","mandatory":false}],
+  "outputs":[{"name":"Ok","type":"Boolean"}],"vars":[{"name":"T","type":"Ticket"}],
+  "steps":[
+    {"get":"Ticket","as":"GetTicket","where":"Ticket.Id = TicketId","max":1},
+    {"if":"GetTicket.List.Empty","then":[{"raise":"NotFound","message":"\"Ticket not found\""}]},
+    {"assign":{"T":"GetTicket.List.Current.Ticket","T.StatusId":"Entities.TicketStatus.Cancelled"}},
+    {"save":"Ticket","record":"T","as":"SaveTicket"},
+    {"call":"Event_Write","as":"Ev","args":{"TicketId":"TicketId","Note":"Reason"}},
+    {"foreach":"GetWatchers.List","as":"EachWatcher","do":[{"call":"Notification_Create","as":"Notify","args":{"UserId":"GetWatchers.List.Current.TicketWatcher.UserId"}}]},
+    {"assign":{"Ok":"True"}}]}]}}
+```
+
+No `get` com `sql:true`, a op logic nomeia o output SQL `List`: um campo do record e
+`<as>.List.Current.List.<Campo>` (diferente de aggregate e de uma lista de entidade comum). `Hint Current` consulta
+ISQLNode.Type e mostra o wrapper real se a expressao estiver errada. SQL nao aceita where/sort/start fora do statement.
+
+**ODC: app nao expoe server action publica.** Num modulo ODC que e app (Reactive Web/Mobile, nao biblioteca), `public: true`
+numa server action (ou `set IServerAction:X Public true`) e recusado pelo verbo `set` antes do Verify: o Studio ao vivo da erro e o
+Verify headless nao. Deixe Public No e chame a action das telas do proprio app; para servir outros apps use service action; para
+reuso entre apps, biblioteca. Bibliotecas ODC e a faixa O11 nao mudam.
+
+Buscas em lista na logica de cliente (screen/client action): `ListIndexOf`, `ListFilter`, `ListAny` e `ListAll` leem `Lista.Current`
+pelo contexto de iteracao de quem chamou, e o codigo gerado ignora o elemento que o built-in passa. Dentro de For Each/While, num evento
+de widget que esta dentro de uma List e numa screen action chamada por JavaScript (`$actions.X`), esse contexto prende o Current em um
+elemento e a busca responde -1 ou a linha errada, sem erro (provado ao vivo na Escala Viva: cobertura 0/7, todo turno "Novo", barra
+de selecao e arrastar inertes). O kernel recusa a busca dentro de laco; nos outros dois casos quem escreve decide. Escreva a busca como
+For Each sobre a lista com um If que guarda a primeira posicao (`Pos` local iniciado em -1).
+
+Chaves da action: `name`, `replace` (true para reescrever uma action propria existente preservando consumidores), `kind` (server | service | client), `public`, `function`, `description`, `inputs`, `outputs`, `vars`
+(cada um `name`, `type`, `mandatory` so em inputs, `default`, `description`), `steps`. Um passo tem UMA forma:
+`get` (aggregate sobre entidade propria ou referenciada; `as` obrigatorio, `where` texto ou lista, `sort` `"Ent.Attr"`,
+`"Ent.Attr DESC"`, `"-Ent.Attr"`, lista delas ou `[{"by":"Ent.Attr","desc":true}]`, um ISort por chave, na ordem escrita,
+`max`, `start`; le-se `<as>.List.Current.<Entidade>.<Attr>`, `<as>.List.Empty`, `<as>.List.Length`), `assign` (`{"Var": "expr"}`,
+`as` opcional = Label), `call` (action propria, referenciada, de entidade `CreateOrUpdateX` ou de sistema `ListAppend`; sem `as`
+o no leva o nome da action, numerado a partir do segundo como o Studio; outputs em `<as>.<Output>`), `save` | `create` | `update` (`record`) e `delete` (`id`) de entidade, `if` (`then`/`else`,
+os ramos voltam ao fluxo; um ramo que acaba em `raise` nao volta), `foreach` (`do`), `raise` (exception do modulo; `message`).
+Nome de no repetido nunca e recusado: o segundo vira `End2`, `S2` (como copia no Studio) e o preflight avisa (`LOGIC_NODE_RENAMED`).
+A mesma screen action em telas diferentes sao duas actions (chave owner + nome). `'Long Text'` vira `Text` (`LOGIC_TYPE_MAPPED`).
+O caminho do registro e o que a lista tem: `V.Current.T.X` de um input/var `T List` vira `V.Current.X`; `Q.List.Current.T.X`
+de um SQL cujo output e `T` vira `Q.List.Current.List.X` (`LOGIC_CURRENT_REWRITTEN`). Todos os problemas da spec saem numa recusa
+so (`LOGIC_INVALID`, um problema por passo com ponteiro relativo ao `data` do op), nunca um por rodada.
+SQL na spec: `{"get":"SqlItem","sql":true,"as":"ReadSqlItems","statement":"SELECT {SqlItem}.* FROM {SqlItem} WHERE {SqlItem}.[Quantity] >= @Minimum","params":{"Minimum":{"type":"Integer","value":"Minimum"}},"max":50}`.
+No `logic/get` com `sql:true`, o output criado chama-se `List`: o registro e `<as>.List.Current.List`, e um atributo e `<as>.List.Current.List.<Atributo>`. Confira o nome do `ISQLOutput` no dump; ele define esse nivel intermediario.
+Exemplo completo: `logic-sql-params.json`. Os nomes @ usados e os declarados em params devem coincidir (sem distinguir maiusculas).
+Comentarios e literais SQL nao contam; `@@ROWCOUNT` segue a leitura do Studio e exige parametro. `where`, `sort` e `start` sao
+recusados com sql:true: filtre, ordene e pagine no statement. Assign `X = X` e recusado por nao fazer nada.
+Nos verbos crus o Verify continua sendo o juiz (negativo `sql-unknown-param.json`). Erros de set/link listam os membros aceitos,
+quatro nomes parecidos e o comando `anvil api --name <Tipo>`.
+A linguagem ampliada tambem aceita `switch` com `otherwise`, `handlers` e `comments` na action, e `node/as/properties`
+para a lista fechada de widgets exposta por `api --op logic`. JavaScript declara inputs/outputs/args no no. `kind: screen`
+ou `preparation` exige um `owner` existente; consulte docs/CONTRATO-MODULO.md para tipos e limites. Nao traduza nomes do
+menu em propriedades por adivinhacao. Excel exportado usa o proprio nome do no como Binary Data; importado, como lista.
+Refresh Data nao aceita StartIndex nao vazio no contrato (o merge nativo o descarta); pagine na fonte. Entidade local
+publica tambem e recusada no contrato; exponha structures publicas. A matriz compara os widgets do catalogo com provas.
+
+Actions da mesma spec podem chamar umas as outras; o compilador ordena por dependencia e recusa ciclos com a cadeia.
+`logic-call-order.json` prova essa ordem. Nome de action propria existente sem replace e erro (`logic-duplicate-action.json`),
+inclusive em create. `replace:true` exige a action existente do mesmo kind; apaga e recria na mesma transacao e verifica que
+as chaves dos consumidores do modulo, fora dos corpos substituidos, sobrevivem. Forneca a definicao completa (public, inputs, outputs e steps). `logic-spec-replace.json` prova a chamada e seus argumentos preservados.
+Input ou variavel sem uso e output sem atribuicao nao recusam (A03): o Verify avisa, o aviso volta nao bloqueante, e o
+preflight devolve a nota `LOGIC_UNUSED` com os nomes. Nomes dentro de strings, membros qualificados (`R.Campo`) e nomes da
+entidade/alias no filtro nao contam como uso. Uso em `max`, `start`, qualquer chave de `sort` ou `params.*.value` conta.
+Exemplo: `logic-unused-input.json` (agora aceito, com o aviso).
+Gramatica tao larga quanto o Studio (atritos 3, C18): `label` vale em todo passo (vira o Label de Assign, If, For Each, Switch e
+Message; nos outros nos, sem `as`, e o nome quando e identificador). `record` aceita os campos `{"Campo":"expr"}`: vira uma local
+`<Entidade>Record`, um Assign e a action de entidade. `kind` do join aceita o nome da tela: `Only With`/`inner` = Inner,
+`With or Without`/`left` = Left, `With`/`full` = Full. A mesma entidade duas vezes e self-join: a segunda fonte e `<Entidade>2`
+(nota `LOGIC_SOURCE_RENAMED`). `DateFormat` omitido no JSON Serialize/Deserialize e `ISO`.
+Expressoes sao texto OutSystems (secao 2; so funcoes de `docs/functions.md`). Mesma spec = mesmos ops, sempre. Os dados
+(entidades, static, exceptions) vem antes por `spec` ou verbos: a `logic` resolve os nomes contra o modulo e recusa o que nao existe.
+
+### 2.2 Integracoes (ops `rest`, `rest-expose`, `soap`; docs/integracoes-rest-soap.md)
+
+Uma op por cliente ou servico; o contrato e `api --op rest|rest-expose|soap`. A op cria o que falta, atualiza no lugar pela chave
+o que existe (quem chama continua ligado), nao toca o que nao nomeia e apaga o que `remove` lista. Todos os erros dos dados numa
+recusa so, antes de qualquer op (`REST_*`, `REST_EXPOSE_*`, codigos de SOAP), pela regra `PreflightRules.IntegrationOps`.
+- `rest`: `{"client":{"name","baseUrl","headers"},"methods":[{"name","http","path","inputs":[{"name","type","in":"url|query|header|body"}],"response":{"structure"|"sample"|"type"}}],"structures":[...],"remove":[...],"breaks":[...]}`. Expande so para os verbos crus provados; amostra JSON vira estruturas pelo plugin REST; credencial nunca no modelo (`REST_CREDENTIALS_NOT_IN_MODEL`, regra do SSAM no O11: entrada `Authorization` em header). `openapi {path, sha256, operations}`: ODC headless; O11 pelo `o11_deliver` (bridge).
+- `rest-expose`: cada metodo e uma action de logic de tipo `rest` (dono `IRestService:<S>`, `http`, `path`, parametro `in`); `action` + `arguments` + `results` geram chamada e atribuicao; ou `steps`. Start e End sao os do proprio metodo.
+- `soap` (so O11): `{"wsdl","port"|"service"|"binding"|"soapVersion","methods","refresh","remove","breaks"}`. A selecao da porta e headless (`SoapPlan`); o import e o do Studio pela bridge (`integration_import`) dentro do `o11_deliver`; o candidato confere os tipos exatos (`SOAP_CONTRACT_TYPE_MISMATCH`). `ssam_job`/`o11_job` sem Studio: `INTEGRATION_IMPORT_NEEDS_STUDIO`.
+- Documentos: a fachada fixa URL/caminho em `.local/documents/<sha256>/` e reescreve para `{path, sha256, source}`; o kernel nunca busca na rede (`DOCUMENT_NOT_PINNED`). Job de suite usa caminho relativo (`tests/fixtures/wsdl/...`).
+- Apagar: `delete {target, breaks?}` recusa com `DELETE_HAS_CONSUMERS` (caminho de cada chamador); apague o chamador antes no mesmo job ou liste os caminhos exatos em `breaks` (diferente: `CONSUMERS_CHANGED`). Metodo SOAP apagado leva as estruturas sem uso. Na entrega, as palavras do dono nomeiam cada alvo e cada consumidor; concessao nunca cobre delete.
+
+## 3. Telas
+
+### 3.1 Reactive e Mobile (tests/jobs/screen-form-reactive.json, screen-list-reactive.json)
+
+Tela: `create IMobileScreen` em `IMobileFlow:MainFlow`; o layout e o bloco padrao: `set $scr/#IMobileBlockInstanceWidget
+SourceBlock IMobileBlock:LayoutTopMenu` (Mobile: `IMobileBlock:Layout`, placeholders `Title`, `Content`, `Navigation`, `HeaderLeft`, `HeaderRight`, `Bottom`). Uma `IList` aceita
+widgets direto (Expression) ou um `IListItem`.
+Input da tela: `IInputParameter` + `DataType`. Dados: `IScreenAggregate` com `IAliasedSource` (args.dataSource) e `IFilter`
+(args.condition; texto: `User.Name like "%" + Search + "%"`). Entidade de outro modulo (User do Users): `IEntitySignature:User`; propria:
+`IServerEntity:X`. Recarregar um aggregate numa screen action: `create IRefreshDataNode` + `set DataSource GetUsers`. Widgets nativos (plugin NRWidgets): IContainer, IExpression, IInput, ITextArea, ICheckbox, ISwitch,
+IRadioGroup/IRadioButton, IDropdown, IButtonGroup/IButtonGroupItem, IUpload, IButton, ILink, IIcon, IImage, ILabel, IList/IListItem,
+ITableRecords (IHeaderCell/IRowCell em `$tbl/HeaderRow` e `$tbl/Row`), IIfWidget (`$if/TrueBranch`), IPopup, IAdvancedHtml.
+Regras: Input `set Variable` = `GetX.List.Current.Entidade.Atributo` ou variavel local; Button e Link ja nascem com texto
+(`set $btn/#ITextWidget prop Text`; para texto dinamico: `delete $lnk/#ITextWidget` e `create IExpression` dentro); Link navega e passa
+argumentos exatamente como Button; navegacao `set $btn/OnClick prop Destination value $acao` ou
+`IMobileScreen:Tela` com argumentos `$btn/OnClick/<Input>`; ListItem nasce com swipe action sem destino (`delete
+$item/RightActions/#IListItemAction`); Dropdown ligado a lista: `List` = `GetX.List`, `Values`/`Labels` no escopo do alias
+(`User.Id`); widgets compostos nascem com itens de exemplo (`"empty": true`); IRadioButton e IButtonGroupItem so se criam
+dentro do grupo (pai = o grupo, o Content dele ou algo dentro dele; fora, o create e recusado nas duas faixas:
+`tests/jobs-negative/create-radio-button-outside-group.json`). Roles: `link from $scr connector Roles to $role`.
+Galeria completa dos nativos: `gallery-native-reactive.json`.
+
+Listas devolvidas por data actions usam diretamente os atributos: `GetGames.Games.Current.Name` (entidade) ou
+`GetKpis.Kpis.Current.Name` (structure). O wrapper `Current.User.Name` pertence ao resultado de um aggregate sem agrupamento;
+com group by/agregacao, use os nomes das colunas (`Current.Orders`). `Hint Current` lista os campos reais quando o Verify
+acusa um membro inexistente. Exemplos: `data-action-entity-list-reactive.json`, `data-action-reactive.json`, `aggregate-full.json`.
+Static entity referenciada precisa ser publica no produtor (`"public": true` na spec ou `set $Status Public true`) e aparecer
+em `elements` como `IStaticEntity:Status`; refaca o job produtor ou tire novo snapshot apos a alteracao. A FK so traz o tipo
+Identifier. Veja `producer-static-public.json` + `consume-reference-static.json`; `producer-static-private.json` e o controle
+negativo de `reference-static-not-public.json`. O erro de `reference` inclui a receita.
+
+### 3.2 Traditional (tests/jobs/screen-crud-traditional.json)
+
+`IWebScreen` em `IWebFlow:MainFlow` ja nasce com o layout do tema: os placeholders sao `$scr/#IWebBlockInstanceWidget/Title`,
+`$scr/#IWebBlockInstanceWidget/MainContent`, `.../Actions`, `.../Breadcrumbs`. Dados na `IPreparation` (create no
+`$scr`; Start, `IAggregateNode`, End, `link`, `layout`). Widgets com sufixo Widget: IContainerWidget, IExpressionWidget, IInputWidget
+(Variable, Mandatory, MaxLength igual ao atributo), IButtonWidget (`set Label`, OnClick -> screen action), ILinkWidget (`Method`
+Navigate, Destination = tela, argumento, e `link` tela -> tela para o conector do flow), ITableRecordsWidget (`SourceRecordList`,
+celulas via `$tbl/HeaderRow` e `$tbl/DataRow`).
+
+### 3.3 OutSystems UI (docs/ui/<Modulo>/README.md e blocks/<Bloco>.md)
+
+Accordion, Tabs, Card, Columns, DatePicker, Dropdown Search, Sidebar, Carousel, Tooltip, ProgressBar... nao sao widgets nativos:
+sao blocos do OutSystemsUI (Reactive/Mobile), OutSystemsUIWeb/RichWidgets (Traditional), OutSystemsCharts e OutSystemsMaps.
+Cada bloco tem pagina com inputs (tipo, default, obrigatorio), valores possiveis, placeholders e o que nascem com, eventos,
+blocos filhos esperados, APIs OSUI, CSS/JS e o trecho de verbos. Consulta rapida:
+`dotnet .local/cli/anvil.dll ui-block --catalog catalog/ui/OutSystemsUI-2.28.1.json --name Tabs` (ou `--find dropdown`).
+Blocos de dependencia INDIRETA (referencia oculta no modulo, ex. MouseEvents/TouchEvents): ao ligar `source`/`SourceBlock` o verbo
+desoculta a referencia sozinho (`unhidden` no resultado); sem isso o merge automatico apagava handlers e argumentos da instancia
+(`hidden-reference-block.json` e o teste MergeFidelityTests provam o merge de 3 vias headless sem perdas).
+Instanciar: `create IMobileBlockInstanceWidget` com `"source": "IMobileBlock:<Nome>"` (`"empty": true` se o bloco traz conteudo
+de exemplo); inputs `set $b/<Input> Value`; placeholders `$b/<Placeholder>`; eventos: screen action com um input por parametro,
+`set $b/<Evento> Handler $acao` e `set $b/<Evento>/<Param> Value`; inputs do handler que nao usar geram `UnusedElement` (warning
+esperado: declare cada aviso em `expectedMessages` com `why`). Blocos com Input de exemplo (DatePicker, Search, InputWithIcon, TimePicker): NAO use `empty`,
+ligue `set $b/<Placeholder>/#IInput Variable`; os nomes reais do conteudo de exemplo sao renumerados (Input1), enderece por tipo.
+Para saber que blocos o modulo ja referencia: um job com `{"op":"find","type":"IMobileBlockSignature","max":300}` (o template Reactive
+traz 120 do OutSystemsUI). Se o bloco nao esta referenciado: verbo `reference` com nome do produtor ligado por `--producer Nome=<snapshot.oml>`. Datas: `Date Time` -> `Date`
+com `DateTimeToDate()`, `CurrDate()`, `CurrDateTime()`. Galeria viva com o estado de cada um dos 176 blocos: `docs/ui/gallery-reactive.md`; as telas `Gallery_*`
+publicadas no Headless_UI mostram como cada bloco fica. Regenerar quando a versao do ambiente mudar: `anvil ui-catalog`, `anvil ui-gallery`.
+
+### 3.4 Spec de telas (op `screen`, Reactive e Mobile)
+
+Prefira esta forma para catalogo, tabela, detalhe, formulario e dashboard. O compilador usa os blocos ja referenciados
+no proprio modulo (Gallery/Carousel, CardSectioned, Search, Pagination, Tabs e Rating), sem caminho de catalogo.
+Um job sobre fixture tem `base`, `expectValid:true`, `expectedMessages:[]` e `ops`; defina dados com `spec` antes de `screen`.
+Exemplo completo de catalogo e detalhe (os tipos Id e os records estaticos sao gerados por `spec`):
+
+```json
+{
+  "base":"reactive-ui.oml", "expectValid":true, "expectedMessages":[],
+  "ops":[
+    {"op":"spec","data":{
+      "static":[{"name":"Genre","records":[{"name":"Adventure"},{"name":"Strategy"}]}],
+      "entities":[{"name":"Game","public":true,"attributes":[
+        {"name":"Title","type":"Text","mandatory":true,"length":120},
+        {"name":"Description","type":"Text","length":500},
+        {"name":"Price","type":"Currency"},{"name":"Rating","type":"Decimal"},
+        {"name":"GenreId","type":"Genre Identifier"}]}]}},
+    {"op":"screen","data":{"screens":[
+      {"name":"Catalog","kind":"cards","title":"Games",
+       "source":{"entity":"Game","as":"GetGames","sort":[["Game.Title","Ascending"]]},
+       "search":{"field":"Title","label":"Search games"},
+       "filters":[{"field":"GenreId","from":"Genre","label":"All genres"}],
+       "card":{"title":"Title","description":"Description","price":"Price","rating":"Rating",
+         "destination":"GameDetail","args":{"GameId":"GetGames.List.Current.Game.Id"}}},
+      {"name":"GameDetail","kind":"detail","title":"Game details",
+       "inputs":[{"name":"GameId","type":"Game Identifier","mandatory":true}],
+       "source":{"entity":"Game","as":"GetGame","where":"Game.Id = GameId"},
+       "tabs":[{"title":"Overview","fields":[{"field":"Title"},{"field":"Description"}]},
+               {"title":"Pricing","fields":[{"field":"Price"},{"field":"Rating"}]}]}
+    ]}}
+  ]
+}
+```
+
+Esquema fechado: chaves desconhecidas, campo inexistente, input sem uso, evento obrigatorio sem handler e `kind`
+desconhecido falham na compilacao. Todas as telas/inputs sao criados antes das navegacoes: declare as telas de um app
+no mesmo `screens`, em qualquer ordem. Uma tela existente nao e recriada; corrija o mesmo job antes da primeira entrega,
+ou use os verbos para editar a tela existente. Traditional nao faz parte desta versao.
+
+| Campo | Contrato |
+|---|---|
+| Comuns | `name`, `kind`, `title`, `inputs`, `source`, `search`, `filters`, `actions` |
+| `inputs[]` | `name`, `type`, `mandatory` (padrao false), `default` (expressao). Devem aparecer em where/args/sort/metricas; texto entre aspas nao conta como uso |
+| `source` entidade | `entity`, `as`, `where` (expressao ou lista), `sort` (lista de `[expressao,"Ascending"/"Descending"]`). Campos da tela sao nomes de atributos; expressoes em args usam `<as>.List.Current.<Entidade>.<Campo>` |
+| `source` action | `action`, `as`, `output` (nome de output list, inferido se unico), `args` (mapa de expressoes), `total` (output inteiro). Gera data action; campos usam `<as>.<output>.Current.<Campo>`, sem wrapper de entidade. Para cards/table, args precisam passar `StartIndex` e `MaxRecords` e total deve informar a contagem completa |
+| `search` | `field` Text, `label` opcional; usa Search e refresh automatico |
+| `filters[]` | `field` FK, `from` static entity existente, `label`; a FK deve ter tipo `<from> Identifier`. Valor vazio significa todos |
+| `kind:cards` | `card:{title,description?,price?,rating?,image?,layout?,destination?,args?}`; cada campo e um atributo. image e URL Text; layout e gallery (padrao) ou carousel. destination nomeia uma tela e args passa seus inputs |
+| `kind:table` | `columns:[{field,label?}]` |
+| `kind:detail` | `fields:[{field,label?}]` e/ou `tabs:[{title,fields:[{field,label?}]}]` |
+| `kind:form` | `fields:[{field,label?,kind?,readonly?}]`; kind e input, textarea ou checkbox. Labels ligados aos inputs, obrigatoriedade vinda do atributo. Actions de gravacao ficam no Form, validam e so chamam o servidor com Form.Valid |
+| `kind:dashboard` | `fields:[{label,value}]` (value e expressao, ex. `GetGames.Count`); pode ter card para uma galeria/carousel adicional. Home pode ser um dashboard com total de jogos e cards em carousel |
+| `actions[]` | `name`, `label`, e exatamente um de `destination` (tela) ou `call` (action existente), mais `args` (mapa). Para gravar, crie antes uma server action wrapper por `logic`, e passe o record por args; entity action direta da tela nao e aceita |
+
+Cards e table ganham variaveis StartIndex/MaxRecords (20 por pagina), Pagination com total do aggregate, handler
+OnNavigate e Refresh Data. Search/filtros voltam a primeira pagina. Esses nomes de estado e `source.as` sao reservados:
+nao os redeclare como inputs. Gallery e Carousel conservam sua List e substituem apenas os widgets de exemplo dentro dela;
+a spec nao precisa nem deve criar IList, eventos ou ligacoes por fora.
+
+Exemplos testados: `screen-spec-cards-reactive.json`, `screen-spec-cards-mobile.json`, `screen-spec-table-reactive.json`,
+`screen-spec-detail-tabs-reactive.json`, `screen-spec-form-reactive.json`, `screen-spec-dashboard-reactive.json` (inclui
+fonte de data action). `screen-spec-store-reactive.json` e a prova fria Home/Catalog/GameDetail,
+validada na primeira tentativa por outra LLM lendo apenas esta secao. Negativo: `screen-unknown-kind.json`. Todos os dados dos exemplos vivem no mesmo job, sobre fixture.
+Provar: `ANVIL_LANE=ss5 python scripts/run_job.py <job>.json`; no PowerShell, defina `$env:ANVIL_LANE='ss5'` antes.
+Entregar: `anvil deliver --module Headless_UI --job <job>.json --checks Catalog,GetGames,Pagination1,CardSectioned1`.
+Para uma prova nova, guarde o job em `.local/lane-ss5/` e use o caminho explicito; nao reutilize OML gerado como base.
+
+### 3.5 Autoria HTML/CSS (op `html`, Reactive e Mobile)
+
+A LLM escreve a pagina inteira em HTML/CSS mais um manifesto tipado; o compilador (HtmlExpander) converte em widgets nativos
+pelos mesmos verbos: `div` -> Container (classes em Style), as outras tags suportadas -> HTML Element (`Tag` + atributos como
+extended properties), texto -> Expression; `input`/`select`/`button`/`a`/`label`/`table` -> Input/Dropdown/Button/Link/Label/
+TableRecords; `input type="date"` -> bloco DatePicker do OutSystemsUI com handler OnSelected. Ordem, aninhamento, classes, `aria-*`,
+`data-*`, `role`, `title` e `style` inline sao preservados. A pagina nasce dentro de um Container `Page` com a classe `av-<tela>`;
+o CSS (`<style>` e `data.css`) e analisado, reescrito sob essa classe (`:root`/`body` viram a raiz) e instalado no CSS do
+AUTOR do tema padrao do modulo (a metade que o Studio edita; veja **CSS do tema** na secao 2) entre marcadores
+`/* anvil:html <Tela> */`, substituidos a cada compilacao (`stylesheet: "none"` desliga). `api --op html` lista tags, atributos, kinds e chaves. Fonte canonica: `tests/html/incidents-dashboard.html`
++ `.bindings.json` (+ `.fixture.json` com spec/logic/screen stand-ins das actions do Incidents_CS; `.product.json` com o `reference`).
+Jobs derivados por `scripts/gen_html_job.py --target fixture|update|product`: `html-dashboard-reactive.json` (cria a tela sobre
+reactive-ui.oml), `html-dashboard-update.json` (a mesma pagina outra vez sobre `job:html-dashboard-reactive`: delta) e
+`tests/jobs-live/html-dashboard-incidents.json` (produto; base = snapshot do deliver, `--producer Incidents_CS=<snapshot>`).
+
+Op: `{"op":"html","data":{"screen","title","html","css?","stylesheet?","vars?","sources?","search?","filters?","derived?","scripts?","bindings"}}`.
+`vars` declara variaveis da tela (`name`, `type`, `default`). `sources[]` (ou `source`): entidade (`entity`, `as`, `where`, `sort`,
+`max`) vira Aggregate; action (`action`, `as`, `args`, `outputs?`) vira Data Action expondo TODAS as saidas da action (`<as>.<Saida>`,
+listas em `<as>.<Saida>.Current.<Campo>`). `search` (`key`, `variable`=SearchText, `field` so em entidade, `label`) e `filters[]`
+(`key`, `from` static, `variable`, `field`, `label`) declaram a variavel, o controle e a action de refresh; com action sources a
+variavel tem de ser passada em `args`, senao e erro. `derived[]` (`name`, `type`, `source`, `output`, `max`|`sum` de um campo) gera
+variavel + screen action `Derive<Nome>` (ForEach/If/Assign) ligada ao OnAfterFetch da source: logica nativa no lugar de script.
+`scripts[]` (`name`, `inputs`, `outputs`, `code`) viram client actions Function com um no JavaScript (inputs so de tipos basicos:
+lista de estrutura e recusada pelo Verify), chamaveis nas expressoes dos bindings. Bindings por chave (`data-av="chave"`), esquema
+fechado: `text` (`value`), `list` (`source`, `output`; num `<table>` -> TableRecords com `<thead>` de um `<tr>` e `<tbody>` de UM
+`<tr>` template; num `<div>/<ul>/<ol>/<section>` -> List cujo unico filho e o template), `field` (so dentro de um `list`),
+`style`/`class` (expressao que se soma ao atributo estatico), `visible` (`condition`, so em `<div>`: vira um If nativo `If<Chave>` no
+lugar do elemento, Condition = expressao, o Container nasce no ramo True; nunca a propriedade Visible), `date` (`variable` Date/Date Time
+declarada em `vars`, `format`), `navigate` (`destination` tela existente + `args` conferidos), `call` (`action` + `args`; handler
+`<Nome>Handler` com Refresh Data) e `refresh` (`sources?`). Chave sem elemento, elemento `data-av` sem binding, chave repetida,
+botao sem binding, `<input>`/`<select>` sem search/filter/date sao erros com linha e coluna. Recusados com diagnostico, sem
+aproximacao: `<script>` inline, `<form>`, `<dialog>`, `<img>`, `<svg>`, `<link>`, `<textarea>`, tabela sem `list`, `@import`,
+atributos fora da lista fechada. `id` no HTML so serve a `<label for>` (vira `TargetWidget` nativo) e nunca e emitido: o OutSystems
+reserva o atributo (`InvalidHTMLAttribute_Id`); por isso seletor CSS por id (`#x`) e SEMPRE recusado, sem opcao: use classes.
+`<a>`/`<button>` so com texto usam a legenda do proprio widget; com elementos filhos (card `<div>`, icone `<i>`, `<span>` com
+`text`/`field`/`class`/`style`, `<div>` com `visible`) os filhos viram widgets filhos do Link/Button (a legenda nativa e apagada), nas
+duas faixas. Dentro deles sao recusados com elemento, posicao e o que fazer: outro `<a>`/`<button>`, `input`/`select`/`label`, `table`,
+`list`, `block`; um `data-av` dentro de `<label>` tambem. Provas: `tests/jobs/html-if-links-reactive.json`, `tests/jobs-odc/html-if-links.json`,
+`tests/jobs-negative/html-control-inside-link.json`.
+
+Tela existente: o op limpa o conteudo, o titulo, as data actions, os aggregates e as screen actions da tela (tudo interno a ela;
+um evento de ciclo de vida ligado a uma screen action da tela e desligado no mesmo op e citado em `delta.removed.lifecycle`), mantem a chave da tela, inputs, roles e as variaveis que a pagina declara com o mesmo tipo
+(tipo diferente e erro), recria a apresentacao e poda variaveis antigas so quando nada as usa. O resultado traz `mode` create|update,
+`delta` (removidos com chaves, variaveis mantidas/podadas), `keys`, `sources`, hashes do HTML/CSS e o tema instalado. Provas:
+`HtmlSpecTests` (parsers, ops iguais para a mesma fonte, estrutura, negativos) e `HtmlDeltaTests` (chaves da tela e das variaveis
+iguais apos a segunda compilacao, um bloco no tema, merge de 3 vias sem conflito). `anvil merge-probe --base <snapshot.oml> --foreign <resultado.oml> [--out <merged.oml>]`
+repete headless o merge de 3 vias do Studio (objetos, Verify, conflitos) antes de entregar. Renderizacao no navegador e entrega ao Studio
+do Incidents_UI continuam pendentes do acesso autenticado ao controlador (docs/tasks/2026-09-05-plano-autoria-html-dashboard.md, secao 8).
+
+Autoria **visual** (fragmento HTML/CSS dentro de um pai que ja existe, sem logica: a logica, dados, eventos e parametros continuam
+nos verbos nativos): `{"op":"html","parent":"$tela/...","file":"tests/html/visual/alert.html"}`. Tabela fechada de tags/atributos e
+provas em `docs/UI-HTML-VISUAL.md`; jobs `html-visual-alert.json`, `html-visual-list.json`, `html-visual-block.json` (`HtmlVisualTests`).
+Pai = a propria tela: o fragmento vai para o placeholder de conteudo do layout. `{{ }}` na legenda de botao/link vira Expression;
+`<label>` com filhos vira Container + Label; botao so com icone e aceito; `<br>` vira Container vazio; `<ButtonGroup bind>` com
+`<ButtonGroupItem value>` segue a rota nativa; o tipo da variavel decide o InputType. CSS: `light-dark()` e expandido, `color-mix()`
+e recusado com a cor calculada (`CSS_FUNCTION_UNSUPPORTED`; tambem em `set StyleSheet`). Todos os problemas do fragmento numa recusa so.
+O compilador JS de componentes (`HtmlComponents`, `data.components`) e legado: nao usar em trabalho novo.
+
+Faixa ODC (WS1): o mesmo kernel compila contra o ODC Studio em `src/Anvil.Core.Odc` (adaptador `Adapters.ODC`, ver o
+README la) e os mesmos ops correm headless sobre `tests/fixtures/odc/insurance-reactive-r8.oml` pelos jobs de
+`tests/jobs-odc` (`data-entity`, `logic-action`, `screen-basic`, `html-visual-{alert,list,block}`): prova
+`dotnet test tests/Anvil.Tests.Odc -c Release`. Diferencas de API entre as plataformas e como o kernel as trata:
+`docs/tasks/2026-09-17-ws1-diferencas.md`. O CLI dessa faixa e `src/Anvil.Cli.Odc` (`anvil-odc`, construido por
+`python scripts/build_odc.py` para `.local/lane-odc/cli`, com worker residente como o da faixa O11):
+`python scripts/run_job.py <job> --lane odc` aplica um job pelo kernel ODC (worker: ~3 s; frio: ~14 s) e imprime o
+mesmo resumo da faixa O11; `anvil-odc deliver` entrega ao ODC Studio aberto pela bridge (WS2). Tabela em `docs/lanes.md`.
+
+## 4. Quando o Verify falhar
+
+O `apply` devolve `Severity Id: Titulo @ caminho`. Consulte `anvil verify-message --name <Id>` ou `--find <texto>`: IDs, severidade e textos vem da DLL instalada;
+os hints curados tambem aparecem no runner. `docs/diagnostics/verify-messages.md` explica essa separacao. Quando o Studio e
+atualizado, os manifestos do repo regeneram-se com `anvil verify-message --out catalog/verify-messages-<ver>.json` (na faixa ODC,
+`anvil-odc verify-catalog --out catalog/odc/verify-messages-<versao>.json`: um job ODC declara `expectedMessages` contra essa lista,
+que tem avisos so do ODC como `UnusedGlobalEvent`, prova `tests/jobs-odc/global-event-unused.json`) e
+`anvil functions --out catalog/functions-<ver>.json --docs docs/functions.md` (so ids e metadados; texto do fabricante nunca
+entra). Sem isso, `SurfaceTests` e `FunctionCatalogTests` ficam vermelhos a apontar o ficheiro que falta. Erros comuns e correcao: `RequiredPropertyValue_*` (falta valor: input, Variable, Source, Destination);
+`RequiredConnector_*` (no sem `link`); `InvalidFlow_NoStart` (fluxo sem `IStartNode`); `ExpressionUnknownObject` (nome errado ou
+fora do escopo; em Dropdown use o alias da lista); `DisconnectedDestination` (Traditional: falta `link` tela -> tela);
+`ExpressionUnknownFunction` (a funcao nao existe: leia a linha `Hint UnknownFunction` logo abaixo, que da as parecidas, e
+`docs/functions.md`); `InvalidDataSet_LocalEntitiesInServerAggregate` (aggregate sobre client entity sem `isClientSide`); `UnusedElement` e
+`UnusedUserAction` (warning: ligue ou marque Public); `CustomObjectWarning` Security Warning (tela chamando entity action: wrapper).
+O job e uma SEQUENCIA: o alvo de um `set`/`link` (tela de destino, action chamada) tem de existir ANTES desse op. Se nao existir, o erro
+diz `op #4 (set Destination): ... IMobileScreen:Catalog does not exist yet at this point of the job: it is created at op #6 ...` e lista
+todos os outros forward-refs do job (`Also out of order: ...`): mova os creates para antes, ou os sets para depois (exemplo negativo:
+`tests/jobs-negative/destination-before-screen.json`). O erro traz sempre o prefixo `op #i (verbo prop)`.
+Erro do proprio verbo (antes do Verify) diz o que faltou: `no X named Y; objects with that name: ...`, `has no child 'Z' (children: ...)`,
+`cannot create T (no Create method)`, `delete: refused, used by ...`. "can't be children of" = o runtime do modulo nao aceita:
+veja `docs/mapa/criar-<fixture>.md` e a coluna "Onde pode".
+
+## 5. Bridge do Service Studio (porta 4516, scripts/anvil_client.py)
+
+A entrada preferida para um Studio aberto é `ssam connect --lane o11 [--pid <PID>]` na raiz.
+Ela conecta à instalação normal em runtime ou reutiliza a bridge existente. Não fechar/reabrir o Studio nem
+salvar/publicar para anexar; módulos inválidos e não salvos são permitidos. Guia e limites de prova:
+`../docs/CONEXAO-STUDIO.md`. Os launchers de clones descritos abaixo são caminhos legados, não recuperação do attach.
+
+`get_active_module`, `snapshot_module`, `merge_from_oml` (preview|auto), `get_errors`, `find_element`, `get_flow_nodes`, `login`
+(arquivo de credenciais; nunca imprima senhas), `open_module` (seleciona a aba), `publish` (so testes; a falha traz
+`data.publishLog`), `publish_log {module?, max?}` (le a aba 1-Click Publish do Studio: ultima publicacao do modulo, quem quer
+que a tenha feito, com etapa, texto e elemento; `PublishLogHandler.cs`, so leitura), e para troubleshooting
+`windows`, `ui_alive`, `close_dialog`, `python scripts/cdp_pages.py` (le e clica dialogos web pelo CDP 9226; depois de matar o
+Studio aparece o dialogo de recuperacao: `--click Discard`). Abrir o Studio: `scripts/open_ss4.ps1`.
+Abertura: `open_module` usa `silent:true` por omissao, so durante o carregamento; devolve `referencesOutdated`,
+`referencesCheck:complete|skipped` e `serverSilentMode:false`. Referencias antigas ficam para o humano atualizar;
+o modo silencioso e reposto tambem em timeout. `silent:false` conserva a pergunta normal do Studio.
+`close_module {name}` so fecha uma aba guardada, aberta e sem dialogos; recusa edicoes locais ou nomes duplicados.
+`open_module` prefere a unica aba com edicoes quando ha uma copia limpa do mesmo modulo; recusa varias copias editadas.
+Dialogos: `open_module` NUNCA fica mudo; com um dialogo aberto devolve em <= 5 s `{opened:false, blockedBy:[{kind, title, texts, hint}]}`
+(kinds: Recovery, ManageDependencies, MergeEditor, MessageBox, Modal); a bridge nao clica por si: responda no Studio ou com
+`cdp_pages.py --click <Botao>` / `close_dialog` e chame outra vez. `merge_from_oml` recusa quando ha dialogo/editor pendente ou o
+modulo ja tem estado de match ("Matches cannot be set already" = dialogo de referencias/merge aberto; nunca reinicie o Studio por isso);
+`get_active_module` mostra `activeMatch` e `pendingDialogs`. Todos os caminhos passados a bridge (`path`, `foreign_path`, `base_path`, `out_dir`,
+`credentials_file`) sao ABSOLUTOS: a bridge corre no processo do Studio e um caminho relativo cairia na pasta da instalacao; um
+relativo e recusado com o verbo, o parametro e o cwd.
+Service Center pelo login do proprio Studio (SSO incluido; contrato no `CONTRATO.md` da integracao, secao O11):
+`sc_api {host, surface: soap|server-api|sc-rest, operation, args, write?, operationId?, authorizeSha256?, target?,
+corporateInstruction?}` faz UMA chamada de uma lista fechada (`bridge_manifest.serviceCenter`) com o cliente do Studio
+logado nesse host e segredo novo a cada chamada, sem o wrapper do Studio que reenvia. Escrita exige os campos da fachada,
+nunca e reenviada (excecao depois do envio = `UNCERTAIN`; operationId repetido e recusado) e no ambiente corporativo exige
+`corporateInstruction:true`. Fechadas: SetupAdminUser, TestAction, TestQuery, Upload/DeleteProductLicense, SynchronizeApps,
+PushProducerToConsumer, ImportTable, RegisterOperation, Metrics_*. Binarios: `args.outFile` absoluto (nunca sobrescreve) ou
+base64 ate 16 MiB. `sc_web {host, action: status|open|login|fetch|close}`: janela do Service Center dentro do Studio;
+`open {hidden:true}` a mantem fora da tela e da barra de tarefas pela vida toda, e `login` (capacidade `sc_web:login`) a loga
+com `SSAM/O11/<host>/ServiceCenter` do cofre, digitado so no formulario de login do proprio host ou de `id.outsystems.com`, um
+envio por chamada (`WEB_LOGIN_REJECTED` / `WEB_SIGN_IN_INTERACTIVE`, nunca reenviado nem mostrado; `ScWebLogin`); sem `hidden`
+o usuario entra nela uma vez; `fetch` e um fetch() da mesma origem so sob `/ServiceCenter/` (postback que muda estado leva os campos
+de escrita). Segredo (senha/usuario de Database Connection, site property secreta) NUNCA vai no `form` pela fachada: o
+postback de escrita leva `secretRefs [{field:<campo do form>, target:'SSAM/O11/<host>/<entrada>', part:password|username}]`
+ou, como a fachada manda, `[{pointer:'/<campo do form>' (RFC 6901), target, field:password|username}]` (capacidade
+`sc_web:secretRefs`; o campo fica no form com um placeholder) e a bridge le a credencial generica do Cofre do
+Windows dentro do Studio logo antes do envio; a resposta mascara o eco e apaga o `__OSVSTATE` (releia por GET); entrada
+ausente = `SECRET_NOT_FOUND` com o alvo; alvo de outro host = `HOST_MISMATCH`; os logins do ambiente nunca entram num form
+de postback (o unico caminho do login ServiceCenter e o formulario de login, pelo `sc_web login`).
+`studio_login {host}` abre o login do proprio Studio; `sc_session {host?}` mostra sessoes, janela e
+capacidades. Respostas `{success, data:{ok, code?, ...}}` sem segredo; o log da bridge guarda so o tamanho. Codigo:
+`src/Anvil.Bridge/Sc*.cs`; testes `ServiceCenterBridgeTests`. A bridge nova vale no proximo Studio aberto pelo hook.
+Trocar de ambiente sem GUI: `python scripts/studio_env.py login --credentials <arquivo .credentials.json> [--open <Modulo>]`
+(o Studio mantem UMA ligacao; o login substitui a anterior e nao toca em nada do ambiente anterior; `status` mostra o ambiente
+ligado e os modulos abertos). Cada ambiente tem o seu arquivo de credenciais fora do repo; o script so imprime host e utilizador.
+FAIXAS (uma por sessao, `scripts/lanes.py`): `ANVIL_LANE=ss4` (omissao: SS4 — em `scripts/lanes.py` e no CLI por valor fixo; na fachada
+`ssam`/descoberta por `o11Lane` de `.ssam-workspace.json`, que hoje diz `ss4`, e sem nenhum dos dois a fachada recusa em vez de assumir; um
+`ANVIL_LANE` explicito prevalece sempre — bridge 4516, CDP 9226, worker 4517, pastas `.local/`) ou
+`ANVIL_LANE=ss5` (SS5, bridge 4536, CDP 9246, worker 4537, pastas `.local/lane-ss5/`). Todos os scripts leem a variavel; duas
+sessoes trabalham em paralelo sem se tocar, uma em cada faixa; dentro de uma faixa o Studio tem UM modulo ativo de cada vez.
+Abrir o Studio de uma faixa: `scripts/open_studio.ps1 -Lane ss5` (clona a instalacao uma vez, injeta a bridge e abre); o CLI da
+faixa: `dotnet build src/Anvil.Cli -c Release -o .local/lane-ss5/cli`. Nunca reconstrua `.local/cli` nem reinicie o worker 4517
+se outra sessao estiver na faixa ss4: use a sua faixa.
+
+## 6. Onde esta o resto
+
+Para criar um app, consulte primeiro `recipe`, `where-can`, `verify-message` e `api --op` conforme a duvida;
+leia apenas a secao e o job indicados. Nao leia todo `src/` preventivamente. Se precisou abrir `src/` para descobrir
+como expressar uma tarefa, registre a pergunta: e um bug da superficie de comandos/documentacao. Investigacao e
+manutencao do proprio Anvil naturalmente exigem codigo. Em provas frias, conte separadamente leituras preventivas,
+consultas reativas apos erro e invocacoes de comandos.
+
+`MANIFESTO.md` (principios; leia antes de mudar rumo), `docs/architecture/` (produto, verbos, plano), `docs/PROVAS.md` (todas as
+provas com numeros e comandos), `docs/mapa/` (o que cada runtime cria + investigacoes: referencias, refatoracao, REST),
+`catalog/model-api-11.55.69.json` (todas as interfaces e propriedades), `catalog/ui/` e `docs/ui/` (blocos), `docs/diagnostics/`.
+Nao traga codigo do SSAM antigo; se precisar, pasta `Legacy`. Nunca comite OMLs de cliente, binarios da OutSystems ou credenciais.

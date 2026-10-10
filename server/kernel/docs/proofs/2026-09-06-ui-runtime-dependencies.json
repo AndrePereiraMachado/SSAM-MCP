@@ -1,0 +1,31 @@
+{
+  "date": "2026-09-06",
+  "scope": "Reviewed CLI output, not the whole repository or OutSystems installation",
+  "target": "net8.0",
+  "runtimePackages": [
+    {
+      "name": "Esprima",
+      "version": "3.0.6",
+      "license": "BSD-3-Clause",
+      "notice": "licenses/Esprima-3.0.6.txt",
+      "transitiveRuntimePackages": []
+    }
+  ],
+  "shippedAssemblies": [
+    {
+      "name": "Anvil.Core.dll",
+      "sha256": "fb042f94d07f087c60b74f30af26424a2eb7ed2002828e74069e4133d7a078b2"
+    },
+    {
+      "name": "anvil.dll",
+      "sha256": "8a5f937a3255938cc270fda6dba851f24558af5e8afcea93a8ecb0dcdbd9cb78"
+    },
+    {
+      "name": "Esprima.dll",
+      "sha256": "c24fe55072884b0b283634d1695510eff57e14f92fbb2a028ef8e7e31bedd1bd"
+    }
+  ],
+  "outsystemsAssembliesBundled": false,
+  "roslynProductDependency": false,
+  "noticeCopied": true
+}

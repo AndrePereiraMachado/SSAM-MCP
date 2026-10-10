@@ -1,0 +1,9 @@
+{
+ "description": "BlankSlate (OutSystemsUI, Content) minimo: instancia como o Studio cria ao arrastar o bloco.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "BlankSlateDemo", "source": "IMobileBlock:BlankSlate", "as": "$b"}
+ ]
+}

@@ -1,0 +1,16 @@
+{
+ "description": "MouseEvents do OSUI: WidgetId obrigatorio com o Id de um Container da tela.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "MouseEventsDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "TouchArea", "as": "$area"},
+  {"op": "set", "target": "$area", "prop": "Style", "value": "\"padding-l\""},
+  {"op": "create", "parent": "$area", "type": "ITextWidget", "as": "$text1"},
+  {"op": "set", "target": "$text1", "prop": "Text", "value": "Drag here"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "MouseEvents1", "source": "IMobileBlock:MouseEvents", "as": "$me"},
+  {"op": "set", "target": "$me/WidgetId", "prop": "Value", "value": "TouchArea.Id"}
+ ]
+}

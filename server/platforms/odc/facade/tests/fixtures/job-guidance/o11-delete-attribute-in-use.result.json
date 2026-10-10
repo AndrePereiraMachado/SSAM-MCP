@@ -1,0 +1,5 @@
+{
+ "ok": false,
+ "error": "op #2 (delete ): InvalidOperationException: delete: refused, IEntityAttribute 'Email' is used by 2 consumer(s): IMobileFlow:MainFlow/IMobileScreen:ContactDetail/IScreenAggregate:GetContactById/DataTable/ICombineSourcesOperation:Contacts/IFilter/IExpression; IMobileFlow:MainFlow/IMobileScreen:ContactDetail/IMobileBlockInstanceWidget/IPlaceholderContentWidget:MainContent/IForm:ContactForm/IMobileWidget:content/IInput:Email_Input/CustomProperty:Variable/IExpression (list them with usages, fix or remove those usages, or pass \"force\": true to break them)",
+ "data": null
+}

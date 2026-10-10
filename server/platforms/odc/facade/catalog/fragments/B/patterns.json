@@ -1,0 +1,230 @@
+{
+ "schemaVersion": "ssam-discovery-fragment/1",
+ "contract": "ssam-catalog-contribution/1",
+ "front": "B",
+ "title": "UI composition patterns on both lanes: a form bound to a record and a searchable dropdown (library block); their widgets, events and instances are stated per role in ui.input, ui.event and ui.block-instance",
+ "reviewedAt": "2026-09-23",
+ "synonyms": {},
+ "capabilities": [
+  {
+   "id": "ui.form",
+   "supersedes": [
+    "ui.form"
+   ],
+   "category": "ui",
+   "title": "Form bound to a record: edit its fields and save",
+   "keywords": [
+    "form",
+    "edit record",
+    "save",
+    "mandatory",
+    "checkbox",
+    "detail screen",
+    "crud"
+   ],
+   "summary": "Screen input (Id), IScreenAggregate filtered by it, IForm with IInput/ICheckbox bound to `GetX.List.Current.<Entity>.<Attr>`, a Save button whose screen action calls the save wrapper of front A that runs CreateOrUpdate<Entity>.",
+   "route": {
+    "kind": "job",
+    "operation": "screen-form.json pattern: wrapper server action + screen + aggregate + IForm + inputs + IScreenAction + set $btn/OnClick Destination"
+   },
+   "contract": [
+    "verbs.verbs.create",
+    "verbs.verbs.set",
+    "verbs.verbs.link"
+   ],
+   "depends": [
+    {
+     "id": "data.entity",
+     "unless": "the entity already exists (bind the form to IServerEntity:Name; its attributes are in context.signatures)"
+    },
+    {
+     "id": "logic.server-action",
+     "unless": "a save wrapper action for that entity already exists (call it from the screen action)"
+    },
+    {
+     "id": "ui.screen",
+     "unless": "the screen already exists (add the form under IMobileScreen:Name/...; ui.edit)"
+    }
+   ],
+   "recommends": [
+    {
+     "id": "read.inspect",
+     "when": "the module already exists: read its entities, screens and referenced blocks (--app) before declaring new ones",
+     "lanes": [
+      "odc"
+     ]
+    },
+    {
+     "id": "ui.input",
+     "when": "the fields need other value widgets (switch, text area, radio, upload) or their per-role evidence"
+    }
+   ],
+   "alternatives": [
+    {
+     "id": "ui.screen-spec",
+     "when": "the archetype form (kind form) is acceptable: fields input|textarea|checkbox only, no dropdown field"
+    }
+   ],
+   "guidance": "For a selectable field inside the form combine with ui.dropdown (native) or ui.dropdown-search (library block, read its contract from the capture). The widgets of the form are ui.input roles, the Save button's OnClick is a ui.event binding, and the save logic belongs to the logic capabilities.",
+   "example": {
+    "ops": [
+     "create",
+     "set",
+     "link",
+     "layout"
+    ],
+    "max": 60
+   },
+   "platforms": {
+    "odc": {
+     "proofs": [
+      "screen-form",
+      "delete-screen"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileScreen",
+       "ServerEntity"
+      ],
+      "signatures": [
+       "ServerEntity"
+      ]
+     },
+     "limits": [
+      {
+       "text": "Mandatory comes from the attribute or `set Mandatory True`; the screen must not call the entity action directly (wrapper server action).",
+       "origin": "job:screen-form; kernel/AGENTS.md section 1"
+      }
+     ],
+     "differences": []
+    },
+    "o11": {
+     "proofs": [
+      "screen-form-reactive"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileScreen",
+       "ServerEntity"
+      ],
+      "signatures": [
+       "ServerEntity"
+      ]
+     },
+     "limits": [
+      {
+       "text": "Same pattern on O11 Reactive: screen input ContactId, filtered aggregate, Form with inputs bound to the record, button OnClick -> screen action Save -> server action wrapper Contact_Save -> CreateOrUpdateContact. Traditional Web forms use the web widgets and the Preparation (ui.traditional-screen, ui.traditional-widget).",
+       "origin": "job:screen-form-reactive (stamped) ops 12-19, 52-61"
+      }
+     ],
+     "differences": [
+      "a button's caption sits beside the button (not inside IContent)"
+     ]
+    }
+   }
+  },
+  {
+   "id": "ui.dropdown-search",
+   "supersedes": [
+    "ui.dropdown-search"
+   ],
+   "category": "ui",
+   "title": "Searchable dropdown (OutSystemsUI DropdownSearch block)",
+   "keywords": [
+    "dropdown search",
+    "searchable dropdown",
+    "search",
+    "autocomplete",
+    "type ahead",
+    "dropdown pesquisavel"
+   ],
+   "summary": "An instance of the OutSystemsUI block DropdownSearch referenced by the module. Its inputs, mandatory input types and events (with their parameters) are the signature of the referenced revision: read them from the capture (`--app`: context.signatures, D), never from this text. Instantiate with the visual `html` op (`<Block name=\"DropdownSearch\" :<Input>=\"expr\" @<Event>=\"ScreenAction\">`) or the raw verbs (`create IMobileBlockInstanceWidget` with source `IMobileBlock:DropdownSearch`, `set $b/<Input> Value`, `set $b/<Event> Handler $action`); the handler of the selection event assigns the selection to the record field.",
+   "route": {
+    "kind": "job",
+    "operation": "html-visual `<Block>` or raw verbs on IMobileBlockInstanceWidget; a screen action builds the option list expected by the block input from an aggregate and another handles the selection event"
+   },
+   "contract": [
+    "html-visual.tags",
+    "verbs.verbs.create",
+    "verbs.verbs.set"
+   ],
+   "depends": [
+    {
+     "id": "ui.screen",
+     "unless": "the screen already exists (place the instance under IMobileScreen:Name/...)"
+    },
+    {
+     "id": "logic.screen-action",
+     "unless": "a screen action to handle the mandatory event already exists (set $b/<Event> Handler to it)"
+    }
+   ],
+   "recommends": [
+    {
+     "id": "ui.block-instance",
+     "when": "the per-role statements of a block instance: arguments, handlers, placeholder content, the referenced signature (read-only)"
+    }
+   ],
+   "alternatives": [
+    {
+     "id": "ui.dropdown",
+     "when": "no typing/search is needed: the native IDropdown binds a record field directly"
+    }
+   ],
+   "guidance": "Build the option list expected by the block input (type in context.signatures) in a screen action or data action from the entity list, keep it in a screen variable, and map the event's selection parameter back to the FK in the handler.",
+   "example": null,
+   "platforms": {
+    "odc": {
+     "proofs": [
+      "examples/cap-dropdown-search-minimal",
+      "examples/cap-dropdown-search-typical"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileBlockSignature",
+       "MobileScreen"
+      ],
+      "signatures": [
+       "MobileBlockSignature"
+      ]
+     },
+     "limits": [
+      {
+       "text": "No ODC job instantiates DropdownSearch; the nearest ODC proofs are html-visual-block (DatePicker block with input and mandatory handler) and block-events (event handlers). The offline block doc is O11 OutSystemsUI 2.28.1 and is not used by the answer; on ODC the contract is the MobileBlockSignature in the capture (context.signatures with --app, or `odc inspect <capture> \"MobileBlockSignature:DropdownSearch\" --depth 2`).",
+       "origin": "index: ODC jobs; kernel/docs/ui/OutSystemsUI/blocks/DropdownSearch.md (O11)"
+      },
+      {
+       "text": "A block instance has no Variable of its own: the selected value only reaches the record through the handler of the block's selection event; a mandatory event without handler is a Verify error per instance (EventHandlerRequiredAction).",
+       "origin": "job:block-events-mandatory; job:html-visual-block"
+      }
+     ],
+     "differences": []
+    },
+    "o11": {
+     "proofs": [],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileBlockSignature",
+       "MobileScreen"
+      ],
+      "signatures": [
+       "MobileBlockSignature"
+      ]
+     },
+     "limits": [
+      {
+       "text": "No O11 suite job instantiates DropdownSearch; the O11 proofs of OutSystemsUI instances with handlers are osui-patterns (Tabs OnTabChange) and osui-datepicker-handler (DatePicker OnSelected) in ui.block-instance. The offline OutSystemsUI 2.28.1 catalog is not used by jobs nor by this answer: the contract is the MobileBlockSignature in the module.",
+       "origin": "kernel/tests/jobs (scan 2026-09-23); kernel/src/Anvil.Core/Kernel/ScreenContracts.cs:6"
+      }
+     ],
+     "differences": []
+    }
+   }
+  }
+ ],
+ "unavailable": [],
+ "coverage": []
+}

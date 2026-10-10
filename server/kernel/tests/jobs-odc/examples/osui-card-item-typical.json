@@ -1,0 +1,27 @@
+{
+ "description": "CardItem do OSUI por linha: icone no Left, codigo no Title, data no Content e total no Right, cada um ligado ao registro.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "SalesOrder", "attributes": [{"name": "Code", "type": "Text", "length": 20, "mandatory": true}, {"name": "PlacedOn", "type": "Date"}, {"name": "Total", "type": "Currency"}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "OrderCards", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Orders\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetOrders", "as": "$GetOrders"},
+  {"op": "create", "parent": "$GetOrders", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:SalesOrder"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "OrderList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetOrders.List"},
+  {"op": "create", "parent": "$list", "type": "IMobileBlockInstanceWidget", "name": "OrderCard", "source": "IMobileBlock:CardItem", "as": "$ci"},
+  {"op": "create", "parent": "$ci/Left", "type": "IIcon", "name": "OrderIcon", "as": "$icon1"},
+  {"op": "set", "target": "$icon1", "prop": "Icon", "value": "package"},
+  {"op": "set", "target": "$icon1", "prop": "Weight", "value": "regular"},
+  {"op": "create", "parent": "$ci/Title", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "GetOrders.List.Current.SalesOrder.Code"},
+  {"op": "create", "parent": "$ci/Content", "type": "IExpression", "as": "$expr2"},
+  {"op": "set", "target": "$expr2", "prop": "Value", "value": "FormatDateTime(GetOrders.List.Current.SalesOrder.PlacedOn, \"yyyy-MM-dd\")"},
+  {"op": "create", "parent": "$ci/Right", "type": "IExpression", "as": "$expr3"},
+  {"op": "set", "target": "$expr3", "prop": "Value", "value": "FormatCurrency(GetOrders.List.Current.SalesOrder.Total, \"$\", 2, \".\", \",\")"}
+ ]
+}

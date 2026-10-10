@@ -1,0 +1,53 @@
+{
+ "description": "Cobertura testada (fase 1, medir): life de OutSystems.Model.Logic.Integrations.SOAP.ISOAPService (odc) em espace. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISOAPService",
+   "name": "CovASOAPService",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "ISOAPServiceAction",
+   "name": "CovSOp",
+   "as": "$aop"
+  },
+  {
+   "op": "create",
+   "parent": "$aop",
+   "type": "IStartNode",
+   "as": "$aop_s"
+  },
+  {
+   "op": "create",
+   "parent": "$aop",
+   "type": "IEndNode",
+   "as": "$aop_e"
+  },
+  {
+   "op": "link",
+   "from": "$aop_s",
+   "to": "$aop_e"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRSOAPService"
+  }
+ ]
+}

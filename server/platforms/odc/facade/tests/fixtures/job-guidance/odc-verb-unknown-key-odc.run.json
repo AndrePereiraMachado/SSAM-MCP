@@ -1,0 +1,15 @@
+{
+ "ok": false,
+ "lane": "odc",
+ "verb": "job",
+ "exitCode": 1,
+ "result": {
+  "lane": "odc",
+  "via": "processo frio odc",
+  "ok": false,
+  "command": "apply",
+  "elapsedMs": 11116,
+  "error": "op #0 (create Probe): InvalidOperationException: create: unknown key(s) 'bogus'; required: parent, type; optional: name, args, as, source, empty (api --op verbs)"
+ },
+ "laneFrom": "--lane"
+}

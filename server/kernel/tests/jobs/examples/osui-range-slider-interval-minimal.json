@@ -1,0 +1,18 @@
+{
+ "description": "RangeSliderInterval (OutSystemsUI, Interaction) minimo: instancia como o Studio cria ao arrastar o bloco; inputs obrigatorios MinValue, MaxValue, StartingValueFrom, StartingValueTo com valores simples; evento obrigatorio OnValueChange ligado a uma screen action vazia.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAction", "name": "RangeSliderIntervalDemoOnValueChange", "as": "$hRangeSliderIntervalDemoOnValueChange"},
+  {"op": "create", "parent": "$hRangeSliderIntervalDemoOnValueChange", "type": "IStartNode", "as": "$hRangeSliderIntervalDemoOnValueChangeS"},
+  {"op": "create", "parent": "$hRangeSliderIntervalDemoOnValueChange", "type": "IEndNode", "as": "$hRangeSliderIntervalDemoOnValueChangeE"},
+  {"op": "link", "from": "$hRangeSliderIntervalDemoOnValueChangeS", "to": "$hRangeSliderIntervalDemoOnValueChangeE"},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "RangeSliderIntervalDemo", "source": "IMobileBlock:RangeSliderInterval", "as": "$b"},
+  {"op": "set", "target": "$b/MinValue", "prop": "Value", "value": "0"},
+  {"op": "set", "target": "$b/MaxValue", "prop": "Value", "value": "100"},
+  {"op": "set", "target": "$b/StartingValueFrom", "prop": "Value", "value": "20"},
+  {"op": "set", "target": "$b/StartingValueTo", "prop": "Value", "value": "80"},
+  {"op": "set", "target": "$b/OnValueChange", "prop": "Handler", "value": "IScreenAction:RangeSliderIntervalDemoOnValueChange"}
+ ]
+}

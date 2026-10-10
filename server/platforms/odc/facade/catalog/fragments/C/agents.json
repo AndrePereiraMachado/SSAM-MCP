@@ -1,0 +1,140 @@
+{
+  "schemaVersion": "ssam-discovery-fragment/1",
+  "contract": "ssam-catalog-contribution/1",
+  "front": "C",
+  "title": "Native ODC agents and agentic apps",
+  "reviewedAt": "2026-10-05",
+  "synonyms": {
+    "agent": [
+      "agente",
+      "agentes",
+      "agentic",
+      "agentico",
+      "agenticos",
+      "multiagent"
+    ]
+  },
+  "capabilities": [
+    {
+      "id": "ai.agents",
+      "supersedes": [
+        "agents"
+      ],
+      "lanes": [
+        "odc"
+      ],
+      "category": "integration",
+      "title": "Create and edit native agents, tools and agentic apps in ODC",
+      "keywords": [
+        "agent",
+        "agente",
+        "agentic app",
+        "app agentico",
+        "multiagent",
+        "call agent",
+        "ai model",
+        "tool calling",
+        "memoria de agente",
+        "instrucoes do agente"
+      ],
+      "summary": "studio_create_app kind agentic creates a native Agent asset from template_Agent. studio_deliver accepts agent {data} to create/configure IAgent, model, inputs, tool handlers and structured output. Combine with logic steps node ICallAgentNode for complete service actions, branching, multiple agents, message building and explicit session memory.",
+      "route": {
+        "kind": "job",
+        "operation": "studio_create_app {kind:\"agentic\",name,authorize,publish:false}; ssam_map; studio_deliver {module,feature,owners,changes,job:{ops:[{op:\"reference\",producer:\"<model connection>\",elements:[\"IServerAction:<model action>\"]},{op:\"agent\",data:{name:\"Support\",model:\"IReference:<model connection>/<model action>\"}}]}}"
+      },
+      "contract": [
+        "agent.shapes",
+        "agent.rules",
+        "logic.nativeNodes.ICallAgentNode",
+        "verbs.verbs.reference",
+        "verbs.verbs.rename",
+        "verbs.verbs.delete"
+      ],
+      "guidance": "Resolve the real model connection and its action from the consumer session. For a complete agent declare purpose, system instructions in the message-building action, tools with typed inputs, return contract, memory SessionId and error behavior. agent.target patches an existing IAgent by key; omitted fields remain unchanged. Tool arguments use fromAI:true or value, exclusively. Tool descriptions edit shared action/parameter metadata. Structured output and tool calling are separate modes. ICallAgentNode is a logic node with Agent reference and args.Messages; create agents before callers. The official template provides BuildMessages_V2/LoadMemory_V2/StoreMemory_V2. Wire these into a real service action; a template clone alone has dummy calls. Example: kernel/tests/jobs-live/odc-agents-example.json. Native model tests: kernel/tests/Anvil.Tests.Odc/OdcAgentTests.cs. Delivery/publish evidence: platforms/odc/docs/AGENTES.md. Existing MCP, A2A and knowledge-base assets are not automatically created by this route. Call Agent nodes belong in server actions; expose them with a separate service action calling that server action.",
+      "example": {
+        "ops": [
+          "reference",
+          "agent",
+          "logic"
+        ],
+        "max": 12
+      },
+      "elements": [
+        {
+          "role": "agent",
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.Logic.IAgent",
+              "jobType": "IAgent",
+              "address": "IAgent:<Name> or @key"
+            }
+          }
+        },
+        {
+          "role": "agent call",
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.Logic.Nodes.ICallAgentNode",
+              "jobType": "ICallAgentNode",
+              "address": "<action>/<call>"
+            }
+          }
+        },
+        {
+          "role": "tool",
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.Logic.IActionHandler",
+              "jobType": "IActionHandler",
+              "address": "<agent>/#IActionHandler[n]"
+            }
+          }
+        }
+      ],
+      "platforms": {
+        "odc": {
+          "proofs": [],
+          "negative": [],
+          "context": {
+            "kinds": [
+              "Agent",
+              "CallAgentNode",
+              "ActionHandler"
+            ]
+          },
+          "limits": [
+            {
+              "text": "Native creation, configuration, tool metadata, identity-preserving edit, save/reload and live publishing are tested. Runtime model answers and external MCP/A2A integrations require separate execution evidence.",
+              "origin": "platforms/odc/docs/AGENTES.md"
+            }
+          ],
+          "differences": []
+        }
+      },
+      "depends": [],
+      "alternatives": []
+    }
+  ],
+  "unavailable": [
+    {
+      "id": "ai.agent-connections",
+      "lanes": [
+        "odc"
+      ],
+      "keywords": [
+        "create mcp connection",
+        "create a2a connection",
+        "agent manifest",
+        "remote mcp tool",
+        "create knowledge base"
+      ],
+      "reason": "The native agent route imports existing AI model connections. Creation of MCP/A2A/knowledge-base assets and Agent Editor manifests is separate and is not covered by agent authoring tests.",
+      "evidence": "platforms/odc/docs/AGENTES.md",
+      "negative": {
+        "odc": []
+      },
+      "alternative": "Discover the existing ODC connection/Portal operations and their own contracts."
+    }
+  ],
+  "coverage": []
+}

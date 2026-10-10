@@ -1,0 +1,22 @@
+{
+ "description": "DropdownTags (OutSystemsUI, Interaction) tipico; inputs obrigatorios OptionsList ligados a variaveis da tela; eventos Initialized, OnChanged tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "OptionsListValue", "as": "$vOptionsListValue"},
+  {"op": "set", "target": "$vOptionsListValue", "prop": "DataType", "value": "DropdownOption List"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastDropdownTagsId", "as": "$vLastDropdownTagsId"},
+  {"op": "set", "target": "$vLastDropdownTagsId", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastSelectedOptionList", "as": "$vLastSelectedOptionList"},
+  {"op": "set", "target": "$vLastSelectedOptionList", "prop": "DataType", "value": "DropdownOption List"},
+  {"op": "logic", "data": {"actions": [{"name": "DropdownTagsDemoInitialized", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de Initialized", "inputs": [{"name": "DropdownTagsId", "type": "Text"}],"steps": [{"assign": {"LastDropdownTagsId": "DropdownTagsId"},"as": "KeepInitialized"}]}, {"name": "DropdownTagsDemoOnChanged", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de OnChanged", "inputs": [{"name": "DropdownTagsId", "type": "Text"}, {"name": "SelectedOptionList", "type": "DropdownOption List"}],"steps": [{"assign": {"LastDropdownTagsId": "DropdownTagsId", "LastSelectedOptionList": "SelectedOptionList"},"as": "KeepOnChanged"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "DropdownTagsDemo", "source": "IMobileBlock:DropdownTags", "as": "$b"},
+  {"op": "set", "target": "$b/OptionsList", "prop": "Value", "value": "OptionsListValue"},
+  {"op": "set", "target": "$b/Initialized", "prop": "Handler", "value": "IScreenAction:DropdownTagsDemoInitialized"},
+  {"op": "set", "target": "$b/Initialized/DropdownTagsId", "prop": "Value", "value": "DropdownTagsId"},
+  {"op": "set", "target": "$b/OnChanged", "prop": "Handler", "value": "IScreenAction:DropdownTagsDemoOnChanged"},
+  {"op": "set", "target": "$b/OnChanged/DropdownTagsId", "prop": "Value", "value": "DropdownTagsId"},
+  {"op": "set", "target": "$b/OnChanged/SelectedOptionList", "prop": "Value", "value": "SelectedOptionList"}
+ ]
+}

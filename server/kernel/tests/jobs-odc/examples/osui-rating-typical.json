@@ -1,0 +1,25 @@
+{
+ "description": "Rating do OSUI editavel: valor numa variavel, escala de 5, tamanho, e o OnSelect grava a nota escolhida.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "RateProduct", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Rate\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Score", "as": "$vScore"},
+  {"op": "set", "target": "$vScore", "prop": "DataType", "value": "Decimal"},
+  {"op": "set", "target": "$vScore", "prop": "DefaultValue", "value": "3"},
+  {"op": "logic", "data": {"actions": [{"name": "Rated", "kind": "screen", "owner": "IMobileScreen:RateProduct", "inputs": [{"name": "Value", "type": "Decimal"}], "steps": [{"assign": {"Score": "Value"}, "as": "Keep"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Rating1", "source": "IMobileBlock:Rating", "as": "$rt"},
+  {"op": "set", "target": "$rt/RatingValue", "prop": "Value", "value": "Score"},
+  {"op": "set", "target": "$rt/RatingScale", "prop": "Value", "value": "5"},
+  {"op": "set", "target": "$rt/IsEdit", "prop": "Value", "value": "True"},
+  {"op": "set", "target": "$rt/Size", "prop": "Value", "value": "Entities.Size.Medium"},
+  {"op": "set", "target": "$rt/OnSelect", "prop": "Handler", "value": "IMobileScreen:RateProduct/Rated"},
+  {"op": "set", "target": "$rt/OnSelect/Value", "prop": "Value", "value": "Value"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "\"Your score: \" + Score"}
+ ]
+}

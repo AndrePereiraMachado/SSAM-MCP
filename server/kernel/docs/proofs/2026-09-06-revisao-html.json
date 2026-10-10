@@ -1,0 +1,52 @@
+{
+  "reviewedCommit": "5004e59690cdce41751dd30c52c2eb2e6653615e",
+  "publishedBaseline": {
+    "module": "Incidents_UI",
+    "versionId": 4901,
+    "isPublishedVersion": true
+  },
+  "candidate": {
+    "delivered": false,
+    "published": false,
+    "accepted": true,
+    "isValid": true,
+    "objects": 17009,
+    "loadMs": 1271,
+    "applyMs": 8607,
+    "newWarnings": 4,
+    "tolerated": 4,
+    "merge": {
+      "LocalObjects": 17009,
+      "ForeignObjects": 17009,
+      "LocalIsValid": true,
+      "Errors": 0,
+      "Warnings": 18,
+      "HasConflicts": false
+    }
+  },
+  "artifacts": {
+    ".local\\review\\candidate.oml": "3593f49bda0c8bcedbdde0fb171418c463d22f34308169ea14159d940bbc12be",
+    ".local\\review\\candidate-merged.oml": "16d6af314dea122857e114b2f1d9e7ee5a325b707ba5877d4cc80ddac0df2d90",
+    "tests\\jobs-live\\html-dashboard-incidents.json": "d154618d76620fa21eacc689b363d8c84671c2dc2fddea237b8ef3d3aae15957"
+  },
+  "browserEvidence": "Published baseline only: anonymous/authenticated desktop/mobile; search reaches four data actions; open-card URL has dates only and destination shows all statuses.",
+  "deliveryBlock": "SS4 authenticated bridge operations rejected by trusted-controller authentication; SS5 unavailable.",
+  "tests": {
+    "baselineReproductions": {
+      "failedBeforeFix": 4,
+      "passedAfterFix": 4
+    },
+    "fullRegression": {
+      "total": 447,
+      "passed": 445,
+      "failed": 2,
+      "reason": "Two outdated reference-page assertions still expected the removed header/user binding; corrected and retested."
+    },
+    "finalFocusedRun": {
+      "total": 54,
+      "passed": 54,
+      "failed": 0,
+      "scope": "HtmlSpecTests, HtmlDeltaTests, MessageExpectationTests; includes the added native retained-consumer test."
+    }
+  }
+}

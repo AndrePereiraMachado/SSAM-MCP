@@ -1,0 +1,23 @@
+{
+ "description": "ScrollableArea do OSUI vertical com altura fixa e barra compacta, envolvendo uma List longa de produtos.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [{"name": "Name", "type": "Text", "length": 100, "mandatory": true}, {"name": "Price", "type": "Currency"}, {"name": "ImageUrl", "type": "Text", "length": 500}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ScrollingList", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Scrolling\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$GetProducts"},
+  {"op": "create", "parent": "$GetProducts", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ScrollableArea1", "source": "IMobileBlock:ScrollableArea", "as": "$sa"},
+  {"op": "set", "target": "$sa/Orientation", "prop": "Value", "value": "Entities.Orientation.Vertical"},
+  {"op": "set", "target": "$sa/Height", "prop": "Value", "value": "\"300px\""},
+  {"op": "set", "target": "$sa/ScrollbarStyle", "prop": "Value", "value": "Entities.ScrollbarStyle.Compact"},
+  {"op": "create", "parent": "$sa/Content", "type": "IList", "name": "ProductList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetProducts.List"},
+  {"op": "create", "parent": "$list", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "GetProducts.List.Current.Product.Name"}
+ ]
+}

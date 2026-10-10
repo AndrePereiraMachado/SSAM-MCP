@@ -1,0 +1,36 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "root-screen",
+    "ITextWidget"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Greeting",
+            "type": "ITextWidget",
+            "properties": {
+              "Text": "Hello screen"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "mutation": {
+    "target": "IWebScreen:Coverage/Greeting",
+    "prop": "Text",
+    "value": "Changed"
+  }
+}

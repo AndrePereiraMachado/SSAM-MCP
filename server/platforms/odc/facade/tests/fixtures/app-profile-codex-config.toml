@@ -1,0 +1,33 @@
+# A personal Codex configuration (fixture): other MCP servers, trusted projects and an unrelated hook.
+model = "gpt-5"
+approval_policy = "on-request"
+
+[projects.'C:\Users\someone\repo']
+trust_level = "trusted"
+
+[mcp_servers.some_other_tool]
+command = "npx"
+args = ["-y", "@example/tool"]
+env = { EXAMPLE_FLAG = "1" }
+
+[mcp_servers."odd name.with dot"]
+command = 'C:\tools\odd.exe'
+enabled = true
+
+[mcp_servers.'back\slash']
+command = "bs"
+
+[mcp_servers.ssam_hybrid]
+command = "python"
+args = ["-B", "old"]
+
+[mcp_servers.123]
+command = "numeric"
+
+[tui]
+notifications = ["agent-turn-complete"]
+
+[[hooks.Stop]]
+[[hooks.Stop.hooks]]
+type = "command"
+command = "echo done"

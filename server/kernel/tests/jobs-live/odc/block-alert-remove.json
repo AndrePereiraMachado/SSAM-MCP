@@ -1,0 +1,9 @@
+{
+ "description": "ODC (WS2, prova viva): o job inverso de block-alert: remove o bloco WF_PinNotFoundBanner e devolve o modulo ao estado inicial. Headless: base = o resultado de block-alert sobre a fixture pessoal r8; ao vivo: base = snapshot do modulo aberto depois do primeiro merge (StudioSessionOdc.DeliverJob).",
+ "base": "job:block-alert",
+ "expectValid": true,
+ "ops": [
+  {"op": "delete", "target": "IMobileBlock:WF_PinNotFoundBanner"},
+  {"op": "find", "type": "IMobileBlock", "name": "WF_PinNotFoundBanner"}
+ ]
+}

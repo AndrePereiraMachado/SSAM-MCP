@@ -1,0 +1,33 @@
+{
+ "description": "Cobertura testada (fase 2): del de OutSystems.Model.Data.IStaticEntityRecord (odc) em staticEntity. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "static": [
+     {
+      "name": "CovSStatic",
+      "records": [
+       {
+        "name": "One",
+        "label": "One"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$CovSStatic",
+   "type": "IStaticEntityRecord",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

@@ -1,0 +1,41 @@
+{
+ "description": "ODC: refatorar MODELO HERDADO -- o trabalho de manutencao, nao o de nascimento. Este job NAO cria o modelo: herda-o de job:logic-steps (que herda os dados de job:data-full-model) e mexe no que ja estava la. A helper WfCov_Task_Describe, chamada de dentro do foreach da action publica, e renomeada COM o consumidor real ligado; depois e duplicada (a copia nasce sem consumidores, com o sufixo que a plataforma escolhe), o consumidor e repontado com replace, a antiga e apagada sem force e o nome original volta para a copia. Pelo meio renomeiam-se os dois nos de aggregate herdados e um atributo herdado, e o job LE DE VOLTA o que acompanhou e o que ficou para tras: na faixa ODC a expressao <No>.<Saida> e reescrita sozinha (na faixa O11 a mesma expressao mantem o nome antigo e o modulo cai com ExpressionUnknownObject), enquanto o nome do no consumidor, o nome do indice e a Description continuam com o texto antigo e so a mao os corrige.",
+ "base": "job:logic-steps",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "find", "name": "WfCov_Task_Describe", "_why": "1. O PONTO DE PARTIDA E HERDADO: nada aqui foi criado por este job. A helper, a action publica que a chama e as entidades vem de job:logic-steps."},
+  {"op": "usages", "target": "IServerAction:WfCov_Task_Describe", "_why": "um consumidor REAL, herdado: o no Describe dentro do foreach EachOpen de WfCov_Project_CloseOpenTasks. E este consumidor que torna o rename e o replace interessantes."},
+  {"op": "dump", "target": "IServerAction:WfCov_Project_CloseOpenTasks", "depth": 4, "_why": "o ANTES por escrito: as expressoes citam GetProject, GetOpenOfProject e WfCovTask.IsDone."},
+
+  {"op": "rename", "target": "IServerAction:WfCov_Project_CloseOpenTasks/GetProject", "name": "WfLoadProject", "_why": "2. RENOMEAR UM NO HERDADO, que e a forma <No>.<Saida> da pergunta. Duas expressoes herdadas leem este no: a condicao do If (GetProject.List.Empty) e o Assign final (GetProject.List.Current.WfCovProject.Name). Volta consumers=3 e expressionsRewritten=2 -- no rename de um AGGREGATE a faixa ODC conta e reescreve as expressoes que leem a saida do no."},
+  {"op": "rename", "target": "IServerAction:WfCov_Project_CloseOpenTasks/GetOpenOfProject", "name": "WfLoadOpenTasks", "_why": "o mesmo com quatro leitores herdados: o RecordList do foreach, o Assign do ciclo, o argumento da chamada a helper e o Summary.OpenTasks. Volta consumers=5 e expressionsRewritten=4."},
+  {"op": "dump", "target": "IServerAction:WfCov_Project_CloseOpenTasks", "depth": 4, "_why": "LER DE VOLTA, E A PROVA CENTRAL: as SEIS expressoes ja dizem WfLoadProject/WfLoadOpenTasks sem uma unica correcao a mao -- WfLoadProject.List.Empty, WfLoadOpenTasks.List, WfLoadOpenTasks.Count e as tres .List.Current. Na faixa O11 este mesmo dump mostraria ainda GetProject.List.Empty e o Verify daria ExpressionUnknownObject: Can't identify 'GetProject' element in expression. Compare sempre pelo dump, nunca so pelo contador: ele conta objetos consumidores, e ha casos (o rename da action, mais abaixo) em que devolve 0 com o texto na mesma certo."},
+
+  {"op": "rename", "target": "IServerEntity:WfCovTask/IsDone", "name": "IsClosed", "_why": "3. RENOMEAR UM ATRIBUTO HERDADO (rename, nao criacao: por isso segue a convencao da entidade e nao leva o prefixo Wf dos elementos novos). Volta consumers=6 e expressionsRewritten=2: as duas expressoes reescritas sao o filtro do aggregate e o Assign do ciclo; os outros quatro consumidores estao no usages a seguir."},
+  {"op": "usages", "target": "IServerEntity:WfCovTask/IsClosed", "_why": "quem mais segurava o atributo herdado, ja com o nome novo: count=6 mas real=3 -- as duas expressoes reescritas mais o EntityIndexAttribute do indice. Os outros tres vem com derived=true (o IRecordAttributeValue do registo de exemplo e as duas AttributeReference das listas de atributos dos aggregates): sao coisas que o Studio mantem sozinho e que nao contam como uso real."},
+  {"op": "get", "target": "EntityIndex:IX_WfCovTask_ProjectDone", "_why": "LER DE VOLTA O QUE NAO ACOMPANHOU: os Attributes do indice seguiram (ProjectId, IsClosed) porque sao referencias, mas o NOME do indice ainda diz ProjectDone, porque nome e texto. So a mao o corrige -- e este job deixa-o de proposito, para a diferenca ficar visivel."},
+  {"op": "dump", "target": "IServerAction:WfCov_Project_CloseOpenTasks", "depth": 4, "_why": "ja e WfCovTask.IsClosed no filtro do aggregate e no Assign do ciclo."},
+
+  {"op": "rename", "target": "IServerAction:WfCov_Task_Describe", "name": "WfCov_Task_Caption", "_why": "4. RENOMEAR A ACTION HERDADA COM CONSUMIDORES REAIS. O nome estava errado: ela devolve uma legenda, nao uma descricao. Volta consumers=1 (o no do foreach) e expressionsRewritten=0: aqui o zero e honesto, porque nenhuma expressao herdada le Describe.Title. Note o contraste com o rename do aggregate acima, que devolveu 2 e 4 -- o contador muda de significado com o tipo do objeto renomeado, por isso a prova esta no get seguinte, nao no numero."},
+  {"op": "get", "target": "IServerAction:WfCov_Project_CloseOpenTasks/Describe", "_why": "LER DE VOLTA: o Action do no ja aponta para WfCov_Task_Caption (ligacao por chave), mas o NOME do no continua Describe -- o nome do no so acompanha quando era igual ao da action, e aqui foi o autor que lhe chamou Describe."},
+
+  {"op": "duplicate", "target": "IServerAction:WfCov_Task_Caption", "as": "$copy", "_why": "5. DUPLICAR UM ELEMENTO HERDADO. E o Ctrl+D do Studio: a copia entra no mesmo pai, no fim, e o sufixo e escolhido pela PLATAFORMA, nao pelo job."},
+  {"op": "get", "target": "$copy", "_why": "o nome que a plataforma deu: WfCov_Task_Caption2. Repare tambem em Referrers=0 e em que a copia trouxe a Description do original herdado, palavra por palavra."},
+  {"op": "usages", "target": "$copy", "_why": "real=0: a copia nasce SEM consumidores. Nao e defeito, e o significado da operacao."},
+  {"op": "usages", "target": "IServerAction:WfCov_Task_Caption", "_why": "real=1: quem usava o original continua a usar o original."},
+  {"op": "set", "target": "$copy", "prop": "Description", "value": "Versao mantida da helper de legenda. Substituiu a WfCov_Task_Describe original.", "_why": "a copia e que passa a ser mantida; a Description fica de proposito a citar o nome ANTIGO, para o fim do job mostrar que nenhum rename lhe toca."},
+
+  {"op": "replace", "from": "IServerAction:WfCov_Task_Caption", "to": "$copy", "_why": "6. REPONTAR O CONSUMIDOR HERDADO. Nao e procurar e substituir texto: e o mesmo ReplaceReferences que o Studio usa; o no consumidor mantem a MESMA chave e so muda de alvo."},
+  {"op": "usages", "target": "IServerAction:WfCov_Task_Caption", "_why": "a antiga tem de ficar em zero."},
+  {"op": "usages", "target": "$copy", "_why": "o consumidor herdado esta agora aqui."},
+
+  {"op": "delete", "target": "IServerAction:WfCov_Task_Caption", "_why": "7. depois do replace nao ha consumidores, por isso o delete passa SEM force e brokenConsumers=0."},
+  {"op": "rename", "target": "$copy", "name": "WfCov_Task_Caption", "_why": "e so agora que este nome esta livre: antes do delete o rename seria recusado por colisao no mesmo escopo."},
+
+  {"op": "get", "target": "IServerAction:WfCov_Project_CloseOpenTasks/Describe", "_why": "8. O DEPOIS: o no herdado tem a MESMA chave do primeiro usages la em cima, e o Action dele aponta agora para a chave da copia. Foi o alvo que mudou, nao o consumidor."},
+  {"op": "get", "target": "$copy", "_why": "LER DE VOLTA O QUE NAO ACOMPANHOU: o nome e outra vez WfCov_Task_Caption mas a Key e a da copia, nao a do original apagado; e a Description continua a dizer WfCov_Task_Describe, um nome que ja nao existe no modulo, porque Description e texto do autor."},
+  {"op": "find", "name": "WfCov_Task_Describe", "_why": "lista vazia: o nome herdado desapareceu do modulo, e o modelo continua valido."},
+  {"op": "dump", "target": "IServerAction:WfCov_Project_CloseOpenTasks", "depth": 4, "_why": "o estado final da action publica herdada: seis expressoes reescritas pela plataforma, um consumidor repontado, zero correcoes a mao dentro do fluxo."}
+ ]
+}

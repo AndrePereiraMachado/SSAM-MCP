@@ -1,0 +1,43 @@
+{
+  "ok": true,
+  "command": "apply",
+  "elapsedMs": 1334,
+  "data": {
+    "ops": 14,
+    "objects": 181,
+    "isValid": false,
+    "expectedValid": false,
+    "messages": 2,
+    "applyMs": 567,
+    "accepted": false,
+    "validation": {
+      "new": [
+        { "id": "ExpressionUnknownFunction", "type": "Error", "path": "Headless_CS (ESpace) / Text_Tail (ServerAction) / CalculaCauda (AssignNode) / Assignment", "detail": "Invalid Expression | Unknown function 'Right' in expression." },
+        { "id": "UnusedUserAction", "type": "Warning", "path": "Headless_CS (ESpace) / Text_Tail (ServerAction)", "detail": "Unused User Action | 'Text_Tail' action is never used in this module. Consider deleting it." }
+      ],
+      "fixed": [],
+      "preexisting": [],
+      "unexpected": [
+        { "id": "ExpressionUnknownFunction", "type": "Error", "path": "Headless_CS (ESpace) / Text_Tail (ServerAction) / CalculaCauda (AssignNode) / Assignment", "detail": "Invalid Expression | Unknown function 'Right' in expression." },
+        { "id": "UnusedUserAction", "type": "Warning", "path": "Headless_CS (ESpace) / Text_Tail (ServerAction)", "detail": "Unused User Action | 'Text_Tail' action is never used in this module. Consider deleting it." }
+      ],
+      "missingExpected": [],
+      "ambiguous": [],
+      "tolerated": []
+    },
+    "dataContract": { "count": 0, "accepted": true, "differences": [] },
+    "timings": { "loadMs": 533, "applyMs": 567, "totalMs": 1334 },
+    "details": [
+      "Error ExpressionUnknownFunction: Invalid Expression | Unknown function 'Right' in expression. @ Headless_CS (ESpace) / Text_Tail (ServerAction) / CalculaCauda (AssignNode) / Assignment",
+      "Warning UnusedUserAction: Unused User Action | 'Text_Tail' action is never used in this module. Consider deleting it. @ Headless_CS (ESpace) / Text_Tail (ServerAction)",
+      "d3", "d4", "d5", "d6", "d7", "d8", "d9", "d10", "d11", "d12"
+    ],
+    "policyMessages": ["policy: the job declares no expectedMessages"],
+    "results": [
+      { "op": "get", "result": { "type": "IServerAction", "name": "Text_Tail", "properties": { "Name": "Text_Tail", "Public": false, "Description": "", "Function": "True", "Order": 0 } } },
+      { "op": "find", "result": [ { "type": "IServerAction", "name": "Text_Tail" }, { "type": "IAssignNode", "name": "CalculaCauda" } ] },
+      { "op": "dump", "result": { "type": "IServerAction", "name": "Text_Tail", "children": [ { "type": "IArgument", "name": "Value" }, { "type": "IAssignNode", "name": "CalculaCauda", "children": [ { "type": "IAssignment", "text": "Right(Value, 1)" } ] } ] } },
+      { "op": "create", "result": { "key": "abc" } }
+    ]
+  }
+}

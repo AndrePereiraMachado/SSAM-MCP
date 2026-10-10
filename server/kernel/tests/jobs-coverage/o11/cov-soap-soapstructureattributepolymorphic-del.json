@@ -1,0 +1,58 @@
+{
+ "description": "Cobertura testada (fase 1, medir): del de ServiceStudio.Plugin.SOAP.ISOAPStructureAttributePolymorphic (o11) em soapStructurePoly. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedCustomStructure",
+   "element": "Headless_CS (ESpace) / CovSSoap (SOAPClient) / CovSStructP (SOAPStructurePolymorphic)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISOAPClient",
+   "name": "CovSSoap",
+   "as": "$c"
+  },
+  {
+   "op": "create",
+   "parent": "$c",
+   "type": "ISOAPStructurePolymorphic",
+   "name": "CovSStructP",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "ISOAPStructureAttributePolymorphic",
+   "name": "CovSField",
+   "as": "$pf"
+  },
+  {
+   "op": "set",
+   "target": "$pf",
+   "prop": "MinOccurrencies",
+   "value": "0"
+  },
+  {
+   "op": "set",
+   "target": "$pf",
+   "prop": "MaxOccurrencies",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "ISOAPStructureAttributePolymorphic",
+   "name": "CovASOAPStructureAttributePolymorphic",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

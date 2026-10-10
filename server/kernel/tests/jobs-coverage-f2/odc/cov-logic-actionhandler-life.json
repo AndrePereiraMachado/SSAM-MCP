@@ -1,0 +1,76 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.Logic.IActionHandler (odc) em ctxAgent. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/blank-agent.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IAgent",
+   "name": "CovSAgent",
+   "as": "$p"
+  },
+  {
+   "op": "set",
+   "target": "$p",
+   "prop": "AIModel",
+   "value": "IServerActionSignature:CovAIModel"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "CovSTool",
+   "as": "$t"
+  },
+  {
+   "op": "create",
+   "parent": "$t",
+   "type": "IStartNode",
+   "as": "$t0"
+  },
+  {
+   "op": "create",
+   "parent": "$t",
+   "type": "IEndNode",
+   "as": "$t9"
+  },
+  {
+   "op": "link",
+   "from": "$t0",
+   "to": "$t9"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IActionHandler",
+   "as": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Action",
+   "value": "$t"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "move",
+   "target": "$b",
+   "first": true
+  }
+ ]
+}

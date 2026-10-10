@@ -1,0 +1,70 @@
+{
+  "date": "2026-09-05",
+  "scope": "Implementation and local validation; live laboratory creation awaits explicit user approval after auto-review rejection.",
+  "installedLanes": [
+    "ss4",
+    "ss5"
+  ],
+  "regressionSuite": {
+    "passed": 261,
+    "failed": 0,
+    "durationSeconds": 147,
+    "tree": ".local/data-contract-validation",
+    "excludedUntrackedSessionJobs": [
+      "incidents-cs-tables",
+      "incidents-cs-static",
+      "incidents-cs-data"
+    ],
+    "note": "Original invalid jobs preserved; tested compact replacement data-contract-incidents instead."
+  },
+  "fixture": {
+    "job": "tests/jobs/data-contract-incidents.json",
+    "specOps": 1,
+    "entities": 4,
+    "staticEntities": 2,
+    "staticRecords": 9,
+    "explicitIndexes": 6,
+    "assertions": 361,
+    "recordValueAssertions": 49,
+    "longTextLength": 2000000,
+    "messages": 0,
+    "ss4ColdWorkerWallMs": 3670,
+    "ss4ApplyMs": 804
+  },
+  "coldAgentAcceptance": {
+    "dispatchUtc": "2026-09-05T16:33:09.592Z",
+    "contentVerifiedAt": "2026-09-05T13:34:46.573952-03:00",
+    "elapsedSeconds": 96.981952,
+    "definitionAttempts": 1,
+    "applyAttempts": 2,
+    "accepted": true,
+    "localOnly": true,
+    "workerAlreadyAvailable": true,
+    "publicRecipeAvailable": true,
+    "remainingFrictionFixed": "Runner now persists its complete result and dataSummary; no second apply is needed to retrieve it.",
+    "report": ".local/cold-incident-summary-acceptance/report.md"
+  },
+  "firstColdEvaluation": {
+    "firstValidOmlSecondsFromOwnClock": 88.723053,
+    "contentVerificationSecondsFromOwnClock": 206.581442,
+    "report": ".local/cold-incident-acceptance/report.json",
+    "foundAndFixed": [
+      "Get of full entity failed on Studio None-type sentinel",
+      "Missing readable data summary caused many redundant read queries"
+    ]
+  },
+  "liveProof": {
+    "status": "completed-by-controlled-data-flow",
+    "application": "ZZDataContract",
+    "module": "ZZDataContract_CS",
+    "lane": "ss5",
+    "reason": "Specific user approval received; lab initial publication, live data merge and recovery proofs completed.",
+    "evidence": "docs/proofs/2026-09-05-fluxo-controlado-live.json"
+  },
+  "limitations": [
+    "Preflight reports base-dependent types as unresolved; final resolution uses the base before mutation when no producer import is pending.",
+    "Data proof covers data declarations executed by the job, not semantic interpretation of arbitrary natural language.",
+    "check-delivery checks stored source and artifact hashes, not later manual changes in the Studio.",
+    "97 seconds is one local cold-context evaluation with an existing worker and a directly applicable public recipe; live merge latency is not included."
+  ]
+}

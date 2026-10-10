@@ -1,0 +1,25 @@
+{
+ "description": "FlipContent (OutSystemsUI, Content) tipico; placeholders CardFront, CardBack com dados do aggregate de tarefas; eventos OnFlip, Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastFlipContentId", "as": "$vLastFlipContentId"},
+  {"op": "set", "target": "$vLastFlipContentId", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastIsFlipped", "as": "$vLastIsFlipped"},
+  {"op": "set", "target": "$vLastIsFlipped", "prop": "DataType", "value": "Boolean"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetShowcaseTasks", "as": "$tasks"},
+  {"op": "create", "parent": "$tasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "logic", "data": {"actions": [{"name": "FlipContentDemoOnFlip", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de OnFlip", "inputs": [{"name": "FlipContentId", "type": "Text"}, {"name": "IsFlipped", "type": "Boolean"}],"steps": [{"assign": {"LastFlipContentId": "FlipContentId", "LastIsFlipped": "IsFlipped"},"as": "KeepOnFlip"}]}, {"name": "FlipContentDemoInitialized", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de Initialized", "inputs": [{"name": "FlipContentId", "type": "Text"}],"steps": [{"assign": {"LastFlipContentId": "FlipContentId"},"as": "KeepInitialized"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "FlipContentDemo", "source": "IMobileBlock:FlipContent", "as": "$b"},
+  {"op": "set", "target": "$b/OnFlip", "prop": "Handler", "value": "IScreenAction:FlipContentDemoOnFlip"},
+  {"op": "set", "target": "$b/OnFlip/FlipContentId", "prop": "Value", "value": "FlipContentId"},
+  {"op": "set", "target": "$b/OnFlip/IsFlipped", "prop": "Value", "value": "IsFlipped"},
+  {"op": "set", "target": "$b/Initialized", "prop": "Handler", "value": "IScreenAction:FlipContentDemoInitialized"},
+  {"op": "set", "target": "$b/Initialized/FlipContentId", "prop": "Value", "value": "FlipContentId"},
+  {"op": "create", "parent": "$b/CardFront", "type": "IExpression", "as": "$ph1"},
+  {"op": "set", "target": "$ph1", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/CardBack", "type": "IExpression", "as": "$ph2"},
+  {"op": "set", "target": "$ph2", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""}
+ ]
+}

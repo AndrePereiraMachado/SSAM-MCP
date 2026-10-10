@@ -1,0 +1,17 @@
+{
+ "description": "A RECUSA de `duplicate` de um no de diagrama de entidades (faixa ODC). A regra de importacao do diagrama (AllowImportOf) so aceita um no colado junto com a origem da sua entidade e uma vez por entidade: o no copiado sozinho e recusado pelo mesmo diagrama e por qualquer outro. O kernel diz isso e manda por a entidade no diagrama com create IEntityDiagramNode.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectError": [
+  "duplicate: IEntityDiagram 'DupDiagramB' refuses this IEntityDiagramNode by its own import rule",
+  "no diagram takes this copy",
+  "create IEntityDiagramNode (args.entity)"
+ ],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "DupDiagramEntity", "attributes": [{"name": "Title", "type": "Text", "length": 50}]}]}},
+  {"op": "create", "parent": "@espace", "type": "IEntityDiagram", "name": "DupDiagramA", "as": "$diagramA"},
+  {"op": "create", "parent": "$diagramA", "type": "IEntityDiagramNode", "args": {"entity": "$DupDiagramEntity"}, "as": "$node"},
+  {"op": "create", "parent": "@espace", "type": "IEntityDiagram", "name": "DupDiagramB", "as": "$diagramB"},
+  {"op": "duplicate", "target": "$node", "parent": "$diagramB", "as": "$copy"}
+ ]
+}

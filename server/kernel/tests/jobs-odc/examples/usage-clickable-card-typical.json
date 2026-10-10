@@ -1,0 +1,49 @@
+{
+ "description": "Card de produto clicavel numa Gallery: o onclick do Container chama uma screen action que recebe o Id da linha e navega para o detalhe passando esse Id.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [
+   {"name": "Name", "type": "Text", "length": 100, "mandatory": true},
+   {"name": "Price", "type": "Currency"}]}]}},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductDetail", "as": "$detail", "_why": "1. a tela de destino nasce antes de quem navega para ela"},
+  {"op": "set", "target": "$detail/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$detail", "type": "IInputParameter", "name": "ProductId", "as": "$pid"},
+  {"op": "set", "target": "$pid", "prop": "DataType", "value": "Product Identifier"},
+  {"op": "set", "target": "$pid", "prop": "IsMandatory", "value": true},
+  {"op": "create", "parent": "$detail", "type": "IScreenAggregate", "name": "GetProduct", "as": "$one"},
+  {"op": "create", "parent": "$one", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "create", "parent": "$one", "type": "IFilter", "args": {"condition": "Product.Id = ProductId"}},
+  {"op": "create", "parent": "$detail/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$dTitle"},
+  {"op": "set", "target": "$dTitle", "prop": "Value", "value": "GetProduct.List.Current.Product.Name"},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductGrid", "as": "$scr", "_why": "2. a grade de cards"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "logic", "_why": "o handler de um evento estendido tem de ser uma screen action (a tela direto e recusada pela plataforma); ela navega com IDestinationNode", "data": {"actions": [
+   {"name": "OpenProduct", "kind": "screen", "owner": "IMobileScreen:ProductGrid",
+    "inputs": [{"name": "ProductId", "type": "Product Identifier"}],
+    "steps": [{"node": "IDestinationNode", "as": "GoToDetail", "properties": {"Destination": "IMobileScreen:ProductDetail"}, "args": {"ProductId": "ProductId"}}]}]}},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Grid", "source": "IMobileBlock:Gallery", "empty": true, "as": "$gal", "_why": "empty tira a List de exemplo com que a Gallery nasce"},
+  {"op": "create", "parent": "$gal/Content", "type": "IList", "name": "ProductList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetProducts.List"},
+  {"op": "create", "parent": "$list", "type": "IContainer", "name": "ProductCard", "as": "$card"},
+  {"op": "set", "target": "$card", "prop": "Style", "value": "\"card\""},
+  {"op": "create", "parent": "$card", "type": "IExpression", "as": "$name"},
+  {"op": "set", "target": "$name", "prop": "Value", "value": "GetProducts.List.Current.Product.Name"},
+  {"op": "create", "parent": "$card", "type": "IExpression", "as": "$price"},
+  {"op": "set", "target": "$price", "prop": "Value", "value": "FormatCurrency(GetProducts.List.Current.Product.Price, \"$\", 2, \".\", \",\")"},
+
+  {"op": "create", "parent": "$card", "type": "IEvent", "as": "$click", "_why": "3. o clique do card: evento estendido onclick no Container"},
+  {"op": "set", "target": "$click", "prop": "Event", "value": "onclick"},
+  {"op": "set", "target": "$click", "prop": "Handler", "value": "IMobileScreen:ProductGrid/OpenProduct"},
+  {"op": "set", "target": "$click/ProductId", "prop": "Value", "value": "GetProducts.List.Current.Product.Id", "_why": "o argumento leva o nome do input da screen action"},
+
+  {"op": "get", "target": "$click"},
+  {"op": "usages", "target": "IMobileScreen:ProductGrid/OpenProduct", "_why": "o IEvent do card e o consumidor da screen action"}
+ ]
+}

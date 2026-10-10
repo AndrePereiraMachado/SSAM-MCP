@@ -1,0 +1,71 @@
+{
+ "description": "Cobertura testada (fase 2): life de ServiceStudio.Plugin.SOAP.ISOAPActionOutput (odc) em soapAction. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISOAPClient",
+   "name": "CovSSoap",
+   "as": "$c"
+  },
+  {
+   "op": "create",
+   "parent": "$c",
+   "type": "ISOAPAction",
+   "name": "CovSOp",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "ISOAPActionOutput",
+   "name": "CovASOAPActionOutput",
+   "as": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "MinOccurrencies",
+   "value": "1"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "MaxOccurrencies",
+   "value": "1"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "OriginalName",
+   "value": "covOut"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRSOAPActionOutput"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "move",
+   "target": "$b",
+   "first": true
+  }
+ ]
+}

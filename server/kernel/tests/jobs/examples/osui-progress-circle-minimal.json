@@ -1,0 +1,10 @@
+{
+ "description": "ProgressCircle (OutSystemsUI, Numbers) minimo: instancia como o Studio cria ao arrastar o bloco; criado vazio, porque o conteudo de exemplo do bloco usa elementos que a tela nao tem; inputs obrigatorios Progress com valores simples.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ProgressCircleDemo", "source": "IMobileBlock:ProgressCircle", "empty": true,"as": "$b"},
+  {"op": "set", "target": "$b/Progress", "prop": "Value", "value": "40"}
+ ]
+}

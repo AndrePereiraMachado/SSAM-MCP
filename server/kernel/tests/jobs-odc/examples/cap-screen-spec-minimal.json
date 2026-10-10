@@ -1,0 +1,15 @@
+{
+ "description": "Tela por arquetipo (op screen): uma tabela de produtos gerada de uma so declaracao kind table, com fonte na entidade e duas colunas.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [
+   {"name": "Name", "type": "Text", "length": 100, "mandatory": true},
+   {"name": "Price", "type": "Currency"}]}]}},
+  {"op": "screen", "data": {"screens": [
+   {"name": "ProductTable", "kind": "table", "title": "Products",
+    "source": {"entity": "Product", "as": "GetProducts", "sort": [["Product.Name", "Ascending"]]},
+    "columns": [{"field": "Name", "label": "Product"}, {"field": "Price"}]}]}}
+ ]
+}

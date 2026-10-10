@@ -1,0 +1,61 @@
+{
+  "sourceSha256": "933d61367b61eec0ad77321eb7c433af26c743c6d8d7e30df5e80f5c8d9c369f",
+  "cases": [
+    {
+      "id": "space-combining-mark/Measure",
+      "method": "Measure",
+      "arguments": [
+        " \u0301"
+      ]
+    },
+    {
+      "id": "space-combining-mark/Describe",
+      "method": "Describe",
+      "arguments": [
+        " \u0301"
+      ]
+    },
+    {
+      "id": "space-combining-mark-word/Measure",
+      "method": "Measure",
+      "arguments": [
+        " \u0301x "
+      ]
+    },
+    {
+      "id": "space-combining-mark-word/Describe",
+      "method": "Describe",
+      "arguments": [
+        " \u0301x "
+      ]
+    },
+    {
+      "id": "space-zwj/Measure",
+      "method": "Measure",
+      "arguments": [
+        " \u200D"
+      ]
+    },
+    {
+      "id": "space-zwj/Describe",
+      "method": "Describe",
+      "arguments": [
+        " \u200D"
+      ]
+    },
+    {
+      "id": "space-variation-selector/Measure",
+      "method": "Measure",
+      "arguments": [
+        " \uFE0F"
+      ]
+    },
+    {
+      "id": "space-variation-selector/Describe",
+      "method": "Describe",
+      "arguments": [
+        " \uFE0F"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+ "description": "SectionGroup do OSUI: a instancia com uma Section no placeholder Sections.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "SectionGroupDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "SectionGroup1", "source": "IMobileBlock:SectionGroup", "as": "$sg"},
+  {"op": "create", "parent": "$sg/Sections", "type": "IMobileBlockInstanceWidget", "name": "Section1", "source": "IMobileBlock:Section", "as": "$s1"},
+  {"op": "create", "parent": "$s1/Title", "type": "ITextWidget", "as": "$text1"},
+  {"op": "set", "target": "$text1", "prop": "Text", "value": "First"}
+ ]
+}

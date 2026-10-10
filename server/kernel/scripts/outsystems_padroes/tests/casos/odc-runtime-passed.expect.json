@@ -1,0 +1,14 @@
+{
+ "_leia": "ODC: o estágio runtime só cruza runtimeTests com runtimeEvidence e vale nas duas plataformas; sem estágio de detecção pedido, nenhuma regra fica 'não checada no ODC ainda'.",
+ "stage": "runtime",
+ "platform": "odc",
+ "mode": "autor",
+ "fromReport": "runtime.report.json",
+ "review": "runtime-pass.review.json",
+ "exitCode": 0,
+ "ruleStatus": {
+  "T4": "checada",
+  "L3": "fora-dos-estagios",
+  "AR1": "nao-se-aplica"
+ }
+}

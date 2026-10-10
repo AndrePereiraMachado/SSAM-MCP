@@ -1,0 +1,10 @@
+{
+ "description": "FloatingActionsItem (OutSystemsUI, Interaction) minimo: instancia como o Studio cria ao arrastar o bloco; dentro de um FloatingActions vazio (placeholder Items).",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "FloatingActionsDemo", "source": "IMobileBlock:FloatingActions", "empty": true,"as": "$parent"},
+  {"op": "create", "parent": "$parent/Items", "type": "IMobileBlockInstanceWidget", "name": "FloatingActionsItemDemo", "source": "IMobileBlock:FloatingActionsItem", "as": "$b"}
+ ]
+}

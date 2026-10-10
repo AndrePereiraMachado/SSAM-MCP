@@ -1,0 +1,18 @@
+{
+  "oracleBasis": "Ordinary C# with the detached IDataSession semantics stated in inputs.json; expectations authored before generated execution.",
+  "cases": [
+    { "method": "DuplicateProjectionMembers", "value": true, "storedQuantity1": 10, "storedNote1": null, "asserts": "Two projection members assigned the same lambda parameter refer to one mutable object." },
+    { "method": "AliasesSurviveAnotherProjection", "value": true, "storedQuantity1": 10, "storedNote1": null, "asserts": "Another Select retains the aliased object while allocating a new outer projection." },
+    { "method": "EqualConstructedObjectsStayDistinct", "value": true, "storedQuantity1": 10, "storedNote1": null, "asserts": "Two new expressions with identical type, key and fields produce distinct objects." },
+    { "method": "SeparateQueriesDetachTheSameKey", "value": true, "storedQuantity1": 10, "storedNote1": null, "asserts": "Separately evaluated Query calls returning the same persisted key produce independent objects." },
+    { "method": "MutationWithoutUpdateStaysDetached", "value": true, "storedQuantity1": 10, "storedNote1": null, "asserts": "Local aliases observe mutation; a later detached read observes unchanged storage." },
+    { "method": "UpdateSavesTheCurrentDetachedFields", "value": true, "storedQuantity1": 46, "storedNote1": "saved", "asserts": "Update saves current fields exactly once; subsequent alias mutations remain local." },
+    { "method": "InsertReturnsIdentityWithoutMutatingTheArgument", "value": true, "storedQuantity1": 10, "storedNote1": null, "inserted": { "Id": 4, "Group": 9, "Quantity": 47, "Note": "inserted" }, "asserts": "Insert returns the generated identity while every alias of the input retains Id zero and later local edits are not saved." },
+    { "method": "JoinFanoutReusesTheLeftSourceObject", "value": true, "storedQuantity1": 10, "storedNote1": null, "asserts": "Two join results reuse the left occurrence; independent same-key right occurrence and result wrappers stay distinct." },
+    { "method": "JoinFanoutReusesBothSourceSides", "value": true, "storedQuantity1": 10, "storedNote1": null, "asserts": "A two-by-two join shares left and right occurrences across result rows without merging independent source sides." },
+    { "method": "ProjectionBeforeJoinRetainsItsOwnIdentity", "value": true, "storedQuantity1": 10, "storedNote1": null, "asserts": "A new object created before a fanout join is reused across its matching results, including its nested entity reference." },
+    { "method": "ProjectionAfterJoinAllocatesForEveryOccurrence", "value": true, "storedQuantity1": 10, "storedNote1": null, "asserts": "An object constructed after the join is new for every combined occurrence, while its source entity remains shared." },
+    { "method": "ArrayResultsPreserveMembersAndDistinctRows", "value": true, "storedQuantity1": 10, "storedNote1": null, "asserts": "ToArray yields a reference array with aliased members within each projection and independent source rows." },
+    { "method": "DefaultTerminalReturnsNullForNoRows", "value": true, "storedQuantity1": 10, "storedNote1": null, "asserts": "FirstOrDefault and SingleOrDefault return null references for no results." }
+  ]
+}

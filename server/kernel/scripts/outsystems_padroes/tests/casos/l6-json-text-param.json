@@ -1,0 +1,15 @@
+{
+ "description": "NEG L6 (OutSystems padroes): parametro Text com nome *Json (JSON transportado entre actions).",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "logic", "data": {"actions": [
+   {"name": "MeasureRunSummary", "kind": "server", "public": true,
+    "description": "Recebe o resumo como texto JSON em vez de structure (violacao proposital da L6).",
+    "inputs": [{"name": "SummaryJson", "type": "Text", "description": "Resumo em JSON passado entre actions do app."}],
+    "outputs": [{"name": "SummaryLength", "type": "Integer", "description": "Tamanho do resumo recebido pelo controle."}],
+    "steps": [{"assign": {"SummaryLength": "Length(SummaryJson)"}, "as": "Measure the summary text"}]}
+  ]}}
+ ]
+}

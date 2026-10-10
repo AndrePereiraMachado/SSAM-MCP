@@ -1,0 +1,22 @@
+{
+ "description": "ProgressCircle (OutSystemsUI, Numbers) tipico; inputs obrigatorios Progress ligados a variaveis da tela; criado vazio e preenchido com conteudo proprio; placeholders Content com dados do aggregate de tarefas; eventos Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "ProgressValue", "as": "$vProgressValue"},
+  {"op": "set", "target": "$vProgressValue", "prop": "DataType", "value": "Integer"},
+  {"op": "set", "target": "$vProgressValue", "prop": "DefaultValue", "value": "40"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastProgressCircleId", "as": "$vLastProgressCircleId"},
+  {"op": "set", "target": "$vLastProgressCircleId", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetShowcaseTasks", "as": "$tasks"},
+  {"op": "create", "parent": "$tasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "logic", "data": {"actions": [{"name": "ProgressCircleDemoInitialized", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de Initialized", "inputs": [{"name": "ProgressCircleId", "type": "Text"}],"steps": [{"assign": {"LastProgressCircleId": "ProgressCircleId"},"as": "KeepInitialized"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ProgressCircleDemo", "source": "IMobileBlock:ProgressCircle", "empty": true,"as": "$b"},
+  {"op": "set", "target": "$b/Progress", "prop": "Value", "value": "ProgressValue"},
+  {"op": "set", "target": "$b/Initialized", "prop": "Handler", "value": "IScreenAction:ProgressCircleDemoInitialized"},
+  {"op": "set", "target": "$b/Initialized/ProgressCircleId", "prop": "Value", "value": "ProgressCircleId"},
+  {"op": "create", "parent": "$b/Content", "type": "IExpression", "as": "$ph1"},
+  {"op": "set", "target": "$ph1", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""}
+ ]
+}

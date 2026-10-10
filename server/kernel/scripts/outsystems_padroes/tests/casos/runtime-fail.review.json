@@ -1,0 +1,12 @@
+{
+ "answers": [],
+ "runtimeEvidence": [
+  {
+   "testId": "fixture0000a",
+   "result": "fail",
+   "test": "E2E-FIXTURE-01",
+   "evidence": "fixture do autoteste: filtro devolveu itens nao urgentes",
+   "date": "2026-09-25"
+  }
+ ]
+}

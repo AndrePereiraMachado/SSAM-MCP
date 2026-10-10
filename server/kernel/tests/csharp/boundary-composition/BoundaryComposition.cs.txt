@@ -1,0 +1,45 @@
+public sealed class Envelope
+{
+    public byte[] Payload { get; set; } = null!;
+    public IReadOnlyList<byte> View { get; set; } = null!;
+    public DateTime Captured { get; set; }
+    public DateTimeOffset? Offset { get; set; }
+}
+
+public static class Rules
+{
+    public static IReadOnlyList<byte> Stamp(Envelope envelope, byte[] payload, int delta = 1)
+    {
+        envelope.Payload = payload;
+        envelope.View = payload;
+        payload[0] = unchecked((byte)(payload[0] + delta));
+        return envelope.View;
+    }
+
+    public static IReadOnlyList<byte>? Pick(IReadOnlyList<byte>? chosen = null, IReadOnlyList<byte>? fallback = null)
+        => chosen ?? fallback;
+
+    public static int Sum(IReadOnlyList<byte> values, int maximum = 10)
+    {
+        var total = 0;
+        var count = 0;
+        foreach (var value in values)
+        {
+            if (count >= maximum) break;
+            total += value;
+            count++;
+        }
+        return total;
+    }
+
+    public static byte[] BackToArray(IReadOnlyList<byte> values) => (byte[])values;
+
+    public static Envelope Record(Envelope envelope, DateTime captured = default, DateTimeOffset? offset = null)
+    {
+        envelope.Captured = captured;
+        envelope.Offset = offset;
+        return envelope;
+    }
+
+    public static byte[] NewHeader(int count = 2) => new byte[count];
+}

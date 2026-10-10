@@ -1,0 +1,15 @@
+# Casos semânticos C#
+
+`ColdStock.cs.txt` e `ColdSwitch.cs.txt` foram produzidos por agentes sem o contexto da implementação. A fonte de `ColdSwitch` foi incorporada sem alterações: 12 métodos e 138 casos em `ColdSwitch.cases.json`. As expectativas foram fixadas antes de executar o C# original, com 138/138 aprovadas em .NET 10.0.11. Incluem códigos de enum não declarados, seletor com incremento, labels compartilhados e saltos entre seleção e laços.
+
+`PatternSemantics` acrescenta 32 regressões do compilador para guards com exceções/efeitos, padrões relacionais, nulidade, variáveis ligadas e expressão não exaustiva. `EnumRuntime` acrescenta três fases de persistência com códigos de catálogo 10/40/90, leitura em requisições distintas, filtros, ordenação e nulidade. Esses complementos foram escritos pelo implementador e não são apresentados como novos testes frios.
+
+`RuntimeCaseSourceTests` compila e executa em .NET os métodos de teste com entradas literais e depois passa a mesma fonte pela entrada pública C#. Seus arquivos ficam em `.local/data-logic-translator/runtime-generated`, separados das fontes congeladas de uma entrega ativa. A camada temporária HTTP executa os métodos nativos no laboratório; ela não contém os grafos de negócio nem troca as guardas de acesso.
+
+Resultado do C# original, Verify/recarga e resultado HTTP são evidências diferentes. A aprovação de uma delas não substitui as demais. Os recibos vivos e as versões publicadas são registrados em `docs/PROVAS.md`.
+
+`ColdQueryProjection.cs.txt` conserva integralmente os cinco métodos do agente frio de contas a receber. Seus 28 casos independentes em `.local/data-logic-translator/cold-query-projection` passaram em .NET e no OutSystems. `csharp_query_lab.py` usa a lógica normalizada pelo controlador (com guards), substitui somente as tabelas SQL por fixtures e compara as respostas completas. Campos padrão omitidos pelo REST seguem o codec documentado no próprio probe; os testes Python verificam que o codec não inventa valores não padrão nem confunde nulo com texto vazio. O JSON bruto acompanha os resultados congelados.
+
+`ColdGrouping.cs.txt` conserva os três relatórios independentes de `.local/data-logic-translator/cold-group-authoring/LedgerReports.cs`. O corpus de 36 casos e oito âncoras passou em .NET. A prova nativa 4947 passou 30/36: seis divergências de médias decimais permanecem falhas do tradutor. O fixture SQL agora escolhe escala capaz de representar exatamente cada coluna de entrada e recusa um conjunto que não caiba em SQL decimal; essa prova de consulta não certifica persistência arbitrária em colunas Decimal da plataforma. Unicode é transportado como bytes UTF-16 para preservar composições sem depender do lexer de literais SQL do Studio. Os originais frios nunca são regravados pelo adaptador.
+
+O corpus de exceções permanece separado em `.local/data-logic-translator/cold-exception-authoring`: 46 casos, 26 retornos e 20 exceções, com traces e estado mutável. Foi verificado somente em C#; não há prova de tradução ou execução nativa dessa bateria ainda.

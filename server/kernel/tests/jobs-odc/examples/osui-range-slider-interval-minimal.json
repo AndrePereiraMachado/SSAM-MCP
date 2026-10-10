@@ -1,0 +1,25 @@
+{
+ "description": "RangeSliderInterval do OSUI: minimo, maximo, os dois valores iniciais e o evento obrigatorio OnValueChange guardando o intervalo.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "IntervalDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "FromValue", "as": "$vFromValue"},
+  {"op": "set", "target": "$vFromValue", "prop": "DataType", "value": "Decimal"},
+  {"op": "set", "target": "$vFromValue", "prop": "DefaultValue", "value": "10"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "ToValue", "as": "$vToValue"},
+  {"op": "set", "target": "$vToValue", "prop": "DataType", "value": "Decimal"},
+  {"op": "set", "target": "$vToValue", "prop": "DefaultValue", "value": "90"},
+  {"op": "logic", "data": {"actions": [{"name": "IntervalChanged", "kind": "screen", "owner": "IMobileScreen:IntervalDemo", "inputs": [{"name": "IntervalStart", "type": "Decimal"}, {"name": "IntervalEnd", "type": "Decimal"}], "steps": [{"assign": {"FromValue": "IntervalStart", "ToValue": "IntervalEnd"}, "as": "Keep"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "RangeSliderInterval1", "source": "IMobileBlock:RangeSliderInterval", "as": "$ri"},
+  {"op": "set", "target": "$ri/MinValue", "prop": "Value", "value": "0"},
+  {"op": "set", "target": "$ri/MaxValue", "prop": "Value", "value": "100"},
+  {"op": "set", "target": "$ri/StartingValueFrom", "prop": "Value", "value": "FromValue"},
+  {"op": "set", "target": "$ri/StartingValueTo", "prop": "Value", "value": "ToValue"},
+  {"op": "set", "target": "$ri/OnValueChange", "prop": "Handler", "value": "IMobileScreen:IntervalDemo/IntervalChanged"},
+  {"op": "set", "target": "$ri/OnValueChange/IntervalStart", "prop": "Value", "value": "IntervalStart"},
+  {"op": "set", "target": "$ri/OnValueChange/IntervalEnd", "prop": "Value", "value": "IntervalEnd"}
+ ]
+}

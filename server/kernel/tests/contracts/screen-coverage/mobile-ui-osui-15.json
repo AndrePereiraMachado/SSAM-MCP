@@ -1,0 +1,308 @@
+{
+  "fixture": "mobile-ui",
+  "features": [
+    "OutSystemsUI",
+    "OutSystemsUI:StackedCards",
+    "OutSystemsUI:Submenu",
+    "OutSystemsUI:SwipeEvents",
+    "OutSystemsUI:Tabs",
+    "OutSystemsUI:TabsContentItem"
+  ],
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "tests/fixtures/outsystems-ui.oml",
+      "elements": [
+        "IMobileBlock:StackedCards",
+        "IMobileBlock:Submenu",
+        "IMobileBlock:SwipeEvents",
+        "IMobileBlock:Tabs",
+        "IMobileBlock:TabsContentItem",
+        "IMobileBlock:TabsHeaderItem"
+      ]
+    }
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Ui70_StackedCards",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:StackedCards",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part3",
+                  "type": "IList",
+                  "properties": {
+                    "Source": "Value1"
+                  },
+                  "children": [
+                    {
+                      "name": "Part2",
+                      "type": "ITextWidget",
+                      "properties": {
+                        "Text": "Component content"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "OverlayTop": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "OverlayRight": [
+                {
+                  "name": "Part5",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "OverlayLeft": [
+                {
+                  "name": "Part6",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value1",
+            "type": "Text List"
+          }
+        ]
+      },
+      {
+        "name": "Ui71_Submenu",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:Submenu",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Menu": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Text"
+                  }
+                }
+              ],
+              "Items": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Link"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui72_SwipeEvents",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part2",
+            "type": "IInput",
+            "properties": {
+              "Variable": "Value1"
+            }
+          },
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:SwipeEvents",
+            "args": {
+              "WidgetId": "Part2.Id"
+            },
+            "slots": {}
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value1",
+            "type": "Text"
+          }
+        ]
+      },
+      {
+        "name": "Ui73_Tabs",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:Tabs",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Header": [
+                {
+                  "name": "Part2",
+                  "type": "IMobileBlockInstanceWidget",
+                  "properties": {},
+                  "source": "IMobileBlock:TabsHeaderItem",
+                  "args": {
+                    "ExtendedClass": "\"coverage\""
+                  },
+                  "slots": {
+                    "Title": [
+                      {
+                        "name": "Part3",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Component content"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ],
+              "Content": [
+                {
+                  "name": "Part4",
+                  "type": "IMobileBlockInstanceWidget",
+                  "properties": {},
+                  "source": "IMobileBlock:TabsContentItem",
+                  "args": {
+                    "ExtendedClass": "\"coverage\""
+                  },
+                  "slots": {
+                    "Content": [
+                      {
+                        "name": "Part5",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Component content"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui74_TabsContentItem",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:TabsContentItem",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      }
+    ]
+  },
+  "mutations": [
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui70_StackedCards/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "StackedCards"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui71_Submenu/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Submenu"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui72_SwipeEvents/Part1",
+      "prop": "Name",
+      "value": "RenamedSubject",
+      "element": "SwipeEvents"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui73_Tabs/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Tabs"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui74_TabsContentItem/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "TabsContentItem"
+    }
+  ]
+}

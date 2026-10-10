@@ -1,0 +1,19 @@
+{
+ "description": "Placeholder de bloco: um bloco Panel declara o placeholder Body, e a tela instancia o bloco e poe um texto nesse placeholder.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:Common", "type": "IMobileBlock", "name": "Panel", "as": "$blk"},
+  {"op": "create", "parent": "$blk", "type": "IContainer", "name": "PanelFrame", "as": "$frame"},
+  {"op": "set", "target": "$frame", "prop": "Style", "value": "\"card padding-m\""},
+  {"op": "create", "parent": "$frame", "type": "IPlaceholderWidget", "name": "Body", "as": "$ph", "_why": "o placeholder e o buraco que quem instancia preenche"},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "PanelDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Panel1", "source": "IMobileBlock:Panel", "as": "$inst"},
+  {"op": "create", "parent": "$inst/Body", "type": "IExpression", "as": "$text", "_why": "o conteudo vai no placeholder da instancia, pelo nome"},
+  {"op": "set", "target": "$text", "prop": "Value", "value": "\"Content placed in the Body placeholder\""},
+  {"op": "dump", "target": "$inst", "depth": 3}
+ ]
+}

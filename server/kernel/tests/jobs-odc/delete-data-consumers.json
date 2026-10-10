@@ -1,0 +1,81 @@
+{
+ "description": "ODC: apagar DADOS com consumidores reais sobre o InsuranceApp do tenant pessoal. O atributo WfProofNotice.Body e usado por um filtro de aggregate, pela expressao de um Assign e por um argumento de Execute. Um consumidor e REPONTADO (para Title), os outros dois sao REMOVIDOS, e so entao o delete passa sem force. A recusa (sem force) esta em tests/jobs-odc/delete-data-in-use.json.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfProof_Digest (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "entities": [
+     {
+      "name": "WfProofNotice",
+      "description": "Prova da frente A: apagar um atributo com consumidores reais no ODC",
+      "attributes": [
+       {"name": "Title", "type": "Text", "mandatory": true, "length": 100},
+       {"name": "Body", "type": "Text", "length": 500}
+      ]
+     }
+    ]
+   }
+  },
+
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfProof_Send", "as": "$send"},
+  {"op": "create", "parent": "$send", "type": "IInputParameter", "name": "Body", "as": "$sendIn"},
+  {"op": "set", "target": "$sendIn", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$send", "type": "IOutputParameter", "name": "Sent", "as": "$sendOut"},
+  {"op": "set", "target": "$sendOut", "prop": "DataType", "value": "Boolean"},
+  {"op": "create", "parent": "$send", "type": "IStartNode", "as": "$s0"},
+  {"op": "create", "parent": "$send", "type": "IAssignNode", "as": "$sAs"},
+  {"op": "set", "target": "$sAs", "prop": "Label", "value": "SetSent"},
+  {"op": "create", "parent": "$sAs", "type": "IAssignment", "as": "$sA1"},
+  {"op": "set", "target": "$sA1", "prop": "Variable", "value": "Sent"},
+  {"op": "set", "target": "$sA1", "prop": "Value", "value": "Body <> \"\""},
+  {"op": "create", "parent": "$send", "type": "IEndNode", "as": "$s9"},
+  {"op": "link", "from": "$s0", "to": "$sAs"},
+  {"op": "link", "from": "$sAs", "to": "$s9"},
+  {"op": "layout", "target": "$send"},
+
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfProof_Digest", "as": "$dig"},
+  {"op": "create", "parent": "$dig", "type": "IOutputParameter", "name": "Summary", "as": "$digOut"},
+  {"op": "set", "target": "$digOut", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$dig", "type": "IStartNode", "as": "$d0"},
+
+  {"op": "create", "parent": "$dig", "type": "IAggregateNode", "name": "ReadNotices", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "$WfProofNotice"}},
+  {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "WfProofNotice.Body <> \"\""}, "as": "$flt", "_why": "(1) consumidor de DADOS: o filtro do aggregate cita o atributo"},
+
+  {"op": "create", "parent": "$dig", "type": "IAssignNode", "as": "$dAs"},
+  {"op": "set", "target": "$dAs", "prop": "Label", "value": "SetSummary"},
+  {"op": "create", "parent": "$dAs", "type": "IAssignment", "as": "$dA1"},
+  {"op": "set", "target": "$dA1", "prop": "Variable", "value": "Summary"},
+  {"op": "set", "target": "$dA1", "prop": "Value", "value": "ReadNotices.List.Current.WfProofNotice.Body", "_why": "(2) consumidor de LOGICA: a expressao do Assign"},
+
+  {"op": "create", "parent": "$dig", "type": "IExecuteServerActionNode", "name": "Send", "as": "$call"},
+  {"op": "set", "target": "$call", "prop": "Action", "value": "$send"},
+  {"op": "set", "target": "$call/Body", "prop": "Value", "value": "ReadNotices.List.Current.WfProofNotice.Body", "_why": "(3) consumidor por ARGUMENTO"},
+
+  {"op": "create", "parent": "$dig", "type": "IEndNode", "as": "$d9"},
+  {"op": "link", "from": "$d0", "to": "$agg"},
+  {"op": "link", "from": "$agg", "to": "$dAs"},
+  {"op": "link", "from": "$dAs", "to": "$call"},
+  {"op": "link", "from": "$call", "to": "$d9"},
+  {"op": "layout", "target": "$dig"},
+
+  {"op": "usages", "target": "$WfProofNotice.Body", "_why": "(4) tres consumidores reais: filtro, Assign e argumento"},
+
+  {"op": "delete", "target": "$flt", "_why": "(5a) REMOVER: o filtro sai"},
+  {"op": "set", "target": "$dA1", "prop": "Value", "value": "ReadNotices.List.Current.WfProofNotice.Title", "_why": "(5b) REPONTAR: o Assign passa a ler Title, e a action continua a atribuir o output"},
+  {"op": "link", "from": "$dAs", "to": "$d9", "_why": "(5c) religar ANTES de apagar o no: o conector de entrada conta como consumidor do no"},
+  {"op": "delete", "target": "$call"},
+  {"op": "delete", "target": "$send", "_why": "(5d) a action chamada ficou sem chamadores; apagar evita um UnusedUserAction"},
+  {"op": "layout", "target": "$dig"},
+
+  {"op": "usages", "target": "$WfProofNotice.Body", "_why": "(6) os tres consumidores de autoria sairam; o que sobra e o valor do registo de exemplo da entidade (IRecord/IRecordAttributeValue), que no ODC NAO e classificado como derivado (na faixa O11 o equivalente chama-se SampleRecord e e derivado) - ver a diferenca no relatorio da frente A"},
+  {"op": "delete", "target": "$WfProofNotice.Body", "_why": "(7) sem force: os tres consumidores de autoria sairam, e o valor do registo de exemplo conta como uso derivado (o Studio limpa-o sozinho)"},
+
+  {"op": "find", "name": "WfProof_Send", "_why": "(8) lista vazia"},
+  {"op": "get", "target": "$WfProofNotice"},
+  {"op": "dump", "target": "$dig", "depth": 4}
+ ]
+}

@@ -1,0 +1,12 @@
+{
+ "description": "Cobertura testada (fase 1, medir): reconhecimento so de leitura da fixture reactive-ui; a arvore de topo do modulo da os nomes dos fluxos, blocos de layout, temas e entidades que os jobs de cobertura usam como pais.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": false,
+ "ops": [
+  {
+   "op": "dump",
+   "target": "@espace",
+   "depth": 2
+  }
+ ]
+}

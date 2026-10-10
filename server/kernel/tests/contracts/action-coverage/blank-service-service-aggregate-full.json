@@ -1,0 +1,177 @@
+{
+  "fixture": "blank-service",
+  "features": [
+    "aggregate-join-group-calculated-count-sum-max-min-avg",
+    "service"
+  ],
+  "contract": {
+    "data": {
+      "structures": [
+        {
+          "name": "CoverageItem",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Number",
+              "type": "Integer"
+            },
+            {
+              "name": "Text",
+              "type": "Text"
+            }
+          ]
+        },
+        {
+          "name": "CoverageEnvelope",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Item",
+              "type": "CoverageItem"
+            },
+            {
+              "name": "Items",
+              "type": "CoverageItem List"
+            },
+            {
+              "name": "Numbers",
+              "type": "Integer List"
+            }
+          ]
+        }
+      ],
+      "entities": [
+        {
+          "name": "CoverageRow",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Value",
+              "type": "Integer"
+            }
+          ]
+        },
+        {
+          "name": "CoverageDetail",
+          "public": true,
+          "attributes": [
+            {
+              "name": "RowId",
+              "type": "CoverageRow Identifier"
+            },
+            {
+              "name": "Amount",
+              "type": "Decimal"
+            }
+          ]
+        }
+      ]
+    },
+    "logic": {
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "service",
+          "public": true,
+          "access": {
+            "authenticated": true
+          },
+          "inputs": [
+            {
+              "name": "Minimum",
+              "type": "Integer"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "Result",
+              "type": "Decimal"
+            }
+          ],
+          "steps": [
+            {
+              "get": "CoverageRow",
+              "as": "Calculated",
+              "max": "10",
+              "calculated": [
+                {
+                  "name": "DoubleValue",
+                  "value": "CoverageRow.Value * 2"
+                }
+              ]
+            },
+            {
+              "get": "CoverageRow",
+              "as": "Report",
+              "sources": [
+                "CoverageDetail"
+              ],
+              "joins": [
+                {
+                  "left": "CoverageRow",
+                  "right": "CoverageDetail",
+                  "kind": "Left",
+                  "condition": "CoverageRow.Id = CoverageDetail.RowId"
+                }
+              ],
+              "where": "CoverageRow.Value >= Minimum",
+              "sort": [
+                "CoverageRow.Value",
+                "Descending"
+              ],
+              "max": "100",
+              "columns": [
+                {
+                  "name": "GroupValue",
+                  "kind": "Group",
+                  "attribute": "CoverageRow.Value"
+                },
+                {
+                  "name": "AmountCount",
+                  "kind": "Count",
+                  "attribute": "CoverageDetail.Amount"
+                },
+                {
+                  "name": "AmountSum",
+                  "kind": "Sum",
+                  "attribute": "CoverageDetail.Amount"
+                },
+                {
+                  "name": "AmountMax",
+                  "kind": "Max",
+                  "attribute": "CoverageDetail.Amount"
+                },
+                {
+                  "name": "AmountMin",
+                  "kind": "Min",
+                  "attribute": "CoverageDetail.Amount"
+                },
+                {
+                  "name": "AmountAvg",
+                  "kind": "Avg",
+                  "attribute": "CoverageDetail.Amount"
+                }
+              ],
+              "calculated": [
+                {
+                  "name": "DoubleValue",
+                  "value": "CoverageRow.Value * 2"
+                }
+              ]
+            },
+            {
+              "assign": {
+                "Result": "Calculated.List.Current.DoubleValue + Report.List.Current.AmountSum + Report.List.Current.AmountCount + Report.List.Current.AmountMax + Report.List.Current.AmountMin + Report.List.Current.AmountAvg + Report.List.Current.GroupValue"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IServiceAction:Coverage/Report/**IJoin",
+    "prop": "JoinType",
+    "value": "Inner"
+  }
+}

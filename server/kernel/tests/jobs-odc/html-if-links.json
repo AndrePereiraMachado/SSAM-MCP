@@ -1,0 +1,35 @@
+{
+  "description": "op html (pagina inteira): binding visible vira IIfWidget nativo com o elemento no ramo True (tambem dentro de um <a>), e os filhos de <a>/<button> viram widgets filhos do Link/Button (card com div, icone <i> e bindings dentro de um link na lista; icone dentro de um botao). Faixa ODC: o mesmo job de tests/jobs/html-if-links-reactive.json sobre o InsuranceApp do tenant pessoal (o compilador e partilhado).",
+  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+  "expectedMessages": [],
+  "expectValid": true,
+  "ops": [
+    {"op": "spec", "data": {"entities": [{"name": "Card", "public": true, "attributes": [
+      {"name": "Title", "type": "Text"}, {"name": "Subtitle", "type": "Text"}, {"name": "IsFeatured", "type": "Boolean"}, {"name": "Unread", "type": "Integer"}]}]}},
+    {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CardDetail", "as": "$detail"},
+    {"op": "set", "target": "$detail/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+    {"op": "create", "parent": "$detail", "type": "IInputParameter", "name": "CardId", "as": "$detailIn"},
+    {"op": "set", "target": "$detailIn", "prop": "DataType", "value": "Card Identifier"},
+    {"op": "create", "parent": "$detail/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$detailTitle"},
+    {"op": "set", "target": "$detailTitle", "prop": "Value", "value": "If(CardId = NullIdentifier(), \"Card\", \"Card selecionado\")"},
+    {"op": "html", "data": {
+      "screen": "Cards", "title": "Cards", "layout": "blank",
+      "vars": [{"name": "ShowBanner", "type": "Boolean", "default": "True"}],
+      "sources": [{"entity": "Card", "as": "GetCards", "max": 20}],
+      "html": "<div class=\"cards-page\"><div class=\"top\"><h1>Cards</h1><button class=\"icon-btn\" title=\"Atualizar\" data-av=\"reload\"><i class=\"fa fa-refresh\"></i>Atualizar</button></div><div class=\"banner\" hidden data-av=\"banner\">Destaques da semana</div><div class=\"cards\" data-av=\"cards\"><a href=\"#\" class=\"card-link\" data-av=\"card.open\"><div class=\"card\"><i class=\"fa fa-star\"></i><span class=\"title\" data-av=\"card.title\">Titulo</span><div class=\"sub\" data-av=\"card.sub\">Subtitulo</div><div class=\"featured\" data-av=\"card.featured\">Destaque</div><span data-av=\"card.unread\">0</span></div></a></div><a href=\"#\" class=\"more\" data-av=\"first\"><div class=\"dot\" data-av=\"first.dot\"></div>Abrir o primeiro</a></div>",
+      "css": ".cards-page{display:flex;flex-direction:column;gap:12px}.card-link{display:block;color:inherit}.card{border:1px solid #ddd;border-radius:12px;padding:12px}.card .sub.muted{opacity:.6}.featured{color:#b8860b}.dot{width:8px;height:8px;border-radius:50%;background:#c00}",
+      "bindings": {
+        "reload": {"kind": "refresh"},
+        "banner": {"kind": "visible", "condition": "ShowBanner and GetCards.IsDataFetched"},
+        "cards": {"kind": "list", "source": "GetCards"},
+        "card.open": {"kind": "navigate", "destination": "CardDetail", "args": {"CardId": "GetCards.List.Current.Card.Id"}},
+        "card.title": {"kind": "field", "field": "Title"},
+        "card.sub": {"kind": "class", "value": "If(GetCards.List.Current.Card.Unread = 0, \"muted\", \"\")"},
+        "card.featured": {"kind": "visible", "condition": "GetCards.List.Current.Card.IsFeatured"},
+        "card.unread": {"kind": "text", "value": "IntegerToText(GetCards.List.Current.Card.Unread)"},
+        "first": {"kind": "navigate", "destination": "CardDetail", "args": {"CardId": "If(GetCards.List.Empty, NullIdentifier(), GetCards.List[0].Card.Id)"}},
+        "first.dot": {"kind": "visible", "condition": "not GetCards.List.Empty"}
+      }
+    }}
+  ]
+}

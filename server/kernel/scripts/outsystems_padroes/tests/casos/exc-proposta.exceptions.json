@@ -1,0 +1,30 @@
+{
+ "schema": "outsystems-padroes-excecoes/1",
+ "_fixture": "Excecao FICTICIA dos testes; aprovador 'autoteste' so existe no configOverride do .expect.json. Nao e aprovacao do usuario.",
+ "exceptions": [
+  {
+   "id": "EX-TESTE",
+   "rule": "L6",
+   "module": "Domain_CS",
+   "element": {
+    "objectKey": null,
+    "path": [
+     [
+      "ServerAction",
+      "MeasureRunSummary"
+     ],
+     [
+      "InputParameter",
+      "SummaryJson"
+     ]
+    ]
+   },
+   "match": "suffix",
+   "reason": "fixture",
+   "evidence": "autoteste",
+   "status": "proposta",
+   "approval": null,
+   "expires": null
+  }
+ ]
+}

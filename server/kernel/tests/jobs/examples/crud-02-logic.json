@@ -1,0 +1,29 @@
+{
+ "description": "CRUD back-office, parte 2 de 5 (logica): Product_Save valida role, campos e codigo repetido e faz create ou update do record recebido; Product_Delete confere o role e apaga. As telas chamam estes wrappers, nunca as entity actions.",
+ "base": "job:crud-01-data",
+ "expectValid": true,
+ "expectedMessages": [
+  {"id": "UnusedUserAction", "element": "Product_Save (ServerAction)", "why": "O chamador (ProductEdit) chega na parte 4; no crud-all nao ha aviso."},
+  {"id": "UnusedUserAction", "element": "Product_Delete (ServerAction)", "why": "O chamador (ProductList) chega na parte 5; no crud-all nao ha aviso."}
+ ],
+ "ops": [
+  {"op": "logic", "data": {"actions": [
+   {"name": "Product_Save", "kind": "server", "description": "Cria ou atualiza um produto validado",
+    "inputs": [{"name": "Item", "type": "Product"}],
+    "outputs": [{"name": "ProductId", "type": "Product Identifier"}],
+    "steps": [
+     {"if": "not CheckProductManagerRole(GetUserId())", "label": "IsManager?", "then": [{"raise": "ProductAccessDenied", "message": "\"Only product managers can save products\""}]},
+     {"if": "Trim(Item.Code) = \"\" or Trim(Item.Name) = \"\"", "label": "MissingFields?", "then": [{"raise": "ProductInvalid", "message": "\"Code and name are required\""}]},
+     {"if": "Item.Price < 0", "label": "NegativePrice?", "then": [{"raise": "ProductInvalid", "message": "\"Price cannot be negative\""}]},
+     {"get": "Product", "as": "GetSameCode", "where": "Product.Code = Item.Code and Product.Id <> Item.Id", "max": 1},
+     {"if": "not GetSameCode.List.Empty", "label": "CodeInUse?", "then": [{"raise": "ProductInvalid", "message": "\"Code already in use\""}]},
+     {"if": "Item.Id = NullIdentifier()", "label": "IsNew?",
+      "then": [{"create": "Product", "record": "Item", "as": "CreateProduct"}, {"assign": {"ProductId": "CreateProduct.Id"}, "as": "NewId"}],
+      "else": [{"update": "Product", "record": "Item", "as": "UpdateProduct"}, {"assign": {"ProductId": "Item.Id"}, "as": "SameId"}]}]},
+   {"name": "Product_Delete", "kind": "server", "description": "Apaga um produto",
+    "inputs": [{"name": "ProductId", "type": "Product Identifier"}],
+    "steps": [
+     {"if": "not CheckProductManagerRole(GetUserId())", "label": "IsManager?", "then": [{"raise": "ProductAccessDenied", "message": "\"Only product managers can delete products\""}]},
+     {"delete": "Product", "id": "ProductId", "as": "DeleteProduct"}]}]}}
+ ]
+}

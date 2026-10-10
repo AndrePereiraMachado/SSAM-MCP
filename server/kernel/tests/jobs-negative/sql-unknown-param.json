@@ -1,0 +1,6 @@
+{
+ "description": "Statement novo num no SQL existente: @Missing nao e parametro do no (a base declara MinPrice). O preflight SQL confere os parametros da base antes do apply e recusa com op e linha; antes, so o Verify (InvalidSQL_UnknownParam) o dizia, depois de mutar.",
+ "base": "job:sql-input-output",
+ "expectError": ["op #0 (SQL IServerAction:Product_Search/SearchProducts, line 1): @Missing is used but the SQL node declares no parameter 'Missing' (declared: MinPrice)"],
+ "ops": [{"op": "set", "target": "IServerAction:Product_Search/SearchProducts", "prop": "Statement", "value": "SELECT {Product}.* FROM {Product} WHERE {Product}.[Id] = @Missing"}]
+}

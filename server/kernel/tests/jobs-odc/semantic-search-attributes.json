@@ -1,0 +1,23 @@
+{
+ "description": "ODC: os atributos de pesquisa de um no Semantic Search pelos verbos. ISemanticSearchNode.SearchAttributes e so leitura; o Model API edita-o por AddSearchableAttributes/RemoveSearchableAttributes. O `set` de uma lista assim recebe um array de referencias e deixa a lista EXATAMENTE igual (tira o que sobra, acrescenta o que falta): primeiro Title e Summary, depois so Summary. Sem isto o no ficava com o erro SemanticSearch_RequiredSearchAttributes (a recusa da fase 1). Os atributos tem de ser IsSearchable antes.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCovSearchArticles (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "WfCovArticle", "attributes": [{"name": "Title", "type": "Text", "length": 50}, {"name": "Summary", "type": "Text", "length": 500}]}]}},
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfCovSearchArticles", "as": "$action"},
+  {"op": "create", "parent": "$action", "type": "IStartNode", "as": "$start"},
+  {"op": "create", "parent": "$action", "type": "IEndNode", "as": "$end"},
+  {"op": "create", "parent": "$action", "type": "ISemanticSearchNode", "name": "SearchArticles", "as": "$search"},
+  {"op": "set", "target": "$WfCovArticle.Title", "prop": "IsSearchable", "value": true},
+  {"op": "set", "target": "$WfCovArticle.Summary", "prop": "IsSearchable", "value": true},
+  {"op": "set", "target": "$search", "prop": "Source", "value": "$WfCovArticle"},
+  {"op": "set", "target": "$search", "prop": "SearchQuery", "value": "\"flood insurance\""},
+  {"op": "set", "target": "$search", "prop": "SearchAttributes", "value": ["$WfCovArticle.Title", "$WfCovArticle.Summary"]},
+  {"op": "get", "target": "$search", "_why": "SearchAttributes 2"},
+  {"op": "set", "target": "$search", "prop": "SearchAttributes", "value": ["$WfCovArticle.Summary"]},
+  {"op": "get", "target": "$search", "_why": "SearchAttributes 1: o set substitui a lista"},
+  {"op": "link", "from": "$start", "to": "$search"},
+  {"op": "link", "from": "$search", "to": "$end"}
+ ]
+}

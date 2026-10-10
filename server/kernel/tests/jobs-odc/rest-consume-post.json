@@ -1,0 +1,66 @@
+{
+ "description": "ODC: REST consumido com POST e CORPO, o que a faixa ODC so tinha em GET (rest-consume.json). Espelha tests/jobs/rest-consume-post.json sobre a fixture do InsuranceApp: IRestClient com Basic Authentication, um header fixo do cliente (IExtendedProperty), structure de pedido e structure de resposta, IRestAction POST com RequestFormat/ResponseFormat JSON e timeout, input do corpo em BodyPlacement, input de header com OriginalName (X-Api-Key, nome que nao e identificador OutSystems), output do corpo em BodyPlacement e output lido de um header de resposta (ETag). O tipo concreto vem do plugin ServiceStudio.Plugin.REST do ODC Studio, o mesmo caminho do GET. DIFERENCA DE PLATAFORMA (medida, nao suposta): o job O11 grava Username e Password no IRestClient; no ODC as duas propriedades EXISTEM e sao gravaveis pela API, mas o Verify recusa-as como ERRO: 'CustomObjectError: Invalid Password | Password is not supported, please remove it using Model API. @ InsuranceApp (ESpace) / WfCovOrdersApi (RestClient) / Password (CustomProperty)' (idem Username). Superficie de API nao e funcionalidade: no ODC o MODO de autenticacao fica no modelo (AuthenticationType=BasicAuthentication, ClientAuthentication=SendAsBasicAuthHeader, lidos de volta pelo get) e as CREDENCIAIS ficam fora dele. Por isso este job nao as grava; o resto do POST e paridade exata com a faixa O11.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IRestClient", "name": "WfCovOrdersApi", "as": "$api"},
+  {"op": "set", "target": "$api", "prop": "BaseURL", "value": "https://api.example.com"},
+  {"op": "set", "target": "$api", "prop": "Description", "value": "Cobertura POST: API de encomendas consumida pelo InsuranceApp"},
+
+  {"op": "set", "target": "$api", "prop": "AuthenticationType", "value": "BasicAuthentication", "_why": "DIFERENCA DE PLATAFORMA: o enum do ODC so tem None, BasicAuthentication e OAuth2, e o modo escolhe-se aqui; mas as credenciais NAO entram no modelo (ver a nota do Username/Password no description)"},
+
+  {"op": "create", "parent": "$api", "type": "IExtendedProperty", "as": "$h", "_why": "header fixo do CLIENTE (vale para todos os metodos), diferente do header por metodo mais abaixo"},
+  {"op": "set", "target": "$h", "prop": "Property", "value": "Accept"},
+  {"op": "set", "target": "$h", "prop": "Value", "value": "\"application/json\"", "_why": "Value e EXPRESSAO OutSystems: um literal de texto leva aspas dentro do JSON"},
+
+  {"op": "create", "parent": "$api", "type": "IRestStructure", "name": "WfCovOrderRequest", "as": "$req", "_why": "o corpo do POST e uma structure do proprio cliente REST, nao uma IStructure do modulo"},
+  {"op": "create", "parent": "$req", "type": "IRestStructureAttribute", "name": "CustomerId", "as": "$r1"},
+  {"op": "set", "target": "$r1", "prop": "DataType", "value": "Integer"},
+  {"op": "set", "target": "$r1", "prop": "NameInJSON", "value": "customer_id", "_why": "o nome no JSON nao e o nome do atributo: e assim que snake_case do servico entra sem quebrar o nome OutSystems"},
+  {"op": "create", "parent": "$req", "type": "IRestStructureAttribute", "name": "Total", "as": "$r2"},
+  {"op": "set", "target": "$r2", "prop": "DataType", "value": "Decimal"},
+  {"op": "set", "target": "$r2", "prop": "NameInJSON", "value": "total"},
+
+  {"op": "create", "parent": "$api", "type": "IRestStructure", "name": "WfCovOrderResponse", "as": "$res"},
+  {"op": "create", "parent": "$res", "type": "IRestStructureAttribute", "name": "Id", "as": "$s1"},
+  {"op": "set", "target": "$s1", "prop": "DataType", "value": "Long Integer"},
+  {"op": "set", "target": "$s1", "prop": "NameInJSON", "value": "id"},
+
+  {"op": "create", "parent": "$api", "type": "IRestAction", "name": "WfCovCreateOrder", "as": "$m"},
+  {"op": "set", "target": "$m", "prop": "HTTPMethod", "value": "POST", "_why": "o ponto do job: o ODC aceita POST (o enum tem GET, PUT, POST, DELETE, PATCH)"},
+  {"op": "set", "target": "$m", "prop": "URLPath", "value": "/orders"},
+  {"op": "set", "target": "$m", "prop": "RequestFormat", "value": "JSON", "_why": "sem RequestFormat nao ha corpo a serializar; o GET da faixa nao precisava desta propriedade"},
+  {"op": "set", "target": "$m", "prop": "ResponseFormat", "value": "JSON"},
+  {"op": "set", "target": "$m", "prop": "TimeoutinSeconds", "value": 30, "_why": "no ODC a propriedade e Nullable<int>: recebe o numero JSON tal e qual"},
+
+  {"op": "create", "parent": "$m", "type": "IRestActionInput", "name": "Request", "as": "$in"},
+  {"op": "set", "target": "$in", "prop": "DataType", "value": "WfCovOrderRequest", "_why": "o input do corpo e tipado pela structure do cliente, citada pelo nome"},
+  {"op": "set", "target": "$in", "prop": "InputPlacement", "value": "BodyPlacement", "_why": "e isto que distingue este job do GET: o parametro vai no CORPO, nao na URL"},
+  {"op": "set", "target": "$in", "prop": "IsMandatory", "value": true},
+
+  {"op": "create", "parent": "$m", "type": "IRestActionInput", "name": "XApiKey", "as": "$hin"},
+  {"op": "set", "target": "$hin", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$hin", "prop": "InputPlacement", "value": "HeaderPlacement"},
+  {"op": "set", "target": "$hin", "prop": "OriginalName", "value": "X-Api-Key", "_why": "o header real tem hifens, que nome de parametro OutSystems nao aceita: OriginalName guarda o nome do fio"},
+  {"op": "set", "target": "$hin", "prop": "IsMandatory", "value": true},
+
+  {"op": "create", "parent": "$m", "type": "IRestActionOutput", "name": "Response", "as": "$out"},
+  {"op": "set", "target": "$out", "prop": "DataType", "value": "WfCovOrderResponse"},
+  {"op": "set", "target": "$out", "prop": "OutputPlacement", "value": "BodyPlacement"},
+
+  {"op": "create", "parent": "$m", "type": "IRestActionOutput", "name": "ETag", "as": "$hout"},
+  {"op": "set", "target": "$hout", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$hout", "prop": "OutputPlacement", "value": "HeaderPlacement", "_why": "nem toda a resposta vem no corpo: este output le um header da resposta"},
+  {"op": "set", "target": "$hout", "prop": "OriginalName", "value": "ETag"},
+
+  {"op": "get", "target": "$api", "_why": "le de volta BaseURL e a autenticacao gravadas no cliente"},
+  {"op": "get", "target": "$h", "_why": "prova o header fixo do cliente: Property e o Value como expressao"},
+  {"op": "get", "target": "$m", "_why": "prova POST, URLPath, os dois formatos JSON e o timeout"},
+  {"op": "get", "target": "$in", "_why": "prova o input do corpo: tipo da structure e BodyPlacement"},
+  {"op": "get", "target": "$hin", "_why": "prova o input de header e o OriginalName com hifens"},
+  {"op": "get", "target": "$out", "_why": "prova o output do corpo tipado pela structure de resposta"},
+  {"op": "get", "target": "$hout", "_why": "prova o output vindo de um header da resposta"},
+  {"op": "dump", "target": "$api", "depth": 4, "_why": "prova a arvore inteira do cliente REST: header, as duas structures e o metodo com os quatro parametros"}
+ ]
+}

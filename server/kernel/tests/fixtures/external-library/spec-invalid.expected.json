@@ -1,0 +1,10 @@
+{
+  "description": "The five problems of spec-invalid.json, in document order: the kernel (ExternalLibrarySpec.Check, OdcExternalLibraryTests) and the facade (validateExternalLibrarySpec, odc-external-library.test.mjs) must both answer exactly these.",
+  "problems": [
+    { "code": "IDENTIFIER_INVALID", "path": "/name" },
+    { "code": "DUPLICATE_NAME", "path": "/actions/1/name" },
+    { "code": "TYPE_UNKNOWN", "path": "/actions/1/inputs/0/type" },
+    { "code": "STRUCTURE_UNDECLARED", "path": "/actions/1/outputs/0/type" },
+    { "code": "PACKAGE_VERSION_REQUIRED", "path": "/packages/0/version" }
+  ]
+}

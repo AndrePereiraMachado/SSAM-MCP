@@ -1,0 +1,23 @@
+{
+ "description": "Video (OutSystemsUI, Interaction) tipico; inputs obrigatorios URL ligados a variaveis da tela; eventos StateChanged, Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "URLValue", "as": "$vURLValue"},
+  {"op": "set", "target": "$vURLValue", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$vURLValue", "prop": "DefaultValue", "value": "\"https://www.example.com/intro.mp4\""},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastVideoId", "as": "$vLastVideoId"},
+  {"op": "set", "target": "$vLastVideoId", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastVideoState", "as": "$vLastVideoState"},
+  {"op": "set", "target": "$vLastVideoState", "prop": "DataType", "value": "VideoState Identifier"},
+  {"op": "logic", "data": {"actions": [{"name": "VideoDemoStateChanged", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de StateChanged", "inputs": [{"name": "VideoId", "type": "Text"}, {"name": "VideoState", "type": "VideoState Identifier"}],"steps": [{"assign": {"LastVideoId": "VideoId", "LastVideoState": "VideoState"},"as": "KeepStateChanged"}]}, {"name": "VideoDemoInitialized", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de Initialized", "inputs": [{"name": "VideoId", "type": "Text"}],"steps": [{"assign": {"LastVideoId": "VideoId"},"as": "KeepInitialized"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "VideoDemo", "source": "IMobileBlock:Video", "as": "$b"},
+  {"op": "set", "target": "$b/URL", "prop": "Value", "value": "URLValue"},
+  {"op": "set", "target": "$b/StateChanged", "prop": "Handler", "value": "IScreenAction:VideoDemoStateChanged"},
+  {"op": "set", "target": "$b/StateChanged/VideoId", "prop": "Value", "value": "VideoId"},
+  {"op": "set", "target": "$b/StateChanged/VideoState", "prop": "Value", "value": "VideoState"},
+  {"op": "set", "target": "$b/Initialized", "prop": "Handler", "value": "IScreenAction:VideoDemoInitialized"},
+  {"op": "set", "target": "$b/Initialized/VideoId", "prop": "Value", "value": "VideoId"}
+ ]
+}

@@ -1,0 +1,108 @@
+{
+  "source": "NuGet package metadata and resolved Anvil.CSharp net8.0 assets",
+  "packages": [
+    {
+      "package": "Microsoft.CodeAnalysis.Analyzers/3.3.4",
+      "declaredLicense": "MIT",
+      "runtimeAssets": [],
+      "buildAssets": [
+        "buildTransitive/Microsoft.CodeAnalysis.Analyzers.props",
+        "buildTransitive/Microsoft.CodeAnalysis.Analyzers.targets"
+      ],
+      "notices": [
+        {
+          "file": "licenses/csharp/Microsoft.CodeAnalysis.Analyzers-3.3.4/ThirdPartyNotices.txt",
+          "sha256": "0eabe2880daf9bfb25ac160b1e779c5da95a88406dd06cdb570ec7edb5eabb76"
+        }
+      ]
+    },
+    {
+      "package": "Microsoft.CodeAnalysis.Common/4.8.0",
+      "declaredLicense": "MIT",
+      "runtimeAssets": [
+        "lib/net7.0/Microsoft.CodeAnalysis.dll"
+      ],
+      "buildAssets": [],
+      "notices": [
+        {
+          "file": "licenses/csharp/Microsoft.CodeAnalysis.Common-4.8.0/ThirdPartyNotices.rtf",
+          "sha256": "ef4678850e7e3aaf9297f07e5c4060d477854e545ccf8e2ef8452d65a7b2efaf"
+        }
+      ]
+    },
+    {
+      "package": "Microsoft.CodeAnalysis.CSharp/4.8.0",
+      "declaredLicense": "MIT",
+      "runtimeAssets": [
+        "lib/net7.0/Microsoft.CodeAnalysis.CSharp.dll"
+      ],
+      "buildAssets": [],
+      "notices": [
+        {
+          "file": "licenses/csharp/Microsoft.CodeAnalysis.CSharp-4.8.0/ThirdPartyNotices.rtf",
+          "sha256": "ef4678850e7e3aaf9297f07e5c4060d477854e545ccf8e2ef8452d65a7b2efaf"
+        }
+      ]
+    },
+    {
+      "package": "System.Collections.Immutable/7.0.0",
+      "declaredLicense": "MIT",
+      "runtimeAssets": [
+        "lib/net7.0/System.Collections.Immutable.dll"
+      ],
+      "buildAssets": [
+        "buildTransitive/net6.0/_._"
+      ],
+      "notices": [
+        {
+          "file": "licenses/csharp/System.Collections.Immutable-7.0.0/LICENSE.TXT",
+          "sha256": "d7a68596ab69b06f51ca278a6545148e4269a9381c26d597c13df5d88e08cf5b"
+        },
+        {
+          "file": "licenses/csharp/System.Collections.Immutable-7.0.0/THIRD-PARTY-NOTICES.TXT",
+          "sha256": "e5263d73f2fcb1ee8fa2d4e5439cc0052d02f8a4910816977b8834359e3fe689"
+        }
+      ]
+    },
+    {
+      "package": "System.Reflection.Metadata/7.0.0",
+      "declaredLicense": "MIT",
+      "runtimeAssets": [
+        "lib/net7.0/System.Reflection.Metadata.dll"
+      ],
+      "buildAssets": [
+        "buildTransitive/net6.0/_._"
+      ],
+      "notices": [
+        {
+          "file": "licenses/csharp/System.Reflection.Metadata-7.0.0/LICENSE.TXT",
+          "sha256": "d7a68596ab69b06f51ca278a6545148e4269a9381c26d597c13df5d88e08cf5b"
+        },
+        {
+          "file": "licenses/csharp/System.Reflection.Metadata-7.0.0/THIRD-PARTY-NOTICES.TXT",
+          "sha256": "e5263d73f2fcb1ee8fa2d4e5439cc0052d02f8a4910816977b8834359e3fe689"
+        }
+      ]
+    },
+    {
+      "package": "System.Runtime.CompilerServices.Unsafe/6.0.0",
+      "declaredLicense": "MIT",
+      "runtimeAssets": [
+        "lib/net6.0/System.Runtime.CompilerServices.Unsafe.dll"
+      ],
+      "buildAssets": [
+        "buildTransitive/netcoreapp3.1/_._"
+      ],
+      "notices": [
+        {
+          "file": "licenses/csharp/System.Runtime.CompilerServices.Unsafe-6.0.0/LICENSE.TXT",
+          "sha256": "d7a68596ab69b06f51ca278a6545148e4269a9381c26d597c13df5d88e08cf5b"
+        },
+        {
+          "file": "licenses/csharp/System.Runtime.CompilerServices.Unsafe-6.0.0/THIRD-PARTY-NOTICES.TXT",
+          "sha256": "a6344bfb229bc08d1071cec400eea216e307439f961c5943ec1b56d2245acb95"
+        }
+      ]
+    }
+  ]
+}

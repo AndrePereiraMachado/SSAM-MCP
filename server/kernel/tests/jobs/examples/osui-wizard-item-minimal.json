@@ -1,0 +1,11 @@
+{
+ "description": "WizardItem (OutSystemsUI, Navigation) minimo: instancia como o Studio cria ao arrastar o bloco; dentro de um Wizard vazio (placeholder Content); inputs obrigatorios Status com valores simples.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "WizardDemo", "source": "IMobileBlock:Wizard", "empty": true,"as": "$parent"},
+  {"op": "create", "parent": "$parent/Content", "type": "IMobileBlockInstanceWidget", "name": "WizardItemDemo", "source": "IMobileBlock:WizardItem", "as": "$b"},
+  {"op": "set", "target": "$b/Status", "prop": "Value", "value": "Entities.Steps.Next"}
+ ]
+}

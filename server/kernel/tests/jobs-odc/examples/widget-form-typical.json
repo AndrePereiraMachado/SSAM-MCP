@@ -1,0 +1,55 @@
+{
+ "description": "Form de cadastro: Labels ligados aos Inputs (TargetWidget), campos obrigatorios, e o botao Salvar so chama o servidor quando ContactForm.Valid.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Contact", "attributes": [
+   {"name": "FullName", "type": "Text", "length": 100, "mandatory": true},
+   {"name": "Email", "type": "Email", "mandatory": true},
+   {"name": "Age", "type": "Integer"}]}]}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "Contact_Save", "kind": "server", "inputs": [{"name": "Contact", "type": "Contact"}],
+    "outputs": [{"name": "ContactId", "type": "Contact Identifier"}],
+    "steps": [{"save": "Contact", "record": "Contact", "as": "SaveContact"}, {"assign": {"ContactId": "SaveContact.Id"}, "as": "SetId"}]}]}},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "NewContact", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Draft", "as": "$draft"},
+  {"op": "set", "target": "$draft", "prop": "DataType", "value": "Contact"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IForm", "name": "ContactForm", "as": "$form"},
+
+  {"op": "create", "parent": "$form", "type": "ILabel", "name": "FullNameLabel", "as": "$l1"},
+  {"op": "set", "target": "$l1/#ITextWidget", "prop": "Text", "value": "Full name"},
+  {"op": "create", "parent": "$form", "type": "IInput", "name": "FullNameInput", "as": "$i1"},
+  {"op": "set", "target": "$i1", "prop": "Variable", "value": "Draft.FullName"},
+  {"op": "set", "target": "$i1", "prop": "Mandatory", "value": "True"},
+  {"op": "set", "target": "$l1", "prop": "TargetWidget", "value": "$i1"},
+
+  {"op": "create", "parent": "$form", "type": "ILabel", "name": "EmailLabel", "as": "$l2"},
+  {"op": "set", "target": "$l2/#ITextWidget", "prop": "Text", "value": "E-mail"},
+  {"op": "create", "parent": "$form", "type": "IInput", "name": "EmailInput", "as": "$i2"},
+  {"op": "set", "target": "$i2", "prop": "Variable", "value": "Draft.Email"},
+  {"op": "set", "target": "$i2", "prop": "InputType", "value": "Email", "_why": "o tipo do Input segue o tipo do atributo (Email)"},
+  {"op": "set", "target": "$i2", "prop": "Mandatory", "value": "True"},
+  {"op": "set", "target": "$l2", "prop": "TargetWidget", "value": "$i2"},
+
+  {"op": "create", "parent": "$form", "type": "ILabel", "name": "AgeLabel", "as": "$l3"},
+  {"op": "set", "target": "$l3/#ITextWidget", "prop": "Text", "value": "Age"},
+  {"op": "create", "parent": "$form", "type": "IInput", "name": "AgeInput", "as": "$i3"},
+  {"op": "set", "target": "$i3", "prop": "Variable", "value": "Draft.Age"},
+  {"op": "set", "target": "$i3", "prop": "InputType", "value": "Number"},
+  {"op": "set", "target": "$l3", "prop": "TargetWidget", "value": "$i3"},
+
+  {"op": "logic", "_why": "ContactForm.Valid fica falso quando um campo obrigatorio esta vazio ou um valor nao bate com o InputType", "data": {"actions": [
+   {"name": "SaveContact", "kind": "screen", "owner": "IMobileScreen:NewContact",
+    "steps": [
+     {"if": "ContactForm.Valid", "as": "IsFormValid",
+      "then": [
+       {"call": "Contact_Save", "as": "Save", "args": {"Contact": "Draft"}},
+       {"node": "IMessageNode", "as": "Saved", "properties": {"Message": "\"Contact saved\"", "Type": "Success"}}]}]}]}},
+  {"op": "create", "parent": "$form", "type": "IButton", "name": "SaveButton", "as": "$btn"},
+  {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "Save"},
+  {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "IMobileScreen:NewContact/SaveContact"}
+ ]
+}

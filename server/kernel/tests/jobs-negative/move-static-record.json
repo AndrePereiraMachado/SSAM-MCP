@@ -1,0 +1,13 @@
+{
+ "description": "O11: a RECUSA do move de um registo de static entity. IStaticEntity.Records e IEnumerable (o dump do outro job mostra os registos por uma ordem que nem se repete de corrida para corrida), a ordem de leitura e o valor do atributo Order (OrderByAttribute) e o verbo move so reordena dentro de uma sequencia do pai; o kernel recusa e diz que sequencias o pai tem de facto (Attributes, Metadata). A alternativa provada e escrever o valor de Order (set <registo>/Order prop Value), como em tests/jobs/static-entity-lifecycle.json. Medido com a base job:spec-data.",
+ "base": "job:spec-data",
+ "expectValid": true,
+ "expectError": [
+  "move: IStaticEntity 'Status' does not keep IRecord 'Active' in an ordered sequence, so there is no order to change",
+  "Sequences of this parent: Attributes, Metadata"
+ ],
+ "ops": [
+  {"op": "get", "target": "IStaticEntity:Status/Active/Order", "_why": "a ordem que existe de verdade: o valor 1 na coluna Order deste registo. E isto que se escreve para reordenar, nao a posicao na arvore."},
+  {"op": "move", "target": "IStaticEntity:Status/Active", "first": true, "_why": "recusado com \"op #1 (move ): InvalidOperationException: move: IStaticEntity 'Status' does not keep IRecord 'Active' in an ordered sequence, so there is no order to change (the Studio lists that kind by itself). Sequences of this parent: Attributes, Metadata\"."}
+ ]
+}

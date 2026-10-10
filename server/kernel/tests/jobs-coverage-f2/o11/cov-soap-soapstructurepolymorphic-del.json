@@ -1,0 +1,25 @@
+{
+ "description": "Cobertura testada (fase 2): del de ServiceStudio.Plugin.SOAP.ISOAPStructurePolymorphic (o11) em soapClient. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISOAPClient",
+   "name": "CovSSoap",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "ISOAPStructurePolymorphic",
+   "name": "CovASOAPStructurePolymorphic",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

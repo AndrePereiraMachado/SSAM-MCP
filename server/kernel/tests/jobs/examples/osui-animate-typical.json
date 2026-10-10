@@ -1,0 +1,17 @@
+{
+ "description": "Animate (OutSystemsUI, Interaction) tipico; inputs obrigatorios AnimationType ligados a variaveis da tela; placeholders Content com dados do aggregate de tarefas.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "AnimationTypeValue", "as": "$vAnimationTypeValue"},
+  {"op": "set", "target": "$vAnimationTypeValue", "prop": "DataType", "value": "AnimationType Identifier"},
+  {"op": "set", "target": "$vAnimationTypeValue", "prop": "DefaultValue", "value": "Entities.AnimationType.BottomToTop"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetShowcaseTasks", "as": "$tasks"},
+  {"op": "create", "parent": "$tasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "AnimateDemo", "source": "IMobileBlock:Animate", "as": "$b"},
+  {"op": "set", "target": "$b/AnimationType", "prop": "Value", "value": "AnimationTypeValue"},
+  {"op": "create", "parent": "$b/Content", "type": "IExpression", "as": "$ph1"},
+  {"op": "set", "target": "$ph1", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""}
+ ]
+}

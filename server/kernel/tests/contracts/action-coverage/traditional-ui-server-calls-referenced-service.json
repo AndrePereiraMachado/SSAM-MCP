@@ -1,0 +1,63 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "service-reference",
+    "server-calls-service"
+  ],
+  "contract": {
+    "logic": {
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "server",
+          "public": true,
+          "access": {
+            "authenticated": true
+          },
+          "inputs": [
+            {
+              "name": "Id",
+              "type": "Order Identifier"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "Summary",
+              "type": "OrderSummary"
+            }
+          ],
+          "steps": [
+            {
+              "call": "Order_GetSummary",
+              "as": "RemoteService",
+              "args": {
+                "OrderId": "Id"
+              }
+            },
+            {
+              "assign": {
+                "Summary": "RemoteService.Summary"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "job:service-action",
+      "elements": [
+        "IServiceAction:Order_GetSummary",
+        "IServerEntity:Order",
+        "IStructure:OrderSummary"
+      ]
+    }
+  ],
+  "mutation": {
+    "target": "IServerAction:Coverage/RemoteService/arg:OrderId",
+    "prop": "Value",
+    "value": "If(Id = NullIdentifier(), Id, NullIdentifier())"
+  }
+}

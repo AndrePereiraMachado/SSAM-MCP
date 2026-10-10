@@ -1,0 +1,11 @@
+{
+ "description": "OverflowMenu do OSUI: a instancia com empty (o menu de exemplo traz links sem destino).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "OverflowDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "OverflowMenu1", "source": "IMobileBlock:OverflowMenu", "empty": true, "as": "$om"}
+ ]
+}

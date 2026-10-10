@@ -1,0 +1,22 @@
+{
+ "description": "Counter do OSUI com dados: Content com o Count do aggregate e o rotulo, cor de fundo e altura.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "SalesOrder", "attributes": [{"name": "Code", "type": "Text", "length": 20, "mandatory": true}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "OrdersCounter", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Orders\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetOrders", "as": "$GetOrders"},
+  {"op": "create", "parent": "$GetOrders", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:SalesOrder"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Counter1", "source": "IMobileBlock:Counter", "as": "$ct"},
+  {"op": "set", "target": "$ct/BackgroundColor", "prop": "Value", "value": "Entities.Color.Neutral1"},
+  {"op": "set", "target": "$ct/Height", "prop": "Value", "value": "\"120\""},
+  {"op": "create", "parent": "$ct/Content", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "GetOrders.Count"},
+  {"op": "create", "parent": "$ct/Content", "type": "ITextWidget", "as": "$text1"},
+  {"op": "set", "target": "$text1", "prop": "Text", "value": "orders"}
+ ]
+}

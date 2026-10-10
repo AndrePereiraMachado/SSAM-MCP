@@ -1,0 +1,78 @@
+{
+ "description": "Cobertura testada (fase 2): del de ServiceStudio.Plugin.NRWidgets.IButtonGroupItem (o11) em uiButtonGroup. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "CovSScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "ILocalVariable",
+   "name": "CovSChoice",
+   "as": "$hc"
+  },
+  {
+   "op": "set",
+   "target": "$hc",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IContainer",
+   "name": "CovSBox",
+   "as": "$box"
+  },
+  {
+   "op": "create",
+   "parent": "$box",
+   "type": "IButtonGroup",
+   "name": "CovSGroup",
+   "empty": true,
+   "as": "$p"
+  },
+  {
+   "op": "set",
+   "target": "$p",
+   "prop": "Variable",
+   "value": "CovSChoice"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IButtonGroupItem",
+   "name": "CovSItem",
+   "as": "$si"
+  },
+  {
+   "op": "set",
+   "target": "$si",
+   "prop": "Value",
+   "value": "\"Z\""
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IButtonGroupItem",
+   "name": "CovAButtonGroupItem",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

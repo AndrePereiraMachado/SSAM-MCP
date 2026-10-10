@@ -1,0 +1,2 @@
+/* SSAM SYNTHETIC OsAjax reply. Evidenced tokens: the marker RichWidgets_Input_AutoComplete_setListFor<inputId> and a bracket call whose single-quoted argument holds label TAB value lines (GSC:4275-4300). Envelope invented. */
+OsAjaxReply_v1(["__OSVSTATE","U1NBTS1TWU5USEVUSUMtT1NWU1RBVEUvc29sdXRpb24tMTEtbG9va3Vw"],[]);window['RichWidgets_Input_AutoComplete_setListForwt9_wtContentMain_wtAddComponent_wtComponentInput']('SampleShared_IS (Module)\t7c3d9e10-0000-4000-8000-00000000e103\nSampleWarehouseExt (Extension)\t2d4f6a8c-0000-4000-8000-000000000202');

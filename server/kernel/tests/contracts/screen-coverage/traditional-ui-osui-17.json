@@ -1,0 +1,326 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "OutSystemsUI",
+    "OutSystemsUIWeb:TimePicker",
+    "OutSystemsUIWeb:Timeline",
+    "OutSystemsUIWeb:TimelineItem",
+    "OutSystemsUIWeb:ToggleButton",
+    "OutSystemsUIWeb:Tooltip"
+  ],
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "tests/fixtures/outsystems-ui-web.oml",
+      "elements": [
+        "IWebBlock:TimePicker",
+        "IWebBlock:Timeline",
+        "IWebBlock:TimelineItem",
+        "IWebBlock:ToggleButton",
+        "IWebBlock:Tooltip"
+      ]
+    }
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Ui80_TimePicker",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:TimePicker",
+            "args": {},
+            "slots": {
+              "Input": [
+                {
+                  "name": "Part2",
+                  "type": "IInputWidget",
+                  "properties": {
+                    "Variable": "Value1"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "Part3",
+            "type": "IButtonWidget",
+            "properties": {
+              "Label": "\"Submit\""
+            },
+            "events": {
+              "OnClick": {
+                "destination": "IWebScreen:Ui80_TimePicker/Ui80_TimePicker_Submit"
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value1",
+            "type": "Text"
+          }
+        ]
+      },
+      {
+        "name": "Ui81_Timeline",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:Timeline",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "IWebBlockInstanceWidget",
+                  "properties": {},
+                  "source": "IWebBlock:TimelineItem",
+                  "args": {
+                    "ExtendedClass": "\"coverage\""
+                  },
+                  "slots": {
+                    "Icon": [
+                      {
+                        "name": "Part3",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Component content"
+                        }
+                      }
+                    ],
+                    "Date": [
+                      {
+                        "name": "Part4",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Component content"
+                        }
+                      }
+                    ],
+                    "Content": [
+                      {
+                        "name": "Part5",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Component content"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui82_TimelineItem",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:TimelineItem",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Icon": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Date": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Content": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui83_ToggleButton",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:ToggleButton",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "CheckBox": [
+                {
+                  "name": "Part2",
+                  "type": "ICheckBoxWidget",
+                  "properties": {
+                    "Variable": "Value1"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "Part3",
+            "type": "IButtonWidget",
+            "properties": {
+              "Label": "\"Submit\""
+            },
+            "events": {
+              "OnClick": {
+                "destination": "IWebScreen:Ui83_ToggleButton/Ui83_ToggleButton_Submit"
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value1",
+            "type": "Boolean"
+          }
+        ]
+      },
+      {
+        "name": "Ui84_Tooltip",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:Tooltip",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Widget": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Content": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "name": "Ui80_TimePicker_Submit",
+          "kind": "screen",
+          "owner": "IWebScreen:Ui80_TimePicker",
+          "steps": []
+        },
+        {
+          "name": "Ui83_ToggleButton_Submit",
+          "kind": "screen",
+          "owner": "IWebScreen:Ui83_ToggleButton",
+          "steps": []
+        }
+      ]
+    }
+  },
+  "mutations": [
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui80_TimePicker/Part1",
+      "prop": "Name",
+      "value": "RenamedSubject",
+      "element": "TimePicker"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui81_Timeline/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Timeline"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui82_TimelineItem/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "TimelineItem"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui83_ToggleButton/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "ToggleButton"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui84_Tooltip/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Tooltip"
+    }
+  ]
+}

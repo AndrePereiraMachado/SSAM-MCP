@@ -1,0 +1,390 @@
+{
+ "description": "Entidade e server action com aggregate, If, Assign, Execute e Raise.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerEntity",
+   "name": "Customer",
+   "as": "$cust"
+  },
+  {
+   "op": "set",
+   "target": "$cust",
+   "prop": "Description",
+   "value": "Cliente (job de verbos)"
+  },
+  {
+   "op": "create",
+   "parent": "$cust",
+   "type": "IEntityAttribute",
+   "name": "Id",
+   "as": "$id"
+  },
+  {
+   "op": "set",
+   "target": "$id",
+   "prop": "DataType",
+   "value": "Long Integer"
+  },
+  {
+   "op": "set",
+   "target": "$id",
+   "prop": "IsAutoNumber",
+   "value": "Yes"
+  },
+  {
+   "op": "set",
+   "target": "$id",
+   "prop": "IsMandatory",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$cust",
+   "prop": "IdentifierAttribute",
+   "value": "$id"
+  },
+  {
+   "op": "create",
+   "parent": "$cust",
+   "type": "IEntityAttribute",
+   "name": "Name",
+   "as": "$name"
+  },
+  {
+   "op": "set",
+   "target": "$name",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$name",
+   "prop": "Length",
+   "value": 100
+  },
+  {
+   "op": "set",
+   "target": "$name",
+   "prop": "IsMandatory",
+   "value": true
+  },
+  {
+   "op": "create",
+   "parent": "$cust",
+   "type": "IEntityAttribute",
+   "name": "Credit",
+   "as": "$credit"
+  },
+  {
+   "op": "set",
+   "target": "$credit",
+   "prop": "DataType",
+   "value": "Currency"
+  },
+  {
+   "op": "set",
+   "target": "$credit",
+   "prop": "DefaultValue",
+   "value": "0"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Customer_AddCredit",
+   "as": "$act"
+  },
+  {
+   "op": "set",
+   "target": "$act",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IInputParameter",
+   "name": "CustomerId",
+   "as": "$inId"
+  },
+  {
+   "op": "set",
+   "target": "$inId",
+   "prop": "DataType",
+   "value": "Customer Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IInputParameter",
+   "name": "Amount",
+   "as": "$inAmt"
+  },
+  {
+   "op": "set",
+   "target": "$inAmt",
+   "prop": "DataType",
+   "value": "Currency"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IOutputParameter",
+   "name": "NewCredit",
+   "as": "$out"
+  },
+  {
+   "op": "set",
+   "target": "$out",
+   "prop": "DataType",
+   "value": "Currency"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "ILocalVariable",
+   "name": "C",
+   "as": "$c"
+  },
+  {
+   "op": "set",
+   "target": "$c",
+   "prop": "DataType",
+   "value": "Customer"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IStartNode",
+   "name": "Start",
+   "as": "$start"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IEndNode",
+   "name": "End",
+   "as": "$end"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IAggregateNode",
+   "name": "GetCustomer",
+   "as": "$agg"
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Customer"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IFilter",
+   "args": {
+    "condition": "Customer.Id = CustomerId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IIfNode",
+   "name": "Found",
+   "as": "$if"
+  },
+  {
+   "op": "set",
+   "target": "$if",
+   "prop": "Label",
+   "value": "Found"
+  },
+  {
+   "op": "set",
+   "target": "$if",
+   "prop": "Condition",
+   "value": "not GetCustomer.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IAssignNode",
+   "name": "AddCredit",
+   "as": "$assign"
+  },
+  {
+   "op": "set",
+   "target": "$assign",
+   "prop": "Label",
+   "value": "AddCredit"
+  },
+  {
+   "op": "create",
+   "parent": "$assign",
+   "type": "IAssignment",
+   "as": "$a1"
+  },
+  {
+   "op": "set",
+   "target": "$a1",
+   "prop": "Variable",
+   "value": "C"
+  },
+  {
+   "op": "set",
+   "target": "$a1",
+   "prop": "Value",
+   "value": "GetCustomer.List.Current.Customer"
+  },
+  {
+   "op": "create",
+   "parent": "$assign",
+   "type": "IAssignment",
+   "as": "$a2"
+  },
+  {
+   "op": "set",
+   "target": "$a2",
+   "prop": "Variable",
+   "value": "C.Credit"
+  },
+  {
+   "op": "set",
+   "target": "$a2",
+   "prop": "Value",
+   "value": "C.Credit + Amount"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IExecuteServerActionNode",
+   "name": "UpdateCustomer",
+   "as": "$upd"
+  },
+  {
+   "op": "set",
+   "target": "$upd",
+   "prop": "Action",
+   "value": "IEntityActionSignature:UpdateCustomer"
+  },
+  {
+   "op": "set",
+   "target": "$upd/Source",
+   "prop": "Value",
+   "value": "C"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IAssignNode",
+   "name": "SetOutput",
+   "as": "$setout"
+  },
+  {
+   "op": "set",
+   "target": "$setout",
+   "prop": "Label",
+   "value": "SetOutput"
+  },
+  {
+   "op": "create",
+   "parent": "$setout",
+   "type": "IAssignment",
+   "as": "$a3"
+  },
+  {
+   "op": "set",
+   "target": "$a3",
+   "prop": "Variable",
+   "value": "NewCredit"
+  },
+  {
+   "op": "set",
+   "target": "$a3",
+   "prop": "Value",
+   "value": "C.Credit"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IUserException",
+   "name": "CustomerNotFound",
+   "as": "$ex"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IRaiseExceptionNode",
+   "name": "RaiseNotFound",
+   "as": "$raise"
+  },
+  {
+   "op": "set",
+   "target": "$raise",
+   "prop": "Exception",
+   "value": "$ex"
+  },
+  {
+   "op": "set",
+   "target": "$raise",
+   "prop": "ExceptionMessage",
+   "value": "\"Customer not found\""
+  },
+  {
+   "op": "link",
+   "from": "$start",
+   "to": "$agg"
+  },
+  {
+   "op": "link",
+   "from": "$agg",
+   "to": "$if"
+  },
+  {
+   "op": "link",
+   "from": "$if",
+   "connector": "TrueTarget",
+   "to": "$assign"
+  },
+  {
+   "op": "link",
+   "from": "$if",
+   "connector": "FalseTarget",
+   "to": "$raise"
+  },
+  {
+   "op": "link",
+   "from": "$assign",
+   "to": "$upd"
+  },
+  {
+   "op": "link",
+   "from": "$upd",
+   "to": "$setout"
+  },
+  {
+   "op": "link",
+   "from": "$setout",
+   "to": "$end"
+  },
+  {
+   "op": "layout",
+   "target": "$act"
+  },
+  {
+   "op": "find",
+   "name": "Customer_AddCredit"
+  },
+  {
+   "op": "get",
+   "target": "$act"
+  }
+ ]
+}

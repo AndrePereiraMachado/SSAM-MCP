@@ -1,0 +1,38 @@
+{
+ "description": "Checkbox por linha: cada tarefa da List tem um Checkbox ligado ao IsDone do registro, e o OnChange grava a linha no servidor passando o indice.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Task", "attributes": [
+   {"name": "Title", "type": "Text", "length": 100, "mandatory": true},
+   {"name": "IsDone", "type": "Boolean"}]}]}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "Task_SetDone", "kind": "server", "inputs": [{"name": "TaskId", "type": "Task Identifier"}, {"name": "IsDone", "type": "Boolean"}],
+    "vars": [{"name": "Row", "type": "Task"}],
+    "steps": [
+     {"get": "Task", "as": "ReadTask", "where": "Task.Id = TaskId", "max": 1},
+     {"assign": {"Row": "ReadTask.List.Current.Task"}, "as": "TakeRow"},
+     {"assign": {"Row.IsDone": "IsDone"}, "as": "SetDone"},
+     {"update": "Task", "record": "Row", "as": "SaveRow"}]}]}},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "TaskChecklist", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetTasks", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "DoneChanged", "kind": "screen", "owner": "IMobileScreen:TaskChecklist",
+    "inputs": [{"name": "RowIndex", "type": "Integer"}],
+    "steps": [{"call": "Task_SetDone", "as": "Save", "args": {"TaskId": "GetTasks.List[RowIndex].Task.Id", "IsDone": "GetTasks.List[RowIndex].Task.IsDone"}}]}]}},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "TaskList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetTasks.List"},
+  {"op": "create", "parent": "$list", "type": "IContainer", "name": "TaskRow", "as": "$row"},
+  {"op": "create", "parent": "$row", "type": "ICheckbox", "name": "DoneCheckbox", "as": "$cb"},
+  {"op": "set", "target": "$cb", "prop": "Variable", "value": "GetTasks.List.Current.Task.IsDone", "_why": "o Checkbox escreve direto no registro da linha"},
+  {"op": "set", "target": "$cb/OnChange", "prop": "Destination", "value": "IMobileScreen:TaskChecklist/DoneChanged"},
+  {"op": "set", "target": "$cb/OnChange/RowIndex", "prop": "Value", "value": "GetTasks.List.CurrentRowNumber"},
+  {"op": "create", "parent": "$row", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "GetTasks.List.Current.Task.Title"}
+ ]
+}

@@ -1,0 +1,25 @@
+<style>
+  :root { border: 1px solid #f0b429; border-radius: 6px; padding: 12px; background: #fffaf0; }
+  .wf-alert-head { display: flex; gap: 8px; align-items: center; }
+  .wf-alert-title { font-weight: 600; font-size: 16px; }
+  .wf-alert-body { margin: 4px 0; color: #4b5563; }
+  .wf-alert-field { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+</style>
+<div id="PinAlert" class="wf-alert">
+  <div class="wf-alert-head">
+    <i icon="exclamation-triangle" weight="regular" class="wf-alert-icon"></i>
+    <span class="wf-alert-title">Pin not found</span>
+  </div>
+  <p class="wf-alert-body">The pin you asked for is not in this report.</p>
+  <p class="wf-alert-body">Check the number and try again.</p>
+  <p class="wf-alert-body">Nothing was changed.</p>
+  <div class="wf-alert-field">
+    <label for="PinInput">Pin</label>
+    <input id="PinInput" bind="PinNumber" placeholder="e.g. 1234" type="text" aria-label="Pin">
+  </div>
+  <div class="wf-alert-field">
+    <label for="NoteInput">Note</label>
+    <input id="NoteInput" bind="AlertNote" placeholder="Optional note" type="text">
+  </div>
+  <button id="RetryButton" onclick="RetrySearch" class="btn btn-primary">Try again</button>
+</div>

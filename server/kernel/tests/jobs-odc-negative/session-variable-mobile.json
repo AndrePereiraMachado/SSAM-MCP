@@ -1,0 +1,9 @@
+{
+ "description": "ODC (contexto): Session Variable continua recusada mesmo numa app Mobile em branco. A recusa e a mesma numa app CrossDevice e em Service, BusinessProcess e AIAgent; numa biblioteca e 'children of Library objects'. Medido com create-blank: so um modulo WebResponsive (Traditional Web, que o ODC nao publica) aceita a variavel de sessao.",
+ "base": "tests/fixtures/odc/blank-mobile.oml",
+ "expectError": "Session Variable objects can't be children of App objects",
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "ISessionVariable", "name": "CovMSession", "as": "$session"},
+  {"op": "set", "target": "$session", "prop": "DataType", "value": "Text"}
+ ]
+}

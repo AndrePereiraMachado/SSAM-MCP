@@ -1,0 +1,16 @@
+{
+ "description": "Job NEGATIVO (tem de falhar): dois botoes navegam para telas (Catalog, GameDetail) que so sao criadas DEPOIS no mesmo job. O job e uma sequencia: o alvo de um set tem de existir antes. A mensagem diz em que op cada tela nasce e lista todos os forward-refs de uma vez.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": false,
+ "expectError": ["op #4 (set Destination)", "IMobileScreen:Catalog does not exist yet at this point of the job: it is created at op #6", "Also out of order: IMobileScreen:GameDetail (created at op #7, used at op #5)"],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "Home", "as": "$home"},
+  {"op": "set", "target": "$home/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$home/#IMobileBlockInstanceWidget/MainContent", "type": "IButton", "name": "GoCatalog", "as": "$b1"},
+  {"op": "create", "parent": "$home/#IMobileBlockInstanceWidget/MainContent", "type": "IButton", "name": "GoDetail", "as": "$b2"},
+  {"op": "set", "target": "$b1/OnClick", "prop": "Destination", "value": "IMobileScreen:Catalog"},
+  {"op": "set", "target": "$b2/OnClick", "prop": "Destination", "value": "IMobileScreen:GameDetail"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "Catalog", "as": "$cat"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "GameDetail", "as": "$det"}
+ ]
+}

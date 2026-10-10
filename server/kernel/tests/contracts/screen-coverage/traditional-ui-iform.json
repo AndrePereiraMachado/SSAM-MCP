@@ -1,0 +1,91 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "native-widget",
+    "web:IForm"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Subject",
+            "type": "IForm",
+            "properties": {
+              "SourceRecord": "Row",
+              "IsEditable": "True"
+            },
+            "children": [
+              {
+                "name": "Part2",
+                "type": "ITextWidget",
+                "properties": {
+                  "Text": "Content"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Submit",
+            "type": "IButtonWidget",
+            "properties": {
+              "Label": "\"Submit\""
+            },
+            "events": {
+              "OnClick": {
+                "destination": "IWebScreen:Coverage/Handle1"
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Row",
+            "type": "ScreenRow"
+          }
+        ]
+      }
+    ],
+    "data": {
+      "structures": [
+        {
+          "name": "ScreenRow",
+          "attributes": [
+            {
+              "name": "Name",
+              "type": "Text"
+            },
+            {
+              "name": "Value",
+              "type": "Integer"
+            }
+          ]
+        }
+      ]
+    },
+    "logic": {
+      "actions": [
+        {
+          "name": "Handle1",
+          "kind": "screen",
+          "owner": "IWebScreen:Coverage",
+          "steps": []
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IWebScreen:Coverage/Subject",
+    "prop": "IsEditable",
+    "value": "False"
+  }
+}

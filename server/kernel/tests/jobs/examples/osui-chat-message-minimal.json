@@ -1,0 +1,10 @@
+{
+ "description": "ChatMessage (OutSystemsUI, Content) minimo: instancia como o Studio cria ao arrastar o bloco; inputs obrigatorios MessageStatus com valores simples.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ChatMessageDemo", "source": "IMobileBlock:ChatMessage", "as": "$b"},
+  {"op": "set", "target": "$b/MessageStatus", "prop": "Value", "value": "Entities.MessageStatus.Received"}
+ ]
+}

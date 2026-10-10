@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><StudioDir Condition="'$(StudioDir)' == ''">$(USERPROFILE)/OutSystems/Service Studio 11 - Anvil 4516/Service Studio</StudioDir></PropertyGroup>
+  <Import Project="../NativeReferences.props" />
+  <ItemGroup>
+    <Reference Include="$(StudioDir)/OutSystems.Communication.dll" Private="false" />
+    <Reference Include="$(StudioDir)/OutSystems.Communication.Identity.dll" Private="false" />
+    <!-- Platform 11 SOAP client and its installed WCF runtime; vendor DLLs remain outside the output. -->
+    <Reference Include="$(StudioDir)/ServiceStudio.ServerCommunications.ServiceCenter.dll" Private="false" />
+    <Reference Include="$(StudioDir)/System.ServiceModel.Primitives.dll" Private="false" />
+    <Reference Include="$(StudioDir)/System.ServiceModel.Http.dll" Private="false" />
+    <Reference Include="$(StudioDir)/System.Private.ServiceModel.dll" Private="false" />
+    <Compile Include="../../src/Anvil.Core/Kernel/Credentials.cs" Link="Credentials.cs" />
+    <Compile Include="O11Authentication.cs" />
+    <Compile Include="SoapTransport.cs" />
+    <Compile Include="TransportFactory.cs" />
+  </ItemGroup>
+</Project>

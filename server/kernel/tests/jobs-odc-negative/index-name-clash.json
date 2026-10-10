@@ -1,0 +1,22 @@
+{
+ "description": "ODC: a RECUSA de um indice com nome repetido na mesma entidade, sem distincao de maiusculas (IX_WfCovTask_ProjectDone ja existe). O caminho limpo esta em tests/jobs-odc/entity-lifecycle.json (lote de dados, fase 3).",
+ "base": "job:data-full-model",
+ "expectValid": true,
+ "expectError": [
+  "EntityIndex 'ix_wfcovtask_projectdone' already exists on WfCovTask"
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IServerEntity:WfCovTask",
+   "type": "EntityIndex",
+   "name": "ix_wfcovtask_projectdone",
+   "args": {
+    "unique": true,
+    "attributes": [
+     "IServerEntity:WfCovTask/Title"
+    ]
+   }
+  }
+ ]
+}

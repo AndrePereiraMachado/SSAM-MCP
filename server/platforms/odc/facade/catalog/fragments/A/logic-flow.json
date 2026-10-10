@@ -1,0 +1,615 @@
+{
+  "schemaVersion": "ssam-discovery-fragment/1",
+  "contract": "ssam-catalog-contribution/1",
+  "front": "A",
+  "title": "Flow bodies of actions: nodes, connectors, assignments, conditions, loops, calls, comments; editing an existing flow (splice, relink, delete mid-flow)",
+  "reviewedAt": "2026-09-23",
+  "synonyms": {
+    "flow": ["fluxo", "fluxos", "flows", "corpo da acao", "action body"],
+    "splice": [
+      "inserir no meio do fluxo", "meio do fluxo", "meio de um fluxo", "middle of flow", "middle of an existing flow", "middle of the flow", "middle of a flow",
+      "insert between two nodes", "between two nodes"
+    ],
+    "edit": ["inserir no meio do fluxo", "meio do fluxo", "meio de um fluxo", "middle of an existing flow", "middle of the flow", "middle of a flow", "between two nodes"],
+    "relink": ["reapontar o conector", "repoint the connector", "religar o conector", "religar o predecessor", "religando o predecessor", "relink the predecessor"],
+    "node": [
+      "nodes", "nodo", "nodos", "flow step", "passo do fluxo", "inicio do fluxo da acao", "inicio da acao", "fim do fluxo da acao", "final do fluxo da acao",
+      "fim da acao", "atribuir variavel", "atribuir a variavel", "atribuir valor a variavel", "if do fluxo", "if da acao", "switch com otherwise",
+      "switch with otherwise", "casos do switch", "switch do fluxo", "foreach", "percorrer a lista", "percorrer uma lista", "iterar a lista",
+      "iterar sobre a lista", "iterate over a list", "iterate over the list", "chamada de acao", "chamadas de acao", "chamar uma server action",
+      "chamar a server action", "call a server action", "call node", "flow comment", "comentario no fluxo da acao", "comentario no fluxo ligado"
+    ],
+    "start": ["inicio do fluxo da acao", "inicio da acao"],
+    "end": ["fim do fluxo da acao", "final do fluxo da acao", "fim da acao"],
+    "assign": ["atribuir variavel", "atribuir a variavel", "atribuir valor a variavel"],
+    "assignment": ["atribuicao", "atribuicoes", "assignments"],
+    "condition": ["condicao do switch", "caso do switch", "casos do switch", "switch condition", "switch node case"],
+    "each": ["foreach", "percorrer a lista", "percorrer uma lista", "iterar a lista", "iterar sobre a lista", "iterate over a list", "iterate over the list"],
+    "execute": ["chamada de acao", "chamadas de acao", "chamar uma server action", "chamar a server action", "call a server action", "call node"],
+    "server": ["chamada de acao", "chamadas de acao", "chamar uma server action", "chamar a server action", "call a server action", "call node"],
+    "client": ["acao de cliente", "acoes de cliente", "client action", "client actions"],
+    "comment": ["flow comment", "conector do comentario", "ligar o comentario", "comentario no fluxo da acao", "comentario no fluxo ligado"],
+    "connector": [
+      "conector do fluxo", "conectores do fluxo", "conector de saida", "reapontar o conector", "religar o conector", "ligacao do fluxo", "ligacoes do fluxo",
+      "flow connector", "node connector", "conector do comentario", "ligar o comentario", "ramo do if", "ramo de um if", "ramos do if", "dentro de um ramo de um if",
+      "ramo verdadeiro do if", "ramo falso do if", "ramo verdadeiro de um if", "ramo falso de um if", "branch of an if node", "branch of the if node",
+      "branch of an existing if", "true branch of an existing if", "false branch of an existing if", "true branch of the if node", "false branch of the if node"
+    ],
+    "start node": ["inicio do fluxo da acao", "inicio da acao"],
+    "end node": ["fim do fluxo da acao", "final do fluxo da acao", "fim da acao"],
+    "assign node": ["atribuir variavel", "atribuir a variavel", "atribuir valor a variavel"],
+    "if node": ["if do fluxo", "if da acao"],
+    "switch node": ["switch com otherwise", "switch with otherwise", "casos do switch", "switch do fluxo"],
+    "for each node": ["foreach", "percorrer a lista", "percorrer uma lista", "iterar a lista", "iterar sobre a lista", "iterate over a list", "iterate over the list"],
+    "execute server action node": ["chamada de acao", "chamadas de acao", "chamar uma server action", "chamar a server action", "call a server action", "call node"],
+    "execute client action node": ["chamada de acao de cliente"],
+    "comment node": ["flow comment", "comentario no fluxo da acao", "comentario no fluxo ligado"]
+  },
+  "capabilities": [
+    {
+      "id": "logic.flow",
+      "supersedes": ["logic.edit"],
+      "category": "logic",
+      "title": "Flowchart splice (IAssignNode, IIfNode, IForEachNode, IActionConnector)",
+      "keywords": [
+        "action flow", "fluxo da acao", "logic flow", "fluxo de logica", "flow connector", "conector do fluxo", "node connector", "splice",
+        "inserir no meio do fluxo", "meio do fluxo", "relink the predecessor", "religar o predecessor", "relink the connector", "religar o conector",
+        "assign node", "variable assignment", "atribuicao de variavel", "if node", "ramo do if", "ramo de um if", "ramo verdadeiro do if", "ramo falso do if",
+        "ramo verdadeiro de um if", "ramo falso de um if", "branch of an if node", "branch of an existing if", "true branch of an existing if",
+        "false branch of an existing if", "inside a branch of an existing if", "dentro de um ramo de um if", "inserir a chamada",
+        "insert a call", "switch node", "switch com otherwise", "for each node", "foreach",
+        "execute server action node", "execute client action node", "call node", "chamada de acao", "start node of the action", "end node of the action",
+        "inicio do fluxo da acao", "fim do fluxo da acao", "flow comment", "comment connector", "comentario no fluxo da acao", "comentario no fluxo ligado",
+        "comment in the action flow", "middle of an existing flow", "no meio de um fluxo existente"
+      ],
+      "summary": "Splice (a call or any node): create it, link new->successor first (keeps it addressable), then predecessor->new (an If branch: connector TrueTarget|FalseTarget). Delete mid-flow: relink the predecessor first. Paths: <Action>/<Label>, #IIfNode[1].",
+      "route": { "kind": "job", "operation": "compact `logic` steps to build; raw create/set/link/delete on <Action>/... to edit" },
+      "contract": [
+        "logic.steps.assign", "logic.steps.if", "logic.steps.foreach", "logic.steps.while", "logic.steps.switch", "logic.steps.call", "logic.switchCase",
+        "logic.comment", "verbs.verbs.create", "verbs.verbs.set", "verbs.verbs.link", "verbs.verbs.move", "verbs.verbs.delete", "verbs.verbs.layout",
+        "verbs.references"
+      ],
+      "guidance": "Read with get before and after (a dump is storage order; Target keys prove a splice); run layout after editing. Loop: CycleTarget -> body, last body node -> ForEach, Target -> exit.",
+      "example": { "ops": ["create", "set", "link", "delete", "layout"], "max": 30 },
+      "depends": [{ "id": "logic.server-action", "unless": "the flow belongs to an existing action (any kind): edit it by path" }],
+      "recommends": [{ "id": "logic.variable", "when": "an Assign or a call argument uses parameters or locals" }],
+      "alternatives": [{ "id": "logic.server-action", "when": "rewrite the whole body: `logic` replace:true keeps callers (O11 only)" }],
+      "elements": [
+        {
+          "role": "start node",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.Nodes.IStartNode", "jobType": "IStartNode", "address": "<Action>/#IStartNode[1]" },
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.IStartNode", "jobType": "IStartNode", "address": "<Action>/#IStartNode[1]" }
+          }
+        },
+        {
+          "role": "end node",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.Nodes.IEndNode", "jobType": "IEndNode", "address": "<Action>/#IEndNode[n]" },
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.IEndNode", "jobType": "IEndNode", "address": "<Action>/#IEndNode[n]" }
+          }
+        },
+        {
+          "role": "assign node",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.Nodes.IAssignNode", "jobType": "IAssignNode", "address": "<Action>/<Label>" },
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.IAssignNode", "jobType": "IAssignNode", "address": "<Action>/<Label>" }
+          }
+        },
+        {
+          "role": "assignment",
+          "child": true,
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.IAssignment", "jobType": "IAssignment", "address": "<Action>/<Assign>/#IAssignment[n]" },
+            "o11": { "native": "OutSystems.Model.Logic.IAssignment", "jobType": "IAssignment", "address": "<Action>/<Assign>/#IAssignment[n]" }
+          }
+        },
+        {
+          "role": "if node",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.Nodes.IIfNode", "jobType": "IIfNode", "address": "<Action>/<Label>" },
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.IIfNode", "jobType": "IIfNode", "address": "<Action>/<Label>" }
+          }
+        },
+        {
+          "role": "switch node",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.Nodes.ISwitchNode", "jobType": "ISwitchNode", "address": "<Action>/<Label>" },
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.ISwitchNode", "jobType": "ISwitchNode", "address": "<Action>/<Label>" }
+          }
+        },
+        {
+          "role": "switch condition",
+          "child": true,
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.Nodes.ISwitchCondition", "jobType": "ISwitchCondition", "address": "<Switch>/#ISwitchCondition[n]" },
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.ISwitchCondition", "jobType": "ISwitchCondition", "address": "<Switch>/#ISwitchCondition[n]" }
+          }
+        },
+        {
+          "role": "for each node",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.Nodes.IForEachNode", "jobType": "IForEachNode", "address": "<Action>/<Label>" },
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.IForEachNode", "jobType": "IForEachNode", "address": "<Action>/<Label>" }
+          }
+        },
+        {
+          "role": "execute server action node",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.Nodes.IExecuteServerActionNode", "jobType": "IExecuteServerActionNode", "address": "<Action>/<Name>" },
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.IExecuteServerActionNode", "jobType": "IExecuteServerActionNode", "address": "<Action>/<Name>" }
+          }
+        },
+        {
+          "role": "execute client action node",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.Nodes.IExecuteClientActionNode", "jobType": "IExecuteClientActionNode", "address": "<Action>/<Name>" },
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.IExecuteClientActionNode", "jobType": "IExecuteClientActionNode", "address": "<Action>/<Name>" }
+          }
+        },
+        {
+          "role": "comment node",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.Nodes.ICommentNode", "jobType": "ICommentNode", "address": "<Action>/<Name>" },
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.ICommentNode", "jobType": "ICommentNode", "address": "<Action>/<Name>" }
+          }
+        },
+        {
+          "role": "comment connector",
+          "child": true,
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.Nodes.ICommentConnector", "jobType": "ICommentConnector", "address": "link {from: <comment>, to: <node>}" },
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.ICommentConnector", "jobType": "ICommentConnector", "address": "link {from: <comment>, to: <node>}" }
+          }
+        },
+        {
+          "role": "connector",
+          "child": true,
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.Logic.IActionConnector",
+              "jobType": "IActionConnector",
+              "address": "no path: link {from, connector: Target|TrueTarget|FalseTarget|CycleTarget|OtherwiseTarget, to} on the source node"
+            },
+            "o11": {
+              "native": "OutSystems.Model.Logic.IActionConnector",
+              "jobType": "IActionConnector",
+              "address": "no path: link {from, connector: Target|TrueTarget|FalseTarget|CycleTarget|OtherwiseTarget, to} on the source node"
+            }
+          }
+        }
+      ],
+      "operations": {
+        "read": {
+          "route": "get/dump by path; `#Type[n]` (1-based) for an unnamed node; End, ForEach, switch conditions: action dump only (ODC)",
+          "preconditions": [],
+          "roles": {
+            "start node": { "odc": { "status": "applicable", "proofs": ["action-edit-lifecycle"], "scope": "Target across a splice" }, "o11": { "status": "undetermined" } },
+            "assign node": {
+              "odc": { "status": "applicable", "proofs": ["action-edit-lifecycle"], "scope": "incoming and Target after a splice" },
+              "o11": { "status": "applicable", "proofs": ["refactor-move"], "scope": "get after a move" }
+            },
+            "assignment": {
+              "odc": { "status": "applicable", "proofs": ["service-action"] },
+              "o11": { "status": "applicable", "proofs": ["rename-data-propagation"], "scope": "Value after a rename" }
+            },
+            "if node": {
+              "odc": { "status": "applicable", "proofs": ["action-edit-lifecycle"], "scope": "1 incoming after a splice" },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["cat-a-reset-typed-values"],
+                "scope": "both targets before/after a branch repoint"
+              }
+            },
+            "switch node": {
+              "odc": { "status": "applicable", "proofs": ["switch-exception-handler"], "scope": "Label, OtherwiseTarget" },
+              "o11": { "status": "undetermined" }
+            },
+            "execute server action node": {
+              "odc": { "status": "applicable", "proofs": ["refactor-inherited"] },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["refactor-usages", "cat-a-reset-typed-values"],
+                "scope": "an inserted call: Action, Target, 1 incoming, Arguments"
+              }
+            },
+            "execute client action node": {
+              "odc": { "status": "applicable", "proofs": ["rename-logic-propagation"] },
+              "o11": { "status": "applicable", "proofs": ["rename-logic-propagation"] }
+            },
+            "comment node": { "odc": { "status": "applicable", "proofs": ["logic-comment-connector"] }, "o11": { "status": "undetermined" } },
+            "comment connector": {
+              "odc": { "status": "applicable", "proofs": ["logic-comment-connector"], "scope": "under the commented node in the dump (op 21)" },
+              "o11": { "status": "undetermined" }
+            },
+            "connector": {
+              "odc": { "status": "applicable", "proofs": ["action-edit-lifecycle"], "scope": "in its source node's dump: declared" },
+              "o11": { "status": "applicable", "proofs": ["delete-data-consumers"], "scope": "in its source node's dump: declared" }
+            }
+          }
+        },
+        "create": {
+          "route": "compact `logic` steps, or raw create <Action> <Type> then link (a connector is created by link)",
+          "preconditions": ["raw create discards the name of Assign/If/Switch/ForEach: set Label", "a Switch needs OtherwiseTarget", "compact foreach cannot break: use a while"],
+          "roles": {
+            "start node": { "odc": { "status": "applicable", "proofs": ["logic-comment-connector"] }, "o11": { "status": "applicable", "proofs": ["smoke-data-logic"] } },
+            "end node": { "odc": { "status": "applicable", "proofs": ["logic-comment-connector"] }, "o11": { "status": "applicable", "proofs": ["smoke-data-logic"] } },
+            "assign node": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["action-edit-lifecycle", "cat-a-reset-typed-values"],
+                "scope": "raw, also in an inherited action; compact"
+              },
+              "o11": { "status": "applicable", "proofs": ["smoke-data-logic", "cat-a-reset-typed-values"], "scope": "raw and compact" }
+            },
+            "assignment": {
+              "odc": { "status": "applicable", "proofs": ["action-edit-lifecycle"] },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["delete-data-consumers", "cat-a-reset-typed-values"],
+                "scope": "also 14 in one Assign"
+              }
+            },
+            "if node": {
+              "odc": { "status": "applicable", "proofs": ["exception-lifecycle"] },
+              "o11": { "status": "applicable", "proofs": ["smoke-data-logic", "flow-layout-decisions"], "scope": "raw and nested compact if" }
+            },
+            "switch node": { "odc": { "status": "applicable", "proofs": ["switch-exception-handler"] }, "o11": { "status": "undetermined" } },
+            "switch condition": { "odc": { "status": "applicable", "proofs": ["switch-exception-handler"] }, "o11": { "status": "undetermined" } },
+            "for each node": {
+              "odc": { "status": "applicable", "proofs": ["data-action"] },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["email-digest-foreach-traditional", "logic-spec-services"],
+                "scope": "raw and compact foreach"
+              }
+            },
+            "execute server action node": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["delete-data-consumers", "cat-a-reset-typed-values", "cat-a-list-clear"],
+                "scope": "new flows; an If branch of an inherited action; ListClear system call"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["delete-data-consumers", "cat-a-reset-typed-values"],
+                "scope": "new flows; an If branch of an inherited action"
+              }
+            },
+            "execute client action node": {
+              "odc": { "status": "applicable", "proofs": ["rename-logic-propagation"] },
+              "o11": { "status": "applicable", "proofs": ["rename-logic-propagation"] }
+            },
+            "comment node": { "odc": { "status": "applicable", "proofs": ["logic-comment-connector"] }, "o11": { "status": "undetermined" } },
+            "comment connector": {
+              "odc": { "status": "applicable", "proofs": ["logic-comment-connector"], "verbs": ["link"], "scope": "link comment -> node only" },
+              "o11": { "status": "undetermined" }
+            },
+            "connector": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["action-edit-lifecycle"],
+                "verbs": ["link"],
+                "scope": "first link from a node; attributed to the source node: declared"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["rename-logic-propagation"],
+                "verbs": ["link"],
+                "scope": "links of a new action; attributed to the source node: declared"
+              }
+            }
+          }
+        },
+        "set": {
+          "route": "set Label/Condition/RecordList/Action/Text; assignment Variable/Value; link {from,to,connector} writes a Target of the source node (End has none)",
+          "preconditions": [
+            "insert into an existing flow: create the node, link new -> successor first, then predecessor -> new; read both back (both lanes, into an If branch). O11 (delete-data-consumers) linked predecessor -> new first, with no read-back",
+            "an If branch: link with connector TrueTarget|FalseTarget (the other stays; an unknown one is refused); into an existing ForEach CycleTarget: no job"
+          ],
+          "roles": {
+            "start node": {
+              "odc": { "status": "applicable", "proofs": ["action-edit-lifecycle"], "scope": "Target to an inserted node" },
+              "o11": { "status": "applicable", "proofs": ["delete-data-consumers"], "scope": "Target of a new Start" }
+            },
+            "assign node": {
+              "odc": { "status": "applicable", "proofs": ["action-edit-lifecycle"], "scope": "Label; Target after a splice" },
+              "o11": { "status": "applicable", "proofs": ["smoke-data-logic"], "scope": "Label; Target" }
+            },
+            "assignment": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["action-edit-lifecycle", "cat-a-reset-typed-values"],
+                "scope": "Variable, Value; one Assign resetting outputs of 14 data types"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["smoke-data-logic", "delete-data-consumers", "cat-a-reset-typed-values"],
+                "scope": "Variable (also a record attribute), Value; one Assign resetting outputs of 14 data types"
+              }
+            },
+            "if node": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["exception-lifecycle", "cat-a-reset-typed-values"],
+                "negative": ["cat-a-link-unknown-connector"],
+                "scope": "Label, Condition, targets of a new If; an existing If's TrueTarget repointed"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["smoke-data-logic", "cat-a-reset-typed-values"],
+                "negative": ["cat-a-link-unknown-connector"],
+                "scope": "Label, Condition, targets of a new If; an existing If's FalseTarget repointed"
+              }
+            },
+            "switch node": { "odc": { "status": "applicable", "proofs": ["switch-exception-handler"] }, "o11": { "status": "undetermined" } },
+            "switch condition": {
+              "odc": { "status": "applicable", "proofs": ["switch-exception-handler"], "scope": "Value; linked with the default Target" },
+              "o11": { "status": "undetermined" }
+            },
+            "for each node": {
+              "odc": { "status": "applicable", "proofs": ["data-action"] },
+              "o11": { "status": "applicable", "proofs": ["email-digest-foreach-traditional", "tickets-02-helpers"] }
+            },
+            "execute server action node": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["delete-data-consumers", "cat-a-reset-typed-values"],
+                "scope": "Action, Target; also a call inserted into an If branch"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["delete-data-consumers", "cat-a-reset-typed-values"],
+                "scope": "Action, Target; a call spliced into a screen action and one into an If branch"
+              }
+            },
+            "execute client action node": {
+              "odc": { "status": "applicable", "proofs": ["rename-logic-propagation"] },
+              "o11": { "status": "applicable", "proofs": ["rename-logic-propagation"] }
+            },
+            "comment node": { "odc": { "status": "applicable", "proofs": ["logic-comment-connector"], "scope": "Text, IsReminder" }, "o11": { "status": "undetermined" } },
+            "connector": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["action-edit-lifecycle"],
+                "scope": "repointed by link (splice, If branch); attributed to the source node: declared"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["delete-data-consumers"],
+                "scope": "repointed by link (splice, If branch); attributed to the source node: declared"
+              }
+            }
+          }
+        },
+        "move": {
+          "route": "move {target, x, y}; first/last/before/after reorders switch conditions",
+          "preconditions": ["switch cases are evaluated in connector order"],
+          "roles": {
+            "assign node": { "odc": { "status": "applicable", "proofs": ["refactor-move"] }, "o11": { "status": "applicable", "proofs": ["refactor-move"] } },
+            "end node": {
+              "odc": { "status": "applicable", "proofs": ["switch-exception-handler"], "scope": "x/y in a flow without Start" },
+              "o11": { "status": "undetermined" }
+            },
+            "switch condition": { "odc": { "status": "applicable", "proofs": ["switch-exception-handler"], "scope": "first and after" }, "o11": { "status": "undetermined" } }
+          }
+        },
+        "rename": {
+          "route": "set Label on Assign/If/Switch/ForEach; renaming a call node is not exercised (a default-named one follows an action rename)",
+          "preconditions": [],
+          "roles": {
+            "assign node": {
+              "odc": { "status": "applicable", "proofs": ["switch-exception-handler"], "props": ["Label"] },
+              "o11": { "status": "applicable", "proofs": ["smoke-data-logic"], "props": ["Label"] }
+            },
+            "if node": {
+              "odc": { "status": "applicable", "proofs": ["service-action"], "props": ["Label"] },
+              "o11": { "status": "applicable", "proofs": ["smoke-data-logic"], "props": ["Label"] }
+            },
+            "switch node": { "odc": { "status": "applicable", "proofs": ["switch-exception-handler"], "props": ["Label"] }, "o11": { "status": "undetermined" } },
+            "for each node": {
+              "odc": { "status": "applicable", "proofs": ["data-action"], "props": ["Label"] },
+              "o11": { "status": "applicable", "proofs": ["email-digest-foreach-traditional"], "props": ["Label"] }
+            }
+          }
+        },
+        "delete": {
+          "route": "link predecessor -> successor first, then delete <node>",
+          "preconditions": ["relink the predecessor first (declared in delete-data-consumers; no refusal job proves it)", "a removed call may leave its action unused (warning)"],
+          "roles": {
+            "execute server action node": {
+              "odc": { "status": "conditional", "proofs": ["delete-data-consumers"], "scope": "predecessor relinked to the End, then delete without force" },
+              "o11": { "status": "conditional", "proofs": ["delete-data-consumers"], "scope": "predecessor relinked to the End, then delete without force" }
+            },
+            "comment node": {
+              "odc": { "status": "applicable", "proofs": ["service-action"], "scope": "the comment of a new service action" },
+              "o11": { "status": "undetermined" }
+            },
+            "connector": {
+              "odc": { "status": "undetermined", "note": "goes with its source node" },
+              "o11": { "status": "undetermined", "note": "goes with its source node" }
+            }
+          }
+        }
+      },
+      "platforms": {
+        "odc": {
+          "proofs": [
+            "logic-action", "cat-a-list-clear", "logic-steps", "action-edit-lifecycle", "delete-data-consumers", "logic-comment-connector", "switch-exception-handler",
+            "exception-lifecycle", "service-action", "data-action", "rename-logic-propagation", "refactor-inherited", "refactor-move", "cat-a-reset-typed-values"
+          ],
+          "negative": [],
+          "context": { "kinds": ["ServerAction", "ClientAction", "ServiceAction", "MobileScreen", "DataAction"], "signatures": ["ServerAction", "ClientAction"] },
+          "limits": [
+            {
+              "text": "Headless (model, Verify; not runtime): a call inserted into an existing If's TrueTarget branch; one Assign resets 14 typed outputs; ListClear; unknown connector refused. Into an existing ForEach CycleTarget: no job.",
+              "origin": "jobs cat-a-reset-typed-values, cat-a-list-clear, cat-a-link-unknown-connector"
+            },
+            {
+              "text": "A mid-sequence splice is proven with an Assign; a call only into an If branch.",
+              "origin": "jobs action-edit-lifecycle, cat-a-reset-typed-values"
+            },
+            {
+              "text": "A comment link always adds a comment connector (never repoints one, never writes its Label).",
+              "origin": "kernel Verbs.cs:508; job:logic-comment-connector"
+            }
+          ],
+          "differences": ["switch, switch conditions and flow comments are proven on this lane only"]
+        },
+        "o11": {
+          "proofs": [
+            "logic-spec-services", "flow-layout-decisions", "delete-data-consumers", "smoke-data-logic", "refactor-move", "rename-logic-propagation",
+            "refactor-usages", "rename-data-propagation", "screen-form-reactive", "email-digest-foreach-traditional", "tickets-02-helpers", "cat-a-reset-typed-values"
+          ],
+          "negative": [],
+          "context": { "kinds": ["ServerAction", "ClientAction", "ServiceAction", "MobileScreen", "DataAction"], "signatures": ["ServerAction", "ClientAction"] },
+          "limits": [
+            {
+              "text": "Headless (Verify, not runtime): call inserted in an existing If's FalseTarget branch; one Assign resets 14 typed outputs; unknown connector refused. ListClear: compact call only in unit contracts; raw in tickets-06-sla.",
+              "origin": "jobs cat-a-reset-typed-values, cat-a-link-unknown-connector, tickets-06-sla; *-list-operations contracts"
+            },
+            { "text": "Switch, switch conditions and flow comments have no O11 job.", "origin": "matrix a-matrix.json (lanes.o11 ISwitchNode, ICommentNode)" },
+            {
+              "text": "Process and comment flows link by CreateConnector (adds a connector, needs the target); process nodes are front C.",
+              "origin": "kernel/src/Anvil.Core/Kernel/Verbs.cs:508; kernel/docs/mapa/README.md:11"
+            },
+            {
+              "text": "Compact foreach with break is refused before touching the model: use an indexed while.",
+              "origin": "kernel/tests/Anvil.Tests/StructuredControlTests.cs:66"
+            }
+          ],
+          "differences": ["switch, switch conditions and flow comments have no job on this lane"]
+        }
+      }
+    }
+  ],
+  "unavailable": [],
+  "coverage": [
+    {
+      "type": "odc:OutSystems.Model.IConnector",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface; its concrete connectors (node connectors, switch conditions, comment connectors) are roles of logic.flow",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "o11:OutSystems.Model.IConnector",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface; its concrete connectors are roles of logic.flow",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "odc:OutSystems.Model.IFlow",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface of actions and flows; concrete owners are accounted (logic.* actions)",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "o11:OutSystems.Model.IFlow",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface of actions and flows; concrete owners are accounted",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "odc:OutSystems.Model.IFlowNode",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface; the concrete flow nodes are roles of logic.flow and of the native-node/query/exception themes",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "o11:OutSystems.Model.IFlowNode",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface; the concrete flow nodes are accounted",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.IActionConnector",
+      "status": "represented",
+      "applicability": "applicable",
+      "classification": "concrete",
+      "capability": "logic.flow",
+      "role": "connector",
+      "reason": "the inventory marks it base-interface, but it is the interface of the node connectors a flow is made of (Sequence, True, False, Cycle, Otherwise classes)",
+      "origin": "job:action-edit-lifecycle dumps ops 2 and 41; job:switch-exception-handler dump op 57"
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.IActionConnector",
+      "status": "represented",
+      "applicability": "applicable",
+      "classification": "concrete",
+      "capability": "logic.flow",
+      "role": "connector",
+      "reason": "the inventory marks it base-interface, but it is the interface of the node connectors a flow is made of (Sequence class in the dumps)",
+      "origin": "job:delete-data-consumers dump op 37; job:rename-logic-propagation dump op 134"
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.Nodes.IActionNode",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface; its concrete nodes are accounted",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.Nodes.IActionNode",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "classification": "base",
+      "reason": "the generic CreateNode factory returns this base type; it is the base of the concrete action nodes, which are accounted (O11 inventory classifies it base-interface)",
+      "origin": "inventory kindBasis: factory IObjectWithNodes.CreateNode / IAction.CreateNode, also base of 32"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.Nodes.IDecisionOutcomeNode",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "only a generic CreateNode<T> factory; no job, contract step or reader names the parent that accepts it: needs a native probe",
+      "origin": "inventory kindBasis generic factory CreateNode<T>"
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.Nodes.IDecisionOutcomeNode",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "no job, contract step or reader names the parent that accepts it: needs a native probe",
+      "origin": "inventory family logic.node; matrix a-matrix.json (no evidence)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.IActionHandler",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "created only under an AI agent (IAgent / ICallAgentCoreNode.CreateActionHandler), a front C domain; no job; ownership to be confirmed by the integrator",
+      "origin": "inventory kindBasis: IAgent.CreateActionHandler, ICallAgentCoreNode.CreateActionHandler"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.IEntityConnector",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "no factory returns it; possibly platform or import generated; no job reads or writes it",
+      "origin": "inventory kindClass undetermined"
+    },
+    {
+      "type": "odc:OutSystems.Model.UI.Mobile.ICommentConnector",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "comment connector of a UI flow diagram; link would pick the overload by target type, but no job links a comment inside a UI flow",
+      "origin": "kernel/src/Anvil.Core/Kernel/Verbs.cs:508; job:logic-comment-connector description (Comment spans five model areas)"
+    },
+    {
+      "type": "odc:OutSystems.Model.UI.Web.ICommentConnector",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "Traditional Web flows are not supported in ODC; the type exists only in the Model API metadata",
+      "origin": "platforms/odc/docs/FRICCAO-ROTASEGURA.md:215 (OS-APPS-40015 Traditional Web not supported)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.ITriggerableEvent",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "abstraction implemented by the events a trigger node fires, not an element authored in an action flow; trigger nodes and block events are front B",
+      "origin": "inventory kindClass outside-object-root (rule: logic helpers)"
+    }
+  ]
+}

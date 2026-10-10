@@ -1,0 +1,101 @@
+{
+ "description": "ODC: o aggregate COMPLETO - duas fontes ligadas por JOIN, filtro com parametro implicito, ordenacao e group by com agregacoes sobre os DOIS lados do join. Espelha tests/jobs/aggregate-full.json da faixa O11. E assim que um aggregate de verdade se constroi no modelo, e o dump do fim mostra a arvore que o censo conta: cada IAliasedSource nasce como um IAddSourceOperation; o IJoin, o IFilter e o ISort vivem dentro do ICombineSourcesOperation, a etapa que corre ANTES do agrupamento (por isso os tres citam os atributos pelo alias da fonte); o group by e as colunas agregadas ficam no IGroupByOperation; e o filtro que cita um parametro da action faz nascer um IImplicitParameter - o aggregate nao le variaveis de fora, recebe o valor por um parametro proprio. Diferencas do ODC adaptadas aqui: o tipo da coluna agregada chama-se IAggregatedAttribute (no SS11 e IAggregateAttribute) e tanto o Count como o Sum devolvem Long Integer (no SS11, Integer); so o List.Length continua Integer.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfAggOrder_Report (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "ops": [
+  {"op": "spec", "data": {
+   "entities": [
+    {
+     "name": "WfAggOrder",
+     "description": "Prova do aggregate completo no ODC: o lado esquerdo do join",
+     "attributes": [
+      {"name": "CustomerName", "type": "Text", "mandatory": true, "length": 100},
+      {"name": "Total", "type": "Decimal"}
+     ]
+    },
+    {
+     "name": "WfAggOrderItem",
+     "description": "Prova do aggregate completo no ODC: o lado direito do join",
+     "attributes": [
+      {"name": "OrderId", "type": "WfAggOrder Identifier", "mandatory": true},
+      {"name": "Qty", "type": "Integer"}
+     ]
+    }
+   ]
+  }},
+
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfAggOrder_Report", "as": "$act"},
+
+  {"op": "create", "parent": "$act", "type": "IInputParameter", "name": "MinTotal", "as": "$in"},
+  {"op": "set", "target": "$in", "prop": "DataType", "value": "Decimal"},
+
+  {"op": "create", "parent": "$act", "type": "IOutputParameter", "name": "TopCustomer", "as": "$o1"},
+  {"op": "set", "target": "$o1", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$act", "type": "IOutputParameter", "name": "TopOrders", "as": "$o2"},
+  {"op": "set", "target": "$o2", "prop": "DataType", "value": "Long Integer", "_why": "DIFERENCA ODC: o Count do aggregate e Long Integer (no SS11 e Integer); dar Integer aqui cai em ExpressionUnexpectedExpresssionType"},
+  {"op": "create", "parent": "$act", "type": "IOutputParameter", "name": "TopQty", "as": "$o3"},
+  {"op": "set", "target": "$o3", "prop": "DataType", "value": "Long Integer", "_why": "o Sum de uma coluna Integer tambem sobe para Long Integer; so o List.Length continua Integer"},
+  {"op": "create", "parent": "$act", "type": "IOutputParameter", "name": "Groups", "as": "$o4"},
+  {"op": "set", "target": "$o4", "prop": "DataType", "value": "Integer"},
+
+  {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$s0"},
+
+  {"op": "create", "parent": "$act", "type": "IAggregateNode", "name": "WfGetOrdersByCustomer", "as": "$agg", "_why": "nome PROPRIO, nao o nome padrao do Studio (GetWfAggOrders): ao receber filtro a plataforma renomearia o aggregate sozinho e todas as expressoes que o citam quebrariam"},
+
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "$WfAggOrder"}, "as": "$srcOrder", "_why": "primeira fonte = primeiro IAddSourceOperation do aggregate"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "$WfAggOrderItem"}, "as": "$srcItem", "_why": "segunda fonte: e a existencia de DUAS que torna o join possivel"},
+
+  {"op": "create", "parent": "$agg", "type": "IJoin", "as": "$join", "_why": "o join vive no ICombineSourcesOperation, a etapa que corre depois de somar as fontes e antes do group by"},
+  {"op": "set", "target": "$join", "prop": "LeftSource", "value": "$srcOrder"},
+  {"op": "set", "target": "$join", "prop": "RightSource", "value": "$srcItem"},
+  {"op": "set", "target": "$join", "prop": "JoinType", "value": "Left", "_why": "enum pelo nome: None/Inner/Right/Left/Full"},
+  {"op": "set", "target": "$join", "prop": "Condition", "value": "WfAggOrder.Id = WfAggOrderItem.OrderId", "_why": "a condicao cita os dois lados pelo ALIAS da fonte, que por omissao e o nome da entidade"},
+
+  {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "WfAggOrder.Total >= MinTotal"}, "as": "$flt", "_why": "o filtro cita MinTotal, um parametro da ACTION: o aggregate nao le variaveis de fora, entao a plataforma cria um IImplicitParameter dentro dele e liga-o ao parametro. O dump no fim prova isso"},
+
+  {"op": "create", "parent": "$agg", "type": "ISort", "as": "$sort"},
+  {"op": "set", "target": "$sort", "prop": "Attribute", "value": "WfAggOrder.CustomerName", "_why": "o dump no fim mostra que a ordenacao mora no ICombineSourcesOperation, ou seja, corre ANTES do group by: por isso ela cita o atributo pelo alias da fonte (WfAggOrder.CustomerName) e nao o nome da coluna agrupada"},
+  {"op": "set", "target": "$sort", "prop": "SortDirection", "value": "Descending"},
+
+  {"op": "create", "parent": "$agg", "type": "IGroupByAttribute", "name": "CustomerName", "as": "$gb"},
+  {"op": "set", "target": "$gb", "prop": "Attribute", "value": "WfAggOrder.CustomerName"},
+
+  {"op": "create", "parent": "$agg", "type": "IAggregatedAttribute", "name": "Orders", "as": "$cnt", "_why": "DIFERENCA ODC: o tipo chama-se IAggregatedAttribute (no SS11, IAggregateAttribute); o DisplayName 'Aggregate Attribute' e o mesmo nas duas"},
+  {"op": "set", "target": "$cnt", "prop": "Attribute", "value": "WfAggOrder.Id"},
+  {"op": "set", "target": "$cnt", "prop": "AggregationType", "value": "Count"},
+
+  {"op": "create", "parent": "$agg", "type": "IAggregatedAttribute", "name": "QtySum", "as": "$sum", "_why": "agregacao sobre o lado DIREITO do join: e a prova de que o join entrou mesmo na consulta, e nao so no desenho"},
+  {"op": "set", "target": "$sum", "prop": "Attribute", "value": "WfAggOrderItem.Qty"},
+  {"op": "set", "target": "$sum", "prop": "AggregationType", "value": "Sum"},
+
+  {"op": "set", "target": "$agg", "prop": "MaxRecords", "value": "100"},
+
+  {"op": "create", "parent": "$act", "type": "IAssignNode", "as": "$asg"},
+  {"op": "set", "target": "$asg", "prop": "Label", "value": "SetOutputs"},
+  {"op": "create", "parent": "$asg", "type": "IAssignment", "as": "$a1"},
+  {"op": "set", "target": "$a1", "prop": "Variable", "value": "TopCustomer"},
+  {"op": "set", "target": "$a1", "prop": "Value", "value": "WfGetOrdersByCustomer.List.Current.CustomerName", "_why": "COM group by a linha e uma structure anonima: le-se a coluna direto, SEM o alias WfAggOrder."},
+  {"op": "create", "parent": "$asg", "type": "IAssignment", "as": "$a2"},
+  {"op": "set", "target": "$a2", "prop": "Variable", "value": "TopOrders"},
+  {"op": "set", "target": "$a2", "prop": "Value", "value": "WfGetOrdersByCustomer.List.Current.Orders"},
+  {"op": "create", "parent": "$asg", "type": "IAssignment", "as": "$a3"},
+  {"op": "set", "target": "$a3", "prop": "Variable", "value": "TopQty"},
+  {"op": "set", "target": "$a3", "prop": "Value", "value": "WfGetOrdersByCustomer.List.Current.QtySum"},
+  {"op": "create", "parent": "$asg", "type": "IAssignment", "as": "$a4"},
+  {"op": "set", "target": "$a4", "prop": "Variable", "value": "Groups"},
+  {"op": "set", "target": "$a4", "prop": "Value", "value": "WfGetOrdersByCustomer.List.Length", "_why": "quantas LINHAS agrupadas voltaram (um por cliente), nao quantos pedidos"},
+
+  {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$s9"},
+  {"op": "link", "from": "$s0", "to": "$agg"},
+  {"op": "link", "from": "$agg", "to": "$asg"},
+  {"op": "link", "from": "$asg", "to": "$s9"},
+  {"op": "layout", "target": "$act"},
+
+  {"op": "get", "target": "$join", "_why": "le de volta o join: os dois lados, o tipo e a condicao"},
+  {"op": "get", "target": "$sort", "_why": "le de volta a ordenacao"},
+  {"op": "get", "target": "$cnt", "_why": "prova o tipo do Count no ODC: Long Integer"},
+  {"op": "dump", "target": "$agg", "depth": 4, "_why": "prova a arvore inteira do aggregate: duas fontes, join, filtro, o IImplicitParameter que o filtro criou, ordenacao, group by e as duas colunas agregadas"},
+  {"op": "usages", "target": "$WfAggOrderItem.Qty", "_why": "o atributo do lado direito e consumido pela agregacao Sum: o join nao e decoracao"}
+ ]
+}

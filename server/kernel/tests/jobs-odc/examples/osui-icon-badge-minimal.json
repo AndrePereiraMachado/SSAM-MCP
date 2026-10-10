@@ -1,0 +1,15 @@
+{
+ "description": "IconBadge do OSUI: o input obrigatorio Number e um icone no placeholder Icon.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "IconBadgeDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "IconBadge1", "source": "IMobileBlock:IconBadge", "as": "$ib"},
+  {"op": "set", "target": "$ib/Number", "prop": "Value", "value": "5"},
+  {"op": "create", "parent": "$ib/Icon", "type": "IIcon", "name": "BellIcon", "as": "$icon1"},
+  {"op": "set", "target": "$icon1", "prop": "Icon", "value": "bell"},
+  {"op": "set", "target": "$icon1", "prop": "Weight", "value": "regular"}
+ ]
+}

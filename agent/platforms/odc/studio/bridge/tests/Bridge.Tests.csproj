@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Offline tests of the bridge's portal lane (PortalCore.cs): allowlist, host check after redirects, no Dispose of the
+    Studio's client, one send per write, redaction, Portal page routes. PortalCore uses no Studio type, so neither the
+    Studio install nor a running Studio is needed. Run: dotnet test studio\bridge\tests\Bridge.Tests.csproj
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RollForward>Major</RollForward>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <!-- NativeMergeVerification.cs: only its Studio-free dump validation is compiled here. -->
+    <DefineConstants>$(DefineConstants);NATIVE_MERGE_OFFLINE</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\PortalCore.cs" Link="PortalCore.cs" />
+    <Compile Include="..\PortalUpload.cs" Link="PortalUpload.cs" />
+    <Compile Include="..\PublishLogCore.cs" Link="PublishLogCore.cs" />
+    <Compile Include="..\MergeDiagnostics.cs" Link="MergeDiagnostics.cs" />
+    <Compile Include="..\TemplateCache.cs" Link="TemplateCache.cs" />
+    <!-- The bridge's copy of the kernel's list, the one the bridge compiles (public-signature-drift.test.mjs keeps it equal). -->
+    <Compile Include="..\SecurityWarningsCopy.cs" Link="SecurityWarningsCopy.cs" />
+    <Compile Include="..\..\engine\NativeMergeVerification.cs" Link="engine\NativeMergeVerification.cs" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,407 @@
+{
+ "description": "Tela Reactive de detalhe/edicao ligada a dados: entidade Contact, tela ContactDetail com input ContactId, aggregate filtrado, Form com Inputs ligados ao registro, Button OnClick -> screen action Save que chama CreateOrUpdateContact",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerEntity",
+   "name": "Contact",
+   "as": "$ent"
+  },
+  {
+   "op": "create",
+   "parent": "$ent",
+   "type": "IEntityAttribute",
+   "name": "Id",
+   "as": "$id"
+  },
+  {
+   "op": "set",
+   "target": "$id",
+   "prop": "DataType",
+   "value": "Long Integer"
+  },
+  {
+   "op": "set",
+   "target": "$id",
+   "prop": "IsAutoNumber",
+   "value": "Yes"
+  },
+  {
+   "op": "set",
+   "target": "$ent",
+   "prop": "IdentifierAttribute",
+   "value": "$id"
+  },
+  {
+   "op": "create",
+   "parent": "$ent",
+   "type": "IEntityAttribute",
+   "name": "Name",
+   "as": "$name"
+  },
+  {
+   "op": "set",
+   "target": "$name",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$name",
+   "prop": "IsMandatory",
+   "value": true
+  },
+  {
+   "op": "create",
+   "parent": "$ent",
+   "type": "IEntityAttribute",
+   "name": "Email",
+   "as": "$email"
+  },
+  {
+   "op": "set",
+   "target": "$email",
+   "prop": "DataType",
+   "value": "Email"
+  },
+  {
+   "op": "create",
+   "parent": "$ent",
+   "type": "IEntityAttribute",
+   "name": "Phone",
+   "as": "$phone"
+  },
+  {
+   "op": "set",
+   "target": "$phone",
+   "prop": "DataType",
+   "value": "Phone Number"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Contact_Save",
+   "as": "$sa"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IInputParameter",
+   "name": "Contact",
+   "as": "$saIn"
+  },
+  {
+   "op": "set",
+   "target": "$saIn",
+   "prop": "DataType",
+   "value": "Contact"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IOutputParameter",
+   "name": "ContactId",
+   "as": "$saOut"
+  },
+  {
+   "op": "set",
+   "target": "$saOut",
+   "prop": "DataType",
+   "value": "Contact Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IStartNode",
+   "as": "$sa0"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IExecuteServerActionNode",
+   "name": "CreateOrUpdateContact",
+   "as": "$saCu"
+  },
+  {
+   "op": "set",
+   "target": "$saCu",
+   "prop": "Action",
+   "value": "IEntityActionSignature:CreateOrUpdateContact"
+  },
+  {
+   "op": "set",
+   "target": "$saCu/Source",
+   "prop": "Value",
+   "value": "Contact"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IAssignNode",
+   "name": "SetOutput",
+   "as": "$saAs"
+  },
+  {
+   "op": "set",
+   "target": "$saAs",
+   "prop": "Label",
+   "value": "SetOutput"
+  },
+  {
+   "op": "create",
+   "parent": "$saAs",
+   "type": "IAssignment",
+   "as": "$saA1"
+  },
+  {
+   "op": "set",
+   "target": "$saA1",
+   "prop": "Variable",
+   "value": "ContactId"
+  },
+  {
+   "op": "set",
+   "target": "$saA1",
+   "prop": "Value",
+   "value": "CreateOrUpdateContact.Id"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IEndNode",
+   "as": "$sa9"
+  },
+  {
+   "op": "link",
+   "from": "$sa0",
+   "to": "$saCu"
+  },
+  {
+   "op": "link",
+   "from": "$saCu",
+   "to": "$saAs"
+  },
+  {
+   "op": "link",
+   "from": "$saAs",
+   "to": "$sa9"
+  },
+  {
+   "op": "layout",
+   "target": "$sa"
+  },
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "ContactDetail",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IInputParameter",
+   "name": "ContactId",
+   "as": "$pid"
+  },
+  {
+   "op": "set",
+   "target": "$pid",
+   "prop": "DataType",
+   "value": "Contact Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAggregate",
+   "name": "GetContactById",
+   "as": "$agg"
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Contact"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IFilter",
+   "args": {
+    "condition": "Contact.Id = ContactId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/Title",
+   "type": "IExpression",
+   "as": "$title"
+  },
+  {
+   "op": "set",
+   "target": "$title",
+   "prop": "Value",
+   "value": "\"Contact\""
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IForm",
+   "name": "ContactForm",
+   "as": "$form"
+  },
+  {
+   "op": "create",
+   "parent": "$form",
+   "type": "IInput",
+   "name": "Name_Input",
+   "as": "$inName"
+  },
+  {
+   "op": "set",
+   "target": "$inName",
+   "prop": "Variable",
+   "value": "GetContactById.List.Current.Contact.Name"
+  },
+  {
+   "op": "set",
+   "target": "$inName",
+   "prop": "Mandatory",
+   "value": "True"
+  },
+  {
+   "op": "set",
+   "target": "$inName",
+   "prop": "Prompt",
+   "value": "\"Name\""
+  },
+  {
+   "op": "create",
+   "parent": "$form",
+   "type": "IInput",
+   "name": "Email_Input",
+   "as": "$inEmail"
+  },
+  {
+   "op": "set",
+   "target": "$inEmail",
+   "prop": "Variable",
+   "value": "GetContactById.List.Current.Contact.Email"
+  },
+  {
+   "op": "set",
+   "target": "$inEmail",
+   "prop": "Prompt",
+   "value": "\"Email\""
+  },
+  {
+   "op": "create",
+   "parent": "$form",
+   "type": "IInput",
+   "name": "Phone_Input",
+   "as": "$inPhone"
+  },
+  {
+   "op": "set",
+   "target": "$inPhone",
+   "prop": "Variable",
+   "value": "GetContactById.List.Current.Contact.Phone"
+  },
+  {
+   "op": "create",
+   "parent": "$form",
+   "type": "IButton",
+   "name": "SaveButton",
+   "as": "$btn"
+  },
+  {
+   "op": "set",
+   "target": "$btn/#ITextWidget",
+   "prop": "Text",
+   "value": "Save"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAction",
+   "name": "Save",
+   "as": "$save"
+  },
+  {
+   "op": "create",
+   "parent": "$save",
+   "type": "IStartNode",
+   "as": "$s0"
+  },
+  {
+   "op": "create",
+   "parent": "$save",
+   "type": "IExecuteServerActionNode",
+   "name": "Contact_Save",
+   "as": "$cu"
+  },
+  {
+   "op": "set",
+   "target": "$cu",
+   "prop": "Action",
+   "value": "IServerAction:Contact_Save"
+  },
+  {
+   "op": "set",
+   "target": "$cu/Contact",
+   "prop": "Value",
+   "value": "GetContactById.List.Current.Contact"
+  },
+  {
+   "op": "create",
+   "parent": "$save",
+   "type": "IEndNode",
+   "as": "$s9"
+  },
+  {
+   "op": "link",
+   "from": "$s0",
+   "to": "$cu"
+  },
+  {
+   "op": "link",
+   "from": "$cu",
+   "to": "$s9"
+  },
+  {
+   "op": "layout",
+   "target": "$save"
+  },
+  {
+   "op": "set",
+   "target": "$btn/OnClick",
+   "prop": "Destination",
+   "value": "$save"
+  },
+  {
+   "op": "get",
+   "target": "$inName"
+  },
+  {
+   "op": "get",
+   "target": "$btn/OnClick"
+  },
+  {
+   "op": "dump",
+   "target": "$scr",
+   "depth": 6
+  }
+ ]
+}

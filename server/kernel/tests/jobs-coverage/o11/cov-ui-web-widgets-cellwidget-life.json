@@ -1,0 +1,62 @@
+{
+ "description": "Cobertura testada (fase 1, medir): life de OutSystems.Model.UI.Web.Widgets.ICellWidget (o11) em uiWebTableRow. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IWebFlow:MainFlow",
+   "type": "IWebScreen",
+   "name": "CovSWebScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IWebBlockInstanceWidget/MainContent",
+   "type": "IContainerWidget",
+   "name": "CovSBox",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "ITableWidget",
+   "name": "CovSLayout",
+   "as": "$tbl"
+  },
+  {
+   "op": "create",
+   "parent": "$tbl",
+   "type": "IRowWidget",
+   "name": "CovSRow",
+   "as": "$row"
+  },
+  {
+   "op": "create",
+   "parent": "$row",
+   "type": "ICellWidget",
+   "name": "CovACellWidget",
+   "as": "$a"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Height",
+   "value": "8px"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRCellWidget"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "first": true
+  }
+ ]
+}

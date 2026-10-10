@@ -1,0 +1,18 @@
+{
+ "description": "Licenses do OSUI com licencas proprias: um texto no placeholder CustomLicenses ao lado das licencas padrao.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "AboutLicenses", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Licenses\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "AppVersion", "as": "$vAppVersion"},
+  {"op": "set", "target": "$vAppVersion", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$vAppVersion", "prop": "DefaultValue", "value": "\"1.0.0\""},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Licenses1", "source": "IMobileBlock:Licenses", "as": "$lc"},
+  {"op": "create", "parent": "$lc/CustomLicenses", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "\"Store app \" + AppVersion + \" - MIT License\""}
+ ]
+}

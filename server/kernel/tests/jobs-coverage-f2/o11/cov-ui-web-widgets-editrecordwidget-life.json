@@ -1,0 +1,101 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.UI.Web.Widgets.IEditRecordWidget (o11) em uiWebContainerEntity. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "MissingWidgetContent",
+   "element": "MainFlow (WebFlow) / CovSWebScreen (WebScreen) / WebBlockInstanceWidget / MainContent (PlaceholderContentWidget) / CovSBox (ContainerWidget) / CovREditRecordWidget (EditRecordWidget)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  },
+  {
+   "id": "MissingWidgetContent",
+   "element": "MainFlow (WebFlow) / CovSWebScreen (WebScreen) / WebBlockInstanceWidget / MainContent (PlaceholderContentWidget) / CovSBox (ContainerWidget) / CovREditRecordWidget2 (EditRecordWidget)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "entities": [
+     {
+      "name": "CovSEntity",
+      "attributes": [
+       {
+        "name": "Title",
+        "type": "Text",
+        "length": 50
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "create",
+   "parent": "IWebFlow:MainFlow",
+   "type": "IWebScreen",
+   "name": "CovSWebScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IWebBlockInstanceWidget/MainContent",
+   "type": "IContainerWidget",
+   "name": "CovSBox",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEditRecordWidget",
+   "name": "CovAEditRecordWidget",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "ILocalVariable",
+   "name": "CovSRecord",
+   "as": "$hv"
+  },
+  {
+   "op": "set",
+   "target": "$hv",
+   "prop": "DataType",
+   "value": "CovSEntity"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "SourceRecord",
+   "value": "CovSRecord"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "CellHeight",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovREditRecordWidget"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "move",
+   "target": "$b",
+   "first": true
+  }
+ ]
+}

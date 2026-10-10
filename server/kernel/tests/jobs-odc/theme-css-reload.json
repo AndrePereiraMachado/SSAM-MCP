@@ -1,0 +1,8 @@
+{
+ "description": "A outra metade do theme-css-halves: o OML gravado tem de trazer as tres metades coerentes. A base e o proprio job anterior (o runner reconstroi, grava e recarrega), e o get e sobre o modulo recarregado do disco. Sem o conserto do kernel a efetiva ficava congelada e o modulo entregue levaria um CSS que contradiz as suas proprias partes -- invisivel ate publicar. Os valores sao aferidos em Anvil.Tests.Odc.ThemeCssTests.",
+ "base": "job:theme-css-halves",
+ "expectValid": true,
+ "ops": [
+  {"op": "get", "target": "IMobileTheme:InsuranceApp", "_why": "depois de gravar e recarregar: UserStyleSheet e o texto do job anterior e StyleSheet e gerada + CRLF + esse texto"}
+ ]
+}

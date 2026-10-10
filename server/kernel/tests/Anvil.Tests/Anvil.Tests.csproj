@@ -1,0 +1,63 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <SSDir Condition="'$(SSDir)' == ''">$(USERPROFILE)\OutSystems\Service Studio 11 - Anvil 4516\Service Studio</SSDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="OutSystems.RuntimeCommon"><HintPath>$(SSDir)\OutSystems.RuntimeCommon.dll</HintPath><Private>false</Private></Reference>
+    <!-- The Service Center bridge tests fake these Studio interfaces (ScOperations.cs). -->
+    <Reference Include="OutSystems.Communication"><HintPath>$(SSDir)\OutSystems.Communication.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Communication.Identity"><HintPath>$(SSDir)\OutSystems.Communication.Identity.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Communication.Rest"><HintPath>$(SSDir)\OutSystems.Communication.Rest.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.ServerCommunications.API"><HintPath>$(SSDir)\ServiceStudio.ServerCommunications.API.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.ServerCommunications.ServiceCenter"><HintPath>$(SSDir)\ServiceStudio.ServerCommunications.ServiceCenter.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Anvil.Core\Anvil.Core.csproj" />
+    <!-- Headless O11 extensions (XIF): spec, package, merge, net472 compiler, contract diff, engine probe. -->
+    <ProjectReference Include="..\..\src\Anvil.Xif\Anvil.Xif.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="../../src/Anvil.Cli/PublishOmlProtocol.cs" Link="Cli/PublishOmlProtocol.cs" />
+    <Compile Include="../../src/Anvil.Cli/PublishOmlCommand.cs" Link="Cli/PublishOmlCommand.cs" />
+    <Compile Include="../../src/Anvil.Bridge/SilentModeLease.cs" Link="Bridge/SilentModeLease.cs" />
+    <Compile Include="../../src/Anvil.Bridge/PublishConfirmation.cs" Link="Bridge/PublishConfirmation.cs" />
+    <Compile Include="../../src/Anvil.Bridge/PublishLog.cs" Link="Bridge/PublishLog.cs" />
+    <!-- C15/C10: the pure rollback proof of merge_from_oml and the dialogs-seen labels of publish (no Studio type). -->
+    <Compile Include="../../src/Anvil.Bridge/MergeRollbackProof.cs" Link="Bridge/MergeRollbackProof.cs" />
+    <Compile Include="../../src/Anvil.Bridge/DialogScope.cs" Link="Bridge/DialogScope.cs" />
+    <!-- UI freeze of 2026-10-08: the bounded UI dispatch, the idle gate of close_module and the headless publications (pure). -->
+    <Compile Include="../../src/Anvil.Bridge/UiGate.cs" Link="Bridge/UiGate.cs" />
+    <!-- I12 (package 3): the window lifetime rule of the Service Center window (lane fa, D5), when it is there. -->
+    <Compile Include="../../src/Anvil.Bridge/ScWindowLifetime.cs" Link="Bridge/ScWindowLifetime.cs" Condition="Exists('../../src/Anvil.Bridge/ScWindowLifetime.cs')" />
+    <Compile Include="../../src/Anvil.Bridge/ScProtocol.cs" Link="Bridge/ScProtocol.cs" />
+    <Compile Include="../../src/Anvil.Bridge/ScOperations.cs" Link="Bridge/ScOperations.cs" />
+    <Compile Include="../../src/Anvil.Bridge/BridgeKit.cs" Link="Bridge/BridgeKit.cs" />
+    <!-- sc_api integration-studio: the pure SOAP envelope and reading of IntegrationStudio.asmx (no Studio type). -->
+    <Compile Include="../../src/Anvil.Bridge/ScIntegrationStudioSoap.cs" Link="Bridge/ScIntegrationStudioSoap.cs" />
+    <!-- secretRefs without the vault: ScVault.cs (CredReadW) stays out, the tests use a fake IScVault. -->
+    <Compile Include="../../src/Anvil.Bridge/ScSecrets.cs" Link="Bridge/ScSecrets.cs" />
+    <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Include="../Shared/ModelReadingTests.cs" Link="ModelReadingTests.cs" />
+    <Compile Include="../Shared/ModuleIndexTests.cs" Link="ModuleIndexTests.cs" />
+    <Compile Include="../Shared/AutomaticFlowLayoutTests.cs" Link="AutomaticFlowLayoutTests.cs" />
+    <Compile Include="../Shared/DataContractIdentityScenarios.cs" Link="DataContractIdentityScenarios.cs" />
+    <Compile Include="../Shared/QueryRulesScenarios.cs" Link="QueryRulesScenarios.cs" />
+  </ItemGroup>
+</Project>

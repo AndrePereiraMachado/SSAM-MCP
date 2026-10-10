@@ -1,0 +1,17 @@
+{
+ "description": "DatePickerRange (OutSystemsUI, Interaction) minimo: instancia como o Studio cria ao arrastar o bloco; evento obrigatorio OnSelected ligado a uma screen action vazia; o Input de exemplo do placeholder Datepicker ligado a uma variavel Date.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "PickedDate", "as": "$vPickedDate"},
+  {"op": "set", "target": "$vPickedDate", "prop": "DataType", "value": "Date"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAction", "name": "DatePickerRangeDemoOnSelected", "as": "$hDatePickerRangeDemoOnSelected"},
+  {"op": "create", "parent": "$hDatePickerRangeDemoOnSelected", "type": "IStartNode", "as": "$hDatePickerRangeDemoOnSelectedS"},
+  {"op": "create", "parent": "$hDatePickerRangeDemoOnSelected", "type": "IEndNode", "as": "$hDatePickerRangeDemoOnSelectedE"},
+  {"op": "link", "from": "$hDatePickerRangeDemoOnSelectedS", "to": "$hDatePickerRangeDemoOnSelectedE"},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "DatePickerRangeDemo", "source": "IMobileBlock:DatePickerRange", "as": "$b"},
+  {"op": "set", "target": "$b/Datepicker/#IInput", "prop": "Variable", "value": "PickedDate"},
+  {"op": "set", "target": "$b/OnSelected", "prop": "Handler", "value": "IScreenAction:DatePickerRangeDemoOnSelected"}
+ ]
+}

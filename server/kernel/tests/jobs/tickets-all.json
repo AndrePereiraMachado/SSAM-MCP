@@ -1,0 +1,22 @@
+{
+ "description": "App de tickets INTEIRO num job so: o campo jobs concatena os 8 jobs tickets-01..08 (mesma ordem) numa unica transacao, para uma entrega com UM merge; e o mesmo conteudo dos 8 jobs, sem copiar ops",
+ "base": "tests/fixtures/blank-service.oml",
+ "jobs": [
+  "job:tickets-01-data",
+  "job:tickets-02-helpers",
+  "job:tickets-03-lifecycle",
+  "job:tickets-04-collab",
+  "job:tickets-05-org",
+  "job:tickets-06-sla",
+  "job:tickets-07-read",
+  "job:tickets-08-services"
+ ],
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedElement",
+   "element": "Calendar_AddBusinessMinutes (ServerAction) / BusinessHoursOnly (InputParameter)",
+   "why": "BusinessHoursOnly ainda nao e consumido pelo calculo simplificado do calendario; limitacao explicita a tratar no passo de inputs sem uso."
+  }
+ ]
+}

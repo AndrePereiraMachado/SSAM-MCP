@@ -1,0 +1,624 @@
+[
+  {
+    "op": "spec",
+    "data": {
+      "static": [
+        {
+          "name": "IncidentStatus",
+          "records": [
+            {
+              "name": "New",
+              "label": "Novo"
+            },
+            {
+              "name": "InAnalysis",
+              "label": "Em análise"
+            },
+            {
+              "name": "InProgress",
+              "label": "Em andamento"
+            },
+            {
+              "name": "Reopened",
+              "label": "Reaberto"
+            },
+            {
+              "name": "Resolved",
+              "label": "Resolvido"
+            }
+          ],
+          "public": true
+        },
+        {
+          "name": "IncidentPriority",
+          "records": [
+            {
+              "name": "Critical",
+              "label": "Crítica"
+            },
+            {
+              "name": "High",
+              "label": "Alta"
+            },
+            {
+              "name": "Medium",
+              "label": "Média"
+            },
+            {
+              "name": "Low",
+              "label": "Baixa"
+            }
+          ],
+          "public": true
+        }
+      ],
+      "entities": [
+        {
+          "name": "Incident",
+          "description": "Chamado de suporte (stand-in do Incidents_CS para a prova em fixture).",
+          "attributes": [
+            {
+              "name": "Title",
+              "type": "Text",
+              "mandatory": true,
+              "length": 120
+            },
+            {
+              "name": "Description",
+              "type": "Text",
+              "length": 500
+            },
+            {
+              "name": "PriorityId",
+              "type": "IncidentPriority Identifier"
+            },
+            {
+              "name": "StatusId",
+              "type": "IncidentStatus Identifier"
+            },
+            {
+              "name": "ReporterId",
+              "type": "User Identifier"
+            },
+            {
+              "name": "AssigneeId",
+              "type": "User Identifier"
+            },
+            {
+              "name": "SlaDueAt",
+              "type": "Date Time"
+            },
+            {
+              "name": "ResolvedAt",
+              "type": "Date Time"
+            },
+            {
+              "name": "CreatedAt",
+              "type": "Date Time"
+            }
+          ],
+          "public": true,
+          "updateBehavior": "Optimized"
+        }
+      ],
+      "structures": [
+        {
+          "name": "IncidentStatusMetric",
+          "attributes": [
+            {
+              "name": "Label",
+              "type": "Text"
+            },
+            {
+              "name": "Total",
+              "type": "Integer"
+            }
+          ],
+          "public": true
+        },
+        {
+          "name": "IncidentPriorityMetric",
+          "attributes": [
+            {
+              "name": "PriorityId",
+              "type": "IncidentPriority Identifier"
+            },
+            {
+              "name": "Label",
+              "type": "Text"
+            },
+            {
+              "name": "Total",
+              "type": "Integer"
+            }
+          ],
+          "public": true
+        }
+      ]
+    }
+  },
+  {
+    "op": "logic",
+    "data": {
+      "actions": [
+        {
+          "name": "GetDashboardMetricsForPeriod",
+          "kind": "server",
+          "public": true,
+          "description": "Stand-in com a assinatura do Incidents_CS.GetDashboardMetricsForPeriod.",
+          "inputs": [
+            {
+              "name": "StartDate",
+              "type": "Date Time",
+              "mandatory": false
+            },
+            {
+              "name": "EndDate",
+              "type": "Date Time",
+              "mandatory": false
+            }
+          ],
+          "outputs": [
+            {
+              "name": "TotalOpen",
+              "type": "Integer"
+            },
+            {
+              "name": "TotalOverdue",
+              "type": "Integer"
+            },
+            {
+              "name": "TotalCritical",
+              "type": "Integer"
+            },
+            {
+              "name": "TotalResolvedToday",
+              "type": "Integer"
+            },
+            {
+              "name": "MyOpenIncidents",
+              "type": "Integer"
+            },
+            {
+              "name": "IncidentsByStatus",
+              "type": "IncidentStatusMetric List"
+            },
+            {
+              "name": "IncidentsByPriority",
+              "type": "IncidentPriorityMetric List"
+            }
+          ],
+          "vars": [
+            {
+              "name": "StatusMetric",
+              "type": "IncidentStatusMetric"
+            },
+            {
+              "name": "PriorityMetric",
+              "type": "IncidentPriorityMetric"
+            }
+          ],
+          "steps": [
+            {
+              "get": "Incident",
+              "as": "GetOpen",
+              "where": "Incident.StatusId <> Entities.IncidentStatus.Resolved and (StartDate = NullDate() or Incident.CreatedAt >= StartDate) and (EndDate = NullDate() or Incident.CreatedAt < AddDays(DateToDateTime(DateTimeToDate(EndDate)), 1))"
+            },
+            {
+              "get": "Incident",
+              "as": "GetOverdue",
+              "where": "Incident.StatusId <> Entities.IncidentStatus.Resolved and Incident.SlaDueAt < CurrDateTime() and (StartDate = NullDate() or Incident.CreatedAt >= StartDate) and (EndDate = NullDate() or Incident.CreatedAt < AddDays(DateToDateTime(DateTimeToDate(EndDate)), 1))"
+            },
+            {
+              "get": "Incident",
+              "as": "GetCritical",
+              "where": "Incident.StatusId <> Entities.IncidentStatus.Resolved and Incident.PriorityId = Entities.IncidentPriority.Critical and (StartDate = NullDate() or Incident.CreatedAt >= StartDate) and (EndDate = NullDate() or Incident.CreatedAt < AddDays(DateToDateTime(DateTimeToDate(EndDate)), 1))"
+            },
+            {
+              "get": "Incident",
+              "as": "GetResolved",
+              "where": "Incident.StatusId = Entities.IncidentStatus.Resolved and Incident.ResolvedAt >= DateToDateTime(CurrDate())"
+            },
+            {
+              "get": "Incident",
+              "as": "GetMine",
+              "where": "Incident.StatusId <> Entities.IncidentStatus.Resolved and Incident.AssigneeId = GetUserId()"
+            },
+            {
+              "assign": {
+                "TotalOpen": "GetOpen.List.Length",
+                "TotalOverdue": "GetOverdue.List.Length",
+                "TotalCritical": "GetCritical.List.Length",
+                "TotalResolvedToday": "GetResolved.List.Length",
+                "MyOpenIncidents": "GetMine.List.Length"
+              },
+              "as": "SetTotals"
+            },
+            {
+              "get": "IncidentStatus",
+              "as": "GetStatuses"
+            },
+            {
+              "foreach": "GetStatuses.List",
+              "as": "EachStatus",
+              "do": [
+                {
+                  "get": "Incident",
+                  "as": "ByStatus",
+                  "where": "Incident.StatusId = GetStatuses.List.Current.IncidentStatus.Id and (StartDate = NullDate() or Incident.CreatedAt >= StartDate) and (EndDate = NullDate() or Incident.CreatedAt < AddDays(DateToDateTime(DateTimeToDate(EndDate)), 1))"
+                },
+                {
+                  "assign": {
+                    "StatusMetric.Label": "GetStatuses.List.Current.IncidentStatus.Label",
+                    "StatusMetric.Total": "ByStatus.List.Length"
+                  },
+                  "as": "FillStatus"
+                },
+                {
+                  "call": "ListAppend",
+                  "as": "AppendStatus",
+                  "args": {
+                    "List": "IncidentsByStatus",
+                    "Element": "StatusMetric"
+                  }
+                }
+              ]
+            },
+            {
+              "get": "IncidentPriority",
+              "as": "GetPriorities"
+            },
+            {
+              "foreach": "GetPriorities.List",
+              "as": "EachPriority",
+              "do": [
+                {
+                  "get": "Incident",
+                  "as": "ByPriority",
+                  "where": "Incident.PriorityId = GetPriorities.List.Current.IncidentPriority.Id and Incident.StatusId <> Entities.IncidentStatus.Resolved and (StartDate = NullDate() or Incident.CreatedAt >= StartDate) and (EndDate = NullDate() or Incident.CreatedAt < AddDays(DateToDateTime(DateTimeToDate(EndDate)), 1))"
+                },
+                {
+                  "assign": {
+                    "PriorityMetric.Label": "GetPriorities.List.Current.IncidentPriority.Label",
+                    "PriorityMetric.Total": "ByPriority.List.Length",
+                    "PriorityMetric.PriorityId": "GetPriorities.List.Current.IncidentPriority.Id"
+                  },
+                  "as": "FillPriority"
+                },
+                {
+                  "call": "ListAppend",
+                  "as": "AppendPriority",
+                  "args": {
+                    "List": "IncidentsByPriority",
+                    "Element": "PriorityMetric"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "GetIncidentsNearDue",
+          "kind": "server",
+          "public": true,
+          "description": "Stand-in com a assinatura do Incidents_CS.GetIncidentsNearDue.",
+          "inputs": [
+            {
+              "name": "StartDate",
+              "type": "Date Time",
+              "mandatory": false
+            },
+            {
+              "name": "EndDate",
+              "type": "Date Time",
+              "mandatory": false
+            },
+            {
+              "name": "StartIndex",
+              "type": "Integer",
+              "mandatory": false,
+              "default": "0"
+            },
+            {
+              "name": "MaxRecords",
+              "type": "Integer",
+              "mandatory": false,
+              "default": "10"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "Incidents",
+              "type": "Incident List"
+            },
+            {
+              "name": "Total",
+              "type": "Long Integer"
+            }
+          ],
+          "steps": [
+            {
+              "get": "Incident",
+              "as": "GetAllNearDue",
+              "where": "Incident.StatusId <> Entities.IncidentStatus.Resolved and Incident.SlaDueAt >= CurrDateTime() and Incident.SlaDueAt <= AddMinutes(CurrDateTime(), 30) and (StartDate = NullDate() or Incident.CreatedAt >= StartDate) and (EndDate = NullDate() or Incident.CreatedAt < AddDays(DateToDateTime(DateTimeToDate(EndDate)), 1))",
+              "sort": [
+                "Incident.SlaDueAt",
+                "Ascending"
+              ]
+            },
+            {
+              "get": "Incident",
+              "as": "GetNearDue",
+              "where": "Incident.StatusId <> Entities.IncidentStatus.Resolved and Incident.SlaDueAt >= CurrDateTime() and Incident.SlaDueAt <= AddMinutes(CurrDateTime(), 30) and (StartDate = NullDate() or Incident.CreatedAt >= StartDate) and (EndDate = NullDate() or Incident.CreatedAt < AddDays(DateToDateTime(DateTimeToDate(EndDate)), 1))",
+              "sort": [
+                "Incident.SlaDueAt",
+                "Ascending"
+              ],
+              "max": "If(StartIndex < 0, 0, StartIndex) + If(MaxRecords < 1, 20, MaxRecords)"
+            },
+            {
+              "foreach": "GetNearDue.List",
+              "as": "PageRows",
+              "start": "If(StartIndex < 0, 0, StartIndex)",
+              "max": "If(MaxRecords < 1, 20, MaxRecords)",
+              "do": [
+                {
+                  "call": "ListAppend",
+                  "as": "AppendPageRow",
+                  "args": {
+                    "List": "Incidents",
+                    "Element": "GetNearDue.List.Current.Incident"
+                  }
+                }
+              ]
+            },
+            {
+              "assign": {
+                "Total": "GetAllNearDue.List.Length"
+              },
+              "as": "SetOutput"
+            }
+          ]
+        },
+        {
+          "name": "GetIncidentList",
+          "kind": "server",
+          "public": true,
+          "description": "Stand-in com a assinatura do Incidents_CS.GetIncidentList (sem CategoryId, que o Dashboard nao usa).",
+          "inputs": [
+            {
+              "name": "Search",
+              "type": "Text",
+              "mandatory": false
+            },
+            {
+              "name": "StatusId",
+              "type": "IncidentStatus Identifier",
+              "mandatory": false
+            },
+            {
+              "name": "PriorityId",
+              "type": "IncidentPriority Identifier",
+              "mandatory": false
+            },
+            {
+              "name": "AssigneeId",
+              "type": "User Identifier",
+              "mandatory": false
+            },
+            {
+              "name": "OnlyMine",
+              "type": "Boolean",
+              "mandatory": false
+            },
+            {
+              "name": "OnlyOverdue",
+              "type": "Boolean",
+              "mandatory": false
+            },
+            {
+              "name": "StartDate",
+              "type": "Date Time",
+              "mandatory": false
+            },
+            {
+              "name": "EndDate",
+              "type": "Date Time",
+              "mandatory": false
+            },
+            {
+              "name": "StartIndex",
+              "type": "Integer",
+              "mandatory": false
+            },
+            {
+              "name": "MaxRecords",
+              "type": "Integer",
+              "mandatory": false
+            },
+            {
+              "name": "OnlyOpen",
+              "type": "Boolean",
+              "mandatory": false,
+              "default": "False"
+            },
+            {
+              "name": "OnlyResolvedToday",
+              "type": "Boolean",
+              "mandatory": false,
+              "default": "False"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "Incidents",
+              "type": "Incident List"
+            },
+            {
+              "name": "Total",
+              "type": "Integer"
+            }
+          ],
+          "steps": [
+            {
+              "get": "Incident",
+              "as": "GetAll",
+              "where": "(Search = \"\" or Incident.Title like \"%\" + Search + \"%\") and (StatusId = NullIdentifier() or Incident.StatusId = StatusId) and (PriorityId = NullIdentifier() or Incident.PriorityId = PriorityId) and (AssigneeId = NullIdentifier() or Incident.AssigneeId = AssigneeId) and (not OnlyMine or Incident.ReporterId = GetUserId()) and (not OnlyOverdue or Incident.SlaDueAt < CurrDateTime()) and (StartDate = NullDate() or Incident.CreatedAt >= StartDate) and (EndDate = NullDate() or Incident.CreatedAt < AddDays(DateToDateTime(DateTimeToDate(EndDate)), 1)) and (not OnlyOpen or Incident.StatusId <> Entities.IncidentStatus.Resolved) and (not OnlyResolvedToday or (Incident.StatusId = Entities.IncidentStatus.Resolved and Incident.ResolvedAt >= DateToDateTime(CurrDate()) and Incident.ResolvedAt < AddDays(DateToDateTime(CurrDate()), 1)))"
+            },
+            {
+              "get": "Incident",
+              "as": "GetPage",
+              "where": "(Search = \"\" or Incident.Title like \"%\" + Search + \"%\") and (StatusId = NullIdentifier() or Incident.StatusId = StatusId) and (PriorityId = NullIdentifier() or Incident.PriorityId = PriorityId) and (AssigneeId = NullIdentifier() or Incident.AssigneeId = AssigneeId) and (not OnlyMine or Incident.ReporterId = GetUserId()) and (not OnlyOverdue or Incident.SlaDueAt < CurrDateTime()) and (StartDate = NullDate() or Incident.CreatedAt >= StartDate) and (EndDate = NullDate() or Incident.CreatedAt < AddDays(DateToDateTime(DateTimeToDate(EndDate)), 1)) and (not OnlyOpen or Incident.StatusId <> Entities.IncidentStatus.Resolved) and (not OnlyResolvedToday or (Incident.StatusId = Entities.IncidentStatus.Resolved and Incident.ResolvedAt >= DateToDateTime(CurrDate()) and Incident.ResolvedAt < AddDays(DateToDateTime(CurrDate()), 1)))",
+              "sort": [
+                "Incident.CreatedAt",
+                "Descending"
+              ],
+              "max": "If(StartIndex < 0, 0, StartIndex) + If(MaxRecords < 1, 20, MaxRecords)"
+            },
+            {
+              "foreach": "GetPage.List",
+              "as": "PageRows",
+              "start": "If(StartIndex < 0, 0, StartIndex)",
+              "max": "If(MaxRecords < 1, 20, MaxRecords)",
+              "do": [
+                {
+                  "call": "ListAppend",
+                  "as": "AppendPageRow",
+                  "args": {
+                    "List": "Incidents",
+                    "Element": "GetPage.List.Current.Incident"
+                  }
+                }
+              ]
+            },
+            {
+              "assign": {
+                "Total": "GetAll.List.Length"
+              },
+              "as": "SetOutputs"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "op": "screen",
+    "data": {
+      "screens": [
+        {
+          "name": "IncidentList",
+          "kind": "table",
+          "title": "Incidentes",
+          "inputs": [
+            {
+              "name": "Search",
+              "type": "Text"
+            },
+            {
+              "name": "StatusId",
+              "type": "IncidentStatus Identifier"
+            },
+            {
+              "name": "PriorityId",
+              "type": "IncidentPriority Identifier"
+            },
+            {
+              "name": "OnlyMine",
+              "type": "Boolean"
+            },
+            {
+              "name": "OnlyOverdue",
+              "type": "Boolean"
+            },
+            {
+              "name": "StartDate",
+              "type": "Date Time"
+            },
+            {
+              "name": "EndDate",
+              "type": "Date Time"
+            },
+            {
+              "name": "OnlyOpen",
+              "type": "Boolean",
+              "mandatory": false,
+              "default": "False"
+            },
+            {
+              "name": "OnlyResolvedToday",
+              "type": "Boolean",
+              "mandatory": false,
+              "default": "False"
+            }
+          ],
+          "source": {
+            "entity": "Incident",
+            "as": "GetIncidents",
+            "where": "(Search = \"\" or Incident.Title like \"%\" + Search + \"%\") and (StatusId = NullIdentifier() or Incident.StatusId = StatusId) and (PriorityId = NullIdentifier() or Incident.PriorityId = PriorityId) and (not OnlyMine or Incident.AssigneeId = GetUserId()) and (not OnlyOverdue or Incident.SlaDueAt < CurrDateTime()) and (StartDate = NullDate() or Incident.CreatedAt >= StartDate) and (EndDate = NullDate() or Incident.CreatedAt < AddDays(DateToDateTime(DateTimeToDate(EndDate)), 1)) and (not OnlyOpen or Incident.StatusId <> Entities.IncidentStatus.Resolved) and (not OnlyResolvedToday or (Incident.StatusId = Entities.IncidentStatus.Resolved and Incident.ResolvedAt >= DateToDateTime(CurrDate()) and Incident.ResolvedAt < AddDays(DateToDateTime(CurrDate()), 1)))"
+          },
+          "columns": [
+            {
+              "field": "Title"
+            },
+            {
+              "field": "SlaDueAt",
+              "label": "SLA"
+            }
+          ]
+        },
+        {
+          "name": "IncidentCreate",
+          "kind": "detail",
+          "title": "Novo incidente",
+          "source": {
+            "entity": "Incident",
+            "as": "GetIncident",
+            "where": "Incident.Id = NullIdentifier()"
+          },
+          "fields": [
+            {
+              "field": "Title"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "op": "create",
+    "parent": "IServerAction:GetIncidentsNearDue/GetNearDue",
+    "type": "ISort",
+    "as": "$stable.GetNearDue"
+  },
+  {
+    "op": "set",
+    "target": "$stable.GetNearDue",
+    "prop": "Attribute",
+    "value": "Incident.Id"
+  },
+  {
+    "op": "set",
+    "target": "$stable.GetNearDue",
+    "prop": "SortDirection",
+    "value": "Ascending"
+  },
+  {
+    "op": "create",
+    "parent": "IServerAction:GetIncidentList/GetPage",
+    "type": "ISort",
+    "as": "$stable.GetPage"
+  },
+  {
+    "op": "set",
+    "target": "$stable.GetPage",
+    "prop": "Attribute",
+    "value": "Incident.Id"
+  },
+  {
+    "op": "set",
+    "target": "$stable.GetPage",
+    "prop": "SortDirection",
+    "value": "Ascending"
+  }
+]

@@ -1,0 +1,70 @@
+{
+ "description": "ODC: renomear INTERFACE e ler de volta o CSS e as URLs que ficaram para tras, o espelho de tests/jobs/rename-interface-propagation.json. Tela, bloco, parametro de bloco e variavel de tela sao renomeados; o job le o StyleSheet da propria tela e do proprio bloco, a classe CSS na propriedade Style, a legenda do botao e uma variavel com um deep link escrito a mao. Serve tambem para comparar com a faixa O11 o que a plataforma reescreve sozinha.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "WfRenCard", "as": "$blk", "_why": "1. o bloco: CSS proprio com o nome do bloco na classe, e um input citado por uma expressao"},
+  {"op": "set", "target": "$blk", "prop": "StyleSheet", "value": ".wfren-card { border: 1px solid #ddd; }\n.wfren-card__title { font-weight: 700; }"},
+  {"op": "set", "target": "$blk", "prop": "Description", "value": "Cartao do WfRenCard, estilizado pela classe wfren-card"},
+  {"op": "create", "parent": "$blk", "type": "IInputParameter", "name": "Caption", "as": "$blkIn"},
+  {"op": "set", "target": "$blkIn", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$blk", "type": "IContainer", "name": "CardBody", "as": "$cardBody"},
+  {"op": "set", "target": "$cardBody", "prop": "Style", "value": "\"wfren-card\""},
+  {"op": "create", "parent": "$cardBody", "type": "IExpression", "as": "$cardText"},
+  {"op": "set", "target": "$cardText", "prop": "Value", "value": "\"WfRenCard: \" + Caption"},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfRenDetail", "as": "$det", "_why": "2. o destino da navegacao"},
+  {"op": "set", "target": "$det/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$det", "type": "IInputParameter", "name": "NoticeId", "as": "$detIn"},
+  {"op": "set", "target": "$detIn", "prop": "DataType", "value": "Integer"},
+  {"op": "create", "parent": "$det/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$detTitle"},
+  {"op": "set", "target": "$detTitle", "prop": "Value", "value": "\"WfRenDetail \" + IntegerToText(NoticeId)"},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfRenList", "as": "$scr", "_why": "3. a tela consumidora: CSS proprio, classe no container, instancia do bloco, deep link a mao e botao que navega"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "set", "target": "$scr", "prop": "StyleSheet", "value": ".wfren-list { padding: 16px; }\n.wfren-list .wfren-card { margin-bottom: 8px; }"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "DetailUrl", "as": "$url"},
+  {"op": "set", "target": "$url", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$url", "prop": "DefaultValue", "value": "\"/InsuranceApp/WfRenDetail?NoticeId=1\""},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"WfRen notices\""},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "ListBody", "as": "$listBody"},
+  {"op": "set", "target": "$listBody", "prop": "Style", "value": "\"wfren-list\""},
+  {"op": "create", "parent": "$listBody", "type": "IMobileBlockInstanceWidget", "name": "WfRenCard1", "as": "$inst", "source": "IMobileBlock:WfRenCard"},
+  {"op": "set", "target": "$inst/Caption", "prop": "Value", "value": "\"Primeiro WfRenCard\""},
+  {"op": "create", "parent": "$listBody", "type": "IExpression", "as": "$urlText"},
+  {"op": "set", "target": "$urlText", "prop": "Value", "value": "\"Link directo: \" + DetailUrl"},
+  {"op": "create", "parent": "$listBody", "type": "IButton", "name": "OpenDetailButton", "as": "$btn"},
+  {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "Abrir o WfRenDetail"},
+  {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$det"},
+  {"op": "set", "target": "$btn/OnClick/NoticeId", "prop": "Value", "value": "1"},
+
+  {"op": "usages", "target": "$det", "_why": "4. ANTES"},
+  {"op": "usages", "target": "$blk"},
+
+  {"op": "rename", "target": "$det", "name": "WfRenNoticeDetail", "_why": "5. renomear a TELA de destino"},
+  {"op": "get", "target": "$btn/OnClick", "_why": "LER DE VOLTA: o Destination seguiu por chave"},
+  {"op": "get", "target": "$url", "_why": "o deep link escrito a mao continua a apontar para /InsuranceApp/WfRenDetail"},
+  {"op": "get", "target": "$btn/#ITextWidget", "_why": "e a legenda do botao continua a dizer WfRenDetail"},
+
+  {"op": "rename", "target": "$blk", "name": "WfRenNoticeCard", "_why": "6. renomear o BLOCO"},
+  {"op": "get", "target": "$inst", "_why": "LER DE VOLTA: o nome da instancia e o SourceBlock"},
+  {"op": "get", "target": "$blk", "_why": "o StyleSheet do bloco continua a definir .wfren-card e a Description nao mudou"},
+  {"op": "get", "target": "$cardBody", "_why": "a classe CSS na propriedade Style e um literal: nao mudou"},
+
+  {"op": "rename", "target": "$blkIn", "name": "Heading", "_why": "7. renomear o PARAMETRO do bloco"},
+  {"op": "get", "target": "$inst/Heading"},
+  {"op": "get", "target": "$cardText"},
+
+  {"op": "rename", "target": "$url", "name": "NoticeDetailUrl", "_why": "8. renomear a VARIAVEL da tela"},
+  {"op": "get", "target": "$urlText"},
+
+  {"op": "rename", "target": "$scr", "name": "WfRenNoticeList", "_why": "9. renomear a propria TELA consumidora"},
+  {"op": "get", "target": "$scr", "_why": "LER DE VOLTA: o StyleSheet da tela continua a falar de .wfren-list e .wfren-card"},
+  {"op": "get", "target": "$listBody"},
+
+  {"op": "dump", "target": "$scr", "depth": 7},
+  {"op": "dump", "target": "$blk", "depth": 5}
+ ]
+}

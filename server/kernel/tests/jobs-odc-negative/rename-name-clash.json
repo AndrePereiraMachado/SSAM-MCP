@@ -1,0 +1,21 @@
+{
+ "description": "ODC: a RECUSA do rename por colisao de nome, o espelho de tests/jobs-negative/rename-name-clash.json. A entidade WfRenClash ja tem um atributo Title; renomear Body para Title tem de ser recusado, porque o Studio sufixaria o nome em silencio e o modulo ficaria com um nome diferente do pedido. Roda em OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane. O caminho limpo esta em tests/jobs-odc/rename-data-propagation.json.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectError": [
+  "rename: 'Title' clashes with an existing name in that scope",
+  "pick another name"
+ ],
+ "ops": [
+  {"op": "spec", "data": {
+   "entities": [
+    {"name": "WfRenClash", "attributes": [
+     {"name": "Title", "type": "Text", "mandatory": true, "length": 100},
+     {"name": "Body", "type": "Text", "length": 500}
+    ]}
+   ]
+  }},
+  {"op": "usages", "target": "$WfRenClash.Body"},
+  {"op": "rename", "target": "$WfRenClash.Body", "name": "Title"}
+ ]
+}

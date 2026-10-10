@@ -1,0 +1,347 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "OutSystemsUI",
+    "OutSystemsUIWeb:Iframe",
+    "OutSystemsUIWeb:InputWithIcon",
+    "OutSystemsUIWeb:LayoutEmail",
+    "OutSystemsUIWeb:LayoutLogin",
+    "OutSystemsUIWeb:LayoutLoginSplit"
+  ],
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "tests/fixtures/outsystems-ui-web.oml",
+      "elements": [
+        "IWebBlock:Columns2",
+        "IWebBlock:Iframe",
+        "IWebBlock:InputWithIcon",
+        "IWebBlock:LayoutEmail",
+        "IWebBlock:LayoutLogin",
+        "IWebBlock:LayoutLoginSplit",
+        "IWebBlock:LoginForm"
+      ]
+    }
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Ui45_Iframe",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:Iframe",
+            "args": {
+              "SourceURL": "\"Coverage\""
+            },
+            "slots": {}
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui46_InputWithIcon",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:InputWithIcon",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Icon": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Icon"
+                  }
+                }
+              ],
+              "Input": [
+                {
+                  "name": "Part3",
+                  "type": "IInputWidget",
+                  "properties": {
+                    "Variable": "Value1"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "Part4",
+            "type": "IButtonWidget",
+            "properties": {
+              "Label": "\"Submit\""
+            },
+            "events": {
+              "OnClick": {
+                "destination": "IWebScreen:Ui46_InputWithIcon/Ui46_InputWithIcon_Submit"
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value1",
+            "type": "Text"
+          }
+        ]
+      },
+      {
+        "name": "Ui47_LayoutEmail",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:LayoutEmail",
+            "args": {},
+            "slots": {
+              "Logo": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Source": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Heading": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "MainContent": [
+                {
+                  "name": "Part5",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Action": [
+                {
+                  "name": "Part6",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Notes": [
+                {
+                  "name": "Part7",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Unsubscribe": [
+                {
+                  "name": "Part8",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Address": [
+                {
+                  "name": "Part9",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui48_LayoutLogin",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:LayoutLogin",
+            "args": {},
+            "slots": {
+              "Login": [
+                {
+                  "name": "Part2",
+                  "type": "IWebBlockInstanceWidget",
+                  "properties": {},
+                  "source": "IWebBlock:LoginForm",
+                  "args": {},
+                  "slots": {
+                    "Login": [
+                      {
+                        "name": "Part3",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Container"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ],
+              "BackgroundImage": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui49_LayoutLoginSplit",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:LayoutLoginSplit",
+            "args": {},
+            "slots": {
+              "Login": [
+                {
+                  "name": "Part2",
+                  "type": "IWebBlockInstanceWidget",
+                  "properties": {},
+                  "source": "IWebBlock:Columns2",
+                  "args": {
+                    "ExtendedClass": "\"coverage\""
+                  },
+                  "slots": {
+                    "Column1": [
+                      {
+                        "name": "Part3",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Component content"
+                        }
+                      }
+                    ],
+                    "Column2": [
+                      {
+                        "name": "Part4",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Component content"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "name": "Ui46_InputWithIcon_Submit",
+          "kind": "screen",
+          "owner": "IWebScreen:Ui46_InputWithIcon",
+          "steps": []
+        }
+      ]
+    }
+  },
+  "mutations": [
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui45_Iframe/Part1",
+      "prop": "Name",
+      "value": "RenamedSubject",
+      "element": "Iframe"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui46_InputWithIcon/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "InputWithIcon"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui47_LayoutEmail/Part1/Logo/Part2",
+      "prop": "Text",
+      "value": "Changed",
+      "element": "LayoutEmail"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui48_LayoutLogin/Part1",
+      "prop": "Name",
+      "value": "RenamedSubject",
+      "element": "LayoutLogin"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui49_LayoutLoginSplit/Part1",
+      "prop": "Name",
+      "value": "RenamedSubject",
+      "element": "LayoutLoginSplit"
+    }
+  ]
+}

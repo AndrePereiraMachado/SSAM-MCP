@@ -1,0 +1,1260 @@
+{
+ "schema": "ssam-discover-tool-heldout/1",
+ "note": "Generalization checks of the tool router, never used to write the first version of catalog/tools.json. Set 1 (60 items, written 2026-10-03 after the first freeze): top-1 35/54 at that point (Portuguese informal imperatives, participles); the general fixes that followed (inflections, @publicado, a few verbs) were checked on it. Set 2 (46 items, written after those fixes and measured once): top-1 38/41, 4/5 model changes silent; the three misses and the one leak were then fixed with general rules (adicionar vetoes the timer routes like criar; quem consome + modulo; tirar; hook). Both sets now guard those rules; neither is a blind measure any more.",
+ "items": [
+  {
+   "intent": "preciso abrir o modulo Faturamento no service studio",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_studio",
+    "verb": {
+     "field": "command",
+     "value": "open-module"
+    }
+   }
+  },
+  {
+   "intent": "abre pra mim o módulo Cadastro",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_open"
+   }
+  },
+  {
+   "intent": "pode publicar agora",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_publish"
+   }
+  },
+  {
+   "intent": "faz o publish do módulo Vendas",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_publish"
+   }
+  },
+  {
+   "intent": "liga o SSAM no Studio que já está aberto",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_connect"
+   },
+   "alsoAccept": [
+    {
+     "tool": "studio_attach"
+    }
+   ]
+  },
+  {
+   "intent": "dispara o timer ImportarClientes",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "timer-run"
+    }
+   }
+  },
+  {
+   "intent": "quero uma aplicação nova chamada Estoque",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "create-app"
+    }
+   }
+  },
+  {
+   "intent": "mostra os erros que deram no service center hoje",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "logs"
+    }
+   }
+  },
+  {
+   "intent": "coloca um breakpoint na action CalcularFrete",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "start"
+    }
+   }
+  },
+  {
+   "intent": "quero o oml publicado do módulo Pedidos",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "download"
+    }
+   }
+  },
+  {
+   "intent": "tem algum erro de TrueChange no módulo?",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_studio",
+    "verb": {
+     "field": "command",
+     "value": "errors"
+    }
+   }
+  },
+  {
+   "intent": "apareceu um popup no Service Studio, fecha ele",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_studio",
+    "verb": {
+     "field": "command",
+     "value": "dismiss-dialog"
+    }
+   }
+  },
+  {
+   "intent": "captura o módulo que está aberto",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_studio",
+    "verb": {
+     "field": "command",
+     "value": "snapshot"
+    }
+   }
+  },
+  {
+   "intent": "cadastra 3 registros de teste na entidade Produto",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_data",
+    "verb": {
+     "field": "request.operation",
+     "value": "insert"
+    }
+   }
+  },
+  {
+   "intent": "troca o valor da site property UrlServico",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "property-set"
+    }
+   }
+  },
+  {
+   "intent": "suspende o timer de limpeza",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "timer-deactivate"
+    }
+   }
+  },
+  {
+   "intent": "faz refresh das referências do módulo Core",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "refresh-refs"
+    }
+   }
+  },
+  {
+   "intent": "a minha entrega já terminou?",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_task"
+   }
+  },
+  {
+   "intent": "quem consome a biblioteca Utils?",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_consumers"
+   }
+  },
+  {
+   "intent": "aguarda o Studio desocupar",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_studio",
+    "verb": {
+     "field": "command",
+     "value": "wait"
+    }
+   }
+  },
+  {
+   "intent": "manda o app para produção",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_deploy",
+    "verb": {
+     "field": "operation",
+     "value": "Deploy"
+    }
+   }
+  },
+  {
+   "intent": "quais exceções aconteceram no app em QA",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "monitoring.errors"
+    }
+   }
+  },
+  {
+   "intent": "testa a conexão com o banco Oracle externo",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_external_db_connection",
+    "verb": {
+     "field": "action",
+     "value": "test"
+    }
+   }
+  },
+  {
+   "intent": "altera a configuração TimeoutSegundos do app",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_configurations",
+    "verb": {
+     "field": "action",
+     "value": "set"
+    }
+   }
+  },
+  {
+   "intent": "remove o app ZZDemo do ODC",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_asset_delete"
+   }
+  },
+  {
+   "intent": "mostra as linhas da tabela Cliente no banco de desenvolvimento",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_data"
+   }
+  },
+  {
+   "intent": "o deploy para QA já acabou?",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_operation_status",
+    "verb": {
+     "field": "kind",
+     "value": "deployment"
+    }
+   }
+  },
+  {
+   "intent": "qual é o endereço da tela Home do app Loja",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_app_url"
+   }
+  },
+  {
+   "intent": "loga no portal do ODC",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_login",
+    "verb": {
+     "field": "action",
+     "value": "open"
+    }
+   }
+  },
+  {
+   "intent": "quais roles existem nas aplicações do tenant",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_read"
+   },
+   "alsoAccept": [
+    {
+     "tool": "odc_search_operations"
+    }
+   ]
+  },
+  {
+   "intent": "open the Billing module please",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_studio",
+    "verb": {
+     "field": "command",
+     "value": "open-module"
+    }
+   }
+  },
+  {
+   "intent": "go ahead and publish module Sales",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_publish"
+   }
+  },
+  {
+   "intent": "attach SSAM to my running Service Studio",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_connect"
+   }
+  },
+  {
+   "intent": "kick off timer NightlyImport right now",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "timer-run"
+    }
+   }
+  },
+  {
+   "intent": "make a new reactive application named Stock",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "create-app"
+    }
+   }
+  },
+  {
+   "intent": "show me the error log entries in Service Center",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "logs"
+    }
+   }
+  },
+  {
+   "intent": "set a breakpoint and debug GetCustomers",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "start"
+    }
+   }
+  },
+  {
+   "intent": "grab the OML of the published Orders module",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "download"
+    }
+   }
+  },
+  {
+   "intent": "dismiss the dialog that popped up in Service Studio",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_studio",
+    "verb": {
+     "field": "command",
+     "value": "dismiss-dialog"
+    }
+   }
+  },
+  {
+   "intent": "seed entity Product with five test rows",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_data",
+    "verb": {
+     "field": "request.operation",
+     "value": "insert"
+    }
+   }
+  },
+  {
+   "intent": "disable the cleanup timer",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "timer-deactivate"
+    }
+   }
+  },
+  {
+   "intent": "did my delivery finish?",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_task"
+   }
+  },
+  {
+   "intent": "who consumes library Utils?",
+   "lang": "en",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_consumers"
+   }
+  },
+  {
+   "intent": "push the app to the QA stage",
+   "lang": "en",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_deploy",
+    "verb": {
+     "field": "operation",
+     "value": "Deploy"
+    }
+   }
+  },
+  {
+   "intent": "which exceptions did the app throw in production",
+   "lang": "en",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "monitoring.errors"
+    }
+   }
+  },
+  {
+   "intent": "check that the external Postgres connection works",
+   "lang": "en",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_external_db_connection",
+    "verb": {
+     "field": "action",
+     "value": "test"
+    }
+   }
+  },
+  {
+   "intent": "update setting TimeoutSeconds of the app",
+   "lang": "en",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_configurations",
+    "verb": {
+     "field": "action",
+     "value": "set"
+    }
+   }
+  },
+  {
+   "intent": "remove app ZZDemo from ODC",
+   "lang": "en",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_asset_delete"
+   }
+  },
+  {
+   "intent": "is the QA deployment done yet?",
+   "lang": "en",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_operation_status",
+    "verb": {
+     "field": "kind",
+     "value": "deployment"
+    }
+   }
+  },
+  {
+   "intent": "what's the URL of the Home screen of app Shop",
+   "lang": "en",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_app_url"
+   }
+  },
+  {
+   "intent": "log in to the ODC portal",
+   "lang": "en",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_login",
+    "verb": {
+     "field": "action",
+     "value": "open"
+    }
+   }
+  },
+  {
+   "intent": "step into the next call",
+   "lang": "en",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-into"
+    }
+   }
+  },
+  {
+   "intent": "end the debugging session",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "stop"
+    }
+   }
+  },
+  {
+   "intent": "deliver this job to the open module",
+   "lang": "en",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_deliver",
+    "verb": {
+     "field": "until",
+     "value": "merge"
+    }
+   }
+  },
+  {
+   "intent": "criar uma tela Clientes com uma tabela de pedidos",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "adicionar um atributo Email na entidade Cliente",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "renomear a action CriarCliente para NovoCliente",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "add a timer that calls CleanupLogs every night",
+   "lang": "en",
+   "lane": "odc",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "add a button that opens the details popup",
+   "lang": "en",
+   "lane": "odc",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "create a structure Address with Street and Number",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "consegue abrir o modulo Contratos pra mim?",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_studio",
+    "verb": {
+     "field": "command",
+     "value": "open-module"
+    }
+   }
+  },
+  {
+   "intent": "abrir no ODC Studio o módulo Simulador",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_open"
+   }
+  },
+  {
+   "intent": "publique o módulo Cotacao no ambiente",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_publish"
+   }
+  },
+  {
+   "intent": "publica esse app no ODC",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_publish"
+   },
+   "alsoAccept": [
+    {
+     "tool": "studio_authorize",
+     "verb": {
+      "field": "kind",
+      "value": "publish"
+     }
+    }
+   ]
+  },
+  {
+   "intent": "conecta no service studio",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_connect"
+   }
+  },
+  {
+   "intent": "executa o timer EnviarEmails",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "timer-run"
+    }
+   }
+  },
+  {
+   "intent": "reativa o timer de importação",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "timer-activate"
+    }
+   }
+  },
+  {
+   "intent": "cria uma aplicação Mobile chamada Campo",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "create-app"
+    }
+   }
+  },
+  {
+   "intent": "quais erros apareceram nos logs do service center ontem",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "logs"
+    }
+   }
+  },
+  {
+   "intent": "depura a server action ObterApolice",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "start"
+    }
+   }
+  },
+  {
+   "intent": "baixa o oml do módulo Sinistros",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "download"
+    }
+   }
+  },
+  {
+   "intent": "lista as aplicações do ambiente O11",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "inventory"
+    }
+   },
+   "alsoAccept": [
+    {
+     "tool": "o11_service_center_read",
+     "verb": {
+      "field": "action",
+      "value": "applications"
+     }
+    }
+   ]
+  },
+  {
+   "intent": "apaga os registros de teste da entidade Pedido",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_data",
+    "verb": {
+     "field": "request.operation",
+     "value": "delete"
+    }
+   }
+  },
+  {
+   "intent": "quero ver os timers do módulo Integracao",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "timers"
+    }
+   }
+  },
+  {
+   "intent": "atualiza as dependências do módulo Portal",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "refresh-refs"
+    }
+   }
+  },
+  {
+   "intent": "a publicação já terminou?",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_task"
+   }
+  },
+  {
+   "intent": "quem consome o módulo Core no ambiente?",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "consumers"
+    }
+   }
+  },
+  {
+   "intent": "promove a revisão 12 para QA",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_deploy",
+    "verb": {
+     "field": "operation",
+     "value": "Deploy"
+    }
+   }
+  },
+  {
+   "intent": "mostra os traces lentos do app",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "monitoring.traces"
+    }
+   }
+  },
+  {
+   "intent": "lista as conexões de banco externo do tenant",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_external_db_connection",
+    "verb": {
+     "field": "action",
+     "value": "list"
+    }
+   }
+  },
+  {
+   "intent": "insere um produto de teste na entidade Produto",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_data_insert"
+   }
+  },
+  {
+   "intent": "tira o app do ar em produção",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_deploy",
+    "verb": {
+     "field": "operation",
+     "value": "Undeploy"
+    }
+   }
+  },
+  {
+   "intent": "qual tenant está autenticado agora",
+   "lang": "en",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_auth_status"
+   }
+  },
+  {
+   "intent": "baixa a revisão publicada mais recente do módulo Quotes",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_latest"
+   }
+  },
+  {
+   "intent": "open the Claims module in Service Studio",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_studio",
+    "verb": {
+     "field": "command",
+     "value": "open-module"
+    }
+   }
+  },
+  {
+   "intent": "please publish the Quotes module",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_publish"
+   }
+  },
+  {
+   "intent": "hook SSAM up to the open ODC Studio",
+   "lang": "en",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_connect"
+   },
+   "alsoAccept": [
+    {
+     "tool": "studio_attach"
+    }
+   ]
+  },
+  {
+   "intent": "run timer SendEmails",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "timer-run"
+    }
+   }
+  },
+  {
+   "intent": "create a Library module in app Sales",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "create-module"
+    }
+   },
+   "alsoAccept": [
+    {
+     "tool": "o11_environment",
+     "verb": {
+      "field": "action",
+      "value": "add-modules"
+     }
+    }
+   ]
+  },
+  {
+   "intent": "what errors are in the Service Center log",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "logs"
+    }
+   }
+  },
+  {
+   "intent": "show me the variables at the current breakpoint",
+   "lang": "en",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "variables"
+    }
+   }
+  },
+  {
+   "intent": "continue past the breakpoint",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "continue"
+    }
+   }
+  },
+  {
+   "intent": "read every row of entity Policy",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_data",
+    "verb": {
+     "field": "request.operation",
+     "value": "read-all"
+    }
+   }
+  },
+  {
+   "intent": "change site property MaxRetries",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "property-set"
+    }
+   }
+  },
+  {
+   "intent": "list the published versions of module Core",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "versions"
+    }
+   }
+  },
+  {
+   "intent": "wait for ODC Studio to become idle",
+   "lang": "en",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_wait",
+    "verb": {
+     "field": "condition",
+     "value": "idle"
+    }
+   }
+  },
+  {
+   "intent": "which apps are in my tenant",
+   "lang": "en",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_assets"
+   },
+   "alsoAccept": [
+    {
+     "tool": "odc_read"
+    }
+   ]
+  },
+  {
+   "intent": "delete records of entity Product in the development database",
+   "lang": "en",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_data_delete"
+   }
+  },
+  {
+   "intent": "save the guardrails of the agent",
+   "lang": "en",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_write",
+    "verb": {
+     "field": "operationId",
+     "value": "agents.guardrailsSave"
+    }
+   }
+  },
+  {
+   "intent": "check the status of code analysis",
+   "lang": "en",
+   "lane": "odc",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_operation_status",
+    "verb": {
+     "field": "kind",
+     "value": "code-analysis"
+    }
+   }
+  },
+  {
+   "intent": "read the receipt.json of the last delivery",
+   "lang": "en",
+   "lane": "o11",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_evidence"
+   }
+  },
+  {
+   "intent": "criar uma action server que soma dois números",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "adicionar um timer que roda toda noite chamando LimparCache",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "add a list of customers on the Home screen",
+   "lang": "pt",
+   "lane": "odc",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "delete the attribute Phone from entity Contact",
+   "lang": "en",
+   "lane": "odc",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "mudar o tipo do atributo Valor para Decimal",
+   "lang": "pt",
+   "lane": "o11",
+   "expect": {
+    "kind": "capability"
+   }
+  }
+ ]
+}

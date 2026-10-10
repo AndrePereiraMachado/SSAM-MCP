@@ -1,0 +1,45 @@
+{
+ "description": "AR2 (OutSystems padroes), padrao do contrato fachada publica -> <Nome>_Impl privado. ApproveNegItem: a guarda esta no _Impl, conforme (sem achado). ReopenNegItem: o _Impl grava sem guarda; o achado sai no _Impl, nao na fachada.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IUserException", "name": "NegFacadeDenied", "as": "$exFacade"},
+  {"op": "spec", "data": {"entities": [
+   {"name": "SubjectNegItem", "public": true, "description": "Item de teste com conteudo do sujeito, que exige guarda no servidor (controle AR2).",
+    "attributes": [{"name": "IsApproved", "type": "Boolean", "description": "Marca o item aprovado pelo revisor."}]}
+  ]}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "ApproveNegItem_Impl", "kind": "server",
+    "description": "Implementacao da aprovacao: guarda de login antes de ler e gravar o item (conforme).",
+    "inputs": [{"name": "ItemId", "type": "SubjectNegItem Identifier", "description": "Item que o revisor quer aprovar."}],
+    "vars": [{"name": "Item", "type": "SubjectNegItem", "description": "Registro lido e marcado como aprovado."}],
+    "steps": [
+     {"if": "GetUserId() = NullIdentifier()", "label": "Is the caller anonymous?",
+      "then": [{"raise": "NegFacadeDenied", "message": "\"Login required\""}]},
+     {"get": "SubjectNegItem", "as": "ReadItemToApprove", "where": "SubjectNegItem.Id = ItemId", "max": 1},
+     {"assign": {"Item": "ReadItemToApprove.List.Current.SubjectNegItem", "Item.IsApproved": "True"}, "as": "Mark the item approved"},
+     {"update": "SubjectNegItem", "record": "Item", "as": "SaveApprovedItem"}
+    ]},
+   {"name": "ApproveNegItem", "kind": "server", "public": true,
+    "description": "Fachada publica da aprovacao; a guarda fica no ApproveNegItem_Impl (padrao do contrato).",
+    "inputs": [{"name": "ItemId", "type": "SubjectNegItem Identifier", "description": "Item que o revisor quer aprovar."}],
+    "steps": [{"call": "ApproveNegItem_Impl", "as": "Impl", "args": {"ItemId": "ItemId"}}]},
+   {"name": "ReopenNegItem_Impl", "kind": "server",
+    "description": "Implementacao da reabertura sem guarda: le e grava o item do sujeito (violacao proposital da AR2).",
+    "inputs": [{"name": "ItemId", "type": "SubjectNegItem Identifier", "description": "Item que o usuario quer reabrir."}],
+    "vars": [{"name": "Item", "type": "SubjectNegItem", "description": "Registro lido e reaberto."}],
+    "steps": [
+     {"get": "SubjectNegItem", "as": "ReadItemToReopen", "where": "SubjectNegItem.Id = ItemId", "max": 1},
+     {"assign": {"Item": "ReadItemToReopen.List.Current.SubjectNegItem", "Item.IsApproved": "False"}, "as": "Mark the item reopened"},
+     {"update": "SubjectNegItem", "record": "Item", "as": "SaveReopenedItem"}
+    ]},
+   {"name": "ReopenNegItem", "kind": "server", "public": true,
+    "description": "Fachada publica da reabertura; so repassa ao ReopenNegItem_Impl (padrao do contrato).",
+    "inputs": [{"name": "ItemId", "type": "SubjectNegItem Identifier", "description": "Item que o usuario quer reabrir."}],
+    "steps": [{"call": "ReopenNegItem_Impl", "as": "Impl", "args": {"ItemId": "ItemId"}}]}
+  ]}},
+  {"op": "set", "target": "$ApproveNegItem_Impl.ReadItemToApprove", "prop": "Description", "value": "Le o item a aprovar, ja depois da guarda de login do servidor."},
+  {"op": "set", "target": "IServerAction:ReopenNegItem_Impl/ReadItemToReopen", "prop": "Description", "value": "Le o item a reabrir; o alvo por tipo e nome tambem vale para a N1."}
+ ]
+}

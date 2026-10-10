@@ -1,0 +1,17 @@
+{
+ "description": "DropdownTags (OutSystemsUI, Interaction) minimo: instancia como o Studio cria ao arrastar o bloco; inputs obrigatorios OptionsList com valores simples; evento obrigatorio OnChanged ligado a uma screen action vazia.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "OptionsListValue", "as": "$vOptionsListValue"},
+  {"op": "set", "target": "$vOptionsListValue", "prop": "DataType", "value": "DropdownOption List"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAction", "name": "DropdownTagsDemoOnChanged", "as": "$hDropdownTagsDemoOnChanged"},
+  {"op": "create", "parent": "$hDropdownTagsDemoOnChanged", "type": "IStartNode", "as": "$hDropdownTagsDemoOnChangedS"},
+  {"op": "create", "parent": "$hDropdownTagsDemoOnChanged", "type": "IEndNode", "as": "$hDropdownTagsDemoOnChangedE"},
+  {"op": "link", "from": "$hDropdownTagsDemoOnChangedS", "to": "$hDropdownTagsDemoOnChangedE"},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "DropdownTagsDemo", "source": "IMobileBlock:DropdownTags", "as": "$b"},
+  {"op": "set", "target": "$b/OptionsList", "prop": "Value", "value": "OptionsListValue"},
+  {"op": "set", "target": "$b/OnChanged", "prop": "Handler", "value": "IScreenAction:DropdownTagsDemoOnChanged"}
+ ]
+}

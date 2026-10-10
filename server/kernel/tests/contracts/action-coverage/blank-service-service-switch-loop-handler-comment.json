@@ -1,0 +1,172 @@
+{
+  "fixture": "blank-service",
+  "features": [
+    "switch-loop-handler-comment",
+    "service"
+  ],
+  "contract": {
+    "data": {
+      "structures": [
+        {
+          "name": "CoverageItem",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Number",
+              "type": "Integer"
+            },
+            {
+              "name": "Text",
+              "type": "Text"
+            }
+          ]
+        },
+        {
+          "name": "CoverageEnvelope",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Item",
+              "type": "CoverageItem"
+            },
+            {
+              "name": "Items",
+              "type": "CoverageItem List"
+            },
+            {
+              "name": "Numbers",
+              "type": "Integer List"
+            }
+          ]
+        }
+      ],
+      "entities": [
+        {
+          "name": "CoverageRow",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Value",
+              "type": "Integer"
+            }
+          ]
+        }
+      ]
+    },
+    "exceptions": [
+      {
+        "name": "CoverageFailure"
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "inputs": [
+            {
+              "name": "Number",
+              "type": "Integer"
+            },
+            {
+              "name": "Values",
+              "type": "Integer List"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "Result",
+              "type": "Integer"
+            }
+          ],
+          "steps": [
+            {
+              "switch": [
+                {
+                  "when": "Number < 0",
+                  "steps": [
+                    {
+                      "assign": {
+                        "Result": "-1"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "when": "Number = 0",
+                  "steps": [
+                    {
+                      "assign": {
+                        "Result": "0"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "otherwise": [
+                {
+                  "assign": {
+                    "Result": "Number"
+                  }
+                }
+              ],
+              "as": "SelectValue"
+            },
+            {
+              "foreach": "Values",
+              "as": "EachValue",
+              "start": "0",
+              "max": "Values.Length",
+              "do": [
+                {
+                  "assign": {
+                    "Result": "Result + Values.Current"
+                  }
+                }
+              ]
+            },
+            {
+              "if": "Result < 0",
+              "then": [
+                {
+                  "raise": "CoverageFailure",
+                  "message": "\"negative\""
+                }
+              ]
+            }
+          ],
+          "handlers": [
+            {
+              "name": "Recover",
+              "exception": "CoverageFailure",
+              "abortTransaction": true,
+              "logError": false,
+              "steps": [
+                {
+                  "assign": {
+                    "Result": "-999"
+                  }
+                }
+              ]
+            }
+          ],
+          "comments": [
+            {
+              "text": "Coverage: preserve branches, loops and recovery.",
+              "reminder": false
+            }
+          ],
+          "name": "Coverage",
+          "kind": "service",
+          "public": true,
+          "access": {
+            "authenticated": true
+          }
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IServiceAction:Coverage/#ISwitchNode/#ISwitchCondition[1]",
+    "prop": "Value",
+    "value": "Number > 0"
+  }
+}

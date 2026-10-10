@@ -1,0 +1,15 @@
+{
+ "_leia": "Controle negativo P7: estagio job no modo autor; assign de Site.IsFeatureHardEnabled, switch listado em config.p7.siteSwitches.",
+ "stage": "job",
+ "mode": "autor",
+ "module": "Engine_Core_CS",
+ "exitCode": 1,
+ "mustFind": [
+  {
+   "rule": "P7",
+   "severity": "erro",
+   "stage": "job",
+   "contains": "IsFeatureHardEnabled"
+  }
+ ]
+}

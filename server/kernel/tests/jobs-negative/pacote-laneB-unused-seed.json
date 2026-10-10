@@ -1,0 +1,9 @@
+{
+ "description": "Base de prova do contrato de mensagens (lane B): UnusedSeedProbe tem um unico chamador, UnusedSeedCaller, que nao tem consumidor. O aviso UnusedUserAction do chamador e de um elemento criado por este job, por isso fica na allowlist e a base e aceita.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [{"op": "logic", "data": {"actions": [
+   {"name": "UnusedSeedProbe", "steps": []},
+   {"name": "UnusedSeedCaller", "steps": [{"call": "UnusedSeedProbe", "as": "RunProbe"}]}
+ ]}}]
+}

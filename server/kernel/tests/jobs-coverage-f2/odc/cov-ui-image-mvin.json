@@ -1,0 +1,33 @@
+{
+ "description": "Cobertura testada (fase 2): move into (folder:Images) de OutSystems.Model.UI.IImage (odc) em espace. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "OutSystems.Model.UI.IImage",
+   "name": "CovAImage",
+   "args": {
+    "binary": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    "originalPath": "cov.png"
+   },
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IFolder",
+   "name": "CovSMvFolder",
+   "args": {
+    "parentFolder": "Images"
+   },
+   "as": "$mvp"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "into": "$mvp"
+  }
+ ]
+}

@@ -1,0 +1,259 @@
+{
+ "description": "Mobile local storage: client entity (Draft) com atributos e client action que grava com CreateOrUpdateDraft e le com aggregate local",
+ "base": "tests/fixtures/mobile-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IClientEntity",
+   "name": "Draft",
+   "as": "$ce"
+  },
+  {
+   "op": "create",
+   "parent": "$ce",
+   "type": "IEntityAttribute",
+   "name": "Id",
+   "as": "$id"
+  },
+  {
+   "op": "set",
+   "target": "$id",
+   "prop": "DataType",
+   "value": "Long Integer"
+  },
+  {
+   "op": "set",
+   "target": "$id",
+   "prop": "IsAutoNumber",
+   "value": "No"
+  },
+  {
+   "op": "set",
+   "target": "$ce",
+   "prop": "IdentifierAttribute",
+   "value": "$id"
+  },
+  {
+   "op": "create",
+   "parent": "$ce",
+   "type": "IEntityAttribute",
+   "name": "Title",
+   "as": "$t"
+  },
+  {
+   "op": "set",
+   "target": "$t",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$ce",
+   "type": "IEntityAttribute",
+   "name": "SavedOn",
+   "as": "$d"
+  },
+  {
+   "op": "set",
+   "target": "$d",
+   "prop": "DataType",
+   "value": "Date Time"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IClientAction",
+   "name": "Draft_Save",
+   "as": "$ca"
+  },
+  {
+   "op": "set",
+   "target": "$ca",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "create",
+   "parent": "$ca",
+   "type": "IInputParameter",
+   "name": "Title",
+   "as": "$in"
+  },
+  {
+   "op": "set",
+   "target": "$in",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$ca",
+   "type": "ILocalVariable",
+   "name": "D",
+   "as": "$lv"
+  },
+  {
+   "op": "set",
+   "target": "$lv",
+   "prop": "DataType",
+   "value": "Draft"
+  },
+  {
+   "op": "create",
+   "parent": "$ca",
+   "type": "IStartNode",
+   "as": "$s0"
+  },
+  {
+   "op": "create",
+   "parent": "$ca",
+   "type": "IAssignNode",
+   "name": "Fill",
+   "as": "$as"
+  },
+  {
+   "op": "set",
+   "target": "$as",
+   "prop": "Label",
+   "value": "Fill"
+  },
+  {
+   "op": "create",
+   "parent": "$as",
+   "type": "IAssignment",
+   "as": "$a1"
+  },
+  {
+   "op": "set",
+   "target": "$a1",
+   "prop": "Variable",
+   "value": "D.Title"
+  },
+  {
+   "op": "set",
+   "target": "$a1",
+   "prop": "Value",
+   "value": "Title"
+  },
+  {
+   "op": "create",
+   "parent": "$as",
+   "type": "IAssignment",
+   "as": "$a2"
+  },
+  {
+   "op": "set",
+   "target": "$a2",
+   "prop": "Variable",
+   "value": "D.SavedOn"
+  },
+  {
+   "op": "set",
+   "target": "$a2",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$ca",
+   "type": "IExecuteClientActionNode",
+   "name": "CreateOrUpdateDraft",
+   "as": "$cu"
+  },
+  {
+   "op": "set",
+   "target": "$cu",
+   "prop": "Action",
+   "value": "IEntityActionSignature:CreateOrUpdateDraft"
+  },
+  {
+   "op": "set",
+   "target": "$cu/Source",
+   "prop": "Value",
+   "value": "D"
+  },
+  {
+   "op": "create",
+   "parent": "$ca",
+   "type": "IEndNode",
+   "as": "$s9"
+  },
+  {
+   "op": "link",
+   "from": "$s0",
+   "to": "$as"
+  },
+  {
+   "op": "link",
+   "from": "$as",
+   "to": "$cu"
+  },
+  {
+   "op": "link",
+   "from": "$cu",
+   "to": "$s9"
+  },
+  {
+   "op": "layout",
+   "target": "$ca"
+  },
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "Drafts",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:Layout"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAggregate",
+   "name": "GetDrafts",
+   "as": "$agg",
+   "args": {
+    "isClientSide": true
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IClientEntity:Draft"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/Content",
+   "type": "IList",
+   "name": "DraftList",
+   "as": "$list"
+  },
+  {
+   "op": "set",
+   "target": "$list",
+   "prop": "Source",
+   "value": "GetDrafts.List"
+  },
+  {
+   "op": "create",
+   "parent": "$list",
+   "type": "IExpression",
+   "as": "$ex"
+  },
+  {
+   "op": "set",
+   "target": "$ex",
+   "prop": "Value",
+   "value": "GetDrafts.List.Current.Draft.Title"
+  }
+ ]
+}

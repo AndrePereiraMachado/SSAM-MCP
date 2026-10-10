@@ -1,0 +1,121 @@
+{
+ "description": "ODC (cobertura T): ESTRUTURA ANINHADA, LISTA DE ESTRUTURA DENTRO DE ESTRUTURA e ESTRUTURA COMO PARAMETRO - o formato que REST consumido e REST exposto produzem e consomem, e que o structure-list-type.json ainda nao cobria (la a lista de estrutura era so de uma variavel e de um output). Espelha tests/jobs/spec-data.json (uma unica op spec declara os tipos compostos) e tests/jobs/rest-query-nested.json (aninhamento lido por caminho: Address.Geo.Latitude). Tres niveis: WfCovPolicyQuote tem um atributo do tipo WfCovAddress, que por sua vez tem um atributo do tipo WfCovGeoPoint; e um atributo 'Items' do tipo 'WfCovCoverageItem List', que faz o kernel pedir o LIST TYPE ao IESpace dentro da propria declaracao da structure. Depois uma server action recebe record E lista de record como INPUT, devolve record como OUTPUT, le o aninhamento pelo caminho completo e ACRESCENTA a lista que vive dentro do record de saida (ListAppend com Quote.Items). No ODC tudo o que a action publica (shareable) toca tem de ser partilhavel, por isso as quatro structures nascem publicas - e ser publica e tambem o que as impede de nascer com UnusedElement.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCovQuote_Build (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "ops": [
+  {
+   "op": "spec",
+   "_why": "UMA op declara as quatro structures: o compilador declara todos os tipos ANTES dos campos, por isso um atributo pode citar uma structure declarada adiante no mesmo bloco e o aninhamento nao exige entregas separadas (a mesma regra das FKs circulares de entidade)",
+   "data": {
+    "structures": [
+     {
+      "name": "WfCovGeoPoint",
+      "public": true,
+      "description": "Cobertura T: folha do aninhamento - o terceiro nivel, so primitivos",
+      "attributes": [
+       {"name": "Latitude", "type": "Decimal"},
+       {"name": "Longitude", "type": "Decimal"}
+      ]
+     },
+     {
+      "name": "WfCovAddress",
+      "public": true,
+      "description": "Cobertura T: nivel do meio - tem primitivos E um atributo do tipo WfCovGeoPoint",
+      "attributes": [
+       {"name": "Street", "type": "Text"},
+       {"name": "Postcode", "type": "Text"},
+       {"name": "Zone", "type": "Text"},
+       {"name": "Geo", "type": "WfCovGeoPoint"}
+      ]
+     },
+     {
+      "name": "WfCovCoverageItem",
+      "public": true,
+      "description": "Cobertura T: o elemento da lista - existe para ser 'WfCovCoverageItem List' dentro de outra structure e input da action",
+      "attributes": [
+       {"name": "Peril", "type": "Text"},
+       {"name": "Limit", "type": "Decimal"}
+      ]
+     },
+     {
+      "name": "WfCovPolicyQuote",
+      "public": true,
+      "description": "Cobertura T: topo do aninhamento - record dentro de record e lista de record dentro de record",
+      "attributes": [
+       {"name": "Holder", "type": "Text"},
+       {"name": "Address", "type": "WfCovAddress"},
+       {"name": "Items", "type": "WfCovCoverageItem List"},
+       {"name": "Total", "type": "Decimal"},
+       {"name": "IsCoastal", "type": "Boolean"}
+      ]
+     }
+    ]
+   }
+  },
+
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfCovQuote_Build", "as": "$act"},
+
+  {"op": "create", "parent": "$act", "type": "IInputParameter", "name": "Holder", "as": "$inHolder"},
+  {"op": "set", "target": "$inHolder", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$act", "type": "IInputParameter", "name": "Address", "as": "$inAddress"},
+  {"op": "set", "target": "$inAddress", "prop": "DataType", "value": "WfCovAddress", "_why": "ESTRUTURA COMO PARAMETRO (record): o input inteiro e um tipo composto, e ele proprio ja traz um nivel aninhado (Geo)"},
+  {"op": "create", "parent": "$act", "type": "IInputParameter", "name": "CoverLines", "as": "$inLines"},
+  {"op": "set", "target": "$inLines", "prop": "DataType", "value": "WfCovCoverageItem List", "_why": "LISTA DE ESTRUTURA COMO PARAMETRO: o list type ja existe porque a structure WfCovPolicyQuote o pediu no atributo Items; aqui prova-se que o mesmo tipo serve de contrato de entrada"},
+
+  {"op": "create", "parent": "$act", "type": "IOutputParameter", "name": "Quote", "as": "$out"},
+  {"op": "set", "target": "$out", "prop": "DataType", "value": "WfCovPolicyQuote", "_why": "ESTRUTURA COMO SAIDA: um unico output carrega o aninhamento inteiro - e exatamente a forma de um corpo JSON de REST"},
+
+  {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$s0"},
+
+  {"op": "create", "parent": "$act", "type": "IAssignNode", "as": "$head"},
+  {"op": "set", "target": "$head", "prop": "Label", "value": "SetHeader"},
+  {"op": "create", "parent": "$head", "type": "IAssignment", "as": "$h1"},
+  {"op": "set", "target": "$h1", "prop": "Variable", "value": "Quote.Address"},
+  {"op": "set", "target": "$h1", "prop": "Value", "value": "Address", "_why": "record inteiro para dentro de record: o atributo Address do output recebe o parametro Address de uma vez, sem copiar campo a campo (e leva o Geo junto)"},
+  {"op": "create", "parent": "$head", "type": "IAssignment", "as": "$h2"},
+  {"op": "set", "target": "$h2", "prop": "Variable", "value": "Quote.Holder"},
+  {"op": "set", "target": "$h2", "prop": "Value", "value": "Holder + \" - \" + Quote.Address.Zone", "_why": "leitura ANINHADA pelo caminho completo no lado DIREITO: Quote.Address.Zone atravessa output -> structure -> atributo. Le do Quote (ja preenchido pelo assignment anterior, que corre primeiro) para provar que o aninhamento e navegavel depois de escrito"},
+  {"op": "create", "parent": "$head", "type": "IAssignment", "as": "$h3"},
+  {"op": "set", "target": "$h3", "prop": "Variable", "value": "Quote.IsCoastal"},
+  {"op": "set", "target": "$h3", "prop": "Value", "value": "Address.Geo.Latitude > 26.0", "_why": "TRES NIVEIS a partir do PARAMETRO: parametro -> WfCovAddress -> WfCovGeoPoint -> Latitude. E a mesma forma de 'GetLatest.Response.Rates.USD' do rest-query-nested.json do SS11, aqui sem passar por REST"},
+  {"op": "create", "parent": "$head", "type": "IAssignment", "as": "$h4"},
+  {"op": "set", "target": "$h4", "prop": "Variable", "value": "Quote.Total"},
+  {"op": "set", "target": "$h4", "prop": "Value", "value": "0.0"},
+
+  {"op": "create", "parent": "$act", "type": "IForEachNode", "as": "$each"},
+  {"op": "set", "target": "$each", "prop": "Label", "value": "EachLine"},
+  {"op": "set", "target": "$each", "prop": "RecordList", "value": "CoverLines", "_why": "ciclo sobre a LISTA DE ESTRUTURA recebida como parametro: le-se CoverLines.Current.<Atributo>, SEM o nivel do aggregate (nao ha aggregate nenhum neste job)"},
+
+  {"op": "create", "parent": "$act", "type": "IAssignNode", "as": "$sum"},
+  {"op": "set", "target": "$sum", "prop": "Label", "value": "AddLine"},
+  {"op": "create", "parent": "$sum", "type": "IAssignment", "as": "$s1"},
+  {"op": "set", "target": "$s1", "prop": "Variable", "value": "Quote.Total"},
+  {"op": "set", "target": "$s1", "prop": "Value", "value": "Quote.Total + CoverLines.Current.Limit", "_why": "acumula lendo o elemento corrente da lista de structure do parametro"},
+
+  {"op": "create", "parent": "$act", "type": "IExecuteServerActionNode", "name": "AppendLine", "as": "$append"},
+  {"op": "set", "target": "$append", "prop": "Action", "value": "IServerActionSignature:ListAppend", "_why": "no ODC o ListAppend existe como IClientActionSignature E como IServerActionSignature; dentro de uma server action o IExecuteServerActionNode so aceita a do servidor"},
+  {"op": "set", "target": "$append/List", "prop": "Value", "value": "Quote.Items", "_why": "o ponto do job: a lista que se acrescenta NAO e uma variavel solta, e o atributo-lista que vive DENTRO do record de saida. Escrever Quote.Items prova que a lista de structure aninhada e um destino gravavel como outro qualquer"},
+  {"op": "set", "target": "$append/Element", "prop": "Value", "value": "CoverLines.Current", "_why": "elemento = o record corrente do parametro-lista, passado inteiro"},
+
+  {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$s9"},
+  {"op": "link", "from": "$s0", "to": "$head"},
+  {"op": "link", "from": "$head", "to": "$each"},
+  {"op": "link", "from": "$each", "connector": "CycleTarget", "to": "$sum"},
+  {"op": "link", "from": "$sum", "to": "$append"},
+  {"op": "link", "from": "$append", "to": "$each"},
+  {"op": "link", "from": "$each", "to": "$s9"},
+  {"op": "layout", "target": "$act"},
+
+  {"op": "get", "target": "$WfCovPolicyQuote/Address", "_why": "le de volta o atributo ANINHADO: DataType e a structure WfCovAddress, nao um primitivo"},
+  {"op": "get", "target": "$WfCovPolicyQuote/Items", "_why": "le de volta o atributo LISTA DE ESTRUTURA: DataType e o list type de WfCovCoverageItem, criado pelo kernel dentro da propria op spec"},
+  {"op": "get", "target": "$WfCovAddress/Geo", "_why": "prova o segundo salto do aninhamento: a structura do meio tambem tem um atributo composto"},
+  {"op": "get", "target": "$inAddress", "_why": "prova ESTRUTURA COMO PARAMETRO de entrada"},
+  {"op": "get", "target": "$inLines", "_why": "prova LISTA DE ESTRUTURA COMO PARAMETRO de entrada"},
+  {"op": "get", "target": "$out", "_why": "prova ESTRUTURA COMO SAIDA"},
+  {"op": "dump", "target": "$WfCovPolicyQuote", "depth": 2, "_why": "a arvore do tipo composto do topo: primitivos, record e lista de record lado a lado"},
+  {"op": "usages", "target": "IStructure:WfCovAddress", "_why": "prova os dois papeis do mesmo tipo composto: atributo de outra structure (aninhamento) e parametro de uma action"},
+  {"op": "usages", "target": "IStructure:WfCovCoverageItem", "_why": "prova o list type: a structure e consumida como LISTA em dois sitios (o atributo Items e o input CoverLines) sem nunca aparecer solta"},
+  {"op": "dump", "target": "$append", "depth": 3, "_why": "prova o ListAppend a escrever dentro do record de saida: List = Quote.Items, Element = CoverLines.Current"}
+ ]
+}

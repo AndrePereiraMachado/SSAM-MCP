@@ -1,0 +1,20 @@
+{
+ "description": "Pagination do OSUI: os tres inputs obrigatorios e o evento obrigatorio OnNavigate guardando o novo inicio.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "PaginationDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "StartIndex", "as": "$vStartIndex"},
+  {"op": "set", "target": "$vStartIndex", "prop": "DataType", "value": "Integer"},
+  {"op": "set", "target": "$vStartIndex", "prop": "DefaultValue", "value": "0"},
+  {"op": "logic", "data": {"actions": [{"name": "PageChanged", "kind": "screen", "owner": "IMobileScreen:PaginationDemo", "inputs": [{"name": "NewStartIndex", "type": "Integer"}], "steps": [{"assign": {"StartIndex": "NewStartIndex"}, "as": "Move"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Pagination1", "source": "IMobileBlock:Pagination", "as": "$pg"},
+  {"op": "set", "target": "$pg/StartIndex", "prop": "Value", "value": "StartIndex"},
+  {"op": "set", "target": "$pg/MaxRecords", "prop": "Value", "value": "10"},
+  {"op": "set", "target": "$pg/TotalCount", "prop": "Value", "value": "100"},
+  {"op": "set", "target": "$pg/OnNavigate", "prop": "Handler", "value": "IMobileScreen:PaginationDemo/PageChanged"},
+  {"op": "set", "target": "$pg/OnNavigate/NewStartIndex", "prop": "Value", "value": "NewStartIndex"}
+ ]
+}

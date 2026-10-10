@@ -1,0 +1,137 @@
+{
+  "errors": [],
+  "modes": [
+    {
+      "override": null,
+      "preserveListItemReactKey": false,
+      "initial": {
+        "labels": [
+          "A",
+          "B"
+        ],
+        "counts": [
+          "2",
+          "1"
+        ],
+        "before": "",
+        "after": ""
+      },
+      "descending": {
+        "labels": [
+          "B",
+          "A"
+        ],
+        "counts": [
+          "0",
+          "0"
+        ],
+        "before": "[\"3_0\",\"3_1\"]",
+        "after": "[\"3_1\",\"3_0\"]"
+      },
+      "ascending": {
+        "labels": [
+          "A",
+          "B"
+        ],
+        "counts": [
+          "0",
+          "0"
+        ],
+        "before": "[\"3_1\",\"3_0\"]",
+        "after": "[\"3_0\",\"3_1\"]"
+      },
+      "stateFollowsBusinessKey": false,
+      "itemIdsPreserved": true,
+      "normalNativeSort": {
+        "labels": [
+          "B",
+          "A"
+        ],
+        "counts": [
+          "0",
+          "0"
+        ],
+        "before": "[\"3_1\",\"3_0\"]",
+        "after": "[\"3_0\",\"3_1\"]"
+      }
+    },
+    {
+      "override": true,
+      "preserveListItemReactKey": true,
+      "initial": {
+        "labels": [
+          "A",
+          "B"
+        ],
+        "counts": [
+          "2",
+          "1"
+        ],
+        "before": "",
+        "after": ""
+      },
+      "descending": {
+        "labels": [
+          "B",
+          "A"
+        ],
+        "counts": [
+          "1",
+          "2"
+        ],
+        "before": "[\"4_0\",\"4_1\"]",
+        "after": "[\"4_1\",\"4_0\"]"
+      },
+      "ascending": {
+        "labels": [
+          "A",
+          "B"
+        ],
+        "counts": [
+          "2",
+          "1"
+        ],
+        "before": "[\"4_1\",\"4_0\"]",
+        "after": "[\"4_0\",\"4_1\"]"
+      },
+      "stateFollowsBusinessKey": true,
+      "itemIdsPreserved": true,
+      "normalNativeSort": {
+        "labels": [
+          "B",
+          "A"
+        ],
+        "counts": [
+          "0",
+          "0"
+        ],
+        "before": "[\"4_1\",\"4_0\"]",
+        "after": "[\"4_0\",\"4_1\"]"
+      }
+    }
+  ],
+  "sourceFrontendImplemented": false,
+  "experimentCompleted": true,
+  "date": "2026-09-06",
+  "scope": "LAB-only native list identity protocol research",
+  "serverConfigurationChanged": false,
+  "privateFieldsAssigned": false,
+  "domPatched": false,
+  "supportedPublicApiEstablished": false,
+  "runtimeExportsUsed": [
+    "ImmutableBase.getData",
+    "ImmutableListWithTracking.sort",
+    "GenericRecordList.newItem",
+    "GenericRecord.getAttributes",
+    "Record.getBasicProperty",
+    "ImmutableBase.writePropagate",
+    "ListCache"
+  ],
+  "runtimeSha256": "2334c87bd9c4fd029498318d684e2ac4137eebdeba6fcb44c4af72d61dc22e15",
+  "remaining": [
+    "supported per-list render-key contract instead of changing a global runtime flag",
+    "record update/insert/delete/reload/page reconciliation with semantic keys",
+    "versioned runtime codec/adapter and source transformer",
+    "no support claim for arbitrary keyed lists yet"
+  ]
+}

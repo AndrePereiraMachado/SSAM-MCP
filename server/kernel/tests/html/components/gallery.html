@@ -1,0 +1,111 @@
+<component name="CounterCard" kind="block">
+  <script type="module">
+    export const inputs = { title: "string" };
+    export const events = { changed: { value: "integer" } };
+    export let count = 0;
+    export let ready = false;
+    export let updates = 0;
+    export function onInitialize() { ready = true; }
+    export function onParametersChanged() { updates += 1; }
+    export function onDestroy() { console.info("AV CounterCard destroyed"); }
+    export function increment() {
+      count += 1;
+      emit.changed({ value: count });
+    }
+    export function burst() {
+      emit.changed({ value: 3 });
+      emit.changed({ value: 1 });
+      emit.changed({ value: 2 });
+    }
+  </script>
+  <style>
+    :root { display:block; }
+    article { background:white; border:1px solid #e0e5ef; border-radius:16px; padding:24px; }
+    h2 { color:#192b40; font-size:18px; margin:0 0 16px; }
+    .count { color:#315ddc; font-size:40px; font-weight:700; margin:16px 0; }
+    button { background:#315ddc; color:white; border:0; border-radius:8px; padding:12px 18px; }
+    .footer { margin-top:18px; color:#68788f; }
+  </style>
+  <article id="Card">
+    <h2>{{ title }}</h2>
+    <div class="count">{{ count }}</div><p>{{ ready ? "Pronto" : "Inicializando" }} · atualizações: {{ updates }}</p>
+    <button id="Increment" onclick="increment()">Incrementar</button>
+    <button id="Burst" onclick="burst()">Emitir sequência</button>
+    <div id="FooterRegion" class="footer"><slot name="Footer"></slot></div>
+  </article>
+</component>
+<component name="ComponentControls" kind="screen" roles="Anonymous">
+  <script type="module">
+    export let title = "";
+    export let details = "";
+    export let enabled = false;
+    export let saved = "";
+    export function save() { saved = title.trim() + ": " + details; }
+  </script>
+  <style>
+    :root { font-family:system-ui; padding:32px; background:#f4f6fa; min-height:100vh; }
+    main { max-width:620px; margin:auto; background:white; border-radius:16px; padding:28px; }
+    .field { display:flex; flex-direction:column; gap:8px; margin:20px 0; }
+    input, textarea { border:1px solid #aebed3; border-radius:8px; padding:10px; }
+    button { padding:12px 24px; background:#315ddc; color:white; border:0; border-radius:8px; }
+    button:disabled { opacity:.45; }
+  </style>
+  <main><h1>Campos nativos por HTML</h1>
+    <div class="field"><label for="Title">Título</label><input id="Title" type="text" bind:value="title" placeholder="Nome do incidente" required maxlength="120"></div>
+    <div class="field"><label for="Details">Detalhes</label><textarea id="Details" bind:value="details" rows="4" placeholder="Descreva o problema"></textarea></div>
+    <p><input id="Enabled" type="checkbox" bind:checked="enabled"><label for="Enabled">Permitir gravação</label></p>
+    <button id="Save" onclick="save()" :disabled="!enabled || !title.trim()">Salvar</button>
+    <p class="saved">{{ saved }}</p>
+  </main>
+</component>
+<component name="CounterPanel" kind="block">
+  <script type="module">
+    export const inputs = { title: "string" };
+    export const events = { changed: { value: "integer" } };
+    export function relay(value) { emit.changed({ value: value }); }
+  </script>
+  <style>:root{display:block} section{padding:12px;border:2px solid #c9d7f2;border-radius:20px} h2{color:purple}</style>
+  <section><CounterCard id="NestedCounter" :title="title" @changed="relay"><div slot="Footer"><slot name="Extra"></slot></div></CounterCard></section>
+</component>
+<component name="ComponentGallery" kind="screen" roles="Anonymous">
+  <script type="module">
+    export let last = 0;
+    export let history = "";
+    export let firstTitle = "Equipe de suporte";
+    export let show = true;
+    export function rename() { firstTitle = "Título atualizado"; }
+    export function toggle() { show = !show; }
+    export function receive(value) { last = value; history += String(value) + ","; }
+  </script>
+  <style>
+    :root { font-family:system-ui; background:#f4f6fa; min-height:100vh; padding:40px; }
+    main { max-width:1100px; margin:auto; }
+    h1 { font-size:30px; color:#192b40; }
+    h2 { color:red; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }
+    .note { color:#68788f; margin:20px 0; }
+    @media(max-width:650px) { .grid { grid-template-columns:1fr; } :root { padding:20px; } }
+  </style>
+  <main>
+    <h1>Componentes reutilizáveis</h1>
+    <p class="note">Um block nativo, duas instâncias independentes.</p>
+    <p><button id="Rename" onclick="rename()">Mudar título</button> <button id="Toggle" onclick="toggle()">Mostrar/ocultar primeiro</button></p>
+    <div class="grid">
+      <CounterCard if="show" id="FirstCounter" :title="firstTitle" @changed="receive"><span slot="Footer">Instância A · estado independente</span></CounterCard>
+      <CounterCard id="SecondCounter" title="Equipe de operações" @changed="receive"><span slot="Footer">Instância B · mesmo componente</span></CounterCard>
+    </div>
+    <p class="note">Último evento recebido: {{ last }}</p>
+    <p class="history">Sequência: {{ history }}</p>
+  </main>
+</component>
+<component name="ComponentDetail" kind="screen" roles="Anonymous">
+  <script type="module">
+    export let last = 0;
+    export function receive(value) { last = value; }
+  </script>
+  <style>:root{font-family:system-ui;padding:40px;background:#eef3f8;min-height:100vh} main{max-width:620px;margin:auto} h1{color:#192b40}</style>
+  <main><h1>O mesmo block em outra tela</h1>
+    <CounterPanel id="DetailCounter" title="Atendimento prioritário" @changed="receive"><span slot="Extra">Conteúdo fornecido pela tela de detalhe</span></CounterPanel>
+    <p>Valor recebido: {{ last }}</p>
+  </main>
+</component>

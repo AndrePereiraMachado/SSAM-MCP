@@ -1,0 +1,15 @@
+{
+ "description": "A RECUSA do delete de uma STRUCTURE em uso: ProductSummary e o tipo do output Summary da server action publica Product_GetById, e as expressoes 'Summary.Name' e 'Summary.Price' escrevem-lhe os campos (base job:producer-public). Sem force, o delete tem de ser recusado E a mensagem tem de nomear os 3 consumidores: o IOutputParameter Summary e as duas IExpression do Assign. O IAttribute do registo anonimo 'ProductSummary Record' que a plataforma gera para cada structure ja nao conta enquanto ninguem usar esse registo (cobertura testada, fase 2): o usages marca-o derived. O caminho limpo - reapontar com replace e so depois apagar, sem force - esta em tests/jobs/structure-refactor.json (ops 3b e 4c).",
+ "base": "job:producer-public",
+ "expectValid": true,
+ "expectError": [
+  "delete: refused, IStructure 'ProductSummary' is used by 3 consumer(s)",
+  "IServerAction:Product_GetById/IOutputParameter:Summary",
+  "IServerAction:Product_GetById/IAssignNode/IAssignment/IExpression",
+  "pass \"force\": true to break them"
+ ],
+ "ops": [
+  {"op": "usages", "target": "IStructure:ProductSummary", "max": 30, "_why": "count 4, real 3: IOutputParameter Summary e as duas IExpression #Variable ('Summary.Name', 'Summary.Price'); o IAttribute 'ProductSummary' do registo anonimo vem com derived true. Sao os 3 reais que a recusa lista."},
+  {"op": "delete", "target": "IStructure:ProductSummary", "_why": "sem force: recusado com 'delete: refused, IStructure 'ProductSummary' is used by 3 consumer(s): IServerAction:Product_GetById/IAssignNode/IAssignment/IExpression; IServerAction:Product_GetById/IAssignNode/IAssignment/IExpression; IServerAction:Product_GetById/IOutputParameter:Summary (list them with usages, fix or remove those usages, or pass \"force\": true to break them)'. A ORDEM dos caminhos na lista pode variar entre execucoes, por isso o expectError confere cada caminho isoladamente e nunca a lista inteira."}
+ ]
+}

@@ -1,0 +1,10 @@
+{
+ "description": "A RECUSA de um segundo indice com a MESMA composicao de atributos (o Verify da plataforma marcaria InvalidEntityIndex_DupIndexes): so um AutoIndex gerado pela plataforma pode ser promovido por um indice explicito com os mesmos atributos; dois indices explicitos iguais sao recusados antes de tocar o modelo. O caminho limpo esta em tests/jobs/entity-lifecycle.json (lote de dados, fase 3).",
+ "base": "job:spec-data",
+ "expectValid": true,
+ "expectError": ["EntityIndex duplicates an existing explicit index"],
+ "ops": [
+  {"op": "create", "parent": "IServerEntity:Contact", "type": "EntityIndex", "name": "IX_Contact_Email", "args": {"unique": false, "attributes": ["IServerEntity:Contact/Email"]}},
+  {"op": "create", "parent": "IServerEntity:Contact", "type": "EntityIndex", "name": "IX_Contact_Email2", "args": {"unique": true, "attributes": ["IServerEntity:Contact/Email"]}}
+ ]
+}

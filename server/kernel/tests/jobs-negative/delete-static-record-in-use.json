@@ -1,0 +1,16 @@
+{
+ "description": "O11: a RECUSA do delete de um registo de static entity com consumidores reais. O default herdado de Contact.StatusId e o filtro da Contact_CountActive citam Entities.Status.Active, ligados por chave ao IRecord; sem force o delete tem de ser recusado E a mensagem tem de nomear os dois consumidores pelo caminho. O caminho limpo (repontar com replace e so depois apagar, brokenConsumers 0) esta em tests/jobs/static-record-refactor.json. Medido com a base job:spec-data.",
+ "base": "job:spec-data",
+ "expectValid": true,
+ "expectError": [
+  "delete: refused",
+  "IRecord 'Active' is used by 2 consumer(s)",
+  "IServerAction:Contact_CountActive/IAggregateNode:GetActive/DataTable/ICombineSourcesOperation:Contacts/IFilter/IExpression",
+  "IServerEntity:Contact/IEntityAttribute:StatusId/IExpression",
+  "pass \"force\": true to break them"
+ ],
+ "ops": [
+  {"op": "usages", "target": "IStaticEntity:Status/Active", "max": 20, "_why": "count 2, real 2, nenhum derived: o IExpression do filtro e o IExpression do DefaultValue - os mesmos dois caminhos que a recusa vai nomear."},
+  {"op": "delete", "target": "IStaticEntity:Status/Active", "_why": "recusado com \"op #1 (delete ): InvalidOperationException: delete: refused, IRecord 'Active' is used by 2 consumer(s): IServerAction:Contact_CountActive/IAggregateNode:GetActive/DataTable/ICombineSourcesOperation:Contacts/IFilter/IExpression; IServerEntity:Contact/IEntityAttribute:StatusId/IExpression (list them with usages, fix or remove those usages, or pass \\\"force\\\": true to break them)\". A ORDEM dos dois caminhos na mensagem muda de corrida para corrida (medido: numa corrida o filtro primeiro, noutra o StatusId primeiro), por isso o expectError pede cada caminho em separado e nunca os dois juntos."}
+ ]
+}

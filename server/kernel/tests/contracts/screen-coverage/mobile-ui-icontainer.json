@@ -1,0 +1,46 @@
+{
+  "fixture": "mobile-ui",
+  "features": [
+    "native-widget",
+    "mobile:IContainer"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Subject",
+            "type": "IContainer",
+            "properties": {
+              "Visible": "True",
+              "Style": "\"coverage\""
+            },
+            "children": [
+              {
+                "name": "Part2",
+                "type": "ITextWidget",
+                "properties": {
+                  "Text": "Content"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "mutation": {
+    "target": "IMobileScreen:Coverage/Subject",
+    "prop": "Style",
+    "value": "\"changed\""
+  }
+}

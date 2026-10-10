@@ -1,0 +1,12 @@
+{
+ "description": "InlineSVG do OSUI: a instancia com o codigo SVG em SVGCode.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "InlineSvgDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "InlineSVG1", "source": "IMobileBlock:InlineSVG", "as": "$svg"},
+  {"op": "set", "target": "$svg/SVGCode", "prop": "Value", "value": "\"<svg width='24' height='24'><circle cx='12' cy='12' r='10' fill='currentColor'/></svg>\""}
+ ]
+}

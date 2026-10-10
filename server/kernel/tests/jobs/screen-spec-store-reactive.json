@@ -1,0 +1,69 @@
+{
+  "description": "Avaliacao fria SS5: app Reactive sintetico de jogos com Home, Catalog e GameDetail, dados por spec e telas por screen.",
+  "base": "reactive-ui.oml",
+  "expectValid": true,
+  "expectedMessages": [],
+  "ops": [
+    {
+      "op": "spec",
+      "data": {
+        "static": [
+          {"name": "Genre", "records": [{"name": "Adventure"}, {"name": "Strategy"}, {"name": "Puzzle"}]}
+        ],
+        "entities": [
+          {
+            "name": "Game",
+            "attributes": [
+              {"name": "Title", "type": "Text", "mandatory": true, "length": 120},
+              {"name": "Description", "type": "Text", "length": 500},
+              {"name": "Price", "type": "Currency"},
+              {"name": "Rating", "type": "Decimal"},
+              {"name": "GenreId", "type": "Genre Identifier"}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "screen",
+      "data": {
+        "screens": [
+          {
+            "name": "Home",
+            "kind": "dashboard",
+            "title": "Game Atlas: destaques",
+            "source": {"entity": "Game", "as": "GetHighlights", "sort": [["Game.Rating", "Descending"], ["Game.Title", "Ascending"]]},
+            "fields": [{"label": "Total de jogos", "value": "GetHighlights.Count"}],
+            "card": {"title": "Title", "description": "Description", "price": "Price", "rating": "Rating", "layout": "carousel", "destination": "GameDetail", "args": {"GameId": "GetHighlights.List.Current.Game.Id"}},
+            "actions": [{"name": "OpenCatalog", "label": "Explorar catalogo", "destination": "Catalog"}]
+          },
+          {
+            "name": "Catalog",
+            "kind": "cards",
+            "title": "Catalogo de jogos",
+            "source": {"entity": "Game", "as": "GetGames", "sort": [["Game.Title", "Ascending"]]},
+            "search": {"field": "Title", "label": "Buscar jogos"},
+            "filters": [{"field": "GenreId", "from": "Genre", "label": "Todos os generos"}],
+            "card": {"title": "Title", "description": "Description", "price": "Price", "rating": "Rating", "destination": "GameDetail", "args": {"GameId": "GetGames.List.Current.Game.Id"}},
+            "actions": [{"name": "BackHome", "label": "Inicio", "destination": "Home"}]
+          },
+          {
+            "name": "GameDetail",
+            "kind": "detail",
+            "title": "Detalhes do jogo",
+            "inputs": [{"name": "GameId", "type": "Game Identifier", "mandatory": true}],
+            "source": {"entity": "Game", "as": "GetGame", "where": "Game.Id = GameId"},
+            "tabs": [
+              {"title": "Visao geral", "fields": [{"field": "Title", "label": "Titulo"}, {"field": "Description", "label": "Descricao"}]},
+              {"title": "Preco e avaliacao", "fields": [{"field": "Price", "label": "Preco"}, {"field": "Rating", "label": "Avaliacao"}]}
+            ],
+            "actions": [
+              {"name": "BackCatalog", "label": "Catalogo", "destination": "Catalog"},
+              {"name": "BackHome", "label": "Inicio", "destination": "Home"}
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

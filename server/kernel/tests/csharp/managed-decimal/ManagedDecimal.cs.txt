@@ -1,0 +1,28 @@
+using System;
+public sealed class BalanceCell { public decimal Value; public int Trace; public Exception? Error; }
+public static class Rules {
+    public static decimal Add(BalanceCell state, decimal amount) { state.Trace++; return state.Value + amount; }
+    public static decimal Subtract(BalanceCell state, decimal amount) { state.Trace++; return state.Value - amount; }
+    public static decimal Multiply(BalanceCell state, decimal amount) { state.Trace++; return state.Value * amount; }
+    public static decimal Divide(BalanceCell state, decimal amount) { state.Trace++; return state.Value / amount; }
+    public static decimal Remainder(BalanceCell state, decimal amount) { state.Trace++; return state.Value % amount; }
+    public static decimal Recover(BalanceCell state, decimal amount) {
+        try { state.Trace = state.Trace * 10 + 1; state.Value = state.Value * amount; return state.Value; }
+        catch (OverflowException error) { state.Error = error; state.Trace = state.Trace * 10 + 2; return 17m; }
+        finally { state.Trace = state.Trace * 10 + 3; }
+    }
+    public static decimal CallerFilter(BalanceCell state, decimal amount) {
+        try { return Inner(state, amount); }
+        catch (OverflowException error) when (Filter(state, error)) { return 19m; }
+    }
+    private static decimal Inner(BalanceCell state, decimal amount) {
+        try { state.Trace = 1; return state.Value + amount; }
+        finally { state.Trace = state.Trace * 10 + 3; }
+    }
+    private static bool Filter(BalanceCell state, Exception error) {
+        state.Error = error; state.Trace = state.Trace * 10 + 2; return true;
+    }
+    public static decimal EvaluateOnce(BalanceCell state, decimal amount) => Left(state) / Right(state, amount);
+    private static decimal Left(BalanceCell state) { state.Trace = state.Trace * 10 + 1; return state.Value; }
+    private static decimal Right(BalanceCell state, decimal amount) { state.Trace = state.Trace * 10 + 2; return amount; }
+}

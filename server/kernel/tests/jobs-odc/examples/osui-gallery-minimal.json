@@ -1,0 +1,11 @@
+{
+ "description": "Gallery do OSUI: a instancia com empty, porque ela nasce com uma List de exemplo sem Source.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "GalleryDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Gallery1", "source": "IMobileBlock:Gallery", "empty": true, "as": "$gal", "_why": "sem empty a List de exemplo da RequiredPropertyValue (Source) e a Image vazia da erro"}
+ ]
+}

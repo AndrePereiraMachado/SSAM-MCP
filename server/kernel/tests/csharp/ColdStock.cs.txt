@@ -1,0 +1,79 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.Linq;
+using Anvil.Authoring;
+
+public enum EstadoItem { Ativo = 10, Descontinuado = 20 }
+
+[Entity, Index(nameof(Codigo), Unique = true)]
+public sealed record Item(
+    Id<Item> Id,
+    [property: MaxLength(40)] string Codigo,
+    int Quantidade,
+    decimal Preco,
+    [property: MaxLength(1000)] string? Observacao,
+    EstadoItem Estado);
+
+public record PaginaItens(List<Item> Itens, int Total, int Inicio, int Tamanho);
+
+public static class Estoque
+{
+    [ServiceAction]
+    public static Id<Item> Cadastrar(
+        IDataSession database, string codigo, int quantidade,
+        decimal preco, string? observacao)
+    {
+        if (string.IsNullOrWhiteSpace(codigo))
+            throw new ArgumentException("O código é obrigatório.");
+        if (quantidade < 0)
+            throw new ArgumentException("A quantidade inicial não pode ser negativa.");
+        if (preco < 0)
+            throw new ArgumentException("O preço não pode ser negativo.");
+        if (database.Query<Item>().Any(item => item.Codigo == codigo))
+            throw new ArgumentException("Já existe um item com esse código.");
+
+        var item = new Item(default(Id<Item>), codigo, quantidade, preco, observacao, EstadoItem.Ativo);
+        return database.Insert(item);
+    }
+
+    [ServiceAction]
+    public static Item AjustarEstoque(IDataSession database, Id<Item> id, int ajuste)
+    {
+        if (ajuste == 0)
+            throw new ArgumentException("O ajuste deve ser diferente de zero.");
+        var item = database.Query<Item>().SingleOrDefault(candidate => candidate.Id == id);
+        if (item == null)
+            throw new ArgumentException("Item não encontrado.");
+        if (item.Estado != EstadoItem.Ativo)
+            throw new ArgumentException("O item está descontinuado.");
+
+        var novaQuantidade = checked(item.Quantidade + ajuste);
+        if (novaQuantidade < 0)
+            throw new ArgumentException("O ajuste deixaria o estoque negativo.");
+        var atualizado = item with { Quantidade = novaQuantidade };
+        database.Update(atualizado);
+        return atualizado;
+    }
+
+    [ServiceAction]
+    public static Item? BuscarPorId(IDataSession database, Id<Item> id)
+        => database.Query<Item>().SingleOrDefault(item => item.Id == id);
+
+    [ServiceAction]
+    public static PaginaItens Listar(IDataSession database, int inicio, int tamanho)
+    {
+        if (inicio < 0)
+            throw new ArgumentException("O início não pode ser negativo.");
+        if (tamanho <= 0 || tamanho > 100)
+            throw new ArgumentException("O tamanho da página deve estar entre 1 e 100.");
+
+        var total = database.Query<Item>().Count();
+        var itens = database.Query<Item>()
+            .OrderBy(item => item.Codigo)
+            .Skip(inicio)
+            .Take(tamanho)
+            .ToList();
+        return new PaginaItens(itens, total, inicio, tamanho);
+    }
+}

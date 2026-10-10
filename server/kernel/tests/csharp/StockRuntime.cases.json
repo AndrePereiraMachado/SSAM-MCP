@@ -1,0 +1,17 @@
+[
+  {
+    "method": "Seed",
+    "arguments": [],
+    "expected": true
+  },
+  {
+    "method": "Change",
+    "arguments": [],
+    "expected": true
+  },
+  {
+    "method": "ReadAndDelete",
+    "arguments": [],
+    "expected": true
+  }
+]

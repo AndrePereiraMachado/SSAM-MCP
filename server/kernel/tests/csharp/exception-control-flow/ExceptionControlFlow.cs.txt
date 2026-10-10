@@ -1,0 +1,269 @@
+#nullable enable
+using System;
+using System.Collections.Generic;
+
+public sealed class CreditState
+{
+    public int Balance;
+    public readonly List<string> Events = new List<string>();
+    public Exception? OriginalFailure;
+    public bool HandledOriginalFailure;
+
+    public bool MatchesPolicy(int amount, bool policyUnavailable)
+    {
+        Events.Add("policy");
+        Balance += 1;
+        if (policyUnavailable)
+            throw new FormatException("policy is unreadable");
+        return amount <= 5;
+    }
+}
+
+public static class CreditRules
+{
+    public static int ReserveCredit(CreditState state, int amount)
+    {
+        state.Events.Add("request");
+        try
+        {
+            state.Balance -= amount;
+            state.Events.Add("reserve");
+        }
+        finally
+        {
+            state.Events.Add("audit");
+        }
+        state.Events.Add("done");
+        return state.Balance;
+    }
+
+    public static int QuoteWithAudit(CreditState state, int amount)
+    {
+        try
+        {
+            state.Events.Add("quote");
+            return state.Balance + amount;
+        }
+        finally
+        {
+            state.Balance += 1;
+            state.Events.Add("audit");
+        }
+    }
+
+    public static int UseFallbackQuote(CreditState state, int amount)
+    {
+        try
+        {
+            state.Events.Add("request");
+            state.Balance -= amount;
+            throw new InvalidOperationException("quote unavailable");
+        }
+        catch (InvalidOperationException)
+        {
+            state.Events.Add("fallback");
+            state.Balance += 2;
+            return state.Balance;
+        }
+        finally
+        {
+            state.Balance += 3;
+            state.Events.Add("audit");
+        }
+    }
+
+    public static int RejectUnavailableCredit(CreditState state, int amount)
+    {
+        try
+        {
+            state.Events.Add("check");
+            if (amount == 0)
+                throw new InvalidOperationException("credit is locked");
+            throw new ArgumentException("credit amount invalid");
+        }
+        catch (InvalidOperationException)
+        {
+            state.Balance -= 1;
+            state.Events.Add("locked");
+            return state.Balance;
+        }
+        catch (Exception failure)
+        {
+            state.Balance -= 2;
+            state.Events.Add(failure.GetType().Name);
+            return state.Balance;
+        }
+        finally
+        {
+            state.Events.Add("audit");
+        }
+    }
+
+    public static int RethrowSettlementFailure(CreditState state, int amount)
+    {
+        state.OriginalFailure = new InvalidOperationException("settlement unavailable");
+        try
+        {
+            state.Balance -= amount;
+            state.Events.Add("settlement");
+            throw state.OriginalFailure;
+        }
+        catch (InvalidOperationException)
+        {
+            state.Balance += 1;
+            state.Events.Add("retry");
+            throw;
+        }
+        finally
+        {
+            state.Events.Add("audit");
+        }
+    }
+
+    public static int CleanupOverridesReturn(CreditState state, int amount)
+    {
+        try
+        {
+            state.Events.Add("refund");
+            state.Balance += amount;
+            return state.Balance;
+        }
+        finally
+        {
+            state.Events.Add("cleanup");
+            state.Balance -= 1;
+            throw new ApplicationException("cleanup failed");
+        }
+    }
+
+    public static int CleanupOverridesFailure(CreditState state, int amount)
+    {
+        state.OriginalFailure = new InvalidOperationException("posting failed");
+        try
+        {
+            state.Balance -= amount;
+            state.Events.Add("post");
+            throw state.OriginalFailure;
+        }
+        finally
+        {
+            state.Events.Add("cleanup");
+            state.Balance += 1;
+            throw new ApplicationException("cleanup failed");
+        }
+    }
+
+    public static int ApproveWithFilter(CreditState state, int amount)
+    {
+        state.OriginalFailure = new InvalidOperationException("approval required");
+        try
+        {
+            try
+            {
+                state.Events.Add("request");
+                throw state.OriginalFailure;
+            }
+            finally
+            {
+                state.Events.Add("release");
+                state.Balance += 2;
+            }
+        }
+        catch (InvalidOperationException) when (state.MatchesPolicy(amount, false))
+        {
+            state.Events.Add("approved");
+            state.Balance += amount;
+            return state.Balance;
+        }
+        catch (Exception)
+        {
+            state.Events.Add("rejected");
+            return -1;
+        }
+        finally
+        {
+            state.Events.Add("audit");
+        }
+    }
+
+    public static int IgnoreBrokenFilter(CreditState state, int amount)
+    {
+        state.OriginalFailure = new InvalidOperationException("approval required");
+        try
+        {
+            state.Events.Add("request");
+            throw state.OriginalFailure;
+        }
+        catch (InvalidOperationException) when (state.MatchesPolicy(amount, true))
+        {
+            state.Events.Add("approved");
+            return 100;
+        }
+        catch (Exception failure)
+        {
+            state.HandledOriginalFailure = ReferenceEquals(failure, state.OriginalFailure);
+            state.Events.Add(failure.GetType().Name);
+            state.Balance += 2;
+            return state.Balance;
+        }
+        finally
+        {
+            state.Events.Add("audit");
+        }
+    }
+
+    public static int CloseNestedReservation(CreditState state, int amount)
+    {
+        try
+        {
+            state.Events.Add("outer");
+            try
+            {
+                state.Balance -= amount;
+                state.Events.Add("reserve");
+                throw new ArgumentException("invalid reservation");
+            }
+            catch (ArgumentException)
+            {
+                state.Events.Add("cancel");
+                state.Balance += 1;
+            }
+            finally
+            {
+                state.Events.Add("release");
+                state.Balance += 2;
+            }
+            state.Events.Add("resume");
+            return state.Balance;
+        }
+        finally
+        {
+            state.Events.Add("audit");
+            state.Balance += 3;
+        }
+    }
+
+    public static int SumEligibleCharges(CreditState state, int limit)
+    {
+        for (int index = 0; index < limit; index += 1)
+        {
+            try
+            {
+                state.Events.Add("check:" + index);
+                if (index == 1)
+                    continue;
+                if (index == 3)
+                    break;
+                state.Balance += index + 1;
+                state.Events.Add("accepted:" + index);
+            }
+            finally
+            {
+                state.Events.Add("release:" + index);
+            }
+            state.Events.Add("after:" + index);
+        }
+        state.Events.Add("done");
+        return state.Balance;
+    }
+}

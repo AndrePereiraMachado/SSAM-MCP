@@ -1,0 +1,203 @@
+{
+  "date": "2026-09-05",
+  "lane": "ss5",
+  "studioVersion": "11.55.73.64880",
+  "baselineCommit": "54440f1",
+  "threadReviewed": "Abrir o SS4",
+  "measurementScope": "Execution of frozen existing jobs, including base job reconstruction. Excludes LLM authoring and merge. First optimized data run measured 10528ms; final warmed worker 6055ms. Both action measurements followed a data run. One baseline and multiple optimization passes, not a statistical latency distribution.",
+  "fixtures": "Same repository fixtures and frozen JSON; existing native EntityIndex adapter unchanged in working tree for both measurements. Hire files and that adapter remain owned by the other session.",
+  "benchmarks": [
+    {
+      "job": "hire-data-model",
+      "jobSha256": "39cc4acc03952817407b3a8c29b0d065912c7655df2584bce0a355ad2dec5a49",
+      "baseline": {
+        "name": "hire-data-model",
+        "ok": true,
+        "accepted": true,
+        "loadMs": 533,
+        "applyMs": 10750,
+        "wallMs": 13721,
+        "messages": 0,
+        "objects": 5754,
+        "error": null
+      },
+      "optimized": {
+        "job": "hire-data-model",
+        "accepted": true,
+        "wallMs": 6055,
+        "applyMs": 5167,
+        "objects": 5754,
+        "messages": 0,
+        "timings": {
+          "loadMs": 32,
+          "verifyBeforeMs": 0,
+          "applyMs": 5167,
+          "verifyAfterMs": 0,
+          "describeMs": 3,
+          "detailsMs": 21,
+          "saveMs": 775,
+          "releaseMs": 0,
+          "totalMs": 6000
+        }
+      },
+      "wallSpeedup": 2.27,
+      "applySpeedup": 2.08
+    },
+    {
+      "job": "hire-business-actions",
+      "jobSha256": "91664af54633baa6b96847f503efd21e4c7044d8dc17b4ec239183a3a25fbdec",
+      "baseline": {
+        "name": "hire-business-actions",
+        "ok": true,
+        "accepted": true,
+        "loadMs": 248,
+        "applyMs": 121898,
+        "wallMs": 134964,
+        "messages": 0,
+        "objects": 27608,
+        "error": null
+      },
+      "optimized": {
+        "job": "hire-business-actions",
+        "accepted": true,
+        "wallMs": 23377,
+        "applyMs": 16678,
+        "objects": 27608,
+        "messages": 0,
+        "timings": {
+          "loadMs": 127,
+          "verifyBeforeMs": 0,
+          "applyMs": 16678,
+          "verifyAfterMs": 0,
+          "describeMs": 15,
+          "detailsMs": 145,
+          "saveMs": 1994,
+          "releaseMs": 1,
+          "totalMs": 18962
+        }
+      },
+      "wallSpeedup": 5.77,
+      "applySpeedup": 7.31
+    }
+  ],
+  "historicalDeliverySS4": {
+    "totalMs": 277858,
+    "applyMs": 239320,
+    "mergeMs": 31748
+  },
+  "historicalSession": {
+    "data": {
+      "activeTurnMs": 798106,
+      "commandCount": 40,
+      "fullSuiteCommandMs": 195768,
+      "successfulJobWallMs": [
+        10230,
+        14599
+      ]
+    },
+    "actions": {
+      "activeTurnMs": 2454191,
+      "commandCount": 51,
+      "fullSuiteCommandMs": [
+        192526,
+        624995
+      ],
+      "largeApplyCommandMs": [
+        36485,
+        164414,
+        66320,
+        211362,
+        325285
+      ]
+    },
+    "note": "Command durations may overlap and some continued after interruption; do not add them to derive a wall-time pie chart. The quoted Mentor time was not independently measured."
+  },
+  "actionAudit": {
+    "valid": true,
+    "errors": [],
+    "ops": 281,
+    "actions": 172,
+    "publicActions": 127,
+    "helpers": 45,
+    "alwaysRaises": [
+      "Candidate_LinkAccount",
+      "CandidateDocument_RequestUpload",
+      "CandidateDocument_ConfirmUpload",
+      "CandidateDocument_GetDownload",
+      "JobPublication_RequestPublish",
+      "JobPublication_RequestWithdraw",
+      "Offer_Send",
+      "Communication_RequestSend",
+      "Communication_RecordInbound",
+      "CandidateDataRequest_Execute",
+      "Outbox_ProcessBatch",
+      "Outbox_RetryFailed",
+      "Interview_SendReminders",
+      "Evaluation_SendReminders",
+      "RecruitmentTask_CheckOverdue",
+      "Application_CheckStageSLA",
+      "Retention_PlanBatch",
+      "Retention_ExecuteApprovedBatch"
+    ],
+    "identicalImplementations": [
+      {
+        "names": [
+          "CandidateDocument_RequestUpload",
+          "CandidateDocument_ConfirmUpload"
+        ],
+        "alwaysRaises": true,
+        "note": "Same declared contract and body; distinct API intent may be legitimate. Do not delete without checking callers."
+      },
+      {
+        "names": [
+          "Outbox_ProcessBatch",
+          "Outbox_RetryFailed",
+          "Interview_SendReminders",
+          "Evaluation_SendReminders",
+          "RecruitmentTask_CheckOverdue",
+          "Application_CheckStageSLA",
+          "Retention_PlanBatch",
+          "Retention_ExecuteApprovedBatch"
+        ],
+        "alwaysRaises": true,
+        "note": "Same declared contract and body; distinct API intent may be legitimate. Do not delete without checking callers."
+      }
+    ],
+    "scope": "Syntax only; does not verify model references, expressions, business correctness or the runtime. Always-raising endpoints are not evidence of completed integrations.",
+    "elapsedMs": 93
+  },
+  "deliveredActionNames": {
+    "count": 172,
+    "duplicateNames": [],
+    "source": "Last delivered foreign OML from .local/work/deliver/8743cf27b37a46dcab3347d4625f9e0d, read headlessly in SS5"
+  },
+  "verification": {
+    "isolatedDotnet": {
+      "passed": 235,
+      "failed": 0,
+      "duration": "2m3s",
+      "trx": ".local/lane-ss5/test-results/performance-isolated.trx"
+    },
+    "python": {
+      "passed": 11,
+      "failed": 0
+    },
+    "preflightWithoutStudioMs": 245,
+    "liveProof": {
+      "module": "Headless_UI",
+      "job": "tests/jobs/performance-lookup.json",
+      "delivered": true,
+      "elapsedMs": 10446,
+      "newMessages": 0,
+      "preexistingMessages": 14,
+      "published": false
+    }
+  },
+  "limits": [
+    "Verify and object counts do not prove business correctness.",
+    "18 always-raising endpoints are unavailable contracts, not completed integrations; 45 actions are private helpers.",
+    "No API was deleted based only on body similarity.",
+    "Targets of 2-3 minutes and 5-10 minutes for a new LLM-led delivery are not yet established as end-to-end SLOs.",
+    "Optimized CLI installed in SS5; SS4 was not restarted or rebuilt."
+  ]
+}

@@ -1,0 +1,321 @@
+{
+  "description": "Native sales dashboard with Area, Donut and Bar charts; demonstration data, no server writes. Deliver to ZZSS4HybridProof_UI.",
+  "expectValid": true,
+  "expectedMessages": [],
+  "ops": [
+    {
+      "op": "create",
+      "parent": "IMobileFlow:MainFlow",
+      "type": "IMobileScreen",
+      "name": "Dashboard",
+      "as": "$dashboard"
+    },
+    {
+      "op": "delete",
+      "target": "$dashboard/#IMobileBlockInstanceWidget"
+    },
+    {
+      "op": "set",
+      "target": "$dashboard",
+      "prop": "Title",
+      "value": "\"Dashboard de vendas\""
+    },
+    {
+      "op": "create",
+      "parent": "$dashboard",
+      "type": "ILocalVariable",
+      "name": "RevenuePoints",
+      "as": "$RevenuePoints"
+    },
+    {
+      "op": "set",
+      "target": "$RevenuePoints",
+      "prop": "DataType",
+      "value": "DataPoint List"
+    },
+    {
+      "op": "create",
+      "parent": "$dashboard",
+      "type": "ILocalVariable",
+      "name": "ChannelPoints",
+      "as": "$ChannelPoints"
+    },
+    {
+      "op": "set",
+      "target": "$ChannelPoints",
+      "prop": "DataType",
+      "value": "DataPoint List"
+    },
+    {
+      "op": "create",
+      "parent": "$dashboard",
+      "type": "ILocalVariable",
+      "name": "SegmentPoints",
+      "as": "$SegmentPoints"
+    },
+    {
+      "op": "set",
+      "target": "$SegmentPoints",
+      "prop": "DataType",
+      "value": "DataPoint List"
+    },
+    {
+      "op": "logic",
+      "data": {
+        "actions": [
+          {
+            "name": "InitializeDashboard",
+            "kind": "screen",
+            "owner": "IMobileScreen:Dashboard",
+            "description": "Populate native chart lists with explicit demonstration data. No server writes.",
+            "vars": [
+              {
+                "name": "Point",
+                "type": "DataPoint"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "Point.Label": "\"Jan\"",
+                  "Point.Value": "32000",
+                  "Point.SeriesName": "\"Receita\"",
+                  "Point.Color": "\"#3765e8\""
+                },
+                "as": "Set RevenuePoints point 1"
+              },
+              {
+                "call": "ListAppend",
+                "as": "AppendRevenuePoints1",
+                "args": {
+                  "List": "RevenuePoints",
+                  "Element": "Point"
+                }
+              },
+              {
+                "assign": {
+                  "Point.Label": "\"Fev\"",
+                  "Point.Value": "38500",
+                  "Point.SeriesName": "\"Receita\"",
+                  "Point.Color": "\"#3765e8\""
+                },
+                "as": "Set RevenuePoints point 2"
+              },
+              {
+                "call": "ListAppend",
+                "as": "AppendRevenuePoints2",
+                "args": {
+                  "List": "RevenuePoints",
+                  "Element": "Point"
+                }
+              },
+              {
+                "assign": {
+                  "Point.Label": "\"Mar\"",
+                  "Point.Value": "42000",
+                  "Point.SeriesName": "\"Receita\"",
+                  "Point.Color": "\"#3765e8\""
+                },
+                "as": "Set RevenuePoints point 3"
+              },
+              {
+                "call": "ListAppend",
+                "as": "AppendRevenuePoints3",
+                "args": {
+                  "List": "RevenuePoints",
+                  "Element": "Point"
+                }
+              },
+              {
+                "assign": {
+                  "Point.Label": "\"Abr\"",
+                  "Point.Value": "48500",
+                  "Point.SeriesName": "\"Receita\"",
+                  "Point.Color": "\"#3765e8\""
+                },
+                "as": "Set RevenuePoints point 4"
+              },
+              {
+                "call": "ListAppend",
+                "as": "AppendRevenuePoints4",
+                "args": {
+                  "List": "RevenuePoints",
+                  "Element": "Point"
+                }
+              },
+              {
+                "assign": {
+                  "Point.Label": "\"Mai\"",
+                  "Point.Value": "55000",
+                  "Point.SeriesName": "\"Receita\"",
+                  "Point.Color": "\"#3765e8\""
+                },
+                "as": "Set RevenuePoints point 5"
+              },
+              {
+                "call": "ListAppend",
+                "as": "AppendRevenuePoints5",
+                "args": {
+                  "List": "RevenuePoints",
+                  "Element": "Point"
+                }
+              },
+              {
+                "assign": {
+                  "Point.Label": "\"Jun\"",
+                  "Point.Value": "68500",
+                  "Point.SeriesName": "\"Receita\"",
+                  "Point.Color": "\"#3765e8\""
+                },
+                "as": "Set RevenuePoints point 6"
+              },
+              {
+                "call": "ListAppend",
+                "as": "AppendRevenuePoints6",
+                "args": {
+                  "List": "RevenuePoints",
+                  "Element": "Point"
+                }
+              },
+              {
+                "assign": {
+                  "Point.Label": "\"Site\"",
+                  "Point.Value": "136560",
+                  "Point.SeriesName": "\"Receita\"",
+                  "Point.Color": "\"#3765e8\""
+                },
+                "as": "Set ChannelPoints point 1"
+              },
+              {
+                "call": "ListAppend",
+                "as": "AppendChannelPoints1",
+                "args": {
+                  "List": "ChannelPoints",
+                  "Element": "Point"
+                }
+              },
+              {
+                "assign": {
+                  "Point.Label": "\"Parceiros\"",
+                  "Point.Value": "91040",
+                  "Point.SeriesName": "\"Receita\"",
+                  "Point.Color": "\"#25b6a0\""
+                },
+                "as": "Set ChannelPoints point 2"
+              },
+              {
+                "call": "ListAppend",
+                "as": "AppendChannelPoints2",
+                "args": {
+                  "List": "ChannelPoints",
+                  "Element": "Point"
+                }
+              },
+              {
+                "assign": {
+                  "Point.Label": "\"Marketplace\"",
+                  "Point.Value": "56900",
+                  "Point.SeriesName": "\"Receita\"",
+                  "Point.Color": "\"#f0b95b\""
+                },
+                "as": "Set ChannelPoints point 3"
+              },
+              {
+                "call": "ListAppend",
+                "as": "AppendChannelPoints3",
+                "args": {
+                  "List": "ChannelPoints",
+                  "Element": "Point"
+                }
+              },
+              {
+                "assign": {
+                  "Point.Label": "\"Tecnologia\"",
+                  "Point.Value": "98500",
+                  "Point.SeriesName": "\"Receita\"",
+                  "Point.Color": "\"#3765e8\""
+                },
+                "as": "Set SegmentPoints point 1"
+              },
+              {
+                "call": "ListAppend",
+                "as": "AppendSegmentPoints1",
+                "args": {
+                  "List": "SegmentPoints",
+                  "Element": "Point"
+                }
+              },
+              {
+                "assign": {
+                  "Point.Label": "\"Serviços\"",
+                  "Point.Value": "76000",
+                  "Point.SeriesName": "\"Receita\"",
+                  "Point.Color": "\"#3765e8\""
+                },
+                "as": "Set SegmentPoints point 2"
+              },
+              {
+                "call": "ListAppend",
+                "as": "AppendSegmentPoints2",
+                "args": {
+                  "List": "SegmentPoints",
+                  "Element": "Point"
+                }
+              },
+              {
+                "assign": {
+                  "Point.Label": "\"Varejo\"",
+                  "Point.Value": "62000",
+                  "Point.SeriesName": "\"Receita\"",
+                  "Point.Color": "\"#3765e8\""
+                },
+                "as": "Set SegmentPoints point 3"
+              },
+              {
+                "call": "ListAppend",
+                "as": "AppendSegmentPoints3",
+                "args": {
+                  "List": "SegmentPoints",
+                  "Element": "Point"
+                }
+              },
+              {
+                "assign": {
+                  "Point.Label": "\"Indústria\"",
+                  "Point.Value": "48000",
+                  "Point.SeriesName": "\"Receita\"",
+                  "Point.Color": "\"#3765e8\""
+                },
+                "as": "Set SegmentPoints point 4"
+              },
+              {
+                "call": "ListAppend",
+                "as": "AppendSegmentPoints4",
+                "args": {
+                  "List": "SegmentPoints",
+                  "Element": "Point"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "set",
+      "target": "$dashboard/OnInitialize",
+      "prop": "Destination",
+      "value": "$dashboard/InitializeDashboard"
+    },
+    {
+      "op": "html",
+      "parent": "$dashboard",
+      "file": "tests/html/visual/dashboard-charts.html"
+    },
+    {
+      "op": "dump",
+      "target": "$dashboard",
+      "depth": 3
+    }
+  ]
+}

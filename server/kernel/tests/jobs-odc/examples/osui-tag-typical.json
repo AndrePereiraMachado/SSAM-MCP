@@ -1,0 +1,26 @@
+{
+ "description": "Tag do OSUI por linha: cor por expressao do estado do registro, forma, tamanho e texto vindo do registro.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Task", "attributes": [{"name": "Title", "type": "Text", "length": 100, "mandatory": true}, {"name": "IsDone", "type": "Boolean"}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "TaskTags", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Tasks\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetTasks", "as": "$GetTasks"},
+  {"op": "create", "parent": "$GetTasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "TaskList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetTasks.List"},
+  {"op": "create", "parent": "$list", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "GetTasks.List.Current.Task.Title"},
+  {"op": "create", "parent": "$list", "type": "IMobileBlockInstanceWidget", "name": "StateTag", "source": "IMobileBlock:Tag", "as": "$tag"},
+  {"op": "set", "target": "$tag/Color", "prop": "Value", "value": "If(GetTasks.List.Current.Task.IsDone, Entities.Color.Green, Entities.Color.Orange)"},
+  {"op": "set", "target": "$tag/Shape", "prop": "Value", "value": "Entities.Shape.SoftRounded"},
+  {"op": "set", "target": "$tag/Size", "prop": "Value", "value": "Entities.Size.Small"},
+  {"op": "set", "target": "$tag/IsLight", "prop": "Value", "value": "True"},
+  {"op": "create", "parent": "$tag/Tag", "type": "IExpression", "as": "$expr2"},
+  {"op": "set", "target": "$expr2", "prop": "Value", "value": "If(GetTasks.List.Current.Task.IsDone, \"Done\", \"Open\")"}
+ ]
+}

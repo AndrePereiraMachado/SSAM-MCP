@@ -1,0 +1,25 @@
+{
+ "description": "Checkbox tipico: Label ligado ao Checkbox por TargetWidget, variavel ShowDone usada no filtro do aggregate e OnChange que refaz a consulta.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "ShowDone", "as": "$vShow"},
+  {"op": "set", "target": "$vShow", "prop": "DataType", "value": "Boolean"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetVisibleTasks", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "ShowDone or not Task.Done"}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "ShowDoneOnChange", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Refaz a lista com ou sem as concluidas",
+    "steps": [{"node": "IRefreshDataNode", "as": "RefreshVisible", "properties": {"DataSource": "IScreenAggregate:GetVisibleTasks"}}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "ICheckbox", "name": "ShowDoneCheckbox", "as": "$chk"},
+  {"op": "set", "target": "$chk", "prop": "Variable", "value": "ShowDone"},
+  {"op": "set", "target": "$chk/OnChange", "prop": "Destination", "value": "IScreenAction:ShowDoneOnChange"},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "ILabel", "name": "ShowDoneLabel", "as": "$lbl"},
+  {"op": "set", "target": "$lbl", "prop": "TargetWidget", "value": "$chk"},
+  {"op": "create", "parent": "$lbl", "type": "IExpression", "as": "$lblT"},
+  {"op": "set", "target": "$lblT", "prop": "Value", "value": "\"Show done tasks\""},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$count"},
+  {"op": "set", "target": "$count", "prop": "Value", "value": "GetVisibleTasks.Count + \" task(s)\""}
+ ]
+}

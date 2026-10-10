@@ -1,0 +1,10 @@
+{
+ "description": "Animate (OutSystemsUI, Interaction) minimo: instancia como o Studio cria ao arrastar o bloco; inputs obrigatorios AnimationType com valores simples.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "AnimateDemo", "source": "IMobileBlock:Animate", "as": "$b"},
+  {"op": "set", "target": "$b/AnimationType", "prop": "Value", "value": "Entities.AnimationType.BottomToTop"}
+ ]
+}

@@ -1,0 +1,115 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.Logic.Nodes.ITriggerNode (o11) em blockActionFlowEvent. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedAction",
+   "element": "Headless_UI (ESpace) / MainFlow (MobileFlow) / CovSBlock (MobileBlock) / CovSAction (ScreenAction)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileBlock",
+   "name": "CovSBlock",
+   "as": "$blk"
+  },
+  {
+   "op": "create",
+   "parent": "$blk",
+   "type": "IBlockEvent",
+   "name": "CovSEvent",
+   "as": "$bev"
+  },
+  {
+   "op": "set",
+   "target": "$bev",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$blk",
+   "type": "IScreenAction",
+   "name": "CovSAction",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "ITriggerNode",
+   "name": "CovATriggerNode",
+   "as": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Event",
+   "value": "$bev"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$a"
+  },
+  {
+   "op": "link",
+   "from": "$a",
+   "connector": "Target",
+   "to": "$fe"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRTriggerNode"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "link",
+   "from": "$a",
+   "connector": "Target",
+   "to": "$b"
+  },
+  {
+   "op": "link",
+   "from": "$b",
+   "connector": "Target",
+   "to": "$fe"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "x": 600,
+   "y": 400
+  }
+ ]
+}

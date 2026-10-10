@@ -1,0 +1,37 @@
+{
+ "description": "Cobertura testada (fase 2): del de OutSystems.Model.Logic.IServiceActionToolReference (odc) em ctxManifestService. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/blank-agent-definition.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "reference",
+   "producer": "tests/fixtures/odc/blank-mobile-producer.oml",
+   "elements": [
+    "IServiceAction:CovSService"
+   ]
+  },
+  {
+   "op": "set",
+   "target": "IAgentManifest:CovBlankAgentDefinition",
+   "prop": "GoalsAndInstructions",
+   "value": "Cobertura"
+  },
+  {
+   "op": "set",
+   "target": "IAgentManifest:CovBlankAgentDefinition",
+   "prop": "AIModel",
+   "value": "IServerActionSignature:CovAIModel"
+  },
+  {
+   "op": "create",
+   "parent": "IAgentManifest:CovBlankAgentDefinition",
+   "type": "IServiceActionToolReference",
+   "name": "CovAServiceActionToolReference",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

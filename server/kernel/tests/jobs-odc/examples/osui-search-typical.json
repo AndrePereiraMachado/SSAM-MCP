@@ -1,0 +1,29 @@
+{
+ "description": "Search do OSUI: Input ligado a SearchText com Prompt e OnChange, que faz Refresh Data do aggregate filtrado por like.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [{"name": "Name", "type": "Text", "length": 100, "mandatory": true}, {"name": "Price", "type": "Currency"}, {"name": "ImageUrl", "type": "Text", "length": 500}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductSearch", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Search\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "SearchText", "as": "$vSearchText"},
+  {"op": "set", "target": "$vSearchText", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "LoadProducts", "as": "$LoadProducts"},
+  {"op": "create", "parent": "$LoadProducts", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "create", "parent": "$LoadProducts", "type": "IFilter", "args": {"condition": "Product.Name like \"%\" + SearchText + \"%\""}},
+  {"op": "create", "parent": "$LoadProducts", "type": "ISort", "as": "$LoadProductsSort"},
+  {"op": "set", "target": "$LoadProductsSort", "prop": "Attribute", "value": "Product.Name"},
+  {"op": "logic", "data": {"actions": [{"name": "SearchChanged", "kind": "screen", "owner": "IMobileScreen:ProductSearch", "steps": [{"node": "IRefreshDataNode", "as": "Reload", "properties": {"DataSource": "IMobileScreen:ProductSearch/LoadProducts"}}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Search1", "source": "IMobileBlock:Search", "as": "$s"},
+  {"op": "set", "target": "$s/Input/#IInput", "prop": "Variable", "value": "SearchText"},
+  {"op": "set", "target": "$s/Input/#IInput", "prop": "Prompt", "value": "\"Search products\""},
+  {"op": "set", "target": "$s/Input/#IInput/OnChange", "prop": "Destination", "value": "IMobileScreen:ProductSearch/SearchChanged"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "ProductList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "LoadProducts.List"},
+  {"op": "create", "parent": "$list", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "LoadProducts.List.Current.Product.Name"}
+ ]
+}

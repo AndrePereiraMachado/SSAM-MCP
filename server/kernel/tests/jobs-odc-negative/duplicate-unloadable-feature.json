@@ -1,0 +1,17 @@
+{
+ "description": "A RECUSA de `duplicate` de um widget com ColumnGap (faixa ODC; achado odc-columngap-blocks-duplicate da cobertura testada). ColumnGap usa a model feature ModelFeature_ModernLayouts, InDevelopment neste ODC Studio: a copia leva a feature no clipboard e ClipboardManager.ContainsValidVersion recusa a colagem em QUALQUER destino. Com MarginLeft (sem feature) o mesmo duplicate passa. O kernel diz a feature, o elemento e a propriedade.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectError": [
+  "carries model feature(s) this Studio does not load",
+  "ModelFeature_ModernLayouts (InDevelopment) by IContainer 'DupGapBox'.ColumnGap",
+  "clear that property in the original before duplicating it"
+ ],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "DupGapScreen", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "DupGapBox", "as": "$box"},
+  {"op": "set", "target": "$box", "prop": "ColumnGap", "value": "8px"},
+  {"op": "duplicate", "target": "$box", "as": "$copy"}
+ ]
+}

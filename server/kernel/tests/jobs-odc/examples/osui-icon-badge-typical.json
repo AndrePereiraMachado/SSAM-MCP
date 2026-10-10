@@ -1,0 +1,23 @@
+{
+ "description": "IconBadge do OSUI com dados: o numero de avisos nao lidos vem do Count de um aggregate filtrado e a cor fica leve.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Notice", "attributes": [{"name": "Subject", "type": "Text", "length": 100, "mandatory": true}, {"name": "IsRead", "type": "Boolean"}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "NotificationBell", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Inbox\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "LoadUnread", "as": "$LoadUnread"},
+  {"op": "create", "parent": "$LoadUnread", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Notice"}},
+  {"op": "create", "parent": "$LoadUnread", "type": "IFilter", "args": {"condition": "not Notice.IsRead"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "IconBadge1", "source": "IMobileBlock:IconBadge", "as": "$ib"},
+  {"op": "set", "target": "$ib/Number", "prop": "Value", "value": "LoadUnread.Count"},
+  {"op": "set", "target": "$ib/Color", "prop": "Value", "value": "Entities.Color.Orange"},
+  {"op": "set", "target": "$ib/IsLight", "prop": "Value", "value": "True"},
+  {"op": "create", "parent": "$ib/Icon", "type": "IIcon", "name": "BellIcon", "as": "$icon1"},
+  {"op": "set", "target": "$icon1", "prop": "Icon", "value": "bell"},
+  {"op": "set", "target": "$icon1", "prop": "Weight", "value": "regular"}
+ ]
+}

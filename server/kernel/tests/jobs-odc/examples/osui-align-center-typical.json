@@ -1,0 +1,22 @@
+{
+ "description": "AlignCenter do OSUI na vertical (IsHorizontal False) com um texto ligado a variavel e um botao.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CenteredActions", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Done\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Message", "as": "$vMessage"},
+  {"op": "set", "target": "$vMessage", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$vMessage", "prop": "DefaultValue", "value": "\"All set!\""},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "AlignCenter1", "source": "IMobileBlock:AlignCenter", "as": "$ac"},
+  {"op": "set", "target": "$ac/IsHorizontal", "prop": "Value", "value": "False"},
+  {"op": "create", "parent": "$ac/Content", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "Message"},
+  {"op": "create", "parent": "$ac/Content", "type": "IButton", "name": "ProfileButton", "as": "$bProfileButton"},
+  {"op": "set", "target": "$bProfileButton/#ITextWidget", "prop": "Text", "value": "Profile"},
+  {"op": "set", "target": "$bProfileButton/OnClick", "prop": "Destination", "value": "IMobileScreen:UserProfile"}
+ ]
+}

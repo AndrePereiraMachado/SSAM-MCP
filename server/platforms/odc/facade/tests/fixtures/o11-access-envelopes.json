@@ -1,0 +1,99 @@
+{
+  "_about": "Envelopes of `anvil access plan|apply|verify` in the shapes of kernel/src/Anvil.Cli/Program.cs Envelope() (ok = data.ok for access) and Anvil.Core/Access/AccessCommand.cs (Plan receipt, Apply receipt via Result/WithPath, Refused, Verify). tasks: kernel delivery task states (Delivery.cs Run, task.json payload) keyed by taskId; the tests write them under <lane.local>/work/deliver/<taskId>/task.json.",
+  "planOk": {
+    "ok": true, "command": "access", "elapsedMs": 18000,
+    "data": {
+      "schema": "ssam-access-plan/1", "ok": true, "createdAtUtc": "2026-10-02T10:00:00.0000000Z",
+      "manifest": { "path": "C:\\manifests\\roles.json", "sha256": "ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12", "manifestVersion": 3, "environment": "dev.example.test", "entries": 4 },
+      "options": { "createAccounts": false, "createActive": false },
+      "modules": [{ "module": "Orders", "status": "changes", "mode": "update", "counts": { "grants": 2, "revokes": 0, "creates": 0 } }],
+      "warnings": [], "errors": [], "planPath": "C:\\anvil\\.local\\access\\plans\\v3-ab12ab12ab12\\plan.json"
+    }
+  },
+  "planRefused": {
+    "ok": false, "command": "access", "elapsedMs": 9000,
+    "data": { "ok": false, "stage": "validation", "errors": ["Orders: the module does not reference (System) User; add it in Service Studio (Manage Dependencies > (System) > User) before planning"], "warnings": [] }
+  },
+  "verify": {
+    "ok": false, "command": "access", "elapsedMs": 900,
+    "data": { "ok": false, "implemented": false, "phase": 2, "reason": "not implemented (phase 2): read-only GET with HMAC returning UserId and one boolean per role." }
+  },
+  "applyDelivered": {
+    "ok": true, "command": "access", "elapsedMs": 98000,
+    "data": {
+      "schema": "ssam-access-apply/1", "operationId": "@op", "status": "delivered", "mode": "execute", "ok": true,
+      "environment": "dev.example.test", "manifestVersion": 3, "wordsSha256": "@wordsSha256",
+      "deliveries": [
+        { "module": "Orders", "status": "delivered", "delivered": true, "environmentAttested": true, "taskId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "command": "dotnet \"C:\\anvil\\.local\\cli\\anvil.dll\" deliver --module Orders --job C:\\anvil\\.local\\access\\plans\\v3-ab12ab12ab12\\Orders-access.json" },
+        { "module": "Billing", "status": "delivered", "delivered": true, "environmentAttested": true, "taskId": "1f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "command": "dotnet \"C:\\anvil\\.local\\cli\\anvil.dll\" deliver --module Billing --job C:\\anvil\\.local\\access\\plans\\v3-ab12ab12ab12\\Billing-access.json" }
+      ],
+      "publication": "not performed: publication follows the integrator/user policy",
+      "receiptPath": "C:\\anvil\\.local\\access\\applies\\op.json"
+    }
+  },
+  "applyUnchanged": {
+    "ok": true, "command": "access", "elapsedMs": 12000,
+    "data": { "schema": "ssam-access-apply/1", "operationId": "@op", "status": "unchanged", "mode": "execute", "ok": true, "deliveries": [] }
+  },
+  "applyNoPlan": {
+    "ok": false, "command": "access", "elapsedMs": 4000,
+    "data": { "ok": false, "stage": "plan", "errors": ["no successful plan for this manifest (sha256 ab12ab12ab12) under C:\\anvil\\.local\\access\\plans; run access plan first"], "warnings": [] }
+  },
+  "applyExecuteRefused": {
+    "ok": false, "command": "access", "elapsedMs": 4000,
+    "data": { "ok": false, "stage": "execute", "errors": ["the delivery of Orders was prepared for Studio port 45001 (this call: 45999); nothing was sent. Run --execute with --port 45001 --deliver-work C:\\other\\work, the lane and store it was prepared for"], "warnings": [] }
+  },
+  "applyVerifierRefused": {
+    "ok": false, "command": "access", "elapsedMs": 140000,
+    "data": {
+      "schema": "ssam-access-apply/1", "operationId": "@op", "status": "failed", "mode": "execute", "ok": false,
+      "deliveries": [
+        { "module": "Orders", "status": "delivered", "delivered": true, "taskId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0" },
+        { "module": "Billing", "status": "failed", "delivered": false, "writeState": "applied", "taskId": "2b3c4d5e6f708192a3b4c5d6e7f8091a",
+          "error": "merge kept for review: new TrueChange errors or unexpected messages; inspect validation and contract. Ctrl+Z in Studio undoes it; nothing was published",
+          "resultPath": "C:\\anvil\\.local\\work\\deliver\\2b3c4d5e6f708192a3b4c5d6e7f8091a\\result.json" },
+        { "module": "Customers", "status": "not-started" }
+      ]
+    }
+  },
+  "applyRefusedBeforeMerge": {
+    "ok": false, "command": "access", "elapsedMs": 30000,
+    "data": {
+      "schema": "ssam-access-apply/1", "operationId": "@op", "status": "failed", "mode": "execute", "ok": false,
+      "deliveries": [
+        { "module": "Orders", "status": "failed", "delivered": false, "writeState": "not-sent", "taskId": "1a2b3c4d5e6f708192a3b4c5d6e7f809",
+          "error": "job rejected by validation contract; merge was not attempted" }
+      ]
+    }
+  },
+  "applyUncertain": {
+    "ok": false, "command": "access", "elapsedMs": 905000,
+    "data": {
+      "schema": "ssam-access-apply/1", "operationId": "@op", "status": "failed", "mode": "execute", "ok": false,
+      "deliveries": [
+        { "module": "Orders", "status": "failed", "delivered": false, "writeState": "unknown", "taskId": "3c4d5e6f708192a3b4c5d6e7f8091a2b",
+          "error": "BridgeCallException: Bridge merge_from_oml timed out after 900000 ms" },
+        { "module": "Billing", "status": "not-started" }
+      ]
+    }
+  },
+  "tasks": {
+    "0f1e2d3c4b5a69788796a5b4c3d2e1f0": { "taskId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0", "module": "Orders", "delivered": true, "writeState": "applied", "stage": "complete",
+      "validation": { "newErrors": 0, "new": [] }, "apply": { "isValid": true, "accepted": true, "validation": { "new": [] } } },
+    "2b3c4d5e6f708192a3b4c5d6e7f8091a": { "taskId": "2b3c4d5e6f708192a3b4c5d6e7f8091a", "module": "Billing", "delivered": false, "writeState": "applied", "stage": "verify",
+      "error": "merge kept for review: new TrueChange errors or unexpected messages; inspect validation and contract. Ctrl+Z in Studio undoes it; nothing was published",
+      "merge": { "merged": true },
+      "validation": { "newErrors": 1, "new": [{ "id": "RequiredProperty", "type": "Error", "key": "k9", "path": "Billing/Role:Approver", "detail": "Required property 'Description' is empty" }] },
+      "contract": { "accepted": false },
+      "failures": [{ "stage": "verify", "error": "merge kept for review: new TrueChange errors or unexpected messages; inspect validation and contract. Ctrl+Z in Studio undoes it; nothing was published" }] },
+    "1a2b3c4d5e6f708192a3b4c5d6e7f809": { "taskId": "1a2b3c4d5e6f708192a3b4c5d6e7f809", "module": "Orders", "delivered": false, "writeState": "not-sent", "stage": "apply",
+      "error": "job rejected by validation contract; merge was not attempted",
+      "apply": { "isValid": false, "accepted": false,
+        "validation": { "new": [{ "id": "UndefinedVariable", "type": "Error", "key": "k1", "path": "Orders/ServerAction:AccessReconcile", "detail": "Undefined variable 'RoleId'" }] },
+        "policyMessages": ["expectValid=True, but Verify isValid=False"] } },
+    "3c4d5e6f708192a3b4c5d6e7f8091a2b": { "taskId": "3c4d5e6f708192a3b4c5d6e7f8091a2b", "module": "Orders", "delivered": false, "writeState": "unknown", "stage": "merge",
+      "operationId": "9f8e7d6c5b4a39281706f5e4d3c2b1a0", "error": "BridgeCallException: Bridge merge_from_oml timed out after 900000 ms" }
+  }
+}

@@ -1,0 +1,115 @@
+{
+ "description": "Cobertura testada (fase 2): duplicate com parent (copy of IMobileScreen) de OutSystems.Model.UI.Mobile.Events.IOnSyncCompleteEvent (odc) em ctxMobileScreenAction. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/blank-mobile.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "NoErrorHandlingInFlow",
+   "element": "CovBlankMobile (ESpace) / MainFlow (MobileFlow)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IMobileFlow",
+   "name": "MainFlow",
+   "as": "$flow"
+  },
+  {
+   "op": "create",
+   "parent": "$flow",
+   "type": "IMobileScreen",
+   "name": "CovSScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAction",
+   "name": "CovSAction",
+   "as": "$act"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IStartNode",
+   "as": "$act0"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IEndNode",
+   "as": "$act9"
+  },
+  {
+   "op": "link",
+   "from": "$act0",
+   "to": "$act9"
+  },
+  {
+   "op": "set",
+   "target": "$scr/OnReady",
+   "prop": "Destination",
+   "value": "$act"
+  },
+  {
+   "op": "delete",
+   "target": "$scr/OnSyncComplete"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IOnSyncCompleteEvent",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$flow",
+   "type": "IMobileScreen",
+   "name": "CovSScreenMv",
+   "as": "$scr_mv"
+  },
+  {
+   "op": "create",
+   "parent": "$scr_mv",
+   "type": "IScreenAction",
+   "name": "CovSActionMv",
+   "as": "$act_mv"
+  },
+  {
+   "op": "create",
+   "parent": "$act_mv",
+   "type": "IStartNode",
+   "as": "$act0_mv"
+  },
+  {
+   "op": "create",
+   "parent": "$act_mv",
+   "type": "IEndNode",
+   "as": "$act9_mv"
+  },
+  {
+   "op": "link",
+   "from": "$act0_mv",
+   "to": "$act9_mv"
+  },
+  {
+   "op": "set",
+   "target": "$scr_mv/OnReady",
+   "prop": "Destination",
+   "value": "$act_mv"
+  },
+  {
+   "op": "delete",
+   "target": "$scr_mv/OnSyncComplete"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "parent": "$scr_mv",
+   "as": "$b"
+  }
+ ]
+}

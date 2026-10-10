@@ -1,0 +1,98 @@
+{
+ "description": "Cobertura testada (fase 1, medir): life de OutSystems.Model.Logic.Nodes.ISwitchCondition (o11) em switchNode. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "CovSFlow",
+   "as": "$fp"
+  },
+  {
+   "op": "set",
+   "target": "$fp",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "ISwitchNode",
+   "as": "$p"
+  },
+  {
+   "op": "set",
+   "target": "$p",
+   "prop": "Label",
+   "value": "CovSSwitch"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$p"
+  },
+  {
+   "op": "link",
+   "from": "$p",
+   "connector": "OtherwiseTarget",
+   "to": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "ISwitchCondition",
+   "as": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Value",
+   "value": "True"
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "IEndNode",
+   "as": "$a_e"
+  },
+  {
+   "op": "link",
+   "from": "$a",
+   "to": "$a_e"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Label",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "move",
+   "target": "$b",
+   "first": true
+  }
+ ]
+}

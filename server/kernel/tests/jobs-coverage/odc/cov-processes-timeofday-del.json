@@ -1,0 +1,54 @@
+{
+ "description": "Cobertura testada (fase 1, medir): del de OutSystems.Model.Processes.ITimeOfDay (odc) em timerSchedule. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "CovSTimerAction",
+   "as": "$ta"
+  },
+  {
+   "op": "create",
+   "parent": "$ta",
+   "type": "IStartNode",
+   "as": "$tas"
+  },
+  {
+   "op": "create",
+   "parent": "$ta",
+   "type": "IEndNode",
+   "as": "$tae"
+  },
+  {
+   "op": "link",
+   "from": "$tas",
+   "to": "$tae"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ITimer",
+   "name": "CovSTimer",
+   "as": "$t"
+  },
+  {
+   "op": "set",
+   "target": "$t",
+   "prop": "Action",
+   "value": "$ta"
+  },
+  {
+   "op": "create",
+   "parent": "$t/ScheduleConfiguration",
+   "type": "ITimeOfDay",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

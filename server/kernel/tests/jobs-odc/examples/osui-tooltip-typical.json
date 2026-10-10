@@ -1,0 +1,28 @@
+{
+ "description": "Tooltip do OSUI aberto por clique: icone de ajuda no Content, texto calculado no Tooltip, posicao e OnToggle guardando se esta aberto.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "FeeHelp", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Fees\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Fee", "as": "$vFee"},
+  {"op": "set", "target": "$vFee", "prop": "DataType", "value": "Currency"},
+  {"op": "set", "target": "$vFee", "prop": "DefaultValue", "value": "7.5"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "IsHelpOpen", "as": "$vIsHelpOpen"},
+  {"op": "set", "target": "$vIsHelpOpen", "prop": "DataType", "value": "Boolean"},
+  {"op": "logic", "data": {"actions": [{"name": "HelpToggled", "kind": "screen", "owner": "IMobileScreen:FeeHelp", "inputs": [{"name": "IsOpened", "type": "Boolean"}], "steps": [{"assign": {"IsHelpOpen": "IsOpened"}, "as": "Remember"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Tooltip1", "source": "IMobileBlock:Tooltip", "as": "$tt"},
+  {"op": "set", "target": "$tt/Trigger", "prop": "Value", "value": "Entities.Trigger.OnClick"},
+  {"op": "set", "target": "$tt/Position", "prop": "Value", "value": "Entities.Position.Top"},
+  {"op": "set", "target": "$tt/OnToggle", "prop": "Handler", "value": "IMobileScreen:FeeHelp/HelpToggled"},
+  {"op": "set", "target": "$tt/OnToggle/IsOpened", "prop": "Value", "value": "IsOpened"},
+  {"op": "create", "parent": "$tt/Content", "type": "IIcon", "name": "HelpIcon", "as": "$icon1"},
+  {"op": "set", "target": "$icon1", "prop": "Icon", "value": "question"},
+  {"op": "set", "target": "$icon1", "prop": "Weight", "value": "regular"},
+  {"op": "create", "parent": "$tt/Tooltip", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "\"Delivery fee: \" + FormatCurrency(Fee, \"$\", 2, \".\", \",\")"}
+ ]
+}

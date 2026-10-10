@@ -1,0 +1,45 @@
+{
+ "description": "Op html visual (WS4): instancia de bloco com input e handler. O fragmento so nomeia o bloco, o input e o evento; o handler e uma screen action nativa que ja existe, e os parametros do evento chegam por nome.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedElement",
+   "element": "DateChosen (ScreenAction) / DatePickerId (InputParameter)",
+   "why": "DatePickerId faz parte do contrato do evento OnSelected; este exemplo usa somente a data selecionada."
+  }
+ ],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "Booking", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Booking\""},
+
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "SelectedDate", "as": "$vSel"},
+  {"op": "set", "target": "$vSel", "prop": "DataType", "value": "Date"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Confirmed", "as": "$vConf"},
+  {"op": "set", "target": "$vConf", "prop": "DataType", "value": "Date"},
+
+  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "DateChosen", "as": "$h"},
+  {"op": "create", "parent": "$h", "type": "IInputParameter", "name": "DatePickerId", "as": "$hp1"},
+  {"op": "set", "target": "$hp1", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$h", "type": "IInputParameter", "name": "SelectedDateTime", "as": "$hp2"},
+  {"op": "set", "target": "$hp2", "prop": "DataType", "value": "Date Time"},
+  {"op": "create", "parent": "$h", "type": "IStartNode", "as": "$hs"},
+  {"op": "create", "parent": "$h", "type": "IAssignNode", "as": "$hAs"},
+  {"op": "set", "target": "$hAs", "prop": "Label", "value": "SetConfirmed"},
+  {"op": "create", "parent": "$hAs", "type": "IAssignment", "as": "$hA1"},
+  {"op": "set", "target": "$hA1", "prop": "Variable", "value": "Confirmed"},
+  {"op": "set", "target": "$hA1", "prop": "Value", "value": "DateTimeToDate(SelectedDateTime)"},
+  {"op": "create", "parent": "$h", "type": "IEndNode", "as": "$he"},
+  {"op": "link", "from": "$hs", "to": "$hAs"},
+  {"op": "link", "from": "$hAs", "to": "$he"},
+  {"op": "layout", "target": "$h"},
+
+  {"op": "html", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "file": "tests/html/visual/block.html"},
+
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget/MainContent/**IMobileBlockInstanceWidget[1]/Datepicker/#IInput", "prop": "Variable", "value": "SelectedDate"},
+
+  {"op": "dump", "target": "$scr", "depth": 9}
+ ]
+}

@@ -1,0 +1,11 @@
+{
+ "description": "LightboxImage (OutSystemsUI, Interaction) minimo: instancia como o Studio cria ao arrastar o bloco; a Image de exemplo passa a External com Url.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "LightboxImageDemo", "source": "IMobileBlock:LightboxImage", "as": "$b"},
+  {"op": "set", "target": "$b/Thumbnail/#IImage", "prop": "Type", "value": "External"},
+  {"op": "set", "target": "$b/Thumbnail/#IImage", "prop": "Url", "value": "\"https://www.example.com/photo.jpg\""}
+ ]
+}

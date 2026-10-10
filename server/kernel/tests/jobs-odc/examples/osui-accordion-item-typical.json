@@ -1,0 +1,30 @@
+{
+ "description": "AccordionItem do OSUI aberto de inicio, com icone PlusMinus a esquerda, desabilitado por variavel e OnToggle guardando o estado.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ShippingInfo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Shipping\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "IsLocked", "as": "$vIsLocked"},
+  {"op": "set", "target": "$vIsLocked", "prop": "DataType", "value": "Boolean"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "IsOpen", "as": "$vIsOpen"},
+  {"op": "set", "target": "$vIsOpen", "prop": "DataType", "value": "Boolean"},
+  {"op": "set", "target": "$vIsOpen", "prop": "DefaultValue", "value": "True"},
+  {"op": "logic", "data": {"actions": [{"name": "Toggled", "kind": "screen", "owner": "IMobileScreen:ShippingInfo", "inputs": [{"name": "IsExpanded", "type": "Boolean"}], "steps": [{"assign": {"IsOpen": "IsExpanded"}, "as": "Remember"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Accordion1", "source": "IMobileBlock:Accordion", "empty": true, "as": "$acc"},
+  {"op": "create", "parent": "$acc/Content", "type": "IMobileBlockInstanceWidget", "name": "ShippingItem", "source": "IMobileBlock:AccordionItem", "as": "$item"},
+  {"op": "set", "target": "$item/StartsExpanded", "prop": "Value", "value": "IsOpen"},
+  {"op": "set", "target": "$item/Icon", "prop": "Value", "value": "Entities.AccordionIconType.PlusMinus"},
+  {"op": "set", "target": "$item/IconPosition", "prop": "Value", "value": "Entities.AccordionIconPosition.Left"},
+  {"op": "set", "target": "$item/IsDisabled", "prop": "Value", "value": "IsLocked"},
+  {"op": "set", "target": "$item/OnToggle", "prop": "Handler", "value": "IMobileScreen:ShippingInfo/Toggled"},
+  {"op": "set", "target": "$item/OnToggle/IsExpanded", "prop": "Value", "value": "IsExpanded"},
+  {"op": "create", "parent": "$item/Title", "type": "ITextWidget", "as": "$text1"},
+  {"op": "set", "target": "$text1", "prop": "Text", "value": "Shipping"},
+  {"op": "create", "parent": "$item/Content", "type": "ITextWidget", "as": "$text2"},
+  {"op": "set", "target": "$text2", "prop": "Text", "value": "Free shipping over $50."}
+ ]
+}

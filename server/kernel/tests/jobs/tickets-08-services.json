@@ -1,0 +1,832 @@
+{
+ "description": "Tickets: service actions para portais e integracoes (create, comment, change status, get)",
+ "base": "job:tickets-07-read",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServiceAction",
+   "name": "Tickets_Create",
+   "as": "$Tickets_Create"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create",
+   "prop": "Description",
+   "value": "Cria um ticket (remoto)"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Create",
+   "type": "IInputParameter",
+   "name": "Subject",
+   "as": "$Tickets_Create_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_in1",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Create",
+   "type": "IInputParameter",
+   "name": "Description",
+   "as": "$Tickets_Create_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_in2",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_in2",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Create",
+   "type": "IInputParameter",
+   "name": "TypeId",
+   "as": "$Tickets_Create_in3"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_in3",
+   "prop": "DataType",
+   "value": "TicketType Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Create",
+   "type": "IInputParameter",
+   "name": "CategoryId",
+   "as": "$Tickets_Create_in4"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_in4",
+   "prop": "DataType",
+   "value": "Category Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_in4",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Create",
+   "type": "IInputParameter",
+   "name": "PriorityId",
+   "as": "$Tickets_Create_in5"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_in5",
+   "prop": "DataType",
+   "value": "TicketPriority Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_in5",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Create",
+   "type": "IInputParameter",
+   "name": "RequesterId",
+   "as": "$Tickets_Create_in6"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_in6",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Create",
+   "type": "IOutputParameter",
+   "name": "TicketId",
+   "as": "$Tickets_Create_out7"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_out7",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Create",
+   "type": "IOutputParameter",
+   "name": "Number",
+   "as": "$Tickets_Create_out8"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_out8",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Create",
+   "type": "IStartNode",
+   "as": "$Tickets_Create_start9"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Create",
+   "type": "IExecuteServerActionNode",
+   "name": "Create",
+   "as": "$Tickets_Create_call10"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_call10",
+   "prop": "Action",
+   "value": "IServerAction:Ticket_Create"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_call10/Subject",
+   "prop": "Value",
+   "value": "Subject"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_call10/Description",
+   "prop": "Value",
+   "value": "Description"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_call10/TypeId",
+   "prop": "Value",
+   "value": "TypeId"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_call10/ChannelId",
+   "prop": "Value",
+   "value": "Entities.TicketChannel.API"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_call10/CategoryId",
+   "prop": "Value",
+   "value": "CategoryId"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_call10/PriorityId",
+   "prop": "Value",
+   "value": "PriorityId"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_call10/RequesterId",
+   "prop": "Value",
+   "value": "RequesterId"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Create",
+   "type": "IAssignNode",
+   "name": "SetOutputs",
+   "as": "$Tickets_Create_asg11"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_asg11",
+   "prop": "Label",
+   "value": "SetOutputs"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Create_asg11",
+   "type": "IAssignment",
+   "as": "$Tickets_Create_a12"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_a12",
+   "prop": "Variable",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_a12",
+   "prop": "Value",
+   "value": "Create.TicketId"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Create_asg11",
+   "type": "IAssignment",
+   "as": "$Tickets_Create_a13"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_a13",
+   "prop": "Variable",
+   "value": "Number"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Create_a13",
+   "prop": "Value",
+   "value": "Create.Number"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Create",
+   "type": "IEndNode",
+   "as": "$Tickets_Create_end14"
+  },
+  {
+   "op": "link",
+   "from": "$Tickets_Create_start9",
+   "to": "$Tickets_Create_call10"
+  },
+  {
+   "op": "link",
+   "from": "$Tickets_Create_call10",
+   "to": "$Tickets_Create_asg11"
+  },
+  {
+   "op": "link",
+   "from": "$Tickets_Create_asg11",
+   "to": "$Tickets_Create_end14"
+  },
+  {
+   "op": "layout",
+   "target": "$Tickets_Create"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServiceAction",
+   "name": "Tickets_Comment",
+   "as": "$Tickets_Comment"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Comment",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Comment",
+   "prop": "Description",
+   "value": "Comentario publico (remoto)"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Comment",
+   "type": "IInputParameter",
+   "name": "TicketId",
+   "as": "$Tickets_Comment_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Comment_in1",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Comment",
+   "type": "IInputParameter",
+   "name": "AuthorId",
+   "as": "$Tickets_Comment_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Comment_in2",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Comment",
+   "type": "IInputParameter",
+   "name": "Body",
+   "as": "$Tickets_Comment_in3"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Comment_in3",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Comment",
+   "type": "IOutputParameter",
+   "name": "CommentId",
+   "as": "$Tickets_Comment_out4"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Comment_out4",
+   "prop": "DataType",
+   "value": "TicketComment Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Comment",
+   "type": "IStartNode",
+   "as": "$Tickets_Comment_start5"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Comment",
+   "type": "IExecuteServerActionNode",
+   "name": "Comment",
+   "as": "$Tickets_Comment_call6"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Comment_call6",
+   "prop": "Action",
+   "value": "IServerAction:Comment_Add"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Comment_call6/TicketId",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Comment_call6/AuthorId",
+   "prop": "Value",
+   "value": "AuthorId"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Comment_call6/Body",
+   "prop": "Value",
+   "value": "Body"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Comment_call6/IsInternal",
+   "prop": "Value",
+   "value": "False"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Comment",
+   "type": "IAssignNode",
+   "name": "SetOutput",
+   "as": "$Tickets_Comment_asg7"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Comment_asg7",
+   "prop": "Label",
+   "value": "SetOutput"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Comment_asg7",
+   "type": "IAssignment",
+   "as": "$Tickets_Comment_a8"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Comment_a8",
+   "prop": "Variable",
+   "value": "CommentId"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Comment_a8",
+   "prop": "Value",
+   "value": "Comment.CommentId"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Comment",
+   "type": "IEndNode",
+   "as": "$Tickets_Comment_end9"
+  },
+  {
+   "op": "link",
+   "from": "$Tickets_Comment_start5",
+   "to": "$Tickets_Comment_call6"
+  },
+  {
+   "op": "link",
+   "from": "$Tickets_Comment_call6",
+   "to": "$Tickets_Comment_asg7"
+  },
+  {
+   "op": "link",
+   "from": "$Tickets_Comment_asg7",
+   "to": "$Tickets_Comment_end9"
+  },
+  {
+   "op": "layout",
+   "target": "$Tickets_Comment"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServiceAction",
+   "name": "Tickets_ChangeStatus",
+   "as": "$Tickets_ChangeStatus"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_ChangeStatus",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_ChangeStatus",
+   "prop": "Description",
+   "value": "Transicao de status (remoto)"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_ChangeStatus",
+   "type": "IInputParameter",
+   "name": "TicketId",
+   "as": "$Tickets_ChangeStatus_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_ChangeStatus_in1",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_ChangeStatus",
+   "type": "IInputParameter",
+   "name": "NewStatusId",
+   "as": "$Tickets_ChangeStatus_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_ChangeStatus_in2",
+   "prop": "DataType",
+   "value": "TicketStatus Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_ChangeStatus",
+   "type": "IInputParameter",
+   "name": "ActorId",
+   "as": "$Tickets_ChangeStatus_in3"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_ChangeStatus_in3",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_ChangeStatus",
+   "type": "IInputParameter",
+   "name": "Note",
+   "as": "$Tickets_ChangeStatus_in4"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_ChangeStatus_in4",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_ChangeStatus_in4",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_ChangeStatus",
+   "type": "IStartNode",
+   "as": "$Tickets_ChangeStatus_start5"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_ChangeStatus",
+   "type": "IExecuteServerActionNode",
+   "name": "Change",
+   "as": "$Tickets_ChangeStatus_call6"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_ChangeStatus_call6",
+   "prop": "Action",
+   "value": "IServerAction:Ticket_ChangeStatus"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_ChangeStatus_call6/TicketId",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_ChangeStatus_call6/NewStatusId",
+   "prop": "Value",
+   "value": "NewStatusId"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_ChangeStatus_call6/ActorId",
+   "prop": "Value",
+   "value": "ActorId"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_ChangeStatus_call6/Note",
+   "prop": "Value",
+   "value": "Note"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_ChangeStatus",
+   "type": "IEndNode",
+   "as": "$Tickets_ChangeStatus_end7"
+  },
+  {
+   "op": "link",
+   "from": "$Tickets_ChangeStatus_start5",
+   "to": "$Tickets_ChangeStatus_call6"
+  },
+  {
+   "op": "link",
+   "from": "$Tickets_ChangeStatus_call6",
+   "to": "$Tickets_ChangeStatus_end7"
+  },
+  {
+   "op": "layout",
+   "target": "$Tickets_ChangeStatus"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServiceAction",
+   "name": "Tickets_Get",
+   "as": "$Tickets_Get"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Get",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Get",
+   "prop": "Description",
+   "value": "Ticket com permissoes (remoto)"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Get",
+   "type": "IInputParameter",
+   "name": "TicketId",
+   "as": "$Tickets_Get_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Get_in1",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Get",
+   "type": "IInputParameter",
+   "name": "ViewerId",
+   "as": "$Tickets_Get_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Get_in2",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Get",
+   "type": "IOutputParameter",
+   "name": "Ticket",
+   "as": "$Tickets_Get_out3"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Get_out3",
+   "prop": "DataType",
+   "value": "Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Get",
+   "type": "IOutputParameter",
+   "name": "Found",
+   "as": "$Tickets_Get_out4"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Get_out4",
+   "prop": "DataType",
+   "value": "Boolean"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Get",
+   "type": "IOutputParameter",
+   "name": "CanEdit",
+   "as": "$Tickets_Get_out5"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Get_out5",
+   "prop": "DataType",
+   "value": "Boolean"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Get",
+   "type": "IOutputParameter",
+   "name": "CanClose",
+   "as": "$Tickets_Get_out6"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Get_out6",
+   "prop": "DataType",
+   "value": "Boolean"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Get",
+   "type": "IStartNode",
+   "as": "$Tickets_Get_start7"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Get",
+   "type": "IExecuteServerActionNode",
+   "name": "Get",
+   "as": "$Tickets_Get_call8"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Get_call8",
+   "prop": "Action",
+   "value": "IServerAction:Ticket_Get"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Get_call8/TicketId",
+   "prop": "Value",
+   "value": "TicketId"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Get_call8/ViewerId",
+   "prop": "Value",
+   "value": "ViewerId"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Get",
+   "type": "IAssignNode",
+   "name": "SetOutputs",
+   "as": "$Tickets_Get_asg9"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Get_asg9",
+   "prop": "Label",
+   "value": "SetOutputs"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Get_asg9",
+   "type": "IAssignment",
+   "as": "$Tickets_Get_a10"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Get_a10",
+   "prop": "Variable",
+   "value": "Ticket"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Get_a10",
+   "prop": "Value",
+   "value": "Get.Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Get_asg9",
+   "type": "IAssignment",
+   "as": "$Tickets_Get_a11"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Get_a11",
+   "prop": "Variable",
+   "value": "Found"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Get_a11",
+   "prop": "Value",
+   "value": "Get.Found"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Get_asg9",
+   "type": "IAssignment",
+   "as": "$Tickets_Get_a12"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Get_a12",
+   "prop": "Variable",
+   "value": "CanEdit"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Get_a12",
+   "prop": "Value",
+   "value": "Get.CanEdit"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Get_asg9",
+   "type": "IAssignment",
+   "as": "$Tickets_Get_a13"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Get_a13",
+   "prop": "Variable",
+   "value": "CanClose"
+  },
+  {
+   "op": "set",
+   "target": "$Tickets_Get_a13",
+   "prop": "Value",
+   "value": "Get.CanClose"
+  },
+  {
+   "op": "create",
+   "parent": "$Tickets_Get",
+   "type": "IEndNode",
+   "as": "$Tickets_Get_end14"
+  },
+  {
+   "op": "link",
+   "from": "$Tickets_Get_start7",
+   "to": "$Tickets_Get_call8"
+  },
+  {
+   "op": "link",
+   "from": "$Tickets_Get_call8",
+   "to": "$Tickets_Get_asg9"
+  },
+  {
+   "op": "link",
+   "from": "$Tickets_Get_asg9",
+   "to": "$Tickets_Get_end14"
+  },
+  {
+   "op": "layout",
+   "target": "$Tickets_Get"
+  }
+ ]
+}

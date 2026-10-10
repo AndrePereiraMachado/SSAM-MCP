@@ -1,0 +1,22 @@
+{
+ "description": "ProgressBar (OutSystemsUI, Numbers) tipico; inputs obrigatorios Progress ligados a variaveis da tela; placeholders Content com dados do aggregate de tarefas; eventos Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "ProgressValue", "as": "$vProgressValue"},
+  {"op": "set", "target": "$vProgressValue", "prop": "DataType", "value": "Integer"},
+  {"op": "set", "target": "$vProgressValue", "prop": "DefaultValue", "value": "40"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastProgressBarId", "as": "$vLastProgressBarId"},
+  {"op": "set", "target": "$vLastProgressBarId", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetShowcaseTasks", "as": "$tasks"},
+  {"op": "create", "parent": "$tasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "logic", "data": {"actions": [{"name": "ProgressBarDemoInitialized", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de Initialized", "inputs": [{"name": "ProgressBarId", "type": "Text"}],"steps": [{"assign": {"LastProgressBarId": "ProgressBarId"},"as": "KeepInitialized"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ProgressBarDemo", "source": "IMobileBlock:ProgressBar", "as": "$b"},
+  {"op": "set", "target": "$b/Progress", "prop": "Value", "value": "ProgressValue"},
+  {"op": "set", "target": "$b/Initialized", "prop": "Handler", "value": "IScreenAction:ProgressBarDemoInitialized"},
+  {"op": "set", "target": "$b/Initialized/ProgressBarId", "prop": "Value", "value": "ProgressBarId"},
+  {"op": "create", "parent": "$b/Content", "type": "IExpression", "as": "$ph1"},
+  {"op": "set", "target": "$ph1", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""}
+ ]
+}

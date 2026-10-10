@@ -1,0 +1,19 @@
+{
+ "description": "NEG U1 (OutSystems padroes): Container controlado pela propriedade Visible em vez de If widget.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IRole", "name": "NegU1Viewer", "as": "$role"},
+  {"op": "set", "target": "$role", "prop": "Description", "value": "Perfil que pode abrir a tela do controle negativo U1."},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "NegVisibleScreen", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "set", "target": "$scr", "prop": "Description", "value": "Tela que esconde um painel por Visible (violacao proposital da U1)."},
+  {"op": "link", "from": "$scr", "connector": "Roles", "to": "$role"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "IsDetailShown", "as": "$v"},
+  {"op": "set", "target": "$v", "prop": "DataType", "value": "Boolean"},
+  {"op": "set", "target": "$v", "prop": "Description", "value": "Liga o painel de detalhe quando o usuario pede mais dados."},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "DetailPanel", "as": "$panel"},
+  {"op": "set", "target": "$panel", "prop": "Visible", "value": "IsDetailShown"}
+ ]
+}

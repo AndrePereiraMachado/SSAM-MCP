@@ -1,0 +1,9 @@
+{
+ "description": "A RECUSA de `duplicate` sobre um indice: a plataforma recusa dois indices com os mesmos atributos (a copia nativa falhava com 'Condition is false'); desde o lote de dados da fase 3 o kernel recusa antes, com a alternativa: criar outro indice com uma composicao diferente.",
+ "base": "job:spec-data",
+ "expectValid": true,
+ "expectError": ["duplicate: EntityIndex 'AutoIndex_StatusId' cannot be duplicated", "create another EntityIndex with a different composition"],
+ "ops": [
+  {"op": "duplicate", "target": "EntityIndex:AutoIndex_StatusId", "as": "$copy"}
+ ]
+}

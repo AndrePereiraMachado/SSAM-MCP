@@ -1,0 +1,46 @@
+{
+ "description": "ODC: apagar um BLOCO que ja existia. Nada nasce aqui: o `base` e job:block-reuse, e este job abre um modulo que JA TEM o WfCovPriceTag instanciado 3 vezes e o WfCovPolicyCard instanciado 2, em telas diferentes. A unica coisa que faz e desmontar isso pela ordem certa, com `usages` a provar cada passo. A ordem nao e a criacao ao contrario: as instancias saem de CIMA para baixo (a tela consome o bloco do meio, o bloco do meio consome o de baixo), e cada `delete` so passa sem `force` depois de o alvo estar a zero. O NUCLEO: quando o bloco do meio sai, o `usages` do WfCovPriceTag cai de 3 para 1 sem ninguem lhe tocar - duas das suas instancias viviam DENTRO do WfCovPolicyCard e foram com ele, porque o delete leva a arvore inteira. Quem tentar apagar o bloco de baixo primeiro leva a recusa que nomeia os 3 consumidores; quem apagar o de cima primeiro nao precisa sequer de saber que eles existiam. Sobra uma instancia a mao, a que nasceu do fragmento HTML na WfCovPolicySummary, e so entao o WfCovPriceTag sai sem force. O QUE NAO SAI SOZINHO: o delete varre para baixo e nunca para cima, por isso as variaveis de tela que so serviam para alimentar os argumentos (PolicyLabel, RenewalPremium) ficam vivas e orfas - quem contar com limpeza automatica deixa o modulo cheio de variaveis mortas, e e por isso que elas saem aqui com `usages` em zero a provar que ja nao ha quem as leia. O conteudo de placeholder prova o outro lado: a Quote era lida pela nota dentro da instancia visual, e o `usages` dela cai para zero com o delete da INSTANCIA, sem se tocar na nota - essa nota pertence ao consumidor e nao ao bloco, como o job:block-reuse mostra ao cria-la. Par exato: tests/jobs-odc/block-reuse.json monta, este desmonta; a recusa correspondente (delete de bloco com instancia viva) esta provada na faixa O11 em tests/jobs-negative/delete-block-in-use.json, e o caminho limpo para logica e dados na propria faixa ODC em tests/jobs-odc/delete-logic-consumers.json e delete-data-consumers.json.",
+ "base": "job:block-reuse",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "usages", "target": "IMobileBlock:WfCovPriceTag", "_why": "PONTO DE PARTIDA, tudo herdado: 3 instancias do bloco de baixo, em DOIS pais diferentes - duas dentro de IMobileBlock:WfCovPolicyCard e uma dentro de IMobileScreen:WfCovPolicySummary. Nenhuma delas sai por si."},
+  {"op": "usages", "target": "IMobileBlock:WfCovPolicyCard", "_why": "o bloco do MEIO: 2 instancias, uma em cada tela. E consumidor do de baixo e consumido pelas telas ao mesmo tempo - e ele que decide a ordem."},
+  {"op": "usages", "target": "IMobileScreen:WfCovPolicyDetail/PolicyLabel", "_why": "a variavel da tela antes de se mexer em nada: 1 leitor. E repare em QUEM o usages nomeia: nao e o IArgument, e a ITextBasedExpression que esta DENTRO dele - o argumento e a caixa, a expressao e que le, e e por isso que o leitor morre junto com a instancia que o hospeda. Guarde o 1: e esta a variavel que vai ficar orfa, nao apagada."},
+
+  {"op": "delete", "target": "IMobileScreen:WfCovPolicyDetail/#IMobileBlockInstanceWidget/MainContent/WfCovPolicyCard1", "_why": "(1a) TOPO PRIMEIRO: a instancia na tela e o consumidor mais acima. A tela sobrevive, so perde o widget."},
+  {"op": "delete", "target": "IMobileScreen:WfCovPolicySummary/#IMobileBlockInstanceWidget/MainContent/WfCovPolicyCard1", "_why": "(1b) a segunda instancia do MESMO bloco, na outra tela: duas instancias com o mesmo nome, dois deletes distintos, porque o nome pertence ao PAI"},
+
+  {"op": "usages", "target": "IMobileBlock:WfCovPolicyCard", "_why": "(2) zero: o bloco do meio ficou sem instancias e o delete dele ja passa sem force"},
+  {"op": "usages", "target": "IMobileBlock:WfCovPriceTag", "_why": "(3) AINDA 3: apagar as instancias do bloco do meio nao mexeu numa unica instancia do de baixo. As duas de dentro continuam vivas porque o WfCovPolicyCard continua vivo."},
+
+  {"op": "delete", "target": "IMobileBlock:WfCovPolicyCard", "_why": "(4) o bloco do meio sai sem force - e leva com ele o corpo inteiro, incluindo as duas instancias do WfCovPriceTag que estavam la dentro"},
+
+  {"op": "usages", "target": "IMobileBlock:WfCovPriceTag", "_why": "(5) O NUCLEO DA PROVA: caiu de 3 para 1 sem uma unica operacao sobre o WfCovPriceTag nem sobre as suas instancias. O delete varre a arvore para baixo, e a conta de quem o alvo CONSUMIA muda a reboque. Sobra a instancia visual na WfCovPolicySummary, que nao estava dentro de nada apagado."},
+  {"op": "find", "name": "WfCovPolicyCard", "_why": "(5) o bloco do meio ja nao existe: lista vazia"},
+
+  {"op": "usages", "target": "IMobileScreen:WfCovPolicySummary/TotalDue", "_why": "(6) antes de apagar a ultima instancia: a variavel alimenta o argumento Amount dela"},
+  {"op": "usages", "target": "IMobileScreen:WfCovPolicySummary/Quote", "_why": "(6) e esta e lida pela NOTA dentro do placeholder da instancia - conteudo que pertence ao consumidor, nao ao bloco"},
+
+  {"op": "get", "target": "IMobileScreen:WfCovPolicySummary/#IMobileBlockInstanceWidget/MainContent/WfCovSummaryBoard/**IMobileBlockInstanceWidget[1]", "_why": "(7a) a terceira instancia antes de sair. Repare no CAMINHO: e por DESCENDENTE (`**`), nao por filho - o fragmento HTML pendura a instancia dentro de um IContent do contentor, e o filho direto de WfCovSummaryBoard e esse IContent. Quem escrever o caminho como se o `<Block>` fosse filho do `<div>` leva KeyNotFoundException com a lista dos filhos reais."},
+  {"op": "delete", "target": "IMobileScreen:WfCovPolicySummary/#IMobileBlockInstanceWidget/MainContent/WfCovSummaryBoard/**IMobileBlockInstanceWidget[1]", "_why": "(7b) a terceira instancia, a que nasceu do fragmento HTML: esta e a mao, porque nao vivia dentro de nada que tenha sido apagado. O contentor WfCovSummaryBoard fica, com o titulo que nao era do bloco."},
+
+  {"op": "usages", "target": "IMobileScreen:WfCovPolicySummary/Quote", "_why": "(8) zero sem se tocar na nota: ela estava dentro do IPlaceholderContentWidget:Footnote da INSTANCIA (o caminho do usages anterior mostra-o inteiro) e saiu com ela. Prova pelo avesso do que o job:block-reuse mostra ao cria-la: o conteudo do placeholder e do consumidor."},
+  {"op": "usages", "target": "IMobileBlock:WfCovPriceTag", "_why": "(9) zero: agora sim, o bloco de baixo nao tem consumidores"},
+
+  {"op": "delete", "target": "IMobileBlock:WfCovPriceTag", "_why": "(10) O PEDIDO: o bloco herdado sai sem force, porque as 3 instancias ja sairam - duas de arrasto, uma a mao"},
+  {"op": "find", "name": "WfCovPriceTag", "_why": "(10) lista vazia: nao ficou nem bloco nem instancia"},
+
+  {"op": "usages", "target": "IMobileScreen:WfCovPolicyDetail/PolicyLabel", "_why": "(11) O QUE NAO SAIU SOZINHO: a variavel comecou com 1 leitor, esta em zero e continua na tela. O delete nunca sobe: quem so olha para o bloco deixa o modulo com variaveis mortas."},
+  {"op": "delete", "target": "IMobileScreen:WfCovPolicyDetail/PolicyLabel", "_why": "(11) por isso ela sai aqui, com o usages em zero a autorizar"},
+  {"op": "usages", "target": "IMobileScreen:WfCovPolicySummary/RenewalPremium", "_why": "(12) a mesma coisa na outra tela: era lida pela expressao RenewalPremium * 1.15 do argumento, e a expressao saiu com a instancia"},
+  {"op": "delete", "target": "IMobileScreen:WfCovPolicySummary/RenewalPremium"},
+  {"op": "delete", "target": "IMobileScreen:WfCovPolicySummary/TotalDue"},
+  {"op": "delete", "target": "IMobileScreen:WfCovPolicySummary/Quote"},
+
+  {"op": "get", "target": "IMobileScreen:WfCovPolicyDetail", "_why": "LER DE VOLTA: a tela continua inteira - mesmo nome, mesmo tema, mesmo layout - e agora com LocalVariables=0, que e a limpeza do passo (11) a aparecer nas propriedades e nao so no usages"},
+  {"op": "dump", "target": "IMobileScreen:WfCovPolicyDetail", "depth": 6, "_why": "MainContent vazio: nao sobrou instancia nem argumento pendurado"},
+  {"op": "dump", "target": "IMobileScreen:WfCovPolicySummary", "depth": 7, "_why": "o contentor do fragmento sobreviveu com o seu titulo; o que era do bloco desapareceu inteiro"},
+  {"op": "find", "type": "IMobileBlock", "_why": "o que resta de blocos no modulo: os da biblioteca, nenhum dos dois autorais"}
+ ]
+}

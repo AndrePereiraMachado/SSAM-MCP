@@ -1,0 +1,25 @@
+{
+ "description": "A RECUSA do delete de interface: o bloco proprio ContactCard esta INSTANCIADO na tela ContactDetail. Sem force o delete tem de ser recusado E a mensagem tem de nomear a instancia (o caminho limpo esta em tests/jobs/delete-interface-consumers.json).",
+ "base": "job:screen-form-reactive",
+ "expectValid": true,
+ "expectError": [
+  "delete: refused",
+  "IMobileBlock 'ContactCard' is used by 1 consumer(s)",
+  "IMobileBlockInstanceWidget:ContactCardInstance",
+  "pass \"force\": true to break them"
+ ],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "ContactCard", "as": "$blk"},
+  {"op": "create", "parent": "$blk", "type": "IInputParameter", "name": "Title", "as": "$blkIn"},
+  {"op": "set", "target": "$blkIn", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$blk", "type": "IExpression", "name": "TitleText", "as": "$blkExp"},
+  {"op": "set", "target": "$blkExp", "prop": "Value", "value": "Title"},
+
+  {"op": "create", "parent": "IMobileScreen:ContactDetail/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ContactCardInstance", "as": "$inst"},
+  {"op": "set", "target": "$inst", "prop": "SourceBlock", "value": "$blk"},
+  {"op": "set", "target": "$inst/Title", "prop": "Value", "value": "GetContactById.List.Current.Contact.Name"},
+
+  {"op": "usages", "target": "$blk"},
+  {"op": "delete", "target": "$blk"}
+ ]
+}

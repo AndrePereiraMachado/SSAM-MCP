@@ -1,0 +1,16 @@
+{
+ "description": "A RECUSA do create de um Button Group Item fora de um Button Group. O O11 aceitava e o Verify nativo caia com NullReferenceException fora de qualquer op (ButtonGroupItemDescriptor.GetVariableTypeFromParent); o ODC recusa no create. O kernel recusa nas duas faixas com o texto do ODC e diz como fazer. Dentro do grupo (ou do Content dele) o create funciona: tests/jobs/widgets-reactive.json. Cobertura testada, fase 2.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectError": [
+  "create IButtonGroupItem: a Button Group Item must be placed inside a Button Group widget",
+  "IContainer 'GroupLessBox' is not inside one",
+  "Create the IButtonGroup first"
+ ],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "GroupLess", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "GroupLessBox", "as": "$box"},
+  {"op": "create", "parent": "$box", "type": "IButtonGroupItem", "name": "LooseItem"}
+ ]
+}

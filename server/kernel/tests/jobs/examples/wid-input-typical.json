@@ -1,0 +1,27 @@
+{
+ "description": "Input tipico: variavel de pesquisa ligada ao Input, aggregate filtrado por ela e OnChange que refaz a consulta (Refresh Data).",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "SearchText", "as": "$search"},
+  {"op": "set", "target": "$search", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetTasksByTitle", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "Task.Title like \"%\" + SearchText + \"%\""}},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAction", "name": "SearchOnChange", "as": "$act"},
+  {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$a0"},
+  {"op": "create", "parent": "$act", "type": "IRefreshDataNode", "name": "RefreshTasks", "as": "$rf"},
+  {"op": "set", "target": "$rf", "prop": "DataSource", "value": "$agg"},
+  {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$a9"},
+  {"op": "link", "from": "$a0", "to": "$rf"},
+  {"op": "link", "from": "$rf", "to": "$a9"},
+  {"op": "layout", "target": "$act"},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IInput", "name": "SearchInput", "as": "$in"},
+  {"op": "set", "target": "$in", "prop": "Variable", "value": "SearchText"},
+  {"op": "set", "target": "$in", "prop": "Prompt", "value": "\"Search tasks\""},
+  {"op": "set", "target": "$in/OnChange", "prop": "Destination", "value": "$act"},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$count"},
+  {"op": "set", "target": "$count", "prop": "Value", "value": "GetTasksByTitle.Count"}
+ ]
+}

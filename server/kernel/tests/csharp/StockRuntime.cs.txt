@@ -1,0 +1,31 @@
+using System.Linq;
+using Anvil.Authoring;
+
+// These are business-level tests against the cold agent's unmodified stock source.
+// Each method runs in a separate native HTTP request, so reads exercise committed data.
+public static class StockRuntime
+{
+    public static bool Seed(IDataSession database)
+    {
+        foreach (var old in database.Query<Item>().Where(item => item.Codigo == "CSharpColdStock").ToList())
+            database.Delete(old.Id);
+        var id = Estoque.Cadastrar(database, "CSharpColdStock", 4, 2.5m, null);
+        var created = Estoque.BuscarPorId(database, id);
+        return !id.IsEmpty && created != null && created.Quantidade == 4 && created.Observacao == null;
+    }
+    public static bool Change(IDataSession database)
+    {
+        var before = database.Query<Item>().Single(item => item.Codigo == "CSharpColdStock");
+        if (before.Quantidade != 4 || before.Observacao != null) return false;
+        var adjusted = Estoque.AjustarEstoque(database, before.Id, 3);
+        database.Update(adjusted with { Observacao = "" });
+        return adjusted.Quantidade == 7 && adjusted.Preco == 2.5m && adjusted.Estado == EstadoItem.Ativo;
+    }
+    public static bool ReadAndDelete(IDataSession database)
+    {
+        var row = database.Query<Item>().Single(item => item.Codigo == "CSharpColdStock");
+        var correct = row.Quantidade == 7 && row.Preco == 2.5m && row.Observacao == "";
+        database.Delete(row.Id);
+        return correct && !database.Query<Item>().Any(item => item.Codigo == "CSharpColdStock");
+    }
+}

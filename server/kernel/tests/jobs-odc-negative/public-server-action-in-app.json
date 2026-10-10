@@ -1,0 +1,13 @@
+{
+ "description": "ODC: a RECUSA de tornar publica uma server action de um app (InsuranceApp e CrossDevice). O Verify headless aceita, mas o ODC Studio ao vivo da erro: app ODC nao expoe server action publica. O kernel recusa no set e aponta as saidas (Public No com consumidor nas telas do proprio app, service action, ou mover para uma library). O caminho limpo esta em tests/jobs-odc/structure-nested.json (a mesma action, privada).",
+ "base": "job:structure-nested",
+ "expectValid": true,
+ "expectError": [
+  "is a server action of an ODC app",
+  "ODC apps do not expose public server actions",
+  "use a service action to serve other apps, or move it to a library"
+ ],
+ "ops": [
+  {"op": "set", "target": "IServerAction:WfCovQuote_Build", "prop": "Public", "value": true}
+ ]
+}

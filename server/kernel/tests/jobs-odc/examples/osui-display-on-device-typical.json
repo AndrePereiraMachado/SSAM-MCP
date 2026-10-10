@@ -1,0 +1,22 @@
+{
+ "description": "DisplayOnDevice do OSUI: um conteudo diferente para desktop, tablet e telefone, com o telefone mostrando so o resumo.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [{"name": "Name", "type": "Text", "length": 100, "mandatory": true}, {"name": "Price", "type": "Currency"}, {"name": "ImageUrl", "type": "Text", "length": 500}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "DeviceContent", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Device content\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$GetProducts"},
+  {"op": "create", "parent": "$GetProducts", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "DisplayOnDevice1", "source": "IMobileBlock:DisplayOnDevice", "as": "$dev"},
+  {"op": "create", "parent": "$dev/OnDesktop", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "\"Desktop: \" + GetProducts.Count + \" products in the full table\""},
+  {"op": "create", "parent": "$dev/OnTablet", "type": "IExpression", "as": "$expr2"},
+  {"op": "set", "target": "$expr2", "prop": "Value", "value": "\"Tablet: \" + GetProducts.Count + \" products\""},
+  {"op": "create", "parent": "$dev/OnPhone", "type": "IExpression", "as": "$expr3"},
+  {"op": "set", "target": "$expr3", "prop": "Value", "value": "GetProducts.Count + \" products\""}
+ ]
+}

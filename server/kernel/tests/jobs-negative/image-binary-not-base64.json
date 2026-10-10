@@ -1,0 +1,12 @@
+{
+ "description": "A RECUSA de um Byte[] que nao e base64: o binario de uma imagem vai nos args como texto base64 (o conteudo do ficheiro), nunca como caminho. O caminho limpo esta em tests/jobs/image-localized.json.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "expectError": [
+  "op #0 (create CovLogo)",
+  "Byte[] value must be base64 text"
+ ],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IImage", "name": "CovLogo", "args": {"binary": "C:\\images\\logo.png", "originalPath": "logo.png"}}
+ ]
+}

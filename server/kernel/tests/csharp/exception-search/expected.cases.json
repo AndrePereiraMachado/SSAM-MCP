@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "authorship": "Expected CLR semantics authored before any corpus compilation or execution; independent of Anvil implementation and native graphs.",
+  "cases": [
+    {
+      "name": "caller-filter-before-callee-finally",
+      "events": [
+        "callee.throw:original",
+        "caller.filter:original:state=0",
+        "callee.finally.enter:state=0",
+        "callee.finally.exit:state=1",
+        "caller.catch:original:state=1"
+      ],
+      "returnValue": "caught",
+      "caughtException": "original",
+      "finalException": "none",
+      "state": { "state": "1", "observedByFilter": "0" }
+    },
+    {
+      "name": "filter-mutates-captured-caller-scalar",
+      "events": [
+        "callee.throw:original",
+        "caller.filter.enter:original:scalar=10",
+        "caller.filter.exit:scalar=17",
+        "callee.finally.enter:scalar=17",
+        "callee.finally.exit:scalar=117",
+        "caller.catch:original:scalar=117"
+      ],
+      "returnValue": "117",
+      "caughtException": "original",
+      "finalException": "none",
+      "state": { "callerScalar": "117", "observedInFinally": "17" }
+    },
+    {
+      "name": "finally-replacement-restarts-outer-filter-search",
+      "events": [
+        "body.throw:original",
+        "outer.filter:original:state=0",
+        "body.finally.enter:state=0",
+        "body.finally.throw:replacement:state=1",
+        "outer.filter:replacement:state=1",
+        "outer.catch:replacement:state=1"
+      ],
+      "returnValue": "caught-replacement",
+      "caughtException": "replacement",
+      "finalException": "none",
+      "state": { "state": "1", "filterCount": "2" }
+    },
+    {
+      "name": "throwing-filter-helper-is-false-with-effects",
+      "events": [
+        "body.throw:original",
+        "first.filter:original:state=0",
+        "helper.throw:helper:state=1",
+        "helper.finally:state=11",
+        "fallback.filter:original:state=11",
+        "body.finally:state=111",
+        "fallback.catch:original:state=111"
+      ],
+      "returnValue": "fallback",
+      "caughtException": "original",
+      "finalException": "none",
+      "state": { "state": "111", "firstCatchEntered": "false" }
+    },
+    {
+      "name": "reassigned-catch-variable-bare-rethrow-keeps-original",
+      "events": [
+        "body.throw:original",
+        "inner.catch:original",
+        "inner.reassigned:replacement",
+        "inner.rethrow",
+        "boundary.filter:original",
+        "inner.finally",
+        "boundary.catch:original"
+      ],
+      "returnValue": "no-return",
+      "caughtException": "original",
+      "finalException": "original",
+      "state": { "reassignedAlias": "replacement", "finallyCount": "1" }
+    },
+    {
+      "name": "recursive-same-region-selects-frame-and-cleanup-order",
+      "events": [
+        "enter:3:local=30",
+        "enter:2:local=20",
+        "enter:1:local=10",
+        "enter:0:local=0",
+        "throw:0:original",
+        "filter:0:original:local=0",
+        "filter:1:original:local=10",
+        "filter:2:original:local=20",
+        "finally:0:local=1",
+        "finally:1:local=11",
+        "catch:2:original:local=21",
+        "finally:2:local=121",
+        "return:2:local=121",
+        "after-child:3:local=30",
+        "finally:3:local=30",
+        "return:3:local=30"
+      ],
+      "returnValue": "completed",
+      "caughtException": "original",
+      "finalException": "none",
+      "state": {
+        "caughtDepth": "2",
+        "cleanupOrder": "0,1,2,3",
+        "frameLocal0": "1",
+        "frameLocal1": "11",
+        "frameLocal2": "121",
+        "frameLocal3": "30"
+      }
+    }
+  ]
+}

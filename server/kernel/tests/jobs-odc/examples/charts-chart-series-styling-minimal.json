@@ -1,0 +1,15 @@
+{
+ "description": "ChartSeriesStyling do OutSystemsCharts: o add-on dentro do AddOns_Placeholder de um ColumnChart criado com empty (sem os add-ons de exemplo).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ChartSeriesStylingDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ColumnChart1", "source": "IMobileBlock:ColumnChart", "empty": true, "as": "$ch", "_why": "empty tira os add-ons que nascem com o grafico; o job poe so o que configura"},
+  {"op": "set", "target": "$ch/DataPointList", "prop": "Value", "value": "[{Label: \"Jan\", Value: 10}, {Label: \"Feb\", Value: 14}]"},
+  {"op": "create", "parent": "$ch/AddOns_Placeholder", "type": "IMobileBlockInstanceWidget", "name": "ChartSeriesStyling1", "source": "IMobileBlock:ChartSeriesStyling", "as": "$ad"},
+  {"op": "set", "target": "$ad/SeriesName", "prop": "Value", "value": "\"Sales\""},
+  {"op": "set", "target": "$ad/ShowDataPointValues", "prop": "Value", "value": "True"}
+ ]
+}

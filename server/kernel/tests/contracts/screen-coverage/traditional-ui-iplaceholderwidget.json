@@ -1,0 +1,31 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "native-widget",
+    "web:IPlaceholderWidget"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IWebBlock",
+        "flow": "MainFlow",
+        "properties": {},
+        "widgets": [
+          {
+            "name": "Subject",
+            "type": "IPlaceholderWidget",
+            "properties": {
+              "StyleClasses": "coverage"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "mutation": {
+    "target": "IWebBlock:Coverage/Subject",
+    "prop": "StyleClasses",
+    "value": "changed"
+  }
+}

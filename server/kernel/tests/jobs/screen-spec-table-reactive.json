@@ -1,0 +1,110 @@
+{
+  "description": "Screen spec screen-spec-table-reactive: public block contracts, fixture-owned data, zero new messages.",
+  "base": "reactive-ui.oml",
+  "expectValid": true,
+  "ops": [
+    {
+      "op": "spec",
+      "data": {
+        "static": [
+          {
+            "name": "ShowcaseGenre",
+            "records": [
+              {
+                "name": "Adventure"
+              },
+              {
+                "name": "Strategy"
+              }
+            ]
+          }
+        ],
+        "entities": [
+          {
+            "name": "ShowcaseGame",
+            "public": true,
+            "attributes": [
+              {
+                "name": "Title",
+                "type": "Text",
+                "mandatory": true,
+                "length": 120
+              },
+              {
+                "name": "Description",
+                "type": "Text",
+                "length": 500
+              },
+              {
+                "name": "Price",
+                "type": "Currency"
+              },
+              {
+                "name": "Rating",
+                "type": "Decimal"
+              },
+              {
+                "name": "ImageUrl",
+                "type": "Text",
+                "length": 500
+              },
+              {
+                "name": "Active",
+                "type": "Boolean"
+              },
+              {
+                "name": "GenreId",
+                "type": "ShowcaseGenre Identifier"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "screen",
+      "data": {
+        "screens": [
+          {
+            "name": "GamesTable",
+            "kind": "table",
+            "title": "Games",
+            "source": {
+              "entity": "ShowcaseGame",
+              "as": "GetGames"
+            },
+            "search": {
+              "field": "Title"
+            },
+            "filters": [
+              {
+                "field": "GenreId",
+                "from": "ShowcaseGenre",
+                "label": "Genre"
+              }
+            ],
+            "columns": [
+              {
+                "field": "Title",
+                "label": "Title"
+              },
+              {
+                "field": "Price",
+                "label": "Price"
+              },
+              {
+                "field": "Rating",
+                "label": "Rating"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "find",
+      "type": "IMobileBlockInstanceWidget",
+      "max": 100
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+{
+ "description": "Cobertura testada (fase 2): life de ServiceStudio.Plugin.Widgets.IEditableTable (o11) em webContainer. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnsubmitableInputs_NoLinks",
+   "element": "HeadlessTrad_UI (ESpace) / MainFlow (WebFlow) / CovSWebScreen (WebScreen)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  },
+  {
+   "id": "CustomObjectWarning",
+   "element": "MainFlow (WebFlow) / CovSWebScreen (WebScreen) / WebBlockInstanceWidget / MainContent (PlaceholderContentWidget) / CovSBox (ContainerWidget) / CovREditableTable (EditableTable)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  },
+  {
+   "id": "CustomObjectWarning",
+   "element": "MainFlow (WebFlow) / CovSWebScreen (WebScreen) / WebBlockInstanceWidget / MainContent (PlaceholderContentWidget) / CovSBox (ContainerWidget) / CovREditableTable2 (EditableTable)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IWebFlow:MainFlow",
+   "type": "IWebScreen",
+   "name": "CovSWebScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IWebBlockInstanceWidget/MainContent",
+   "type": "IContainerWidget",
+   "name": "CovSBox",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEditableTable",
+   "name": "CovAEditableTable",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "ILocalVariable",
+   "name": "CovSList",
+   "as": "$hl"
+  },
+  {
+   "op": "set",
+   "target": "$hl",
+   "prop": "DataType",
+   "value": "Text List"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "SourceRecordList",
+   "value": "CovSList"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "ShowHeader",
+   "value": true
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovREditableTable"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "move",
+   "target": "$b",
+   "first": true
+  }
+ ]
+}

@@ -1,0 +1,319 @@
+{
+  "fixture": "mobile-ui",
+  "features": [
+    "OutSystemsUI",
+    "OutSystemsUI:RangeSliderInterval",
+    "OutSystemsUI:Rating",
+    "OutSystemsUI:ScrollableArea",
+    "OutSystemsUI:Search",
+    "OutSystemsUI:Section"
+  ],
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "tests/fixtures/outsystems-ui.oml",
+      "elements": [
+        "IMobileBlock:RangeSliderInterval",
+        "IMobileBlock:Rating",
+        "IMobileBlock:ScrollableArea",
+        "IMobileBlock:Search",
+        "IMobileBlock:Section"
+      ]
+    }
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Ui60_RangeSliderInterval",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part2",
+            "type": "IExpression",
+            "properties": {
+              "Value": "LastEvent"
+            }
+          },
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:RangeSliderInterval",
+            "args": {
+              "MinValue": "1",
+              "MaxValue": "1",
+              "StartingValueFrom": "1",
+              "StartingValueTo": "1",
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {},
+            "events": {
+              "OnValueChange": {
+                "destination": "IMobileScreen:Ui60_RangeSliderInterval/Ui60_RangeSliderInterval_Event1",
+                "args": {
+                  "RangeSliderIntervalId": "RangeSliderIntervalId",
+                  "IntervalStart": "IntervalStart",
+                  "IntervalEnd": "IntervalEnd"
+                }
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "LastEvent",
+            "type": "Text"
+          }
+        ]
+      },
+      {
+        "name": "Ui61_Rating",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:Rating",
+            "args": {
+              "RatingValue": "1",
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "FilledState": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Icon"
+                  }
+                }
+              ],
+              "HalfState": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Icon"
+                  }
+                }
+              ],
+              "EmptyState": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Icon"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui62_ScrollableArea",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:ScrollableArea",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui63_Search",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:Search",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Input": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Label"
+                  }
+                },
+                {
+                  "name": "Part3",
+                  "type": "IInput",
+                  "properties": {
+                    "Variable": "Value1"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value1",
+            "type": "Text"
+          }
+        ]
+      },
+      {
+        "name": "Ui64_Section",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:Section",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Title": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Content": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "name": "Ui60_RangeSliderInterval_Event1",
+          "kind": "screen",
+          "owner": "IMobileScreen:Ui60_RangeSliderInterval",
+          "inputs": [
+            {
+              "name": "RangeSliderIntervalId",
+              "type": "Text",
+              "mandatory": true
+            },
+            {
+              "name": "IntervalStart",
+              "type": "Decimal",
+              "mandatory": true
+            },
+            {
+              "name": "IntervalEnd",
+              "type": "Decimal",
+              "mandatory": true
+            }
+          ],
+          "steps": [
+            {
+              "assign": {
+                "LastEvent": "RangeSliderIntervalId"
+              }
+            },
+            {
+              "assign": {
+                "LastEvent": "DecimalToText(IntervalStart)"
+              }
+            },
+            {
+              "assign": {
+                "LastEvent": "DecimalToText(IntervalEnd)"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "mutations": [
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui60_RangeSliderInterval/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "RangeSliderInterval"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui61_Rating/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Rating"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui62_ScrollableArea/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "ScrollableArea"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui63_Search/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Search"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui64_Section/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Section"
+    }
+  ]
+}

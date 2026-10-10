@@ -1,0 +1,541 @@
+{
+  "description": "Modelo completo de dados para uma loja virtual de videogames: perfil do cliente, catalogo, plataformas, edicoes, carrinho, pedidos, pagamentos, licencas digitais, wishlist, avaliacoes e promocoes.",
+  "base": "tests/fixtures/blank-service.oml",
+  "expectValid": true,
+  "ops": [
+    {
+      "op": "spec",
+      "data": {
+        "static": [
+          {
+            "name": "AgeRating",
+            "records": [
+              { "name": "Free", "label": "Livre", "order": 1 },
+              { "name": "Ten", "label": "10 anos", "order": 2 },
+              { "name": "Twelve", "label": "12 anos", "order": 3 },
+              { "name": "Fourteen", "label": "14 anos", "order": 4 },
+              { "name": "Sixteen", "label": "16 anos", "order": 5 },
+              { "name": "Eighteen", "label": "18 anos", "order": 6 }
+            ]
+          },
+          {
+            "name": "GameStatus",
+            "records": [
+              { "name": "Draft", "label": "Rascunho", "order": 1 },
+              { "name": "Published", "label": "Publicado", "order": 2 },
+              { "name": "Archived", "label": "Arquivado", "order": 3 }
+            ]
+          },
+          {
+            "name": "EditionType",
+            "records": [
+              { "name": "Standard", "label": "Standard", "order": 1 },
+              { "name": "Deluxe", "label": "Deluxe", "order": 2 },
+              { "name": "Ultimate", "label": "Ultimate", "order": 3 },
+              { "name": "Collector", "label": "Collector", "order": 4 }
+            ]
+          },
+          {
+            "name": "CartStatus",
+            "records": [
+              { "name": "Active", "label": "Ativo", "order": 1 },
+              { "name": "Converted", "label": "Convertido", "order": 2 },
+              { "name": "Abandoned", "label": "Abandonado", "order": 3 },
+              { "name": "Expired", "label": "Expirado", "order": 4 }
+            ]
+          },
+          {
+            "name": "OrderStatus",
+            "records": [
+              { "name": "Created", "label": "Criado", "order": 1 },
+              { "name": "AwaitingPayment", "label": "Aguardando pagamento", "order": 2 },
+              { "name": "Paid", "label": "Pago", "order": 3 },
+              { "name": "Cancelled", "label": "Cancelado", "order": 4 },
+              { "name": "PartiallyRefunded", "label": "Parcialmente reembolsado", "order": 5 },
+              { "name": "Refunded", "label": "Reembolsado", "order": 6 }
+            ]
+          },
+          {
+            "name": "PaymentStatus",
+            "records": [
+              { "name": "Pending", "label": "Pendente", "order": 1 },
+              { "name": "Approved", "label": "Aprovado", "order": 2 },
+              { "name": "Declined", "label": "Recusado", "order": 3 },
+              { "name": "Cancelled", "label": "Cancelado", "order": 4 },
+              { "name": "Refunded", "label": "Estornado", "order": 5 }
+            ]
+          },
+          {
+            "name": "RefundStatus",
+            "records": [
+              { "name": "Requested", "label": "Solicitado", "order": 1 },
+              { "name": "Processing", "label": "Processando", "order": 2 },
+              { "name": "Completed", "label": "Concluido", "order": 3 },
+              { "name": "Rejected", "label": "Rejeitado", "order": 4 }
+            ]
+          },
+          {
+            "name": "LicenseStatus",
+            "records": [
+              { "name": "Pending", "label": "Pendente", "order": 1 },
+              { "name": "Active", "label": "Ativa", "order": 2 },
+              { "name": "Suspended", "label": "Suspensa", "order": 3 },
+              { "name": "Revoked", "label": "Revogada", "order": 4 },
+              { "name": "Expired", "label": "Expirada", "order": 5 }
+            ]
+          },
+          {
+            "name": "ReviewStatus",
+            "records": [
+              { "name": "Pending", "label": "Pendente", "order": 1 },
+              { "name": "Published", "label": "Publicada", "order": 2 },
+              { "name": "Hidden", "label": "Oculta", "order": 3 },
+              { "name": "Rejected", "label": "Rejeitada", "order": 4 }
+            ]
+          },
+          {
+            "name": "DiscountType",
+            "records": [
+              { "name": "Percentage", "label": "Percentual", "order": 1 },
+              { "name": "FixedAmount", "label": "Valor fixo", "order": 2 }
+            ]
+          },
+          {
+            "name": "MediaType",
+            "records": [
+              { "name": "Cover", "label": "Capa", "order": 1 },
+              { "name": "Screenshot", "label": "Screenshot", "order": 2 },
+              { "name": "Trailer", "label": "Trailer", "order": 3 },
+              { "name": "Video", "label": "Video", "order": 4 },
+              { "name": "Banner", "label": "Banner", "order": 5 }
+            ]
+          }
+        ],
+        "entities": [
+          {
+            "name": "CustomerProfile",
+            "public": true,
+            "description": "Dados adicionais do usuario nativo da plataforma.",
+            "attributes": [
+              { "name": "UserId", "type": "User Identifier", "mandatory": true },
+              { "name": "DisplayName", "type": "Text", "length": 150 },
+              { "name": "CountryCode", "type": "Text", "length": 5 },
+              { "name": "PreferredLanguage", "type": "Text", "length": 10, "default": "\"pt-BR\"" },
+              { "name": "BirthDate", "type": "Date" },
+              { "name": "IsActive", "type": "Boolean", "default": "True" },
+              { "name": "CreatedOn", "type": "Date Time", "mandatory": true, "default": "CurrDateTime()" },
+              { "name": "UpdatedOn", "type": "Date Time" }
+            ]
+          },
+          {
+            "name": "Game",
+            "public": true,
+            "description": "Jogo no catalogo, independente da plataforma ou edicao.",
+            "attributes": [
+              { "name": "Title", "type": "Text", "mandatory": true, "length": 250 },
+              { "name": "Slug", "type": "Text", "mandatory": true, "length": 300 },
+              { "name": "ShortDescription", "type": "Text", "length": 1000 },
+              { "name": "Description", "type": "Text", "length": 8000 },
+              { "name": "ReleaseDate", "type": "Date" },
+              { "name": "AgeRatingId", "type": "AgeRating Identifier" },
+              { "name": "StatusId", "type": "GameStatus Identifier", "mandatory": true, "default": "Entities.GameStatus.Draft" },
+              { "name": "CoverUrl", "type": "Text", "length": 1000 },
+              { "name": "TrailerUrl", "type": "Text", "length": 1000 },
+              { "name": "WebsiteUrl", "type": "Text", "length": 1000 },
+              { "name": "IsFeatured", "type": "Boolean", "default": "False" },
+              { "name": "CreatedOn", "type": "Date Time", "mandatory": true, "default": "CurrDateTime()" },
+              { "name": "UpdatedOn", "type": "Date Time" },
+              { "name": "PublishedOn", "type": "Date Time" }
+            ]
+          },
+          {
+            "name": "Developer",
+            "public": true,
+            "description": "Estudio desenvolvedor.",
+            "attributes": [
+              { "name": "Name", "type": "Text", "mandatory": true, "length": 150 },
+              { "name": "Description", "type": "Text", "length": 4000 },
+              { "name": "WebsiteUrl", "type": "Text", "length": 1000 },
+              { "name": "CountryCode", "type": "Text", "length": 5 },
+              { "name": "FoundedOn", "type": "Date" },
+              { "name": "IsActive", "type": "Boolean", "default": "True" },
+              { "name": "CreatedOn", "type": "Date Time", "mandatory": true, "default": "CurrDateTime()" }
+            ]
+          },
+          {
+            "name": "Publisher",
+            "public": true,
+            "description": "Empresa publicadora.",
+            "attributes": [
+              { "name": "Name", "type": "Text", "mandatory": true, "length": 150 },
+              { "name": "Description", "type": "Text", "length": 4000 },
+              { "name": "WebsiteUrl", "type": "Text", "length": 1000 },
+              { "name": "CountryCode", "type": "Text", "length": 5 },
+              { "name": "IsActive", "type": "Boolean", "default": "True" },
+              { "name": "CreatedOn", "type": "Date Time", "mandatory": true, "default": "CurrDateTime()" }
+            ]
+          },
+          {
+            "name": "Genre",
+            "public": true,
+            "description": "Genero usado para classificar jogos.",
+            "attributes": [
+              { "name": "Name", "type": "Text", "mandatory": true, "length": 100 },
+              { "name": "Slug", "type": "Text", "mandatory": true, "length": 120 },
+              { "name": "Description", "type": "Text", "length": 500 },
+              { "name": "IsActive", "type": "Boolean", "default": "True" },
+              { "name": "SortOrder", "type": "Integer", "default": "1" }
+            ]
+          },
+          {
+            "name": "Platform",
+            "public": true,
+            "description": "Plataforma compativel com o jogo.",
+            "attributes": [
+              { "name": "Name", "type": "Text", "mandatory": true, "length": 100 },
+              { "name": "Manufacturer", "type": "Text", "length": 100 },
+              { "name": "Generation", "type": "Text", "length": 50 },
+              { "name": "LogoUrl", "type": "Text", "length": 1000 },
+              { "name": "IsActive", "type": "Boolean", "default": "True" },
+              { "name": "SortOrder", "type": "Integer", "default": "1" }
+            ]
+          },
+          {
+            "name": "GameDeveloper",
+            "public": true,
+            "description": "Associacao entre jogo e desenvolvedor.",
+            "attributes": [
+              { "name": "GameId", "type": "Game Identifier", "mandatory": true },
+              { "name": "DeveloperId", "type": "Developer Identifier", "mandatory": true },
+              { "name": "Role", "type": "Text", "length": 100 },
+              { "name": "IsPrimary", "type": "Boolean", "default": "False" },
+              { "name": "SortOrder", "type": "Integer", "default": "1" }
+            ]
+          },
+          {
+            "name": "GamePublisher",
+            "public": true,
+            "description": "Associacao entre jogo e publicadora.",
+            "attributes": [
+              { "name": "GameId", "type": "Game Identifier", "mandatory": true },
+              { "name": "PublisherId", "type": "Publisher Identifier", "mandatory": true },
+              { "name": "IsPrimary", "type": "Boolean", "default": "False" },
+              { "name": "SortOrder", "type": "Integer", "default": "1" }
+            ]
+          },
+          {
+            "name": "GameGenre",
+            "public": true,
+            "description": "Associacao entre jogo e genero.",
+            "attributes": [
+              { "name": "GameId", "type": "Game Identifier", "mandatory": true },
+              { "name": "GenreId", "type": "Genre Identifier", "mandatory": true },
+              { "name": "IsPrimary", "type": "Boolean", "default": "False" },
+              { "name": "SortOrder", "type": "Integer", "default": "1" }
+            ]
+          },
+          {
+            "name": "GamePlatform",
+            "public": true,
+            "description": "Disponibilidade de um jogo em uma plataforma.",
+            "attributes": [
+              { "name": "GameId", "type": "Game Identifier", "mandatory": true },
+              { "name": "PlatformId", "type": "Platform Identifier", "mandatory": true },
+              { "name": "PlatformReleaseDate", "type": "Date" },
+              { "name": "MinimumVersion", "type": "Text", "length": 50 },
+              { "name": "IsActive", "type": "Boolean", "default": "True" }
+            ]
+          },
+          {
+            "name": "GameEdition",
+            "public": true,
+            "description": "Produto comercial digital que pode ser comprado.",
+            "attributes": [
+              { "name": "GameId", "type": "Game Identifier", "mandatory": true },
+              { "name": "PlatformId", "type": "Platform Identifier", "mandatory": true },
+              { "name": "EditionTypeId", "type": "EditionType Identifier", "mandatory": true },
+              { "name": "Name", "type": "Text", "mandatory": true, "length": 150 },
+              { "name": "SKU", "type": "Text", "mandatory": true, "length": 80 },
+              { "name": "Description", "type": "Text", "length": 4000 },
+              { "name": "Version", "type": "Text", "length": 50 },
+              { "name": "DownloadSizeBytes", "type": "Long Integer" },
+              { "name": "BasePrice", "type": "Currency", "mandatory": true, "default": "0" },
+              { "name": "CurrencyCode", "type": "Text", "mandatory": true, "length": 3, "default": "\"BRL\"" },
+              { "name": "IsPreOrder", "type": "Boolean", "default": "False" },
+              { "name": "ReleaseDate", "type": "Date" },
+              { "name": "IsActive", "type": "Boolean", "default": "True" },
+              { "name": "CreatedOn", "type": "Date Time", "mandatory": true, "default": "CurrDateTime()" },
+              { "name": "UpdatedOn", "type": "Date Time" }
+            ]
+          },
+          {
+            "name": "GameMedia",
+            "public": true,
+            "description": "Imagem, video ou outro material promocional do jogo.",
+            "attributes": [
+              { "name": "GameId", "type": "Game Identifier", "mandatory": true },
+              { "name": "MediaTypeId", "type": "MediaType Identifier", "mandatory": true },
+              { "name": "Url", "type": "Text", "mandatory": true, "length": 1000 },
+              { "name": "Title", "type": "Text", "length": 150 },
+              { "name": "Description", "type": "Text", "length": 500 },
+              { "name": "SortOrder", "type": "Integer", "default": "1" },
+              { "name": "IsActive", "type": "Boolean", "default": "True" }
+            ]
+          },
+          {
+            "name": "Cart",
+            "public": true,
+            "description": "Carrinho de compras de um usuario.",
+            "attributes": [
+              { "name": "UserId", "type": "User Identifier", "mandatory": true },
+              { "name": "StatusId", "type": "CartStatus Identifier", "mandatory": true, "default": "Entities.CartStatus.Active" },
+              { "name": "CurrencyCode", "type": "Text", "mandatory": true, "length": 3, "default": "\"BRL\"" },
+              { "name": "CreatedOn", "type": "Date Time", "mandatory": true, "default": "CurrDateTime()" },
+              { "name": "UpdatedOn", "type": "Date Time" },
+              { "name": "ExpiresOn", "type": "Date Time" }
+            ]
+          },
+          {
+            "name": "CartItem",
+            "public": true,
+            "description": "Produto dentro do carrinho.",
+            "attributes": [
+              { "name": "CartId", "type": "Cart Identifier", "mandatory": true },
+              { "name": "GameEditionId", "type": "GameEdition Identifier", "mandatory": true },
+              { "name": "Quantity", "type": "Integer", "mandatory": true, "default": "1" },
+              { "name": "UnitPrice", "type": "Currency", "mandatory": true, "default": "0" },
+              { "name": "DiscountAmount", "type": "Currency", "default": "0" },
+              { "name": "AddedOn", "type": "Date Time", "mandatory": true, "default": "CurrDateTime()" }
+            ]
+          },
+          {
+            "name": "Order",
+            "public": true,
+            "description": "Pedido realizado pelo usuario.",
+            "attributes": [
+              { "name": "UserId", "type": "User Identifier", "mandatory": true },
+              { "name": "OrderNumber", "type": "Text", "mandatory": true, "length": 40 },
+              { "name": "StatusId", "type": "OrderStatus Identifier", "mandatory": true, "default": "Entities.OrderStatus.Created" },
+              { "name": "CurrencyCode", "type": "Text", "mandatory": true, "length": 3, "default": "\"BRL\"" },
+              { "name": "Subtotal", "type": "Currency", "mandatory": true, "default": "0" },
+              { "name": "DiscountTotal", "type": "Currency", "mandatory": true, "default": "0" },
+              { "name": "TaxTotal", "type": "Currency", "mandatory": true, "default": "0" },
+              { "name": "TotalAmount", "type": "Currency", "mandatory": true, "default": "0" },
+              { "name": "BillingCountryCode", "type": "Text", "length": 5 },
+              { "name": "CreatedOn", "type": "Date Time", "mandatory": true, "default": "CurrDateTime()" },
+              { "name": "PaidOn", "type": "Date Time" },
+              { "name": "CancelledOn", "type": "Date Time" },
+              { "name": "RefundedOn", "type": "Date Time" }
+            ]
+          },
+          {
+            "name": "OrderItem",
+            "public": true,
+            "description": "Produto comprado e seus valores historicos.",
+            "attributes": [
+              { "name": "OrderId", "type": "Order Identifier", "mandatory": true },
+              { "name": "GameEditionId", "type": "GameEdition Identifier", "mandatory": true },
+              { "name": "ProductNameSnapshot", "type": "Text", "mandatory": true, "length": 150 },
+              { "name": "SKUSnapshot", "type": "Text", "mandatory": true, "length": 80 },
+              { "name": "PlatformNameSnapshot", "type": "Text", "length": 100 },
+              { "name": "UnitPrice", "type": "Currency", "mandatory": true, "default": "0" },
+              { "name": "DiscountAmount", "type": "Currency", "default": "0" },
+              { "name": "TaxAmount", "type": "Currency", "default": "0" },
+              { "name": "TotalAmount", "type": "Currency", "mandatory": true, "default": "0" },
+              { "name": "CreatedOn", "type": "Date Time", "mandatory": true, "default": "CurrDateTime()" }
+            ]
+          },
+          {
+            "name": "PaymentTransaction",
+            "public": true,
+            "description": "Tentativa ou confirmacao de pagamento com provedor externo.",
+            "attributes": [
+              { "name": "OrderId", "type": "Order Identifier", "mandatory": true },
+              { "name": "ProviderName", "type": "Text", "mandatory": true, "length": 100 },
+              { "name": "ProviderTransactionId", "type": "Text", "length": 200 },
+              { "name": "PaymentMethodToken", "type": "Text", "length": 500 },
+              { "name": "StatusId", "type": "PaymentStatus Identifier", "mandatory": true, "default": "Entities.PaymentStatus.Pending" },
+              { "name": "Amount", "type": "Currency", "mandatory": true, "default": "0" },
+              { "name": "CurrencyCode", "type": "Text", "mandatory": true, "length": 3, "default": "\"BRL\"" },
+              { "name": "FailureCode", "type": "Text", "length": 100 },
+              { "name": "FailureMessage", "type": "Text", "length": 1000 },
+              { "name": "CreatedOn", "type": "Date Time", "mandatory": true, "default": "CurrDateTime()" },
+              { "name": "ProcessedOn", "type": "Date Time" }
+            ]
+          },
+          {
+            "name": "Refund",
+            "public": true,
+            "description": "Reembolso de um pedido ou transacao.",
+            "attributes": [
+              { "name": "OrderId", "type": "Order Identifier", "mandatory": true },
+              { "name": "PaymentTransactionId", "type": "PaymentTransaction Identifier", "mandatory": true },
+              { "name": "Amount", "type": "Currency", "mandatory": true, "default": "0" },
+              { "name": "Reason", "type": "Text", "length": 1000 },
+              { "name": "StatusId", "type": "RefundStatus Identifier", "mandatory": true, "default": "Entities.RefundStatus.Requested" },
+              { "name": "ProviderRefundId", "type": "Text", "length": 200 },
+              { "name": "RequestedOn", "type": "Date Time", "mandatory": true, "default": "CurrDateTime()" },
+              { "name": "CompletedOn", "type": "Date Time" }
+            ]
+          },
+          {
+            "name": "License",
+            "public": true,
+            "description": "Direito de acesso digital concedido apos uma compra.",
+            "attributes": [
+              { "name": "UserId", "type": "User Identifier", "mandatory": true },
+              { "name": "OrderItemId", "type": "OrderItem Identifier", "mandatory": true },
+              { "name": "GameEditionId", "type": "GameEdition Identifier", "mandatory": true },
+              { "name": "StatusId", "type": "LicenseStatus Identifier", "mandatory": true, "default": "Entities.LicenseStatus.Pending" },
+              { "name": "LicenseKey", "type": "Text", "length": 200 },
+              { "name": "GrantedOn", "type": "Date Time", "mandatory": true, "default": "CurrDateTime()" },
+              { "name": "ActivatedOn", "type": "Date Time" },
+              { "name": "LastAccessedOn", "type": "Date Time" },
+              { "name": "RevokedOn", "type": "Date Time" },
+              { "name": "RevocationReason", "type": "Text", "length": 500 }
+            ]
+          },
+          {
+            "name": "DownloadGrant",
+            "public": true,
+            "description": "Controle de acesso e download de uma licenca.",
+            "attributes": [
+              { "name": "LicenseId", "type": "License Identifier", "mandatory": true },
+              { "name": "FileUrl", "type": "Text", "mandatory": true, "length": 1000 },
+              { "name": "FileVersion", "type": "Text", "length": 50 },
+              { "name": "DownloadCount", "type": "Integer", "default": "0" },
+              { "name": "MaxDownloads", "type": "Integer" },
+              { "name": "ExpiresOn", "type": "Date Time" },
+              { "name": "LastDownloadedOn", "type": "Date Time" },
+              { "name": "IsActive", "type": "Boolean", "default": "True" }
+            ]
+          },
+          {
+            "name": "WishlistItem",
+            "public": true,
+            "description": "Jogo salvo na lista de desejos do usuario.",
+            "attributes": [
+              { "name": "UserId", "type": "User Identifier", "mandatory": true },
+              { "name": "GameId", "type": "Game Identifier", "mandatory": true },
+              { "name": "NotifyOnPriceDrop", "type": "Boolean", "default": "True" },
+              { "name": "AddedOn", "type": "Date Time", "mandatory": true, "default": "CurrDateTime()" },
+              { "name": "RemovedOn", "type": "Date Time" }
+            ]
+          },
+          {
+            "name": "GameReview",
+            "public": true,
+            "description": "Avaliacao de um jogo feita por um usuario.",
+            "attributes": [
+              { "name": "UserId", "type": "User Identifier", "mandatory": true },
+              { "name": "GameId", "type": "Game Identifier", "mandatory": true },
+              { "name": "OrderItemId", "type": "OrderItem Identifier", "mandatory": true },
+              { "name": "Rating", "type": "Integer", "mandatory": true },
+              { "name": "Title", "type": "Text", "length": 150 },
+              { "name": "Body", "type": "Text", "length": 4000 },
+              { "name": "StatusId", "type": "ReviewStatus Identifier", "mandatory": true, "default": "Entities.ReviewStatus.Pending" },
+              { "name": "CreatedOn", "type": "Date Time", "mandatory": true, "default": "CurrDateTime()" },
+              { "name": "UpdatedOn", "type": "Date Time" },
+              { "name": "PublishedOn", "type": "Date Time" }
+            ]
+          },
+          {
+            "name": "ReviewVote",
+            "public": true,
+            "description": "Voto de utilidade em uma avaliacao.",
+            "attributes": [
+              { "name": "ReviewId", "type": "GameReview Identifier", "mandatory": true },
+              { "name": "UserId", "type": "User Identifier", "mandatory": true },
+              { "name": "IsHelpful", "type": "Boolean", "mandatory": true },
+              { "name": "CreatedOn", "type": "Date Time", "mandatory": true, "default": "CurrDateTime()" }
+            ]
+          },
+          {
+            "name": "Promotion",
+            "public": true,
+            "description": "Campanha promocional para produtos da loja.",
+            "attributes": [
+              { "name": "Name", "type": "Text", "mandatory": true, "length": 150 },
+              { "name": "Description", "type": "Text", "length": 1000 },
+              { "name": "DiscountTypeId", "type": "DiscountType Identifier", "mandatory": true },
+              { "name": "DiscountValue", "type": "Decimal", "mandatory": true, "default": "0" },
+              { "name": "StartsOn", "type": "Date Time", "mandatory": true },
+              { "name": "EndsOn", "type": "Date Time", "mandatory": true },
+              { "name": "MaxRedemptions", "type": "Integer" },
+              { "name": "RedemptionCount", "type": "Integer", "default": "0" },
+              { "name": "IsActive", "type": "Boolean", "default": "True" }
+            ]
+          },
+          {
+            "name": "PromotionGameEdition",
+            "public": true,
+            "description": "Produto participante de uma promocao.",
+            "attributes": [
+              { "name": "PromotionId", "type": "Promotion Identifier", "mandatory": true },
+              { "name": "GameEditionId", "type": "GameEdition Identifier", "mandatory": true },
+              { "name": "MaximumDiscount", "type": "Currency" },
+              { "name": "IsActive", "type": "Boolean", "default": "True" }
+            ]
+          },
+          {
+            "name": "Coupon",
+            "public": true,
+            "description": "Cupom promocional aplicavel a pedidos.",
+            "attributes": [
+              { "name": "Code", "type": "Text", "mandatory": true, "length": 50 },
+              { "name": "Description", "type": "Text", "length": 500 },
+              { "name": "DiscountTypeId", "type": "DiscountType Identifier", "mandatory": true },
+              { "name": "DiscountValue", "type": "Decimal", "mandatory": true, "default": "0" },
+              { "name": "MinimumOrderAmount", "type": "Currency", "default": "0" },
+              { "name": "StartsOn", "type": "Date Time", "mandatory": true },
+              { "name": "EndsOn", "type": "Date Time", "mandatory": true },
+              { "name": "MaximumRedemptions", "type": "Integer" },
+              { "name": "MaximumPerUser", "type": "Integer" },
+              { "name": "RedemptionCount", "type": "Integer", "default": "0" },
+              { "name": "IsActive", "type": "Boolean", "default": "True" }
+            ]
+          },
+          {
+            "name": "CouponRedemption",
+            "public": true,
+            "description": "Registro do uso de um cupom em um pedido.",
+            "attributes": [
+              { "name": "CouponId", "type": "Coupon Identifier", "mandatory": true },
+              { "name": "UserId", "type": "User Identifier", "mandatory": true },
+              { "name": "OrderId", "type": "Order Identifier", "mandatory": true },
+              { "name": "DiscountAmount", "type": "Currency", "mandatory": true, "default": "0" },
+              { "name": "RedeemedOn", "type": "Date Time", "mandatory": true, "default": "CurrDateTime()" }
+            ]
+          }
+        ]
+      }
+    },
+    { "op": "set", "target": "$CustomerProfile", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$Game", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$Developer", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$Publisher", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$Genre", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$Platform", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$GameDeveloper", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$GamePublisher", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$GameGenre", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$GamePlatform", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$GameEdition", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$GameMedia", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$Cart", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$CartItem", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$Order", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$OrderItem", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$PaymentTransaction", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$Refund", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$License", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$DownloadGrant", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$WishlistItem", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$GameReview", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$ReviewVote", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$Promotion", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$PromotionGameEdition", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$Coupon", "prop": "UpdateBehavior", "value": "Optimized" },
+    { "op": "set", "target": "$CouponRedemption", "prop": "UpdateBehavior", "value": "Optimized" }
+  ]
+}

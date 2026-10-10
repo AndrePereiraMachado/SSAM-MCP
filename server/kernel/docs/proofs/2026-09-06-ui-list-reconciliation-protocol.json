@@ -1,0 +1,171 @@
+{
+  "date": "2026-09-06",
+  "scope": "LAB exported runtime reconciliation protocol",
+  "status": "experiment passed; frontend not implemented",
+  "runtime": "ZZHtmlImports_UI published client runtime",
+  "method": "immutable candidate keyed by Id; set/remove/push/sort; invalidate wrapper cache via exported getCache().invalidate(); writePropagate once",
+  "proof": {
+    "frontendImplemented": false,
+    "environmentFlagChanged": false,
+    "initial": [
+      {
+        "key": "a",
+        "id": "4_0",
+        "caption": "A"
+      },
+      {
+        "key": "b",
+        "id": "4_1",
+        "caption": "B"
+      },
+      {
+        "key": "c",
+        "id": "4_2",
+        "caption": "C"
+      }
+    ],
+    "updated": [
+      {
+        "key": "a",
+        "id": "4_0",
+        "caption": "A changed"
+      },
+      {
+        "key": "b",
+        "id": "4_1",
+        "caption": "B"
+      },
+      {
+        "key": "c",
+        "id": "4_2",
+        "caption": "C"
+      }
+    ],
+    "reordered": [
+      {
+        "key": "c",
+        "id": "4_2",
+        "caption": "C"
+      },
+      {
+        "key": "a",
+        "id": "4_0",
+        "caption": "A changed"
+      },
+      {
+        "key": "b",
+        "id": "4_1",
+        "caption": "B"
+      }
+    ],
+    "inserted": [
+      {
+        "key": "c",
+        "id": "4_2",
+        "caption": "C"
+      },
+      {
+        "key": "d",
+        "id": "4_3",
+        "caption": "D"
+      },
+      {
+        "key": "a",
+        "id": "4_0",
+        "caption": "A changed"
+      },
+      {
+        "key": "b",
+        "id": "4_1",
+        "caption": "B"
+      }
+    ],
+    "removed": [
+      {
+        "key": "d",
+        "id": "4_3",
+        "caption": "D"
+      },
+      {
+        "key": "a",
+        "id": "4_0",
+        "caption": "A changed"
+      },
+      {
+        "key": "b",
+        "id": "4_1",
+        "caption": "B"
+      }
+    ],
+    "equivalent": [
+      {
+        "key": "d",
+        "id": "4_3",
+        "caption": "D"
+      },
+      {
+        "key": "a",
+        "id": "4_0",
+        "caption": "A changed"
+      },
+      {
+        "key": "b",
+        "id": "4_1",
+        "caption": "B"
+      }
+    ],
+    "duplicateRejected": true,
+    "afterDuplicate": [
+      {
+        "key": "d",
+        "id": "4_3",
+        "caption": "D"
+      },
+      {
+        "key": "a",
+        "id": "4_0",
+        "caption": "A changed"
+      },
+      {
+        "key": "b",
+        "id": "4_1",
+        "caption": "B"
+      }
+    ],
+    "overlappingPage": [
+      {
+        "key": "b",
+        "id": "4_1",
+        "caption": "B page 2"
+      },
+      {
+        "key": "e",
+        "id": "4_4",
+        "caption": "E"
+      }
+    ],
+    "returnedPage": [
+      {
+        "key": "a",
+        "id": "4_5",
+        "caption": "A returned"
+      },
+      {
+        "key": "b",
+        "id": "4_1",
+        "caption": "B"
+      }
+    ],
+    "empty": [],
+    "refilled": [
+      {
+        "key": "a",
+        "id": "4_6",
+        "caption": "A fresh"
+      }
+    ],
+    "ok": true
+  },
+  "limitation": "Does not solve the renderer wrapper key controlled by PreserveListItemReactKey. No flags changed. Exported methods are not established supported APIs.",
+  "script": "scripts/probes/highcode/ui_list_reconcile_browser.cjs"
+}

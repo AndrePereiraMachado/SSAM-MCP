@@ -1,0 +1,290 @@
+{
+  "description": "Data action returning an entity list: Current exposes Name directly, without an entity wrapper.",
+  "base": "reactive-ui.oml",
+  "expectValid": true,
+  "ops": [
+    {
+      "op": "spec",
+      "data": {
+        "entities": [
+          {
+            "name": "CurrentGame",
+            "public": true,
+            "attributes": [
+              {
+                "name": "Name",
+                "type": "Text"
+              },
+              {
+                "name": "Value",
+                "type": "Integer"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "create",
+      "parent": "IMobileFlow:MainFlow",
+      "type": "IMobileScreen",
+      "name": "Games",
+      "as": "$scr"
+    },
+    {
+      "op": "set",
+      "target": "$scr/#IMobileBlockInstanceWidget",
+      "prop": "SourceBlock",
+      "value": "IMobileBlock:LayoutTopMenu"
+    },
+    {
+      "op": "create",
+      "parent": "$scr/#IMobileBlockInstanceWidget/Title",
+      "type": "IExpression",
+      "as": "$title"
+    },
+    {
+      "op": "set",
+      "target": "$title",
+      "prop": "Value",
+      "value": "\"KPIs\""
+    },
+    {
+      "op": "create",
+      "parent": "$scr",
+      "type": "IDataAction",
+      "name": "GetGames",
+      "as": "$da"
+    },
+    {
+      "op": "delete",
+      "target": "$da/Out1",
+      "_why": "a data action nasce com um output Out1 de exemplo"
+    },
+    {
+      "op": "create",
+      "parent": "$da",
+      "type": "IOutputParameter",
+      "name": "Games",
+      "as": "$daOut"
+    },
+    {
+      "op": "set",
+      "target": "$daOut",
+      "prop": "DataType",
+      "value": "CurrentGame List"
+    },
+    {
+      "op": "create",
+      "parent": "$da",
+      "type": "ILocalVariable",
+      "name": "K",
+      "as": "$daK"
+    },
+    {
+      "op": "set",
+      "target": "$daK",
+      "prop": "DataType",
+      "value": "CurrentGame"
+    },
+    {
+      "op": "create",
+      "parent": "$da",
+      "type": "ILocalVariable",
+      "name": "L",
+      "as": "$daL"
+    },
+    {
+      "op": "set",
+      "target": "$daL",
+      "prop": "DataType",
+      "value": "CurrentGame List"
+    },
+    {
+      "op": "create",
+      "parent": "$da",
+      "type": "IStartNode",
+      "as": "$d0"
+    },
+    {
+      "op": "create",
+      "parent": "$da",
+      "type": "IAggregateNode",
+      "name": "GetUsers",
+      "as": "$agg"
+    },
+    {
+      "op": "create",
+      "parent": "$agg",
+      "type": "IAliasedSource",
+      "args": {
+        "dataSource": "IEntitySignature:User"
+      }
+    },
+    {
+      "op": "create",
+      "parent": "$da",
+      "type": "IAssignNode",
+      "name": "Fill",
+      "as": "$as"
+    },
+    {
+      "op": "set",
+      "target": "$as",
+      "prop": "Label",
+      "value": "Fill"
+    },
+    {
+      "op": "create",
+      "parent": "$as",
+      "type": "IAssignment",
+      "as": "$a1"
+    },
+    {
+      "op": "set",
+      "target": "$a1",
+      "prop": "Variable",
+      "value": "K.Name"
+    },
+    {
+      "op": "set",
+      "target": "$a1",
+      "prop": "Value",
+      "value": "\"Users\""
+    },
+    {
+      "op": "create",
+      "parent": "$as",
+      "type": "IAssignment",
+      "as": "$a2"
+    },
+    {
+      "op": "set",
+      "target": "$a2",
+      "prop": "Variable",
+      "value": "K.Value"
+    },
+    {
+      "op": "set",
+      "target": "$a2",
+      "prop": "Value",
+      "value": "GetUsers.List.Length"
+    },
+    {
+      "op": "create",
+      "parent": "$da",
+      "type": "IExecuteServerActionNode",
+      "name": "ListAppend",
+      "as": "$app"
+    },
+    {
+      "op": "set",
+      "target": "$app",
+      "prop": "Action",
+      "value": "IActionSignature:ListAppend"
+    },
+    {
+      "op": "set",
+      "target": "$app/List",
+      "prop": "Value",
+      "value": "L"
+    },
+    {
+      "op": "set",
+      "target": "$app/Element",
+      "prop": "Value",
+      "value": "K"
+    },
+    {
+      "op": "create",
+      "parent": "$da",
+      "type": "IAssignNode",
+      "name": "SetOutput",
+      "as": "$asOut"
+    },
+    {
+      "op": "set",
+      "target": "$asOut",
+      "prop": "Label",
+      "value": "SetOutput"
+    },
+    {
+      "op": "create",
+      "parent": "$asOut",
+      "type": "IAssignment",
+      "as": "$aOut"
+    },
+    {
+      "op": "set",
+      "target": "$aOut",
+      "prop": "Variable",
+      "value": "Games"
+    },
+    {
+      "op": "set",
+      "target": "$aOut",
+      "prop": "Value",
+      "value": "L"
+    },
+    {
+      "op": "create",
+      "parent": "$da",
+      "type": "IEndNode",
+      "as": "$d9"
+    },
+    {
+      "op": "link",
+      "from": "$d0",
+      "to": "$agg"
+    },
+    {
+      "op": "link",
+      "from": "$agg",
+      "to": "$as"
+    },
+    {
+      "op": "link",
+      "from": "$as",
+      "to": "$app"
+    },
+    {
+      "op": "link",
+      "from": "$app",
+      "to": "$asOut"
+    },
+    {
+      "op": "link",
+      "from": "$asOut",
+      "to": "$d9"
+    },
+    {
+      "op": "layout",
+      "target": "$da"
+    },
+    {
+      "op": "create",
+      "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+      "type": "IList",
+      "name": "CurrentGameList",
+      "as": "$list"
+    },
+    {
+      "op": "set",
+      "target": "$list",
+      "prop": "Source",
+      "value": "GetGames.Games"
+    },
+    {
+      "op": "create",
+      "parent": "$list",
+      "type": "IExpression",
+      "as": "$ex"
+    },
+    {
+      "op": "set",
+      "target": "$ex",
+      "prop": "Value",
+      "value": "GetGames.Games.Current.Name + \": \" + GetGames.Games.Current.Value"
+    }
+  ]
+}

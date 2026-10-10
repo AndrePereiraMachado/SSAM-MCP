@@ -1,0 +1,22 @@
+{
+ "description": "Op rest editando e apagando: sobre o rest-consume-call, o chamador sai primeiro (delete cru), o metodo antigo sai pelo remove e um metodo novo com query string entra no mesmo cliente reaproveitando a estrutura de resposta; depois o mesmo metodo e redeclarado com outro caminho e a descricao do cliente muda (atualizacao no lugar, mesma chave).",
+ "base": "job:rest-consume-call",
+ "expectValid": true,
+ "ops": [
+  {"op": "delete", "target": "IServerAction:Cep_Lookup"},
+  {"op": "rest", "data": {
+    "client": {"name": "ViaCepApi"},
+    "methods": [{"name": "GetAddressV2", "http": "GET", "path": "/ws/{CEP}/json/",
+                 "inputs": [{"name": "CEP", "type": "Text", "in": "url"}, {"name": "callback", "type": "Text", "in": "query"}],
+                 "response": {"structure": "GetAddressByCepResponse"}}],
+    "remove": ["GetAddressByCep"]}},
+  {"op": "get", "target": "IRestAction:GetAddressV2"},
+  {"op": "rest", "data": {
+    "client": {"name": "ViaCepApi", "description": "ViaCEP (edited in place)"},
+    "methods": [{"name": "GetAddressV2", "http": "GET", "path": "/ws/{CEP}/json",
+                 "inputs": [{"name": "CEP", "type": "Text", "in": "url"}],
+                 "response": {"structure": "GetAddressByCepResponse"}}]}},
+  {"op": "get", "target": "IRestAction:GetAddressV2"},
+  {"op": "find", "type": "IRestAction"}
+ ]
+}

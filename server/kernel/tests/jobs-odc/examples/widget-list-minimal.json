@@ -1,0 +1,17 @@
+{
+ "description": "List: um IList com Source no aggregate da tela e uma Expression por linha (List.Current).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [{"name": "Name", "type": "Text", "length": 100, "mandatory": true}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ListDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "ProductList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetProducts.List", "_why": "sem Source o Verify da RequiredPropertyValue"},
+  {"op": "create", "parent": "$list", "type": "IExpression", "as": "$name", "_why": "o job escreve na List; no ODC o filho fica dentro do IContent dela"},
+  {"op": "set", "target": "$name", "prop": "Value", "value": "GetProducts.List.Current.Product.Name"}
+ ]
+}

@@ -1,0 +1,116 @@
+{
+  "fixture": "blank-service",
+  "features": [
+    "json-nested-structures",
+    "server"
+  ],
+  "contract": {
+    "data": {
+      "structures": [
+        {
+          "name": "CoverageItem",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Number",
+              "type": "Integer"
+            },
+            {
+              "name": "Text",
+              "type": "Text"
+            }
+          ]
+        },
+        {
+          "name": "CoverageEnvelope",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Item",
+              "type": "CoverageItem"
+            },
+            {
+              "name": "Items",
+              "type": "CoverageItem List"
+            },
+            {
+              "name": "Numbers",
+              "type": "Integer List"
+            }
+          ]
+        }
+      ],
+      "entities": [
+        {
+          "name": "CoverageRow",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Value",
+              "type": "Integer"
+            }
+          ]
+        }
+      ]
+    },
+    "exceptions": [
+      {
+        "name": "CoverageFailure"
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "inputs": [
+            {
+              "name": "Value",
+              "type": "CoverageEnvelope"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "Result",
+              "type": "CoverageEnvelope"
+            }
+          ],
+          "steps": [
+            {
+              "node": "IJSONSerializeNode",
+              "as": "Encode",
+              "properties": {
+                "Data": "Value",
+                "DateFormat": "ISO",
+                "SerializeDefaultValues": true
+              }
+            },
+            {
+              "node": "IJSONDeserializeNode",
+              "as": "Decode",
+              "properties": {
+                "JSONString": "Encode.JSON",
+                "DataType": "CoverageEnvelope",
+                "DateFormat": "ISO"
+              }
+            },
+            {
+              "assign": {
+                "Result": "Decode.Data"
+              }
+            }
+          ],
+          "name": "Coverage",
+          "kind": "server",
+          "public": true,
+          "access": {
+            "authenticated": true
+          }
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IServerAction:Coverage/Encode",
+    "prop": "SerializeDefaultValues",
+    "value": false
+  }
+}

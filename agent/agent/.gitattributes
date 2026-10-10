@@ -1,0 +1,3 @@
+# Line endings fixed here, not by the cloning machine: lib/odc-pipe.mjs must stay byte-equal to
+# platforms/odc/facade/odc-pipe.mjs (LF there, platforms/odc/.gitattributes), and pack.json pins sha256 of these files.
+* text=auto eol=lf

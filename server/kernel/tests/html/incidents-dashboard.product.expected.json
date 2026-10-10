@@ -1,0 +1,6 @@
+[
+  {"id": "CustomObjectWarning", "element": "Dashboard (MobileScreen) / LoadDashboard (DataAction) / ReadSource (ExecuteServerActionNode)", "why": "A tela Dashboard do Incidents_UI tem a role Anonymous (como IncidentList e IncidentDetail, que ja carregam o mesmo aviso); a data action chama GetDashboardMetricsForPeriod, que faz o proprio CheckRole. As data actions substituidas tinham o mesmo aviso; remover a Anonymous e decisao de seguranca do produto, fora do op html."},
+  {"id": "CustomObjectWarning", "element": "Dashboard (MobileScreen) / LoadNearDue (DataAction) / ReadSource (ExecuteServerActionNode)", "why": "Mesmo motivo: tela com role Anonymous chamando GetIncidentsNearDue do Incidents_CS; aviso preexistente na data action substituida."},
+  {"id": "CustomObjectWarning", "element": "Dashboard (MobileScreen) / LoadMine (DataAction) / ReadSource (ExecuteServerActionNode)", "why": "Mesmo motivo: tela com role Anonymous chamando GetIncidentList do Incidents_CS; aviso preexistente na data action substituida."},
+  {"id": "CustomObjectWarning", "element": "Dashboard (MobileScreen) / LoadRecent (DataAction) / ReadSource (ExecuteServerActionNode)", "why": "Mesmo motivo: tela com role Anonymous chamando GetIncidentList do Incidents_CS; aviso preexistente na data action substituida."}
+]

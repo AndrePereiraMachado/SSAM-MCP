@@ -1,0 +1,12 @@
+{
+ "answers": [],
+ "runtimeEvidence": [
+  {
+   "testId": "fixture0000a",
+   "result": "pass",
+   "test": "E2E-FIXTURE-01",
+   "evidence": "fixture do autoteste",
+   "date": "2026-09-25"
+  }
+ ]
+}

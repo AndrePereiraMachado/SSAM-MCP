@@ -1,0 +1,18 @@
+{
+ "description": "Faixa ODC, o espelho de tests/jobs-negative/move-into-out-of-reach.json. A recusa do move com `into` quando um consumidor nao pode seguir o objeto: a variavel local Used e lida por um Assign da sua action; noutra action ela fica fora de alcance desse Assign. O move nativo deixaria a referencia a apontar para nada; o verbo confere cada consumidor depois do move, recusa e o job inteiro nao entra. O caminho limpo esta em tests/jobs-odc/refactor-reparent.json.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectError": [
+  "move into: 1 consumer(s) of ILocalVariable 'Used' cannot follow it into IServerAction:RpOther",
+  "would be left pointing at nothing",
+  "IServerAction:RpOwner/IAssignNode/IAssignment",
+  "nothing was moved"
+ ],
+ "ops": [
+  {"op": "logic", "data": {"actions": [
+   {"name": "RpOwner", "kind": "server", "vars": [{"name": "Used", "type": "Text"}], "steps": [{"assign": {"Used": "\"x\""}}]},
+   {"name": "RpOther", "kind": "server", "steps": []}
+  ]}},
+  {"op": "move", "target": "IServerAction:RpOwner/Used", "into": "IServerAction:RpOther"}
+ ]
+}

@@ -1,0 +1,431 @@
+{
+ "description": "Sessao fria I: modulo Reactive referencia Product e Product_GetById do produtor (job producer-public); tela Products com aggregate + Table (Name, Price) e link por linha para ProductDetail(ProductId), que mostra Name/Price e tem botao Summary -> screen action que chama Product_GetById e guarda o output numa variavel local (escrito por uma LLM sem contexto na sessao fria I, rodada 2, 2026-09-04)",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "reference",
+   "producer": "job:producer-public",
+   "elements": [
+    "IServerEntity:Product",
+    "IServerAction:Product_GetById"
+   ],
+   "as": "$ref"
+  },
+  {
+   "op": "find",
+   "type": "IReference",
+   "max": 20
+  },
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "ProductDetail",
+   "as": "$det"
+  },
+  {
+   "op": "set",
+   "target": "$det/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$det",
+   "type": "IInputParameter",
+   "name": "ProductId",
+   "as": "$pid"
+  },
+  {
+   "op": "set",
+   "target": "$pid",
+   "prop": "DataType",
+   "value": "Product Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$det",
+   "type": "ILocalVariable",
+   "name": "Summary",
+   "as": "$var"
+  },
+  {
+   "op": "set",
+   "target": "$var",
+   "prop": "DataType",
+   "value": "ProductSummary"
+  },
+  {
+   "op": "create",
+   "parent": "$det",
+   "type": "IScreenAggregate",
+   "name": "GetProductById",
+   "as": "$dagg"
+  },
+  {
+   "op": "create",
+   "parent": "$dagg",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IEntitySignature:Product"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$dagg",
+   "type": "IFilter",
+   "args": {
+    "condition": "Product.Id = ProductId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$det/#IMobileBlockInstanceWidget/Title",
+   "type": "IExpression",
+   "as": "$dtitle"
+  },
+  {
+   "op": "set",
+   "target": "$dtitle",
+   "prop": "Value",
+   "value": "\"Product\""
+  },
+  {
+   "op": "create",
+   "parent": "$det/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IContainer",
+   "name": "DetailContainer",
+   "as": "$dc"
+  },
+  {
+   "op": "create",
+   "parent": "$dc",
+   "type": "IExpression",
+   "as": "$dname"
+  },
+  {
+   "op": "set",
+   "target": "$dname",
+   "prop": "Value",
+   "value": "GetProductById.List.Current.Product.Name"
+  },
+  {
+   "op": "create",
+   "parent": "$dc",
+   "type": "IExpression",
+   "as": "$dprice"
+  },
+  {
+   "op": "set",
+   "target": "$dprice",
+   "prop": "Value",
+   "value": "GetProductById.List.Current.Product.Price"
+  },
+  {
+   "op": "create",
+   "parent": "$det",
+   "type": "IScreenAction",
+   "name": "GetSummary",
+   "as": "$sa"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IStartNode",
+   "as": "$s0"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IExecuteServerActionNode",
+   "name": "Product_GetById",
+   "as": "$call"
+  },
+  {
+   "op": "set",
+   "target": "$call",
+   "prop": "Action",
+   "value": "IActionSignature:Product_GetById"
+  },
+  {
+   "op": "set",
+   "target": "$call/ProductId",
+   "prop": "Value",
+   "value": "ProductId"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IAssignNode",
+   "name": "SetSummary",
+   "as": "$as"
+  },
+  {
+   "op": "set",
+   "target": "$as",
+   "prop": "Label",
+   "value": "SetSummary"
+  },
+  {
+   "op": "create",
+   "parent": "$as",
+   "type": "IAssignment",
+   "as": "$a1"
+  },
+  {
+   "op": "set",
+   "target": "$a1",
+   "prop": "Variable",
+   "value": "Summary"
+  },
+  {
+   "op": "set",
+   "target": "$a1",
+   "prop": "Value",
+   "value": "Product_GetById.Summary"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IEndNode",
+   "as": "$s9"
+  },
+  {
+   "op": "link",
+   "from": "$s0",
+   "to": "$call"
+  },
+  {
+   "op": "link",
+   "from": "$call",
+   "to": "$as"
+  },
+  {
+   "op": "link",
+   "from": "$as",
+   "to": "$s9"
+  },
+  {
+   "op": "layout",
+   "target": "$sa"
+  },
+  {
+   "op": "create",
+   "parent": "$det/#IMobileBlockInstanceWidget/Actions",
+   "type": "IButton",
+   "name": "SummaryButton",
+   "as": "$btn"
+  },
+  {
+   "op": "set",
+   "target": "$btn/#ITextWidget",
+   "prop": "Text",
+   "value": "Summary"
+  },
+  {
+   "op": "set",
+   "target": "$btn/OnClick",
+   "prop": "Destination",
+   "value": "$sa"
+  },
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "Products",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/Title",
+   "type": "IExpression",
+   "as": "$title"
+  },
+  {
+   "op": "set",
+   "target": "$title",
+   "prop": "Value",
+   "value": "\"Products\""
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAggregate",
+   "name": "GetProducts",
+   "as": "$agg"
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IEntitySignature:Product"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "ITableRecords",
+   "name": "ProductTable",
+   "as": "$tbl",
+   "empty": true
+  },
+  {
+   "op": "set",
+   "target": "$tbl",
+   "prop": "Source",
+   "value": "GetProducts.List"
+  },
+  {
+   "op": "create",
+   "parent": "$tbl/HeaderRow",
+   "type": "IHeaderCell",
+   "name": "NameHeader",
+   "as": "$h1"
+  },
+  {
+   "op": "create",
+   "parent": "$h1",
+   "type": "IExpression",
+   "as": "$h1e"
+  },
+  {
+   "op": "set",
+   "target": "$h1e",
+   "prop": "Value",
+   "value": "\"Name\""
+  },
+  {
+   "op": "create",
+   "parent": "$tbl/HeaderRow",
+   "type": "IHeaderCell",
+   "name": "PriceHeader",
+   "as": "$h2"
+  },
+  {
+   "op": "create",
+   "parent": "$h2",
+   "type": "IExpression",
+   "as": "$h2e"
+  },
+  {
+   "op": "set",
+   "target": "$h2e",
+   "prop": "Value",
+   "value": "\"Price\""
+  },
+  {
+   "op": "create",
+   "parent": "$tbl/HeaderRow",
+   "type": "IHeaderCell",
+   "name": "DetailHeader",
+   "as": "$h3"
+  },
+  {
+   "op": "create",
+   "parent": "$h3",
+   "type": "IExpression",
+   "as": "$h3e"
+  },
+  {
+   "op": "set",
+   "target": "$h3e",
+   "prop": "Value",
+   "value": "\"\""
+  },
+  {
+   "op": "create",
+   "parent": "$tbl/Row",
+   "type": "IRowCell",
+   "name": "NameCell",
+   "as": "$c1"
+  },
+  {
+   "op": "create",
+   "parent": "$c1",
+   "type": "IExpression",
+   "as": "$c1e"
+  },
+  {
+   "op": "set",
+   "target": "$c1e",
+   "prop": "Value",
+   "value": "GetProducts.List.Current.Product.Name"
+  },
+  {
+   "op": "create",
+   "parent": "$tbl/Row",
+   "type": "IRowCell",
+   "name": "PriceCell",
+   "as": "$c2"
+  },
+  {
+   "op": "create",
+   "parent": "$c2",
+   "type": "IExpression",
+   "as": "$c2e"
+  },
+  {
+   "op": "set",
+   "target": "$c2e",
+   "prop": "Value",
+   "value": "GetProducts.List.Current.Product.Price"
+  },
+  {
+   "op": "create",
+   "parent": "$tbl/Row",
+   "type": "IRowCell",
+   "name": "DetailCell",
+   "as": "$c3"
+  },
+  {
+   "op": "create",
+   "parent": "$c3",
+   "type": "ILink",
+   "name": "DetailLink",
+   "as": "$lnk"
+  },
+  {
+   "op": "set",
+   "target": "$lnk/#ITextWidget",
+   "prop": "Text",
+   "value": "Detail"
+  },
+  {
+   "op": "set",
+   "target": "$lnk/OnClick",
+   "prop": "Destination",
+   "value": "IMobileScreen:ProductDetail"
+  },
+  {
+   "op": "set",
+   "target": "$lnk/OnClick/ProductId",
+   "prop": "Value",
+   "value": "GetProducts.List.Current.Product.Id"
+  },
+  {
+   "op": "find",
+   "name": "Products"
+  },
+  {
+   "op": "find",
+   "name": "ProductDetail"
+  },
+  {
+   "op": "get",
+   "target": "$lnk/OnClick"
+  },
+  {
+   "op": "dump",
+   "target": "$det",
+   "depth": 5
+  }
+ ]
+}

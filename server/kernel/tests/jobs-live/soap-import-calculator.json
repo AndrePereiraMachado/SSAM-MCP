@@ -1,0 +1,11 @@
+{
+ "description": "PROVA VIVA (dono, O11, modulo de teste ZZ): import SOAP de dois metodos pelo o11_deliver (o deliver fixa o WSDL; a bridge importa numa copia destacada; o kernel confere os tipos e o merge e um so). Rodar de novo: nada muda (skipped). Nao roda na suite.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {"op": "soap", "data": {"wsdl": "http://www.dneonline.com/calculator.asmx?WSDL", "client": "Calculator", "port": "CalculatorSoap", "methods": ["Add", "Subtract"]}},
+  {"op": "logic", "data": {"actions": [{"name": "Calculator_Add", "public": true,
+    "inputs": [{"name": "A", "type": "Integer"}, {"name": "B", "type": "Integer"}], "outputs": [{"name": "Sum", "type": "Integer"}],
+    "steps": [{"call": "ISOAPAction:Add", "as": "AddCall", "args": {"intA": "A", "intB": "B"}}, {"assign": {"Sum": "AddCall.AddResult"}}]}]}}
+ ]
+}

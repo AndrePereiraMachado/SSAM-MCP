@@ -1,0 +1,10 @@
+{
+ "description": "A RECUSA de `replace` entre ENTIDADES: os consumidores de uma entidade ligam-se aos seus filhos (tipo identificador das FKs, atributos, registo anonimo, tipo lista) e ReplaceReferences nao os mapeia -- no O11 deixava 1 consumidor na origem ('native replacement was incomplete'), no ODC deixava o modulo com estruturas anonimas em falta (InvalidGlobalStateException 6), medido em 2026-09-23. Desde o lote de dados da fase 3 o kernel recusa antes de tocar o modelo. Alternativas provadas: renomear a entidade (rename), ou reapontar os atributos um a um (replace entre atributos, tests/jobs/entity-refactor.json).",
+ "base": "job:spec-data",
+ "expectValid": true,
+ "expectError": ["replace: IServerEntity 'Contact' is an entity and cannot be repointed", "Rename it, or move the consumers to the other entity by hand"],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Person", "attributes": [{"name": "Name", "type": "Text", "length": 100}]}]}},
+  {"op": "replace", "from": "IServerEntity:Contact", "to": "$Person"}
+ ]
+}

@@ -1,0 +1,15 @@
+{
+ "_leia": "POSITIVO no estagio oml (+truechange): nenhum erro bloqueante no OML da parte conforme.",
+ "stage": "oml,truechange",
+ "mode": "autor",
+ "oml": "positive-conforming.oml",
+ "resultForOml": "positive-conforming.result.json",
+ "exitCode": 0,
+ "maxBlockingErrors": 0,
+ "mustNotFind": [
+  {
+   "rule": "N1",
+   "severity": "erro"
+  }
+ ]
+}

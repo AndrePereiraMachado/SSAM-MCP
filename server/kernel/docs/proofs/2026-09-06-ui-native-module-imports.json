@@ -1,0 +1,125 @@
+{
+  "date": "2026-09-06",
+  "scope": "Native block imports from existing module references",
+  "status": "implemented, live-proven and installed in SS4/SS5 for blocks from registered references",
+  "sourceSyntax": [
+    "import { Block } from 'outsystems:Module/Flow'",
+    "import Alias from 'outsystems:Module/Flow/Block'"
+  ],
+  "nativeSemantics": [
+    "reference instances only; producer block not copied",
+    "original producer flow/block names survive consumer aliases",
+    "primitive input/event signatures and optional defaults",
+    "global block identity, reference key/hash and signature checked after merge"
+  ],
+  "proofs": {
+    "osui": {
+      "taskId": "dab2f77391a54df8806b5ef3aa603b15",
+      "delivered": true,
+      "elapsedMs": 14249,
+      "unchanged": false,
+      "newErrors": 0,
+      "assertions": 328,
+      "imports": [
+        "IReference:OutSystemsUI/Content/Card",
+        "IReference:OutSystemsUI/Navigation/Pagination"
+      ]
+    },
+    "consumer": {
+      "taskId": "e85dc882405b430a8856b9d3aa0d4351",
+      "delivered": true,
+      "elapsedMs": 17348,
+      "unchanged": false,
+      "newErrors": 0,
+      "assertions": 286,
+      "imports": [
+        "IReference:ZZHtmlDashboardReview_UI/MainFlow/CounterCard"
+      ]
+    },
+    "osuiBrowser": {
+      "checks": [
+        "two native Card instances render projected HTML",
+        "native Pagination invokes authored JavaScript and receives updated StartIndex",
+        "forward/back navigation and final-page disabled state",
+        "390px without horizontal overflow"
+      ],
+      "errors": [],
+      "dataPagingProven": false,
+      "ok": true
+    },
+    "consumerBrowser": {
+      "checks": [
+        "published block reused across modules",
+        "independent instance states 2/1",
+        "native events reach authored consumer handlers including three queued emissions",
+        "producer CSS and consumer slots preserved",
+        "390px without horizontal overflow"
+      ],
+      "errors": [],
+      "ok": true
+    },
+    "normalSs5Installation": {
+      "taskId": "b775c05c19104bfbb3326f1402679c8a",
+      "delivered": true,
+      "unchanged": true,
+      "elapsedMs": 14258,
+      "checks": 286,
+      "checkDeliveryAccepted": true
+    }
+  },
+  "limitations": [
+    "missing dependencies are not automatically acquired",
+    "native action/type imports, record/list codecs and async source transformer still pending",
+    "Pagination control callback proven; no claim about Dashboard data paging",
+    "Incidents_UI unchanged",
+    "SS4 GUI restart not performed"
+  ],
+  "installations": {
+    "ss4": {
+      "coreSha256": "4677eb064e9d5092fefc272bffd53dff3d286b9337fd8fbb5dfe871cc6715376",
+      "workerPort": 4517,
+      "workerPid": 68684,
+      "studioRestarted": false,
+      "cliSha256": "d176569e659810827116eb65899bc70d554446e260a81c6f845b42d1e84f04a6"
+    },
+    "ss5": {
+      "coreSha256": "4677eb064e9d5092fefc272bffd53dff3d286b9337fd8fbb5dfe871cc6715376",
+      "workerPort": 4537,
+      "workerPid": 67860,
+      "studioRestarted": false,
+      "cliSha256": "d176569e659810827116eb65899bc70d554446e260a81c6f845b42d1e84f04a6"
+    }
+  },
+  "tests": {
+    "broadRegression": {
+      "passed": 647,
+      "failed": 0,
+      "duration": "41m28s",
+      "report": "tests/Anvil.Tests/TestResults/ui-native-import-regression.trx",
+      "scope": "before final OriginalName/diagnostic changes"
+    },
+    "finalFocused": {
+      "passed": 51,
+      "failed": 1,
+      "report": ".local/review/native-final-results/ui-native-import-final.trx",
+      "failure": "test fixture clone helper omitted two optional native API parameters; production code unchanged by correction"
+    },
+    "nativeImportsRetest": {
+      "passed": 9,
+      "failed": 0,
+      "duration": "27s",
+      "report": ".local/review/native-final-results/ui-native-import-retest.trx",
+      "scope": "final code, including real producer clone and automatic consumer flow alias"
+    },
+    "fullSuiteRepeatedAfterFinalChanges": false
+  },
+  "authorityConfiguration": {
+    "userEnvironmentVariable": "ANVIL_AUTHORITY_DIR",
+    "directory": "C:/Users/andre/.anvil/authority",
+    "defaultClientAuthenticatedReadsPassed": [
+      4517,
+      4537
+    ],
+    "credentialContentsRecorded": false
+  }
+}

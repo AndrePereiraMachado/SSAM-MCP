@@ -1,0 +1,19 @@
+{
+ "description": "InlineSVG do OSUI com SVG montado por expressao: a cor do circulo depende de uma variavel.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "StatusDot", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Status\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "IsOnline", "as": "$vIsOnline"},
+  {"op": "set", "target": "$vIsOnline", "prop": "DataType", "value": "Boolean"},
+  {"op": "set", "target": "$vIsOnline", "prop": "DefaultValue", "value": "True"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "InlineSVG1", "source": "IMobileBlock:InlineSVG", "as": "$svg"},
+  {"op": "set", "target": "$svg/SVGCode", "prop": "Value", "value": "\"<svg width='16' height='16'><circle cx='8' cy='8' r='7' fill='\" + If(IsOnline, \"green\", \"gray\") + \"'/></svg>\""},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "If(IsOnline, \"Online\", \"Offline\")"}
+ ]
+}

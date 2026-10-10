@@ -1,0 +1,79 @@
+{
+  "fixture": "reactive-ui",
+  "features": [
+    "native-widget",
+    "mobile:IListItem"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "RowsList",
+            "type": "IList",
+            "properties": {
+              "Source": "Rows"
+            },
+            "children": [
+              {
+                "name": "Subject",
+                "type": "IListItem",
+                "properties": {
+                  "Style": "\"coverage\""
+                },
+                "slots": {
+                  "Content": [
+                    {
+                      "name": "Part2",
+                      "type": "ITextWidget",
+                      "properties": {
+                        "Text": "Content"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ],
+        "vars": [
+          {
+            "name": "Rows",
+            "type": "ScreenRow List"
+          }
+        ]
+      }
+    ],
+    "data": {
+      "structures": [
+        {
+          "name": "ScreenRow",
+          "attributes": [
+            {
+              "name": "Name",
+              "type": "Text"
+            },
+            {
+              "name": "Value",
+              "type": "Integer"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IMobileScreen:Coverage/RowsList/Subject",
+    "prop": "Style",
+    "value": "\"changed\""
+  }
+}

@@ -1,0 +1,27 @@
+{
+ "description": "Upload de imagem: Accept limita a imagens, o OnChange monta um resumo com o nome do arquivo escolhido.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "PhotoUpload", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Photo", "as": "$photo"},
+  {"op": "set", "target": "$photo", "prop": "DataType", "value": "Binary Data"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "PhotoName", "as": "$name"},
+  {"op": "set", "target": "$name", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Summary", "as": "$sum"},
+  {"op": "set", "target": "$sum", "prop": "DataType", "value": "Text"},
+  {"op": "logic", "data": {"actions": [
+   {"name": "PhotoChosen", "kind": "screen", "owner": "IMobileScreen:PhotoUpload",
+    "steps": [{"assign": {"Summary": "If(PhotoName = \"\", \"No photo\", \"Selected: \" + PhotoName)"}, "as": "Describe"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IUpload", "name": "PhotoUploadWidget", "as": "$up"},
+  {"op": "set", "target": "$up", "prop": "FileContent", "value": "Photo"},
+  {"op": "set", "target": "$up", "prop": "FileName", "value": "PhotoName"},
+  {"op": "set", "target": "$up", "prop": "Accept", "value": "Image", "_why": "Accept e um enum: Image, Video ou Any"},
+  {"op": "set", "target": "$up/OnChange", "prop": "Destination", "value": "IMobileScreen:PhotoUpload/PhotoChosen"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$show"},
+  {"op": "set", "target": "$show", "prop": "Value", "value": "Summary"},
+  {"op": "get", "target": "$up"}
+ ]
+}

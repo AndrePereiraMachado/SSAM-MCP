@@ -1,0 +1,45 @@
+using System;
+using System.Linq;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using Anvil.Authoring;
+
+[Entity, Index(nameof(Code), Unique=true)]
+public record Batch(Id<Batch> Id, [property:MaxLength(24)] string Code, int Quantity,
+    [property:MaxLength(250)] string? Note);
+
+public static class Inventory
+{
+    public static Id<Batch> Create(IDataSession database,string code,int quantity,string? note)
+    {
+        if(quantity<0) throw new ArgumentException("Quantity cannot be negative.");
+        return database.Insert(new Batch(default,code,quantity,note));
+    }
+    public static Batch? Read(IDataSession database,Id<Batch> id)
+        => database.Query<Batch>().SingleOrDefault(batch=>batch.Id==id);
+    public static void ChangeQuantity(IDataSession database,Id<Batch> id,int quantity)
+    {
+        if(quantity<0) throw new ArgumentException("Quantity cannot be negative.");
+        var batch=database.Query<Batch>().SingleOrDefault(batch=>batch.Id==id);
+        if(batch==null) throw new InvalidOperationException("Batch was not found.");
+        database.Update(batch with {Quantity=quantity});
+    }
+    public static void ChangeNote(IDataSession database,Id<Batch> id,string? note)
+    {
+        var batch=database.Query<Batch>().Single(batch=>batch.Id==id);
+        database.Update(batch with {Note=note});
+    }
+    public static void Remove(IDataSession database,Id<Batch> id)=>database.Delete<Batch>(id);
+    public static List<Batch> ListAvailable(IDataSession database,int minimum)
+        => database.Query<Batch>().Where(batch=>batch.Quantity>=minimum).OrderBy(batch=>batch.Code).ToList();
+    public static int CountAvailable(IDataSession database,int minimum)
+        => database.Query<Batch>().Count(batch=>batch.Quantity>=minimum);
+    public static bool Exists(IDataSession database,string code)
+        => database.Query<Batch>().Any(batch=>batch.Code==code);
+    public static Batch ReadRequired(IDataSession database,Id<Batch> id)
+    {
+        var result=Read(database,id);
+        if(result==null) throw new InvalidOperationException("Batch was not found.");
+        return result;
+    }
+}

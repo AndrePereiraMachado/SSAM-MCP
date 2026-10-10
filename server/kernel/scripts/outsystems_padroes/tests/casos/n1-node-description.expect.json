@@ -1,0 +1,21 @@
+{
+ "_leia": "N1: aggregate de `get` sem `set $<Action>.<as> Description` e no `node` sem properties.Description.",
+ "stage": "job",
+ "mode": "autor",
+ "module": "Domain_CS",
+ "exitCode": 1,
+ "mustFind": [
+  {
+   "rule": "N1",
+   "severity": "erro",
+   "stage": "job",
+   "contains": "AggregateNode ReadLatestNote"
+  },
+  {
+   "rule": "N1",
+   "severity": "erro",
+   "stage": "job",
+   "contains": "JSONSerializeNode EncodeRow"
+  }
+ ]
+}

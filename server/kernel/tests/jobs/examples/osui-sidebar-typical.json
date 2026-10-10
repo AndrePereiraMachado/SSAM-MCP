@@ -1,0 +1,25 @@
+{
+ "description": "Sidebar (OutSystemsUI, Interaction) tipico; placeholders Header, Content com dados do aggregate de tarefas; eventos OnToggle, Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastSidebarId", "as": "$vLastSidebarId"},
+  {"op": "set", "target": "$vLastSidebarId", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastIsOpen", "as": "$vLastIsOpen"},
+  {"op": "set", "target": "$vLastIsOpen", "prop": "DataType", "value": "Boolean"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetShowcaseTasks", "as": "$tasks"},
+  {"op": "create", "parent": "$tasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "logic", "data": {"actions": [{"name": "SidebarDemoOnToggle", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de OnToggle", "inputs": [{"name": "SidebarId", "type": "Text"}, {"name": "IsOpen", "type": "Boolean"}],"steps": [{"assign": {"LastSidebarId": "SidebarId", "LastIsOpen": "IsOpen"},"as": "KeepOnToggle"}]}, {"name": "SidebarDemoInitialized", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de Initialized", "inputs": [{"name": "SidebarId", "type": "Text"}],"steps": [{"assign": {"LastSidebarId": "SidebarId"},"as": "KeepInitialized"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "SidebarDemo", "source": "IMobileBlock:Sidebar", "as": "$b"},
+  {"op": "set", "target": "$b/OnToggle", "prop": "Handler", "value": "IScreenAction:SidebarDemoOnToggle"},
+  {"op": "set", "target": "$b/OnToggle/SidebarId", "prop": "Value", "value": "SidebarId"},
+  {"op": "set", "target": "$b/OnToggle/IsOpen", "prop": "Value", "value": "IsOpen"},
+  {"op": "set", "target": "$b/Initialized", "prop": "Handler", "value": "IScreenAction:SidebarDemoInitialized"},
+  {"op": "set", "target": "$b/Initialized/SidebarId", "prop": "Value", "value": "SidebarId"},
+  {"op": "create", "parent": "$b/Header", "type": "IExpression", "as": "$ph1"},
+  {"op": "set", "target": "$ph1", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/Content", "type": "IExpression", "as": "$ph2"},
+  {"op": "set", "target": "$ph2", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""}
+ ]
+}

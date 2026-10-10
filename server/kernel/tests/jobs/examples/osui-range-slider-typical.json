@@ -1,0 +1,31 @@
+{
+ "description": "RangeSlider (OutSystemsUI, Interaction) tipico; inputs obrigatorios MinValue, MaxValue, StartingValue ligados a variaveis da tela; eventos OnValueChange, Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "MinValueValue", "as": "$vMinValueValue"},
+  {"op": "set", "target": "$vMinValueValue", "prop": "DataType", "value": "Decimal"},
+  {"op": "set", "target": "$vMinValueValue", "prop": "DefaultValue", "value": "0"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "MaxValueValue", "as": "$vMaxValueValue"},
+  {"op": "set", "target": "$vMaxValueValue", "prop": "DataType", "value": "Decimal"},
+  {"op": "set", "target": "$vMaxValueValue", "prop": "DefaultValue", "value": "100"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "StartingValueValue", "as": "$vStartingValueValue"},
+  {"op": "set", "target": "$vStartingValueValue", "prop": "DataType", "value": "Decimal"},
+  {"op": "set", "target": "$vStartingValueValue", "prop": "DefaultValue", "value": "50"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastRangeSliderId", "as": "$vLastRangeSliderId"},
+  {"op": "set", "target": "$vLastRangeSliderId", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastValue", "as": "$vLastValue"},
+  {"op": "set", "target": "$vLastValue", "prop": "DataType", "value": "Decimal"},
+  {"op": "logic", "data": {"actions": [{"name": "RangeSliderDemoOnValueChange", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de OnValueChange", "inputs": [{"name": "RangeSliderId", "type": "Text"}, {"name": "Value", "type": "Decimal"}],"steps": [{"assign": {"LastRangeSliderId": "RangeSliderId", "LastValue": "Value"},"as": "KeepOnValueChange"}]}, {"name": "RangeSliderDemoInitialized", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de Initialized", "inputs": [{"name": "RangeSliderId", "type": "Text"}],"steps": [{"assign": {"LastRangeSliderId": "RangeSliderId"},"as": "KeepInitialized"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "RangeSliderDemo", "source": "IMobileBlock:RangeSlider", "as": "$b"},
+  {"op": "set", "target": "$b/MinValue", "prop": "Value", "value": "MinValueValue"},
+  {"op": "set", "target": "$b/MaxValue", "prop": "Value", "value": "MaxValueValue"},
+  {"op": "set", "target": "$b/StartingValue", "prop": "Value", "value": "StartingValueValue"},
+  {"op": "set", "target": "$b/OnValueChange", "prop": "Handler", "value": "IScreenAction:RangeSliderDemoOnValueChange"},
+  {"op": "set", "target": "$b/OnValueChange/RangeSliderId", "prop": "Value", "value": "RangeSliderId"},
+  {"op": "set", "target": "$b/OnValueChange/Value", "prop": "Value", "value": "Value"},
+  {"op": "set", "target": "$b/Initialized", "prop": "Handler", "value": "IScreenAction:RangeSliderDemoInitialized"},
+  {"op": "set", "target": "$b/Initialized/RangeSliderId", "prop": "Value", "value": "RangeSliderId"}
+ ]
+}

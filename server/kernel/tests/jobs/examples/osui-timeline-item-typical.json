@@ -1,0 +1,17 @@
+{
+ "description": "TimelineItem (OutSystemsUI, Navigation) tipico; placeholders Left, Title, Content com dados do aggregate de tarefas.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetShowcaseTasks", "as": "$tasks"},
+  {"op": "create", "parent": "$tasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "TimelineItemDemo", "source": "IMobileBlock:TimelineItem", "as": "$b"},
+  {"op": "create", "parent": "$b/Left", "type": "IExpression", "as": "$ph1"},
+  {"op": "set", "target": "$ph1", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/Title", "type": "IExpression", "as": "$ph2"},
+  {"op": "set", "target": "$ph2", "prop": "Value", "value": "\"Tasks\""},
+  {"op": "create", "parent": "$b/Content", "type": "IExpression", "as": "$ph3"},
+  {"op": "set", "target": "$ph3", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""}
+ ]
+}

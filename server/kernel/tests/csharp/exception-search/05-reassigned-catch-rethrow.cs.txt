@@ -1,0 +1,53 @@
+namespace ExceptionSearchOracle;
+
+internal static class ReassignedCatchRethrow
+{
+    internal static OracleResult Run()
+    {
+        var result = new OracleResult("reassigned-catch-variable-bare-rethrow-keeps-original");
+        var original = new InvalidOperationException("original");
+        var replacement = new ApplicationException("replacement");
+        Exception? reassignedAlias = null;
+        var finallyCount = 0;
+
+        bool BoundaryFilter(Exception exception)
+        {
+            result.Events.Add($"boundary.filter:{Identity.Of(exception, original, replacement)}");
+            return true;
+        }
+
+        // This outer boundary records the exception that escapes the scenario.
+        try
+        {
+            try
+            {
+                result.Events.Add("body.throw:original");
+                throw original;
+            }
+            catch (Exception caught)
+            {
+                result.CaughtException = Identity.Of(caught, original, replacement);
+                result.Events.Add($"inner.catch:{result.CaughtException}");
+                caught = replacement;
+                reassignedAlias = caught;
+                result.Events.Add($"inner.reassigned:{Identity.Of(caught, original, replacement)}");
+                result.Events.Add("inner.rethrow");
+                throw;
+            }
+            finally
+            {
+                finallyCount++;
+                result.Events.Add("inner.finally");
+            }
+        }
+        catch (Exception exception) when (BoundaryFilter(exception))
+        {
+            result.FinalException = Identity.Of(exception, original, replacement);
+            result.Events.Add($"boundary.catch:{result.FinalException}");
+        }
+
+        result.State["reassignedAlias"] = Identity.Of(reassignedAlias!, original, replacement);
+        result.State["finallyCount"] = finallyCount.ToString();
+        return result;
+    }
+}

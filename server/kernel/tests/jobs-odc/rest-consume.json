@@ -1,0 +1,36 @@
+{
+ "description": "ODC (cobertura C): o rest-consume-get.json espelhado na faixa ODC. REST consumido GET (ViaCEP) sobre a fixture do InsuranceApp: IRestClient com BaseURL, IRestStructure de resposta, IRestAction com URLPath parametrizado, input em UrlPlacement e output em BodyPlacement.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IRestClient", "name": "WfCovViaCepApi", "as": "$api"},
+  {"op": "set", "target": "$api", "prop": "BaseURL", "value": "https://viacep.com.br"},
+
+  {"op": "create", "parent": "$api", "type": "IRestStructure", "name": "WfCovAddressResponse", "as": "$st"},
+  {"op": "create", "parent": "$st", "type": "IRestStructureAttribute", "name": "cep", "as": "$a1"},
+  {"op": "set", "target": "$a1", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$a1", "prop": "NameInJSON", "value": "cep"},
+  {"op": "create", "parent": "$st", "type": "IRestStructureAttribute", "name": "logradouro", "as": "$a2"},
+  {"op": "set", "target": "$a2", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$a2", "prop": "NameInJSON", "value": "logradouro"},
+  {"op": "create", "parent": "$st", "type": "IRestStructureAttribute", "name": "uf", "as": "$a3"},
+  {"op": "set", "target": "$a3", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$a3", "prop": "NameInJSON", "value": "uf"},
+
+  {"op": "create", "parent": "$api", "type": "IRestAction", "name": "WfCovGetAddressByCep", "as": "$m"},
+  {"op": "set", "target": "$m", "prop": "HTTPMethod", "value": "GET"},
+  {"op": "set", "target": "$m", "prop": "URLPath", "value": "/ws/{CEP}/json/"},
+  {"op": "set", "target": "$m", "prop": "ResponseFormat", "value": "JSON"},
+  {"op": "create", "parent": "$m", "type": "IRestActionInput", "name": "CEP", "as": "$in"},
+  {"op": "set", "target": "$in", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$in", "prop": "IsMandatory", "value": true},
+  {"op": "set", "target": "$in", "prop": "InputPlacement", "value": "UrlPlacement"},
+  {"op": "create", "parent": "$m", "type": "IRestActionOutput", "name": "Response", "as": "$out"},
+  {"op": "set", "target": "$out", "prop": "DataType", "value": "WfCovAddressResponse"},
+  {"op": "set", "target": "$out", "prop": "OutputPlacement", "value": "BodyPlacement"},
+
+  {"op": "get", "target": "$m"},
+  {"op": "get", "target": "$out"}
+ ]
+}

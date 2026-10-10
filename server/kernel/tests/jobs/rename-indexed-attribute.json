@@ -1,0 +1,20 @@
+{
+ "description": "Renomear um atributo que esta dentro de um indice, no mesmo job que cria o indice. O indice segue por CHAVE (o get mostra Attributes ja com o nome novo) e o contrato de dados tem de aceitar: antes do conserto do kernel ele guardava os atributos do EntityIndex pelo NOME e recusava a entrega com isValid=True, unexpected=0 e o indice correto no modelo (bloqueio 1 da frente R). O que continua a nao seguir e o NOME do indice, que fica a dizer Body: nome de indice e texto do autor, como o resto da coluna direita do paragrafo Renomear.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {"op": "spec", "data": {"entities": [
+   {"name": "Notice", "attributes": [
+    {"name": "Title", "type": "Text", "mandatory": true, "length": 100},
+    {"name": "Body", "type": "Text", "length": 500}
+   ]}
+  ]}},
+
+  {"op": "create", "parent": "$Notice", "type": "EntityIndex", "name": "IX_Notice_Body", "args": {"unique": false, "attributes": ["$Notice.Body"]}},
+  {"op": "get", "target": "EntityIndex:IX_Notice_Body", "_why": "antes: Attributes = [Body]"},
+
+  {"op": "rename", "target": "$Notice.Body", "name": "Message"},
+  {"op": "get", "target": "EntityIndex:IX_Notice_Body", "_why": "depois: Attributes = [Message] sozinho; o nome do indice ainda diz Body"},
+  {"op": "usages", "target": "$Notice.Body", "_why": "o apelido e do OBJETO, nao do nome: continua a resolver depois do rename (o nome novo pede IEntityAttribute:Message)"}
+ ]
+}

@@ -1,0 +1,48 @@
+{
+ "description": "Cobertura testada (fase 1, medir): life de OutSystems.Model.UI.Web.IEntry (o11) em webFlow. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IWebFlow:MainFlow",
+   "type": "IEntry",
+   "name": "CovAEntry",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "IWebFlow:MainFlow",
+   "type": "IWebScreen",
+   "name": "CovSTarget",
+   "as": "$t"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Target",
+   "value": "$t"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovREntry"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "x": 600,
+   "y": 400
+  }
+ ]
+}

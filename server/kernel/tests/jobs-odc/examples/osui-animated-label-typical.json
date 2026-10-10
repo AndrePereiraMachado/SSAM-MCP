@@ -1,0 +1,24 @@
+{
+ "description": "AnimatedLabel do OSUI: o rotulo E-mail no placeholder Label, o Input de exemplo ligado a variavel Email com InputType Email e um OnChange.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "AnimatedLogin", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Sign up\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Email", "as": "$vEmail"},
+  {"op": "set", "target": "$vEmail", "prop": "DataType", "value": "Email"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Touched", "as": "$vTouched"},
+  {"op": "set", "target": "$vTouched", "prop": "DataType", "value": "Boolean"},
+  {"op": "logic", "data": {"actions": [{"name": "EmailChanged", "kind": "screen", "owner": "IMobileScreen:AnimatedLogin", "steps": [{"assign": {"Touched": "True"}, "as": "MarkTouched"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "AnimatedLabel1", "source": "IMobileBlock:AnimatedLabel", "as": "$al"},
+  {"op": "create", "parent": "$al/Label", "type": "ILabel", "name": "EmailLabel", "as": "$lbl"},
+  {"op": "set", "target": "$lbl/#ITextWidget", "prop": "Text", "value": "E-mail"},
+  {"op": "set", "target": "$al/Input/#IInput", "prop": "Variable", "value": "Email"},
+  {"op": "set", "target": "$al/Input/#IInput", "prop": "InputType", "value": "Email"},
+  {"op": "set", "target": "$al/Input/#IInput/OnChange", "prop": "Destination", "value": "IMobileScreen:AnimatedLogin/EmailChanged"},
+  {"op": "set", "target": "$lbl", "prop": "TargetWidget", "value": "$al/Input/#IInput"}
+ ]
+}

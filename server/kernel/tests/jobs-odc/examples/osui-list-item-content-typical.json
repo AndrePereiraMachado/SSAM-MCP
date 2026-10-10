@@ -1,0 +1,28 @@
+{
+ "description": "ListItemContent do OSUI por linha: icone no Left, nome no Title, e-mail no Content e um Link no Right que abre outra tela.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Contact", "attributes": [{"name": "FullName", "type": "Text", "length": 100, "mandatory": true}, {"name": "Email", "type": "Email"}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ContactRows", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Contacts\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetContacts", "as": "$GetContacts"},
+  {"op": "create", "parent": "$GetContacts", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Contact"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "ContactList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetContacts.List"},
+  {"op": "create", "parent": "$list", "type": "IMobileBlockInstanceWidget", "name": "ContactRow", "source": "IMobileBlock:ListItemContent", "as": "$lic"},
+  {"op": "create", "parent": "$lic/Left", "type": "IIcon", "name": "ContactIcon", "as": "$icon1"},
+  {"op": "set", "target": "$icon1", "prop": "Icon", "value": "user"},
+  {"op": "set", "target": "$icon1", "prop": "Weight", "value": "regular"},
+  {"op": "create", "parent": "$lic/Title", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "GetContacts.List.Current.Contact.FullName"},
+  {"op": "create", "parent": "$lic/Content", "type": "IExpression", "as": "$expr2"},
+  {"op": "set", "target": "$expr2", "prop": "Value", "value": "GetContacts.List.Current.Contact.Email"},
+  {"op": "create", "parent": "$lic/Right", "type": "ILink", "name": "ProfileLink", "as": "$lProfileLink"},
+  {"op": "set", "target": "$lProfileLink/#ITextWidget", "prop": "Text", "value": "Profile"},
+  {"op": "set", "target": "$lProfileLink/OnClick", "prop": "Destination", "value": "IMobileScreen:UserProfile"}
+ ]
+}

@@ -1,0 +1,22 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.IESpace (o11) em espace. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "get",
+   "target": "@espace"
+  },
+  {
+   "op": "set",
+   "target": "@espace",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "@espace",
+   "name": "CovRESpace"
+  }
+ ]
+}

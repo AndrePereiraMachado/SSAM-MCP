@@ -1,0 +1,17 @@
+{
+ "description": "Op rest (REST consumido declarativo): o cliente ViaCepApi com o metodo GET /ws/{CEP}/json/, a resposta tipada a partir de uma amostra JSON pelo proprio plugin REST (estruturas como o dialogo do Studio as cria) e uma server action que chama o metodo. Uma chamada, so verbos crus provados.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {"op": "rest", "data": {
+    "client": {"name": "ViaCepApi", "baseUrl": "https://viacep.com.br"},
+    "methods": [{"name": "GetAddressByCep", "http": "GET", "path": "/ws/{CEP}/json/",
+                 "inputs": [{"name": "CEP", "type": "Text", "in": "url"}],
+                 "response": {"sample": {"cep": "01001-000", "logradouro": "Praca da Se", "uf": "SP"}}}]}},
+  {"op": "logic", "data": {"actions": [{"name": "Cep_Lookup", "public": true,
+    "inputs": [{"name": "Cep", "type": "Text"}], "outputs": [{"name": "Uf", "type": "Text"}],
+    "steps": [{"call": "IRestAction:GetAddressByCep", "as": "GetAddress", "args": {"CEP": "Cep"}},
+              {"assign": {"Uf": "GetAddress.Response.uf"}}]}]}},
+  {"op": "get", "target": "IRestAction:GetAddressByCep"}
+ ]
+}

@@ -1,0 +1,750 @@
+{
+  "schemaVersion": "ssam-discovery-capabilities/1",
+  "lane": "odc",
+  "reviewedAt": "2026-09-22",
+  "note": "Curated guidance only. Signatures never live here: `contract` entries are pointers into `api --op` output, `proofs` are job names of the lane suite, `negative` are refusal jobs; the index build refuses any pointer that does not resolve. `limits` and `guidance` are text with an `origin` and are labelled guidance in every answer. `depends` entries are mandatory unless they carry `unless` (a condition the caller checks against the capture: the element may already exist); `recommends` are optional; `alternatives` are decisions. `context.kinds` are the reader kinds listed with --app and `context.signatures` the kinds whose matching elements get their signature read. Capabilities shared with the O11 lane (data.static, data.structure) live in discovery-capabilities-shared.json and are merged into this lane at index build.",
+  "routes": {
+    "job": {
+      "operation": "kernel job JSON {description, base, expectValid, expectedMessages, ops[]} using the compact ops (spec/logic/screen/html) or the raw verbs (api --op verbs)",
+      "prove": ".\\ssam job --lane odc <job.json>  (only when the person asks for a headless proof on the lane fixture; delivers nothing) / MCP ssam_job {lane:\"odc\", job}",
+      "deliver": ".\\odc deliver <feature> --job <job.json> --module <Module> --owners '[\"Owner\"]' --changes '[\"Change\"]'  (directly: captures the open module, validates, previews and merges in one call) / MCP studio_deliver {feature, job, module, owners, changes}",
+      "entries": ["ssam job --lane odc", "ssam_job", "odc deliver --job", "studio_deliver"]
+    },
+    "feature": {
+      "operation": "C# feature in platforms/odc/studio/builder/features (IFeature: Name, Module, Transaction, Owners, Changes, Apply, Verify) using the Authoring*.cs primitives",
+      "prove": ".\\odc build <feature> <base.oml> <sha256> <new-dir> --smoke  (headless candidate) / MCP studio_build",
+      "deliver": ".\\odc deliver <feature> [--until preview] / MCP studio_deliver {feature, until}",
+      "entries": ["odc build", "studio_build", "odc deliver", "studio_deliver"]
+    },
+    "reader": {
+      "operation": "read a capture (.oml) or an open module by name, starting with the module map; identities are bound to sourceSha256",
+      "prove": null,
+      "deliver": null,
+      "entries": [".\\ssam map --lane odc <capture.oml|Module> [--kind K] [--name N] [--prefix P] [--role R] [--parent @key] [--offset N] [--max N] (first: every element with its @key)", "ssam_map {lane:\"odc\", target, kind, name, prefix, role, parent, offset, max}", ".\\odc inspect <capture.oml> [Kind:Name/...|@key] [--kind K] [--name N] [--text T] [--usages] [--select p ...] [--budget N] --expectedSourceSha256 <hash>", "studio_inspect {target, path, kind, name, text, select, usages, budget, expectedSourceSha256}", ".\\ssam inspect --lane odc"]
+    },
+    "data": {
+      "operation": "the Studio's own data service on the development database, module open",
+      "prove": null,
+      "deliver": null,
+      "entries": [".\\odc studio data <Module> <Entity> [--limit N]", "studio_data", "studio_data_insert|update|delete (require the user's own authorization words)"]
+    },
+    "delivery": {
+      "operation": "snapshot -> build/apply -> check-base -> preview -> merge (strictlyEqual) -> authorize -> publish",
+      "prove": null,
+      "deliver": null,
+      "entries": ["odc deliver / studio_deliver", "odc studio check-base|preview|merge", "odc studio authorize <manifest> publish \"<user words>\"", "odc studio publish <manifest> --wait"]
+    }
+  },
+  "synonyms": {
+    "dropdown": ["combo", "combobox", "select", "lista suspensa", "caixa de selecao", "seletor", "picker", "choose from list"],
+    "search": ["pesquisavel", "pesquisa", "busca", "buscar", "procurar", "searchable", "filtrar", "filter", "filtro", "type to search"],
+    "form": ["formulario", "cadastro", "ficha", "edit screen", "tela de edicao", "campos", "fields"],
+    "save": ["salvar", "gravar", "persistir", "guardar", "submit", "enviar", "createorupdate", "record"],
+    "load": ["carregar", "fetch", "buscar dados", "ler dados", "consultar", "listar", "query", "aggregate", "agregado", "consulta", "data source", "fonte de dados"],
+    "sort": ["ordenado", "ordenada", "ordenar", "ordenacao", "ordem", "sorted", "sort by"],
+    "join": ["juntar", "juncao", "cruzar", "relacionar", "left join", "inner join"],
+    "screen": ["tela", "pagina", "page", "ecra", "ui"],
+    "entity": ["entidade", "entidades", "tabela do banco", "tabela de dados", "table", "modelo de dados", "data model", "banco de dados", "database", "persistente", "server entity"],
+    "action": ["acao", "logica", "logic", "regra", "server action", "acao de servidor", "business rule", "regra de negocio"],
+    "block": ["bloco", "web block", "componente", "component", "reutilizavel", "reusable", "widget"],
+    "event": ["evento", "handler", "trigger", "disparar", "onchange", "onclick", "on click", "on change", "callback"],
+    "list": ["lista", "listagem", "grid", "table records", "tabela de registos", "repeater"],
+    "rename": ["renomear", "renomeacao", "mudar nome"],
+    "delete": ["apagar", "remover", "remove", "excluir", "eliminar"],
+    "edit": ["editar", "alterar", "modificar", "mudar", "change", "manutencao", "maintain", "update"],
+    "rest": ["api", "http", "endpoint", "integracao", "integration", "webservice", "web service", "consumir", "consume", "expor", "expose", "json"],
+    "timer": ["agendado", "scheduled", "cron", "schedule", "agendamento"],
+    "css": ["estilo", "style", "tema", "theme", "stylesheet", "classe"],
+    "javascript": ["js", "script"],
+    "exception": ["excecao", "handler de excecao", "exception handler", "raise exception", "lancar excecao", "try catch"],
+    "static": ["static entity", "entidade estatica", "enum", "lookup", "lista fixa", "status", "categoria"],
+    "structure": ["estrutura", "struct", "tipo composto", "dto", "nested"],
+    "deliver": ["entregar", "delivery", "merge", "candidato", "candidate", "aplicar", "apply", "studio"],
+    "publish": ["publicar", "publicacao", "deploy"],
+    "inspect": ["ler", "inspecionar", "read", "leitura", "captura", "snapshot", "usos", "usages", "consumidores", "consumers", "quem usa", "impacto", "impact"],
+    "validate": ["validar", "validation", "verify", "provar", "prove", "testar", "test", "check"],
+    "data": ["dados", "registos", "records", "rows", "linhas", "seed", "popular"],
+    "setting": ["settings", "site property", "configuracao", "config", "parametro de sistema", "client variable", "variavel de cliente"],
+    "role": ["papel", "permissao", "permission", "seguranca", "security", "restringir"],
+    "email": ["e-mail", "mail", "correio"],
+    "popup": ["modal", "dialog", "popover", "dialogo"],
+    "navigate": ["navegar", "navegacao", "abrir tela", "destination", "link", "botao", "button"],
+    "sql": ["query sql", "advanced query", "sql statement"],
+    "service": ["service action", "acao de servico", "remote", "remoto"],
+    "client": ["client action", "acao de cliente", "browser", "local storage", "offline", "client entity"],
+    "date": ["data", "datepicker", "calendario", "calendar"],
+    "refactor": ["refatorar", "refactoring", "reapontar", "repoint", "replace", "duplicar", "duplicate", "copiar", "copy", "reordenar", "reorder", "move", "mover"],
+    "feature": ["c#", "csharp", "builder", "primitiva", "authoring"],
+    "workflow": ["bpt", "processo", "process", "business process"]
+  },
+  "capabilities": [
+    {
+      "id": "data.client-entity", "category": "data", "title": "Client entities (local storage) and client-side aggregates",
+      "keywords": ["client entity", "local storage", "offline", "device"],
+      "summary": "`spec.clientEntities` declares local storage entities (Id without AutoNumber); client actions write them with CreateOrUpdate and screen aggregates read them with `args.isClientSide`.",
+      "route": { "kind": "job", "operation": "{\"op\":\"spec\",\"data\":{\"clientEntities\":[...]}}" },
+      "contract": ["spec.shapes.data", "spec.rules"],
+      "proofs": { "odc": ["client-storage"] },
+      "depends": [],
+      "alternatives": [],
+      "context": { "kinds": ["ClientEntity"] },
+      "limits": [
+        { "text": "Public client entities are not preserved by native merge in this Studio build; expose a public structure instead.", "origin": "ModuleSpecification.Validate (kernel) refusal text" }
+      ],
+      "guidance": null,
+      "example": { "ops": ["spec", "create"], "max": 12 }
+    },
+    {
+      "id": "data.records", "category": "data", "title": "Read or write records of the development database",
+      "keywords": ["records", "rows", "seed", "insert", "update record", "delete record", "view data", "edit data", "populate"],
+      "summary": "The Studio's own data service (View data / Edit data) reads and writes records of an entity of the open module; writes need the user's own authorization words. Not a model change.",
+      "route": { "kind": "data", "operation": "odc studio data <Module> <Entity> [--limit N]; data-insert|data-update|data-delete --authorize \"<words>\"" },
+      "contract": [],
+      "proofs": { "odc": [] },
+      "depends": [],
+      "alternatives": [],
+      "context": { "kinds": ["ServerEntity"] },
+      "limits": [
+        { "text": "Reading is proven live; inserts/updates/deletes have no receipt in the repository yet (HANDOFF §4 'P sem prova'). Corporate tenants only on explicit instruction.", "origin": "platforms/odc/docs/HANDOFF.md §4 and rule 3" }
+      ],
+      "guidance": "The module must be open in the Studio; there is no public ODC API for business data.",
+      "example": null
+    },
+    {
+      "id": "data.setting", "category": "data", "title": "Settings (site properties), client variables, roles and user exceptions",
+      "keywords": ["setting", "site property", "client variable", "role", "permission", "user exception", "secret", "configuration"],
+      "summary": "Create ISiteProperty (the product calls it Setting; expressions read `Settings.<Name>`), IClientVariable, IRole and IUserException with the raw verbs; restrict a screen with `link from $scr connector Roles to $role`.",
+      "route": { "kind": "job", "operation": "create ISiteProperty|IClientVariable|IRole|IUserException + set DataType/DefaultValue/IsSecret" },
+      "contract": ["verbs.verbs.create", "verbs.verbs.set", "verbs.verbs.link"],
+      "proofs": { "odc": ["security-settings", "setting-lifecycle"] },
+      "depends": [],
+      "alternatives": [],
+      "context": { "kinds": ["SiteProperty", "ClientVariable", "Role"] },
+      "limits": [
+        { "text": "On ODC a Setting is read-only inside actions (writing it is an error); IsSecret changes how the value is stored, not the model.", "origin": "job:security-settings and job:setting-lifecycle descriptions" }
+      ],
+      "guidance": "Session variables do not exist on ODC: use a client variable.",
+      "example": { "ops": ["create", "set", "link"], "max": 14 }
+    },
+    {
+      "id": "logic.server-action", "category": "logic", "title": "Server action with steps (op logic)",
+      "keywords": ["server action", "business rule", "logic", "get", "assign", "if", "foreach", "call", "save", "wrapper", "create record", "update record"],
+      "summary": "Declare inputs/outputs/vars and steps (get, assign, call, save/create/update/delete, if/then/else, foreach, raise); Start/End, links and layout are generated; unknown keys, unresolved names and unused inputs fail before touching the model.",
+      "route": { "kind": "job", "operation": "{\"op\":\"logic\",\"data\":{\"actions\":[{\"name\":\"X\",\"kind\":\"server\",\"inputs\":[],\"outputs\":[],\"steps\":[...]}]}}" },
+      "contract": ["logic.action", "logic.actionKinds", "logic.parameter", "logic.steps.get", "logic.steps.assign", "logic.steps.if", "logic.steps.foreach", "logic.steps.call", "logic.steps.save", "logic.steps.raise", "logic.rules"],
+      "proofs": { "odc": ["logic-action", "logic-steps"] },
+      "depends": [],
+      "alternatives": [{ "id": "logic.edit", "when": "the action already exists and must keep its consumers" }],
+      "context": { "kinds": ["ServerAction"] },
+      "limits": [
+        { "text": "On ODC an aggregate Count is Long Integer; a private server action without consumer gets the warning UnusedUserAction (declare it in expectedMessages).", "origin": "job:logic-action description" },
+        { "text": "while/switch/break/continue/return/handlers/comments and joins/columns of the logic language are accepted by the compiler but have no ODC job yet (proven on O11 only).", "origin": "index: no ODC job uses those keys" }
+      ],
+      "guidance": "A screen saves through a server action wrapper (CreateOrUpdate inside it), never by calling the entity action directly (Security warning). Do not name an aggregate `Get<Entity>s`: a filter renames it and expressions break.",
+      "example": { "ops": ["logic"], "max": 1 }
+    },
+    {
+      "id": "logic.aggregate", "category": "logic", "title": "Aggregates: filters, sorts, joins, group by and aggregations",
+      "keywords": ["aggregate", "join", "group by", "count", "sum", "filter", "sort", "query", "load data"],
+      "summary": "In `logic` a `get` step with where/sort/max; a full aggregate with join, group by and aggregated columns is built with the raw verbs (IAggregateNode, IAliasedSource, IJoin, IFilter, ISort, IGroupByAttribute, IAggregatedAttribute).",
+      "route": { "kind": "job", "operation": "logic step {\"get\":\"Entity\",\"as\":\"GetX\",\"where\":\"...\",\"sort\":[[\"X.Attr\",\"Ascending\"]],\"max\":50} or verbs on IAggregateNode" },
+      "contract": ["logic.steps.get", "logic.queryJoin", "logic.queryColumn", "logic.queryCalculated"],
+      "proofs": { "odc": ["logic-steps", "aggregate-full", "structure-list-type"] },
+      "depends": [],
+      "alternatives": [{ "id": "logic.sql", "when": "the query cannot be expressed as an aggregate" }, { "id": "logic.data-action", "when": "a screen needs data fetched by logic instead of a screen aggregate" }],
+      "context": { "kinds": ["ServerEntity"] },
+      "limits": [
+        { "text": "ODC names the aggregated column type IAggregatedAttribute (SS11: IAggregateAttribute); Count and Sum are Long Integer.", "origin": "job:aggregate-full description; NAO-DA.md IAggregateAttribute -> IAggregatedAttribute" }
+      ],
+      "guidance": "Without group by read `GetX.List.Current.<Entity>.<Attr>`; with group by or aggregations read `GetX.List.Current.<Column>`.",
+      "example": { "ops": ["create", "set", "link"], "max": 24 }
+    },
+    {
+      "id": "logic.sql", "category": "logic", "title": "SQL query with parameters",
+      "keywords": ["sql", "statement", "advanced query", "parameters"],
+      "summary": "`get` with `sql:true`, `statement` and `params`; the output is named List: a field reads `<as>.List.Current.List.<Field>`.",
+      "route": { "kind": "job", "operation": "logic step {\"get\":\"Entity\",\"sql\":true,\"as\":\"Read\",\"statement\":\"SELECT {E}.* FROM {E} WHERE {E}.[A] >= @Min\",\"params\":{\"Min\":{\"type\":\"Integer\",\"value\":\"Min\"}},\"max\":50}" },
+      "contract": ["logic.steps.get", "logic.sqlParameter"],
+      "proofs": { "odc": ["logic-sql"] },
+      "depends": [],
+      "alternatives": [{ "id": "logic.aggregate", "when": "an aggregate can express it (preferred, native filters/joins)" }],
+      "context": { "kinds": ["ServerEntity"] },
+      "limits": [
+        { "text": "where/sort/start are refused with sql:true: filter, sort and page inside the statement; declared params and @names must match.", "origin": "kernel/AGENTS.md section 2.1" }
+      ],
+      "guidance": null,
+      "example": { "ops": ["logic"], "max": 1 }
+    },
+    {
+      "id": "logic.service-action", "category": "logic", "title": "Service actions (remote, loosely coupled)",
+      "keywords": ["service action", "remote", "consumer module", "expose logic"],
+      "summary": "`logic` with kind `service` (or raw IServiceAction) exposes logic to other apps; consumers are remote (ReferenceServiceAPIMethod), so zero local usages is normal.",
+      "route": { "kind": "job", "operation": "{\"op\":\"logic\",\"data\":{\"actions\":[{\"kind\":\"service\",...}]}}" },
+      "contract": ["logic.actionKinds"],
+      "proofs": { "odc": ["service-action"] },
+      "depends": [],
+      "alternatives": [{ "id": "logic.server-action", "when": "the caller is in the same module" }],
+      "context": { "kinds": ["ServiceAction"] },
+      "limits": [
+        { "text": "A local IExecuteServerActionNode cannot point at a service action on ODC (Model API refuses); a service action delegates to a private server action. Public and Shareable move together.", "origin": "job:service-action description" }
+      ],
+      "guidance": null,
+      "example": { "ops": ["logic"], "max": 1 }
+    },
+    {
+      "id": "logic.client-action", "category": "logic", "title": "Client actions and JavaScript nodes",
+      "keywords": ["client action", "javascript", "browser", "local storage", "format", "client side"],
+      "summary": "IClientAction with an IJavaScriptNode (inputs/outputs as parameters) created with the raw verbs; called from a screen action with IExecuteClientActionNode.",
+      "route": { "kind": "job", "operation": "create IClientAction + IJavaScriptNode; set JavaScript; IExecuteClientActionNode from a screen action" },
+      "contract": ["verbs.verbs.create", "verbs.verbs.set", "logic.actionKinds", "logic.nativeNodes.IJavaScriptNode"],
+      "proofs": { "odc": ["client-storage", "rename-logic-propagation"] },
+      "depends": [],
+      "alternatives": [],
+      "context": { "kinds": ["ClientAction"] },
+      "limits": [
+        { "text": "The compact `logic` kind client is accepted by the compiler but proven on ODC only through raw verbs; a JavaScript parameter Description is not allowed by the native API.", "origin": "index: ODC jobs; audit T3 (t3/ACHADOS.md)" }
+      ],
+      "guidance": "Prefer native nodes and data actions; use JavaScript only where the request needs the browser.",
+      "example": { "ops": ["create", "set", "link"], "max": 20 }
+    },
+    {
+      "id": "logic.screen-action", "category": "logic", "title": "Screen actions (button/link/event handlers)",
+      "keywords": ["screen action", "button click", "handler", "on click", "submit", "navigate"],
+      "summary": "A screen action lives in the screen (`create IScreenAction` under `$scr`, or `logic` kind `screen` with `owner`); a button binds with `set $btn/OnClick Destination $action`; navigation to another screen uses `Destination IMobileScreen:X` plus `$btn/OnClick/<Input> Value`.",
+      "route": { "kind": "job", "operation": "create IScreenAction under the screen; set $btn/OnClick prop Destination" },
+      "contract": ["logic.owners", "logic.actionKinds", "verbs.verbs.create", "verbs.verbs.set"],
+      "proofs": { "odc": ["screen-basic", "screen-form", "screen-list", "logic-native-nodes"] },
+      "depends": [{ "id": "ui.screen", "unless": "the screen already exists (address it as IMobileScreen:Name; ui.edit)" }],
+      "alternatives": [],
+      "context": { "kinds": ["MobileScreen"], "signatures": ["MobileScreen"] },
+      "limits": [
+        { "text": "Reactive/Mobile screen actions cannot declare outputs. Button/link clicks and screen lifecycle events use Destination; block instance events use Handler (wrong property costs a delivery cycle).", "origin": "LogicExpander refusal; audit OUT-22 (t1/ACHADOS.md); kernel/AGENTS.md 3.1/3.3" }
+      ],
+      "guidance": null,
+      "example": { "ops": ["create", "set", "link", "layout"], "max": 16 }
+    },
+    {
+      "id": "logic.data-action", "category": "logic", "title": "Data actions (screen data fetched by logic) and Refresh Data",
+      "keywords": ["data action", "fetch", "on demand", "at start", "refresh data", "on after fetch", "external data", "rest data"],
+      "summary": "IDataAction created under the screen with an output list, Fetch AtStart|OnDemand, OnAfterFetch Destination to a screen action, and IRefreshDataNode to reload it; the list reads `<DataAction>.<Output>.Current.<Field>`.",
+      "route": { "kind": "job", "operation": "create IDataAction under $scr; set Fetch; delete $da/Out1; create IOutputParameter; flow nodes; set $da/OnAfterFetch Destination" },
+      "contract": ["logic.actionKinds", "logic.action", "logic.nativeNodes.IRefreshDataNode", "verbs.verbs.create"],
+      "proofs": { "odc": ["data-action"] },
+      "depends": [{ "id": "ui.screen", "unless": "the screen already exists (create the data action under IMobileScreen:Name)" }],
+      "alternatives": [{ "id": "logic.aggregate", "when": "the data is a plain entity query: a screen aggregate is simpler" }],
+      "context": { "kinds": ["MobileScreen", "DataAction"], "signatures": ["DataAction"] },
+      "limits": [
+        { "text": "On ODC a Data Action cannot declare input parameters (IDataAction has no CreateInputParameter); pass screen state through Refresh Data.", "origin": "platforms/odc/docs/FRICCAO-QUOTES-REFACTOR.md §17; Model API index (A)" },
+        { "text": "The compact `logic` kind data (with `fetch`) is accepted by the compiler; the ODC proof uses raw verbs.", "origin": "index: job data-action" }
+      ],
+      "guidance": "Idiomatic ODC: initial query by screen aggregate; external/computed data by Data Action + Refresh; submit through a screen action calling a server action.",
+      "example": { "ops": ["create", "set", "link", "delete"], "max": 30 }
+    },
+    {
+      "id": "logic.native-nodes", "category": "logic", "title": "Native nodes: Message, Destination, Download, JSON, Excel",
+      "keywords": ["message", "feedback message", "toast", "download", "json serialize", "deserialize", "excel", "export", "import"],
+      "summary": "In `logic` a `node` step names the native node type and its closed properties (api --op logic nativeNodes): IMessageNode, IDestinationNode, IDownloadNode in screen actions; IJSONSerializeNode/IJSONDeserializeNode, IRecordListToExcelNode/IExcelToRecordListNode in server actions.",
+      "route": { "kind": "job", "operation": "logic step {\"node\":\"IMessageNode\",\"as\":\"Warn\",\"properties\":{\"Message\":\"\\\"Saved\\\"\",\"Type\":\"Success\"}}" },
+      "contract": ["logic.steps.node", "logic.nativeNodes"],
+      "proofs": { "odc": ["logic-native-nodes"] },
+      "depends": [],
+      "alternatives": [],
+      "context": { "kinds": ["ServerAction", "MobileScreen"] },
+      "limits": [
+        { "text": "Message and Destination never live in server actions; Download only in screen actions; RecordListToExcel only in server actions (ODC census of 45 real modules).", "origin": "job:logic-native-nodes description" }
+      ],
+      "guidance": null,
+      "example": { "ops": ["logic"], "max": 1 }
+    },
+    {
+      "id": "logic.exception", "category": "logic", "title": "Exceptions, handlers and switch",
+      "keywords": ["exception", "raise", "handler", "switch", "otherwise", "on exception", "error handling"],
+      "summary": "Raise a user exception with the `raise` step; ISwitchNode + ISwitchCondition and the global IOnExceptionAction (child of a UI flow, no Start node) are built with the raw verbs; exceptions are renamed/repointed/deleted like any element.",
+      "route": { "kind": "job", "operation": "logic step {\"raise\":\"NotFound\",\"message\":\"\\\"...\\\"\"}; verbs create ISwitchNode/ISwitchCondition/IOnExceptionAction/IExceptionHandlerNode" },
+      "contract": ["logic.steps.raise", "logic.handler", "logic.switchCase", "verbs.verbs.create"],
+      "proofs": { "odc": ["logic-steps", "switch-exception-handler", "exception-lifecycle"] },
+      "depends": [],
+      "alternatives": [],
+      "context": { "kinds": ["UserException"] },
+      "limits": [
+        { "text": "Switch requires OtherwiseTarget (InvalidFlow_NoOtherwise); an exception handler has no Start node, so `layout` does not apply (position with move x/y). Do not repoint IESpace.GlobalExceptionHandler on an app that has one (three new warnings).", "origin": "job:switch-exception-handler description" }
+      ],
+      "guidance": "The compact `handlers` key is accepted by the compiler but unproven on ODC; raw verbs are the proven path.",
+      "example": { "ops": ["create", "set", "link", "move"], "max": 24 }
+    },
+    {
+      "id": "logic.edit", "category": "logic", "title": "Edit an existing action (parameters, nodes in the middle of a flow, rename, repoint)",
+      "keywords": ["edit action", "existing action", "add parameter", "insert node", "middle of flow", "rename action", "repoint", "callers", "consumers"],
+      "summary": "Address the action by `IServerAction:Name` (or IClientAction/IScreenAction), its children by path, an argument by `arg:<Param>`; splice a node by linking its exit first and repointing the predecessor after; use usages before delete and replace to repoint callers.",
+      "route": { "kind": "job", "operation": "create/set/link/delete/rename/replace on `IServerAction:Name/...`" },
+      "contract": ["verbs.verbs.link", "verbs.verbs.rename", "verbs.verbs.replace", "verbs.verbs.delete", "verbs.verbs.usages", "verbs.references"],
+      "proofs": { "odc": ["action-edit-lifecycle", "refactor-inherited", "refactor-replace-action", "delete-logic-consumers", "rename-logic-propagation", "logic-comment-connector"] },
+      "negative": { "odc": ["delete-logic-in-use"] },
+      "depends": [],
+      "alternatives": [{ "id": "logic.server-action", "when": "rewriting the whole body: `logic` with replace:true keeps consumers (proven on O11; on ODC the raw-verb edits are the proven path)" }],
+      "context": { "kinds": ["ServerAction", "ClientAction"], "signatures": ["ServerAction", "ClientAction"] },
+      "limits": [
+        { "text": "Adding an input to a called action creates an empty argument in every caller; an argument the author filled survives the parameter's deletion as an orphan (UnusedArgument warning).", "origin": "job:action-edit-lifecycle description" },
+        { "text": "On ODC `<Node>.<Output>` expressions follow a rename automatically; on O11 they do not. `rename` reports expressionsRewritten 0 in that case on both lanes: read the expressions back.", "origin": "kernel/AGENTS.md section 2 (rename); job:refactor-inherited" }
+      ],
+      "guidance": null,
+      "example": { "ops": ["get", "create", "set", "link", "delete", "rename"], "max": 20 }
+    },
+    {
+      "id": "logic.rest-consume", "category": "logic", "title": "Consume a REST API (client, structures, methods, call it)",
+      "keywords": ["rest", "consume", "external api", "http", "get", "post", "json", "call api", "integration"],
+      "summary": "IRestClient with BaseURL, IRestStructure(s) for request/response (nested: child first, then its name as DataType), IRestAction with URLPath (query string inside it, one UrlPlacement input per {param}), inputs/outputs by placement; a server action calls it with IExecuteServerActionNode -> IRestAction:Name.",
+      "route": { "kind": "job", "operation": "create IRestClient/IRestStructure/IRestAction/IRestActionInput/IRestActionOutput with the raw verbs" },
+      "contract": ["verbs.verbs.create", "verbs.verbs.set"],
+      "proofs": { "odc": ["rest-consume", "rest-consume-post", "rest-consume-call", "rest-query-nested", "rest-consume-lifecycle"] },
+      "depends": [],
+      "alternatives": [{ "id": "deliver.feature", "when": "the request needs the C# AuthoringRest primitives (RotaSegura pattern)" }],
+      "context": { "kinds": ["RestClient"] },
+      "limits": [
+        { "text": "Username/Password exist in the ODC API and accept writes, but Verify rejects them as errors: only the authentication mode stays in the model; credentials live outside it.", "origin": "NAO-DA.md IRestClient.Username/Password; job:rest-consume-post" }
+      ],
+      "guidance": "Native type names come from the ODC Model API index (discover --detail logic.rest-consume --type IRestAction).",
+      "example": { "ops": ["create", "set"], "max": 24 }
+    },
+    {
+      "id": "logic.rest-expose", "category": "logic", "title": "Expose a REST API",
+      "keywords": ["expose", "rest service", "endpoint", "public api"],
+      "summary": "IRestService + IRestServiceAction (born with Start/End), inputs in the URL, output typed by a structure, an Assign fills the response.",
+      "route": { "kind": "job", "operation": "create IRestService/IRestServiceAction/IRestServiceActionInput/IRestServiceActionOutput" },
+      "contract": ["verbs.verbs.create", "verbs.verbs.set"],
+      "proofs": { "odc": ["rest-expose", "rest-expose-lifecycle"] },
+      "depends": [],
+      "alternatives": [],
+      "context": { "kinds": ["RestService"] },
+      "limits": [
+        { "text": "Renaming an exposed method rewrites its URLPath (the public URL changes) while rename reports consumers 0: external consumers are invisible to the model.", "origin": "job:rest-expose-lifecycle description" }
+      ],
+      "guidance": null,
+      "example": { "ops": ["create", "set"], "max": 20 }
+    },
+    {
+      "id": "logic.timer", "category": "logic", "title": "Timers (scheduled server actions)",
+      "keywords": ["timer", "scheduled", "cron", "background job", "batch"],
+      "summary": "ITimer with Action, Description, CronSchedule/Schedule and TimeoutInMinutes; the schedule tree (ScheduleConfiguration) is derived and rebuilt when the parent property changes.",
+      "route": { "kind": "job", "operation": "create ITimer; set Action IServerAction:X; set CronSchedule" },
+      "contract": ["verbs.verbs.create", "verbs.verbs.set"],
+      "proofs": { "odc": ["timer-action", "timer-lifecycle"] },
+      "depends": [{ "id": "logic.server-action", "unless": "the server action to schedule already exists (set Action IServerAction:Name)" }],
+      "alternatives": [],
+      "context": { "kinds": ["Timer", "ServerAction"] },
+      "limits": [],
+      "guidance": null,
+      "example": { "ops": ["create", "set"], "max": 10 }
+    },
+    {
+      "id": "logic.app-event", "category": "logic", "title": "Application events, external sites and extended (DOM) events",
+      "keywords": ["on application ready", "system event", "external site", "external link", "extended event", "dom event", "onblur", "onkeydown"],
+      "summary": "ISystemEvent (OnApplicationReady; empty flow to author), IExternalSite (a UI flow node with an URL input) and IEvent (extended event of a widget bound to a screen action without outputs).",
+      "route": { "kind": "job", "operation": "create ISystemEvent|IExternalSite|IEvent with the raw verbs" },
+      "contract": ["verbs.verbs.create", "verbs.verbs.set"],
+      "proofs": { "odc": ["external-site-and-events", "platform-events-lifecycle"] },
+      "depends": [],
+      "alternatives": [],
+      "context": { "kinds": ["MobileFlow"] },
+      "limits": [
+        { "text": "The platform refuses `rename` on IEvent and ISystemEvent; an extended event is renamed by writing `Event` (closed list of 11 DOM names).", "origin": "job:platform-events-lifecycle description" }
+      ],
+      "guidance": null,
+      "example": { "ops": ["create", "set", "link"], "max": 20 }
+    },
+    {
+      "id": "ui.screen", "category": "ui", "title": "Screen with layout, container, expressions, inputs and a button",
+      "keywords": ["screen", "page", "layout", "container", "expression", "input", "button", "title", "new screen"],
+      "summary": "`create IMobileScreen` in `IMobileFlow:MainFlow`, bind the layout instance (`set $scr/#IMobileBlockInstanceWidget SourceBlock IMobileBlock:LayoutTopMenu`), add widgets under the layout placeholders (Title, MainContent, Actions), inputs bound to local variables or aggregate fields, buttons bound to screen actions.",
+      "route": { "kind": "job", "operation": "raw verbs: create IMobileScreen / IContainer / IExpression / IInput / IButton; set SourceBlock, Variable, Value, Text" },
+      "contract": ["verbs.verbs.create", "verbs.verbs.set", "verbs.references"],
+      "proofs": { "odc": ["screen-basic", "screen-form", "screen-list"] },
+      "depends": [],
+      "alternatives": [{ "id": "ui.html-visual", "when": "the content is easier to write as an HTML fragment" }, { "id": "ui.screen-spec", "when": "an archetype (cards/table/detail/form/dashboard) fits and the module references the OutSystemsUI blocks it needs (unproven on ODC)" }],
+      "context": { "kinds": ["MobileScreen", "MobileFlow"] },
+      "limits": [
+        { "text": "On ODC the layouts (LayoutTopMenu, LayoutBase) are blocks of the module itself; the ESpace is CrossDevice so the mobile vocabulary applies; a button's caption lives inside IContent (`$btn/#ITextWidget`).", "origin": "kernel/docs/tasks/2026-09-17-ws1-diferencas.md; job:screen-basic" }
+      ],
+      "guidance": "Screens created headless become DefaultScreen when the module had none; the first screen may need a different DefaultScreen before deletion (delete-screen).",
+      "example": { "ops": ["create", "set"], "max": 20 }
+    },
+    {
+      "id": "ui.form", "category": "ui", "title": "Form bound to a record: load by id, edit fields, save",
+      "keywords": ["form", "edit record", "load record", "save", "mandatory", "checkbox", "detail screen", "crud"],
+      "summary": "Screen input (Id), IScreenAggregate filtered by it, IForm with IInput/ICheckbox bound to `GetX.List.Current.<Entity>.<Attr>`, a Save button whose screen action calls a server action wrapper that runs CreateOrUpdate<Entity>.",
+      "route": { "kind": "job", "operation": "screen-form.json pattern: wrapper server action + screen + aggregate + IForm + inputs + IScreenAction + set $btn/OnClick Destination" },
+      "contract": ["verbs.verbs.create", "verbs.verbs.set", "verbs.verbs.link"],
+      "proofs": { "odc": ["screen-form", "delete-screen"] },
+      "depends": [
+        { "id": "data.entity", "unless": "the entity already exists (bind the form to IServerEntity:Name; its attributes are in context.signatures)" },
+        { "id": "logic.server-action", "unless": "a save wrapper action for that entity already exists (call it from the screen action)" },
+        { "id": "ui.screen", "unless": "the screen already exists (add the form under IMobileScreen:Name/...; ui.edit)" }
+      ],
+      "recommends": [{ "id": "read.inspect", "when": "the module already exists: read its entities, screens and referenced blocks (--app) before declaring new ones" }],
+      "alternatives": [{ "id": "ui.screen-spec", "when": "the archetype form (kind form) is acceptable: fields input|textarea|checkbox only, no dropdown field, unproven on ODC" }],
+      "context": { "kinds": ["MobileScreen", "ServerEntity"], "signatures": ["ServerEntity"] },
+      "limits": [
+        { "text": "Mandatory comes from the attribute or `set Mandatory True`; the screen must not call the entity action directly (wrapper server action).", "origin": "job:screen-form; kernel/AGENTS.md section 1" }
+      ],
+      "guidance": "For a selectable field inside the form combine with ui.dropdown (native, unproven on ODC) or ui.dropdown-search (block, read its contract from the capture).",
+      "example": { "ops": ["create", "set", "link", "layout"], "max": 60 }
+    },
+    {
+      "id": "ui.list", "category": "ui", "title": "List of records with item navigation",
+      "keywords": ["list", "list item", "records list", "row click", "navigate to detail", "sorted"],
+      "summary": "IScreenAggregate with ISort, IList with Source `GetX.List`, IListItem with expressions in its Content, `set $item/OnClick Destination IMobileScreen:Detail` plus `$item/OnClick/<Input> Value`.",
+      "route": { "kind": "job", "operation": "screen-list.json pattern" },
+      "contract": ["verbs.verbs.create", "verbs.verbs.set"],
+      "proofs": { "odc": ["screen-list", "data-action", "block-events-types"] },
+      "depends": [{ "id": "ui.screen", "unless": "the screen already exists (place the list under IMobileScreen:Name/...)" }],
+      "alternatives": [{ "id": "ui.html-visual", "when": "the list body is easier as `<div list as>` HTML" }],
+      "context": { "kinds": ["MobileScreen"] },
+      "limits": [
+        { "text": "A ListItem is born with an example swipe action without destination: delete `$item/RightActions/#IListItemAction`. On ODC the children of a List live inside an IContent (paths show IList:X/IContent:content/...).", "origin": "job:screen-list; job:data-action usages note" },
+        { "text": "ITableRecords (table with columns) has no ODC job; it is B (vocabulary) not C.", "origin": "index: no ODC job creates ITableRecords" }
+      ],
+      "guidance": null,
+      "example": { "ops": ["create", "set", "delete"], "max": 24 }
+    },
+    {
+      "id": "ui.dropdown", "category": "ui", "title": "Native dropdown (IDropdown) bound to a list",
+      "keywords": ["dropdown", "select", "combo", "options", "values", "labels", "choose"],
+      "summary": "Native IDropdown widget bound to a list source and to a record field of the screen; its property names for this Studio are in the native index (`--type IDropdown`, A) and the visual `html` op maps the `select` tag to it (html-visual.tags, B).",
+      "route": { "kind": "job", "operation": "create IDropdown under a container; set its properties (names from --type IDropdown) with raw verbs, or `<select>` in html-visual" },
+      "contract": ["verbs.verbs.create", "verbs.verbs.set", "html-visual.tags"],
+      "proofs": { "odc": [] },
+      "depends": [{ "id": "ui.screen", "unless": "the screen already exists (place the widget under IMobileScreen:Name/...)" }],
+      "alternatives": [{ "id": "ui.dropdown-search", "when": "the user must type to search: the OutSystemsUI DropdownSearch block, not the native widget" }],
+      "context": { "kinds": ["MobileScreen"] },
+      "limits": [
+        { "text": "No ODC job creates an IDropdown: the kernel accepts it (B: verbs + Model API) and it is proven on O11 (gallery-native-reactive.json, widgets-reactive.json); deliver it directly (studio_deliver validates the job on a fresh capture and refuses before any change); a headless proof (ssam_job) only when the person asks for one.", "origin": "index: ODC jobs; kernel/tests/jobs (O11)" },
+        { "text": "The native dropdown has no search behaviour of its own (O11 vocabulary: DropdownMode Text|Custom; confirm the ODC members with --type IDropdown).", "origin": "ScreenVocabulary.json (O11 11.55.69) IDropdown; ODC Model API index NRWidgets IDropdown" }
+      ],
+      "guidance": "Property names are not curated here: read them from the native index (discover --detail ui.dropdown --type IDropdown) and from html-visual.tags (select).",
+      "example": null
+    },
+    {
+      "id": "ui.dropdown-search", "category": "ui", "title": "Searchable dropdown (OutSystemsUI DropdownSearch block)",
+      "keywords": ["dropdown search", "searchable dropdown", "search", "autocomplete", "type ahead", "dropdown pesquisavel"],
+      "summary": "An instance of the OutSystemsUI block DropdownSearch referenced by the module. Its inputs, mandatory input types and events (with their parameters) are the signature of the referenced revision: read them from the capture (`--app`: context.signatures, D), never from this text. Instantiate with the visual `html` op (`<Block name=\"DropdownSearch\" :<Input>=\"expr\" @<Event>=\"ScreenAction\">`) or the raw verbs (`create IMobileBlockInstanceWidget` with source `IMobileBlock:DropdownSearch`, `set $b/<Input> Value`, `set $b/<Event> Handler $action`); the handler of the selection event assigns the selection to the record field.",
+      "route": { "kind": "job", "operation": "html-visual `<Block>` or raw verbs on IMobileBlockInstanceWidget; a screen action builds the option list expected by the block input from an aggregate and another handles the selection event" },
+      "contract": ["html-visual.tags", "verbs.verbs.create", "verbs.verbs.set"],
+      "proofs": { "odc": [] },
+      "depends": [
+        { "id": "ui.screen", "unless": "the screen already exists (place the instance under IMobileScreen:Name/...)" },
+        { "id": "logic.screen-action", "unless": "a screen action to handle the mandatory event already exists (set $b/<Event> Handler to it)" }
+      ],
+      "alternatives": [{ "id": "ui.dropdown", "when": "no typing/search is needed: the native IDropdown binds a record field directly" }],
+      "context": { "kinds": ["MobileBlockSignature", "MobileScreen"], "signatures": ["MobileBlockSignature"] },
+      "limits": [
+        { "text": "No ODC job instantiates DropdownSearch; the nearest ODC proofs are html-visual-block (DatePicker block with input and mandatory handler) and block-events (event handlers). The offline block doc is O11 OutSystemsUI 2.28.1 and is not used by the answer; on ODC the contract is the MobileBlockSignature in the capture (context.signatures with --app, or `odc inspect <capture> \"MobileBlockSignature:DropdownSearch\" --depth 2`).", "origin": "index: ODC jobs; kernel/docs/ui/OutSystemsUI/blocks/DropdownSearch.md (O11)" },
+        { "text": "A block instance has no Variable of its own: the selected value only reaches the record through the handler of the block's selection event; a mandatory event without handler is a Verify error per instance (EventHandlerRequiredAction).", "origin": "job:block-events-mandatory; job:html-visual-block" }
+      ],
+      "guidance": "Build the option list expected by the block input (type in context.signatures) in a screen action or data action from the entity list, keep it in a screen variable, and map the event's selection parameter back to the FK in the handler.",
+      "example": null
+    },
+    {
+      "id": "ui.block", "category": "ui", "title": "Reusable block with inputs, placeholders, events and triggers",
+      "keywords": ["block", "reusable", "component", "block event", "trigger", "input parameter", "placeholder", "nested block"],
+      "summary": "`create IMobileBlock` in a UI flow with IInputParameter, ILocalVariable, IPlaceholderWidget, IBlockEvent (IsMandatory, parameters) fired by an ITriggerNode in a block screen action; instances receive inputs (`set $inst/<Input> Value`) and handlers (`set $inst/<Event> Handler $action`).",
+      "route": { "kind": "job", "operation": "block-events.json / block-reuse.json patterns" },
+      "contract": ["verbs.verbs.create", "verbs.verbs.set", "verbs.verbs.usages", "logic.nativeNodes.ITriggerNode", "html-visual.tags"],
+      "proofs": { "odc": ["block-events", "block-events-types", "block-events-two-instances", "block-events-nested", "block-reuse", "block-events-mandatory", "block-event-lifecycle", "delete-block"] },
+      "negative": { "odc": ["delete-block-event-in-use"] },
+      "depends": [],
+      "alternatives": [],
+      "context": { "kinds": ["MobileBlock", "MobileBlockSignature"], "signatures": ["MobileBlock", "MobileBlockSignature"] },
+      "limits": [
+        { "text": "Changing an event contract breaks the trigger (the producer's arguments mirror the event parameters), not the consumer handlers; the IEventHandler exists even without a handler and counts in usages.", "origin": "job:block-event-lifecycle description" },
+        { "text": "`rename` of an IBlockEvent returns success but writes nothing on ODC in this build: rename its neighbours (trigger node, handler action) instead.", "origin": "job:block-event-lifecycle description" }
+      ],
+      "guidance": "Placeholder content inside the block is example content copied into each instance (owned by the consumer).",
+      "example": { "ops": ["create", "set", "link", "html"], "max": 40 }
+    },
+    {
+      "id": "ui.block-instance", "category": "ui", "title": "Instantiate an existing block (own or OutSystemsUI) with inputs and handlers",
+      "keywords": ["instantiate block", "use block", "outsystems ui", "datepicker", "tabs", "accordion", "pattern", "widget from library"],
+      "summary": "Visual `html` op `<Block name=\"X\" :Input=\"expr\" @Event=\"ScreenAction\"><slot name=\"Placeholder\">...</slot></Block>` inside an existing parent, or raw verbs `create IMobileBlockInstanceWidget` with `source`; the block must already be referenced by the module (its signature is readable from the capture).",
+      "route": { "kind": "job", "operation": "{\"op\":\"html\",\"parent\":\"$scr/#IMobileBlockInstanceWidget/MainContent\",\"file\":\"fragment.html\"}" },
+      "contract": ["html-visual.tags", "html-visual.shape", "verbs.verbs.create"],
+      "proofs": { "odc": ["html-visual-block", "block-reuse", "block-events-two-instances"] },
+      "depends": [],
+      "alternatives": [],
+      "context": { "kinds": ["MobileBlockSignature", "MobileBlock"], "signatures": ["MobileBlockSignature", "MobileBlock"] },
+      "limits": [
+        { "text": "Only the DatePicker OutSystemsUI block has an ODC job; the other patterns (Tabs, Accordion, Search, Pagination, DropdownSearch...) are B on ODC. Placeholders born with an Input are bound with `set .../#IInput Variable`, not `empty`.", "origin": "index: ODC jobs; kernel/AGENTS.md 3.3" }
+      ],
+      "guidance": "List what the module already references: inspect --kind MobileBlockSignature (context.reads).",
+      "example": { "ops": ["html", "set"], "max": 6 }
+    },
+    {
+      "id": "ui.html-visual", "category": "ui", "title": "HTML/CSS fragment into an existing screen or block (native widgets)",
+      "keywords": ["html", "fragment", "markup", "css class", "visual", "layout of widgets"],
+      "summary": "The fragment becomes native widgets under an existing parent: div->Container, tags->IAdvancedHtml, text->Text, `{{ expr }}`->Expression, input/select/button/a/label/img, `<div list as>`, `<div if>`, `<Block>`; names must exist in the module; `<style>` is rewritten under the fragment root class.",
+      "route": { "kind": "job", "operation": "{\"op\":\"html\",\"parent\":\"<widget ref>\",\"file\":\"fragment.html\"}  (api --op html-visual)" },
+      "contract": ["html-visual.shape", "html-visual.tags", "html-visual.attributes", "html-visual.rejected"],
+      "proofs": { "odc": ["html-visual-alert", "html-visual-list", "html-visual-block", "block-events"] },
+      "depends": [{ "id": "ui.screen", "unless": "the parent screen or block already exists (the fragment always needs an existing parent)" }],
+      "alternatives": [{ "id": "ui.html-page", "when": "a whole page with bindings manifest (unproven on ODC)" }],
+      "context": { "kinds": ["MobileScreen"] },
+      "limits": [
+        { "text": "Rejected: script, an <i> without weight, names that do not exist, tags outside the table; logic, data and events stay in native verbs.", "origin": "api --op html-visual rejected" }
+      ],
+      "guidance": null,
+      "example": { "ops": ["html"], "max": 2 }
+    },
+    {
+      "id": "ui.screen-spec", "category": "ui", "title": "Screen archetypes (cards, table, detail, form, dashboard) by op screen",
+      "keywords": ["archetype", "cards", "catalog", "dashboard", "detail tabs", "table screen", "pagination", "search box"],
+      "summary": "One `screen` op declares screens by kind with source (entity or action), search, filters (native dropdown over a static entity), fields/columns/tabs/actions; the compiler composes OutSystemsUI blocks already referenced by the module (Search, Pagination, CardSectioned, Tabs, Gallery/Carousel, Counter).",
+      "route": { "kind": "job", "operation": "{\"op\":\"screen\",\"data\":{\"screens\":[{\"name\":\"X\",\"kind\":\"form\",...}]}}" },
+      "contract": ["screen.kinds", "screen.shapes.screen", "screen.shapes.source", "screen.shapes.field", "screen.shapes.filter", "screen.shapes.action"],
+      "proofs": { "odc": [] },
+      "depends": [{ "id": "data.entity", "unless": "the source entity already exists" }],
+      "alternatives": [{ "id": "ui.screen", "when": "the ODC proofs are needed today: raw verbs (screen-form/screen-list) are the proven path" }],
+      "context": { "kinds": ["MobileBlockSignature"] },
+      "limits": [
+        { "text": "Accepted by the compiler for CrossDevice modules but no ODC job runs it (proven on O11: screen-spec-*.json). Form fields are input|textarea|checkbox only (no dropdown field); existing screen names are refused; the referenced OutSystemsUI blocks must exist in the module.", "origin": "ScreenExpander (kernel); index: ODC jobs" }
+      ],
+      "guidance": "Deliver directly (the deliver call validates and refuses before any change; a headless proof only when the person asks for one); declare the required blocks by reading context.reads MobileBlockSignature.",
+      "example": null
+    },
+    {
+      "id": "ui.html-page", "category": "ui", "title": "Whole page from HTML + bindings manifest (op html data)",
+      "keywords": ["dashboard page", "whole page", "bindings", "manifest", "data-av"],
+      "summary": "The page HTML/CSS plus a typed bindings manifest (text, list, field, visible, style, date, navigate, call, refresh) compiled to native widgets, data sources and screen actions; CSS installed in the theme author half.",
+      "route": { "kind": "job", "operation": "{\"op\":\"html\",\"data\":{\"screen\":\"X\",\"html\":\"...\",\"bindings\":{...}}}  (api --op html)" },
+      "contract": ["html.shapes.data", "html.kinds", "html.tags", "html.attributes"],
+      "proofs": { "odc": [] },
+      "depends": [],
+      "alternatives": [{ "id": "ui.html-visual", "when": "the logic stays native and only a fragment is authored (proven on ODC)" }],
+      "context": { "kinds": ["MobileScreen"] },
+      "limits": [
+        { "text": "No ODC job (proven on O11: html-dashboard-reactive.json). id selectors in CSS are always refused; <form>, <img>, <script> are rejected.", "origin": "index: ODC jobs; kernel/AGENTS.md 3.5" }
+      ],
+      "guidance": null,
+      "example": null
+    },
+    {
+      "id": "ui.edit", "category": "ui", "title": "Edit an existing screen, block or widget (properties, new widgets, reorder, delete)",
+      "keywords": ["edit screen", "existing screen", "change widget", "widget property", "add widget", "reorder widgets", "screen title", "stylesheet", "delete screen"],
+      "summary": "Address by `IMobileScreen:Name/...` or `IMobileBlock:Name/...` and use set (Title, Description, StyleSheet, Style, AnimateItems, argument Values of a block instance), create inside an existing container, move first/last/before/after, delete after usages.",
+      "route": { "kind": "job", "operation": "set/create/move/delete on `IMobileScreen:Name/<path>`" },
+      "contract": ["verbs.verbs.set", "verbs.verbs.move", "verbs.verbs.delete", "verbs.verbs.usages", "verbs.references"],
+      "proofs": { "odc": ["screen-block-edit", "refactor-move", "rename-interface-propagation", "delete-screen", "block-event-lifecycle"] },
+      "negative": { "odc": ["delete-screen-in-use", "move-foreign-sibling"] },
+      "depends": [],
+      "recommends": [{ "id": "read.inspect", "when": "before changing widgets: read the screen subtree (depth) and the usages of what will be deleted" }],
+      "alternatives": [],
+      "context": { "kinds": ["MobileScreen", "MobileBlock"], "signatures": ["MobileScreen", "MobileBlock"] },
+      "limits": [
+        { "text": "StyleSheet is not watched by the data contract: read it back with get. Deleting a screen must handle navigation consumers and the module DefaultScreen (appears with an empty path in the refusal).", "origin": "job:screen-block-edit and job:delete-screen descriptions" },
+        { "text": "Reordering or inserting sibling widgets can trip the strict merge equivalence gate on DisplayOrder (outcome uncertain: never retry, read the receipt).", "origin": "platforms/odc/lab out22 quotes-delivery-06 last-error (audit 22/09)" }
+      ],
+      "guidance": "Renaming a screen or block rewrites references by key; CSS classes, captions and hand-written deep links stay as text.",
+      "example": { "ops": ["get", "set", "create", "move"], "max": 24 }
+    },
+    {
+      "id": "ui.theme-css", "category": "ui", "title": "Theme CSS (three halves) and screen/block stylesheets",
+      "keywords": ["css", "theme", "stylesheet", "style", "theme editor"],
+      "summary": "`set StyleSheet` on a theme writes the author half (Theme Editor CSS is a separate half; the effective sheet is generated + author); screens and blocks have their own StyleSheet.",
+      "route": { "kind": "job", "operation": "get ITheme:X (three halves) then set StyleSheet with the whole author text" },
+      "contract": ["verbs.verbs.set", "verbs.verbs.get"],
+      "proofs": { "odc": ["theme-css-halves", "theme-css-reload", "theme-script-resource", "screen-block-edit"] },
+      "depends": [],
+      "alternatives": [{ "id": "ui.html-visual", "when": "the CSS belongs to a fragment: `<style>` is installed under the fragment class" }],
+      "context": { "kinds": ["Theme"] },
+      "limits": [
+        { "text": "Writing StyleSheet replaces the author CSS: read the three halves first to append. A CSS-only feature must still carry an element stamped by the snapshot author or the manifest gate refuses (audit T1 CSS episode).", "origin": "NAO-DA.md theme CSS; PrepareManifest.cs gate" }
+      ],
+      "guidance": null,
+      "example": { "ops": ["get", "set"], "max": 4 }
+    },
+    {
+      "id": "ui.script-resource", "category": "ui", "title": "Scripts (JS files), resources and required scripts",
+      "keywords": ["script", "javascript file", "resource", "required scripts", "static file", "asset"],
+      "summary": "IScript with JavaScript, IResource with TargetDirectory/DeployAction, and `RequiredScripts` of a screen; RuntimePath is derived and follows renames.",
+      "route": { "kind": "job", "operation": "create IScript|IResource; set JavaScript/TargetDirectory/DeployAction; link screen RequiredScripts" },
+      "contract": ["verbs.verbs.create", "verbs.verbs.set"],
+      "proofs": { "odc": ["theme-script-resource", "resource-script-lifecycle"] },
+      "depends": [],
+      "alternatives": [],
+      "context": { "kinds": ["Script", "Resource"] },
+      "limits": [
+        { "text": "ResourceContent is read-only in the Model API V1 (binary content cannot be written by jobs); write TargetDirectory after DeployAction or the platform discards it. Module images (IImage) are not created by jobs.", "origin": "job:resource-script-lifecycle description; job:theme-script-resource" }
+      ],
+      "guidance": null,
+      "example": { "ops": ["create", "set"], "max": 12 }
+    },
+    {
+      "id": "ui.email-popover", "category": "ui", "title": "Emails, popovers and aggregate metadata",
+      "keywords": ["email", "send email", "popover", "tooltip menu", "metadata"],
+      "summary": "IMobileEmail lives in the Emails UI flow (EmailTheme); IPopover is born complete (TopContent/BottomContent); ITextMetadata hangs on a screen aggregate with managedBy.",
+      "route": { "kind": "job", "operation": "create IMobileEmail in IMobileFlow:Emails; create IPopover; ISendEmailNode in a server action" },
+      "contract": ["verbs.verbs.create", "logic.nativeNodes.ISendEmailNode"],
+      "proofs": { "odc": ["email-popover-metadata"] },
+      "depends": [],
+      "alternatives": [],
+      "context": { "kinds": ["MobileFlow"] },
+      "limits": [],
+      "guidance": null,
+      "example": { "ops": ["create", "set", "link"], "max": 20 }
+    },
+    {
+      "id": "refactor.rename", "category": "refactor", "title": "Rename with propagation report",
+      "keywords": ["rename", "propagation", "consumers", "expressions rewritten"],
+      "summary": "`rename` refuses name clashes and returns consumers and expressionsRewritten; the platform rewrites what is model (expressions, SQL, aggregates, node names), not literals, descriptions, CSS or hand-written URLs.",
+      "route": { "kind": "job", "operation": "{\"op\":\"rename\",\"target\":\"IServerAction:Old\",\"name\":\"New\"} then get/dump the expressions that cite it" },
+      "contract": ["verbs.verbs.rename"],
+      "proofs": { "odc": ["rename-data-propagation", "rename-logic-propagation", "rename-interface-propagation", "refactor-inherited", "setting-lifecycle"] },
+      "negative": { "odc": ["rename-name-clash"] },
+      "depends": [],
+      "alternatives": [],
+      "context": { "kinds": ["ServerAction", "ServerEntity", "MobileScreen"] },
+      "limits": [
+        { "text": "Renaming an exposed REST method rewrites its public URL; renaming a static entity record is `set Identifier`; IEvent/ISystemEvent/IBlockEvent renames are refused or silently ignored on ODC.", "origin": "jobs rest-expose-lifecycle, static-entity-lifecycle, platform-events-lifecycle, block-event-lifecycle" }
+      ],
+      "guidance": null,
+      "example": { "ops": ["rename", "get"], "max": 8 }
+    },
+    {
+      "id": "refactor.replace", "category": "refactor", "title": "Repoint every consumer (replace)",
+      "keywords": ["replace", "repoint", "swap action", "migrate callers", "consumers"],
+      "summary": "`replace from to` makes every consumer of `from` point at `to` (the Studio's ReplaceReferences); afterwards the old element has no consumers and `delete` needs no force.",
+      "route": { "kind": "job", "operation": "{\"op\":\"replace\",\"from\":\"IServerAction:Old\",\"to\":\"IServerAction:New\"}" },
+      "contract": ["verbs.verbs.replace", "verbs.verbs.usages"],
+      "proofs": { "odc": ["refactor-replace-action", "delete-logic-consumers", "exception-lifecycle", "refactor-inherited"] },
+      "depends": [],
+      "alternatives": [],
+      "context": { "kinds": ["ServerAction"] },
+      "limits": [
+        { "text": "Different kinds need force and usually break Verify; literals, descriptions, URLs and CSS never propagate.", "origin": "kernel/AGENTS.md section 2 (replace)" }
+      ],
+      "guidance": null,
+      "example": { "ops": ["replace", "usages", "delete"], "max": 6 }
+    },
+    {
+      "id": "refactor.duplicate", "category": "refactor", "title": "Duplicate (Ctrl+D) an element",
+      "keywords": ["duplicate", "copy", "clone"],
+      "summary": "`duplicate` copies into the same parent at the end, with the platform suffix and without consumers; internal references follow the copy.",
+      "route": { "kind": "job", "operation": "{\"op\":\"duplicate\",\"target\":\"IMobileScreen:X\",\"as\":\"$copy\"}" },
+      "contract": ["verbs.verbs.duplicate"],
+      "proofs": { "odc": ["refactor-duplicate", "refactor-inherited"] },
+      "depends": [],
+      "alternatives": [],
+      "context": { "kinds": [] },
+      "limits": [
+        { "text": "A duplicated action is UnusedAction until something calls it: declare the warning or repoint a consumer.", "origin": "kernel/AGENTS.md section 2 (duplicate)" }
+      ],
+      "guidance": null,
+      "example": { "ops": ["duplicate", "rename", "usages"], "max": 8 }
+    },
+    {
+      "id": "refactor.move", "category": "refactor", "title": "Reorder inside the same parent",
+      "keywords": ["reorder", "move", "order", "position", "first", "last", "before", "after"],
+      "summary": "`move` reorders attributes, widgets, parameters or variables inside the same parent (first/last/before/after) or positions a flow node (x/y); with `into` it changes the parent (folder for top-level elements, key kept; the Studio's own move otherwise: new key, consumers rebound). It returns the resulting order.",
+      "route": { "kind": "job", "operation": "{\"op\":\"move\",\"target\":\"...\",\"before\":\"...\"}" },
+      "contract": ["verbs.verbs.move"],
+      "proofs": { "odc": ["refactor-move", "screen-block-edit"] },
+      "negative": { "odc": ["move-foreign-sibling"] },
+      "depends": [],
+      "alternatives": [{ "id": "deliver.feature", "when": "a widget must change parent: C# features use IModelServices.MoveObject (strict-merge proof per feature)" }],
+      "context": { "kinds": [] },
+      "limits": [],
+      "guidance": null,
+      "example": { "ops": ["move"], "max": 6 }
+    },
+    {
+      "id": "refactor.delete", "category": "refactor", "title": "Delete with consumer check (usages first)",
+      "keywords": ["delete", "remove", "consumers", "force", "usages", "broken consumers"],
+      "summary": "`delete` refuses while real consumers exist and names each one by path; derived usages (aggregate attribute lists, example record values) do not count; `force` breaks them (brokenConsumers). Use `usages` first and repoint or remove the consumers.",
+      "route": { "kind": "job", "operation": "{\"op\":\"usages\",\"target\":\"...\"} then {\"op\":\"delete\",\"target\":\"...\"}" },
+      "contract": ["verbs.verbs.delete", "verbs.verbs.usages"],
+      "proofs": { "odc": ["delete-data-consumers", "delete-logic-consumers", "delete-block", "delete-screen", "delete-entity-whole", "delete-attribute-no-consumers", "timer-lifecycle"] },
+      "negative": { "odc": ["delete-data-in-use", "delete-logic-in-use", "delete-screen-in-use", "delete-block-event-in-use"] },
+      "depends": [],
+      "alternatives": [],
+      "context": { "kinds": [] },
+      "limits": [
+        { "text": "Deleting sweeps down (children), never up: variables that only fed the deleted element stay as orphans. To delete a node in the middle of a flow relink the predecessor first.", "origin": "job:delete-block description; kernel/AGENTS.md section 2 (delete)" }
+      ],
+      "guidance": null,
+      "example": { "ops": ["usages", "replace", "delete"], "max": 8 }
+    },
+    {
+      "id": "read.inspect", "category": "read", "title": "Read an application capture: map, elements, properties, usages",
+      "keywords": ["inspect", "read", "capture", "snapshot", "map", "who uses", "usages", "impact", "properties", "expressions", "existing elements"],
+      "summary": "Read-only reader over a capture (.oml, reused by hash) or the open module: module map, `kind`/`name`/`text` queries with paging, a path or @key subtree with depth, `--usages` for consumers, `--select` for up to 32 paths in one call, `budget` for the inline size (the full JSON is always written to `out`).",
+      "route": { "kind": "reader", "operation": "odc inspect <capture.oml> --kind ServerEntity --max 50 --properties Name; odc inspect <capture.oml> \"MobileScreen:Home\" --depth 4; --usages" },
+      "contract": [],
+      "proofs": { "odc": [] },
+      "depends": [],
+      "alternatives": [],
+      "context": { "kinds": [] },
+      "limits": [
+        { "text": "Limits are in the tool schema: select <= 32, depth <= 12, max <= 500, budget 2000..200000; ok=true means the query ran, check notices/kindObserved/searchComplete/omissions before treating a result as complete. Kinds are interface names without the leading I (MobileScreen, ServerAction, MobileBlockSignature...).", "origin": "platforms/odc/facade/mcp.mjs studio_inspect schema; docs/LEITURA-MODELO.md" }
+      ],
+      "guidance": "Reuse the same capture between pages; after a Studio change take a new capture. Facade proof: platforms/odc/facade/tests/reading.test.mjs.",
+      "example": null
+    },
+    {
+      "id": "deliver.job", "category": "delivery", "title": "Deliver a job to the open module directly",
+      "keywords": ["deliver", "job", "prove", "fixture", "merge", "candidate", "preview", "check base", "receipt"],
+      "summary": "`studio_deliver {feature, module, job, owners, changes}`, directly: captures the open module as it is now, applies the job privately on that capture, prepares the manifest (no new errors or warnings; a change against the capture, read element by element; stamps only name the author), then the native merge (strictlyEqual; the merge itself proves the base and the preview conditions), refusing before any change. Publishes in the same call only with publish:true, after a clean merge, with the user's words (authorize) or a standing grant. `ssam job --lane odc <job>` applies the job on the lane fixture (Verify + expected messages, delivers nothing) only when the person asks for a headless proof.",
+      "route": { "kind": "delivery", "operation": ".\\odc deliver <feature> --job <job.json> --module <M> --owners '[\"Screen\"]' --changes '[\"Change\"]'" },
+      "contract": [],
+      "proofs": { "odc": [] },
+      "depends": [],
+      "alternatives": [{ "id": "deliver.feature", "when": "the change cannot be expressed as a job (new module, producer dependency, reparenting, pattern widgets from a reference)" }],
+      "context": { "kinds": [] },
+      "limits": [
+        { "text": "The base of a job is the fixture or `job:<name>`; for delivery the facade supplies the snapshot as base. A job with expectValid:false is never deliverable. The kernel CLI must report flowLayoutEngine anvil-d4d8ece or delivery refuses.", "origin": "platforms/odc/facade/kernel-delivery.mjs; docs/INTEGRACAO-KERNEL-ENTREGA.md" },
+        { "text": "Refusal vocabulary: base_drift (new snapshot and build), candidate_validation (fix the job), equivalence (merge pending in the Studio, never repeat), known_losses (merged except the named defaults; deliver the repair the continuation names), studio_busy (dismiss the dialog by caption), uncertain (read receipt.json / last-error.json / journal; never retry).", "origin": "platforms/odc/README.md refusal table" }
+      ],
+      "guidance": "Headless proof is not delivery evidence; a merge receipt with merged=true and strictlyEqual=true is.",
+      "example": null
+    },
+    {
+      "id": "deliver.feature", "category": "delivery", "title": "C# feature route (Authoring primitives) for what jobs cannot express",
+      "keywords": ["feature", "c#", "builder", "authoring", "new module", "producer", "dependency", "reparent", "pattern widget", "copy from producer"],
+      "summary": "An IFeature in platforms/odc/studio/builder/features using Authoring/AuthoringData/AuthoringUi/AuthoringMisc/AuthoringRest primitives and ModelPath; `odc build list` shows the registered features; `odc build <feature> <base.oml> <sha> <dir> --smoke` proves headless; `odc deliver <feature>` runs the same gates as jobs. Required for: new module (INewModule + create), AddDependency with --producer, IModelServices.MoveObject reparenting, widgets from a reference WidgetDefinition, native Copy of producer nodes.",
+      "route": { "kind": "feature", "operation": "write features/<Name>.cs (copy LabScreen.cs / LabBlock.cs / LabAction.cs), dotnet build studio/builder, odc build list, odc deliver <feature> --until preview" },
+      "contract": [],
+      "proofs": { "odc": [] },
+      "depends": [],
+      "alternatives": [{ "id": "deliver.job", "when": "a job can express the change: jobs are proven on the fixture and need no C# compile" }],
+      "context": { "kinds": [] },
+      "limits": [
+        { "text": "Live-merged proofs of the feature route live in platforms/odc/lab/<dir>/evidence/receipt.json (merged/strictlyEqual) of the operational checkout; they are not part of this index. The builder refuses any new warning; Caption replaces the default button text; Icon needs weight; the native Button Group cannot be authored; Data Actions take no inputs.", "origin": "platforms/odc/docs/HANDOFF.md §3.5/§4; AuthoringUi.cs comments" }
+      ],
+      "guidance": "Model API reference for C#: platforms/odc/docs/model-api/INDEX.md (reflection, ODC Studio version recorded there).",
+      "example": null
+    },
+    {
+      "id": "deliver.publish", "category": "delivery", "title": "Authorize and publish (user's own words)",
+      "keywords": ["publish", "authorize", "authorization", "deploy", "release", "go live"],
+      "summary": "After a merge receipt, `odc studio authorize <manifest> publish \"<the user's own words>\"` records the authorization and `odc studio publish <manifest> --wait` publishes natively and downloads the revision for comparison. Publication is never automatic and never retried after an uncertain result.",
+      "route": { "kind": "delivery", "operation": "studio_authorize {manifest, kind:\"publish\", text} then studio_publish {manifest, wait:true}" },
+      "contract": [],
+      "proofs": { "odc": [] },
+      "depends": [{ "id": "deliver.job", "unless": "the merge receipt came from the feature route (deliver.feature): publication needs a merge receipt, whichever route produced it" }],
+      "alternatives": [],
+      "context": { "kinds": [] },
+      "limits": [
+        { "text": "The text must be the user's words, quoted, not a paraphrase; outcome `MergeAndPublish` in a merge receipt is a native label and does not mean a publication happened (publishInvoked says).", "origin": "platforms/odc/facade/mcp.mjs studio_authorize; audit 22/09 (T3)" }
+      ],
+      "guidance": null,
+      "example": null
+    }
+  ],
+  "unavailable": [
+    { "id": "session-variable", "keywords": ["session variable", "variavel de sessao", "session"], "reason": "Session variables do not exist in the ODC product; the API offers the type but the factory refuses ('Session Variable objects can't be children of App objects').", "evidence": "tests/jobs-odc-negative/session-variable-not-in-odc.json (suite refusal)", "negative": { "odc": ["session-variable-not-in-odc"] }, "alternative": "data.setting (client variable)" },
+    { "id": "bpt-process", "keywords": ["workflow", "bpt", "process", "business process", "human activity", "taskbox"], "reason": "On ODC processes are Workflow assets edited in the ODC Portal, not elements of the module model; no job or feature creates them.", "evidence": "kernel/docs/NAO-DA.md (BPT item, verdict REFUTADO: the feature exists as Portal Workflow)", "negative": { "odc": [] }, "alternative": null },
+    { "id": "rest-credentials-in-model", "keywords": ["username", "password", "basic auth password", "credentials", "credencial", "senha"], "reason": "IRestClient.Username/Password accept writes but Verify rejects them as errors on ODC; only the authentication mode stays in the model.", "evidence": "kernel/docs/NAO-DA.md IRestClient.Username/Password; tests/jobs-odc/rest-consume-post.json description", "negative": { "odc": [] }, "alternative": "logic.rest-consume (AuthenticationType/ClientAuthentication only)" },
+    { "id": "reference-import-headless", "keywords": ["reference", "referencia", "producer", "import public elements", "add dependency", "consume library", "biblioteca"], "reason": "The ODC kernel has no headless producer import (ImportReference throws NotSupported): the `reference` verb is O11-only; on ODC references are refreshed live by the bridge (studio_refresh_references) or added by a C# feature with --producer.", "evidence": "kernel/src/Anvil.Core.Odc/Adapters.ODC/README.md; index: no ODC job uses op reference", "negative": { "odc": [] }, "alternative": "deliver.feature (AddDependency + --producer) or studio_refresh_references" },
+    { "id": "agents", "keywords": ["agent", "agente", "ai agent", "llm agent"], "reason": "ODC Agents have no route on either path (HANDOFF §4/§5.8: investigation only).", "evidence": "platforms/odc/docs/HANDOFF.md §4 (Agents ✗) and §5.8", "negative": { "odc": [] }, "alternative": null },
+    { "id": "module-image", "keywords": ["image", "imagem", "picture", "logo", "icon file"], "reason": "Module images (IImage) are not created by jobs on ODC (ResourceContent is read-only in the Model API V1).", "evidence": "tests/jobs-odc/theme-script-resource.json description; kernel/docs/NAO-DA.md IImage", "negative": { "odc": [] }, "alternative": "reference an existing image by name in html-visual <img src>" },
+    { "id": "data-action-inputs", "keywords": ["data action input", "data action parameter", "parametro da data action"], "reason": "On ODC a Data Action cannot declare input parameters (IDataAction has no CreateInputParameter).", "evidence": "platforms/odc/docs/FRICCAO-QUOTES-REFACTOR.md §17; ODC Model API index IDataAction", "negative": { "odc": [] }, "alternative": "logic.data-action with screen variables read inside the action and Refresh Data" },
+    { "id": "button-group-native", "keywords": ["button group", "buttongroup", "toggle buttons", "segmented"], "reason": "The native Button Group cannot be authored by the C# route (items created in a Content are silently dropped on save) and no ODC job creates IButtonGroup.", "evidence": "platforms/odc/studio/shared/AuthoringUi.cs comment; index: ODC jobs", "negative": { "odc": [] }, "alternative": "IRadioGroup/IRadioButton (C# primitives exist; B on jobs)" }
+  ]
+}

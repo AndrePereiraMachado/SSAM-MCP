@@ -1,0 +1,65 @@
+{
+ "schema": "outsystems-padroes-config/1",
+ "_leia": "Exemplo neutro de config de projeto da ferramenta OutSystems padrões. Copie para <kernel>/.local/padroes/config.json (ou passe --config) e troque os nomes de exemplo pelos módulos do seu app. Chave ausente usa o padrão da ferramenta (README.md, seção Config). Chaves que começam por _ são notas e não são lidas.",
+
+ "platform": "o11",
+ "_platform_nota": "o11 ou odc. No ODC os detectores de hoje não rodam e cada regra sai como 'não checada no ODC ainda'; a AR1 sai como 'não se aplica ao ODC'. --platform na linha de comando manda.",
+
+ "layerOrder": {"Foundation": 0, "Core": 1, "End-user": 2},
+ "modules": {
+  "Exemplo": "End-user",
+  "Exemplo_CS": "Core",
+  "Exemplo_CW": "Core",
+  "Exemplo_IS": "Foundation",
+  "Exemplo_TH": "Foundation"
+ },
+ "modulePatterns": [["*_CW", "Core"], ["*_CS", "Core"], ["*_IS", "Foundation"], ["*_TH", "Foundation"], ["*_UI", "End-user"]],
+ "forbiddenRefs": [],
+ "_camadas_nota": "AR1 (só O11): camada de cada módulo do Architecture Canvas. modules é mesclado com os módulos da plataforma (OutSystemsUI, Users, (System)...). forbiddenRefs aceita itens {\"from\": \"glob\", \"to\": \"glob\", \"why\": \"motivo\"} para referências proibidas além da regra de camadas.",
+
+ "patternLibrary": "",
+ "_patternLibrary_nota": "U2: nome do módulo da library de padrões do app. Vazio = só o OutSystems UI. Quando preenchido, a pergunta de revisão da U2 cita a library e ela entra em libraries (U4: StyleSheet de bloco só nas libraries).",
+ "libraries": ["OutSystemsUI", "OutSystemsCharts"],
+
+ "timeoutPolicy": {"restTimeoutSeconds": 60, "minSeconds": null, "maxSeconds": null},
+ "_timeoutPolicy_nota": "S4: todo método REST criado precisa de TimeoutinSeconds explícito. restTimeoutSeconds exige um valor exato; minSeconds e maxSeconds definem uma faixa. null desliga a checagem daquele item. Escolha um valor pensado para a API real e abaixo do timeout de quem chama.",
+
+ "integrationModules": [],
+ "_integrationModules_nota": "S3/D4: módulos que podem ter REST. Vazio = sem restrição de módulo.",
+ "longRunning": [],
+ "asyncStarters": [],
+ "_longRunning_nota": "AR3: actions de processo longo que não podem rodar numa screen request, e as actions que só enfileiram esse processo (starters assíncronos), que a tela pode chamar.",
+ "guardActions": ["Require*", "Guard_*", "Auth_Require*"],
+ "subjectEntities": [],
+ "_guardas_nota": "AR2: guardActions são globs de actions de guarda (role, lease, token). subjectEntities são expressões regulares (nome inteiro) das entidades com dado do sujeito: a leitura delas também exige guarda antes.",
+
+ "p7": {
+  "protectedEntities": [],
+  "allowedEntities": [],
+  "entryPatterns": [],
+  "forbiddenCalls": [],
+  "siteSwitches": []
+ },
+ "_p7_nota": "P7 (escrita protegida): desligada enquanto protectedEntities estiver vazia. protectedEntities e allowedEntities são expressões regulares comparadas com o nome inteiro da entidade (allowedEntities isenta nomes que casariam). entryPatterns são expressões regulares dos pontos de entrada automáticos (ex.: \"^Tool_\", \"^Handle\\\\w+Tool$\", \"^Timer_\"); forbiddenCalls, as actions reservadas a decisão humana que esses pontos não podem chamar. siteSwitches: site properties de switch que o código nunca atribui (vale mesmo com protectedEntities vazia). P7 não aceita exceção.",
+
+ "numericAllowProps": ["max", "start", "MaxRecords", "StartIndex", "order", "length", "Length", "TimeoutinSeconds", "TimeoutInMinutes", "ServerRequestTimeout", "Timeout", "MaximumIterations", "timeout"],
+ "literalAllowProps": ["ISiteProperty.DefaultValue"],
+ "_literais_nota": "L7: propriedades onde número literal não é acusado (numericAllowProps) e propriedades <IKind>.<Prop> onde qualquer literal é o lugar certo (literalAllowProps). Valores de Static Entity nunca são acusados.",
+
+ "expectedSiteProperties": {},
+ "_expectedSiteProperties_nota": "E3/S3: site properties que cada módulo precisa ter, por exemplo {\"Exemplo_CS\": [{\"name\": \"ApiKey\", \"isSecret\": true, \"fromStage\": \"I2\"}]}. fromStage só cobra com --plan-stage igual ou posterior.",
+
+ "extraVerbs": [],
+ "contractNames": [],
+ "_nomes_nota": "N1: extraVerbs acrescenta verbos do projeto à lista padrão (actions começam por verbo). contractNames lista nomes de contrato congelados: achado N1 neles sai como 'pendente contrato' em vez de erro.",
+
+ "l6": {"integrationOnlyFields": [], "writeOnlyFields": []},
+ "_l6_nota": "L6: campos JSON que só os módulos de integração podem ler por nó JSON (integrationOnlyFields) e campos JSON que podem ser gravados e exportados, mas nunca desserializados (writeOnlyFields).",
+
+ "suggestions": {},
+ "_suggestions_nota": "Dica do projeto por regra, acrescentada à sugestão neutra de cada achado, por exemplo {\"AR3\": \"Use a action StartImport do Exemplo_CS.\"}.",
+
+ "approvers": [],
+ "exceptionsFile": "",
+ "_excecoes_nota": "exceptionsFile: caminho do arquivo de exceções, relativo a esta config (--exceptions manda). Vazio = nenhuma exceção. approvers: quem pode aprovar exceção; vazio = nenhuma exceção aprovada vale. Formato do arquivo: {\"schema\": \"outsystems-padroes-excecoes/1\", \"exceptions\": [{\"id\": \"EX-01\", \"rule\": \"L6\", \"module\": \"Exemplo_CS\", \"element\": {\"objectKey\": null, \"path\": [[\"ServerAction\", \"ParseResponse\"], [\"JSONDeserializeNode\", \"DecodeBody\"]]}, \"match\": \"suffix\", \"reason\": \"JSON externo da API.\", \"evidence\": \"onde a decisão foi registrada\", \"status\": \"proposta\", \"approval\": null, \"expires\": \"AAAA-MM-DD\", \"stages\": [\"I2\"]}]}. status aprovada exige approval {\"by\": <um de approvers>, \"at\": <data e hora UTC>, \"message\": <texto literal da aprovação>}. Detalhes no README.md, seção Exceções."
+}

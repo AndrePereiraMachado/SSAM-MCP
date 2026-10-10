@@ -1,0 +1,57 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.Logic.IKnowledgeBaseReference (odc) em ctxManifest. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/blank-agent-definition.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "set",
+   "target": "IAgentManifest:CovBlankAgentDefinition",
+   "prop": "GoalsAndInstructions",
+   "value": "Cobertura"
+  },
+  {
+   "op": "set",
+   "target": "IAgentManifest:CovBlankAgentDefinition",
+   "prop": "AIModel",
+   "value": "IServerActionSignature:CovAIModel"
+  },
+  {
+   "op": "create",
+   "parent": "IAgentManifest:CovBlankAgentDefinition",
+   "type": "IKnowledgeBaseReference",
+   "name": "CovAKnowledgeBaseReference",
+   "as": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Action",
+   "value": "IServerActionSignature:CovKnowledge"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Enabled",
+   "value": true
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRKnowledgeBaseReference"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "move",
+   "target": "$b",
+   "first": true
+  }
+ ]
+}

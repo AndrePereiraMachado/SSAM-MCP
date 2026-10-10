@@ -1,0 +1,84 @@
+{
+ "description": "O verbo move REORDENA dentro do mesmo pai e posiciona um no de fluxo na tela; mudar de pai e o `into` (tests/jobs/refactor-reparent.json). Nas tres areas: atributos de uma entidade, widgets dentro de um container, screen actions de uma tela, e o x/y de um no. Cada move devolve a ORDEM que ficou, por isso a prova esta no proprio resultado do op e nao precisa de um dump a seguir (os dumps aqui sao para quem le). O que a ordem muda de facto: atributos definem a ordem das colunas e do registo; widgets definem a ordem da pagina; x/y so mexem no desenho do fluxo. A recusa de um irmao de outro pai esta em tests/jobs-negative/move-foreign-sibling.json.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {"op": "spec", "data": {"entities": [
+   {"name": "MoveNotice", "attributes": [
+    {"name": "Title", "type": "Text", "mandatory": true, "length": 100},
+    {"name": "Body", "type": "Text", "length": 500},
+    {"name": "Rank", "type": "Integer"}
+   ]}
+  ]}},
+
+  {"op": "dump", "target": "$MoveNotice", "depth": 2, "_why": "Id, Title, Body, Rank"},
+  {"op": "move", "target": "$MoveNotice.Rank", "after": "$MoveNotice.Title", "_why": "Id, Title, Rank, Body"},
+  {"op": "move", "target": "$MoveNotice.Body", "first": true, "_why": "Body passa a frente do proprio Id: a API deixa, a interface do Studio nao poe nada antes do Id"},
+  {"op": "move", "target": "$MoveNotice.Body", "last": true, "_why": "e volta para o fim"},
+  {"op": "dump", "target": "$MoveNotice", "depth": 2},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "MoveScreen", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Mover\""},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "Box", "as": "$box"},
+  {"op": "create", "parent": "$box", "type": "IContainer", "name": "Um", "as": "$c1"},
+  {"op": "create", "parent": "$box", "type": "IContainer", "name": "Dois", "as": "$c2"},
+  {"op": "create", "parent": "$box", "type": "IContainer", "name": "Tres", "as": "$c3"},
+  {"op": "dump", "target": "$box", "depth": 2},
+
+  {"op": "move", "target": "$c3", "first": true, "_why": "Tres, Um, Dois"},
+  {"op": "move", "target": "$c3", "after": "$c1", "_why": "Um, Tres, Dois -- o after decisivo"},
+  {"op": "move", "target": "$c1", "before": "$c2", "_why": "Tres, Um, Dois"},
+  {"op": "move", "target": "$c2", "last": true, "_why": "Tres, Um, Dois (ja estava no fim; last e idempotente)"},
+  {"op": "dump", "target": "$box", "depth": 2},
+
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Zebra", "as": "$v1"},
+  {"op": "set", "target": "$v1", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Abelha", "as": "$v2"},
+  {"op": "set", "target": "$v2", "prop": "DataType", "value": "Integer"},
+
+  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "Beta", "as": "$beta"},
+  {"op": "create", "parent": "$beta", "type": "IInputParameter", "name": "Nome", "as": "$p1"},
+  {"op": "set", "target": "$p1", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$beta", "type": "IInputParameter", "name": "Quantos", "as": "$p2"},
+  {"op": "set", "target": "$p2", "prop": "DataType", "value": "Integer"},
+  {"op": "create", "parent": "$beta", "type": "IStartNode", "as": "$b0"},
+  {"op": "create", "parent": "$beta", "type": "IAssignNode", "as": "$b1"},
+  {"op": "set", "target": "$b1", "prop": "Label", "value": "PassoB"},
+  {"op": "create", "parent": "$b1", "type": "IAssignment", "as": "$b1a"},
+  {"op": "set", "target": "$b1a", "prop": "Variable", "value": "Zebra"},
+  {"op": "set", "target": "$b1a", "prop": "Value", "value": "Nome"},
+  {"op": "create", "parent": "$b1", "type": "IAssignment", "as": "$b1b"},
+  {"op": "set", "target": "$b1b", "prop": "Variable", "value": "Abelha"},
+  {"op": "set", "target": "$b1b", "prop": "Value", "value": "Quantos"},
+  {"op": "create", "parent": "$beta", "type": "IEndNode", "as": "$b9"},
+  {"op": "link", "from": "$b0", "to": "$b1"},
+  {"op": "link", "from": "$b1", "to": "$b9"},
+  {"op": "layout", "target": "$beta"},
+
+  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "Alfa", "as": "$alfa"},
+  {"op": "create", "parent": "$alfa", "type": "IStartNode", "as": "$f0"},
+  {"op": "create", "parent": "$alfa", "type": "IEndNode", "as": "$f9"},
+  {"op": "link", "from": "$f0", "to": "$f9"},
+  {"op": "layout", "target": "$alfa"},
+
+  {"op": "create", "parent": "$c1", "type": "IButton", "name": "GoBeta", "as": "$btnB"},
+  {"op": "set", "target": "$btnB/#ITextWidget", "prop": "Text", "value": "Beta"},
+  {"op": "set", "target": "$btnB/OnClick", "prop": "Destination", "value": "$beta"},
+  {"op": "set", "target": "$btnB/OnClick/Nome", "prop": "Value", "value": "\"ola\""},
+  {"op": "set", "target": "$btnB/OnClick/Quantos", "prop": "Value", "value": "1"},
+  {"op": "create", "parent": "$c1", "type": "IButton", "name": "GoAlfa", "as": "$btnA"},
+  {"op": "set", "target": "$btnA/#ITextWidget", "prop": "Text", "value": "Alfa"},
+  {"op": "set", "target": "$btnA/OnClick", "prop": "Destination", "value": "$alfa"},
+
+  {"op": "move", "target": "$p2", "first": true, "_why": "a ORDEM dos parametros de entrada e a ordem que quem chama ve"},
+  {"op": "move", "target": "$v2", "first": true, "_why": "variaveis de tela tambem sao sequencia: Abelha, Zebra"},
+  {"op": "dump", "target": "$beta", "depth": 1},
+  {"op": "dump", "target": "$scr", "depth": 1},
+
+  {"op": "move", "target": "$b1", "x": 5000, "y": 3000, "_why": "x/y so no desenho do fluxo; devolve as coordenadas que ficaram"},
+  {"op": "get", "target": "$b1"}
+ ]
+}

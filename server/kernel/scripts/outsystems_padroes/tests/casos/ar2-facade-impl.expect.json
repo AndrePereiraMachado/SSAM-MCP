@@ -1,0 +1,33 @@
+{
+ "_leia": "AR2 fachada->_Impl: a fachada herda a verificacao do _Impl; _Impl com guarda e conforme; _Impl sem guarda acusa no _Impl, nunca na fachada. N1: set Description por IServerAction:<Action>/<as> tambem conta.",
+ "stage": "job",
+ "mode": "autor",
+ "module": "Domain_CS",
+ "exitCode": 1,
+ "mustFind": [
+  {
+   "rule": "AR2",
+   "severity": "erro",
+   "stage": "job",
+   "contains": "ReopenNegItem_Impl"
+  }
+ ],
+ "mustNotFind": [
+  {
+   "rule": "AR2",
+   "contains": "ApproveNegItem"
+  },
+  {
+   "rule": "AR2",
+   "contains": "ReopenNegItem ("
+  },
+  {
+   "rule": "N1",
+   "contains": "ReadItemToReopen"
+  },
+  {
+   "rule": "N1",
+   "contains": "ReadItemToApprove"
+  }
+ ]
+}

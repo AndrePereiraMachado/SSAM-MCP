@@ -1,0 +1,34 @@
+{
+ "description": "RadioGroup tipico: vazio na criacao, tres RadioButtons com os registros da static Priority como valores, ligado a uma variavel Priority Identifier; OnChange refaz o aggregate filtrado pela prioridade.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "PriorityFilter", "as": "$vPri"},
+  {"op": "set", "target": "$vPri", "prop": "DataType", "value": "Priority Identifier"},
+  {"op": "set", "target": "$vPri", "prop": "DefaultValue", "value": "Entities.Priority.Medium"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetTasksOfPriority", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "Task.PriorityId = PriorityFilter"}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "PriorityOnChange", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Refaz a lista da prioridade escolhida",
+    "steps": [{"node": "IRefreshDataNode", "as": "RefreshPriority", "properties": {"DataSource": "IScreenAggregate:GetTasksOfPriority"}}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IRadioGroup", "name": "PriorityRadio", "as": "$rg", "empty": true},
+  {"op": "set", "target": "$rg", "prop": "Variable", "value": "PriorityFilter"},
+  {"op": "set", "target": "$rg/OnChange", "prop": "Destination", "value": "IScreenAction:PriorityOnChange"},
+  {"op": "create", "parent": "$rg", "type": "IRadioButton", "name": "LowRadio", "as": "$rLow"},
+  {"op": "set", "target": "$rLow", "prop": "Value", "value": "Entities.Priority.Low"},
+  {"op": "create", "parent": "$rLow", "type": "IExpression", "as": "$rLowT"},
+  {"op": "set", "target": "$rLowT", "prop": "Value", "value": "\"Low\""},
+  {"op": "create", "parent": "$rg", "type": "IRadioButton", "name": "MediumRadio", "as": "$rMed"},
+  {"op": "set", "target": "$rMed", "prop": "Value", "value": "Entities.Priority.Medium"},
+  {"op": "create", "parent": "$rMed", "type": "IExpression", "as": "$rMedT"},
+  {"op": "set", "target": "$rMedT", "prop": "Value", "value": "\"Medium\""},
+  {"op": "create", "parent": "$rg", "type": "IRadioButton", "name": "HighRadio", "as": "$rHigh"},
+  {"op": "set", "target": "$rHigh", "prop": "Value", "value": "Entities.Priority.High"},
+  {"op": "create", "parent": "$rHigh", "type": "IExpression", "as": "$rHighT"},
+  {"op": "set", "target": "$rHighT", "prop": "Value", "value": "\"High\""},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$count"},
+  {"op": "set", "target": "$count", "prop": "Value", "value": "GetTasksOfPriority.Count + \" task(s)\""}
+ ]
+}

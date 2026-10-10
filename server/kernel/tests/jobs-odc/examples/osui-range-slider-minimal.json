@@ -1,0 +1,20 @@
+{
+ "description": "RangeSlider do OSUI: os tres inputs obrigatorios e o evento obrigatorio OnValueChange guardando o valor.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "RangeSliderDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Amount", "as": "$vAmount"},
+  {"op": "set", "target": "$vAmount", "prop": "DataType", "value": "Decimal"},
+  {"op": "set", "target": "$vAmount", "prop": "DefaultValue", "value": "50"},
+  {"op": "logic", "data": {"actions": [{"name": "AmountChanged", "kind": "screen", "owner": "IMobileScreen:RangeSliderDemo", "inputs": [{"name": "Value", "type": "Decimal"}], "steps": [{"assign": {"Amount": "Value"}, "as": "Keep"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "RangeSlider1", "source": "IMobileBlock:RangeSlider", "as": "$rs"},
+  {"op": "set", "target": "$rs/MinValue", "prop": "Value", "value": "0"},
+  {"op": "set", "target": "$rs/MaxValue", "prop": "Value", "value": "100"},
+  {"op": "set", "target": "$rs/StartingValue", "prop": "Value", "value": "Amount"},
+  {"op": "set", "target": "$rs/OnValueChange", "prop": "Handler", "value": "IMobileScreen:RangeSliderDemo/AmountChanged"},
+  {"op": "set", "target": "$rs/OnValueChange/Value", "prop": "Value", "value": "Value"}
+ ]
+}

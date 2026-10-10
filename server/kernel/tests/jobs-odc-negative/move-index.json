@@ -1,0 +1,16 @@
+{
+ "description": "ODC: a RECUSA de `move` sobre um indice: os indices de uma entidade nao sao uma sequencia de autor. A ordem dos ATRIBUTOS DE UM INDICE, essa, e reordenavel no ODC (tests/jobs-odc/entity-refactor.json), ao contrario do O11.",
+ "base": "job:data-full-model",
+ "expectValid": true,
+ "expectError": [
+  "move: IServerEntity 'WfCovTask' does not keep EntityIndex 'IX_WfCovTask_ProjectDone' in an ordered sequence",
+  "Sequences of this parent: Attributes"
+ ],
+ "ops": [
+  {
+   "op": "move",
+   "target": "EntityIndex:IX_WfCovTask_ProjectDone",
+   "first": true
+  }
+ ]
+}

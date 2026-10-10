@@ -1,0 +1,28 @@
+{
+ "description": "OverflowMenu do OSUI: icone de tres pontos no TriggerContent, dois links no Menu, posicao do balao e o OnMenuToggle guardando se esta aberto.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductActions", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Product actions\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "IsMenuOpen", "as": "$vIsMenuOpen"},
+  {"op": "set", "target": "$vIsMenuOpen", "prop": "DataType", "value": "Boolean"},
+  {"op": "logic", "data": {"actions": [{"name": "MenuToggled", "kind": "screen", "owner": "IMobileScreen:ProductActions", "inputs": [{"name": "IsOpen", "type": "Boolean"}], "steps": [{"assign": {"IsMenuOpen": "IsOpen"}, "as": "Remember"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "OverflowMenu1", "source": "IMobileBlock:OverflowMenu", "empty": true, "as": "$om"},
+  {"op": "set", "target": "$om/BalloonPosition", "prop": "Value", "value": "Entities.FloatingPosition.BottomEnd"},
+  {"op": "set", "target": "$om/OnMenuToggle", "prop": "Handler", "value": "IMobileScreen:ProductActions/MenuToggled"},
+  {"op": "set", "target": "$om/OnMenuToggle/IsOpen", "prop": "Value", "value": "IsOpen"},
+  {"op": "create", "parent": "$om/TriggerContent", "type": "IIcon", "name": "MoreIcon", "as": "$icon1"},
+  {"op": "set", "target": "$icon1", "prop": "Icon", "value": "dots-three-vertical"},
+  {"op": "set", "target": "$icon1", "prop": "Weight", "value": "regular"},
+  {"op": "create", "parent": "$om/Menu", "type": "ILink", "name": "ProfileLink", "as": "$lProfileLink"},
+  {"op": "set", "target": "$lProfileLink/#ITextWidget", "prop": "Text", "value": "Profile"},
+  {"op": "set", "target": "$lProfileLink/OnClick", "prop": "Destination", "value": "IMobileScreen:UserProfile"},
+  {"op": "create", "parent": "$om/Menu", "type": "ILink", "name": "HelpLink", "as": "$lHelpLink"},
+  {"op": "set", "target": "$lHelpLink/#ITextWidget", "prop": "Text", "value": "Help"},
+  {"op": "set", "target": "$lHelpLink/OnClick", "prop": "Destination", "value": "IMobileScreen:InvalidPermissions"}
+ ]
+}

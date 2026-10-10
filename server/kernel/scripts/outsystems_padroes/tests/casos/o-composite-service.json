@@ -1,0 +1,34 @@
+{
+ "description": "Composto dos controles negativos de modulo Service, para gerar UM OML e rodar o estagio oml uma vez (testes). Cada parte continua valida sozinha.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "SQL_Enumeration",
+   "element": "SearchProductsByColumn (ServerAction) / SelectProducts (SQLNode)",
+   "why": "Controle negativo D3: o SQL enumera as colunas de proposito; a ferramenta conta este warning (N4)."
+  },
+  {
+   "id": "CustomObjectWarning",
+   "element": "SelectProducts (SQLNode) / Argument",
+   "why": "Controle negativo D3: ExpandInline depois de ORDER BY e a violacao que a ferramenta precisa acusar."
+  }
+ ],
+ "_semN4OrphanEnd": "n4-orphan-end fica fora: um End sem conector de entrada e ERRO do Verify (RequiredConnector_In), o modulo nao seria valido. O controle roda so no estagio job.",
+ "jobs": [
+  "job:d5-aggregate-in-foreach",
+  "job:d5-call-in-while",
+  "job:l3-nested-if",
+  "job:l6-json-internal",
+  "job:l6-json-text-param",
+  "job:d2-no-max",
+  "job:n1-if-label",
+  "job:d3-expandinline-nontoken",
+  "job:ar2-guard-under-allexceptions",
+  "job:p7-tool-writes-protected",
+  "job:p7-assign-site-switch",
+  "job:n1-node-description",
+  "job:l7-static-record-url-ok",
+  "job:ar2-facade-impl"
+ ]
+}

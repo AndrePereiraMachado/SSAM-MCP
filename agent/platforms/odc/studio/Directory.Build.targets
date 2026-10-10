@@ -1,0 +1,20 @@
+<Project>
+  <!--
+    The ODC Studio projects compile against ANY ODC Studio installation, whatever its version or folder, with the rule of
+    kernel/Directory.Build.targets: a framework reference that the ODC Studio folder carries at a higher assembly version
+    (today System.Collections.Immutable 9 on the net8 pack) is compiled against the Studio's file, as the .NET host
+    resolves it at run time. Equal or lower versions are left alone.
+
+    Folder: $(OdcInstall) of the project (the default install folder); when it is not an ODC Studio folder, the ODC Studio
+    registered in Windows (Uninstall "OutSystems ODC Studio", InstallLocation). An explicit -p:OdcInstall=<folder> wins.
+  -->
+  <PropertyGroup Condition="'$(OdcInstall)' != '' and !Exists('$(OdcInstall)\OutSystems.Model.dll')">
+    <AnvilRegisteredOdcStudio>$([MSBuild]::GetRegistryValueFromView('HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\OutSystems ODC Studio', 'InstallLocation', null, RegistryView.Registry64, RegistryView.Registry32))</AnvilRegisteredOdcStudio>
+    <AnvilRegisteredOdcStudio Condition="'$(AnvilRegisteredOdcStudio)' == ''">$([MSBuild]::GetRegistryValueFromView('HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\OutSystems ODC Studio', 'InstallLocation', null, RegistryView.Registry64, RegistryView.Registry32))</AnvilRegisteredOdcStudio>
+    <OdcInstall Condition="'$(AnvilRegisteredOdcStudio)' != '' and Exists('$(AnvilRegisteredOdcStudio)\ODC Studio\OutSystems.Model.dll')">$([System.IO.Path]::Combine('$(AnvilRegisteredOdcStudio)', 'ODC Studio'))</OdcInstall>
+  </PropertyGroup>
+  <PropertyGroup>
+    <AnvilStudioDir Condition="'$(AnvilStudioDir)' == ''">$(OdcInstall)</AnvilStudioDir>
+  </PropertyGroup>
+  <Import Project="$(MSBuildThisFileDirectory)..\..\..\kernel\Directory.Build.targets" />
+</Project>

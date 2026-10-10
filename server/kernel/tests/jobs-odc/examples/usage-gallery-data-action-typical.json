@@ -1,0 +1,42 @@
+{
+ "description": "Galeria OSUI (Gallery) com uma List ligada a saida de uma data action: cada item mostra a foto externa, o nome e o preco do produto.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [
+   {"name": "Name", "type": "Text", "length": 100, "mandatory": true},
+   {"name": "Price", "type": "Currency"},
+   {"name": "ImageUrl", "type": "Text", "length": 500}]}]}},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductCatalog", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Products\""},
+
+  {"op": "logic", "_why": "a data action nasce na tela (kind data + owner); a saida Products e a fonte da List", "data": {"actions": [
+   {"name": "GetCatalog", "kind": "data", "owner": "IMobileScreen:ProductCatalog", "fetch": "AtStart",
+    "outputs": [{"name": "Products", "type": "Product List"}],
+    "steps": [
+     {"get": "Product", "as": "ReadProducts", "sort": "Product.Name"},
+     {"assign": {"Products": "ReadProducts.List"}, "as": "SetProducts"}]}]}},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ProductGallery", "source": "IMobileBlock:Gallery", "empty": true, "as": "$gal", "_why": "a Gallery nasce com uma List de exemplo (sem Source e com uma Image vazia): empty tira o exemplo"},
+  {"op": "set", "target": "$gal/RowItemsDesktop", "prop": "Value", "value": "3"},
+  {"op": "set", "target": "$gal/RowItemsPhone", "prop": "Value", "value": "1"},
+
+  {"op": "create", "parent": "$gal/Content", "type": "IList", "name": "ProductList", "as": "$list", "_why": "a List vai no placeholder Content da Gallery: cada linha vira um item da grade"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetCatalog.Products", "_why": "saida de entidade List: a linha le-se .Current.<Atributo>, sem o nivel da entidade de um aggregate"},
+  {"op": "create", "parent": "$list", "type": "IContainer", "name": "ProductCard", "as": "$card"},
+  {"op": "set", "target": "$card", "prop": "Style", "value": "\"card\""},
+  {"op": "create", "parent": "$card", "type": "IImage", "name": "ProductPhoto", "as": "$img"},
+  {"op": "set", "target": "$img", "prop": "Type", "value": "External"},
+  {"op": "set", "target": "$img", "prop": "Url", "value": "GetCatalog.Products.Current.ImageUrl"},
+  {"op": "create", "parent": "$card", "type": "IExpression", "as": "$name"},
+  {"op": "set", "target": "$name", "prop": "Value", "value": "GetCatalog.Products.Current.Name"},
+  {"op": "create", "parent": "$card", "type": "IExpression", "as": "$price"},
+  {"op": "set", "target": "$price", "prop": "Value", "value": "FormatCurrency(GetCatalog.Products.Current.Price, \"$\", 2, \".\", \",\")"},
+
+  {"op": "dump", "target": "$gal", "depth": 6}
+ ]
+}

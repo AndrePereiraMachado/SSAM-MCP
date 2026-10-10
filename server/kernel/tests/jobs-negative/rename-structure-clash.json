@@ -1,0 +1,14 @@
+{
+ "description": "A RECUSA do rename de um ATRIBUTO DE STRUCTURE por colisao de nome. ProductSummary (base job:producer-public) ja tem os atributos Name e Price; renomear Price para Name tem de ser recusado com a explicacao de que o Studio sufixaria o nome em silencio ('Name2') - um rename silenciosamente diferente do pedido e pior do que um erro. E o pre-check do kernel, antes de tocar no modelo: o modulo fica como estava. O caminho limpo (rename de atributo com reescrita da expressao, e rename da propria structure) esta em tests/jobs/structure-lifecycle.json.",
+ "base": "job:producer-public",
+ "expectValid": true,
+ "expectError": [
+  "rename: 'Name' clashes with an existing name in that scope",
+  "the Studio would use 'Name2'",
+  "pick another name"
+ ],
+ "ops": [
+  {"op": "dump", "target": "IStructure:ProductSummary", "depth": 2, "_why": "os dois irmaos no mesmo escopo: Name e Price. E o Name que ja existe que faz o rename seguinte colidir."},
+  {"op": "rename", "target": "IStructure:ProductSummary/Price", "name": "Name", "_why": "recusado com 'rename: 'Name' clashes with an existing name in that scope (the Studio would use 'Name2'); pick another name'. O op nao chega a correr: nao ha consumers nem expressionsRewritten para ler."}
+ ]
+}

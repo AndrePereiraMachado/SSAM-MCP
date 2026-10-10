@@ -1,0 +1,34 @@
+{
+ "description": "POSITIVO (OutSystems padroes): parte conforme. Static para o dominio, entidade descrita, action Verbo+Objeto com contagem no proprio aggregate (Count, max), If em forma de pergunta, Assign com intencao e nenhum literal de configuracao.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {
+   "static": [{"name": "PosTaskStatus", "public": true, "description": "Estados de uma tarefa de revisao; dominio fixo usado nos filtros.",
+     "records": [{"name": "Open", "label": "Open", "order": 1}, {"name": "Closed", "label": "Closed", "order": 2}]}],
+   "entities": [{"name": "PosTask", "public": true, "description": "Tarefa de revisao que o painel do revisor conta por estado.",
+     "attributes": [
+      {"name": "Title", "type": "Text", "length": 100, "mandatory": true, "description": "Titulo mostrado ao revisor na fila de tarefas."},
+      {"name": "StatusId", "type": "PosTaskStatus Identifier", "description": "Estado atual da tarefa, vindo da static de dominio."},
+      {"name": "IsUrgent", "type": "Boolean", "description": "Marca tarefas que o revisor deve tratar antes das demais."}]}]
+  }},
+  {"op": "logic", "data": {"actions": [
+   {"name": "CountOpenTasks", "kind": "server", "public": true,
+    "description": "Conta as tarefas abertas no proprio aggregate, sem laco, para o contador do painel do revisor.",
+    "inputs": [{"name": "IsUrgentOnly", "type": "Boolean", "description": "Quando verdadeiro, o contador considera so as tarefas urgentes."}],
+    "outputs": [
+     {"name": "OpenCount", "type": "Long Integer", "description": "Numero de tarefas abertas que o painel mostra."},
+     {"name": "HasOpenTasks", "type": "Boolean", "description": "Diz ao painel se deve mostrar a fila ou o estado vazio."}],
+    "steps": [
+     {"get": "PosTask", "as": "CountOpenQuery", "where": "PosTask.StatusId = Entities.PosTaskStatus.Open and (not IsUrgentOnly or PosTask.IsUrgent)",
+      "max": 1, "columns": [{"name": "TaskCount", "kind": "Count", "attribute": "PosTask.Id"}]},
+     {"if": "CountOpenQuery.List.Empty", "label": "No open task found?",
+      "then": [{"assign": {"OpenCount": "0", "HasOpenTasks": "False"}, "as": "Report an empty queue"}],
+      "else": [{"assign": {"OpenCount": "CountOpenQuery.List.Current.TaskCount", "HasOpenTasks": "CountOpenQuery.List.Current.TaskCount > 0"}, "as": "Report the open task count"}]}
+    ]}
+  ]}},
+  {"op": "set", "target": "$CountOpenTasks.CountOpenQuery", "prop": "Description",
+   "value": "Conta no banco, com um so aggregate, as tarefas abertas que o painel mostra; evita trazer as linhas para contar."}
+ ]
+}

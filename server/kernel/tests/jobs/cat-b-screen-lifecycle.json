@@ -1,0 +1,438 @@
+{
+ "description": "Frente B (catalogo abrangente): ciclo de vida de TELA e de BLOCO ligado a screen actions na faixa O11 Reactive, a lacuna que nenhum job da suite O11 cobria (so jobs-live, fora da suite). A tela CatBLifeDemo liga OnInitialize, OnReady e OnDestroy a tres screen actions sem outputs que escrevem uma variavel local; o bloco CatBLifeBadge liga OnParametersChanged a uma screen action do proprio bloco; a tela instancia o bloco passando a variavel. O job le de volta cada evento (Destination) e os consumidores das actions. Mesmo cenario, por desenho, que tests/jobs-odc/cat-b-screen-lifecycle.json; resultados independentes por faixa.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileBlock",
+   "name": "CatBLifeBadge",
+   "as": "$blk",
+   "_why": "1. o bloco: um input e uma variavel que o OnParametersChanged mantem"
+  },
+  {
+   "op": "create",
+   "parent": "$blk",
+   "type": "IInputParameter",
+   "name": "Label",
+   "as": "$blkIn"
+  },
+  {
+   "op": "set",
+   "target": "$blkIn",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$blk",
+   "type": "ILocalVariable",
+   "name": "Shown",
+   "as": "$shown"
+  },
+  {
+   "op": "set",
+   "target": "$shown",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$blk",
+   "type": "IContainer",
+   "name": "BadgeBody",
+   "as": "$bbody"
+  },
+  {
+   "op": "create",
+   "parent": "$bbody",
+   "type": "IExpression",
+   "as": "$bexpr"
+  },
+  {
+   "op": "set",
+   "target": "$bexpr",
+   "prop": "Value",
+   "value": "Shown"
+  },
+  {
+   "op": "create",
+   "parent": "$blk",
+   "type": "IScreenAction",
+   "name": "LabelChanged",
+   "as": "$pc",
+   "_why": "2. o handler do OnParametersChanged: screen action do proprio bloco, sem outputs"
+  },
+  {
+   "op": "create",
+   "parent": "$pc",
+   "type": "IStartNode",
+   "as": "$pc0"
+  },
+  {
+   "op": "create",
+   "parent": "$pc",
+   "type": "IAssignNode",
+   "as": "$pcAssign"
+  },
+  {
+   "op": "set",
+   "target": "$pcAssign",
+   "prop": "Label",
+   "value": "KeepLabel"
+  },
+  {
+   "op": "create",
+   "parent": "$pcAssign",
+   "type": "IAssignment",
+   "as": "$pcA1"
+  },
+  {
+   "op": "set",
+   "target": "$pcA1",
+   "prop": "Variable",
+   "value": "Shown"
+  },
+  {
+   "op": "set",
+   "target": "$pcA1",
+   "prop": "Value",
+   "value": "Label"
+  },
+  {
+   "op": "create",
+   "parent": "$pc",
+   "type": "IEndNode",
+   "as": "$pc9"
+  },
+  {
+   "op": "link",
+   "from": "$pc0",
+   "to": "$pcAssign"
+  },
+  {
+   "op": "link",
+   "from": "$pcAssign",
+   "to": "$pc9"
+  },
+  {
+   "op": "layout",
+   "target": "$pc"
+  },
+  {
+   "op": "set",
+   "target": "$blk/OnParametersChanged",
+   "prop": "Destination",
+   "value": "$pc",
+   "_why": "3. a ligacao do ciclo de vida do bloco: o mesmo verbo e a mesma propriedade de um OnClick"
+  },
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "CatBLifeDemo",
+   "as": "$scr",
+   "_why": "4. a tela e os seus tres eventos de ciclo de vida"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/Title",
+   "type": "IExpression",
+   "as": "$title"
+  },
+  {
+   "op": "set",
+   "target": "$title",
+   "prop": "Value",
+   "value": "\"Lifecycle\""
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "ILocalVariable",
+   "name": "Status",
+   "as": "$status"
+  },
+  {
+   "op": "set",
+   "target": "$status",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAction",
+   "name": "InitStatus",
+   "as": "$init"
+  },
+  {
+   "op": "create",
+   "parent": "$init",
+   "type": "IStartNode",
+   "as": "$i0"
+  },
+  {
+   "op": "create",
+   "parent": "$init",
+   "type": "IAssignNode",
+   "as": "$iAssign"
+  },
+  {
+   "op": "set",
+   "target": "$iAssign",
+   "prop": "Label",
+   "value": "MarkInitialized"
+  },
+  {
+   "op": "create",
+   "parent": "$iAssign",
+   "type": "IAssignment",
+   "as": "$iA1"
+  },
+  {
+   "op": "set",
+   "target": "$iA1",
+   "prop": "Variable",
+   "value": "Status"
+  },
+  {
+   "op": "set",
+   "target": "$iA1",
+   "prop": "Value",
+   "value": "\"initialized\""
+  },
+  {
+   "op": "create",
+   "parent": "$init",
+   "type": "IEndNode",
+   "as": "$i9"
+  },
+  {
+   "op": "link",
+   "from": "$i0",
+   "to": "$iAssign"
+  },
+  {
+   "op": "link",
+   "from": "$iAssign",
+   "to": "$i9"
+  },
+  {
+   "op": "layout",
+   "target": "$init"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAction",
+   "name": "ReadyStatus",
+   "as": "$ready"
+  },
+  {
+   "op": "create",
+   "parent": "$ready",
+   "type": "IStartNode",
+   "as": "$r0"
+  },
+  {
+   "op": "create",
+   "parent": "$ready",
+   "type": "IAssignNode",
+   "as": "$rAssign"
+  },
+  {
+   "op": "set",
+   "target": "$rAssign",
+   "prop": "Label",
+   "value": "MarkReady"
+  },
+  {
+   "op": "create",
+   "parent": "$rAssign",
+   "type": "IAssignment",
+   "as": "$rA1"
+  },
+  {
+   "op": "set",
+   "target": "$rA1",
+   "prop": "Variable",
+   "value": "Status"
+  },
+  {
+   "op": "set",
+   "target": "$rA1",
+   "prop": "Value",
+   "value": "Status + \" / ready\""
+  },
+  {
+   "op": "create",
+   "parent": "$ready",
+   "type": "IEndNode",
+   "as": "$r9"
+  },
+  {
+   "op": "link",
+   "from": "$r0",
+   "to": "$rAssign"
+  },
+  {
+   "op": "link",
+   "from": "$rAssign",
+   "to": "$r9"
+  },
+  {
+   "op": "layout",
+   "target": "$ready"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAction",
+   "name": "ClearStatus",
+   "as": "$clear"
+  },
+  {
+   "op": "create",
+   "parent": "$clear",
+   "type": "IStartNode",
+   "as": "$c0"
+  },
+  {
+   "op": "create",
+   "parent": "$clear",
+   "type": "IAssignNode",
+   "as": "$cAssign"
+  },
+  {
+   "op": "set",
+   "target": "$cAssign",
+   "prop": "Label",
+   "value": "ClearOnLeave"
+  },
+  {
+   "op": "create",
+   "parent": "$cAssign",
+   "type": "IAssignment",
+   "as": "$cA1"
+  },
+  {
+   "op": "set",
+   "target": "$cA1",
+   "prop": "Variable",
+   "value": "Status"
+  },
+  {
+   "op": "set",
+   "target": "$cA1",
+   "prop": "Value",
+   "value": "\"\""
+  },
+  {
+   "op": "create",
+   "parent": "$clear",
+   "type": "IEndNode",
+   "as": "$c9"
+  },
+  {
+   "op": "link",
+   "from": "$c0",
+   "to": "$cAssign"
+  },
+  {
+   "op": "link",
+   "from": "$cAssign",
+   "to": "$c9"
+  },
+  {
+   "op": "layout",
+   "target": "$clear"
+  },
+  {
+   "op": "set",
+   "target": "$scr/OnInitialize",
+   "prop": "Destination",
+   "value": "$init",
+   "_why": "5. as tres ligacoes de ciclo de vida da tela"
+  },
+  {
+   "op": "set",
+   "target": "$scr/OnReady",
+   "prop": "Destination",
+   "value": "$ready"
+  },
+  {
+   "op": "set",
+   "target": "$scr/OnDestroy",
+   "prop": "Destination",
+   "value": "$clear"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IExpression",
+   "as": "$show"
+  },
+  {
+   "op": "set",
+   "target": "$show",
+   "prop": "Value",
+   "value": "Status"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IMobileBlockInstanceWidget",
+   "name": "Badge",
+   "source": "IMobileBlock:CatBLifeBadge",
+   "as": "$inst",
+   "_why": "6. a instancia do bloco recebe a variavel da tela: cada mudanca dispara o OnParametersChanged do bloco"
+  },
+  {
+   "op": "set",
+   "target": "$inst/Label",
+   "prop": "Value",
+   "value": "Status"
+  },
+  {
+   "op": "get",
+   "target": "$scr/OnInitialize",
+   "_why": "7. LER DE VOLTA: cada evento aponta para a sua action"
+  },
+  {
+   "op": "get",
+   "target": "$scr/OnReady"
+  },
+  {
+   "op": "get",
+   "target": "$scr/OnDestroy"
+  },
+  {
+   "op": "get",
+   "target": "$blk/OnParametersChanged"
+  },
+  {
+   "op": "usages",
+   "target": "$ready",
+   "_why": "o consumidor da action e o evento de ciclo de vida da tela"
+  },
+  {
+   "op": "usages",
+   "target": "$pc",
+   "_why": "o consumidor da action do bloco e o OnParametersChanged"
+  },
+  {
+   "op": "dump",
+   "target": "$scr",
+   "depth": 4
+  }
+ ]
+}

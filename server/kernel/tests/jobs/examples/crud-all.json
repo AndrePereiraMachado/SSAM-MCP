@@ -1,0 +1,7 @@
+{
+ "description": "CRUD back-office completo numa transacao (um merge na entrega): as cinco partes crud-01 a crud-05 concatenadas por jobs, sobre o mesmo modulo. Nenhum aviso sobra: os chamadores e o uso do input chegam nas partes seguintes.",
+ "base": "reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "jobs": ["job:crud-01-data", "job:crud-02-logic", "job:crud-03-screens", "job:crud-04-edit", "job:crud-05-list"]
+}

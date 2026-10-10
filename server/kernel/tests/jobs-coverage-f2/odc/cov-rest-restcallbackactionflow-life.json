@@ -1,0 +1,55 @@
+{
+ "description": "Cobertura testada (fase 2): life de ServiceStudio.Plugin.REST.IRestCallbackActionFlow (odc) em lgRestClientGet. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IRestClient",
+   "name": "CovSApi",
+   "as": "$api"
+  },
+  {
+   "op": "set",
+   "target": "$api",
+   "prop": "BaseURL",
+   "value": "https://example.com"
+  },
+  {
+   "op": "create",
+   "parent": "$api",
+   "type": "IRestAction",
+   "name": "CovSGet",
+   "as": "$p"
+  },
+  {
+   "op": "set",
+   "target": "$p",
+   "prop": "URLPath",
+   "value": "/cov"
+  },
+  {
+   "op": "create",
+   "parent": "$api",
+   "type": "IRestCallbackActionFlow",
+   "name": "CovARestCallbackActionFlow",
+   "as": "$a"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRRestCallbackActionFlow"
+  }
+ ]
+}

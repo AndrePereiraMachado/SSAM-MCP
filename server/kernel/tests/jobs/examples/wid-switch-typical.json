@@ -1,0 +1,32 @@
+{
+ "description": "Switch tipico: em cada linha da lista, ligado ao campo Done da tarefa; OnChange grava pelo wrapper Task_SetDone (server action) com o Id e o novo valor da linha.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "logic", "data": {"actions": [
+   {"name": "Task_SetDone", "kind": "server", "description": "Marca ou desmarca uma tarefa como concluida",
+    "inputs": [{"name": "TaskId", "type": "Task Identifier"}, {"name": "Done", "type": "Boolean"}],
+    "vars": [{"name": "Item", "type": "Task"}],
+    "steps": [
+     {"get": "Task", "as": "GetTask", "where": "Task.Id = TaskId", "max": 1},
+     {"assign": {"Item": "GetTask.List.Current.Task", "Item.Done": "Done"}, "as": "SetDone"},
+     {"update": "Task", "record": "Item", "as": "UpdateTask"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetTaskRows", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "DoneOnChange", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Grava o novo estado da linha",
+    "inputs": [{"name": "TaskId", "type": "Task Identifier"}, {"name": "Done", "type": "Boolean"}],
+    "steps": [{"call": "Task_SetDone", "as": "SaveDone", "args": {"TaskId": "TaskId", "Done": "Done"}}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "TaskRows", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetTaskRows.List"},
+  {"op": "create", "parent": "$list", "type": "IContainer", "name": "TaskRow", "as": "$row"},
+  {"op": "create", "parent": "$row", "type": "ISwitch", "name": "DoneSwitch", "as": "$sw"},
+  {"op": "set", "target": "$sw", "prop": "Variable", "value": "GetTaskRows.List.Current.Task.Done"},
+  {"op": "set", "target": "$sw/OnChange", "prop": "Destination", "value": "IScreenAction:DoneOnChange"},
+  {"op": "set", "target": "$sw/OnChange/TaskId", "prop": "Value", "value": "GetTaskRows.List.Current.Task.Id"},
+  {"op": "set", "target": "$sw/OnChange/Done", "prop": "Value", "value": "GetTaskRows.List.Current.Task.Done"},
+  {"op": "create", "parent": "$row", "type": "IExpression", "as": "$rowTitle"},
+  {"op": "set", "target": "$rowTitle", "prop": "Value", "value": "GetTaskRows.List.Current.Task.Title"}
+ ]
+}

@@ -1,0 +1,13 @@
+{
+ "description": "StaticMap do OutSystemsMaps: imagem estatica do mapa com centro e altura.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "StaticMapDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "StaticMap1", "source": "IMobileBlock:StaticMap", "as": "$map"},
+  {"op": "set", "target": "$map/Center", "prop": "Value", "value": "\"Lisbon, Portugal\""},
+  {"op": "set", "target": "$map/Height", "prop": "Value", "value": "\"300px\""}
+ ]
+}

@@ -1,0 +1,49 @@
+{
+ "description": "Frente A (catalogo abrangente), cenario de composicao generico, faixa ODC. (1) Uma server action NOVA devolve saidas de tipos diferentes e as repoe nos valores neutros de cada tipo, PRESERVANDO duas saidas excluidas (KeptText, KeptCount), que so copiam as entradas: um Assign de semente e depois um Assign de reposicao com uma atribuicao por saida nao excluida. Valores de reposicao medidos aqui: Text \"\", Integer/Long Integer/Decimal/Currency 0, Boolean False, Date e Date Time NullDate(), Time #00:00:00#, Identifier NullIdentifier(), registo/estrutura/listas copiados de uma variavel local nunca atribuida do mesmo tipo (o valor por omissao do tipo). (2) A CHAMADA dessa action e inserida num RAMO de um If de uma action HERDADA (TrueTarget do unico If de WfCov_Project_CloseOpenTasks, que vinha de job:logic-steps), antes do unico no de raise desse ramo: cria-se o no, liga-se primeiro a saida do no novo ao sucessor e so depois se reaponta o conector do If. (3) Leituras: o inventario tipado da action nova (dump), o If e o no novo antes/depois, e usages da action nova (o consumidor e o no inserido). Headless: prova o modelo e o Verify, nao o valor em tempo de execucao.",
+ "base": "job:logic-steps",
+ "expectValid": true,
+ "ops": [
+  {"op": "spec", "data": {"structures": [{"name": "CatAWorkState", "public": true, "description": "Frente A: tipo composto usado por uma saida da action de reposicao", "attributes": [{"name": "Label", "type": "Text"}, {"name": "Count", "type": "Integer"}]}]}, "_why": "(0) estrutura propria do job, para a reposicao de um tipo composto nao depender de tipos herdados"},
+  {"op": "logic", "data": {"actions": [{
+   "name": "CatA_ResetValues", "kind": "server",
+   "description": "Frente A: repoe saidas de tipos diferentes nos valores neutros, preservando as saidas excluidas",
+   "inputs": [{"name": "KeepText", "type": "Text"}, {"name": "KeepCount", "type": "Integer"}],
+   "outputs": [
+    {"name": "OutText", "type": "Text"}, {"name": "OutInteger", "type": "Integer"}, {"name": "OutLong", "type": "Long Integer"},
+    {"name": "OutDecimal", "type": "Decimal"}, {"name": "OutBoolean", "type": "Boolean"}, {"name": "OutDate", "type": "Date"},
+    {"name": "OutDateTime", "type": "Date Time"}, {"name": "OutTime", "type": "Time"}, {"name": "OutCurrency", "type": "Currency"},
+    {"name": "OutId", "type": "WfCovTask Identifier"}, {"name": "OutRecord", "type": "WfCovTask"}, {"name": "OutState", "type": "CatAWorkState"},
+    {"name": "OutTexts", "type": "Text List"}, {"name": "OutRecords", "type": "WfCovTask List"},
+    {"name": "KeptText", "type": "Text"}, {"name": "KeptCount", "type": "Integer"}
+   ],
+   "vars": [
+    {"name": "BlankRecord", "type": "WfCovTask"}, {"name": "BlankState", "type": "CatAWorkState"},
+    {"name": "BlankTexts", "type": "Text List"}, {"name": "BlankRecords", "type": "WfCovTask List"}
+   ],
+   "steps": [
+    {"assign": {"OutText": "\"seed\"", "OutInteger": "1", "OutBoolean": "True", "OutDate": "CurrDate()", "OutRecord.Title": "\"seed\"", "OutState.Label": "\"seed\"", "KeptText": "KeepText", "KeptCount": "KeepCount"}, "as": "Seed"},
+    {"assign": {
+     "OutText": "\"\"", "OutInteger": "0", "OutLong": "0", "OutDecimal": "0", "OutBoolean": "False",
+     "OutDate": "NullDate()", "OutDateTime": "NullDate()", "OutTime": "#00:00:00#", "OutCurrency": "0",
+     "OutId": "NullIdentifier()", "OutRecord": "BlankRecord", "OutState": "BlankState",
+     "OutTexts": "BlankTexts", "OutRecords": "BlankRecords"
+    }, "as": "ResetExceptKept"}
+   ]}]}, "_why": "(1) a action de reposicao pela linguagem compacta: uma atribuicao por saida nao excluida no Assign ResetExceptKept; KeptText/KeptCount ficam de fora de proposito (a exclusao e simplesmente nao as atribuir)"},
+  {"op": "dump", "target": "IServerAction:CatA_ResetValues", "depth": 2, "_why": "(1a) o inventario tipado lido de volta: entradas, saidas e locais com DataType, e os dois Assign"},
+  {"op": "get", "target": "IServerAction:CatA_ResetValues/OutDateTime", "_why": "(1b) um parametro de saida pelo nome: Type Date Time"},
+
+  {"op": "get", "target": "IServerAction:WfCov_Project_CloseOpenTasks/#IIfNode[1]", "_why": "(2a) ANTES: o unico If da action herdada; TrueTarget = chave do no de raise"},
+  {"op": "get", "target": "IServerAction:WfCov_Project_CloseOpenTasks/#IRaiseExceptionNode[1]", "_why": "(2b) ANTES: o sucessor no ramo, IncomingConnectors 1"},
+  {"op": "create", "parent": "IServerAction:WfCov_Project_CloseOpenTasks", "type": "IExecuteServerActionNode", "name": "ResetValues", "as": "$call", "_why": "(2c) o no novo, dentro da action herdada"},
+  {"op": "set", "target": "$call", "prop": "Action", "value": "IServerAction:CatA_ResetValues"},
+  {"op": "set", "target": "$call/KeepText", "prop": "Value", "value": "\"kept\""},
+  {"op": "set", "target": "$call/KeepCount", "prop": "Value", "value": "0"},
+  {"op": "link", "from": "$call", "to": "IServerAction:WfCov_Project_CloseOpenTasks/#IRaiseExceptionNode[1]", "_why": "(2d) primeiro a saida do no novo ao sucessor"},
+  {"op": "link", "from": "IServerAction:WfCov_Project_CloseOpenTasks/#IIfNode[1]", "connector": "TrueTarget", "to": "$call", "_why": "(2e) depois o conector do ramo: o TrueTarget existente passa a apontar ao no novo (reapontado, nao duplicado)"},
+  {"op": "get", "target": "IServerAction:WfCov_Project_CloseOpenTasks/#IIfNode[1]", "_why": "(2f) DEPOIS: TrueTarget = chave do no novo; FalseTarget inalterado"},
+  {"op": "get", "target": "$call", "_why": "(2g) DEPOIS: IncomingConnectors 1, Target = chave do raise, Arguments 2"},
+  {"op": "get", "target": "IServerAction:WfCov_Project_CloseOpenTasks/#IRaiseExceptionNode[1]", "_why": "(2h) DEPOIS: o sucessor continua com IncomingConnectors 1"},
+  {"op": "layout", "target": "IServerAction:WfCov_Project_CloseOpenTasks"},
+  {"op": "usages", "target": "IServerAction:CatA_ResetValues", "max": 10, "_why": "(3) o unico consumidor real e o no inserido"}
+ ]
+}

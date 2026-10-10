@@ -1,0 +1,83 @@
+{
+ "description": "ODC (cobertura C): o hire-data-model.json reduzido para a faixa ODC. Uma unica op spec sobre a fixture do InsuranceApp com static entity de atributo extra e records que o preenchem, tres entidades relacionadas por FK (uma publica), defaults por expressao, Long Text, structure e indices (um unico e um comum).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "static": [
+     {
+      "name": "WfCovPriority",
+      "description": "Cobertura C: catalogo de prioridade com um atributo alem de Id/Label/Order",
+      "attributes": [
+       {"name": "IsUrgent", "type": "Boolean", "description": "Marca as prioridades que disparam alerta"}
+      ],
+      "records": [
+       {"name": "Low", "label": "Low", "order": 1, "IsUrgent": "False"},
+       {"name": "Normal", "label": "Normal", "order": 2, "IsUrgent": "False"},
+       {"name": "High", "label": "High", "order": 3, "IsUrgent": "True"}
+      ]
+     }
+    ],
+    "entities": [
+     {
+      "name": "WfCovOrganization",
+      "public": true,
+      "description": "Cobertura C: entidade publica, raiz do modelo reduzido",
+      "attributes": [
+       {"name": "Name", "type": "Text", "mandatory": true, "length": 100},
+       {"name": "CreatedOn", "type": "Date Time", "mandatory": true, "default": "CurrDateTime()"}
+      ],
+      "indexes": [
+       {"name": "UQ_WfCovOrganization_Name", "unique": true, "attributes": ["Name"]}
+      ]
+     },
+     {
+      "name": "WfCovProject",
+      "description": "Cobertura C: FK para a organizacao, texto longo e indice unico composto",
+      "attributes": [
+       {"name": "OrganizationId", "type": "WfCovOrganization Identifier", "mandatory": true, "deleteRule": "Protect"},
+       {"name": "Name", "type": "Text", "mandatory": true, "length": 120},
+       {"name": "Notes", "type": "Long Text", "description": "Texto longo: vira Text 2000000 com UpdateBehavior Optimized"},
+       {"name": "StartedOn", "type": "Date"}
+      ],
+      "indexes": [
+       {"name": "UQ_WfCovProject_OrgName", "unique": true, "attributes": ["OrganizationId", "Name"]}
+      ]
+     },
+     {
+      "name": "WfCovTask",
+      "public": true,
+      "description": "Cobertura C: FK para entidade e para static entity, defaults por expressao e indice comum; publica porque a action de SQL devolve uma lista deste tipo (no ODC, uma action shareable so expoe tipos shareable)",
+      "attributes": [
+       {"name": "ProjectId", "type": "WfCovProject Identifier", "mandatory": true, "deleteRule": "Delete"},
+       {"name": "PriorityId", "type": "WfCovPriority Identifier", "mandatory": true, "default": "Entities.WfCovPriority.Normal"},
+       {"name": "Title", "type": "Text", "mandatory": true, "length": 150},
+       {"name": "DueOn", "type": "Date"},
+       {"name": "IsDone", "type": "Boolean", "default": "False"}
+      ],
+      "indexes": [
+       {"name": "IX_WfCovTask_ProjectDone", "unique": false, "attributes": ["ProjectId", "IsDone"]}
+      ]
+     }
+    ],
+    "structures": [
+     {
+      "name": "WfCovProjectSummary",
+      "public": true,
+      "description": "Cobertura C: tipo composto de saida, usado pela logica; publico para nao nascer como elemento sem uso",
+      "attributes": [
+       {"name": "ProjectName", "type": "Text"},
+       {"name": "OpenTasks", "type": "Long Integer"}
+      ]
+     }
+    ]
+   }
+  },
+  {"op": "get", "target": "$WfCovProject.Notes", "_why": "prova o Long Text: DataType Text com Length 2000000"},
+  {"op": "get", "target": "EntityIndex:UQ_WfCovProject_OrgName", "_why": "prova o indice unico composto"},
+  {"op": "find", "name": "WfCovTask"}
+ ]
+}

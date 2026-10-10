@@ -1,0 +1,11 @@
+{
+ "description": "Carousel do OSUI: a instancia com empty (a List de exemplo do CarouselItems nasce sem Source).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CarouselDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Carousel1", "source": "IMobileBlock:Carousel", "empty": true, "as": "$car"}
+ ]
+}

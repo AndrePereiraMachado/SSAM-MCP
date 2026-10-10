@@ -1,0 +1,112 @@
+{
+  "fixture": "reactive-ui",
+  "features": [
+    "screen-refresh-data",
+    "screen"
+  ],
+  "contract": {
+    "logic": {
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "screen",
+          "owner": "IMobileScreen:CoverageScreen",
+          "steps": [
+            {
+              "node": "IRefreshDataNode",
+              "as": "Refresh",
+              "properties": {
+                "DataSource": "IMobileScreen:CoverageScreen/ReadUsers",
+                "MaxRecords": "10",
+                "StartIndex": ""
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "setup": [
+    {
+      "op": "create",
+      "parent": "IMobileFlow:MainFlow",
+      "type": "IMobileScreen",
+      "name": "CoverageScreen"
+    },
+    {
+      "op": "create",
+      "parent": "IMobileFlow:MainFlow",
+      "type": "IMobileScreen",
+      "name": "CoverageTarget"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:CoverageScreen/#IMobileBlockInstanceWidget",
+      "prop": "SourceBlock",
+      "value": "IMobileBlock:LayoutTopMenu"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:CoverageTarget/#IMobileBlockInstanceWidget",
+      "prop": "SourceBlock",
+      "value": "IMobileBlock:LayoutTopMenu"
+    },
+    {
+      "op": "create",
+      "parent": "IMobileScreen:CoverageScreen",
+      "type": "IButton",
+      "name": "Run"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:CoverageScreen/Run/#ITextWidget",
+      "prop": "Text",
+      "value": "Run proof"
+    },
+    {
+      "op": "create",
+      "parent": "IMobileScreen:CoverageScreen",
+      "type": "IScreenAggregate",
+      "name": "ReadUsers"
+    },
+    {
+      "op": "create",
+      "parent": "IMobileScreen:CoverageScreen/ReadUsers",
+      "type": "IAliasedSource",
+      "args": {
+        "dataSource": "IEntitySignature:User"
+      }
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:CoverageScreen/ReadUsers",
+      "prop": "MaxRecords",
+      "value": "10"
+    },
+    {
+      "op": "create",
+      "parent": "IMobileScreen:CoverageScreen",
+      "type": "IExpression",
+      "name": "Count"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:CoverageScreen/Count",
+      "prop": "Value",
+      "value": "ReadUsers.List.Length"
+    }
+  ],
+  "bindings": [
+    {
+      "op": "set",
+      "target": "IMobileScreen:CoverageScreen/Run/OnClick",
+      "prop": "Destination",
+      "value": "IMobileScreen:CoverageScreen/Coverage"
+    }
+  ],
+  "mutation": {
+    "target": "IMobileScreen:CoverageScreen/Coverage/#IRefreshDataNode",
+    "prop": "MaxRecords",
+    "value": "1"
+  }
+}

@@ -1,0 +1,13 @@
+{
+ "description": "ODC: a RECUSA de um set Identifier que colide com o nome de outro registo da mesma static entity. O setter nativo (SetName) sufixaria em SILENCIO (Received -> Received2), como a grelha do Studio; o kernel passou a conferir AbstractObject.NameClash antes de escrever, como o rename ja fazia, e recusa com o nome que o Studio usaria. O caminho limpo esta em tests/jobs-odc/static-entity-lifecycle.json.",
+ "base": "job:static-entity",
+ "expectValid": true,
+ "expectError": [
+  "set Identifier: 'Received' clashes with an existing name in that scope",
+  "pick another identifier"
+ ],
+ "ops": [
+  {"op": "get", "target": "IStaticEntity:WfClaimStage/Received", "_why": "o nome que ja existe no scope: Received."},
+  {"op": "set", "target": "IStaticEntity:WfClaimStage/UnderReview", "prop": "Identifier", "value": "Received"}
+ ]
+}

@@ -1,0 +1,46 @@
+{
+ "description": "ODC (cobertura T): REST EXPOSTO, que nunca tinha passado pela faixa ODC. Espelha tests/jobs/rest-expose.json: IRestService com um IRestServiceAction GET (que ja nasce com Start e End), input na URL, output Body tipado por uma structure e um Assign que preenche a resposta. Na faixa ODC este tipo existe mesmo (ServiceStudio.Plugin.RESTService.RestService, criado por IESpace.CreateIntegration<T>), ao contrario do que o nome do namespace publico (IService/IExposedAction, ambos IsConcrete=false) faz supor.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IStructure", "name": "WfCovZoneInfo", "as": "$st"},
+  {"op": "set", "target": "$st", "prop": "Public", "value": true, "_why": "no ODC (vocabulario: shareable) um contrato exposto so pode usar tipos partilhaveis"},
+  {"op": "create", "parent": "$st", "type": "IStructureAttribute", "name": "Zone", "as": "$stZone"},
+  {"op": "set", "target": "$stZone", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$st", "type": "IStructureAttribute", "name": "IsHighRisk", "as": "$stRisk"},
+  {"op": "set", "target": "$stRisk", "prop": "DataType", "value": "Boolean"},
+
+  {"op": "create", "parent": "@espace", "type": "IRestService", "name": "WfCovZoneService", "as": "$svc"},
+  {"op": "set", "target": "$svc", "prop": "Description", "value": "Cobertura T: endpoint REST exposto pelo InsuranceApp"},
+
+  {"op": "create", "parent": "$svc", "type": "IRestServiceAction", "name": "WfCovGetZone", "as": "$m"},
+  {"op": "set", "target": "$m", "prop": "HTTPMethod", "value": "GET"},
+  {"op": "set", "target": "$m", "prop": "URLPath", "value": "/WfCovGetZone/{Postcode}"},
+
+  {"op": "create", "parent": "$m", "type": "IRestServiceActionInput", "name": "Postcode", "as": "$in"},
+  {"op": "set", "target": "$in", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$in", "prop": "IsMandatory", "value": true},
+
+  {"op": "create", "parent": "$m", "type": "IRestServiceActionOutput", "name": "Info", "as": "$out"},
+  {"op": "set", "target": "$out", "prop": "DataType", "value": "WfCovZoneInfo"},
+
+  {"op": "create", "parent": "$m", "type": "IAssignNode", "as": "$assign"},
+  {"op": "set", "target": "$assign", "prop": "Label", "value": "SetInfo"},
+  {"op": "create", "parent": "$assign", "type": "IAssignment", "as": "$a1"},
+  {"op": "set", "target": "$a1", "prop": "Variable", "value": "Info.Zone"},
+  {"op": "set", "target": "$a1", "prop": "Value", "value": "Postcode"},
+  {"op": "create", "parent": "$assign", "type": "IAssignment", "as": "$a2"},
+  {"op": "set", "target": "$a2", "prop": "Variable", "value": "Info.IsHighRisk"},
+  {"op": "set", "target": "$a2", "prop": "Value", "value": "Length(Postcode) > 5"},
+
+  {"op": "link", "from": "$m/#IStartNode", "to": "$assign", "_why": "o IRestServiceAction ja NASCE com Start e End: nao se criam novos"},
+  {"op": "link", "from": "$assign", "to": "$m/#IEndNode"},
+  {"op": "layout", "target": "$m"},
+
+  {"op": "get", "target": "$m", "_why": "prova HTTPMethod e URLPath do metodo exposto"},
+  {"op": "get", "target": "$in", "_why": "prova o input e onde ele e recebido"},
+  {"op": "get", "target": "$out", "_why": "prova o output tipado pela structure e onde ele e enviado"},
+  {"op": "dump", "target": "$svc", "depth": 4, "_why": "prova a arvore inteira do servico exposto"}
+ ]
+}

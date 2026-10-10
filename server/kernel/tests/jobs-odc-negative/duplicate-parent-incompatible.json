@@ -1,0 +1,14 @@
+{
+ "description": "A RECUSA de `duplicate` num destino incompativel (faixa ODC): uma tela colada num diagrama de entidades (a area de dados). A colagem nativa diria so 'The clipboard objects cannot be pasted into this target'; o kernel recusa antes, diz que o diagrama nao aceita o tipo e que pai serve (outro UI flow).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectError": [
+  "duplicate: IEntityDiagram 'DupDiagram' does not take IMobileScreen",
+  "a compatible parent is another IMobileFlow"
+ ],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IEntityDiagram", "name": "DupDiagram", "as": "$diagram"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "DupScreen", "as": "$scr"},
+  {"op": "duplicate", "target": "$scr", "parent": "$diagram", "as": "$copy"}
+ ]
+}

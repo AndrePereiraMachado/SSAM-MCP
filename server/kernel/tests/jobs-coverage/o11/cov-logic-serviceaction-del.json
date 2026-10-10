@@ -1,0 +1,35 @@
+{
+ "description": "Cobertura testada (fase 1, medir): del de OutSystems.Model.Logic.IServiceAction (o11) em espace. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServiceAction",
+   "name": "CovAServiceAction",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IStartNode",
+   "as": "$a_s"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IEndNode",
+   "as": "$a_e"
+  },
+  {
+   "op": "link",
+   "from": "$a_s",
+   "to": "$a_e"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

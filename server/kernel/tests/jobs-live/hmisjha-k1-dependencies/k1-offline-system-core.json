@@ -1,0 +1,29 @@
+{
+  "description": "K1 PROOF ONLY, NEVER DELIVER (o deliver recusa esta pasta e esta marca antes de registrar a tarefa). K1 (Manage Dependencies headless), prova OFFLINE: acrescenta a entidade User do (System) e AgentOps_Core_CS.GetAgentRunTrace (com o fechamento RunTraceDTO/TraceItemDTO) a uma copia do HMISJHA_CS publicado (v5578) so por assinaturas .avsig, sem o OML dos produtores no job, e prova o uso numa action PRIVADA de prova, sem inputs, que nunca e entregue (le so o registro do proprio usuario da sessao; nao chama Login e nao recebe UserId). O unico consumidor da action e um timer SEM agendamento (uma server action nao publica sem consumidor recebe UnusedUserAction e a regra N4 do gate conta todo aviso). As assinaturas desta prova sao evidencia offline (anvil signature-fixture, environment offline.invalid) e o deliver as recusa; ao vivo use o .avsig de `anvil signature`. Registro: docs/proofs/2026-09-26-o11-manage-dependencies.md.",
+  "base": "tests/fixtures/hmisjha/HMISJHA_CS-v5578.oml",
+  "expectValid": true,
+  "ops": [
+    { "op": "reference", "producer": "System", "elements": ["IEntitySignature:User"] },
+    { "op": "reference", "producer": "AgentOps_Core_CS", "elements": ["IServerActionSignature:GetAgentRunTrace"] },
+    { "op": "logic", "data": { "actions": [ {
+      "name": "ProbeK1RunTraceAndUser", "public": false,
+      "description": "K1 PROBE ONLY, NEVER DELIVER: private offline proof that the imported dependencies are usable. Counts the trace items AgentOps_Core_CS GetAgentRunTrace returns for no run (through its RunTraceDTO/TraceItemDTO closure) and reads the signed-in user's own (System) User record by GetUserId(); it takes no input and signs nobody in. GetAgentRunTrace records a DataAccessEvent for an oversight reader: this probe writes nothing only because its sole caller is the unscheduled timer, which runs without a session, so RequireOversightReaderRole raises before RecordOversightDataAccess.",
+      "outputs": [
+        { "name": "TraceItems", "type": "Integer", "description": "Number of trace items returned by GetAgentRunTrace." },
+        { "name": "IsSessionUserActive", "type": "Boolean", "description": "Whether the signed-in user's own (System) User record is active; proves the User entity reference." }
+      ],
+      "steps": [
+        { "get": "User", "as": "GetSessionUser", "where": ["User.Id = GetUserId()"], "max": 1 },
+        { "call": "IServerActionSignature:GetAgentRunTrace", "as": "ReadTrace", "args": { "AgentRunId": "0", "AfterSequence": "0", "MaxRecords": "1" } },
+        { "assign": { "TraceItems": "ReadTrace.Trace.Items.Length", "IsSessionUserActive": "GetSessionUser.List.Current.User.Is_Active" }, "as": "Return probe results" }
+      ] } ] } },
+    { "op": "set", "target": "$ProbeK1RunTraceAndUser.GetSessionUser", "prop": "Description", "value": "Reads only the signed-in user's own (System) User record (Id = GetUserId()), at most one row." },
+    { "op": "create", "parent": "@espace", "type": "ITimer", "name": "ProbeK1RunTraceAndUserTimer", "as": "$probeTimer" },
+    { "op": "set", "target": "$probeTimer", "prop": "Action", "value": "IServerAction:ProbeK1RunTraceAndUser" },
+    { "op": "set", "target": "$probeTimer", "prop": "Description", "value": "K1 PROBE ONLY, NEVER DELIVER: no schedule, so it never runs by itself; it exists only as the consumer of the private probe action (a private action without one gets the UnusedUserAction warning)." },
+    { "op": "set", "target": "$probeTimer", "prop": "TimeoutInMinutes", "value": 1 },
+    { "op": "find", "name": "User", "type": "IEntitySignature" },
+    { "op": "find", "name": "RunTraceDTO" },
+    { "op": "find", "name": "TraceItemDTO" }
+  ]
+}

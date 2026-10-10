@@ -1,0 +1,128 @@
+{
+  "fixture": "reactive-ui",
+  "features": [
+    "client-calls-server",
+    "client"
+  ],
+  "contract": {
+    "data": {
+      "structures": [
+        {
+          "name": "CoverageItem",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Number",
+              "type": "Integer"
+            },
+            {
+              "name": "Text",
+              "type": "Text"
+            }
+          ]
+        },
+        {
+          "name": "CoverageEnvelope",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Item",
+              "type": "CoverageItem"
+            },
+            {
+              "name": "Items",
+              "type": "CoverageItem List"
+            },
+            {
+              "name": "Numbers",
+              "type": "Integer List"
+            }
+          ]
+        }
+      ],
+      "entities": [
+        {
+          "name": "CoverageRow",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Value",
+              "type": "Integer"
+            }
+          ]
+        }
+      ]
+    },
+    "exceptions": [
+      {
+        "name": "CoverageFailure"
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "name": "ServerEcho",
+          "kind": "server",
+          "access": {
+            "authenticated": true
+          },
+          "inputs": [
+            {
+              "name": "N",
+              "type": "Integer"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "Result",
+              "type": "Integer"
+            }
+          ],
+          "steps": [
+            {
+              "assign": {
+                "Result": "N"
+              }
+            }
+          ]
+        },
+        {
+          "inputs": [
+            {
+              "name": "N",
+              "type": "Integer"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "Result",
+              "type": "Integer"
+            }
+          ],
+          "steps": [
+            {
+              "call": "ServerEcho",
+              "as": "Remote",
+              "args": {
+                "N": "N"
+              }
+            },
+            {
+              "assign": {
+                "Result": "Remote.Result"
+              }
+            }
+          ],
+          "name": "Coverage",
+          "kind": "client",
+          "public": true
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IClientAction:Coverage/Remote/arg:N",
+    "prop": "Value",
+    "value": "N + 1"
+  }
+}

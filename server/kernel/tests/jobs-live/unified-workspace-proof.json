@@ -1,0 +1,40 @@
+{
+  "description": "Prove the unified repository's O11 delivery path on ZZSS4HybridProof_CS without publishing.",
+  "base": "blank-service.oml",
+  "expectValid": true,
+  "expectedMessages": [],
+  "ops": [
+    {
+      "op": "spec",
+      "data": {
+        "structures": [
+          {
+            "name": "UnifiedWorkspaceProof",
+            "public": true,
+            "attributes": [
+              { "name": "Source", "type": "Text" },
+              { "name": "Value", "type": "Integer" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "logic",
+      "data": {
+        "actions": [
+          {
+            "name": "UnifiedWorkspace_Probe",
+            "kind": "server",
+            "public": true,
+            "description": "Local migration proof: builds a typed result through the unified SSAM kernel.",
+            "outputs": [{ "name": "Result", "type": "UnifiedWorkspaceProof" }],
+            "steps": [
+              { "assign": { "Result.Source": "\"SSAM-Hybrid\"", "Result.Value": "42" }, "as": "Build proof result" }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

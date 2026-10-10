@@ -1,0 +1,1960 @@
+{
+ "schema": "ssam-discover-baseline/1",
+ "capturedAt": "2026-10-03T23:50:29.505Z",
+ "base": {
+  "commit": "f845fa245535c7334af9b37468216d7a870a1737"
+ },
+ "how": "discover({lane, intent, budgetBytes, sources: laneSources(lane)}) BEFORE the tool routing existed, ANVIL_WORKER=0, ANVIL_ODC_NO_WORKER=1, ANVIL_LANE=ss4; matches as id:via in answer order",
+ "budgets": [
+  12000,
+  40960
+ ],
+ "intents": [
+  {
+   "id": "a-flow-insert-call",
+   "intent": "inserir uma chamada de ação no meio de um fluxo existente",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-a-flow.test.mjs:45",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "logic.flow:match",
+      "logic.server-action:dependency"
+     ],
+     "40960": [
+      "logic.flow:match",
+      "logic.server-action:dependency",
+      "timer.schedule:alternative",
+      "ai.agents:alternative",
+      "data.entity:alternative",
+      "ui.screen:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "logic.flow:match",
+      "logic.server-action:dependency"
+     ],
+     "40960": [
+      "logic.flow:match",
+      "logic.server-action:dependency",
+      "timer.schedule:alternative",
+      "data.entity:alternative",
+      "process.bpt:alternative",
+      "ui.screen:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-flow-delete-call",
+   "intent": "apagar uma chamada de ação no meio do fluxo religando o predecessor",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-a-flow.test.mjs:113",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "logic.flow:match",
+      "logic.server-action:dependency"
+     ],
+     "40960": [
+      "logic.flow:match",
+      "logic.server-action:dependency",
+      "timer.schedule:alternative",
+      "data.entity:alternative",
+      "data.static:alternative",
+      "data.structure:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "logic.flow:match",
+      "logic.server-action:dependency"
+     ],
+     "40960": [
+      "logic.flow:match",
+      "logic.server-action:dependency",
+      "timer.schedule:alternative",
+      "data.entity:alternative",
+      "data.static:alternative",
+      "data.structure:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-flow-relink",
+   "intent": "religar o conector do fluxo para outro passo",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-a-flow.test.mjs:141",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "logic.flow:match",
+      "logic.server-action:dependency"
+     ],
+     "40960": [
+      "logic.flow:match",
+      "logic.server-action:dependency"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "logic.flow:match",
+      "logic.server-action:dependency",
+      "process.bpt:alternative"
+     ],
+     "40960": [
+      "logic.flow:match",
+      "logic.server-action:dependency",
+      "process.bpt:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-exception-raise",
+   "intent": "criar um nó raise para lançar uma exceção de usuário",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-a-exception.test.mjs:34",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "logic.exception:match"
+     ],
+     "40960": [
+      "logic.exception:match"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "logic.exception:match"
+     ],
+     "40960": [
+      "logic.exception:match"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-exception-handler-en",
+   "intent": "create an exception handler for a user exception",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-a-exception.test.mjs:63",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "logic.exception:match"
+     ],
+     "40960": [
+      "logic.exception:match",
+      "ui.block-instance:alternative",
+      "ui.event:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "logic.exception:match",
+      "ui.block-instance:alternative",
+      "ui.event:alternative"
+     ],
+     "40960": [
+      "logic.exception:match",
+      "ui.block-instance:alternative",
+      "ui.event:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-client-entity",
+   "intent": "criar uma entidade do lado do cliente para armazenamento local offline",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-a-data-types.test.mjs:56",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "data.client-entity:match",
+      "data.entity:alternative"
+     ],
+     "40960": [
+      "data.client-entity:match",
+      "data.entity:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "data.client-entity:match",
+      "data.entity:alternative"
+     ],
+     "40960": [
+      "data.client-entity:match",
+      "data.entity:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-record-literal-en",
+   "intent": "record literal with two fields",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-a-data-types.test.mjs:209",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "logic.expression:match",
+      "ui.form:match",
+      "data.entity:dependency",
+      "logic.server-action:dependency",
+      "ui.screen:dependency"
+     ],
+     "40960": [
+      "logic.expression:match",
+      "ui.form:match",
+      "data.entity:dependency",
+      "logic.server-action:dependency",
+      "ui.screen:dependency",
+      "ui.screen-spec:alternative",
+      "data.records:alternative",
+      "data.static:alternative",
+      "data.structure:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "logic.expression:match",
+      "ui.form:match",
+      "data.entity:dependency",
+      "logic.server-action:dependency",
+      "ui.screen:dependency"
+     ],
+     "40960": [
+      "logic.expression:match",
+      "ui.form:match",
+      "data.entity:dependency",
+      "logic.server-action:dependency",
+      "ui.screen:dependency",
+      "ui.screen-spec:alternative",
+      "data.records:alternative",
+      "data.static:alternative",
+      "data.structure:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-action-input-param",
+   "intent": "adicionar um parâmetro de entrada a uma ação de servidor e mudar o tipo da variável local",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-a-actions.test.mjs:44",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "logic.variable:match",
+      "logic.server-action:match"
+     ],
+     "40960": [
+      "logic.variable:match",
+      "logic.server-action:match",
+      "logic.service-action:alternative",
+      "ui.block:alternative",
+      "ai.agents:alternative",
+      "timer.schedule:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "logic.variable:match",
+      "logic.server-action:match"
+     ],
+     "40960": [
+      "logic.variable:match",
+      "logic.server-action:match",
+      "logic.service-action:alternative",
+      "ui.block:alternative",
+      "integration.rest-consume:alternative",
+      "ui.dropdown-search:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-data-action-en",
+   "intent": "create a data action that fetches on demand",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-a-actions.test.mjs:88",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "logic.data-action:match",
+      "ui.html-page:match",
+      "ui.html-visual:alternative"
+     ],
+     "40960": [
+      "logic.data-action:match",
+      "ui.html-page:match",
+      "ui.html-visual:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "logic.data-action:match",
+      "ui.html-page:alternative",
+      "ui.traditional-screen:alternative"
+     ],
+     "40960": [
+      "logic.data-action:match",
+      "ui.html-page:alternative",
+      "ui.traditional-screen:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-rename-local-var-en",
+   "intent": "rename a local variable of a server action",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-a-actions.test.mjs:95",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "logic.server-action:match",
+      "logic.variable:match"
+     ],
+     "40960": [
+      "logic.server-action:match",
+      "logic.variable:match",
+      "logic.service-action:alternative",
+      "timer.schedule:alternative",
+      "data.entity:alternative",
+      "data.static:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "logic.server-action:match",
+      "logic.variable:match"
+     ],
+     "40960": [
+      "logic.server-action:match",
+      "logic.variable:match",
+      "logic.service-action:alternative",
+      "timer.schedule:alternative",
+      "data.entity:alternative",
+      "data.static:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-preparation-traditional",
+   "intent": "criar a preparação de uma tela tradicional",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-a-actions.test.mjs:212",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "ui.screen:match",
+      "ui.html-visual:alternative",
+      "ui.screen-spec:alternative"
+     ],
+     "40960": [
+      "ui.screen:match",
+      "ui.html-visual:alternative",
+      "ui.screen-spec:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "logic.preparation:match",
+      "ui.screen:match",
+      "ui.traditional-screen:match"
+     ],
+     "40960": [
+      "logic.preparation:match",
+      "ui.screen:match",
+      "ui.traditional-screen:match",
+      "logic.data-action:alternative",
+      "ui.html-visual:alternative",
+      "ui.screen-spec:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-js-node",
+   "intent": "executar javascript numa client action",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-a-native-nodes.test.mjs:48",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "logic.client-action:match",
+      "logic.native-nodes:match",
+      "integration.rest-consume:match"
+     ],
+     "40960": [
+      "logic.client-action:match",
+      "logic.native-nodes:match",
+      "integration.rest-consume:match",
+      "logic.server-action:alternative",
+      "logic.data-action:alternative",
+      "ui.script-resource:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "logic.client-action:match",
+      "logic.native-nodes:match",
+      "integration.rest-consume:match"
+     ],
+     "40960": [
+      "logic.client-action:match",
+      "logic.native-nodes:match",
+      "integration.rest-consume:match",
+      "logic.server-action:alternative",
+      "logic.data-action:alternative",
+      "ui.script-resource:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-rename-callers",
+   "intent": "renomear a server action e ver quem chama",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-a-refactor.test.mjs:163",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "refactor.rename:match",
+      "logic.server-action:match"
+     ],
+     "40960": [
+      "refactor.rename:match",
+      "logic.server-action:match",
+      "logic.service-action:alternative",
+      "timer.schedule:alternative",
+      "data.entity:alternative",
+      "data.static:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "logic.server-action:match",
+      "refactor.rename:match",
+      "read.inspect:match"
+     ],
+     "40960": [
+      "logic.server-action:match",
+      "refactor.rename:match",
+      "read.inspect:match",
+      "logic.service-action:alternative",
+      "timer.schedule:alternative",
+      "data.entity:alternative",
+      "data.static:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-sql-en",
+   "intent": "advanced sql with a sql parameter and a sql output",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-a-query.test.mjs:119",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "logic.sql:match",
+      "logic.aggregate:alternative"
+     ],
+     "40960": [
+      "logic.sql:match",
+      "logic.aggregate:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "logic.sql:match",
+      "logic.aggregate:alternative"
+     ],
+     "40960": [
+      "logic.sql:match",
+      "logic.aggregate:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-query-filter",
+   "intent": "carregar dados com uma consulta filtrada por status",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-a-query.test.mjs:163",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "logic.aggregate:match",
+      "data.static:match"
+     ],
+     "40960": [
+      "logic.aggregate:match",
+      "data.static:match",
+      "logic.sql:alternative",
+      "logic.data-action:alternative",
+      "ops.studio-session:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "logic.aggregate:match",
+      "logic.sql:alternative",
+      "logic.data-action:alternative",
+      "data.static:alternative"
+     ],
+     "40960": [
+      "logic.aggregate:match",
+      "logic.sql:alternative",
+      "logic.data-action:alternative",
+      "data.static:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-aggregate-sort",
+   "intent": "agregado com filtro e ordenação",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-a-query.test.mjs:174",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "logic.aggregate:match",
+      "logic.sql:alternative",
+      "logic.data-action:alternative",
+      "ui.dropdown-search:alternative",
+      "ui.list:alternative"
+     ],
+     "40960": [
+      "logic.aggregate:match",
+      "logic.sql:alternative",
+      "logic.data-action:alternative",
+      "ui.dropdown-search:alternative",
+      "ui.list:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "logic.aggregate:match",
+      "logic.sql:alternative",
+      "logic.data-action:alternative",
+      "ui.dropdown-search:alternative",
+      "ui.list:alternative"
+     ],
+     "40960": [
+      "logic.aggregate:match",
+      "logic.sql:alternative",
+      "logic.data-action:alternative",
+      "ui.dropdown-search:alternative",
+      "ui.list:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-if-en",
+   "intent": "add an if statement in the flow",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-a-query.test.mjs:204",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "ui.screen:match",
+      "ui.widget:match"
+     ],
+     "40960": [
+      "ui.screen:match",
+      "ui.widget:match",
+      "ui.html-visual:alternative",
+      "ui.screen-spec:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "ui.screen:match",
+      "ui.widget:match"
+     ],
+     "40960": [
+      "ui.screen:match",
+      "ui.widget:match",
+      "ui.html-visual:alternative",
+      "ui.screen-spec:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-scenario-pt",
+   "intent": "criar uma action que limpa variáveis de tipos diferentes, exceto algumas, e chamá-la dentro de um ramo de um If existente",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-a-lexicon.test.mjs:135",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "logic.flow:match",
+      "logic.variable:match",
+      "logic.server-action:dependency"
+     ],
+     "40960": [
+      "logic.flow:match",
+      "logic.variable:match",
+      "logic.server-action:dependency"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "logic.flow:match",
+      "logic.variable:match",
+      "logic.server-action:dependency"
+     ],
+     "40960": [
+      "logic.flow:match",
+      "logic.variable:match",
+      "logic.server-action:dependency",
+      "process.bpt:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-scenario-en",
+   "intent": "create an action that resets variables of several types except a few, and call it inside a branch of an existing If",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-a-lexicon.test.mjs:136",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "logic.flow:match",
+      "logic.variable:match",
+      "logic.server-action:dependency"
+     ],
+     "40960": [
+      "logic.flow:match",
+      "logic.variable:match",
+      "logic.server-action:dependency",
+      "ui.html-visual:alternative",
+      "ui.widget:alternative",
+      "integration.rest-consume:alternative",
+      "timer.schedule:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "logic.flow:match",
+      "logic.variable:match",
+      "logic.server-action:dependency"
+     ],
+     "40960": [
+      "logic.flow:match",
+      "logic.variable:match",
+      "logic.server-action:dependency",
+      "process.bpt:alternative",
+      "ui.html-visual:alternative",
+      "ui.widget:alternative",
+      "integration.rest-consume:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-duplicate",
+   "intent": "fazer uma cópia da server action",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-a-lexicon.test.mjs:154",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "logic.server-action:match",
+      "refactor.duplicate:match",
+      "logic.service-action:alternative",
+      "timer.schedule:alternative"
+     ],
+     "40960": [
+      "logic.server-action:match",
+      "refactor.duplicate:match",
+      "logic.service-action:alternative",
+      "timer.schedule:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "logic.server-action:match",
+      "refactor.duplicate:match",
+      "logic.service-action:alternative",
+      "timer.schedule:alternative"
+     ],
+     "40960": [
+      "logic.server-action:match",
+      "refactor.duplicate:match",
+      "logic.service-action:alternative",
+      "timer.schedule:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-rename-update-callers",
+   "intent": "renomear a action e atualizar os chamadores",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-a-lexicon.test.mjs:155",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "refactor.rename:match",
+      "timer.schedule:match",
+      "logic.server-action:dependency"
+     ],
+     "40960": [
+      "refactor.rename:match",
+      "timer.schedule:match",
+      "logic.server-action:dependency",
+      "data.entity:alternative",
+      "data.static:alternative",
+      "data.structure:alternative",
+      "ui.screen:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "refactor.rename:match",
+      "timer.schedule:match",
+      "logic.server-action:dependency"
+     ],
+     "40960": [
+      "refactor.rename:match",
+      "timer.schedule:match",
+      "logic.server-action:dependency",
+      "data.entity:alternative",
+      "data.static:alternative",
+      "data.structure:alternative",
+      "ui.screen:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "d-form-dropdown-en",
+   "intent": "form with dropdown",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/discovery.test.mjs:31",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "ui.dropdown:match",
+      "ui.form:match",
+      "ui.screen-spec:match",
+      "ui.dropdown-search:match"
+     ],
+     "40960": [
+      "ui.dropdown:match",
+      "ui.form:match",
+      "ui.screen-spec:match",
+      "ui.dropdown-search:match",
+      "ui.screen:dependency",
+      "data.entity:dependency",
+      "logic.server-action:dependency",
+      "logic.screen-action:dependency"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "ui.dropdown:match",
+      "ui.form:match",
+      "ui.screen-spec:match",
+      "ui.dropdown-search:match"
+     ],
+     "40960": [
+      "ui.dropdown:match",
+      "ui.form:match",
+      "ui.screen-spec:match",
+      "ui.dropdown-search:match",
+      "ui.screen:dependency",
+      "data.entity:dependency",
+      "logic.server-action:dependency",
+      "logic.screen-action:dependency"
+     ]
+    }
+   }
+  },
+  {
+   "id": "d-onclick-screen-action",
+   "intent": "evento onclick de um botao e um extended event ligados a uma screen action",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/discovery.test.mjs:217",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "ui.event:match",
+      "logic.app-event:match",
+      "logic.screen-action:match",
+      "ui.screen:match"
+     ],
+     "40960": [
+      "ui.event:match",
+      "logic.app-event:match",
+      "logic.screen-action:match",
+      "ui.screen:match",
+      "logic.client-action:alternative",
+      "ui.html-visual:alternative",
+      "ui.screen-spec:alternative",
+      "ui.block:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "ui.event:match",
+      "logic.app-event:match",
+      "logic.screen-action:match",
+      "ui.screen:match"
+     ],
+     "40960": [
+      "ui.event:match",
+      "logic.app-event:match",
+      "logic.screen-action:match",
+      "ui.screen:match",
+      "logic.client-action:alternative",
+      "ui.html-visual:alternative",
+      "ui.screen-spec:alternative",
+      "ui.traditional-screen:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "d-screen-action-en",
+   "intent": "create a screen action",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/discovery.test.mjs:285",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "logic.screen-action:match",
+      "ui.screen:match",
+      "ui.screen-spec:match",
+      "data.entity:dependency"
+     ],
+     "40960": [
+      "logic.screen-action:match",
+      "ui.screen:match",
+      "ui.screen-spec:match",
+      "data.entity:dependency",
+      "logic.client-action:alternative",
+      "ui.html-visual:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "logic.screen-action:match",
+      "ui.screen:match",
+      "ui.screen-spec:match",
+      "data.entity:dependency"
+     ],
+     "40960": [
+      "logic.screen-action:match",
+      "ui.screen:match",
+      "ui.screen-spec:match",
+      "data.entity:dependency",
+      "logic.client-action:alternative",
+      "ui.html-visual:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "d-delete-screen",
+   "intent": "apagar a tela de clientes",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/discovery.test.mjs:296",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "ui.screen:match",
+      "refactor.delete:match"
+     ],
+     "40960": [
+      "ui.screen:match",
+      "refactor.delete:match",
+      "ui.html-visual:alternative",
+      "ui.screen-spec:alternative",
+      "refactor.replace:alternative",
+      "data.entity:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "ui.screen:match",
+      "refactor.delete:match"
+     ],
+     "40960": [
+      "ui.screen:match",
+      "refactor.delete:match",
+      "ui.html-visual:alternative",
+      "ui.screen-spec:alternative",
+      "refactor.replace:alternative",
+      "data.entity:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "d-delete-record-en",
+   "intent": "delete the record",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/discovery.test.mjs:298",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "data.static:match",
+      "data.records:match",
+      "ui.form:match",
+      "data.entity:dependency",
+      "logic.server-action:dependency",
+      "ui.screen:dependency"
+     ],
+     "40960": [
+      "data.static:match",
+      "data.records:match",
+      "ui.form:match",
+      "data.entity:dependency",
+      "logic.server-action:dependency",
+      "ui.screen:dependency",
+      "ui.screen-spec:alternative",
+      "data.structure:alternative",
+      "refactor.delete:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "data.static:match",
+      "data.records:match"
+     ],
+     "40960": [
+      "data.static:match",
+      "data.records:match",
+      "data.entity:alternative",
+      "data.structure:alternative",
+      "refactor.delete:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "d-redirect-reference-en",
+   "intent": "redirect reference to the new action",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/discovery.test.mjs:314",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "refactor.replace:match",
+      "refactor.rename:alternative",
+      "data.entity:alternative",
+      "data.static:alternative",
+      "data.structure:alternative"
+     ],
+     "40960": [
+      "refactor.replace:match",
+      "refactor.rename:alternative",
+      "data.entity:alternative",
+      "data.static:alternative",
+      "data.structure:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "refactor.replace:match",
+      "refactor.rename:alternative",
+      "data.entity:alternative",
+      "data.static:alternative",
+      "data.structure:alternative"
+     ],
+     "40960": [
+      "refactor.replace:match",
+      "refactor.rename:alternative",
+      "data.entity:alternative",
+      "data.static:alternative",
+      "data.structure:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "d-delete-if-node",
+   "intent": "excluir o if node",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/discovery.test.mjs:473",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "logic.flow:match",
+      "logic.server-action:dependency"
+     ],
+     "40960": [
+      "logic.flow:match",
+      "logic.server-action:dependency",
+      "data.entity:alternative",
+      "data.static:alternative",
+      "data.structure:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "logic.flow:match",
+      "logic.server-action:dependency"
+     ],
+     "40960": [
+      "logic.flow:match",
+      "logic.server-action:dependency",
+      "data.entity:alternative",
+      "data.static:alternative",
+      "data.structure:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "d-form-dropdown-search-pt",
+   "intent": "Criar um formulário com dropdown pesquisável, carregar dados e salvar",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/discovery.test.mjs:745",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "ui.dropdown-search:match",
+      "ui.form:match",
+      "ui.screen:dependency",
+      "logic.screen-action:dependency",
+      "data.entity:dependency",
+      "logic.server-action:dependency"
+     ],
+     "40960": [
+      "ui.dropdown-search:match",
+      "ui.form:match",
+      "ui.screen:dependency",
+      "logic.screen-action:dependency",
+      "data.entity:dependency",
+      "logic.server-action:dependency",
+      "ui.dropdown:alternative",
+      "ui.screen-spec:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "ui.dropdown-search:match",
+      "ui.form:match",
+      "ui.screen:dependency",
+      "logic.screen-action:dependency",
+      "data.entity:dependency",
+      "logic.server-action:dependency"
+     ],
+     "40960": [
+      "ui.dropdown-search:match",
+      "ui.form:match",
+      "ui.screen:dependency",
+      "logic.screen-action:dependency",
+      "data.entity:dependency",
+      "logic.server-action:dependency",
+      "ui.dropdown:alternative",
+      "ui.screen-spec:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "d-session-variable",
+   "intent": "guardar estado numa session variable",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/discovery.test.mjs:769",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "ui.form:match",
+      "ops.studio-session:match",
+      "ui.input:match",
+      "data.entity:dependency",
+      "logic.server-action:dependency",
+      "ui.screen:dependency"
+     ],
+     "40960": [
+      "ui.form:match",
+      "ops.studio-session:match",
+      "ui.input:match",
+      "data.entity:dependency",
+      "logic.server-action:dependency",
+      "ui.screen:dependency",
+      "ui.screen-spec:alternative",
+      "ui.html-visual:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "ui.form:match",
+      "ui.input:match",
+      "data.entity:dependency",
+      "logic.server-action:dependency",
+      "ui.screen:dependency"
+     ],
+     "40960": [
+      "ui.form:match",
+      "ui.input:match",
+      "data.entity:dependency",
+      "logic.server-action:dependency",
+      "ui.screen:dependency",
+      "ui.screen-spec:alternative",
+      "ui.html-visual:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "d-policy-list-composite",
+   "intent": "tela de listagem de apolices: static entity PolicyStatus, entidade Policy com FK, tela WfPolicies com um aggregate das apolices ordenado por Number e uma lista com Number e Label do status, clique navega para WfPolicyDetail com input PolicyId",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/discovery.test.mjs:786",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "data.static:match",
+      "data.entity:match",
+      "ui.list:match",
+      "ui.screen:match",
+      "logic.aggregate:match",
+      "ui.html-visual:match",
+      "ops.studio-session:match",
+      "ui.form:match"
+     ],
+     "40960": [
+      "data.static:match",
+      "data.entity:match",
+      "ui.list:match",
+      "ui.screen:match",
+      "logic.aggregate:match",
+      "ui.html-visual:match",
+      "ops.studio-session:match",
+      "ui.form:match",
+      "logic.server-action:dependency",
+      "ui.screen-spec:alternative",
+      "logic.sql:alternative",
+      "logic.data-action:alternative",
+      "ui.html-page:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "data.static:match",
+      "data.entity:match",
+      "ui.list:match",
+      "ui.screen:match",
+      "logic.aggregate:match",
+      "ui.html-visual:match",
+      "ui.form:match",
+      "ui.screen-spec:match"
+     ],
+     "40960": [
+      "data.static:match",
+      "data.entity:match",
+      "ui.list:match",
+      "ui.screen:match",
+      "logic.aggregate:match",
+      "ui.html-visual:match",
+      "ui.form:match",
+      "ui.screen-spec:match",
+      "logic.server-action:dependency",
+      "logic.sql:alternative",
+      "logic.data-action:alternative",
+      "ui.html-page:alternative",
+      "ui.dropdown:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "d-rename-entity",
+   "intent": "renomear uma entidade e ver o que não acompanha",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/discovery.test.mjs:876",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "refactor.rename:match",
+      "data.entity:match"
+     ],
+     "40960": [
+      "refactor.rename:match",
+      "data.entity:match",
+      "data.static:alternative",
+      "data.structure:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "refactor.rename:match",
+      "data.entity:match"
+     ],
+     "40960": [
+      "refactor.rename:match",
+      "data.entity:match",
+      "data.static:alternative",
+      "data.structure:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "s-static-record-repoint",
+   "intent": "reapontar um registo de uma static entity para outro registo e apagar o registo antigo",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/discovery-data.test.mjs:55",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "data.static:match",
+      "refactor.delete:match",
+      "data.records:match",
+      "refactor.replace:match"
+     ],
+     "40960": [
+      "data.static:match",
+      "refactor.delete:match",
+      "data.records:match",
+      "refactor.replace:match",
+      "refactor.rename:alternative",
+      "data.entity:alternative",
+      "data.structure:alternative",
+      "data.client-entity:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "data.static:match",
+      "refactor.delete:match",
+      "refactor.replace:match"
+     ],
+     "40960": [
+      "data.static:match",
+      "refactor.delete:match",
+      "refactor.replace:match",
+      "refactor.rename:alternative",
+      "data.entity:alternative",
+      "data.structure:alternative",
+      "data.records:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "s-structure-reorder",
+   "intent": "reordenar um atributo de uma estrutura e duplicar a estrutura",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/discovery-data.test.mjs:125",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "data.structure:match",
+      "refactor.duplicate:match"
+     ],
+     "40960": [
+      "data.structure:match",
+      "refactor.duplicate:match",
+      "data.entity:alternative",
+      "data.static:alternative",
+      "refactor.move:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "data.structure:match",
+      "refactor.duplicate:match"
+     ],
+     "40960": [
+      "data.structure:match",
+      "refactor.duplicate:match",
+      "data.entity:alternative",
+      "data.static:alternative",
+      "refactor.move:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "s-attribute-rename-delete",
+   "intent": "renomear o atributo Email da entidade Contact e apagar o atributo Phone sem consumidores",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/discovery-data.test.mjs:62",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "data.entity:match",
+      "refactor.delete:match",
+      "refactor.rename:match"
+     ],
+     "40960": [
+      "data.entity:match",
+      "refactor.delete:match",
+      "refactor.rename:match",
+      "refactor.replace:alternative",
+      "data.structure:alternative",
+      "data.static:alternative",
+      "timer.schedule:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "data.entity:match",
+      "refactor.delete:match",
+      "refactor.rename:match"
+     ],
+     "40960": [
+      "data.entity:match",
+      "refactor.delete:match",
+      "refactor.rename:match",
+      "refactor.replace:alternative",
+      "data.structure:alternative",
+      "data.static:alternative",
+      "timer.schedule:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "s-entity-fk-index",
+   "intent": "criar uma entidade Order com FK para Customer e um indice unico composto por Number e CustomerId",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/discovery-data.test.mjs:85",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "data.entity:match"
+     ],
+     "40960": [
+      "data.entity:match",
+      "data.static:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "data.entity:match"
+     ],
+     "40960": [
+      "data.entity:match",
+      "data.static:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "s-move-entity-module",
+   "intent": "mover a entidade para outro modulo",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/discovery-data.test.mjs:108",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "data.entity:match"
+     ],
+     "40960": [
+      "data.entity:match",
+      "data.structure:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "data.entity:match"
+     ],
+     "40960": [
+      "data.entity:match",
+      "data.structure:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "b-delete-block",
+   "intent": "apagar um bloco que tem instancias",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-b-ui.test.mjs:114",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "refactor.delete:match",
+      "ui.block:match",
+      "ui.block-instance:match",
+      "ui.dropdown-search:match",
+      "ui.html-visual:match"
+     ],
+     "40960": [
+      "refactor.delete:match",
+      "ui.block:match",
+      "ui.block-instance:match",
+      "ui.dropdown-search:match",
+      "ui.html-visual:match",
+      "ui.screen:dependency",
+      "logic.screen-action:dependency",
+      "refactor.replace:alternative",
+      "ui.dropdown:alternative",
+      "ui.html-page:alternative",
+      "data.entity:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "refactor.delete:match",
+      "ui.block:match",
+      "ui.block-instance:match",
+      "ui.dropdown-search:match",
+      "ui.html-visual:match"
+     ],
+     "40960": [
+      "refactor.delete:match",
+      "ui.block:match",
+      "ui.block-instance:match",
+      "ui.dropdown-search:match",
+      "ui.html-visual:match",
+      "ui.screen:dependency",
+      "logic.screen-action:dependency",
+      "refactor.replace:alternative",
+      "ui.dropdown:alternative",
+      "ui.html-page:alternative",
+      "data.entity:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "b-traditional-table",
+   "intent": "tela traditional web com table records e link para detalhe",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-b-ui.test.mjs:119",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "ui.form:match",
+      "ui.list:match",
+      "ui.screen:match",
+      "ui.html-page:match",
+      "ui.html-visual:match",
+      "ui.screen-spec:match",
+      "data.records:match",
+      "data.static:match"
+     ],
+     "40960": [
+      "ui.form:match",
+      "ui.list:match",
+      "ui.screen:match",
+      "ui.html-page:match",
+      "ui.html-visual:match",
+      "ui.screen-spec:match",
+      "data.records:match",
+      "data.static:match",
+      "data.entity:dependency",
+      "logic.server-action:dependency",
+      "ui.event:alternative",
+      "data.client-entity:alternative",
+      "data.structure:alternative",
+      "ui.widget:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "ui.traditional-screen:match",
+      "ui.traditional-widget:match",
+      "ui.list:match",
+      "ui.screen:match",
+      "ui.form:match",
+      "ui.screen-spec:match",
+      "ui.html-visual:match",
+      "ui.widget:match"
+     ],
+     "40960": [
+      "ui.traditional-screen:match",
+      "ui.traditional-widget:match",
+      "ui.list:match",
+      "ui.screen:match",
+      "ui.form:match",
+      "ui.screen-spec:match",
+      "ui.html-visual:match",
+      "ui.widget:match",
+      "data.entity:dependency",
+      "logic.server-action:dependency",
+      "ui.html-page:alternative",
+      "ui.event:alternative",
+      "data.client-entity:alternative",
+      "data.records:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "b-input-variable",
+   "intent": "adicionar um input de texto ligado a uma variavel",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-b-ui.test.mjs:129",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "ui.input:match",
+      "integration.rest-consume:match",
+      "integration.rest-expose:match",
+      "ui.screen:dependency"
+     ],
+     "40960": [
+      "ui.input:match",
+      "integration.rest-consume:match",
+      "integration.rest-expose:match",
+      "ui.screen:dependency",
+      "ui.html-visual:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "ui.input:match",
+      "integration.rest-consume:match",
+      "integration.rest-expose:match",
+      "ui.screen:dependency"
+     ],
+     "40960": [
+      "ui.input:match",
+      "integration.rest-consume:match",
+      "integration.rest-expose:match",
+      "ui.screen:dependency",
+      "ui.html-visual:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "c-rest-consume",
+   "intent": "consumir uma API REST com POST, header e estrutura de resposta aninhada",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-c-routes.test.mjs:95",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "integration.rest-consume:match",
+      "integration.rest-expose:alternative",
+      "data.structure:alternative"
+     ],
+     "40960": [
+      "integration.rest-consume:match",
+      "integration.rest-expose:alternative",
+      "data.structure:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "integration.rest-consume:match",
+      "integration.rest-expose:alternative",
+      "data.structure:alternative"
+     ],
+     "40960": [
+      "integration.rest-consume:match",
+      "integration.rest-expose:alternative",
+      "data.structure:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "c-rest-credentials",
+   "intent": "gravar username e password do cliente REST",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-c-routes.test.mjs:103",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "integration.rest-consume:match",
+      "ui.form:match",
+      "integration.rest-expose:match",
+      "data.entity:dependency",
+      "logic.server-action:dependency",
+      "ui.screen:dependency"
+     ],
+     "40960": [
+      "integration.rest-consume:match",
+      "ui.form:match",
+      "integration.rest-expose:match",
+      "data.entity:dependency",
+      "logic.server-action:dependency",
+      "ui.screen:dependency",
+      "ui.screen-spec:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "integration.rest-consume:match",
+      "ui.form:match",
+      "integration.rest-expose:match",
+      "data.entity:dependency",
+      "logic.server-action:dependency",
+      "ui.screen:dependency"
+     ],
+     "40960": [
+      "integration.rest-consume:match",
+      "ui.form:match",
+      "integration.rest-expose:match",
+      "data.entity:dependency",
+      "logic.server-action:dependency",
+      "ui.screen:dependency",
+      "ui.screen-spec:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "c-timer-rename",
+   "intent": "renomear o timer noturno e mudar o agendamento",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-c-routes.test.mjs:108",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "timer.schedule:match",
+      "logic.server-action:dependency",
+      "data.entity:alternative",
+      "data.static:alternative",
+      "data.structure:alternative",
+      "ui.screen:alternative"
+     ],
+     "40960": [
+      "timer.schedule:match",
+      "logic.server-action:dependency",
+      "data.entity:alternative",
+      "data.static:alternative",
+      "data.structure:alternative",
+      "ui.screen:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "timer.schedule:match",
+      "logic.server-action:dependency",
+      "data.entity:alternative",
+      "data.static:alternative",
+      "data.structure:alternative"
+     ],
+     "40960": [
+      "timer.schedule:match",
+      "logic.server-action:dependency",
+      "data.entity:alternative",
+      "data.static:alternative",
+      "data.structure:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "c-role-setting",
+   "intent": "criar um role e restringir a tela, e uma setting secreta",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-c-routes.test.mjs:113",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "security.settings-roles:match",
+      "ui.screen:match"
+     ],
+     "40960": [
+      "security.settings-roles:match",
+      "ui.screen:match",
+      "data.client-variable:alternative",
+      "ui.html-visual:alternative",
+      "ui.screen-spec:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "security.settings-roles:match",
+      "ui.screen:match"
+     ],
+     "40960": [
+      "security.settings-roles:match",
+      "ui.screen:match",
+      "data.client-variable:alternative",
+      "ui.html-visual:alternative",
+      "ui.screen-spec:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "c-bpt",
+   "intent": "criar um processo BPT com atividade humana de aprovacao",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-c-routes.test.mjs:121",
+   "byLane": {
+    "odc": {
+     "12000": [],
+     "40960": []
+    },
+    "o11": {
+     "12000": [
+      "process.bpt:match"
+     ],
+     "40960": [
+      "process.bpt:match"
+     ]
+    }
+   }
+  },
+  {
+   "id": "c-reference-import",
+   "intent": "adicionar referencia ao modulo produtor e importar a action publica",
+   "tools": "allowed",
+   "source": "platforms/odc/facade/tests/catalog-c-routes.test.mjs:124",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "data.entity:match"
+     ],
+     "40960": [
+      "data.entity:match"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "data.entity:match",
+      "reference.producer-import:match"
+     ],
+     "40960": [
+      "data.entity:match",
+      "reference.producer-import:match"
+     ]
+    }
+   }
+  },
+  {
+   "id": "c-soap",
+   "intent": "consumir um web service SOAP a partir do WSDL",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-c-routes.test.mjs:133",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "integration.rest-consume:match",
+      "integration.rest-expose:match"
+     ],
+     "40960": [
+      "integration.rest-consume:match",
+      "integration.rest-expose:match"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "integration.soap:match",
+      "integration.rest-consume:alternative"
+     ],
+     "40960": [
+      "integration.soap:match",
+      "integration.rest-consume:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "c-agent",
+   "intent": "criar um agente de IA com conexao MCP",
+   "tools": "allowed",
+   "source": "platforms/odc/facade/tests/catalog-c-routes.test.mjs:144",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "ai.agents:match"
+     ],
+     "40960": [
+      "ai.agents:match"
+     ]
+    },
+    "o11": {
+     "12000": [],
+     "40960": []
+    }
+   }
+  },
+  {
+   "id": "c-global-event",
+   "intent": "disparar um evento global para outra app",
+   "tools": "none",
+   "source": "platforms/odc/facade/tests/catalog-c-routes.test.mjs:147",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "logic.app-event:match",
+      "ui.event:match"
+     ],
+     "40960": [
+      "logic.app-event:match",
+      "ui.event:match"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "logic.app-event:match",
+      "ui.event:match"
+     ],
+     "40960": [
+      "logic.app-event:match",
+      "ui.event:match"
+     ]
+    }
+   }
+  },
+  {
+   "id": "c-publish-after-merge",
+   "intent": "publicar o modulo depois do merge",
+   "tools": "allowed",
+   "source": "platforms/odc/facade/tests/catalog-c-routes.test.mjs:130",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "deliver.job:match",
+      "deliver.publish:match"
+     ],
+     "40960": [
+      "deliver.job:match",
+      "deliver.publish:match"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "deliver.job:match"
+     ],
+     "40960": [
+      "deliver.job:match"
+     ]
+    }
+   }
+  },
+  {
+   "id": "c-diagnose",
+   "intent": "diagnosticar um merge recusado com base drift e reconciliar um resultado incerto",
+   "tools": "allowed",
+   "source": "platforms/odc/facade/tests/catalog-c-routes.test.mjs:135",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "diagnostic.troubleshoot:match",
+      "deliver.job:match",
+      "deliver.feature:alternative"
+     ],
+     "40960": [
+      "diagnostic.troubleshoot:match",
+      "deliver.job:match",
+      "deliver.feature:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "diagnostic.troubleshoot:match",
+      "deliver.job:match"
+     ],
+     "40960": [
+      "diagnostic.troubleshoot:match",
+      "deliver.job:match"
+     ]
+    }
+   }
+  },
+  {
+   "id": "c-portal-deployments",
+   "intent": "ler os deployments do portal",
+   "tools": "allowed",
+   "source": "platforms/odc/facade/tests/catalog-c-routes.test.mjs:138",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "ops.portal:match",
+      "read.inspect:match"
+     ],
+     "40960": [
+      "ops.portal:match",
+      "read.inspect:match"
+     ]
+    },
+    "o11": {
+     "12000": [],
+     "40960": []
+    }
+   }
+  },
+  {
+   "id": "c-refresh-references",
+   "intent": "atualizar as referencias de um produtor alterado",
+   "tools": "allowed",
+   "source": "platforms/odc/facade/tests/catalog-c-routes.test.mjs:155",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "ops.references-refresh:match",
+      "data.entity:match"
+     ],
+     "40960": [
+      "ops.references-refresh:match",
+      "data.entity:match",
+      "data.static:alternative",
+      "data.structure:alternative"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "data.entity:match",
+      "reference.producer-import:match"
+     ],
+     "40960": [
+      "data.entity:match",
+      "reference.producer-import:match",
+      "data.static:alternative",
+      "data.structure:alternative"
+     ]
+    }
+   }
+  },
+  {
+   "id": "a-hijack-timer-now",
+   "intent": "lançar um timer agora",
+   "tools": "allowed",
+   "source": "platforms/odc/facade/tests/catalog-a-lexicon.test.mjs:89",
+   "byLane": {
+    "odc": {
+     "12000": [
+      "timer.schedule:match",
+      "logic.server-action:dependency"
+     ],
+     "40960": [
+      "timer.schedule:match",
+      "logic.server-action:dependency"
+     ]
+    },
+    "o11": {
+     "12000": [
+      "timer.schedule:match",
+      "logic.server-action:dependency"
+     ],
+     "40960": [
+      "timer.schedule:match",
+      "logic.server-action:dependency"
+     ]
+    }
+   }
+  }
+ ],
+ "revisions": [
+  {
+   "date": "2026-10-06",
+   "reason": "Native ODC agents are now a direct capability and a relevant alternative for action authoring; O11 expectations are unchanged.",
+   "intents": [
+    "a-flow-insert-call",
+    "a-action-input-param",
+    "c-agent"
+   ]
+  }
+ ]
+}

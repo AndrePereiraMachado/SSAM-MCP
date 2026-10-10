@@ -1,0 +1,60 @@
+{
+  "fixture": "reactive-ui",
+  "features": [
+    "native-widget",
+    "mobile:ILink"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Subject",
+            "type": "ILink",
+            "properties": {
+              "Style": "\"coverage\""
+            },
+            "children": [
+              {
+                "name": "Part2",
+                "type": "ITextWidget",
+                "properties": {
+                  "Text": "Go"
+                }
+              }
+            ],
+            "events": {
+              "OnClick": {
+                "destination": "IMobileScreen:Coverage/Handle1"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "name": "Handle1",
+          "kind": "screen",
+          "owner": "IMobileScreen:Coverage",
+          "steps": []
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IMobileScreen:Coverage/Subject",
+    "prop": "Style",
+    "value": "\"changed\""
+  }
+}

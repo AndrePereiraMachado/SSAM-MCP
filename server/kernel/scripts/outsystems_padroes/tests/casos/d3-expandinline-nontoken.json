@@ -1,0 +1,45 @@
+{
+ "description": "NEG D3 (OutSystems padroes): ISQLInputParameter com ExpandInline=True ligado a um input (nao e token T-SQL literal).",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {"id": "SQL_Enumeration", "element": "SearchProductsByColumn (ServerAction) / SelectProducts (SQLNode)", "why": "Controle negativo D3: o SQL enumera as colunas de proposito; a ferramenta conta este warning (N4)."},
+  {"id": "CustomObjectWarning", "element": "SelectProducts (SQLNode) / Argument", "why": "Controle negativo D3: ExpandInline depois de ORDER BY e a violacao que a ferramenta precisa acusar."}
+ ],
+ "ops": [
+  {"op": "spec", "data": {
+   "entities": [{"name": "NegProduct", "description": "Produto de teste do controle negativo D3.",
+    "attributes": [{"name": "Name", "type": "Text", "mandatory": true, "length": 100, "description": "Nome do produto lido pelo SQL do controle."}]}],
+   "structures": [{"name": "NegProductRow", "public": true, "description": "Linha devolvida pelo SQL do controle negativo D3.",
+    "attributes": [{"name": "Id", "type": "Long Integer", "description": "Identificador do produto na linha devolvida."},
+                   {"name": "Name", "type": "Text", "description": "Nome do produto na linha devolvida."}]}]
+  }},
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "SearchProductsByColumn", "as": "$act"},
+  {"op": "set", "target": "$act", "prop": "Description", "value": "Ordena por uma coluna vinda do chamador com ExpandInline (violacao proposital da D3)."},
+  {"op": "set", "target": "$act", "prop": "Public", "value": true},
+  {"op": "create", "parent": "$act", "type": "IInputParameter", "name": "SortColumn", "as": "$in"},
+  {"op": "set", "target": "$in", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$in", "prop": "Description", "value": "Nome da coluna de ordenacao recebido do chamador."},
+  {"op": "create", "parent": "$act", "type": "IOutputParameter", "name": "Products", "as": "$out"},
+  {"op": "set", "target": "$out", "prop": "DataType", "value": "NegProductRow List"},
+  {"op": "set", "target": "$out", "prop": "Description", "value": "Produtos devolvidos na ordem pedida pelo chamador."},
+  {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$s0"},
+  {"op": "create", "parent": "$act", "type": "ISQLNode", "name": "SelectProducts", "as": "$sql"},
+  {"op": "set", "target": "$sql", "prop": "Statement", "value": "SELECT {NegProduct}.[Id], {NegProduct}.[Name] FROM {NegProduct} ORDER BY @SortColumn"},
+  {"op": "create", "parent": "$sql", "type": "ISQLInputParameter", "name": "SortColumn", "as": "$p"},
+  {"op": "set", "target": "$p", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$p", "prop": "ExpandInline", "value": true},
+  {"op": "create", "parent": "$sql", "type": "ISQLOutput", "name": "List", "args": {"entityOrStructure": "NegProductRow"}, "as": "$o"},
+  {"op": "set", "target": "$sql/arg:SortColumn", "prop": "Value", "value": "SortColumn"},
+  {"op": "create", "parent": "$act", "type": "IAssignNode", "as": "$asg"},
+  {"op": "set", "target": "$asg", "prop": "Label", "value": "Return the sorted products"},
+  {"op": "create", "parent": "$asg", "type": "IAssignment", "as": "$a1"},
+  {"op": "set", "target": "$a1", "prop": "Variable", "value": "Products"},
+  {"op": "set", "target": "$a1", "prop": "Value", "value": "SelectProducts.List"},
+  {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$s9"},
+  {"op": "link", "from": "$s0", "to": "$sql"},
+  {"op": "link", "from": "$sql", "to": "$asg"},
+  {"op": "link", "from": "$asg", "to": "$s9"},
+  {"op": "layout", "target": "$act"}
+ ]
+}

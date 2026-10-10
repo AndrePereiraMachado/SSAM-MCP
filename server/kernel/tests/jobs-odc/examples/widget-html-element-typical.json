@@ -1,0 +1,28 @@
+{
+ "description": "HTML Element com atributo e dados: um section com aria-label (propriedade estendida), um h3 fixo e um p que mostra o primeiro produto do aggregate.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [{"name": "Name", "type": "Text", "length": 100, "mandatory": true}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "Highlight", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IAdvancedHtml", "name": "HighlightSection", "as": "$section"},
+  {"op": "set", "target": "$section", "prop": "Tag", "value": "section"},
+  {"op": "create", "parent": "$section", "type": "IExtendedProperty", "as": "$aria", "_why": "um atributo HTML e uma propriedade estendida: Property = nome, Value = expressao"},
+  {"op": "set", "target": "$aria", "prop": "Property", "value": "aria-label"},
+  {"op": "set", "target": "$aria", "prop": "Value", "value": "\"Product of the day\""},
+  {"op": "create", "parent": "$section/Content", "type": "IAdvancedHtml", "name": "HighlightTitle", "as": "$h3"},
+  {"op": "set", "target": "$h3", "prop": "Tag", "value": "h3"},
+  {"op": "create", "parent": "$h3/Content", "type": "ITextWidget", "as": "$h3Text"},
+  {"op": "set", "target": "$h3Text", "prop": "Text", "value": "Product of the day"},
+  {"op": "create", "parent": "$section/Content", "type": "IAdvancedHtml", "name": "HighlightName", "as": "$p"},
+  {"op": "set", "target": "$p", "prop": "Tag", "value": "p"},
+  {"op": "create", "parent": "$p/Content", "type": "IExpression", "as": "$name"},
+  {"op": "set", "target": "$name", "prop": "Value", "value": "If(GetProducts.List.Empty, \"No products yet\", GetProducts.List[0].Product.Name)"},
+  {"op": "get", "target": "$aria"}
+ ]
+}

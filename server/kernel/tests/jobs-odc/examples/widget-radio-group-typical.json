@@ -1,0 +1,36 @@
+{
+ "description": "Radio Group sobre uma static entity: cada RadioButton vale um registro (Entities.Delivery.X), e o OnChange do grupo recalcula o frete.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"static": [{"name": "Delivery", "records": [{"name": "Pickup"}, {"name": "Courier"}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "DeliveryChoice", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "DeliveryId", "as": "$sel"},
+  {"op": "set", "target": "$sel", "prop": "DataType", "value": "Delivery Identifier"},
+  {"op": "set", "target": "$sel", "prop": "DefaultValue", "value": "Entities.Delivery.Pickup"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Fee", "as": "$fee"},
+  {"op": "set", "target": "$fee", "prop": "DataType", "value": "Currency"},
+  {"op": "logic", "data": {"actions": [
+   {"name": "DeliveryChanged", "kind": "screen", "owner": "IMobileScreen:DeliveryChoice",
+    "steps": [{"assign": {"Fee": "If(DeliveryId = Entities.Delivery.Courier, 7.50, 0)"}, "as": "SetFee"}]}]}},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IRadioGroup", "name": "DeliveryRadioGroup", "as": "$rg"},
+  {"op": "set", "target": "$rg", "prop": "Variable", "value": "DeliveryId"},
+  {"op": "set", "target": "$rg/OnChange", "prop": "Destination", "value": "IMobileScreen:DeliveryChoice/DeliveryChanged"},
+  {"op": "delete", "target": "$rg/Content/RadioButton1"},
+  {"op": "delete", "target": "$rg/Content/RadioButton2"},
+  {"op": "delete", "target": "$rg/Content/RadioButton3"},
+  {"op": "create", "parent": "$rg/Content", "type": "IRadioButton", "name": "PickupRadio", "as": "$r1"},
+  {"op": "set", "target": "$r1", "prop": "Value", "value": "Entities.Delivery.Pickup", "_why": "o Value e do tipo da variavel do grupo"},
+  {"op": "create", "parent": "$r1/Content", "type": "IExpression", "as": "$r1Text"},
+  {"op": "set", "target": "$r1Text", "prop": "Value", "value": "\"Pick up at the store\""},
+  {"op": "create", "parent": "$rg/Content", "type": "IRadioButton", "name": "CourierRadio", "as": "$r2"},
+  {"op": "set", "target": "$r2", "prop": "Value", "value": "Entities.Delivery.Courier"},
+  {"op": "create", "parent": "$r2/Content", "type": "IExpression", "as": "$r2Text"},
+  {"op": "set", "target": "$r2Text", "prop": "Value", "value": "\"Courier (+$7.50)\""},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$show"},
+  {"op": "set", "target": "$show", "prop": "Value", "value": "\"Delivery fee: \" + FormatCurrency(Fee, \"$\", 2, \".\", \",\")"}
+ ]
+}

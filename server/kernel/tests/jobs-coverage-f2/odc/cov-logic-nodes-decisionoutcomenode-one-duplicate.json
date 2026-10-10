@@ -1,0 +1,65 @@
+{
+ "description": "Cobertura testada (fase 2): one de OutSystems.Model.Logic.Nodes.IDecisionOutcomeNode (odc) em lgProcessDecision. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IProcess",
+   "name": "CovSProcess",
+   "as": "$pp"
+  },
+  {
+   "op": "set",
+   "target": "$pp",
+   "prop": "Detail",
+   "value": "\"Cov\""
+  },
+  {
+   "op": "create",
+   "parent": "$pp",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "create",
+   "parent": "$pp",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$pp",
+   "type": "IDecisionNode",
+   "name": "CovSDecision",
+   "as": "$p"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IDecisionConnector",
+   "name": "CovSYes",
+   "args": {
+    "target": "$fe"
+   },
+   "as": "$c1"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IDecisionOutcomeNode",
+   "as": "$a"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  }
+ ]
+}

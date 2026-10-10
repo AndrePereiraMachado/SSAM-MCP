@@ -1,0 +1,14 @@
+{
+ "description": "A RECUSA do delete de um ATRIBUTO DE STRUCTURE com consumidor real: ProductSummary.Name e escrito pela expressao 'Summary.Name' do Assign SetSummary da server action publica Product_GetById (base job:producer-public). Sem force, o delete tem de ser recusado E a mensagem tem de nomear o consumidor pelo caminho (a IExpression dentro do IAssignment) e oferecer as duas saidas: remover os usos ou passar force. O caminho limpo - apagar um atributo de structure SEM consumidores, brokenConsumers 0 - esta em tests/jobs/structure-refactor.json (op 4a).",
+ "base": "job:producer-public",
+ "expectValid": true,
+ "expectError": [
+  "delete: refused, IStructureAttribute 'Name' is used by 1 consumer(s)",
+  "IServerAction:Product_GetById/IAssignNode/IAssignment/IExpression",
+  "pass \"force\": true to break them"
+ ],
+ "ops": [
+  {"op": "usages", "target": "IStructure:ProductSummary/Name", "max": 20, "_why": "count 1, real 1: a IExpression '#Variable' com o texto 'Summary.Name', no Assign da action herdada. E este o consumidor que a recusa nomeia."},
+  {"op": "delete", "target": "IStructure:ProductSummary/Name", "_why": "sem force: recusado com 'delete: refused, IStructureAttribute 'Name' is used by 1 consumer(s): IServerAction:Product_GetById/IAssignNode/IAssignment/IExpression (list them with usages, fix or remove those usages, or pass \"force\": true to break them)'."}
+ ]
+}

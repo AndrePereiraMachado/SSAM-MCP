@@ -1,0 +1,13 @@
+{
+ "description": "Texto literal: um ITextWidget com Text fixo dentro de um Container (texto que nao e expressao).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "TextDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "Intro", "as": "$box"},
+  {"op": "create", "parent": "$box", "type": "ITextWidget", "as": "$text"},
+  {"op": "set", "target": "$text", "prop": "Text", "value": "Welcome to the store", "_why": "Text de um ITextWidget e texto puro, sem aspas de expressao"}
+ ]
+}

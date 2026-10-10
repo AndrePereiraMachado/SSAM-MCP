@@ -1,0 +1,30 @@
+{
+ "description": "Map do OutSystemsMaps (Google): chave de API lida de um Setting por uma data action, centro, altura, um MarkerPopup com texto e o OnError guardando a falha.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "ISiteProperty", "name": "MapsApiKey", "as": "$key", "_why": "a chave fica num Setting configurado no Portal, nunca escrita no modelo"},
+  {"op": "set", "target": "$key", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "GoogleStoreMap", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Store\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "MapError", "as": "$vMapError"},
+  {"op": "set", "target": "$vMapError", "prop": "DataType", "value": "Text"},
+  {"op": "logic", "_why": "Settings so existem no servidor: a data action le a chave e a tela usa a saida dela", "data": {"actions": [{"name": "GetMapsConfig", "kind": "data", "owner": "IMobileScreen:GoogleStoreMap", "fetch": "AtStart", "outputs": [{"name": "ApiKey", "type": "Text"}], "steps": [{"assign": {"ApiKey": "Settings.MapsApiKey"}, "as": "ReadKey"}]}]}},
+  {"op": "logic", "data": {"actions": [{"name": "MapFailed", "kind": "screen", "owner": "IMobileScreen:GoogleStoreMap", "inputs": [{"name": "Message", "type": "Text"}], "steps": [{"assign": {"MapError": "Message"}, "as": "Keep"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Map1", "source": "IMobileBlock:Map", "as": "$map"},
+  {"op": "set", "target": "$map/APIKey", "prop": "Value", "value": "GetMapsConfig.ApiKey"},
+  {"op": "set", "target": "$map/Center", "prop": "Value", "value": "\"Lisbon, Portugal\""},
+  {"op": "set", "target": "$map/Height", "prop": "Value", "value": "\"400px\""},
+  {"op": "set", "target": "$map/OnError", "prop": "Handler", "value": "IMobileScreen:GoogleStoreMap/MapFailed"},
+  {"op": "set", "target": "$map/OnError/Message", "prop": "Value", "value": "ErrorMessage"},
+  {"op": "create", "parent": "$map/AddOns_Placeholder", "type": "IMobileBlockInstanceWidget", "name": "StorePin", "source": "IMobileBlock:MarkerPopup", "as": "$mk"},
+  {"op": "set", "target": "$mk/Position", "prop": "Value", "value": "\"Lisbon, Portugal\""},
+  {"op": "create", "parent": "$mk/Popup", "type": "ITextWidget", "as": "$text1"},
+  {"op": "set", "target": "$text1", "prop": "Text", "value": "Our store"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "MapError"}
+ ]
+}

@@ -1,0 +1,89 @@
+<style>
+  :root { --dash-blue: #3765e8; background: #f5f7fb; color: #192641; min-height: 100vh; font-family: Inter, 'Segoe UI', sans-serif; }
+  .dash-topbar { background: #fff; border-bottom: 1px solid #e6ebf3; padding: 19px 36px; display: flex; align-items: center; justify-content: space-between; }
+  div.dash-brand { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 19px; letter-spacing: -.4px; }
+  .dash-logo[data-advancedhtml] { background: #3765e8; color: #fff; width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .dash-brand small { color: #748299; font-weight: 400; font-size: 13px; padding-left: 12px; border-left: 1px solid #e5eaf2; }
+  .dash-demo[data-advancedhtml] { color: #85621d; background: #fff6dc; border: 1px solid #f1e2b8; font-size: 12px; padding: 6px 11px; border-radius: 20px; }
+  .dash-main { max-width: 1440px; margin: 0 auto; padding: 34px 36px 40px; }
+  .dash-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 27px; gap: 20px; }
+  .dash-eyebrow { font-size: 10px; letter-spacing: 2px; font-weight: 700; color: #77849c; margin: 0 0 9px; }
+  .dash-heading h1 { color: #192641; font-size: 30px; line-height: 1.25; font-weight: 700; letter-spacing: -1px; margin: 0 0 7px; }
+  .dash-muted { color: #77849c; font-size: 13px; margin: 0; }
+  .dash-period[data-advancedhtml] { background: #fff; border: 1px solid #e1e7f0; border-radius: 9px; padding: 10px 14px; color: #52617c; font-size: 12px; white-space: nowrap; }
+  .dash-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin-bottom: 22px; }
+  .dash-kpi { background: #fff; padding: 22px; border: 1px solid #e5eaf2; border-radius: 14px; box-shadow: 0 2px 3px #16264103; }
+  .dash-kpi-top { display: flex; align-items: center; justify-content: space-between; color: #66768f; font-size: 12px; margin-bottom: 18px; }
+  .dash-symbol[data-advancedhtml] { border-radius: 9px; background: #edf2ff; color: #3765e8; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; }
+  .dash-kpi-value { display: block; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -.9px; margin-bottom: 10px; }
+  .dash-kpi-note { color: #8190a6; font-size: 11px; }
+  .dash-positive { color: #158569; font-weight: 600; }
+  .dash-charts { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 22px; margin-bottom: 22px; }
+  .dash-card { min-width: 0; background: #fff; border: 1px solid #e5eaf2; border-radius: 14px; overflow: hidden; }
+  .dash-card-head { padding: 23px 24px 8px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .dash-card h2 { color: #263653; font-weight: 600; font-size: 15px; margin: 0 0 7px; }
+  .dash-card-head p { color: #8190a6; font-size: 11px; margin: 0; }
+  .dash-tag[data-advancedhtml] { border: 1px solid #e6ebf3; border-radius: 6px; padding: 4px 8px; font-size: 10px; color: #77849c; white-space: nowrap; }
+  .dash-chart { padding: 10px 18px 5px; }
+  .dash-card-foot { border-top: 1px solid #eff2f7; padding: 15px 24px; font-size: 11px; color: #7d8aa1; }
+  .dash-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #3765e8; margin-right: 6px; }
+  .dash-bottom { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 22px; }
+  .dash-summary { padding: 24px; }
+  .dash-summary h2 { margin-bottom: 8px; }
+  .dash-summary-sub { color: #8190a6; font-size: 11px; margin: 0 0 22px; }
+  .dash-summary-row { display: flex; justify-content: space-between; align-items: center; padding: 14px 0; border-bottom: 1px solid #edf1f6; font-size: 12px; }
+  .dash-summary-row strong { font-size: 13px; color: #243657; }
+  .dash-channel { display: flex; align-items: center; gap: 8px; }
+  .dash-swatch { width: 9px; height: 9px; border-radius: 3px; background: #3765e8; }
+  .dash-swatch.teal { background: #25b6a0; }
+  .dash-swatch.gold { background: #f0b95b; }
+  div.dash-insight { background: #f1f5ff; border-radius: 10px; padding: 16px; margin-top: 20px; font-size: 12px; line-height: 1.7; color: #607293; }
+  .dash-insight strong { display: block; color: #3765e8; margin-bottom: 3px; }
+  .dash-footer { margin-top: 22px; color: #98a3b5; font-size: 11px; display: flex; justify-content: space-between; gap: 20px; }
+  @media (max-width: 1000px) { .dash-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dash-charts, .dash-bottom { grid-template-columns: 1fr; } }
+  @media (max-width: 600px) { .dash-main { padding: 22px 15px; } .dash-topbar { padding: 15px; } .dash-brand small { display: none; } .dash-heading { flex-direction: column; align-items: flex-start; } .dash-kpis { gap: 10px; } .dash-kpi { padding: 15px; } .dash-kpi-value { font-size: 23px; } .dash-footer { flex-direction: column; } }
+</style>
+<div id="DashboardCanvas" class="sales-dashboard">
+  <header class="dash-topbar">
+    <div class="dash-brand"><span class="dash-logo">S</span> SSAM <small>Analytics</small></div>
+    <span class="dash-demo">Dados demonstrativos</span>
+  </header>
+  <main class="dash-main">
+    <div class="dash-heading">
+      <div><p class="dash-eyebrow">VISÃO DO NEGÓCIO</p><h1>Dashboard de vendas</h1><p class="dash-muted">Uma visão clara dos resultados, canais e oportunidades.</p></div>
+      <span class="dash-period">Janeiro — Junho, 2026</span>
+    </div>
+    <div class="dash-kpis">
+      <article class="dash-kpi"><div class="dash-kpi-top"><span>Receita total</span><span class="dash-symbol">R$</span></div><strong class="dash-kpi-value">R$ 284.500</strong><span class="dash-kpi-note">Acumulado no semestre</span></article>
+      <article class="dash-kpi"><div class="dash-kpi-top"><span>Vendas realizadas</span><span class="dash-symbol">↗</span></div><strong class="dash-kpi-value">1.248</strong><span class="dash-kpi-note">Pedidos concluídos no período</span></article>
+      <article class="dash-kpi"><div class="dash-kpi-top"><span>Ticket médio</span><span class="dash-symbol">≈</span></div><strong class="dash-kpi-value">R$ 227,96</strong><span class="dash-kpi-note">Receita por venda realizada</span></article>
+      <article class="dash-kpi"><div class="dash-kpi-top"><span>Receita em junho</span><span class="dash-symbol">+</span></div><strong class="dash-kpi-value">R$ 68.500</strong><span class="dash-kpi-note"><span class="dash-positive">+24,5%</span> em relação a maio</span></article>
+    </div>
+    <div class="dash-charts">
+      <article class="dash-card">
+        <div class="dash-card-head"><div><h2>Evolução da receita</h2><p>Crescimento mensal ao longo do semestre</p></div><span class="dash-tag">BRL · R$</span></div>
+        <div class="dash-chart"><Block id="RevenueChart" name="AreaChart" :DataPointList="RevenuePoints" :Height='"290px"' :Spline="True"></Block></div>
+        <div class="dash-card-foot"><span class="dash-dot"></span>Receita mensal <span class="dash-positive">· Junho foi o melhor mês do período</span></div>
+      </article>
+      <article class="dash-card">
+        <div class="dash-card-head"><div><h2>Receita por canal</h2><p>Participação de cada origem de venda</p></div></div>
+        <div class="dash-chart"><Block id="ChannelChart" name="DonutChart" :DataPointList="ChannelPoints" :Height='"290px"' :InnerSize='"72%"'></Block></div>
+        <div class="dash-card-foot">O site representa <strong>48%</strong> da receita total.</div>
+      </article>
+    </div>
+    <div class="dash-bottom">
+      <article class="dash-card">
+        <div class="dash-card-head"><div><h2>Receita por segmento</h2><p>Comparativo dos quatro segmentos atendidos</p></div><span class="dash-tag">Semestre</span></div>
+        <div class="dash-chart"><Block id="SegmentChart" name="BarChart" :DataPointList="SegmentPoints" :Height='"275px"'></Block></div>
+      </article>
+      <article class="dash-card dash-summary">
+        <h2>Composição dos resultados</h2><p class="dash-summary-sub">Valores consolidados por canal</p>
+        <div class="dash-summary-row"><span class="dash-channel"><span class="dash-swatch"></span>Site · 48%</span><strong>R$ 136.560</strong></div>
+        <div class="dash-summary-row"><span class="dash-channel"><span class="dash-swatch teal"></span>Parceiros · 32%</span><strong>R$ 91.040</strong></div>
+        <div class="dash-summary-row"><span class="dash-channel"><span class="dash-swatch gold"></span>Marketplace · 20%</span><strong>R$ 56.900</strong></div>
+        <div class="dash-insight"><strong>Um semestre em expansão</strong>A receita mensal passou de R$ 32 mil para R$ 68,5 mil. Os três canais compõem o mesmo total apresentado nos indicadores.</div>
+      </article>
+    </div>
+    <footer class="dash-footer"><span>Ambiente de demonstração · Sem vínculo com dados reais</span><span>SSAM Analytics · 2026</span></footer>
+  </main>
+</div>

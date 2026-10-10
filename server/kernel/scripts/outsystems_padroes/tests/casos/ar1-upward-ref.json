@@ -1,0 +1,9 @@
+{
+ "description": "NEG AR1 (OutSystems padroes): o Engine_Core_CS (Core) referencia a UI EngineApp (End-user): referencia para cima. So estagio J (o produtor e ligado por --producer no run_job real). A ferramenta roda com --module Engine_Core_CS.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "reference", "producer": "EngineApp", "elements": ["IMobileBlock:RunSummaryHeader"]}
+ ]
+}

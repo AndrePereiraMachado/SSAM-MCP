@@ -1,0 +1,32 @@
+{
+ "description": "Cobertura testada (fase 1, medir): del de ServiceStudio.Plugin.RESTService.IRestServiceAction (odc) em restService. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IRestService",
+   "name": "CovSRest",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IRestServiceAction",
+   "name": "CovSSibling",
+   "as": "$sib"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IRestServiceAction",
+   "name": "CovARestServiceAction",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

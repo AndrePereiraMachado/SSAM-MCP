@@ -1,0 +1,65 @@
+{
+ "description": "Cobertura testada (fase 2): move into (folder:Timers) de OutSystems.Model.Processes.ITimer (o11) em espace. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ITimer",
+   "name": "CovATimer",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "CovSTimerAction",
+   "as": "$ta"
+  },
+  {
+   "op": "set",
+   "target": "$ta",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "create",
+   "parent": "$ta",
+   "type": "IStartNode",
+   "as": "$tas"
+  },
+  {
+   "op": "create",
+   "parent": "$ta",
+   "type": "IEndNode",
+   "as": "$tae"
+  },
+  {
+   "op": "link",
+   "from": "$tas",
+   "to": "$tae"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Action",
+   "value": "$ta"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IFolder",
+   "name": "CovSMvFolder",
+   "args": {
+    "parentFolder": "Timers"
+   },
+   "as": "$mvp"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "into": "$mvp"
+  }
+ ]
+}

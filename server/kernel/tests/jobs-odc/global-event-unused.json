@@ -1,0 +1,27 @@
+{
+ "description": "ODC: avisos que SO o verificador do ODC emite podem ser declarados em expectedMessages. Dois eventos globais sem trigger nem handler: o privado da PrivateUnusedGlobalEvent e UnusedGlobalEvent, o publico so UnusedGlobalEvent. Esses ids nao existem nas listas do O11 (catalog/verify-messages-*.json); a faixa ODC valida contra catalog/odc/verify-messages-<versao>.json, gerado do ODC Studio instalado por `anvil-odc verify-catalog --out`. Antes disto o job era recusado na leitura ('unknown expectedMessages id') e um job ODC com estes avisos nunca saia accepted:true.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "PrivateUnusedGlobalEvent",
+   "element": "InsuranceApp (ESpace) / WfCovPrivateEvent (GlobalEvent)",
+   "why": "Evento privado sem handler local: o aviso so do ODC que este job existe para declarar."
+  },
+  {
+   "id": "UnusedGlobalEvent",
+   "element": "InsuranceApp (ESpace) / WfCovPrivateEvent (GlobalEvent)",
+   "why": "Evento sem trigger (nenhum TriggerGlobalNode o dispara): aviso so do ODC."
+  },
+  {
+   "id": "UnusedGlobalEvent",
+   "element": "InsuranceApp (ESpace) / WfCovPublicEvent (GlobalEvent)",
+   "why": "O evento publico tambem nao tem trigger; sendo publico, nao pede handler local."
+  }
+ ],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IGlobalEvent", "name": "WfCovPrivateEvent", "as": "$private"},
+  {"op": "create", "parent": "@espace", "type": "IGlobalEvent", "name": "WfCovPublicEvent", "as": "$public"},
+  {"op": "set", "target": "$public", "prop": "Public", "value": true}
+ ]
+}

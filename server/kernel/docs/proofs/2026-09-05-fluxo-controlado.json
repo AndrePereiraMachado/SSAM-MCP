@@ -1,0 +1,206 @@
+{
+  "date": "2026-09-05",
+  "status": "data-controller-validated-live-client-acceptance-pending",
+  "scope": "Normalized data contract; not business authorization or action behavior",
+  "architecture": "docs/adr/ADR-015-fluxo-controlado.md",
+  "plan": "docs/tasks/2026-09-05-plano-fluxo-controlado.md",
+  "suite": {
+    "result": "Completed",
+    "counts": {
+      "total": "292",
+      "executed": "292",
+      "passed": "292",
+      "failed": "0",
+      "error": "0",
+      "timeout": "0",
+      "aborted": "0",
+      "inconclusive": "0",
+      "passedButRunAborted": "0",
+      "notRunnable": "0",
+      "notExecuted": "0",
+      "disconnected": "0",
+      "warning": "0",
+      "completed": "0",
+      "inProgress": "0",
+      "pending": "0"
+    },
+    "times": {
+      "creation": "2026-09-05T16:41:47.6598039-03:00",
+      "queuing": "2026-09-05T16:41:47.6598043-03:00",
+      "start": "2026-09-05T16:41:39.4725009-03:00",
+      "finish": "2026-09-05T16:44:13.6162109-03:00"
+    },
+    "evidence": ".local\\control-flow-dev\\results\\full-suite-final.trx",
+    "sha256": "3778f475359c56de0bc2dbfb30a1059dc0da2e69af73e9bdfe0354e3e30d2509"
+  },
+  "validationScope": {
+    "root": "C:\\Users\\andre\\Anvil\\.local\\control-flow-dev\\validation",
+    "trackedFilesCopied": 674,
+    "restoredFromHeadInValidationOnly": [
+      "tests/jobs/data-contract-incidents.json"
+    ],
+    "untrackedApplicationJobs": "Excluded; only Hire jobs referenced by current AGENTS.md included",
+    "fixtures": "Existing official local fixtures copied; no live/customer snapshots"
+  },
+  "sourceMatch": {
+    "comparedCsFiles": 110,
+    "differences": []
+  },
+  "pythonTests": {
+    "passed": 8,
+    "failed": 0,
+    "command": "python -B -X utf8 tests/test_ssam_app.py"
+  },
+  "verifiedMechanisms": [
+    "Independent data declaration inspection detects omitted fields, shortened text, missing indices and wrong records",
+    "Semantic list equality through a real headless merge; distinct data types rejected",
+    "Applied merge and post-merge proof survive interruption; unknown outcome does not replay writes",
+    "Same-task incremental repair retains original requirements and prior attempt evidence",
+    "Host-captured source cannot be overwritten; changed contract needs new source and host acceptance",
+    "Wrong task, raw job and approval arguments refused at the app boundary",
+    "Exact tool authorization is consumed once; worker rejects unauthorized commands before execution",
+    "Module reservation survives process lease disposal and excludes a competing task"
+  ],
+  "client": {
+    "name": "Codex CLI",
+    "version": "0.153.4",
+    "profile": "ssam-app",
+    "installed": true,
+    "defaultProfileChanged": false,
+    "hookTrustGranted": false,
+    "llmEvaluation": false,
+    "effectiveSandbox": "read-only (explicit legacy override; private storage also owner ACL)",
+    "sandboxProbe": {
+      "privateReadable": false,
+      "workspaceWritable": false,
+      "bridgeReachable": false
+    },
+    "sandboxExit": 0,
+    "integration": {
+      "hookCapture": true,
+      "hookGrant": true,
+      "protocol": "2025-06-18",
+      "tools": [
+        "context",
+        "propose_data",
+        "continue",
+        "status"
+      ],
+      "contextAccepted": true,
+      "originalPromptPreserved": true,
+      "replayRejected": true,
+      "studioMutation": false
+    },
+    "tools": [
+      "context",
+      "propose_data",
+      "continue",
+      "status"
+    ]
+  },
+  "installation": {
+    "lane": "ss5",
+    "connected": true,
+    "workerAuthenticated": true,
+    "workerAuthorizedRead": true,
+    "workerUnauthorized": {
+      "ok": false,
+      "command": "api",
+      "error": "Worker operation requires the trusted Hybrid controller",
+      "executed": false
+    },
+    "bridgeUnauthorized": {
+      "success": false,
+      "data": null,
+      "error": "UnauthorizedAccessException: Bridge operation requires the trusted Hybrid controller",
+      "executed": false
+    },
+    "final": {
+      "utc": "2026-09-05T19:56:02.031882+00:00",
+      "lanes": [
+        {
+          "lane": "ss4",
+          "ready": false,
+          "reason": "Bridge update required before controlled app delivery"
+        },
+        {
+          "lane": "ss5",
+          "ready": true,
+          "environments": [
+            "personal-2qqw9srv.outsystemscloud.com"
+          ],
+          "activeModule": null,
+          "environment": "personal-2qqw9srv.outsystemscloud.com"
+        }
+      ],
+      "inventory": {
+        "count": 0,
+        "modules": [],
+        "environments": [
+          "personal-2qqw9srv.outsystemscloud.com"
+        ]
+      },
+      "Anvil.Bridge.dll": {
+        "built": "4443c4f102fc9f2da16bb9c633a1a6511f5e6d58703d5f783516fe44578f6d84",
+        "installed": "4443c4f102fc9f2da16bb9c633a1a6511f5e6d58703d5f783516fe44578f6d84"
+      },
+      "Anvil.Core.dll": {
+        "built": "da3e610efe614f3476434e93f9cbfd8437e74ba4f3d6a5b75495c216dc766529",
+        "installed": "da3e610efe614f3476434e93f9cbfd8437e74ba4f3d6a5b75495c216dc766529"
+      }
+    },
+    "ss4Modified": false,
+    "studioModulesCreated": 0,
+    "studioModulesMerged": 0,
+    "published": false,
+    "observationPhase": "Historical pre-live validation; follow-up proof records module provisioning and merges"
+  },
+  "pending": [
+    "User review/trust of hooks through /hooks",
+    "Real LLM conversation in the restricted profile and end-to-end timing",
+    "Business/action authorization and effects contract milestone"
+  ],
+  "limits": [
+    "Initial natural-language interpretation can still omit requirements; the proof checks the visible normalized contract",
+    "No live 1-2 minute target has been established for this build",
+    "A crash between native merge and durable receipt may remain unknown; no exactly-once claim",
+    "Existing unrestricted maintenance sessions are not automatically confined"
+  ],
+  "liveLabAuthorization": {
+    "requested": true,
+    "received": true,
+    "automaticReview": "Previously refused specific remote application/module creation and initial publication because explicit authorization was missing; no resource created",
+    "resolution": "User explicitly approved and laboratory proof completed; see followUpLiveProof"
+  },
+  "finalVerification": {
+    "outcome": "Completed",
+    "counts": {
+      "total": "292",
+      "executed": "292",
+      "passed": "292",
+      "failed": "0",
+      "error": "0",
+      "timeout": "0",
+      "aborted": "0",
+      "inconclusive": "0",
+      "passedButRunAborted": "0",
+      "notRunnable": "0",
+      "notExecuted": "0",
+      "disconnected": "0",
+      "warning": "0",
+      "completed": "0",
+      "inProgress": "0",
+      "pending": "0"
+    },
+    "times": {
+      "creation": "2026-09-05T16:55:40.0627636-03:00",
+      "queuing": "2026-09-05T16:55:40.0627642-03:00",
+      "start": "2026-09-05T16:55:33.2800646-03:00",
+      "finish": "2026-09-05T16:58:15.7025075-03:00"
+    },
+    "evidence": ".local\\control-flow-dev\\results\\full-suite-verified.trx",
+    "sha256": "ac82cb5b1530e4d3394c138eedea16ec3c406b2a6fa4095de57dbd935472a3fb",
+    "bridgeBuild": "Release rebuilt after environment inventory correction; installed hashes matched"
+  },
+  "followUpLiveProof": "docs/proofs/2026-09-05-fluxo-controlado-live.json"
+}

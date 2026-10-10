@@ -1,0 +1,38 @@
+{
+  "description": "Reference of a private static entity gives a concrete producer-side correction.",
+  "base": "reactive-ui.oml",
+  "expectValid": true,
+  "ops": [
+    {
+      "op": "reference",
+      "producer": "job:producer-static-private",
+      "elements": [
+        "IStaticEntity:ReferenceStatus"
+      ]
+    },
+    {
+      "op": "logic",
+      "data": {
+        "actions": [
+          {
+            "name": "ReferenceStatus_Default",
+            "public": true,
+            "outputs": [
+              {
+                "name": "StatusId",
+                "type": "ReferenceStatus Identifier"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "StatusId": "Entities.ReferenceStatus.Active"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

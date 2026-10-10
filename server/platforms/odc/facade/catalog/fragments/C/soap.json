@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "ssam-discovery-fragment/1",
+  "contract": "ssam-catalog-contribution/1",
+  "front": "C",
+  "title": "SOAP integrations: a SOAP client from its WSDL on O11 with the declarative op soap (the Studio's own importer, incremental); SOAP on ODC is a declared gap",
+  "reviewedAt": "2026-10-06",
+  "synonyms": {
+    "soap": [
+      "wsdl",
+      "servico soap",
+      "soap service"
+    ],
+    "consume": [
+      "consumir",
+      "consumo"
+    ]
+  },
+  "capabilities": [
+    {
+      "id": "integration.soap",
+      "lanes": [
+        "o11"
+      ],
+      "category": "integration",
+      "title": "SOAP service import from a WSDL (O11): the op soap imports the chosen methods with the Studio's own importer",
+      "keywords": [
+        "soap",
+        "wsdl",
+        "soap service",
+        "consume soap",
+        "soap client",
+        "soap method",
+        "soap wsdl"
+      ],
+      "summary": "Op soap (wsdl, port or service/binding/soapVersion, methods, refresh, remove, breaks): the deliver pins the WSDL with its imports; the kernel selects the SOAP port before any change (AMBIGUOUS_SOAP_PORT lists every choice, SOAP_METHOD_NOT_FOUND the operations); o11_deliver runs the Studio's importer in the bridge on a copy of the module with only the requested methods; the candidate keeps the exact WSDL types (SOAP_CONTRACT_TYPE_MISMATCH) and is merged once. Existing methods are skipped; refresh imports them again; remove takes the unused structures too.",
+      "route": {
+        "kind": "job",
+        "operation": "op soap {wsdl, port, methods} (api --op soap) through o11_deliver (bridge integration_import, then one merge); ssam_job/o11_job without the Studio answer INTEGRATION_IMPORT_NEEDS_STUDIO; a bridge without integration_import:wsdl answers INTEGRATION_IMPORT_NEEDS_BRIDGE before the snapshot"
+      },
+      "contract": [
+        "soap.data",
+        "soap.shapes",
+        "soap.rules",
+        "soap.codes"
+      ],
+      "guidance": "Name the methods exactly as the WSDL names its operations and, when the WSDL has several SOAP ports, the port (or binding / soapVersion). Call a method from logic as any action (call ISOAPAction:<Method>, args by input name). Removing a method needs the user's words naming it and every consumer breaks lists; a standing grant never covers it. When the provider also offers a REST/JSON endpoint, integration.rest-consume needs no import.",
+      "platforms": {
+        "o11": {
+          "proofs": [],
+          "negative": [
+            "soap-method-not-found"
+          ],
+          "limits": [
+            {
+              "text": "Declared, not proven live: the import runs in the bridge (integration_import:wsdl) on a detached copy with the PluginWorkspace of the tab; the bridge loads with the next Service Studio opened. GitSSAM proved the native importer live (CountryInfoService, 4 methods, identical rerun without change).",
+              "origin": "kernel/src/Anvil.Bridge/IntegrationImportHandler.cs; kernel/tests/jobs-live/soap-import-calculator.json; C:/Users/andre/GitSSAM ssam-declarative/docs/tasks/2026-08-06-soap-import-fast-path.md (read-only reference)"
+            },
+            {
+              "text": "The native WSDL importer may resolve absolute imports itself from the Studio machine; the deliver pins and passes them, the importer is not proven to use only the pinned copies.",
+              "origin": "docs/integracoes-rest-soap.md"
+            }
+          ]
+        }
+      },
+      "depends": []
+    }
+  ],
+  "unavailable": [
+    {
+      "id": "integration.soap-odc",
+      "lanes": [
+        "odc"
+      ],
+      "keywords": [
+        "soap",
+        "wsdl",
+        "soap service",
+        "consume soap",
+        "soap client",
+        "expose soap",
+        "soap wsdl"
+      ],
+      "reason": "ODC apps do not consume SOAP through this kernel: the op soap answers SOAP_LANE_UNSUPPORTED on ODC. An ODC binary declares SOAP consumption removed, while the ODC Studio still ships the SOAP plugin; no route is proven.",
+      "evidence": "kernel/src/Anvil.Core/Kernel/Verbs.Integration.cs (SOAP_LANE_UNSUPPORTED); kernel/src/Anvil.Core/Kernel/IntegrationPreflight.cs; kernel/docs/NAO-DA.md (SOAP no ODC); kernel/docs/GITSSAM-O-QUE-SE-APROVEITA.md:799-807",
+      "negative": {
+        "odc": []
+      },
+      "alternative": "integration.rest-consume through a REST facade of the service, or an External Library that calls it (integration.external-library-odc)"
+    }
+  ],
+  "coverage": []
+}

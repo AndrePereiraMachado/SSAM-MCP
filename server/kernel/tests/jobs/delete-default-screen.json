@@ -1,0 +1,16 @@
+{
+ "description": "APAGAR, sem force, a tela padrao do modulo (cobertura testada, fase 2). O reactive-ui nao tem DefaultScreen, por isso a primeira tela criada headless fica com esse papel e o proprio modulo passa a cita-la. O delete recusava com um consumidor de caminho vazio (o ESpace); o Studio apaga e deixa so o aviso 'Unknown Default Screen'. Agora a DefaultScreen nao recusa: o usages mostra o IESpace com derived true e caminho 'IESpace:<modulo>'. O aviso fica no ESpace, num caminho de um nivel que o expectedMessages nao declara, por isso o job escolhe a nova tela padrao logo a seguir e o Verify fica sem mensagens novas.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "DelDefaultOld", "as": "$old"},
+  {"op": "set", "target": "$old/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "DelDefaultNew", "as": "$new"},
+  {"op": "set", "target": "$new/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "usages", "target": "$old", "_why": "count 1, real 0: o IESpace (DefaultScreen), derived true"},
+  {"op": "delete", "target": "$old", "_why": "sem force: brokenConsumers 0"},
+  {"op": "set", "target": "@espace", "prop": "DefaultScreen", "value": "$new", "_why": "sem isto fica o aviso InvalidOptionalPropertyValue_PropertyIn_WithPrevious ('Unknown Default Screen') no ESpace"},
+  {"op": "find", "name": "DelDefaultOld", "_why": "lista vazia"}
+ ]
+}

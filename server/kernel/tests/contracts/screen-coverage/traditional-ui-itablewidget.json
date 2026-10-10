@@ -1,0 +1,59 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "native-widget",
+    "web:ITableWidget"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Subject",
+            "type": "ITableWidget",
+            "properties": {
+              "StyleClasses": "coverage"
+            },
+            "children": [
+              {
+                "name": "TableRow",
+                "type": "IRowWidget",
+                "properties": {},
+                "children": [
+                  {
+                    "name": "Part3",
+                    "type": "ICellWidget",
+                    "properties": {},
+                    "children": [
+                      {
+                        "name": "Part2",
+                        "type": "ITextWidget",
+                        "properties": {
+                          "Text": "Content"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "mutation": {
+    "target": "IWebScreen:Coverage/Subject",
+    "prop": "StyleClasses",
+    "value": "changed"
+  }
+}

@@ -1,0 +1,55 @@
+{
+ "description": "Apagar DADOS com consumidores reais: o atributo Contact.Email e usado por um filtro de aggregate, por uma Expression da tela, por um argumento de Execute e pelo Input do formulario. O delete so passa depois de os quatro sairem; a recusa (sem force) esta em tests/jobs-negative/delete-attribute-in-use.json.",
+ "base": "job:screen-form-reactive",
+ "expectValid": true,
+ "ops": [
+  {"op": "usages", "target": "IServerEntity:Contact/Email", "_why": "(1) estado inicial: so o Input Email_Input usa o atributo de verdade (o resto e derivado)"},
+
+  {"op": "create", "parent": "IMobileScreen:ContactDetail/GetContactById", "type": "IFilter", "args": {"condition": "Contact.Email <> \"\""}, "_why": "(2) consumidor de DADOS: filtro do aggregate"},
+
+  {"op": "create", "parent": "IMobileScreen:ContactDetail/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "name": "EmailEcho", "as": "$echo", "_why": "(2) consumidor de INTERFACE: expressao na tela"},
+  {"op": "set", "target": "$echo", "prop": "Value", "value": "GetContactById.List.Current.Contact.Email"},
+
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "Contact_NotifyByEmail", "as": "$notify"},
+  {"op": "create", "parent": "$notify", "type": "IInputParameter", "name": "Email", "as": "$notifyIn"},
+  {"op": "set", "target": "$notifyIn", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$notify", "type": "IOutputParameter", "name": "Sent", "as": "$notifyOut"},
+  {"op": "set", "target": "$notifyOut", "prop": "DataType", "value": "Boolean"},
+  {"op": "create", "parent": "$notify", "type": "IStartNode", "as": "$nt0"},
+  {"op": "create", "parent": "$notify", "type": "IAssignNode", "as": "$ntAs"},
+  {"op": "set", "target": "$ntAs", "prop": "Label", "value": "SetSent"},
+  {"op": "create", "parent": "$ntAs", "type": "IAssignment", "as": "$ntA1"},
+  {"op": "set", "target": "$ntA1", "prop": "Variable", "value": "Sent"},
+  {"op": "set", "target": "$ntA1", "prop": "Value", "value": "Email <> \"\""},
+  {"op": "create", "parent": "$notify", "type": "IEndNode", "as": "$nt9"},
+  {"op": "link", "from": "$nt0", "to": "$ntAs"},
+  {"op": "link", "from": "$ntAs", "to": "$nt9"},
+  {"op": "layout", "target": "$notify"},
+
+  {"op": "create", "parent": "IScreenAction:Save", "type": "IExecuteServerActionNode", "name": "NotifyByEmail", "as": "$call", "_why": "(2) consumidor de LOGICA: argumento de um Execute"},
+  {"op": "set", "target": "$call", "prop": "Action", "value": "$notify"},
+  {"op": "set", "target": "$call/Email", "prop": "Value", "value": "GetContactById.List.Current.Contact.Email"},
+  {"op": "link", "from": "IScreenAction:Save/Contact_Save", "to": "$call"},
+  {"op": "link", "from": "$call", "to": "IScreenAction:Save/#IEndNode[1]"},
+  {"op": "layout", "target": "IScreenAction:Save"},
+
+  {"op": "usages", "target": "IServerEntity:Contact/Email", "_why": "(3) quatro consumidores reais: filtro, expressao, argumento e Input"},
+
+  {"op": "delete", "target": "$echo", "_why": "(4a) a expressao e folha: sai primeiro"},
+  {"op": "delete", "target": "IMobileScreen:ContactDetail/GetContactById/**IFilter[2]", "_why": "(4b) o filtro que cita Contact.Email (o [1] e o filtro por Id, que fica)"},
+
+  {"op": "link", "from": "IScreenAction:Save/Contact_Save", "to": "IScreenAction:Save/#IEndNode[1]", "_why": "(4c) religar ANTES de apagar o no: o conector de entrada conta como consumidor do no"},
+  {"op": "delete", "target": "$call"},
+  {"op": "delete", "target": "$notify", "_why": "(4d) a action auxiliar ficou sem chamadores; apagar evita um UnusedUserAction"},
+  {"op": "layout", "target": "IScreenAction:Save"},
+
+  {"op": "delete", "target": "IMobileScreen:ContactDetail/#IMobileBlockInstanceWidget/MainContent/ContactForm/Email_Input", "_why": "(4e) o ultimo consumidor: o Input do formulario"},
+
+  {"op": "usages", "target": "IServerEntity:Contact/Email", "_why": "(5) real=0: so ficam os usos derivados (SampleRecord e a lista de atributos do aggregate)"},
+  {"op": "delete", "target": "IServerEntity:Contact/Email", "_why": "(6) agora o delete passa sem force: brokenConsumers=0"},
+
+  {"op": "usages", "target": "IServerEntity:Contact"},
+  {"op": "find", "name": "Contact_NotifyByEmail", "_why": "(7) a action auxiliar tambem saiu: lista vazia"},
+  {"op": "dump", "target": "IMobileScreen:ContactDetail", "depth": 6}
+ ]
+}

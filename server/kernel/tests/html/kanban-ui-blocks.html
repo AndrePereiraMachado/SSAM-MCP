@@ -1,0 +1,325 @@
+<component name="KanbanUserAvatar" kind="block">
+  <script type="module">
+    export const inputs = { name: { type: "string", default: "Pessoa" } };
+    export function initials(fullName) {
+      const parts = fullName.trim().split(" ");
+      const first = parts[0] ? parts[0].charAt(0) : "?";
+      const last = parts.length > 1 ? parts[parts.length - 1].charAt(0) : "";
+      return (first + last).toUpperCase();
+    }
+  </script>
+  <style>
+    :root { display:inline-block; }
+    .avatar { align-items:center; background:#6366f1; border:2px solid #fff; border-radius:50%; color:#fff; display:flex; font-size:10px; font-weight:700; height:28px; justify-content:center; line-height:1; width:28px; }
+  </style>
+  <div id="Avatar" class="avatar" title="{{ name }}">{{ initials(name) }}</div>
+</component>
+
+<component name="AvatarStack" kind="block">
+  <script type="module">
+    export const inputs = {
+      firstName: { type: "string", default: "" },
+      secondName: { type: "string", default: "" },
+      thirdName: { type: "string", default: "" }
+    };
+  </script>
+  <style>
+    :root { display:inline-block; }
+    .stack { align-items:center; display:flex; min-height:28px; }
+    .stack > * + * { margin-left:-8px; }
+  </style>
+  <div id="Stack" class="stack">
+    <KanbanUserAvatar if="firstName !== ''" id="FirstAvatar" :name="firstName"></KanbanUserAvatar>
+    <KanbanUserAvatar if="secondName !== ''" id="SecondAvatar" :name="secondName"></KanbanUserAvatar>
+    <KanbanUserAvatar if="thirdName !== ''" id="ThirdAvatar" :name="thirdName"></KanbanUserAvatar>
+  </div>
+</component>
+
+<component name="KanbanCard" kind="block">
+  <script type="module">
+    export const inputs = {
+      cardKey: { type: "string", default: "" },
+      title: { type: "string", default: "Título do card" },
+      description: { type: "string", default: "" },
+      label: { type: "string", default: "" },
+      priority: { type: "string", default: "" },
+      dueDateText: { type: "string", default: "" },
+      firstAssigneeName: { type: "string", default: "" },
+      secondAssigneeName: { type: "string", default: "" },
+      thirdAssigneeName: { type: "string", default: "" }
+    };
+    export const events = { selected: { cardKey: "string" } };
+    export function selectCard() { emit.selected({ cardKey: cardKey }); }
+  </script>
+  <style>
+    :root { display:block; }
+    .card { background:#fff; border:1px solid #e4e4e7; border-radius:8px; box-sizing:border-box; padding:12px; }
+    .label { background:#eef2ff; border-radius:999px; color:#4f46e5; display:inline-block; font-size:11px; font-weight:600; line-height:16px; padding:1px 7px; }
+    h3 { color:#09090b; font-size:14px; line-height:20px; margin:8px 0 0; }
+    .description { color:#71717a; font-size:12px; line-height:18px; margin:5px 0 0; }
+    .meta { align-items:center; display:flex; justify-content:space-between; margin-top:10px; min-height:28px; }
+    .meta-left { align-items:center; display:flex; flex-wrap:wrap; gap:6px; }
+    .priority { background:#fff7ed; border-radius:999px; color:#c2410c; font-size:11px; font-weight:600; line-height:16px; padding:1px 7px; }
+    .due { color:#a1a1aa; font-size:11px; }
+    .open { background:transparent; border:0; color:#4f46e5; cursor:pointer; font-size:12px; font-weight:600; margin-top:9px; padding:0; }
+  </style>
+  <article id="Card" class="card">
+    <span if="label !== ''" id="Label" class="label">{{ label }}</span>
+    <h3 id="Title">{{ title }}</h3>
+    <p if="description !== ''" id="Description" class="description">{{ description }}</p>
+    <div id="Meta" class="meta">
+      <div class="meta-left">
+        <span if="priority !== ''" id="Priority" class="priority">{{ priority }}</span>
+        <span if="dueDateText !== ''" id="DueDate" class="due">{{ dueDateText }}</span>
+      </div>
+      <AvatarStack id="Assignees" :firstName="firstAssigneeName" :secondName="secondAssigneeName" :thirdName="thirdAssigneeName"></AvatarStack>
+    </div>
+    <button id="Open" class="open" onclick="selectCard()">Abrir card</button>
+  </article>
+</component>
+
+<component name="KanbanColumn" kind="block">
+  <script type="module">
+    export const inputs = {
+      columnKey: { type: "string", default: "" },
+      title: { type: "string", default: "Coluna" },
+      countText: { type: "string", default: "0" },
+      limitText: { type: "string", default: "" }
+    };
+    export const events = { addRequested: { columnKey: "string" } };
+    export function addCard() { emit.addRequested({ columnKey: columnKey }); }
+  </script>
+  <style>
+    :root { display:block; min-width:270px; }
+    .column { background:#fafafa; border-right:1px solid #e4e4e7; box-sizing:border-box; min-height:360px; }
+    .header { align-items:center; background:#fff; border-bottom:1px solid #e4e4e7; display:flex; justify-content:space-between; padding:12px 14px; }
+    .name { color:#52525b; font-size:12px; font-weight:700; letter-spacing:.02em; }
+    .count { color:#a1a1aa; font-size:11px; margin-left:7px; }
+    .add { background:transparent; border:0; color:#71717a; cursor:pointer; font-size:20px; line-height:20px; padding:0 3px; }
+    .cards { display:flex; flex-direction:column; gap:8px; padding:10px; }
+  </style>
+  <section id="Column" class="column">
+    <div class="header">
+      <div><span id="Title" class="name">{{ title }}</span><span id="Count" class="count">{{ countText }}{{ limitText !== '' ? " / " + limitText : "" }}</span></div>
+      <button id="AddCard" class="add" onclick="addCard()">+</button>
+    </div>
+    <div id="CardsContainer" class="cards"><slot name="Cards"></slot></div>
+  </section>
+</component>
+
+<component name="BoardFilters" kind="block">
+  <script type="module">
+    export const inputs = { placeholder: { type: "string", default: "Filtrar…" } };
+    export const events = { changed: { searchText: "string" } };
+    export let searchText = "";
+    export function apply() { emit.changed({ searchText: searchText.trim() }); }
+  </script>
+  <style>
+    :root { display:block; }
+    .filters { align-items:end; display:flex; flex-wrap:wrap; gap:8px; }
+    .field { display:flex; flex-direction:column; gap:5px; }
+    label { color:#71717a; font-size:11px; font-weight:600; }
+    input { background:#fafafa; border:1px solid #e4e4e7; border-radius:7px; box-sizing:border-box; color:#09090b; min-height:33px; padding:7px 10px; width:200px; }
+    button { background:#fff; border:1px solid #e4e4e7; border-radius:7px; color:#52525b; cursor:pointer; min-height:33px; padding:7px 12px; }
+  </style>
+  <div id="Filters" class="filters">
+    <div class="field"><label for="Search">Buscar</label><input id="Search" bind:value="searchText" placeholder="{{ placeholder }}"></div>
+    <button id="Apply" onclick="apply()">Aplicar</button>
+  </div>
+</component>
+
+<component name="BoardToolbar" kind="block">
+  <script type="module">
+    export const inputs = {
+      boardName: { type: "string", default: "Board" },
+      boardMeta: { type: "string", default: "" },
+      selectionLabel: { type: "string", default: "Selecionar" }
+    };
+    export const events = { selectRequested: {}, archivedRequested: {}, settingsRequested: {}, addCardRequested: {} };
+    export function selectCards() { emit.selectRequested({}); }
+    export function showArchived() { emit.archivedRequested({}); }
+    export function showSettings() { emit.settingsRequested({}); }
+    export function addCard() { emit.addCardRequested({}); }
+  </script>
+  <style>
+    :root { display:block; }
+    .toolbar { align-items:center; background:#fff; border-bottom:1px solid #e4e4e7; display:flex; flex-wrap:wrap; gap:16px; justify-content:space-between; padding:20px 24px; }
+    .identity { align-items:center; display:flex; gap:10px; }
+    .color { background:#6366f1; border-radius:5px; height:22px; width:22px; }
+    h2 { color:#09090b; font-size:18px; line-height:24px; margin:0; }
+    .meta { color:#a1a1aa; font-size:12px; margin:1px 0 0; }
+    .actions { display:flex; flex-wrap:wrap; gap:6px; }
+    button { background:#fff; border:1px solid #e4e4e7; border-radius:7px; color:#52525b; cursor:pointer; font-size:12px; min-height:32px; padding:6px 12px; }
+    .primary { background:#09090b; border-color:#09090b; color:#fff; }
+  </style>
+  <header id="Toolbar" class="toolbar">
+    <div class="identity"><span class="color"></span><div><h2 id="BoardName">{{ boardName }}</h2><p if="boardMeta !== ''" id="BoardMeta" class="meta">{{ boardMeta }}</p></div></div>
+    <div class="actions">
+      <button id="Select" onclick="selectCards()">{{ selectionLabel }}</button>
+      <button id="Archived" onclick="showArchived()">Arquivados</button>
+      <button id="Settings" onclick="showSettings()">Config.</button>
+      <button id="AddCard" class="primary" onclick="addCard()">+ Card</button>
+    </div>
+  </header>
+</component>
+
+<component name="WorkspaceHeader" kind="block">
+  <script type="module">
+    export const inputs = {
+      workspaceName: { type: "string", default: "Workspace" },
+      description: { type: "string", default: "" },
+      activeTab: { type: "string", default: "Boards" }
+    };
+    export const events = { tabChanged: { tab: "string" } };
+    export function chooseBoards() { emit.tabChanged({ tab: "Boards" }); }
+    export function chooseMembers() { emit.tabChanged({ tab: "Membros" }); }
+    export function chooseSettings() { emit.tabChanged({ tab: "Configurações" }); }
+  </script>
+  <style>
+    :root { display:block; }
+    .header { background:#fff; border-bottom:1px solid #e4e4e7; padding:24px 32px 0; }
+    .identity { align-items:center; display:flex; gap:12px; }
+    .initial { align-items:center; background:#eef2ff; border-radius:7px; color:#4f46e5; display:flex; font-size:18px; font-weight:700; height:36px; justify-content:center; width:36px; }
+    h2 { color:#09090b; font-size:20px; margin:0; }
+    p { color:#71717a; font-size:13px; margin:3px 0 0; }
+    .tabs { display:flex; gap:4px; margin-top:20px; }
+    button { background:transparent; border:0; border-bottom:2px solid transparent; color:#71717a; cursor:pointer; font-size:13px; padding:10px 14px; }
+    .active { border-bottom-color:#6366f1; color:#3730a3; font-weight:700; }
+  </style>
+  <header id="Header" class="header">
+    <div class="identity"><span class="initial">{{ workspaceName.charAt(0).toUpperCase() }}</span><div><h2 id="Name">{{ workspaceName }}</h2><p if="description !== ''" id="Description">{{ description }}</p></div></div>
+    <nav id="Tabs" class="tabs">
+      <button id="Boards" class="{{ activeTab === 'Boards' ? 'active' : '' }}" onclick="chooseBoards()">Boards</button>
+      <button id="Members" class="{{ activeTab === 'Membros' ? 'active' : '' }}" onclick="chooseMembers()">Membros</button>
+      <button id="Settings" class="{{ activeTab === 'Configurações' ? 'active' : '' }}" onclick="chooseSettings()">Configurações</button>
+    </nav>
+  </header>
+</component>
+
+<component name="BoardSummaryTile" kind="block">
+  <script type="module">
+    export const inputs = {
+      boardKey: { type: "string", default: "" },
+      title: { type: "string", default: "Board" },
+      workspaceName: { type: "string", default: "" },
+      cardCountText: { type: "string", default: "0 cards" }
+    };
+    export const events = { opened: { boardKey: "string" } };
+    export function openBoard() { emit.opened({ boardKey: boardKey }); }
+  </script>
+  <style>
+    :root { display:block; }
+    .tile { background:#fff; border:1px solid #e4e4e7; border-radius:8px; box-sizing:border-box; min-height:145px; padding:20px; }
+    .marker { background:#6366f1; border-radius:6px; display:block; height:28px; width:28px; }
+    h3 { color:#09090b; font-size:15px; margin:11px 0 2px; }
+    .workspace, .count { color:#71717a; font-size:12px; margin:0; }
+    .count { color:#a1a1aa; margin-top:13px; }
+    button { background:transparent; border:0; color:#4f46e5; cursor:pointer; font-size:12px; font-weight:600; margin-top:7px; padding:0; }
+  </style>
+  <article id="Tile" class="tile">
+    <span class="marker"></span><h3 id="Title">{{ title }}</h3><p if="workspaceName !== ''" id="Workspace" class="workspace">{{ workspaceName }}</p><p id="Count" class="count">{{ cardCountText }}</p>
+    <button id="Open" onclick="openBoard()">Abrir</button>
+  </article>
+</component>
+
+<component name="BoardSummaryRow" kind="block">
+  <script type="module">
+    export const inputs = {
+      boardKey: { type: "string", default: "" },
+      title: { type: "string", default: "Board" },
+      description: { type: "string", default: "" },
+      cardCountText: { type: "string", default: "0 cards" }
+    };
+    export const events = { opened: { boardKey: "string" } };
+    export function openBoard() { emit.opened({ boardKey: boardKey }); }
+  </script>
+  <style>
+    :root { display:block; }
+    .row { align-items:center; background:#fff; border:1px solid #e4e4e7; border-radius:8px; display:flex; gap:12px; justify-content:space-between; padding:15px 18px; }
+    .left { align-items:center; display:flex; gap:12px; min-width:0; }
+    .marker { background:#6366f1; border-radius:6px; flex:0 0 auto; height:28px; width:28px; }
+    h3 { color:#09090b; font-size:14px; margin:0; }
+    p { color:#71717a; font-size:12px; margin:3px 0 0; }
+    .count { color:#a1a1aa; font-size:12px; white-space:nowrap; }
+    button { background:#fff; border:1px solid #e4e4e7; border-radius:7px; color:#52525b; cursor:pointer; font-size:12px; padding:6px 10px; }
+  </style>
+  <article id="Row" class="row"><div class="left"><span class="marker"></span><div><h3 id="Title">{{ title }}</h3><p if="description !== ''" id="Description">{{ description }}</p></div></div><div><span id="Count" class="count">{{ cardCountText }}</span><button id="Open" onclick="openBoard()">Abrir</button></div></article>
+</component>
+
+<component name="MemberRow" kind="block">
+  <script type="module">
+    export const inputs = {
+      memberKey: { type: "string", default: "" },
+      name: { type: "string", default: "Pessoa" },
+      role: { type: "string", default: "Membro" },
+      statusText: { type: "string", default: "" },
+      canManage: { type: "boolean", default: false }
+    };
+    export const events = { editRequested: { memberKey: "string" }, removeRequested: { memberKey: "string" } };
+    export function editMember() { emit.editRequested({ memberKey: memberKey }); }
+    export function removeMember() { emit.removeRequested({ memberKey: memberKey }); }
+  </script>
+  <style>
+    :root { display:block; }
+    .row { align-items:center; background:#fff; border-bottom:1px solid #e4e4e7; display:flex; justify-content:space-between; padding:13px 16px; }
+    .identity { align-items:center; display:flex; gap:10px; }
+    h3 { color:#09090b; font-size:14px; margin:0; }
+    .role { color:#71717a; font-size:12px; margin:2px 0 0; }
+    .right { align-items:center; display:flex; gap:10px; }
+    .status { color:#71717a; font-size:12px; }
+    button { background:#fff; border:1px solid #e4e4e7; border-radius:6px; color:#52525b; cursor:pointer; font-size:12px; padding:5px 9px; }
+    .remove { color:#b91c1c; }
+  </style>
+  <article id="Member" class="row"><div class="identity"><KanbanUserAvatar id="Avatar" :name="name"></KanbanUserAvatar><div><h3 id="Name">{{ name }}</h3><p id="Role" class="role">{{ role }}</p></div></div><div class="right"><span if="statusText !== ''" id="Status" class="status">{{ statusText }}</span><button if="canManage" id="Edit" onclick="editMember()">Editar</button><button if="canManage" id="Remove" class="remove" onclick="removeMember()">Remover</button></div></article>
+</component>
+
+<component name="WorkflowColumnRow" kind="block">
+  <script type="module">
+    export const inputs = {
+      columnKey: { type: "string", default: "" },
+      name: { type: "string", default: "Coluna" },
+      limitText: { type: "string", default: "Sem limite" }
+    };
+    export const events = { moveUpRequested: { columnKey: "string" }, moveDownRequested: { columnKey: "string" }, editRequested: { columnKey: "string" }, deleteRequested: { columnKey: "string" } };
+    export function moveUp() { emit.moveUpRequested({ columnKey: columnKey }); }
+    export function moveDown() { emit.moveDownRequested({ columnKey: columnKey }); }
+    export function editColumn() { emit.editRequested({ columnKey: columnKey }); }
+    export function deleteColumn() { emit.deleteRequested({ columnKey: columnKey }); }
+  </script>
+  <style>
+    :root { display:block; }
+    .row { align-items:center; background:#fff; border:1px solid #e4e4e7; border-radius:8px; display:flex; justify-content:space-between; padding:11px 14px; }
+    .identity { align-items:center; display:flex; gap:9px; }
+    .dot { background:#6366f1; border-radius:4px; height:8px; width:8px; }
+    h3 { color:#09090b; font-size:13px; margin:0; }
+    .limit { color:#a1a1aa; font-size:12px; margin-left:5px; }
+    .actions { display:flex; gap:5px; }
+    button { background:#fff; border:1px solid #e4e4e7; border-radius:6px; color:#52525b; cursor:pointer; font-size:12px; min-height:28px; min-width:28px; padding:4px 8px; }
+    .danger { color:#b91c1c; }
+  </style>
+  <article id="Column" class="row"><div class="identity"><span class="dot"></span><h3 id="Name">{{ name }}</h3><span id="Limit" class="limit">{{ limitText }}</span></div><div class="actions"><button id="MoveUp" onclick="moveUp()">↑</button><button id="MoveDown" onclick="moveDown()">↓</button><button id="Edit" onclick="editColumn()">Editar</button><button id="Delete" class="danger" onclick="deleteColumn()">Excluir</button></div></article>
+</component>
+
+<component name="KanbanSidebar" kind="block">
+  <script type="module">
+    export const inputs = {
+      appName: { type: "string", default: "Kanban" },
+      userName: { type: "string", default: "Pessoa" },
+      userEmail: { type: "string", default: "" }
+    };
+    export const events = { homeRequested: {} };
+    export function goHome() { emit.homeRequested({}); }
+  </script>
+  <style>
+    :root { display:block; height:100%; }
+    .sidebar { background:#fff; border-right:1px solid #e4e4e7; box-sizing:border-box; display:flex; flex-direction:column; height:100%; min-height:560px; width:220px; }
+    .brand { align-items:center; border-bottom:1px solid #f4f4f5; display:flex; font-size:16px; font-weight:700; gap:8px; padding:16px; }
+    .brand-mark { background:#6366f1; border-radius:5px; height:16px; width:16px; }
+    .navigation { flex:1; padding:8px; }
+    .home { background:transparent; border:0; border-radius:6px; color:#52525b; cursor:pointer; font-size:13px; padding:8px; text-align:left; width:100%; }
+    .profile { align-items:center; border-top:1px solid #f4f4f5; display:flex; gap:9px; padding:14px 16px; }
+    h3 { color:#27272a; font-size:12px; margin:0; }
+    p { color:#a1a1aa; font-size:11px; margin:2px 0 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:140px; }
+  </style>
+  <aside id="Sidebar" class="sidebar"><div class="brand"><span class="brand-mark"></span>{{ appName }}</div><nav id="NavigationContainer" class="navigation"><button id="Home" class="home" onclick="goHome()">Início</button><slot name="Navigation"></slot></nav><div id="Profile" class="profile"><KanbanUserAvatar id="Avatar" :name="userName"></KanbanUserAvatar><div><h3 id="UserName">{{ userName }}</h3><p if="userEmail !== ''" id="UserEmail">{{ userEmail }}</p></div><slot name="ProfileActions"></slot></div></aside>
+</component>

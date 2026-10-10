@@ -1,0 +1,8 @@
+{
+ "description": "Op soap com uma operacao que o WSDL nao tem: SOAP_METHOD_NOT_FOUND antes de qualquer mudanca, nomeando-a e listando as que existem (a recusa provada do GitSSAM, NotARealMethod).",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectError": ["[SOAP_METHOD_NOT_FOUND]", "NotARealMethod", "use one of:"],
+ "ops": [
+  {"op": "soap", "data": {"wsdl": "tests/fixtures/wsdl/calculator-two-ports.wsdl", "port": "CalculatorSoap", "methods": ["Add", "NotARealMethod"]}}
+ ]
+}

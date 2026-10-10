@@ -1,0 +1,15 @@
+{
+ "description": "MarkerPopup do OutSystemsMaps: marcador com Position (obrigatorio) e o texto do balao no placeholder Popup.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "MarkerPopupDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "LeafletMap1", "source": "IMobileBlock:LeafletMap", "as": "$map"},
+  {"op": "create", "parent": "$map/AddOns_Placeholder", "type": "IMobileBlockInstanceWidget", "name": "MarkerPopup1", "source": "IMobileBlock:MarkerPopup", "as": "$shape"},
+  {"op": "set", "target": "$shape/Position", "prop": "Value", "value": "\"38.7223, -9.1393\""},
+  {"op": "create", "parent": "$shape/Popup", "type": "ITextWidget", "as": "$text1"},
+  {"op": "set", "target": "$text1", "prop": "Text", "value": "Our store"}
+ ]
+}

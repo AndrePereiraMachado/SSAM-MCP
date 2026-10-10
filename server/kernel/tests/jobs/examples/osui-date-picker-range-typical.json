@@ -1,0 +1,29 @@
+{
+ "description": "DatePickerRange (OutSystemsUI, Interaction) tipico; o Input de exemplo ligado a uma variavel Date; placeholders Placeholder_SSPreview com dados do aggregate de tarefas; eventos OnSelected, Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "PickedDate", "as": "$vPickedDate"},
+  {"op": "set", "target": "$vPickedDate", "prop": "DataType", "value": "Date"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastDatePickerId", "as": "$vLastDatePickerId"},
+  {"op": "set", "target": "$vLastDatePickerId", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastSelectedStartDate", "as": "$vLastSelectedStartDate"},
+  {"op": "set", "target": "$vLastSelectedStartDate", "prop": "DataType", "value": "Date"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastSelectedEndDate", "as": "$vLastSelectedEndDate"},
+  {"op": "set", "target": "$vLastSelectedEndDate", "prop": "DataType", "value": "Date"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetShowcaseTasks", "as": "$tasks"},
+  {"op": "create", "parent": "$tasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "logic", "data": {"actions": [{"name": "DatePickerRangeDemoOnSelected", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de OnSelected", "inputs": [{"name": "DatePickerId", "type": "Text"}, {"name": "SelectedStartDate", "type": "Date"}, {"name": "SelectedEndDate", "type": "Date"}],"steps": [{"assign": {"LastDatePickerId": "DatePickerId", "LastSelectedStartDate": "SelectedStartDate", "LastSelectedEndDate": "SelectedEndDate"},"as": "KeepOnSelected"}]}, {"name": "DatePickerRangeDemoInitialized", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de Initialized", "inputs": [{"name": "DatePickerId", "type": "Text"}],"steps": [{"assign": {"LastDatePickerId": "DatePickerId"},"as": "KeepInitialized"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "DatePickerRangeDemo", "source": "IMobileBlock:DatePickerRange", "as": "$b"},
+  {"op": "set", "target": "$b/Datepicker/#IInput", "prop": "Variable", "value": "PickedDate"},
+  {"op": "set", "target": "$b/OnSelected", "prop": "Handler", "value": "IScreenAction:DatePickerRangeDemoOnSelected"},
+  {"op": "set", "target": "$b/OnSelected/DatePickerId", "prop": "Value", "value": "DatePickerId"},
+  {"op": "set", "target": "$b/OnSelected/SelectedStartDate", "prop": "Value", "value": "SelectedStartDate"},
+  {"op": "set", "target": "$b/OnSelected/SelectedEndDate", "prop": "Value", "value": "SelectedEndDate"},
+  {"op": "set", "target": "$b/Initialized", "prop": "Handler", "value": "IScreenAction:DatePickerRangeDemoInitialized"},
+  {"op": "set", "target": "$b/Initialized/DatePickerId", "prop": "Value", "value": "DatePickerId"},
+  {"op": "create", "parent": "$b/Placeholder_SSPreview", "type": "IExpression", "as": "$ph1"},
+  {"op": "set", "target": "$ph1", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""}
+ ]
+}

@@ -1,0 +1,5778 @@
+{
+ "schema": "ssam-discover-tool-eval/1",
+ "note": "Requests written on 2026-10-03 by the three verifiers of the single entry (cobertura: one pt-BR phrase per tool and per verb on its lane, plus a second phrasing of every first-round miss; pedidos: an independent pt/en set with typos, short, mixed and wrong-lane requests; model-change requests from both), never by the curator of catalog/tools.json. Sentences equal to a curated tools.json intent are left out (the verifiers wrote them independently; they would not test anything new). Their misses were fixed with general rules (clauses, names after nouns, typos, model guard, lane fallback, vocabulary of the routes), so this set guards those rules; it is not blind any more. None of these sentences is copied into catalog/tools.json.",
+ "items": [
+  {
+   "intent": "consultar uma página de registros da entidade Pedido publicada no O11",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_data",
+    "verb": {
+     "field": "request.operation",
+     "value": "read"
+    }
+   }
+  },
+  {
+   "intent": "ler todos os registros da entidade Pedido no ambiente O11",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_data",
+    "verb": {
+     "field": "request.operation",
+     "value": "read-all"
+    }
+   }
+  },
+  {
+   "intent": "inserir um registro novo na tabela Cliente do O11",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_data",
+    "verb": {
+     "field": "request.operation",
+     "value": "insert"
+    }
+   }
+  },
+  {
+   "intent": "atualizar o registro 42 da entidade Cliente no O11",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_data",
+    "verb": {
+     "field": "request.operation",
+     "value": "update"
+    }
+   }
+  },
+  {
+   "intent": "apagar uns registros da entidade Cliente no O11 pelo id",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_data",
+    "verb": {
+     "field": "request.operation",
+     "value": "delete"
+    }
+   }
+  },
+  {
+   "intent": "iniciar o debugger com breakpoint na action CalcularPremio",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "start"
+    }
+   }
+  },
+  {
+   "intent": "iniciar o debugger com breakpoint na action CalcularPremio",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "start"
+    }
+   }
+  },
+  {
+   "intent": "ver se o debugger já parou no breakpoint",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "status"
+    }
+   }
+  },
+  {
+   "intent": "ver se o debugger já parou no breakpoint",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "status"
+    }
+   }
+  },
+  {
+   "intent": "encerrar a sessão de debug",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "stop"
+    }
+   }
+  },
+  {
+   "intent": "encerrar a sessão de debug",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "stop"
+    }
+   }
+  },
+  {
+   "intent": "ler o valor das variáveis locais na parada do debug",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "variables"
+    }
+   }
+  },
+  {
+   "intent": "ler o valor das variáveis locais na parada do debug",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "variables"
+    }
+   }
+  },
+  {
+   "intent": "continuar a execução no debugger depois da parada",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "continue"
+    }
+   }
+  },
+  {
+   "intent": "continuar a execução no debugger depois da parada",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "continue"
+    }
+   }
+  },
+  {
+   "intent": "no debug, avançar para o próximo nó sem entrar na action (step over)",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-over"
+    }
+   }
+  },
+  {
+   "intent": "no debug, avançar para o próximo nó sem entrar na action (step over)",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-over"
+    }
+   }
+  },
+  {
+   "intent": "no debugger, entrar dentro da action chamada",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-into"
+    }
+   }
+  },
+  {
+   "intent": "no debugger, entrar dentro da action chamada",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-into"
+    }
+   }
+  },
+  {
+   "intent": "no debugger, sair da action atual e voltar para quem chamou",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-out"
+    }
+   }
+  },
+  {
+   "intent": "no debugger, sair da action atual e voltar para quem chamou",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-out"
+    }
+   }
+  },
+  {
+   "intent": "verificar se estou logado no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_session",
+    "verb": {
+     "field": "action",
+     "value": "status"
+    }
+   }
+  },
+  {
+   "intent": "fazer login no service center do ambiente",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_session",
+    "verb": {
+     "field": "action",
+     "value": "sign-in"
+    }
+   }
+  },
+  {
+   "intent": "abrir a janela web do service center para eu entrar com SSO",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_session",
+    "verb": {
+     "field": "action",
+     "value": "web-sign-in"
+    }
+   }
+  },
+  {
+   "intent": "quais leituras do service center estão disponíveis",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "capabilities"
+    }
+   }
+  },
+  {
+   "intent": "consultar o recibo de uma escrita feita no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "receipt"
+    }
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "o11_service_center_write",
+     "verb": {
+      "field": "action",
+      "value": "verify"
+     }
+    }
+   ]
+  },
+  {
+   "intent": "listar os timers do módulo no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "timers"
+    }
+   }
+  },
+  {
+   "intent": "listar as site properties do módulo no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "site-properties"
+    }
+   }
+  },
+  {
+   "intent": "mostrar o valor da site property ApiUrl",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "property-value"
+    }
+   }
+  },
+  {
+   "intent": "ver os logs de erro do service center de hoje",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "logs"
+    }
+   }
+  },
+  {
+   "intent": "abrir o detalhe de um erro do log do service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "error-detail"
+    }
+   }
+  },
+  {
+   "intent": "ver o trace de uma requisição no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "trace"
+    }
+   }
+  },
+  {
+   "intent": "listar os processos BPT do módulo",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "bpt-processes"
+    }
+   }
+  },
+  {
+   "intent": "ver os detalhes de um processo BPT específico",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "bpt-process"
+    }
+   }
+  },
+  {
+   "intent": "ver uma instância de processo BPT",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "bpt-instance"
+    }
+   }
+  },
+  {
+   "intent": "ver a atividade de um processo BPT",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "bpt-activity"
+    }
+   }
+  },
+  {
+   "intent": "listar as integrações (web services) do módulo no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "integrations"
+    }
+   }
+  },
+  {
+   "intent": "listar as conexões de banco de dados no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "db-connections"
+    }
+   }
+  },
+  {
+   "intent": "listar as solutions do service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "solutions"
+    }
+   }
+  },
+  {
+   "intent": "baixar uma solution do service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "solution-download"
+    }
+   }
+  },
+  {
+   "intent": "capturar o layout de uma página do service center que respondeu LAYOUT_UNKNOWN",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "page-layout"
+    }
+   }
+  },
+  {
+   "intent": "listar as aplicações do ambiente pelo service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "applications"
+    }
+   }
+  },
+  {
+   "intent": "ver os detalhes de uma aplicação no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "application"
+    }
+   }
+  },
+  {
+   "intent": "ver as dependências de uma aplicação no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "application-dependencies"
+    }
+   }
+  },
+  {
+   "intent": "listar os módulos do ambiente no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "modules"
+    }
+   }
+  },
+  {
+   "intent": "listar as extensions do ambiente no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "extensions"
+    }
+   }
+  },
+  {
+   "intent": "ver as versões publicadas de um módulo no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "versions"
+    }
+   }
+  },
+  {
+   "intent": "descobrir o id numérico do módulo no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "module-id"
+    }
+   }
+  },
+  {
+   "intent": "quem consome este módulo no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "consumers"
+    }
+   }
+  },
+  {
+   "intent": "listar os elementos públicos de um módulo pelo service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "public-elements"
+    }
+   }
+  },
+  {
+   "intent": "ver o histórico de commits do ambiente O11",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "commits"
+    }
+   }
+  },
+  {
+   "intent": "ver as operações feitas pelos desenvolvedores no ambiente O11",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "developer-operations"
+    }
+   }
+  },
+  {
+   "intent": "ver a licença do ambiente O11",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "license"
+    }
+   }
+  },
+  {
+   "intent": "listar os bancos de dados do ambiente O11",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "databases"
+    }
+   }
+  },
+  {
+   "intent": "ver qual banco de dados a aplicação usa no O11",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "application-database"
+    }
+   }
+  },
+  {
+   "intent": "listar os componentes de uma solution",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "solution-components"
+    }
+   }
+  },
+  {
+   "intent": "acompanhar o status da publicação de uma solution",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "solution-publish-status"
+    }
+   }
+  },
+  {
+   "intent": "ver o status do apply settings da aplicação",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "apply-settings-status"
+    }
+   }
+  },
+  {
+   "intent": "disparar o timer SincronizarPedidos no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "timer-run"
+    }
+   }
+  },
+  {
+   "intent": "desativar o timer no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "timer-deactivate"
+    }
+   }
+  },
+  {
+   "intent": "reativar o timer do módulo no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "timer-activate"
+    }
+   }
+  },
+  {
+   "intent": "mudar o agendamento do timer para todo dia às 3h no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "timer-schedule"
+    }
+   }
+  },
+  {
+   "intent": "alterar o valor da site property ApiUrl no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "property-set"
+    }
+   }
+  },
+  {
+   "intent": "criar uma solution nova no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "solution-create"
+    }
+   }
+  },
+  {
+   "intent": "adicionar um módulo à solution no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "solution-add-component"
+    }
+   }
+  },
+  {
+   "intent": "remover um módulo da solution no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "solution-remove-component"
+    }
+   }
+  },
+  {
+   "intent": "criar uma conexão de banco de dados externo no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "db-connection-create"
+    }
+   }
+  },
+  {
+   "intent": "testar a conexão de banco de dados no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "db-connection-test"
+    }
+   }
+  },
+  {
+   "intent": "excluir a conexão de banco de dados no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "db-connection-delete"
+    }
+   }
+  },
+  {
+   "intent": "associar a extension à conexão de banco no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "extension-db-connection"
+    }
+   }
+  },
+  {
+   "intent": "excluir um módulo do ambiente O11",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "module-delete"
+    }
+   }
+  },
+  {
+   "intent": "apagar uma extension do ambiente O11",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "extension-delete"
+    }
+   }
+  },
+  {
+   "intent": "publicar a solution no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "solution-publish"
+    }
+   }
+  },
+  {
+   "intent": "aplicar as configurações da aplicação no service center (apply settings)",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "apply-settings"
+    }
+   }
+  },
+  {
+   "intent": "trocar o banco de dados da aplicação no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "application-database-set"
+    }
+   }
+  },
+  {
+   "intent": "excluir a aplicação inteira do ambiente O11",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "application-delete"
+    }
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "o11_environment",
+     "verb": {
+      "field": "action",
+      "value": "delete-app"
+     }
+    }
+   ]
+  },
+  {
+   "intent": "mover o módulo para outra aplicação no O11",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "module-move"
+    }
+   }
+  },
+  {
+   "intent": "colocar um módulo existente dentro da aplicação no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "module-add-to-application"
+    }
+   }
+  },
+  {
+   "intent": "editar a mensagem de commit da versão do módulo",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "commit-message-set"
+    }
+   }
+  },
+  {
+   "intent": "publicar a extension a partir do arquivo xif",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "extension-publish"
+    }
+   }
+  },
+  {
+   "intent": "verificar o resultado incerto de uma escrita no service center",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "verify"
+    }
+   }
+  },
+  {
+   "intent": "listar os produtores que posso referenciar no O11",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_dependencies",
+    "verb": {
+     "field": "action",
+     "value": "producers"
+    }
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "o11_environment",
+     "verb": {
+      "field": "action",
+      "value": "referenceable"
+     }
+    }
+   ]
+  },
+  {
+   "intent": "listar os elementos públicos do produtor Utils para referenciar",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_dependencies",
+    "verb": {
+     "field": "action",
+     "value": "list"
+    }
+   }
+  },
+  {
+   "intent": "capturar a assinatura avsig do produtor para importar a referência",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_dependencies",
+    "verb": {
+     "field": "action",
+     "value": "capture"
+    }
+   }
+  },
+  {
+   "intent": "inspecionar as dependências de um oml com o o11_dependencies",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_dependencies",
+    "verb": {
+     "field": "action",
+     "value": "inspect"
+    }
+   }
+  },
+  {
+   "intent": "ajuda das ações do gerenciador de dependências do O11",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_dependencies",
+    "verb": {
+     "field": "action",
+     "value": "help"
+    }
+   }
+  },
+  {
+   "intent": "ler o contexto da tarefa capturado pelo hook",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "context"
+   }
+  },
+  {
+   "intent": "propor o contrato inicial do módulo para a tarefa",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "propose"
+   }
+  },
+  {
+   "intent": "continuar a tarefa aceita do hook",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "continue"
+   }
+  },
+  {
+   "intent": "ver os fatos de entrega da tarefa original do hook",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "status"
+   }
+  },
+  {
+   "intent": "inspecionar a action GetClientes no oml capturado",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_inspect"
+   }
+  },
+  {
+   "intent": "validar o job no módulo sem fazer merge, só o apply",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_deliver",
+    "verb": {
+     "field": "until",
+     "value": "apply"
+    }
+   }
+  },
+  {
+   "intent": "entregar a mudança no módulo do Service Studio",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_deliver",
+    "verb": {
+     "field": "until",
+     "value": "merge"
+    }
+   }
+  },
+  {
+   "intent": "retomar a entrega incerta pelo taskId",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_deliver",
+    "verb": {
+     "field": "resume",
+     "value": "<taskId>"
+    }
+   }
+  },
+  {
+   "intent": "fechar a tarefa de entrega recusada que está segurando o módulo",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_deliver",
+    "verb": {
+     "field": "close",
+     "value": "{taskId, reason}"
+    }
+   }
+  },
+  {
+   "intent": "corrigir o job recusado com um patch em vez de reenviar tudo",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_deliver",
+    "verb": {
+     "field": "patch",
+     "value": "[JSON Patch]"
+    }
+   }
+  },
+  {
+   "intent": "ver o andamento das tarefas longas",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_task"
+   }
+  },
+  {
+   "intent": "qual o estado do Service Studio agora",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_studio",
+    "verb": {
+     "field": "command",
+     "value": "status"
+    }
+   }
+  },
+  {
+   "intent": "esperar o Service Studio ficar livre",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_studio",
+    "verb": {
+     "field": "command",
+     "value": "wait"
+    }
+   }
+  },
+  {
+   "intent": "abre o módulo Faturamento no Service Studio",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_studio",
+    "verb": {
+     "field": "command",
+     "value": "open-module"
+    }
+   }
+  },
+  {
+   "intent": "tirar um snapshot do módulo aberto no Service Studio",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_studio",
+    "verb": {
+     "field": "command",
+     "value": "snapshot"
+    }
+   }
+  },
+  {
+   "intent": "ver os erros do TrueChange do módulo",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_studio",
+    "verb": {
+     "field": "command",
+     "value": "errors"
+    }
+   }
+  },
+  {
+   "intent": "listar as janelas abertas do Service Studio",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_studio",
+    "verb": {
+     "field": "command",
+     "value": "windows"
+    }
+   }
+  },
+  {
+   "intent": "fechar o diálogo que apareceu no Service Studio",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_studio",
+    "verb": {
+     "field": "command",
+     "value": "dismiss-dialog"
+    }
+   }
+  },
+  {
+   "intent": "entrar no ambiente pelo Service Studio (login)",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_studio",
+    "verb": {
+     "field": "command",
+     "value": "login"
+    }
+   }
+  },
+  {
+   "intent": "listar as aplicações e módulos do ambiente O11",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "inventory"
+    }
+   }
+  },
+  {
+   "intent": "baixar o oml publicado do módulo Vendas",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "download"
+    }
+   }
+  },
+  {
+   "intent": "baixar a aplicação inteira do O11",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "download-app"
+    }
+   }
+  },
+  {
+   "intent": "quais templates de aplicação existem no O11",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "templates"
+    }
+   }
+  },
+  {
+   "intent": "ver offline o que este oml referencia",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "references"
+    }
+   }
+  },
+  {
+   "intent": "criar uma aplicação nova no ambiente O11",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "create-app"
+    }
+   }
+  },
+  {
+   "intent": "adicionar módulos novos à aplicação Vendas",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "add-modules"
+    }
+   }
+  },
+  {
+   "intent": "criar um módulo novo na aplicação Vendas",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "create-module"
+    }
+   }
+  },
+  {
+   "intent": "mudar a cor e a descrição da aplicação",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "update-app"
+    }
+   }
+  },
+  {
+   "intent": "atualizar as referências do módulo Vendas",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "refresh-refs"
+    }
+   }
+  },
+  {
+   "intent": "definir o user provider do módulo como Users",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "set-user-provider"
+    }
+   }
+  },
+  {
+   "intent": "apagar a aplicação de teste ZZTeste",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "delete-app"
+    }
+   }
+  },
+  {
+   "intent": "publicar o módulo Faturamento no O11",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_publish"
+   }
+  },
+  {
+   "intent": "qual a API do kernel para IForEachNode",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_reference",
+    "verb": {
+     "field": "kind",
+     "value": "api"
+    }
+   }
+  },
+  {
+   "intent": "qual a API do kernel para IForEachNode",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_reference",
+    "verb": {
+     "field": "kind",
+     "value": "api"
+    }
+   }
+  },
+  {
+   "intent": "procurar uma função built-in de formatar data",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_reference",
+    "verb": {
+     "field": "kind",
+     "value": "functions"
+    }
+   }
+  },
+  {
+   "intent": "achar um bloco do OutSystemsUI para dropdown",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_reference",
+    "verb": {
+     "field": "kind",
+     "value": "ui-block"
+    }
+   }
+  },
+  {
+   "intent": "listar os tipos de um assembly .NET do Service Studio",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_reference",
+    "verb": {
+     "field": "kind",
+     "value": "types"
+    }
+   }
+  },
+  {
+   "intent": "onde posso colocar um IAggregate",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_reference",
+    "verb": {
+     "field": "kind",
+     "value": "where-can"
+    }
+   }
+  },
+  {
+   "intent": "existe uma receita pronta para tela de lista com filtro",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_reference",
+    "verb": {
+     "field": "kind",
+     "value": "recipe"
+    }
+   }
+  },
+  {
+   "intent": "checar o job antes de aplicar",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_reference",
+    "verb": {
+     "field": "kind",
+     "value": "check-job"
+    }
+   }
+  },
+  {
+   "intent": "checar o job antes de aplicar",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_reference",
+    "verb": {
+     "field": "kind",
+     "value": "check-job"
+    }
+   }
+  },
+  {
+   "intent": "conferir o result.json de uma entrega",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_reference",
+    "verb": {
+     "field": "kind",
+     "value": "check-delivery"
+    }
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "ssam_evidence"
+    }
+   ]
+  },
+  {
+   "intent": "o que significa a mensagem de verificação do validador",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_reference",
+    "verb": {
+     "field": "kind",
+     "value": "verify-message"
+    }
+   }
+  },
+  {
+   "intent": "o que significa a mensagem de verificação do validador",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_reference",
+    "verb": {
+     "field": "kind",
+     "value": "verify-message"
+    }
+   }
+  },
+  {
+   "intent": "ler um campo do arquivo de evidência receipt.json",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_evidence"
+   }
+  },
+  {
+   "intent": "ler um campo do arquivo de evidência receipt.json",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_evidence"
+   }
+  },
+  {
+   "intent": "conectar ao Studio que já está aberto",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_connect"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "studio_attach"
+    }
+   ]
+  },
+  {
+   "intent": "conectar ao Studio que já está aberto",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_connect"
+   }
+  },
+  {
+   "intent": "listar todas as ferramentas do SSAM por grupo",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_discover"
+   }
+  },
+  {
+   "intent": "listar todas as ferramentas do SSAM por grupo",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_discover"
+   }
+  },
+  {
+   "intent": "mapear os elementos do módulo capturado",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_map"
+   }
+  },
+  {
+   "intent": "mapear os elementos do módulo capturado",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_map"
+   }
+  },
+  {
+   "intent": "qual o link da tela Inicio do app Vendas",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_app_url"
+   }
+  },
+  {
+   "intent": "diagnóstico do ODC Studio e do bridge",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_doctor"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "ssam_doctor"
+    }
+   ]
+  },
+  {
+   "intent": "carregar a extensão bridge dentro do ODC Studio",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_attach"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "ssam_connect"
+    }
+   ]
+  },
+  {
+   "intent": "ver o estado do ODC Studio (diálogos, módulos abertos)",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_status"
+   }
+  },
+  {
+   "intent": "esperar o ODC Studio terminar o que está fazendo",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_wait",
+    "verb": {
+     "field": "condition",
+     "value": "idle"
+    }
+   }
+  },
+  {
+   "intent": "esperar até não ter mais diálogos abertos no ODC Studio",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_wait",
+    "verb": {
+     "field": "condition",
+     "value": "no-dialogs"
+    }
+   }
+  },
+  {
+   "intent": "esperar a publicação do módulo terminar",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_wait",
+    "verb": {
+     "field": "condition",
+     "value": "published"
+    }
+   }
+  },
+  {
+   "intent": "esperar o módulo terminar de abrir no ODC Studio",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_wait",
+    "verb": {
+     "field": "condition",
+     "value": "open"
+    }
+   }
+  },
+  {
+   "intent": "listar os assets do tenant que o Studio enxerga",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_assets"
+   }
+  },
+  {
+   "intent": "quem consome a biblioteca Comum no ODC",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_consumers"
+   }
+  },
+  {
+   "intent": "ver os dados da entidade Cliente",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_data"
+   }
+  },
+  {
+   "intent": "atualizar registros da entidade Cliente",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_data_update"
+   }
+  },
+  {
+   "intent": "apagar registros da entidade Cliente",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_data_delete"
+   }
+  },
+  {
+   "intent": "abrir o módulo Vendas no ODC Studio",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_open"
+   }
+  },
+  {
+   "intent": "fechar o módulo Vendas no ODC Studio",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_close"
+   }
+  },
+  {
+   "intent": "tirar um snapshot do módulo Vendas",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_snapshot"
+   }
+  },
+  {
+   "intent": "listar os elementos públicos da biblioteca disponíveis para o módulo consumidor",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_reference_snapshot"
+   }
+  },
+  {
+   "intent": "baixar a última revisão publicada do módulo",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_latest"
+   }
+  },
+  {
+   "intent": "atualizar as dependências do módulo para a última versão do produtor",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_refresh_references"
+   }
+  },
+  {
+   "intent": "responder o diálogo do ODC Studio clicando em OK",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_dismiss_dialog"
+   }
+  },
+  {
+   "intent": "rodar uma feature do builder sobre o snapshot base",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_build"
+   }
+  },
+  {
+   "intent": "inspecionar a tela Home no snapshot do módulo",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_inspect"
+   }
+  },
+  {
+   "intent": "checar a base do manifest antes do merge",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_check_base"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "studio_deliver",
+     "verb": {
+      "field": "until",
+      "value": "check-base"
+     }
+    }
+   ]
+  },
+  {
+   "intent": "pré-visualizar os conflitos do candidato sem fazer merge",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_preview"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "studio_deliver",
+     "verb": {
+      "field": "until",
+      "value": "preview"
+     }
+    }
+   ]
+  },
+  {
+   "intent": "fazer o merge do manifest do candidato no ODC Studio",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_merge"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "studio_deliver",
+     "verb": {
+      "field": "until",
+      "value": "merge"
+     }
+    }
+   ]
+  },
+  {
+   "intent": "registrar a autorização de publicação com as palavras do usuário",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_authorize",
+    "verb": {
+     "field": "kind",
+     "value": "publish"
+    }
+   }
+  },
+  {
+   "intent": "registrar a autorização para criar o asset novo",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_authorize",
+    "verb": {
+     "field": "kind",
+     "value": "create"
+    }
+   }
+  },
+  {
+   "intent": "publicar o módulo Vendas no ODC",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_publish"
+   }
+  },
+  {
+   "intent": "criar o asset do módulo novo no tenant",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_create"
+   }
+  },
+  {
+   "intent": "ver as informações do módulo aberto no ODC Studio (module-info)",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_command",
+    "verb": {
+     "field": "command",
+     "value": "module-info"
+    }
+   }
+  },
+  {
+   "intent": "ver o andamento da publicação no ODC Studio (publish-status)",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_command",
+    "verb": {
+     "field": "command",
+     "value": "publish-status"
+    }
+   }
+  },
+  {
+   "intent": "parar o comando em andamento no ODC Studio",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_command",
+    "verb": {
+     "field": "command",
+     "value": "stop"
+    }
+   }
+  },
+  {
+   "intent": "gerar o manifest de um candidato que já existe",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_manifest"
+   }
+  },
+  {
+   "intent": "entregar o job só até tirar o snapshot",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_deliver",
+    "verb": {
+     "field": "until",
+     "value": "snapshot"
+    }
+   }
+  },
+  {
+   "intent": "construir o candidato do job sem fazer merge",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_deliver",
+    "verb": {
+     "field": "until",
+     "value": "build"
+    }
+   }
+  },
+  {
+   "intent": "entregar o job até o check-base",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_deliver",
+    "verb": {
+     "field": "until",
+     "value": "check-base"
+    }
+   }
+  },
+  {
+   "intent": "revisar a entrega antes do merge (preview)",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_deliver",
+    "verb": {
+     "field": "until",
+     "value": "preview"
+    }
+   }
+  },
+  {
+   "intent": "entregar a mudança no módulo do ODC",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_deliver",
+    "verb": {
+     "field": "until",
+     "value": "merge"
+    }
+   }
+  },
+  {
+   "intent": "corrigir o job recusado no ODC com um patch",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_deliver",
+    "verb": {
+     "field": "patch",
+     "value": "[JSON Patch]"
+    }
+   }
+  },
+  {
+   "intent": "status da configuração da API pública do ODC",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_status"
+   }
+  },
+  {
+   "intent": "quais funcionalidades do Portal ODC o SSAM suporta",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_capabilities"
+   }
+  },
+  {
+   "intent": "descrever a capability do portal pelo id",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_describe_capability"
+   }
+  },
+  {
+   "intent": "procurar uma operação da API pública do ODC por palavra-chave",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_search_operations"
+   }
+  },
+  {
+   "intent": "descrever o contrato de uma operação da API pública",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_describe_operation"
+   }
+  },
+  {
+   "intent": "qual autenticação vai ser usada no tenant",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_auth_status"
+   }
+  },
+  {
+   "intent": "listar os assets do tenant pela API pública",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_read",
+    "verb": {
+     "field": "operationId",
+     "value": "asset-repository-api-v1:get:/assets"
+    }
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "studio_assets"
+    }
+   ]
+  },
+  {
+   "intent": "listar as revisões de um asset",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_read",
+    "verb": {
+     "field": "operationId",
+     "value": "asset-repository-api-v1:get:/assets/{assetKey}/revisions"
+    }
+   }
+  },
+  {
+   "intent": "listar os stages do ODC pela API",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_read",
+    "verb": {
+     "field": "operationId",
+     "value": "portfolio-api-v2:get:/environments"
+    }
+   }
+  },
+  {
+   "intent": "listar as operações de deploy do tenant",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_read",
+    "verb": {
+     "field": "operationId",
+     "value": "deployments-api-v1:get:/deployment-operations"
+    }
+   }
+  },
+  {
+   "intent": "listar os usuários do tenant ODC",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_read",
+    "verb": {
+     "field": "operationId",
+     "value": "user-access-management-api-v1:get:/users"
+    }
+   }
+  },
+  {
+   "intent": "listar os papéis das aplicações no ODC",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_read",
+    "verb": {
+     "field": "operationId",
+     "value": "user-access-management-api-v1:get:/application-roles"
+    }
+   }
+  },
+  {
+   "intent": "ver os findings de qualidade de código do app",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_read",
+    "verb": {
+     "field": "operationId",
+     "value": "code-quality-api-v1:get:/findings"
+    }
+   }
+  },
+  {
+   "intent": "quem consome este asset segundo a API de dependências",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_read",
+    "verb": {
+     "field": "operationId",
+     "value": "dependency-management-api-v1:get:/assets/{assetKey}/consumers"
+    }
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "studio_consumers"
+    }
+   ]
+  },
+  {
+   "intent": "criar um usuário no tenant ODC",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_write",
+    "verb": {
+     "field": "operationId",
+     "value": "user-access-management-api-v1:post:/users"
+    }
+   }
+  },
+  {
+   "intent": "dar um papel de aplicação a um usuário no ODC",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_write",
+    "verb": {
+     "field": "operationId",
+     "value": "user-access-management-api-v1:post:/users/{key}/application-roles/{roleKey}"
+    }
+   }
+  },
+  {
+   "intent": "disparar uma análise de código do app",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_write",
+    "verb": {
+     "field": "operationId",
+     "value": "code-quality-api-v1:post:/code-analyses"
+    }
+   }
+  },
+  {
+   "intent": "iniciar um build do asset pela API",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_write",
+    "verb": {
+     "field": "operationId",
+     "value": "build-operations-api-v1:post:/build-operations"
+    }
+   }
+  },
+  {
+   "intent": "publicar o asset pela API pública (publish operation)",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_write",
+    "verb": {
+     "field": "operationId",
+     "value": "deployments-api-v1:post:/publish-operations"
+    }
+   }
+  },
+  {
+   "intent": "analisar se posso excluir o asset (análise de exclusão)",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_write",
+    "verb": {
+     "field": "operationId",
+     "value": "dependency-management-api-v1:post:/deletion-analyses"
+    }
+   }
+  },
+  {
+   "intent": "ver o recibo da escrita pelo operationUuid",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_receipt",
+    "verb": {
+     "field": "reconcile",
+     "value": "<absent>"
+    }
+   }
+  },
+  {
+   "intent": "reconciliar uma escrita incerta no ODC",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_receipt",
+    "verb": {
+     "field": "reconcile",
+     "value": "{state, read, authorize}"
+    }
+   }
+  },
+  {
+   "intent": "listar os stages no monitoramento do portal",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "monitoring.stages"
+    }
+   }
+  },
+  {
+   "intent": "listar as aplicações monitoradas no stage",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "monitoring.applications"
+    }
+   }
+  },
+  {
+   "intent": "ver os logs da aplicação no portal ODC",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "monitoring.logs"
+    }
+   }
+  },
+  {
+   "intent": "ver os erros da aplicação no portal ODC",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "monitoring.errors"
+    }
+   }
+  },
+  {
+   "intent": "abrir o detalhe de um log no portal ODC",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "monitoring.detail"
+    }
+   }
+  },
+  {
+   "intent": "abrir um trace distribuído no portal",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "monitoring.trace"
+    }
+   }
+  },
+  {
+   "intent": "ver os logs de um trace no portal",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "monitoring.traceLogs"
+    }
+   }
+  },
+  {
+   "intent": "ver o resumo de um trace no portal",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "monitoring.traceSummary"
+    }
+   }
+  },
+  {
+   "intent": "listar os traces da aplicação no portal",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "monitoring.traces"
+    }
+   }
+  },
+  {
+   "intent": "listar os provedores de conexão do portal",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.providers"
+    }
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "odc_external_db_connection",
+     "verb": {
+      "field": "action",
+      "value": "providers"
+     }
+    }
+   ]
+  },
+  {
+   "intent": "listar as conexões do portal ODC",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.list"
+    }
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "odc_external_db_connection",
+     "verb": {
+      "field": "action",
+      "value": "list"
+     }
+    }
+   ]
+  },
+  {
+   "intent": "ver as configurações da conexão no portal",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.settings"
+    }
+   }
+  },
+  {
+   "intent": "ver o resultado do teste da conexão no portal",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.testStatus"
+    }
+   }
+  },
+  {
+   "intent": "verificar se o nome da conexão relacional está livre",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.relationalNameAvailability"
+    }
+   }
+  },
+  {
+   "intent": "verificar se o nome da conexão MCP está disponível",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.mcpNameAvailability"
+    }
+   }
+  },
+  {
+   "intent": "quais tipos de autenticação a conexão MCP aceita",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.mcpAuthenticationTypes"
+    }
+   }
+  },
+  {
+   "intent": "quais tipos de transporte existem para conexão MCP",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.mcpTransportTypes"
+    }
+   }
+  },
+  {
+   "intent": "quais esquemas de autenticação a conexão MCP suporta",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.mcpAuthenticationSchemes"
+    }
+   }
+  },
+  {
+   "intent": "onde vai a chave na conexão MCP (localização da chave)",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.mcpKeyLocations"
+    }
+   }
+  },
+  {
+   "intent": "ver os detalhes de uma conexão do portal",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.connection"
+    }
+   }
+  },
+  {
+   "intent": "listar as entidades disponíveis da conexão no portal",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.entities"
+    }
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "odc_external_db_connection",
+     "verb": {
+      "field": "action",
+      "value": "entities"
+     }
+    }
+   ]
+  },
+  {
+   "intent": "quais entidades já foram selecionadas na conexão",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.selectedEntities"
+    }
+   }
+  },
+  {
+   "intent": "ver os atributos de uma entidade da conexão",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.entityAttributes"
+    }
+   }
+  },
+  {
+   "intent": "listar as actions da conexão MCP no portal",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.actions"
+    }
+   }
+  },
+  {
+   "intent": "quais actions estão selecionadas na conexão",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.selectedActions"
+    }
+   }
+  },
+  {
+   "intent": "as avaliações de agentes estão disponíveis no tenant",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "agents.evaluationsAvailable"
+    }
+   }
+  },
+  {
+   "intent": "listar os datasets de avaliação do agente",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "agents.datasets"
+    }
+   }
+  },
+  {
+   "intent": "listar as avaliações do agente",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "agents.evaluations"
+    }
+   }
+  },
+  {
+   "intent": "listar as execuções de avaliação do agente",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "agents.evaluationRuns"
+    }
+   }
+  },
+  {
+   "intent": "listar os apps agênticos do tenant",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "agents.agenticApps"
+    }
+   }
+  },
+  {
+   "intent": "listar as service actions disponíveis para o agente",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "agents.serviceActions"
+    }
+   }
+  },
+  {
+   "intent": "baixar o template do dataset de avaliação",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "agents.datasetTemplate"
+    }
+   }
+  },
+  {
+   "intent": "listar os juízes de avaliação do agente",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "agents.judges"
+    }
+   }
+  },
+  {
+   "intent": "ver o status de uma execução de avaliação do agente",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "agents.evaluationRunStatus"
+    }
+   }
+  },
+  {
+   "intent": "ver os resultados de uma execução de avaliação",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "agents.evaluationRun"
+    }
+   }
+  },
+  {
+   "intent": "listar os stages dos agentes",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "agents.stages"
+    }
+   }
+  },
+  {
+   "intent": "ver a última revisão do agente",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "agents.latestRevision"
+    }
+   }
+  },
+  {
+   "intent": "listar os elementos do agente",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "agents.elements"
+    }
+   }
+  },
+  {
+   "intent": "ver os guardrails do agente",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "agents.guardrails"
+    }
+   }
+  },
+  {
+   "intent": "testar a conexão relacional no portal",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_write",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.relationalTest"
+    }
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "odc_external_db_connection",
+     "verb": {
+      "field": "action",
+      "value": "test"
+     }
+    }
+   ]
+  },
+  {
+   "intent": "salvar a conexão relacional no portal",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_write",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.relationalSave"
+    }
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "odc_external_db_connection",
+     "verb": {
+      "field": "action",
+      "value": "create"
+     }
+    }
+   ]
+  },
+  {
+   "intent": "importar as entidades da conexão no portal",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_write",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.importEntities"
+    }
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "odc_external_db_connection",
+     "verb": {
+      "field": "action",
+      "value": "import-entities"
+     }
+    }
+   ]
+  },
+  {
+   "intent": "testar a conexão MCP no portal",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_write",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.mcpTest"
+    }
+   }
+  },
+  {
+   "intent": "criar um dataset de avaliação para o agente",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_write",
+    "verb": {
+     "field": "operationId",
+     "value": "agents.datasetCreate"
+    }
+   }
+  },
+  {
+   "intent": "criar uma avaliação do agente",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_write",
+    "verb": {
+     "field": "operationId",
+     "value": "agents.evaluationCreate"
+    }
+   }
+  },
+  {
+   "intent": "rodar uma avaliação do agente agora",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_write",
+    "verb": {
+     "field": "operationId",
+     "value": "agents.evaluationRunCreate"
+    }
+   }
+  },
+  {
+   "intent": "entrar no portal ODC",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_login",
+    "verb": {
+     "field": "action",
+     "value": "open"
+    }
+   }
+  },
+  {
+   "intent": "ver se a janela do portal está logada",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_login",
+    "verb": {
+     "field": "action",
+     "value": "status"
+    }
+   }
+  },
+  {
+   "intent": "capturar as rotas do portal de uma funcionalidade não mapeada",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_routes"
+   }
+  },
+  {
+   "intent": "acompanhar o deploy até terminar",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_operation_status",
+    "verb": {
+     "field": "kind",
+     "value": "deployment"
+    }
+   }
+  },
+  {
+   "intent": "ver o status da operação de publicação",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_operation_status",
+    "verb": {
+     "field": "kind",
+     "value": "publish"
+    }
+   }
+  },
+  {
+   "intent": "ver o status do build do asset",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_operation_status",
+    "verb": {
+     "field": "kind",
+     "value": "build"
+    }
+   }
+  },
+  {
+   "intent": "ver o status do build nativo do app mobile",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_operation_status",
+    "verb": {
+     "field": "kind",
+     "value": "native-build"
+    }
+   }
+  },
+  {
+   "intent": "ver o status da geração do app",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_operation_status",
+    "verb": {
+     "field": "kind",
+     "value": "generation"
+    }
+   }
+  },
+  {
+   "intent": "ver o status da análise de código",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_operation_status",
+    "verb": {
+     "field": "kind",
+     "value": "code-analysis"
+    }
+   }
+  },
+  {
+   "intent": "ver o status da análise de exclusão",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_operation_status",
+    "verb": {
+     "field": "kind",
+     "value": "deletion-analysis"
+    }
+   }
+  },
+  {
+   "intent": "ver o status da análise de deploy",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_operation_status",
+    "verb": {
+     "field": "kind",
+     "value": "deployment-analysis"
+    }
+   }
+  },
+  {
+   "intent": "fazer deploy do app Vendas para o stage de QA",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_deploy",
+    "verb": {
+     "field": "operation",
+     "value": "Deploy"
+    }
+   }
+  },
+  {
+   "intent": "tirar o app do ar no stage (undeploy)",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_deploy",
+    "verb": {
+     "field": "operation",
+     "value": "Undeploy"
+    }
+   }
+  },
+  {
+   "intent": "aplicar as configurações no stage sem novo deploy",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_deploy",
+    "verb": {
+     "field": "operation",
+     "value": "ApplyConfigs"
+    }
+   }
+  },
+  {
+   "intent": "alterar um setting do app no stage",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_configurations",
+    "verb": {
+     "field": "action",
+     "value": "set"
+    }
+   }
+  },
+  {
+   "intent": "excluir o asset do tenant ODC",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_asset_delete"
+   }
+  },
+  {
+   "intent": "quais bancos externos posso conectar no ODC",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_external_db_connection",
+    "verb": {
+     "field": "action",
+     "value": "providers"
+    }
+   }
+  },
+  {
+   "intent": "listar as tabelas da conexão de banco externo",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_external_db_connection",
+    "verb": {
+     "field": "action",
+     "value": "entities"
+    }
+   }
+  },
+  {
+   "intent": "testar a conexão com o SQL Server externo",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_external_db_connection",
+    "verb": {
+     "field": "action",
+     "value": "test"
+    }
+   }
+  },
+  {
+   "intent": "criar uma conexão de banco externo no ODC",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_external_db_connection",
+    "verb": {
+     "field": "action",
+     "value": "create"
+    }
+   }
+  },
+  {
+   "intent": "importar tabelas do banco externo como entidades",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_external_db_connection",
+    "verb": {
+     "field": "action",
+     "value": "import-entities"
+    }
+   }
+  },
+  {
+   "intent": "excluir a conexão de banco externo",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_external_db_connection",
+    "verb": {
+     "field": "action",
+     "value": "delete"
+    }
+   }
+  },
+  {
+   "intent": "listar os tenants configurados",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "hybrid_tenants"
+   }
+  },
+  {
+   "intent": "provar o job no fixture O11 sem entregar",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_job"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "ssam_job"
+    }
+   ]
+  },
+  {
+   "intent": "testar o job num fixture sem entregar",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_job"
+   }
+  },
+  {
+   "intent": "testar o job num fixture sem entregar",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_job"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "o11_job"
+    }
+   ]
+  },
+  {
+   "intent": "planejar os papéis de usuário final a partir do manifest",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_access",
+    "verb": {
+     "field": "action",
+     "value": "plan"
+    }
+   }
+  },
+  {
+   "intent": "aplicar o manifest de papéis de usuário final",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_access",
+    "verb": {
+     "field": "action",
+     "value": "apply"
+    }
+   }
+  },
+  {
+   "intent": "verificar os papéis de usuário final aplicados",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_access",
+    "verb": {
+     "field": "action",
+     "value": "verify"
+    }
+   }
+  },
+  {
+   "intent": "diagnóstico do SSAM nas duas lanes",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_doctor"
+   }
+  },
+  {
+   "intent": "diagnóstico do SSAM nas duas lanes",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_doctor"
+   }
+  },
+  {
+   "intent": "ver as falhas de operação registradas automaticamente",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_friction",
+    "verb": {
+     "field": "view",
+     "value": "issues"
+    }
+   }
+  },
+  {
+   "intent": "ver as falhas de operação registradas automaticamente",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_friction",
+    "verb": {
+     "field": "view",
+     "value": "issues"
+    }
+   }
+  },
+  {
+   "intent": "ver o tempo de uma tarefa na fila de fricção",
+   "lane": "odc",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_friction",
+    "verb": {
+     "field": "view",
+     "value": "task"
+    }
+   }
+  },
+  {
+   "intent": "ver o tempo de uma tarefa na fila de fricção",
+   "lane": "o11",
+   "set": "cobertura-1",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_friction",
+    "verb": {
+     "field": "view",
+     "value": "task"
+    }
+   }
+  },
+  {
+   "intent": "encerrar a janela web do service center aberta no Studio",
+   "lane": "o11",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_session",
+    "verb": {
+     "field": "action",
+     "value": "close"
+    }
+   }
+  },
+  {
+   "intent": "colocar o log da integração REST em nível Full no service center",
+   "lane": "o11",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "integration-log-level"
+    }
+   }
+  },
+  {
+   "intent": "que produtores estão disponíveis para eu referenciar no ambiente O11",
+   "lane": "o11",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "referenceable"
+    }
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "o11_dependencies",
+     "verb": {
+      "field": "action",
+      "value": "producers"
+     }
+    }
+   ]
+  },
+  {
+   "intent": "incluir dois registros novos na entidade Pedido",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_data_insert"
+   }
+  },
+  {
+   "intent": "quais APIs públicas o ODC tem mapeadas",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_list_apis"
+   }
+  },
+  {
+   "intent": "gravar a conexão MCP configurada no portal",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_write",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.mcpSave"
+    }
+   }
+  },
+  {
+   "intent": "gravar as regras de guardrail do agente",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_write",
+    "verb": {
+     "field": "operationId",
+     "value": "agents.guardrailsSave"
+    }
+   }
+  },
+  {
+   "intent": "encerrar a janela do portal ODC dentro do Studio",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_login",
+    "verb": {
+     "field": "action",
+     "value": "close"
+    }
+   }
+  },
+  {
+   "intent": "mostrar os settings configurados do app no stage de QA",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_configurations",
+    "verb": {
+     "field": "action",
+     "value": "get"
+    }
+   }
+  },
+  {
+   "intent": "quais conexões com banco de dados externo existem no tenant",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_external_db_connection",
+    "verb": {
+     "field": "action",
+     "value": "list"
+    }
+   }
+  },
+  {
+   "intent": "o que o o11_service_center_read consegue ler (capabilities)",
+   "lane": "o11",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "capabilities"
+    }
+   }
+  },
+  {
+   "intent": "listar as capacidades de leitura do service center",
+   "lane": "o11",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "capabilities"
+    }
+   }
+  },
+  {
+   "intent": "abrir a instância 1234 do processo BPT",
+   "lane": "o11",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "bpt-instance"
+    }
+   }
+  },
+  {
+   "intent": "abrir a aplicação Vendas no service center e ver seus detalhes",
+   "lane": "o11",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "application"
+    }
+   }
+  },
+  {
+   "intent": "detalhe da aplicação Vendas no service center",
+   "lane": "o11",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "application"
+    }
+   }
+  },
+  {
+   "intent": "continuar a tarefa do contrato aceito (task_id do hook)",
+   "lane": "o11",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "continue"
+   }
+  },
+  {
+   "intent": "status da tarefa task_id do hook com a prova de conteúdo",
+   "lane": "o11",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "status"
+   }
+  },
+  {
+   "intent": "ver a API do kernel da interface IForEachNode",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_reference",
+    "verb": {
+     "field": "kind",
+     "value": "api"
+    }
+   }
+  },
+  {
+   "intent": "consultar a referência da API do kernel para IForEachNode",
+   "lane": "o11",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_reference",
+    "verb": {
+     "field": "kind",
+     "value": "api"
+    }
+   }
+  },
+  {
+   "intent": "quais ferramentas o SSAM tem",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_discover"
+   }
+  },
+  {
+   "intent": "por onde começo qualquer pedido no SSAM",
+   "lane": "o11",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_discover"
+   }
+  },
+  {
+   "intent": "inspecionar as propriedades da tela Home no módulo capturado",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_inspect"
+   }
+  },
+  {
+   "intent": "ler a subárvore da action GetPedidos pelo @key com o studio_inspect",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_inspect"
+   }
+  },
+  {
+   "intent": "module-info do módulo Vendas no ODC Studio",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_command",
+    "verb": {
+     "field": "command",
+     "value": "module-info"
+    }
+   }
+  },
+  {
+   "intent": "quais funcionalidades do portal funcionam e quais rotas ainda não estão mapeadas",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_capabilities"
+   }
+  },
+  {
+   "intent": "como cada funcionalidade do Portal ODC roda aqui",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_capabilities"
+   }
+  },
+  {
+   "intent": "ver o contrato completo da operação deployments-api-v1:post:/deployment-operations",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_describe_operation"
+   }
+  },
+  {
+   "intent": "descrever a operação pública e seus parâmetros",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_describe_operation"
+   }
+  },
+  {
+   "intent": "listar os assets do repositório pela API pública do ODC (asset repository)",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_read",
+    "verb": {
+     "field": "operationId",
+     "value": "asset-repository-api-v1:get:/assets"
+    }
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "studio_assets"
+    }
+   ]
+  },
+  {
+   "intent": "listar os consumidores do asset pela API pública do ODC",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_read",
+    "verb": {
+     "field": "operationId",
+     "value": "dependency-management-api-v1:get:/assets/{assetKey}/consumers"
+    }
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "studio_consumers"
+    }
+   ]
+  },
+  {
+   "intent": "rodar a análise de exclusão do asset antes de apagar",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_write",
+    "verb": {
+     "field": "operationId",
+     "value": "dependency-management-api-v1:post:/deletion-analyses"
+    }
+   }
+  },
+  {
+   "intent": "quais aplicações aparecem no monitoramento do portal",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "monitoring.applications"
+    }
+   }
+  },
+  {
+   "intent": "ver o trace 4bf92f no monitoramento do portal",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "monitoring.trace"
+    }
+   }
+  },
+  {
+   "intent": "abrir o trace da requisição no portal ODC",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "monitoring.trace"
+    }
+   }
+  },
+  {
+   "intent": "ler os settings da conexão no portal ODC",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.settings"
+    }
+   }
+  },
+  {
+   "intent": "quais entidades estão marcadas como selecionadas na conexão do portal",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.selectedEntities"
+    }
+   }
+  },
+  {
+   "intent": "listar os atributos da entidade Cliente na conexão do portal",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "connections.entityAttributes"
+    }
+   }
+  },
+  {
+   "intent": "abrir uma execução de avaliação do agente e ver o resultado",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read",
+    "verb": {
+     "field": "operationId",
+     "value": "agents.evaluationRun"
+    }
+   }
+  },
+  {
+   "intent": "criar um dataset novo para as avaliações do agente",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_write",
+    "verb": {
+     "field": "operationId",
+     "value": "agents.datasetCreate"
+    }
+   }
+  },
+  {
+   "intent": "status da sessão do portal ODC (login)",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_login",
+    "verb": {
+     "field": "action",
+     "value": "status"
+    }
+   }
+  },
+  {
+   "intent": "estou logado no portal ODC?",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_login",
+    "verb": {
+     "field": "action",
+     "value": "status"
+    }
+   }
+  },
+  {
+   "intent": "quais provedores de banco externo o ODC suporta",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_external_db_connection",
+    "verb": {
+     "field": "action",
+     "value": "providers"
+    }
+   }
+  },
+  {
+   "intent": "listar as entidades da conexão de banco externo",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_external_db_connection",
+    "verb": {
+     "field": "action",
+     "value": "entities"
+    }
+   }
+  },
+  {
+   "intent": "quais tenants estão configurados no SSAM",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "hybrid_tenants"
+   }
+  },
+  {
+   "intent": "listar os tenants do ODC e a sessão do Studio em cada um",
+   "lane": "odc",
+   "set": "cobertura-2",
+   "expect": {
+    "kind": "tool",
+    "tool": "hybrid_tenants"
+   }
+  },
+  {
+   "intent": "abrir o módulo Clientes",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_open"
+   }
+  },
+  {
+   "intent": "publicar o módulo Vendas",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_publish"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "studio_authorize"
+    }
+   ]
+  },
+  {
+   "intent": "fazer deploy do app Portal para o estágio de QA",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_deploy"
+   }
+  },
+  {
+   "intent": "criar um app novo no tenant chamado Estoque",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_create_app",
+    "verb": {
+     "field": "action",
+     "value": "create"
+    }
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "studio_build"
+    },
+    {
+     "kind": "tool",
+     "tool": "studio_authorize"
+    }
+   ]
+  },
+  {
+   "intent": "inserir registros na entidade Produto",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_data_insert"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "studio_data"
+    }
+   ]
+  },
+  {
+   "intent": "ver os dados da tabela Pedido",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_data"
+   }
+  },
+  {
+   "intent": "apagar o registro 42 de Cliente",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_data_delete"
+   }
+  },
+  {
+   "intent": "quais apps existem no tenant?",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_assets"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "odc_read"
+    }
+   ]
+  },
+  {
+   "intent": "conectar no ODC Studio",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_connect"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "studio_attach"
+    }
+   ]
+  },
+  {
+   "intent": "fechar o módulo sem salvar",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_close"
+   }
+  },
+  {
+   "intent": "ver os logs de erro do app no portal",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read"
+   }
+  },
+  {
+   "intent": "debugar a ação ServerCalcularFrete",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug"
+   }
+  },
+  {
+   "intent": "atualizar as referências do consumidor depois de publicar o produtor",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_refresh_references"
+   }
+  },
+  {
+   "intent": "mudar a configuração do app em produção",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_configurations"
+   }
+  },
+  {
+   "intent": "testar a conexão com banco externo SQL Server",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_external_db_connection"
+   }
+  },
+  {
+   "intent": "acompanhar o status da publicação",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_wait"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "odc_operation_status"
+    },
+    {
+     "kind": "tool",
+     "tool": "studio_command"
+    },
+    {
+     "kind": "tool",
+     "tool": "studio_publish"
+    }
+   ]
+  },
+  {
+   "intent": "tirar um snapshot do módulo aberto",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_snapshot"
+   }
+  },
+  {
+   "intent": "excluir o app Teste do tenant",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_asset_delete"
+   }
+  },
+  {
+   "intent": "tem um diálogo aberto travando o studio",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_dismiss_dialog"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "studio_status"
+    }
+   ]
+  },
+  {
+   "intent": "me passa o link da tela Home do app",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_app_url"
+   }
+  },
+  {
+   "intent": "abrir o módulo HMISJHA_CS",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_studio",
+    "verb": {
+     "field": "command",
+     "value": "open-module"
+    }
+   }
+  },
+  {
+   "intent": "publicar o modulo no ambiente",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_publish"
+   }
+  },
+  {
+   "intent": "criar uma aplicação nova Reactive no ambiente",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "create-app"
+    }
+   }
+  },
+  {
+   "intent": "listar os timers do ambiente",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read",
+    "verb": {
+     "field": "action",
+     "value": "timers"
+    }
+   }
+  },
+  {
+   "intent": "rodar o timer de carga agora",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "timer-run"
+    }
+   }
+  },
+  {
+   "intent": "editar dados da entidade Funcionario publicada",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_data"
+   }
+  },
+  {
+   "intent": "gerenciar dependências do módulo, referenciar a ação do produtor Core",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_dependencies"
+   }
+  },
+  {
+   "intent": "dar a role Admin para o usuario joao",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_access"
+   }
+  },
+  {
+   "intent": "ver os erros de compilação do módulo",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_studio",
+    "verb": {
+     "field": "command",
+     "value": "errors"
+    }
+   }
+  },
+  {
+   "intent": "ver o log de erros do service center",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read"
+   }
+  },
+  {
+   "intent": "baixar o oml do modulo Core",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "o11_studio"
+    }
+   ]
+  },
+  {
+   "intent": "status da tarefa longa de entrega",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_task"
+   }
+  },
+  {
+   "intent": "open module Orders",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_open"
+   }
+  },
+  {
+   "intent": "publish the app",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_publish"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "studio_authorize"
+    }
+   ]
+  },
+  {
+   "intent": "deploy Sales app to production",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_deploy"
+   }
+  },
+  {
+   "intent": "undeploy the app from the dev stage",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_deploy"
+   }
+  },
+  {
+   "intent": "list all assets in the tenant",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_assets"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "odc_read"
+    }
+   ]
+  },
+  {
+   "intent": "add a new user to the tenant and assign a role",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_write"
+   }
+  },
+  {
+   "intent": "view data of the Customer entity",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_data"
+   }
+  },
+  {
+   "intent": "update record id 5 in the Product table",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_data_update"
+   }
+  },
+  {
+   "intent": "which tenant am I signed in to",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_auth_status"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "hybrid_tenants"
+    }
+   ]
+  },
+  {
+   "intent": "sign in to the portal",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_login"
+   }
+  },
+  {
+   "intent": "show error traces from monitoring",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read"
+   }
+  },
+  {
+   "intent": "find the public API operation to list users",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_search_operations"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "odc_list_apis"
+    }
+   ]
+  },
+  {
+   "intent": "get build status by operation key",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_operation_status"
+   }
+  },
+  {
+   "intent": "who consumes this library?",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_consumers"
+   }
+  },
+  {
+   "intent": "download the latest revision of module Core",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_latest"
+   }
+  },
+  {
+   "intent": "set the app setting ApiUrl in the QA stage",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_configurations"
+   }
+  },
+  {
+   "intent": "pubish modul",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_publish"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "studio_authorize"
+    }
+   ]
+  },
+  {
+   "intent": "opne the moduel Invoices",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_open"
+   }
+  },
+  {
+   "intent": "is everything ok with the setup?",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_doctor"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "studio_doctor"
+    }
+   ]
+  },
+  {
+   "intent": "open module Inventory_CS in Service Studio",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_studio",
+    "verb": {
+     "field": "command",
+     "value": "open-module"
+    }
+   }
+  },
+  {
+   "intent": "create a new Service module in app HR",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment",
+    "verb": {
+     "field": "action",
+     "value": "create-module"
+    }
+   }
+  },
+  {
+   "intent": "delete application OldPortal from the environment",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_environment"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "o11_service_center_write"
+    }
+   ]
+  },
+  {
+   "intent": "list the producers I can reference",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_dependencies"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "o11_environment"
+    }
+   ]
+  },
+  {
+   "intent": "read site property values",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read"
+   }
+  },
+  {
+   "intent": "set site property MaxRows to 100",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "property-set"
+    }
+   }
+  },
+  {
+   "intent": "start the debugger on action GetOrders",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "start"
+    }
+   }
+  },
+  {
+   "intent": "step over in the debugger",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug",
+    "verb": {
+     "field": "op",
+     "value": "step-over"
+    }
+   }
+  },
+  {
+   "intent": "check the health of both studios",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_doctor"
+   }
+  },
+  {
+   "intent": "insert test records into the Employee entity",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_data"
+   }
+  },
+  {
+   "intent": "deliver the change to the open module",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_deliver"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "continue"
+    }
+   ]
+  },
+  {
+   "intent": "dismiss the dialog in service studio",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_studio",
+    "verb": {
+     "field": "command",
+     "value": "dismiss-dialog"
+    }
+   }
+  },
+  {
+   "intent": "publicar",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_publish"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "studio_authorize"
+    }
+   ]
+  },
+  {
+   "intent": "dados",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_data"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "studio_data_insert"
+    },
+    {
+     "kind": "tool",
+     "tool": "studio_data_update"
+    },
+    {
+     "kind": "tool",
+     "tool": "studio_data_delete"
+    }
+   ]
+  },
+  {
+   "intent": "debug",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_debug"
+   }
+  },
+  {
+   "intent": "conectar",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "ssam_connect"
+   }
+  },
+  {
+   "intent": "status",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_status"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "ssam_doctor"
+    },
+    {
+     "kind": "tool",
+     "tool": "studio_doctor"
+    },
+    {
+     "kind": "tool",
+     "tool": "odc_status"
+    }
+   ]
+  },
+  {
+   "intent": "publcar modulo",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_publish"
+   }
+  },
+  {
+   "intent": "deploy",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_deploy"
+   }
+  },
+  {
+   "intent": "abrir modulo",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_open"
+   }
+  },
+  {
+   "intent": "abrir o módulo Vendas e criar a entidade Pedido com atributos Numero e Data",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_open"
+   }
+  },
+  {
+   "intent": "open module HR_CS and add a server action CalculateSalary",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_studio"
+   }
+  },
+  {
+   "intent": "criar a tela de listagem de clientes e publicar",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "studio_publish"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "studio_authorize"
+    }
+   ]
+  },
+  {
+   "intent": "add an aggregate to the screen and then publish the module",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_publish"
+   }
+  },
+  {
+   "intent": "criar a entidade Tarefa, publicar e inserir 3 registros de teste",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_publish"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "o11_data"
+    }
+   ]
+  },
+  {
+   "intent": "add a static entity Status with records and deploy to QA",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_deploy"
+   }
+  },
+  {
+   "intent": "fazer deploy do app para o estágio de produção do ODC",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_deploy"
+   }
+  },
+  {
+   "intent": "list the timers in Service Center",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_read"
+   }
+  },
+  {
+   "intent": "entrar no portal do ODC e ver os logs",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_portal_read"
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "odc_portal_login"
+    }
+   ]
+  },
+  {
+   "intent": "1-click publish in Service Studio",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_publish"
+   }
+  },
+  {
+   "intent": "criar a entidade Cliente com atributos Nome e Email",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "add a server action that calculates the order total",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar uma tela com tabela e filtro de busca",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "add an input parameter to the action GetOrders",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar uma estrutura Endereco com Rua e Cidade",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "form with a dropdown that saves the record",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "adicionar um aggregate que filtra pedidos por status",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "create a static entity OrderStatus with records",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "adicionar um botão que chama a ação Salvar",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "add an if and an assign in the action flow",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar um bloco reutilizável de cabeçalho",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "expose a REST API method that returns the orders",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "renomear o atributo Nome para NomeCompleto",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "show a validation message when the input is empty",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar uma variável local do tipo lista na tela",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "publish an event when the order is created and handle it in a block",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "adicionar um data action que busca os dados do cliente",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar um timer que roda toda noite chamando a ação LimparLogs",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "add a site property ApiTimeout to the module",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar uma role Gestor no módulo e checar na tela",
+   "lane": "o11",
+   "set": "pedidos",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "delete the old entity Invoice and its attributes",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "open a popup when the button is clicked",
+   "lane": "odc",
+   "set": "pedidos",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar uma tela de cadastro de clientes com formulário e botão salvar",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar uma tela de cadastro de clientes com formulário e botão salvar",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "adicionar um atributo Email do tipo texto na entidade Cliente",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "adicionar um atributo Email do tipo texto na entidade Cliente",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar uma server action que calcula o desconto do pedido",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar uma server action que calcula o desconto do pedido",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "renomear a action GetPedidos para ObterPedidos",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "renomear a action GetPedidos para ObterPedidos",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar um aggregate que filtra os pedidos por status",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar um aggregate que filtra os pedidos por status",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar um timer que roda a action LimparLogs todo dia",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar um timer que roda a action LimparLogs todo dia",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar uma site property ApiUrl do tipo texto",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar uma site property ApiUrl do tipo texto",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar um role Gerente no módulo",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar um role Gerente no módulo",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar um processo BPT de aprovação de pedido",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar um processo BPT de aprovação de pedido",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "consumir uma API REST externa de cotação",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "consumir uma API REST externa de cotação",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "expor uma API REST com o método GetClientes",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "expor uma API REST com o método GetClientes",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "adicionar um LogMessage na action de cálculo",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "adicionar um LogMessage na action de cálculo",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "adicionar a dependência do bloco Dropdown do OutSystemsUI na tela",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "adicionar a dependência do bloco Dropdown do OutSystemsUI na tela",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar uma entidade estática Status com os valores Ativo e Inativo",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar uma entidade estática Status com os valores Ativo e Inativo",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar um bloco com um input parameter ClienteId",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar um bloco com um input parameter ClienteId",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar uma client action que mostra uma mensagem de sucesso",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar uma client action que mostra uma mensagem de sucesso",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar uma exception customizada PedidoInvalido",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar uma exception customizada PedidoInvalido",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "apagar o atributo Telefone da entidade Cliente",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "apagar o atributo Telefone da entidade Cliente",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "mover a action CalcularPremio para a pasta Regras",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "mover a action CalcularPremio para a pasta Regras",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar uma estrutura Endereco com Rua e Cidade",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar um módulo de serviço com uma service action",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar um módulo de serviço com uma service action",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "adicionar uma tabela na tela Pedidos com paginação",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "adicionar uma tabela na tela Pedidos com paginação",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar uma conexão entre a tela Lista e a tela Detalhe com input PedidoId",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar uma conexão entre a tela Lista e a tela Detalhe com input PedidoId",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "adicionar um filtro de busca na lista de clientes",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "adicionar um filtro de busca na lista de clientes",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar uma variável local Total na tela",
+   "lane": "odc",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "criar uma variável local Total na tela",
+   "lane": "o11",
+   "set": "cobertura-model",
+   "expect": {
+    "kind": "capability"
+   }
+  },
+  {
+   "intent": "apagar todas as apps que começam com ZZ",
+   "lane": "o11",
+   "set": "integracoes-scdelete",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "delete"
+    }
+   }
+  },
+  {
+   "intent": "remover de uma vez os módulos que começam com ZZTeste",
+   "lane": "o11",
+   "set": "integracoes-scdelete",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "delete"
+    }
+   }
+  },
+  {
+   "intent": "delete all apps starting with ZZ in the environment",
+   "lane": "o11",
+   "set": "integracoes-scdelete",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "delete"
+    }
+   }
+  },
+  {
+   "intent": "excluir a extensão UtilExt",
+   "lane": "o11",
+   "set": "integracoes-scdelete",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_service_center_write",
+    "verb": {
+     "field": "action",
+     "value": "extension-delete"
+    }
+   },
+   "alsoAccept": [
+    {
+     "kind": "tool",
+     "tool": "o11_extension",
+     "verb": {
+      "field": "action",
+      "value": "delete"
+     }
+    }
+   ]
+  },
+  {
+   "intent": "crie uma extensão dotnet Calc com a action Somar",
+   "lane": "o11",
+   "set": "integracoes-scdelete",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_extension",
+    "verb": {
+     "field": "action",
+     "value": "publish"
+    }
+   }
+  },
+  {
+   "intent": "mostrar o código da extensão .NET Calc",
+   "lane": "o11",
+   "set": "integracoes-scdelete",
+   "expect": {
+    "kind": "tool",
+    "tool": "o11_extension",
+    "verb": {
+     "field": "action",
+     "value": "read"
+    }
+   }
+  },
+  {
+   "intent": "fazer deploy da biblioteca externa TextTools no tenant",
+   "lane": "odc",
+   "set": "integracoes-scdelete",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_external_library",
+    "verb": {
+     "field": "action",
+     "value": "deploy"
+    }
+   }
+  },
+  {
+   "intent": "compilar a biblioteca externa sem mandar pro tenant",
+   "lane": "odc",
+   "set": "integracoes-scdelete",
+   "expect": {
+    "kind": "tool",
+    "tool": "odc_external_library",
+    "verb": {
+     "field": "action",
+     "value": "build"
+    }
+   }
+  }
+ ]
+}

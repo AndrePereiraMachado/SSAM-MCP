@@ -1,0 +1,67 @@
+{
+ "description": "Cobertura testada (fase 2): del de OutSystems.Model.UI.Mobile.Events.IEvent (odc) em lgMobileContainerActionUsed. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "CovSScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAction",
+   "name": "CovSAction",
+   "as": "$act"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IStartNode",
+   "as": "$as0"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IEndNode",
+   "as": "$as9"
+  },
+  {
+   "op": "link",
+   "from": "$as0",
+   "to": "$as9"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IContainer",
+   "name": "CovSBox",
+   "as": "$p"
+  },
+  {
+   "op": "set",
+   "target": "$scr/OnReady",
+   "prop": "Destination",
+   "value": "$act"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEvent",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

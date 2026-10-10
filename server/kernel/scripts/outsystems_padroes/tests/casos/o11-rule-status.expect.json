@@ -1,0 +1,19 @@
+{
+ "_leia": "O11: situação das regras no estágio job sobre a parte conforme. Regra com detector no estágio sai 'checada'; regra sem detector fica na revisão manual; regra só do truechange fica fora dos estágios pedidos.",
+ "stage": "job",
+ "mode": "autor",
+ "module": "PosGate_CS",
+ "jobs": [
+  "positive-conforming.json"
+ ],
+ "exitCode": 0,
+ "maxBlockingErrors": 0,
+ "ruleStatus": {
+  "L3": "checada",
+  "AR1": "checada",
+  "P7": "checada",
+  "L1": "revisao-manual",
+  "D1": "revisao-manual",
+  "U2": "revisao-manual"
+ }
+}

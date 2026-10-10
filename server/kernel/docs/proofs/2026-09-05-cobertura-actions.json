@@ -1,0 +1,982 @@
+{
+  "date": "2026-09-05",
+  "status": "expanded-native-widget-coverage-verified-on-ss5",
+  "acceptance": "The initial three-action sample was explicitly rejected as sufficient by the user. This result covers all 26 concrete native action nodes applicable to ordinary actions and their screen/block/email contexts.",
+  "scope": {
+    "widgets": 26,
+    "positiveScenarios": 63,
+    "invalidContextScenarios": 4,
+    "bptContextNegativeTests": 3,
+    "parameterTypePatterns": 20,
+    "listOperations": 11,
+    "includes": [
+      "server actions",
+      "service actions",
+      "client actions",
+      "screen actions on existing owners",
+      "email preparation",
+      "simple/identifier/record/list/structure/nested structure types",
+      "input/output/local variables",
+      "nested client/server calls",
+      "references to service actions",
+      "complete native graphs and declared properties",
+      "independent verification after reload and native merge",
+      "Verify-valid mutations rejected by the contract",
+      "scoped action repair preserving consumers"
+    ],
+    "notClaimed": [
+      "remote execution of these action bodies",
+      "all business requirements inferred from natural language",
+      "arbitrary business transaction correctness",
+      "a real LLM conversation through trusted client hooks",
+      "complete UI creation or BPT workflow coverage"
+    ]
+  },
+  "architecture": {
+    "tools": [
+      "context",
+      "propose",
+      "continue",
+      "status"
+    ],
+    "kernelVerbsAdded": 0,
+    "newDeliveryEngine": false,
+    "nativeNodeDeclarations": "Closed type/property catalog; no Target/Parent/keys/arbitrary API calls"
+  },
+  "suite": {
+    "counts": {
+      "total": "408",
+      "executed": "408",
+      "passed": "408",
+      "failed": "0",
+      "error": "0",
+      "timeout": "0",
+      "aborted": "0",
+      "inconclusive": "0",
+      "passedButRunAborted": "0",
+      "notRunnable": "0",
+      "notExecuted": "0",
+      "disconnected": "0",
+      "warning": "0",
+      "completed": "0",
+      "inProgress": "0",
+      "pending": "0"
+    },
+    "trx": ".local\\action-contract-dev\\results\\action-matrix-final.trx",
+    "sha256": "42b687f7017f2003d20f2390b4164ebf0a86e78e071d6819ad08135f41086a96",
+    "python": {
+      "tests": 8,
+      "passed": 8
+    },
+    "sourceHashes": ".local/action-contract-dev/final-source-hashes.json",
+    "isolatedSourceFilesVerified": 188,
+    "otherSessionJobsExcluded": true,
+    "deletedDataJobRestoredOnlyInValidationCopy": true
+  },
+  "matrix": {
+    "json": "docs/mapa/action-coverage.json",
+    "markdown": "docs/mapa/action-coverage.md",
+    "generator": "scripts/action_coverage_report.py",
+    "contractsGenerator": "scripts/gen_action_coverage.py",
+    "directory": "tests/contracts/action-coverage",
+    "runtimeCatalogCheck": {
+      "sameActionInterfaces": true,
+      "runtimeCatalogSha256": "46583f8d17dbacff105abecfd9261a3dde0c93b39e3086176d984f77700fd467",
+      "originalCatalogSha256": "d04db837a8ddb01e15cdea67daab3dbb2d0f033585e8f40e45b4675d17c80f96"
+    }
+  },
+  "live": {
+    "operatorFixtureNotLlmConversation": true,
+    "lane": "ss5",
+    "modules": [
+      {
+        "module": "ZZDataContract_CS",
+        "moduleKey": "OaXhYvdue0ugf0vpdQf3Xg",
+        "taskId": "cd2a541d63a9490a94337dbb6ebed305",
+        "deliveryTaskId": "3eebaf5e9fc04301bd2109609ba9fd32",
+        "operationId": "eed5f77a9bfc44df90a439a1d47284a9",
+        "actions": 16,
+        "checks": 1951,
+        "nodeKinds": [
+          "IAggregateNode",
+          "IAssignNode",
+          "ICommentNode",
+          "IEndNode",
+          "IExcelToRecordListNode",
+          "IExceptionHandlerNode",
+          "IExecuteServerActionNode",
+          "IForEachNode",
+          "IIfNode",
+          "IJSONDeserializeNode",
+          "IJSONSerializeNode",
+          "IRaiseExceptionNode",
+          "IRecordListToExcelNode",
+          "ISQLNode",
+          "IStartNode",
+          "ISwitchNode"
+        ],
+        "actionSummary": [
+          {
+            "name": "Cov02_Coverage",
+            "kind": "IServerAction",
+            "nodes": 7,
+            "nodeKinds": [
+              "IAggregateNode",
+              "IAssignNode",
+              "IEndNode",
+              "IIfNode",
+              "IRaiseExceptionNode",
+              "IStartNode"
+            ],
+            "inputs": 1,
+            "outputs": 1
+          },
+          {
+            "name": "Cov03_Coverage",
+            "kind": "IServerAction",
+            "nodes": 12,
+            "nodeKinds": [
+              "IAggregateNode",
+              "IAssignNode",
+              "IEndNode",
+              "IExecuteServerActionNode",
+              "IIfNode",
+              "IRaiseExceptionNode",
+              "ISQLNode",
+              "IStartNode"
+            ],
+            "inputs": 1,
+            "outputs": 1
+          },
+          {
+            "name": "Cov04_Coverage",
+            "kind": "IServerAction",
+            "nodes": 7,
+            "nodeKinds": [
+              "IAssignNode",
+              "IEndNode",
+              "IExcelToRecordListNode",
+              "IIfNode",
+              "IRaiseExceptionNode",
+              "IRecordListToExcelNode",
+              "IStartNode"
+            ],
+            "inputs": 1,
+            "outputs": 2
+          },
+          {
+            "name": "Cov05_Coverage",
+            "kind": "IServerAction",
+            "nodes": 7,
+            "nodeKinds": [
+              "IAssignNode",
+              "IEndNode",
+              "IIfNode",
+              "IJSONDeserializeNode",
+              "IJSONSerializeNode",
+              "IRaiseExceptionNode",
+              "IStartNode"
+            ],
+            "inputs": 1,
+            "outputs": 1
+          },
+          {
+            "name": "Cov06_Coverage",
+            "kind": "IServerAction",
+            "nodes": 17,
+            "nodeKinds": [
+              "IAssignNode",
+              "IEndNode",
+              "IExecuteServerActionNode",
+              "IIfNode",
+              "IRaiseExceptionNode",
+              "IStartNode"
+            ],
+            "inputs": 2,
+            "outputs": 1
+          },
+          {
+            "name": "Cov07_Coverage",
+            "kind": "IServerAction",
+            "nodes": 15,
+            "nodeKinds": [
+              "IAssignNode",
+              "ICommentNode",
+              "IEndNode",
+              "IExceptionHandlerNode",
+              "IForEachNode",
+              "IIfNode",
+              "IRaiseExceptionNode",
+              "IStartNode",
+              "ISwitchNode"
+            ],
+            "inputs": 2,
+            "outputs": 1
+          },
+          {
+            "name": "Cov08_Echo",
+            "kind": "IServerAction",
+            "nodes": 4,
+            "nodeKinds": [
+              "IAssignNode",
+              "IEndNode",
+              "IStartNode"
+            ],
+            "inputs": 20,
+            "outputs": 20
+          },
+          {
+            "name": "Cov08_Coverage",
+            "kind": "IServerAction",
+            "nodes": 6,
+            "nodeKinds": [
+              "IAssignNode",
+              "IEndNode",
+              "IExecuteServerActionNode",
+              "IIfNode",
+              "IRaiseExceptionNode",
+              "IStartNode"
+            ],
+            "inputs": 20,
+            "outputs": 20
+          },
+          {
+            "name": "Cov09_Coverage",
+            "kind": "IServiceAction",
+            "nodes": 7,
+            "nodeKinds": [
+              "IAggregateNode",
+              "IAssignNode",
+              "ICommentNode",
+              "IEndNode",
+              "IIfNode",
+              "IRaiseExceptionNode",
+              "IStartNode"
+            ],
+            "inputs": 1,
+            "outputs": 1
+          },
+          {
+            "name": "Cov10_Coverage",
+            "kind": "IServiceAction",
+            "nodes": 12,
+            "nodeKinds": [
+              "IAggregateNode",
+              "IAssignNode",
+              "ICommentNode",
+              "IEndNode",
+              "IExecuteServerActionNode",
+              "IIfNode",
+              "IRaiseExceptionNode",
+              "ISQLNode",
+              "IStartNode"
+            ],
+            "inputs": 1,
+            "outputs": 1
+          },
+          {
+            "name": "Cov11_Coverage",
+            "kind": "IServiceAction",
+            "nodes": 7,
+            "nodeKinds": [
+              "IAssignNode",
+              "ICommentNode",
+              "IEndNode",
+              "IExcelToRecordListNode",
+              "IIfNode",
+              "IRaiseExceptionNode",
+              "IRecordListToExcelNode",
+              "IStartNode"
+            ],
+            "inputs": 1,
+            "outputs": 2
+          },
+          {
+            "name": "Cov12_Coverage",
+            "kind": "IServiceAction",
+            "nodes": 7,
+            "nodeKinds": [
+              "IAssignNode",
+              "ICommentNode",
+              "IEndNode",
+              "IIfNode",
+              "IJSONDeserializeNode",
+              "IJSONSerializeNode",
+              "IRaiseExceptionNode",
+              "IStartNode"
+            ],
+            "inputs": 1,
+            "outputs": 1
+          },
+          {
+            "name": "Cov13_Coverage",
+            "kind": "IServiceAction",
+            "nodes": 17,
+            "nodeKinds": [
+              "IAssignNode",
+              "ICommentNode",
+              "IEndNode",
+              "IExecuteServerActionNode",
+              "IIfNode",
+              "IRaiseExceptionNode",
+              "IStartNode"
+            ],
+            "inputs": 2,
+            "outputs": 1
+          },
+          {
+            "name": "Cov14_Coverage",
+            "kind": "IServiceAction",
+            "nodes": 15,
+            "nodeKinds": [
+              "IAssignNode",
+              "ICommentNode",
+              "IEndNode",
+              "IExceptionHandlerNode",
+              "IForEachNode",
+              "IIfNode",
+              "IRaiseExceptionNode",
+              "IStartNode",
+              "ISwitchNode"
+            ],
+            "inputs": 2,
+            "outputs": 1
+          },
+          {
+            "name": "Cov15_Echo",
+            "kind": "IServerAction",
+            "nodes": 4,
+            "nodeKinds": [
+              "IAssignNode",
+              "IEndNode",
+              "IStartNode"
+            ],
+            "inputs": 20,
+            "outputs": 20
+          },
+          {
+            "name": "Cov15_Coverage",
+            "kind": "IServiceAction",
+            "nodes": 6,
+            "nodeKinds": [
+              "IAssignNode",
+              "ICommentNode",
+              "IEndNode",
+              "IExecuteServerActionNode",
+              "IIfNode",
+              "IRaiseExceptionNode",
+              "IStartNode"
+            ],
+            "inputs": 20,
+            "outputs": 20
+          }
+        ],
+        "delivered": true,
+        "newErrors": 0,
+        "newMessages": 0,
+        "fixedMessages": 0,
+        "mergeAttempts": 1,
+        "snapshots": 1,
+        "resume": {
+          "sameTask": true,
+          "sameOperation": true,
+          "additionalMerge": false,
+          "mcpWallMs": 2576
+        },
+        "initialControllerMs": 11042,
+        "initialMcpWallMs": 11682,
+        "receiptAccepted": true,
+        "receiptSha256": "dd68658e3f02bee806a240b72191b4add3510050b21bc9d87b13aff39903b6d0",
+        "contractSha256": "2c32b16e410e7e70796f068c4dec4cf653c75ebd7319c485ea182fc1c3c17e1a",
+        "remoteRuntimeExecuted": false
+      },
+      {
+        "module": "ZZActionCoverage_UI",
+        "moduleKey": "e7z5y+QGwkS6cEDy3+JbMA",
+        "taskId": "bc208bf87a9a4be39e949c807b3ff41a",
+        "deliveryTaskId": "1c8021639aac4d08a659d23f20f6b191",
+        "operationId": "e16073c8122547baab489455bbe45641",
+        "actions": 12,
+        "checks": 916,
+        "nodeKinds": [
+          "IAssignNode",
+          "ICommentNode",
+          "IDestinationNode",
+          "IEndNode",
+          "IExceptionHandlerNode",
+          "IExecuteClientActionNode",
+          "IExecuteServerActionNode",
+          "IForEachNode",
+          "IIfNode",
+          "IJSONDeserializeNode",
+          "IJSONSerializeNode",
+          "IJavaScriptNode",
+          "IMessageNode",
+          "IRaiseExceptionNode",
+          "IRefreshDataNode",
+          "IStartNode",
+          "ISwitchNode",
+          "ITriggerNode"
+        ],
+        "actionSummary": [
+          {
+            "name": "Cov01_Coverage",
+            "kind": "OutSystems.Model.UI.Mobile.IScreenAction",
+            "nodes": 3,
+            "nodeKinds": [
+              "IEndNode",
+              "IStartNode",
+              "ITriggerNode"
+            ],
+            "inputs": 0,
+            "outputs": 0
+          },
+          {
+            "name": "Cov02_ServerEcho",
+            "kind": "IServerAction",
+            "nodes": 5,
+            "nodeKinds": [
+              "IAssignNode",
+              "IEndNode",
+              "IIfNode",
+              "IRaiseExceptionNode",
+              "IStartNode"
+            ],
+            "inputs": 1,
+            "outputs": 1
+          },
+          {
+            "name": "Cov02_Coverage",
+            "kind": "IClientAction",
+            "nodes": 4,
+            "nodeKinds": [
+              "IAssignNode",
+              "IEndNode",
+              "IExecuteServerActionNode",
+              "IStartNode"
+            ],
+            "inputs": 1,
+            "outputs": 1
+          },
+          {
+            "name": "Cov04_Coverage",
+            "kind": "IClientAction",
+            "nodes": 4,
+            "nodeKinds": [
+              "IAssignNode",
+              "IEndNode",
+              "IJavaScriptNode",
+              "IStartNode"
+            ],
+            "inputs": 1,
+            "outputs": 1
+          },
+          {
+            "name": "Cov05_Coverage",
+            "kind": "IClientAction",
+            "nodes": 5,
+            "nodeKinds": [
+              "IAssignNode",
+              "IEndNode",
+              "IJSONDeserializeNode",
+              "IJSONSerializeNode",
+              "IStartNode"
+            ],
+            "inputs": 1,
+            "outputs": 1
+          },
+          {
+            "name": "Cov06_Coverage",
+            "kind": "IClientAction",
+            "nodes": 15,
+            "nodeKinds": [
+              "IAssignNode",
+              "IEndNode",
+              "IExecuteClientActionNode",
+              "IStartNode"
+            ],
+            "inputs": 2,
+            "outputs": 1
+          },
+          {
+            "name": "Cov07_Coverage",
+            "kind": "IClientAction",
+            "nodes": 3,
+            "nodeKinds": [
+              "IEndNode",
+              "IMessageNode",
+              "IStartNode"
+            ],
+            "inputs": 1,
+            "outputs": 0
+          },
+          {
+            "name": "Cov08_Coverage",
+            "kind": "IClientAction",
+            "nodes": 13,
+            "nodeKinds": [
+              "IAssignNode",
+              "ICommentNode",
+              "IEndNode",
+              "IExceptionHandlerNode",
+              "IForEachNode",
+              "IIfNode",
+              "IRaiseExceptionNode",
+              "IStartNode",
+              "ISwitchNode"
+            ],
+            "inputs": 2,
+            "outputs": 1
+          },
+          {
+            "name": "Cov09_Echo",
+            "kind": "IClientAction",
+            "nodes": 4,
+            "nodeKinds": [
+              "IAssignNode",
+              "IEndNode",
+              "IStartNode"
+            ],
+            "inputs": 20,
+            "outputs": 20
+          },
+          {
+            "name": "Cov09_Coverage",
+            "kind": "IClientAction",
+            "nodes": 4,
+            "nodeKinds": [
+              "IAssignNode",
+              "IEndNode",
+              "IExecuteClientActionNode",
+              "IStartNode"
+            ],
+            "inputs": 20,
+            "outputs": 20
+          },
+          {
+            "name": "Cov10_Coverage",
+            "kind": "OutSystems.Model.UI.Mobile.IScreenAction",
+            "nodes": 2,
+            "nodeKinds": [
+              "IDestinationNode",
+              "IStartNode"
+            ],
+            "inputs": 0,
+            "outputs": 0
+          },
+          {
+            "name": "Cov11_Coverage",
+            "kind": "OutSystems.Model.UI.Mobile.IScreenAction",
+            "nodes": 3,
+            "nodeKinds": [
+              "IEndNode",
+              "IRefreshDataNode",
+              "IStartNode"
+            ],
+            "inputs": 0,
+            "outputs": 0
+          }
+        ],
+        "delivered": true,
+        "newErrors": 0,
+        "newMessages": 0,
+        "fixedMessages": 1,
+        "mergeAttempts": 1,
+        "snapshots": 1,
+        "resume": {
+          "sameTask": true,
+          "sameOperation": true,
+          "additionalMerge": false,
+          "mcpWallMs": 4411
+        },
+        "initialControllerMs": 9423,
+        "initialMcpWallMs": 10012,
+        "receiptAccepted": true,
+        "receiptSha256": "5829e9c4a2c313fe4d3f18fd39761adc374d550ffcf8e174626af786b69b91cd",
+        "contractSha256": "57a4c87a3e40f227c156d4f184e0f026ba2710b04dfaf61d196ef1bd476757bc",
+        "remoteRuntimeExecuted": false
+      },
+      {
+        "module": "ZZActionCoverage_M",
+        "moduleKey": "Y+vCk3lnQUilXZUzcAQZuQ",
+        "taskId": "1894e210ddb24ac9b7387d15585a1893",
+        "deliveryTaskId": "2dc93b689a224bba9826e3cf1208ab8d",
+        "operationId": "5c3bafa088924ea5841b9500731c773b",
+        "actions": 13,
+        "checks": 1004,
+        "nodeKinds": [
+          "IAggregateNode",
+          "IAssignNode",
+          "ICommentNode",
+          "IDestinationNode",
+          "IEndNode",
+          "IExceptionHandlerNode",
+          "IExecuteClientActionNode",
+          "IExecuteServerActionNode",
+          "IForEachNode",
+          "IIfNode",
+          "IJSONDeserializeNode",
+          "IJSONSerializeNode",
+          "IJavaScriptNode",
+          "IMessageNode",
+          "IRaiseExceptionNode",
+          "IRefreshDataNode",
+          "IStartNode",
+          "ISwitchNode",
+          "ITriggerNode"
+        ],
+        "actionSummary": [
+          {
+            "name": "Cov01_Coverage",
+            "kind": "OutSystems.Model.UI.Mobile.IScreenAction",
+            "nodes": 3,
+            "nodeKinds": [
+              "IEndNode",
+              "IStartNode",
+              "ITriggerNode"
+            ],
+            "inputs": 0,
+            "outputs": 0
+          },
+          {
+            "name": "Cov02_ServerEcho",
+            "kind": "IServerAction",
+            "nodes": 5,
+            "nodeKinds": [
+              "IAssignNode",
+              "IEndNode",
+              "IIfNode",
+              "IRaiseExceptionNode",
+              "IStartNode"
+            ],
+            "inputs": 1,
+            "outputs": 1
+          },
+          {
+            "name": "Cov02_Coverage",
+            "kind": "IClientAction",
+            "nodes": 4,
+            "nodeKinds": [
+              "IAssignNode",
+              "IEndNode",
+              "IExecuteServerActionNode",
+              "IStartNode"
+            ],
+            "inputs": 1,
+            "outputs": 1
+          },
+          {
+            "name": "Cov04_Coverage",
+            "kind": "IClientAction",
+            "nodes": 4,
+            "nodeKinds": [
+              "IAssignNode",
+              "IEndNode",
+              "IJavaScriptNode",
+              "IStartNode"
+            ],
+            "inputs": 1,
+            "outputs": 1
+          },
+          {
+            "name": "Cov05_Coverage",
+            "kind": "IClientAction",
+            "nodes": 5,
+            "nodeKinds": [
+              "IAssignNode",
+              "IEndNode",
+              "IJSONDeserializeNode",
+              "IJSONSerializeNode",
+              "IStartNode"
+            ],
+            "inputs": 1,
+            "outputs": 1
+          },
+          {
+            "name": "Cov06_Coverage",
+            "kind": "IClientAction",
+            "nodes": 15,
+            "nodeKinds": [
+              "IAssignNode",
+              "IEndNode",
+              "IExecuteClientActionNode",
+              "IStartNode"
+            ],
+            "inputs": 2,
+            "outputs": 1
+          },
+          {
+            "name": "Cov07_Coverage",
+            "kind": "IClientAction",
+            "nodes": 9,
+            "nodeKinds": [
+              "IAggregateNode",
+              "IAssignNode",
+              "IEndNode",
+              "IExecuteClientActionNode",
+              "IStartNode"
+            ],
+            "inputs": 2,
+            "outputs": 1
+          },
+          {
+            "name": "Cov08_Coverage",
+            "kind": "IClientAction",
+            "nodes": 3,
+            "nodeKinds": [
+              "IEndNode",
+              "IMessageNode",
+              "IStartNode"
+            ],
+            "inputs": 1,
+            "outputs": 0
+          },
+          {
+            "name": "Cov09_Coverage",
+            "kind": "IClientAction",
+            "nodes": 13,
+            "nodeKinds": [
+              "IAssignNode",
+              "ICommentNode",
+              "IEndNode",
+              "IExceptionHandlerNode",
+              "IForEachNode",
+              "IIfNode",
+              "IRaiseExceptionNode",
+              "IStartNode",
+              "ISwitchNode"
+            ],
+            "inputs": 2,
+            "outputs": 1
+          },
+          {
+            "name": "Cov10_Echo",
+            "kind": "IClientAction",
+            "nodes": 4,
+            "nodeKinds": [
+              "IAssignNode",
+              "IEndNode",
+              "IStartNode"
+            ],
+            "inputs": 20,
+            "outputs": 20
+          },
+          {
+            "name": "Cov10_Coverage",
+            "kind": "IClientAction",
+            "nodes": 4,
+            "nodeKinds": [
+              "IAssignNode",
+              "IEndNode",
+              "IExecuteClientActionNode",
+              "IStartNode"
+            ],
+            "inputs": 20,
+            "outputs": 20
+          },
+          {
+            "name": "Cov11_Coverage",
+            "kind": "OutSystems.Model.UI.Mobile.IScreenAction",
+            "nodes": 2,
+            "nodeKinds": [
+              "IDestinationNode",
+              "IStartNode"
+            ],
+            "inputs": 0,
+            "outputs": 0
+          },
+          {
+            "name": "Cov12_Coverage",
+            "kind": "OutSystems.Model.UI.Mobile.IScreenAction",
+            "nodes": 3,
+            "nodeKinds": [
+              "IEndNode",
+              "IRefreshDataNode",
+              "IStartNode"
+            ],
+            "inputs": 0,
+            "outputs": 0
+          }
+        ],
+        "delivered": true,
+        "newErrors": 0,
+        "newMessages": 0,
+        "fixedMessages": 1,
+        "mergeAttempts": 1,
+        "snapshots": 1,
+        "resume": {
+          "sameTask": true,
+          "sameOperation": true,
+          "additionalMerge": false,
+          "mcpWallMs": 4088
+        },
+        "initialControllerMs": 11177,
+        "initialMcpWallMs": 11763,
+        "receiptAccepted": true,
+        "receiptSha256": "e043c3a24d8760f55a4f052c6a06506c3a7aee4c9ad5fea1e3857d4ef52fdbae",
+        "contractSha256": "a62f265b85339989eba2e8b4fc5eb40a1b8470301841391edbfd390bc16beba5",
+        "remoteRuntimeExecuted": false
+      },
+      {
+        "module": "ZZActionCoverage_Web",
+        "moduleKey": "UVmXgBgC8UiPZT0iegvbUQ",
+        "taskId": "f6a823e70b3648808f9cca7949e32450",
+        "deliveryTaskId": "0d0c5b69d85f42aca9e17669438a9a10",
+        "operationId": "1da384ef7053407891142c0ad3b3c03e",
+        "actions": 5,
+        "checks": 107,
+        "nodeKinds": [
+          "IAjaxRefreshNode",
+          "IAttachFileNode",
+          "IDestinationNode",
+          "IDownloadNode",
+          "IEndNode",
+          "IIfNode",
+          "IRaiseExceptionNode",
+          "ISendEmailNode",
+          "IStartNode"
+        ],
+        "actionSummary": [
+          {
+            "name": "Preparation",
+            "kind": "IPreparation",
+            "nodes": 3,
+            "nodeKinds": [
+              "IAttachFileNode",
+              "IEndNode",
+              "IStartNode"
+            ],
+            "inputs": 0,
+            "outputs": 0
+          },
+          {
+            "name": "Cov01_SendProof",
+            "kind": "IServerAction",
+            "nodes": 5,
+            "nodeKinds": [
+              "IEndNode",
+              "IIfNode",
+              "IRaiseExceptionNode",
+              "ISendEmailNode",
+              "IStartNode"
+            ],
+            "inputs": 0,
+            "outputs": 0
+          },
+          {
+            "name": "Cov02_Coverage",
+            "kind": "OutSystems.Model.UI.Web.IScreenAction",
+            "nodes": 3,
+            "nodeKinds": [
+              "IAjaxRefreshNode",
+              "IEndNode",
+              "IStartNode"
+            ],
+            "inputs": 0,
+            "outputs": 0
+          },
+          {
+            "name": "Cov03_Coverage",
+            "kind": "OutSystems.Model.UI.Web.IScreenAction",
+            "nodes": 2,
+            "nodeKinds": [
+              "IDownloadNode",
+              "IStartNode"
+            ],
+            "inputs": 1,
+            "outputs": 0
+          },
+          {
+            "name": "Cov04_Coverage",
+            "kind": "OutSystems.Model.UI.Web.IScreenAction",
+            "nodes": 2,
+            "nodeKinds": [
+              "IDestinationNode",
+              "IStartNode"
+            ],
+            "inputs": 0,
+            "outputs": 0
+          }
+        ],
+        "delivered": true,
+        "newErrors": 0,
+        "newMessages": 0,
+        "fixedMessages": 0,
+        "mergeAttempts": 1,
+        "snapshots": 1,
+        "resume": {
+          "sameTask": true,
+          "sameOperation": true,
+          "additionalMerge": false,
+          "mcpWallMs": 3174
+        },
+        "initialControllerMs": 5415,
+        "initialMcpWallMs": 5957,
+        "receiptAccepted": true,
+        "receiptSha256": "8b45cff752787aa2ec57474164e02549bdc82f9f470dc27772a4ceee2a4dd47a",
+        "contractSha256": "130e26459e3ec6b58478877792f735e08c63a79241ec6f7b95b3b6bcfb14c873",
+        "remoteRuntimeExecuted": false
+      }
+    ],
+    "actions": 46,
+    "checks": 3978,
+    "nodeKinds": [
+      "IAggregateNode",
+      "IAjaxRefreshNode",
+      "IAssignNode",
+      "IAttachFileNode",
+      "ICommentNode",
+      "IDestinationNode",
+      "IDownloadNode",
+      "IEndNode",
+      "IExcelToRecordListNode",
+      "IExceptionHandlerNode",
+      "IExecuteClientActionNode",
+      "IExecuteServerActionNode",
+      "IForEachNode",
+      "IIfNode",
+      "IJSONDeserializeNode",
+      "IJSONSerializeNode",
+      "IJavaScriptNode",
+      "IMessageNode",
+      "IRaiseExceptionNode",
+      "IRecordListToExcelNode",
+      "IRefreshDataNode",
+      "ISQLNode",
+      "ISendEmailNode",
+      "IStartNode",
+      "ISwitchNode",
+      "ITriggerNode"
+    ],
+    "initialControllerMs": 37057,
+    "initialMcpWallMs": 39414,
+    "runtimeNote": "Initial empty modules were published to establish the lab. Action bodies were merged and independently inspected, not published or executed on the server/browser.",
+    "scaffoldNote": "UI test fixtures were prepared through the maintenance path with connected empty handlers. The controlled MCP contracts then created/replaced the complete tested action bodies."
+  },
+  "runtimeRestrictions": [
+    "Public client entities are rejected by the controlled contract because native merge removes Public in this Studio build; use private local entities and public structures",
+    "Refresh Data nonempty StartIndex is rejected because native merge drops it; page through the source aggregate",
+    "Download is proved in Traditional screen actions; rejected in standalone Reactive/Mobile client actions",
+    "Message is proved in Reactive/Mobile client actions; not the Traditional screen feedback mechanism",
+    "Decision Outcome belongs to BPT, not an ordinary server/service/client action"
+  ],
+  "installation": {
+    "lane": "ss5",
+    "workerPort": 4537,
+    "workerPid": 44872,
+    "bridgePort": 4536,
+    "bridgeRestarted": false,
+    "ss4Changed": false,
+    "userIncidentsModulesChanged": false,
+    "skillValidated": true,
+    "clientHookTrustFabricated": false,
+    "clientHookTrustStillRequiresUserReview": true
+  },
+  "historicalSample": {
+    "actions": 3,
+    "checks": 217,
+    "controllerMs": 6625,
+    "sufficientForExpandedAcceptance": false
+  },
+  "performanceInterpretation": "37.057 seconds is the sum of controller deliveries for prepared contracts; 39.414 seconds for their MCP continue calls. Excludes request interpretation, test fixture preparation and initial empty-module publication."
+}

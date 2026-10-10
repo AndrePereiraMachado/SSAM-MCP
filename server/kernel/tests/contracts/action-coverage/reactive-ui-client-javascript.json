@@ -1,0 +1,117 @@
+{
+  "fixture": "reactive-ui",
+  "features": [
+    "javascript",
+    "client"
+  ],
+  "contract": {
+    "data": {
+      "structures": [
+        {
+          "name": "CoverageItem",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Number",
+              "type": "Integer"
+            },
+            {
+              "name": "Text",
+              "type": "Text"
+            }
+          ]
+        },
+        {
+          "name": "CoverageEnvelope",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Item",
+              "type": "CoverageItem"
+            },
+            {
+              "name": "Items",
+              "type": "CoverageItem List"
+            },
+            {
+              "name": "Numbers",
+              "type": "Integer List"
+            }
+          ]
+        }
+      ],
+      "entities": [
+        {
+          "name": "CoverageRow",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Value",
+              "type": "Integer"
+            }
+          ]
+        }
+      ]
+    },
+    "exceptions": [
+      {
+        "name": "CoverageFailure"
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "inputs": [
+            {
+              "name": "Value",
+              "type": "Integer"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "Result",
+              "type": "Integer"
+            }
+          ],
+          "steps": [
+            {
+              "node": "IJavaScriptNode",
+              "as": "Calculate",
+              "properties": {
+                "JavaScript": "$parameters.Result = $parameters.Value + 1;"
+              },
+              "inputs": [
+                {
+                  "name": "Value",
+                  "type": "Integer"
+                }
+              ],
+              "outputs": [
+                {
+                  "name": "Result",
+                  "type": "Integer"
+                }
+              ],
+              "args": {
+                "Value": "Value"
+              }
+            },
+            {
+              "assign": {
+                "Result": "Calculate.Result"
+              }
+            }
+          ],
+          "name": "Coverage",
+          "kind": "client",
+          "public": true
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IClientAction:Coverage/Calculate",
+    "prop": "JavaScript",
+    "value": "$parameters.Result = $parameters.Value + 2;"
+  }
+}

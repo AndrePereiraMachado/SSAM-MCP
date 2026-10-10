@@ -1,0 +1,18 @@
+{
+ "_leia": "Copia congelada de I1 usada com --plan-stage I3: falha de entrada (exit 2).",
+ "stage": "job",
+ "mode": "integrador",
+ "module": "Domain_CS",
+ "jobs": [
+  "l6-json-text-param.json"
+ ],
+ "planStage": "I3",
+ "exceptions": "exc-congelada-i1.exceptions.json",
+ "configOverride": {
+  "approvers": [
+   "autoteste"
+  ]
+ },
+ "exitCode": 2,
+ "toolErrors": 1
+}

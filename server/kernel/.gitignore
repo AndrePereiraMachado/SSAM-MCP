@@ -1,0 +1,14 @@
+bin/
+obj/
+TestResults/
+__pycache__/
+*.py[cod]
+.vs/
+.local/
+*.user
+*.oml
+!tests/**/fixtures/*.oml
+# Local OutSystems UI producer libraries
+/tests/fixtures/outsystems-ui.oml
+/tests/fixtures/outsystems-ui-web.oml
+export-*.json

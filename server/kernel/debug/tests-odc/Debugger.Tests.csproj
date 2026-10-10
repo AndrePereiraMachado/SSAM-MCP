@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><DefineConstants>$(DefineConstants);ODC</DefineConstants><StudioDir Condition="'$(StudioDir)' == ''">$(ProgramFiles)/OutSystems/ODC Studio/ODC Studio</StudioDir><AssemblyName>SSAM.Debugger.Tests</AssemblyName></PropertyGroup>
+  <Import Project="../NativeReferences.props" />
+  <ItemGroup><Compile Remove="../shared/Program.cs" /><Compile Include="../tests/*.cs" /><Compile Include="../odc/TransportFactory.cs" /></ItemGroup>
+</Project>

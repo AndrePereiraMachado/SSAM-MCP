@@ -1,0 +1,61 @@
+{
+  "fixture": "reactive-ui",
+  "features": [
+    "native-widget",
+    "mobile:IButtonGroup"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Subject",
+            "type": "IButtonGroup",
+            "properties": {
+              "Variable": "Choice",
+              "Style": "\"coverage\""
+            },
+            "children": [
+              {
+                "name": "Part3",
+                "type": "IButtonGroupItem",
+                "properties": {
+                  "Value": "\"A\""
+                },
+                "children": [
+                  {
+                    "name": "Part2",
+                    "type": "ITextWidget",
+                    "properties": {
+                      "Text": "A"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "vars": [
+          {
+            "name": "Choice",
+            "type": "Text"
+          }
+        ]
+      }
+    ]
+  },
+  "mutation": {
+    "target": "IMobileScreen:Coverage/Subject",
+    "prop": "Style",
+    "value": "\"changed\""
+  }
+}

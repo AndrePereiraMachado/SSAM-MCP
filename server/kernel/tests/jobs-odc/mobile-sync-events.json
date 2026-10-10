@@ -1,0 +1,37 @@
+{
+ "description": "ODC (contexto: app Mobile). Uma app CrossDevice recusa o que so uma app Mobile tem: 'On Sync objects can't be children of App objects', 'MobileConfigurations objects can't be children of App objects', 'On Sync Start objects can't be children of Screen objects'. Sobre a app Mobile em branco (create-blank --kind Mobile) os mesmos tipos nascem: o OnSync do modulo, as Mobile Configurations e os tres eventos de sincronizacao da tela. Os eventos da tela sao lugares fixos (<tela>.#OnSyncStart): toda tela Mobile ja nasce com eles, um segundo e recusado ('An item with the same key has already been added') e o que se faz e liga-los a uma screen action, ou apagar e voltar a criar. Extensibility Setting tambem nasce aqui (numa app CrossDevice: 'can't be created in Reactive runtime kind').",
+ "base": "tests/fixtures/odc/blank-mobile.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {"id": "NoErrorHandlingInFlow", "element": "CovBlankMobile (ESpace) / MainFlow (MobileFlow)", "why": "o fluxo de UI minimo nao tem OnException; o job prova os eventos de sincronizacao, nao o tratamento de excecoes"},
+  {"id": "UnusedElement", "element": "CovBlankMobile (ESpace) / OnSync (OnSyncSystemEvent) / Context (InputParameter)", "why": "o OnSync nasce com o input Context; o fluxo minimo nao o le"},
+  {"id": "UnusedElement", "element": "CovBlankMobile (ESpace) / CovMSyncSetting (ExtensibilitySetting)", "why": "o setting existe para provar que nasce numa app Mobile; ninguem o le"}
+ ],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IMobileFlow", "name": "MainFlow", "as": "$flow"},
+  {"op": "create", "parent": "$flow", "type": "IMobileScreen", "name": "CovMScreen", "as": "$scr",
+   "_why": "uma tela antes do OnSync: sem telas o OnSync avisa ClientSystemAction_NotExecutable"},
+  {"op": "create", "parent": "@espace", "type": "IOnSyncSystemEvent", "as": "$sync"},
+  {"op": "create", "parent": "$sync", "type": "IStartNode", "as": "$sync0"},
+  {"op": "create", "parent": "$sync", "type": "IEndNode", "as": "$sync9"},
+  {"op": "link", "from": "$sync0", "to": "$sync9"},
+  {"op": "get", "target": "$sync"},
+  {"op": "create", "parent": "@espace", "type": "IMobileConfigurations", "as": "$conf"},
+  {"op": "get", "target": "$conf"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "CovMSyncStarted", "as": "$act"},
+  {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$act0"},
+  {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$act9"},
+  {"op": "link", "from": "$act0", "to": "$act9"},
+  {"op": "set", "target": "$scr/OnSyncStart", "prop": "Destination", "value": "$act",
+   "_why": "o evento que a tela ja tem passa a chamar a screen action"},
+  {"op": "get", "target": "$scr/OnSyncStart"},
+  {"op": "delete", "target": "$scr/OnSyncComplete"},
+  {"op": "create", "parent": "$scr", "type": "IOnSyncCompleteEvent", "as": "$complete",
+   "_why": "o lugar vazio aceita um evento novo: o create so e recusado com o lugar ocupado"},
+  {"op": "get", "target": "$complete"},
+  {"op": "get", "target": "$scr/OnSyncError"},
+  {"op": "create", "parent": "@espace", "type": "IExtensibilitySetting", "name": "CovMSyncSetting", "as": "$setting"},
+  {"op": "set", "target": "$setting", "prop": "DataType", "value": "Text"},
+  {"op": "get", "target": "$setting"}
+ ]
+}

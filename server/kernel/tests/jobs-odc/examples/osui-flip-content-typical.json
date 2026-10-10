@@ -1,0 +1,28 @@
+{
+ "description": "FlipContent do OSUI: o nome do produto na frente, o preco no verso, StartsFlipped por variavel e OnFlip guardando o lado visivel.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [{"name": "Name", "type": "Text", "length": 100, "mandatory": true}, {"name": "Price", "type": "Currency"}, {"name": "ImageUrl", "type": "Text", "length": 500}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "FlipPrice", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Flip\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$GetProducts"},
+  {"op": "create", "parent": "$GetProducts", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "ShowBack", "as": "$vShowBack"},
+  {"op": "set", "target": "$vShowBack", "prop": "DataType", "value": "Boolean"},
+  {"op": "logic", "data": {"actions": [{"name": "Flipped", "kind": "screen", "owner": "IMobileScreen:FlipPrice", "inputs": [{"name": "IsFlipped", "type": "Boolean"}], "steps": [{"assign": {"ShowBack": "IsFlipped"}, "as": "Remember"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "ProductList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetProducts.List"},
+  {"op": "create", "parent": "$list", "type": "IMobileBlockInstanceWidget", "name": "ProductFlip", "source": "IMobileBlock:FlipContent", "as": "$fc"},
+  {"op": "set", "target": "$fc/StartsFlipped", "prop": "Value", "value": "ShowBack"},
+  {"op": "set", "target": "$fc/OnFlip", "prop": "Handler", "value": "IMobileScreen:FlipPrice/Flipped"},
+  {"op": "set", "target": "$fc/OnFlip/IsFlipped", "prop": "Value", "value": "IsFlipped"},
+  {"op": "create", "parent": "$fc/CardFront", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "GetProducts.List.Current.Product.Name"},
+  {"op": "create", "parent": "$fc/CardBack", "type": "IExpression", "as": "$expr2"},
+  {"op": "set", "target": "$expr2", "prop": "Value", "value": "FormatCurrency(GetProducts.List.Current.Product.Price, \"$\", 2, \".\", \",\")"}
+ ]
+}

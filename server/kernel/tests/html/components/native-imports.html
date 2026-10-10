@@ -1,0 +1,27 @@
+<component name="NativeImports" kind="screen" roles="Anonymous,Registered">
+  <script type="module">
+    import { Card } from 'outsystems:OutSystemsUI/Content';
+    import { Pagination } from 'outsystems:OutSystemsUI/Navigation';
+    export let offset = 0;
+    export function navigate(next) { offset = next; }
+  </script>
+  <style>
+    main { max-width: 1080px; margin: 48px auto; padding: 24px; color: #17243b; }
+    h1 { font-size: 32px; margin-bottom: 12px; }
+    .cards { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 24px; margin: 28px 0; }
+    .page { font-size: 20px; font-weight: 600; }
+    @media (max-width: 600px) { .cards { grid-template-columns: 1fr; } main { margin: 16px auto; } }
+  </style>
+  <main>
+    <h1>Componentes de outro módulo</h1>
+    <p>Cards e paginação nativos, importados do OutSystems UI.</p>
+    <div class="cards">
+      <Card id="First"><h2>Primeiro card</h2><p>Conteúdo projetado pelo HTML.</p></Card>
+      <Card id="Second"><h2>Segundo card</h2><p>As duas instâncias reutilizam o mesmo block.</p></Card>
+    </div>
+    <p class="page">Página {{ Math.floor(offset / 10) + 1 }} de 4</p>
+    <Pagination id="Pager" :StartIndex="offset" MaxRecords="10" TotalCount="34" @OnNavigate="navigate">
+      <span slot="Previous">←</span><span slot="Next">→</span>
+    </Pagination>
+  </main>
+</component>

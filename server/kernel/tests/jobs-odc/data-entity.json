@@ -1,0 +1,43 @@
+{
+ "description": "ODC (WS1): spec de dados sobre o InsuranceApp do tenant pessoal (r8): uma static entity com records e uma entidade com FK e defaults; depois um set sobre o alias gerado.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "static": [
+     {
+      "name": "WfProofStatus",
+      "records": [
+       {"name": "Active", "label": "Active"},
+       {"name": "Inactive", "label": "Inactive"}
+      ]
+     }
+    ],
+    "entities": [
+     {
+      "name": "WfProofContact",
+      "description": "Prova WS1: entidade criada headless no ODC",
+      "attributes": [
+       {"name": "Name", "type": "Text", "mandatory": true, "length": 100},
+       {"name": "Email", "type": "Email"},
+       {"name": "StatusId", "type": "WfProofStatus Identifier", "default": "Entities.WfProofStatus.Active"},
+       {"name": "CreatedOn", "type": "Date Time", "default": "CurrDateTime()"}
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "set",
+   "target": "$WfProofContact.Email",
+   "prop": "Description",
+   "value": "Email principal"
+  },
+  {
+   "op": "find",
+   "name": "WfProofContact"
+  }
+ ]
+}

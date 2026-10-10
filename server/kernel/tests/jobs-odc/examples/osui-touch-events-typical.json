@@ -1,0 +1,25 @@
+{
+ "description": "TouchEvents do OSUI: o End le o deslocamento vertical do toque e, se passar de 80px, faz Refresh Data da lista.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [{"name": "Name", "type": "Text", "length": 100, "mandatory": true}, {"name": "Price", "type": "Currency"}, {"name": "ImageUrl", "type": "Text", "length": 500}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "SwipeToRefresh", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Swipe\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$GetProducts"},
+  {"op": "create", "parent": "$GetProducts", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "logic", "data": {"actions": [{"name": "TouchEnded", "kind": "screen", "owner": "IMobileScreen:SwipeToRefresh", "inputs": [{"name": "OffsetY", "type": "Decimal"}], "steps": [{"if": "OffsetY > 80", "as": "PulledDown", "then": [{"node": "IRefreshDataNode", "as": "Reload", "properties": {"DataSource": "IMobileScreen:SwipeToRefresh/GetProducts"}}]}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "PullZone", "as": "$zone"},
+  {"op": "create", "parent": "$zone", "type": "IList", "name": "ProductList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetProducts.List"},
+  {"op": "create", "parent": "$list", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "GetProducts.List.Current.Product.Name"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "TouchEvents1", "source": "IMobileBlock:TouchEvents", "as": "$te"},
+  {"op": "set", "target": "$te/WidgetId", "prop": "Value", "value": "PullZone.Id"},
+  {"op": "set", "target": "$te/End", "prop": "Handler", "value": "IMobileScreen:SwipeToRefresh/TouchEnded"},
+  {"op": "set", "target": "$te/End/OffsetY", "prop": "Value", "value": "OffsetY"}
+ ]
+}

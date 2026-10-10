@@ -1,0 +1,105 @@
+using System;
+using System.Collections.Generic;
+using Anvil.Authoring;
+
+public record Quote(decimal Gross, decimal Total);
+public record Envelope(string? Label, decimal? Amount);
+public enum SampleKind { Small = 10, Large = 40 }
+
+public static class Rules
+{
+    public static int IntegerHalf(int value) => value / 2;
+    public static decimal DecimalHalf(decimal value) => value / 2m;
+    public static int WrapAdd(int left, int right) => left + right;
+    public static int CheckedAdd(int left, int right) => checked(left + right);
+    public static long LongAdd(long left, long right) => unchecked(left + right);
+    public static int Product(int left, int right) => unchecked(left * right);
+    public static int Remainder(int left, int right) => left % right;
+    public static int Negate(int value) => -value;
+    public static int Truncate(decimal value) => (int)value;
+    public static bool HasLargeRatio(int count, decimal weight) => count != 0 && weight / count > 10m;
+    public static bool EmptyOrLarge(List<int> values) => values.Count == 0 || values[0] > 10;
+    public static int EvaluationOrder(int value) => value + value++;
+    public static int SiblingScopes(int count)
+    {
+        int total = 0;
+        { int subtotal = count + 1; total += subtotal; }
+        { int subtotal = count + 2; total += subtotal; }
+        return total;
+    }
+    public static int CountSelected(int limit)
+    {
+        if (limit < 0) return -1;
+        int total = 0;
+        for (int index = 0; index < limit; index++)
+        {
+            if (index == 1) continue;
+            if (index == 5) break;
+            total += index;
+        }
+        return total + 100;
+    }
+    public static int FirstSmall(List<int> values)
+    {
+        int total = 0;
+        foreach (var value in values)
+        {
+            if (value == 0) continue;
+            if (value > 10) break;
+            total += value;
+        }
+        return total;
+    }
+    public static int WhileSum(int count)
+    {
+        int total = 0;
+        while (count-- > 0) total += count;
+        return total;
+    }
+    public static int Nested(int limit)
+    {
+        int total = 0;
+        for (int row = 0; row < limit; row++)
+            for (int column = 0; column < 3; column++)
+            {
+                if (column == 2) break;
+                total++;
+            }
+        return total;
+    }
+    [ServiceAction]
+    public static Quote MakeQuote(int count, decimal price, decimal freight)
+    {
+        if (count <= 0) throw new ArgumentOutOfRangeException(nameof(count), "Count must be positive.");
+        if (price < 0m || freight < 0m) throw new ArgumentException("Amounts cannot be negative.");
+        var gross = count * price;
+        return new Quote(gross, gross + freight);
+    }
+    [Authorize("Supervisor")]
+    public static int GroupPrice(int age) => TicketPrice(age) + Tax(TicketPrice(age));
+    private static int TicketPrice(int age)
+    {
+        if (age < 0) throw new ArgumentException("Age cannot be negative.");
+        if (age < 6) return 0;
+        return age < 18 ? 10 : 20;
+    }
+    private static int Tax(int price) => price > 0 ? 5 : 0;
+    public static int OverloadCall(int value) => Amount(value) + Amount((decimal)value);
+    private static int Amount(int value) => value + 1;
+    private static int Amount(decimal value) => (int)value + 2;
+    public static bool IsLarge(SampleKind kind) => kind == SampleKind.Large;
+    public static int? NullableSum(int? left, int? right) => left + right;
+    public static int? NullableDivide(int? left, int? right) => left / right;
+    public static bool OptionalEqual(int? left, int? right) => left == right;
+    public static bool OptionalGreater(int? left, int? right) => left > right;
+    public static int OrElse(int? value, int fallback) => value ?? fallback;
+    public static int OptionalValue(int? value) => value.Value;
+    public static bool IsPresent(int? value) => value.HasValue;
+    public static int? NoNumber() => null;
+    public static string LabelOrElse(string? value) => value ?? "missing";
+    public static Envelope OptionalEnvelope(string? label, decimal? amount) => new(label, amount);
+    public static byte NarrowToByte(int value) => unchecked((byte)value);
+    public static byte ByteIncrement(byte value) => unchecked((byte)(value + 1));
+    public static uint UIntAdd(uint left, uint right) => unchecked(left + right);
+    public static uint UIntProduct(uint left, uint right) => unchecked(left * right);
+}

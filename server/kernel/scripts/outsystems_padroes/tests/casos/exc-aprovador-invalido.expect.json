@@ -1,0 +1,17 @@
+{
+ "_leia": "Aprovador fora de config.approvers torna a excecao invalida; no integrador isso bloqueia (exit 1).",
+ "stage": "job",
+ "mode": "integrador",
+ "module": "Domain_CS",
+ "jobs": [
+  "l6-json-text-param.json"
+ ],
+ "exceptions": "exc-aprovador-invalido.exceptions.json",
+ "configOverride": {
+  "approvers": [
+   "autoteste"
+  ]
+ },
+ "exitCode": 1,
+ "invalidExceptions": 1
+}

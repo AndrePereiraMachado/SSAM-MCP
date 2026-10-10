@@ -1,0 +1,83 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.UI.Web.Widgets.IButtonWidget (o11) em webContainer. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IWebFlow:MainFlow",
+   "type": "IWebScreen",
+   "name": "CovSWebScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IWebBlockInstanceWidget/MainContent",
+   "type": "IContainerWidget",
+   "name": "CovSBox",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IButtonWidget",
+   "name": "CovAButtonWidget",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAction",
+   "name": "CovSHandler",
+   "as": "$h"
+  },
+  {
+   "op": "create",
+   "parent": "$h",
+   "type": "IStartNode",
+   "as": "$h0"
+  },
+  {
+   "op": "create",
+   "parent": "$h",
+   "type": "IEndNode",
+   "as": "$h9"
+  },
+  {
+   "op": "link",
+   "from": "$h0",
+   "to": "$h9"
+  },
+  {
+   "op": "set",
+   "target": "$a/OnClick",
+   "prop": "Destination",
+   "value": "$h"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Example",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRButtonWidget"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "move",
+   "target": "$b",
+   "first": true
+  }
+ ]
+}

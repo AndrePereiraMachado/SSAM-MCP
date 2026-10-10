@@ -1,0 +1,13 @@
+{
+ "description": "TouchEvents (OutSystemsUI, Utilities) minimo: instancia como o Studio cria ao arrastar o bloco; inputs obrigatorios WidgetId com valores simples.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "TouchEventsTarget", "as": "$target"},
+  {"op": "create", "parent": "$target", "type": "IExpression", "as": "$targetText"},
+  {"op": "set", "target": "$targetText", "prop": "Value", "value": "\"Target area\""},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "TouchEventsDemo", "source": "IMobileBlock:TouchEvents", "as": "$b"},
+  {"op": "set", "target": "$b/WidgetId", "prop": "Value", "value": "TouchEventsTarget.Id"}
+ ]
+}

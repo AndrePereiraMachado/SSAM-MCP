@@ -1,0 +1,250 @@
+{
+  "fixture": "reactive-ui",
+  "features": [
+    "OutSystemsUI",
+    "OutSystemsUI:Animate",
+    "OutSystemsUI:AnimatedLabel",
+    "OutSystemsUI:AppFeedbackHelp",
+    "OutSystemsUI:Badge",
+    "OutSystemsUI:BlankSlate"
+  ],
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "tests/fixtures/outsystems-ui.oml",
+      "elements": [
+        "IMobileBlock:Animate",
+        "IMobileBlock:AnimatedLabel",
+        "IMobileBlock:AppFeedbackHelp",
+        "IMobileBlock:Badge",
+        "IMobileBlock:BlankSlate"
+      ]
+    }
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Ui5_Animate",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:Animate",
+            "args": {
+              "AnimationType": "Entities.AnimationType.BottomToTop"
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui6_AnimatedLabel",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:AnimatedLabel",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Label": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Label"
+                  }
+                }
+              ],
+              "Input": [
+                {
+                  "name": "Part3",
+                  "type": "IInput",
+                  "properties": {
+                    "Variable": "Value1"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value1",
+            "type": "Text"
+          }
+        ]
+      },
+      {
+        "name": "Ui7_AppFeedbackHelp",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:AppFeedbackHelp",
+            "args": {},
+            "slots": {
+              "Title": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Text"
+                  }
+                }
+              ],
+              "Message": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Container"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui8_Badge",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:Badge",
+            "args": {
+              "Number": "1",
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {}
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui9_BlankSlate",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:BlankSlate",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Icon": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Icon"
+                  }
+                }
+              ],
+              "Content": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Actions": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      }
+    ]
+  },
+  "mutations": [
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui5_Animate/Part1/Content/Part2",
+      "prop": "Text",
+      "value": "Changed",
+      "element": "Animate"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui6_AnimatedLabel/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "AnimatedLabel"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui7_AppFeedbackHelp/Part1/Title/Part2",
+      "prop": "Text",
+      "value": "Changed",
+      "element": "AppFeedbackHelp"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui8_Badge/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Badge"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui9_BlankSlate/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "BlankSlate"
+    }
+  ]
+}

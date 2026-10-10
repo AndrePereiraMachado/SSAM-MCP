@@ -1,0 +1,20 @@
+{
+ "description": "Breadcrumbs do OSUI com dois BreadcrumbsItem: um com Link para outra tela no Title e o ultimo com o nome da tela atual.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "OrderHistory", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Order history\""},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Breadcrumbs", "type": "IMobileBlockInstanceWidget", "name": "Breadcrumbs1", "source": "IMobileBlock:Breadcrumbs", "empty": true, "as": "$bc"},
+  {"op": "create", "parent": "$bc/Content", "type": "IMobileBlockInstanceWidget", "name": "HomeCrumb", "source": "IMobileBlock:BreadcrumbsItem", "as": "$home"},
+  {"op": "create", "parent": "$home/Title", "type": "ILink", "name": "HomeLink", "as": "$lHomeLink"},
+  {"op": "set", "target": "$lHomeLink/#ITextWidget", "prop": "Text", "value": "Profile"},
+  {"op": "set", "target": "$lHomeLink/OnClick", "prop": "Destination", "value": "IMobileScreen:UserProfile"},
+  {"op": "create", "parent": "$bc/Content", "type": "IMobileBlockInstanceWidget", "name": "CurrentCrumb", "source": "IMobileBlock:BreadcrumbsItem", "as": "$here"},
+  {"op": "create", "parent": "$here/Title", "type": "ITextWidget", "as": "$text1"},
+  {"op": "set", "target": "$text1", "prop": "Text", "value": "Order history"}
+ ]
+}

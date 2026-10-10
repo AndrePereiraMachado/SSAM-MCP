@@ -1,0 +1,23 @@
+{
+ "_leia": "Excecao 'proposta' nao se aplica no integrador: exit 1.",
+ "stage": "job",
+ "mode": "integrador",
+ "module": "Domain_CS",
+ "jobs": [
+  "l6-json-text-param.json"
+ ],
+ "exceptions": "exc-proposta.exceptions.json",
+ "configOverride": {
+  "approvers": [
+   "autoteste"
+  ]
+ },
+ "exitCode": 1,
+ "mustFind": [
+  {
+   "rule": "L6",
+   "contains": "SummaryJson",
+   "excepted": false
+  }
+ ]
+}

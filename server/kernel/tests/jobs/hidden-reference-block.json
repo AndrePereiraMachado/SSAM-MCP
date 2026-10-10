@@ -1,0 +1,425 @@
+{
+ "description": "Instancia do bloco MouseEvents (OutSystems UI) cuja referencia e OCULTA no fixture (dependencia indireta) com os 3 handlers ligados. O verbo desoculta a referencia ao ligar SourceBlock; sem isso o merge de 3 vias automatico apagava os handlers e argumentos (item 17). O get final mostra Hidden=False.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedElement",
+   "element": "MouseEvents1_End (ScreenAction) / X (InputParameter)",
+   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "MouseEvents1_End (ScreenAction) / Y (InputParameter)",
+   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "MouseEvents1_End (ScreenAction) / OffsetX (InputParameter)",
+   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "MouseEvents1_End (ScreenAction) / OffsetY (InputParameter)",
+   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "MouseEvents1_End (ScreenAction) / TimeTaken (InputParameter)",
+   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "MouseEvents1_Move (ScreenAction) / X (InputParameter)",
+   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "MouseEvents1_Move (ScreenAction) / Y (InputParameter)",
+   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "MouseEvents1_Move (ScreenAction) / OffsetX (InputParameter)",
+   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "MouseEvents1_Move (ScreenAction) / OffsetY (InputParameter)",
+   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "MouseEvents1_Move (ScreenAction) / Evt (InputParameter)",
+   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "MouseEvents1_Start (ScreenAction) / X (InputParameter)",
+   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "MouseEvents1_Start (ScreenAction) / Y (InputParameter)",
+   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "HiddenRefProbe",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IContainer",
+   "name": "G_MouseEvents",
+   "as": "$G_MouseEvents"
+  },
+  {
+   "op": "create",
+   "parent": "$G_MouseEvents",
+   "type": "IMobileBlockInstanceWidget",
+   "name": "MouseEvents1",
+   "source": "IMobileBlock:MouseEvents",
+   "as": "$MouseEvents1"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1/WidgetId",
+   "prop": "Value",
+   "value": "\"Sample\""
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAction",
+   "name": "MouseEvents1_End",
+   "as": "$MouseEvents1_End_h"
+  },
+  {
+   "op": "create",
+   "parent": "$MouseEvents1_End_h",
+   "type": "IInputParameter",
+   "name": "X",
+   "as": "$MouseEvents1_End_h_p1"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1_End_h_p1",
+   "prop": "DataType",
+   "value": "Decimal"
+  },
+  {
+   "op": "create",
+   "parent": "$MouseEvents1_End_h",
+   "type": "IInputParameter",
+   "name": "Y",
+   "as": "$MouseEvents1_End_h_p2"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1_End_h_p2",
+   "prop": "DataType",
+   "value": "Decimal"
+  },
+  {
+   "op": "create",
+   "parent": "$MouseEvents1_End_h",
+   "type": "IInputParameter",
+   "name": "OffsetX",
+   "as": "$MouseEvents1_End_h_p3"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1_End_h_p3",
+   "prop": "DataType",
+   "value": "Decimal"
+  },
+  {
+   "op": "create",
+   "parent": "$MouseEvents1_End_h",
+   "type": "IInputParameter",
+   "name": "OffsetY",
+   "as": "$MouseEvents1_End_h_p4"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1_End_h_p4",
+   "prop": "DataType",
+   "value": "Decimal"
+  },
+  {
+   "op": "create",
+   "parent": "$MouseEvents1_End_h",
+   "type": "IInputParameter",
+   "name": "TimeTaken",
+   "as": "$MouseEvents1_End_h_p5"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1_End_h_p5",
+   "prop": "DataType",
+   "value": "Decimal"
+  },
+  {
+   "op": "create",
+   "parent": "$MouseEvents1_End_h",
+   "type": "IStartNode",
+   "as": "$MouseEvents1_End_h_s"
+  },
+  {
+   "op": "create",
+   "parent": "$MouseEvents1_End_h",
+   "type": "IEndNode",
+   "as": "$MouseEvents1_End_h_e"
+  },
+  {
+   "op": "link",
+   "from": "$MouseEvents1_End_h_s",
+   "to": "$MouseEvents1_End_h_e"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1/End",
+   "prop": "Handler",
+   "value": "$MouseEvents1_End_h"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1/End/X",
+   "prop": "Value",
+   "value": "X"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1/End/Y",
+   "prop": "Value",
+   "value": "Y"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1/End/OffsetX",
+   "prop": "Value",
+   "value": "OffsetX"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1/End/OffsetY",
+   "prop": "Value",
+   "value": "OffsetY"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1/End/TimeTaken",
+   "prop": "Value",
+   "value": "TimeTaken"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAction",
+   "name": "MouseEvents1_Start",
+   "as": "$MouseEvents1_Start_h"
+  },
+  {
+   "op": "create",
+   "parent": "$MouseEvents1_Start_h",
+   "type": "IInputParameter",
+   "name": "X",
+   "as": "$MouseEvents1_Start_h_p1"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1_Start_h_p1",
+   "prop": "DataType",
+   "value": "Decimal"
+  },
+  {
+   "op": "create",
+   "parent": "$MouseEvents1_Start_h",
+   "type": "IInputParameter",
+   "name": "Y",
+   "as": "$MouseEvents1_Start_h_p2"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1_Start_h_p2",
+   "prop": "DataType",
+   "value": "Decimal"
+  },
+  {
+   "op": "create",
+   "parent": "$MouseEvents1_Start_h",
+   "type": "IStartNode",
+   "as": "$MouseEvents1_Start_h_s"
+  },
+  {
+   "op": "create",
+   "parent": "$MouseEvents1_Start_h",
+   "type": "IEndNode",
+   "as": "$MouseEvents1_Start_h_e"
+  },
+  {
+   "op": "link",
+   "from": "$MouseEvents1_Start_h_s",
+   "to": "$MouseEvents1_Start_h_e"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1/Start",
+   "prop": "Handler",
+   "value": "$MouseEvents1_Start_h"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1/Start/X",
+   "prop": "Value",
+   "value": "X"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1/Start/Y",
+   "prop": "Value",
+   "value": "Y"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAction",
+   "name": "MouseEvents1_Move",
+   "as": "$MouseEvents1_Move_h"
+  },
+  {
+   "op": "create",
+   "parent": "$MouseEvents1_Move_h",
+   "type": "IInputParameter",
+   "name": "X",
+   "as": "$MouseEvents1_Move_h_p1"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1_Move_h_p1",
+   "prop": "DataType",
+   "value": "Decimal"
+  },
+  {
+   "op": "create",
+   "parent": "$MouseEvents1_Move_h",
+   "type": "IInputParameter",
+   "name": "Y",
+   "as": "$MouseEvents1_Move_h_p2"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1_Move_h_p2",
+   "prop": "DataType",
+   "value": "Decimal"
+  },
+  {
+   "op": "create",
+   "parent": "$MouseEvents1_Move_h",
+   "type": "IInputParameter",
+   "name": "OffsetX",
+   "as": "$MouseEvents1_Move_h_p3"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1_Move_h_p3",
+   "prop": "DataType",
+   "value": "Decimal"
+  },
+  {
+   "op": "create",
+   "parent": "$MouseEvents1_Move_h",
+   "type": "IInputParameter",
+   "name": "OffsetY",
+   "as": "$MouseEvents1_Move_h_p4"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1_Move_h_p4",
+   "prop": "DataType",
+   "value": "Decimal"
+  },
+  {
+   "op": "create",
+   "parent": "$MouseEvents1_Move_h",
+   "type": "IInputParameter",
+   "name": "Evt",
+   "as": "$MouseEvents1_Move_h_p5"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1_Move_h_p5",
+   "prop": "DataType",
+   "value": "Object"
+  },
+  {
+   "op": "create",
+   "parent": "$MouseEvents1_Move_h",
+   "type": "IStartNode",
+   "as": "$MouseEvents1_Move_h_s"
+  },
+  {
+   "op": "create",
+   "parent": "$MouseEvents1_Move_h",
+   "type": "IEndNode",
+   "as": "$MouseEvents1_Move_h_e"
+  },
+  {
+   "op": "link",
+   "from": "$MouseEvents1_Move_h_s",
+   "to": "$MouseEvents1_Move_h_e"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1/Move",
+   "prop": "Handler",
+   "value": "$MouseEvents1_Move_h"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1/Move/X",
+   "prop": "Value",
+   "value": "X"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1/Move/Y",
+   "prop": "Value",
+   "value": "Y"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1/Move/OffsetX",
+   "prop": "Value",
+   "value": "OffsetX"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1/Move/OffsetY",
+   "prop": "Value",
+   "value": "OffsetY"
+  },
+  {
+   "op": "set",
+   "target": "$MouseEvents1/Move/Evt",
+   "prop": "Value",
+   "value": "Evt"
+  },
+  {
+   "op": "get",
+   "target": "IMobileBlock:MouseEvents"
+  }
+ ]
+}

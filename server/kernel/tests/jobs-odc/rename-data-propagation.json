@@ -1,0 +1,85 @@
+{
+ "description": "ODC: renomear DADOS e ler de volta o que ficou para tras, o espelho de tests/jobs/rename-data-propagation.json. A entidade WfRenNotice vira WfRenAlert, o atributo Body vira Message e uma variavel local tambem e renomeada; o job le com get/dump, DEPOIS de cada rename, a Description e o Label (texto do autor), o nome do indice, o literal do Assign, o Statement do SQL e as expressoes da tela. Primeiro job de rename da faixa ODC.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfRen_Report (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "ops": [
+  {"op": "spec", "data": {
+   "entities": [
+    {"name": "WfRenNotice", "public": true, "attributes": [
+     {"name": "Title", "type": "Text", "mandatory": true, "length": 100},
+     {"name": "Body", "type": "Text", "length": 500}
+    ]}
+   ]
+  }},
+  {"op": "set", "target": "$WfRenNotice", "prop": "Description", "value": "Avisos. O texto vive em WfRenNotice.Body.", "_why": "1. texto do autor: descricao e label citam o nome antigo"},
+  {"op": "set", "target": "$WfRenNotice.Body", "prop": "Description", "value": "Corpo do WfRenNotice, mostrado no ecra WfRenNotices."},
+  {"op": "set", "target": "$WfRenNotice.Body", "prop": "Label", "value": "Body do Notice"},
+
+  {"op": "create", "parent": "$WfRenNotice", "type": "EntityIndex", "name": "IX_WfRenNotice_Title", "args": {"unique": false, "attributes": ["$WfRenNotice.Title"]}, "_why": "2. o indice: a Entity e uma referencia (segue), o NOME do indice e texto (nao segue)"},
+
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfRen_Report", "as": "$rep", "_why": "3. consumidor de logica: SQL sobre a entidade, literal de texto e variavel local"},
+  {"op": "create", "parent": "$rep", "type": "IOutputParameter", "name": "Rows", "as": "$repRows"},
+  {"op": "set", "target": "$repRows", "prop": "DataType", "value": "WfRenNotice List"},
+  {"op": "create", "parent": "$rep", "type": "IOutputParameter", "name": "Label", "as": "$repLabel"},
+  {"op": "set", "target": "$repLabel", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$rep", "type": "ILocalVariable", "name": "NoticeLabel", "as": "$var"},
+  {"op": "set", "target": "$var", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$rep", "type": "IStartNode", "as": "$r0"},
+  {"op": "create", "parent": "$rep", "type": "ISQLNode", "name": "ReadNotices", "as": "$sql"},
+  {"op": "set", "target": "$sql", "prop": "Statement", "value": "SELECT {WfRenNotice}.* FROM {WfRenNotice} WHERE {WfRenNotice}.[Body] <> @Empty"},
+  {"op": "create", "parent": "$sql", "type": "ISQLInputParameter", "name": "Empty", "as": "$sqlIn"},
+  {"op": "set", "target": "$sqlIn", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$sql", "type": "ISQLOutput", "name": "List", "args": {"entityOrStructure": "WfRenNotice"}, "as": "$sqlOut"},
+  {"op": "set", "target": "$sql/arg:Empty", "prop": "Value", "value": "\"\""},
+  {"op": "create", "parent": "$rep", "type": "IAssignNode", "as": "$asg"},
+  {"op": "set", "target": "$asg", "prop": "Label", "value": "SetOutputs"},
+  {"op": "create", "parent": "$asg", "type": "IAssignment", "as": "$a1"},
+  {"op": "set", "target": "$a1", "prop": "Variable", "value": "Rows"},
+  {"op": "set", "target": "$a1", "prop": "Value", "value": "ReadNotices.List"},
+  {"op": "create", "parent": "$asg", "type": "IAssignment", "as": "$a2"},
+  {"op": "set", "target": "$a2", "prop": "Variable", "value": "NoticeLabel"},
+  {"op": "set", "target": "$a2", "prop": "Value", "value": "\"WfRenNotice sem Body\""},
+  {"op": "create", "parent": "$asg", "type": "IAssignment", "as": "$a3"},
+  {"op": "set", "target": "$a3", "prop": "Variable", "value": "Label"},
+  {"op": "set", "target": "$a3", "prop": "Value", "value": "NoticeLabel"},
+  {"op": "create", "parent": "$rep", "type": "IEndNode", "as": "$r9"},
+  {"op": "link", "from": "$r0", "to": "$sql"},
+  {"op": "link", "from": "$sql", "to": "$asg"},
+  {"op": "link", "from": "$asg", "to": "$r9"},
+  {"op": "layout", "target": "$rep"},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfRenNotices", "as": "$scr", "_why": "4. consumidor de interface: aggregate e expressao que citam entidade e atributo"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Notices\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetNoticesForList", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "$WfRenNotice"}},
+  {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "WfRenNotice.Body <> \"\""}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$ex"},
+  {"op": "set", "target": "$ex", "prop": "Value", "value": "GetNoticesForList.List.Current.WfRenNotice.Body"},
+
+  {"op": "usages", "target": "$WfRenNotice", "max": 30, "_why": "5. ANTES: quem usa a entidade e o atributo"},
+  {"op": "usages", "target": "$WfRenNotice.Body"},
+
+  {"op": "rename", "target": "$WfRenNotice", "name": "WfRenAlert", "_why": "6. o rename da entidade"},
+  {"op": "get", "target": "$WfRenNotice", "_why": "LER DE VOLTA: a Description ainda diz WfRenNotice.Body"},
+  {"op": "get", "target": "EntityIndex:IX_WfRenNotice_Title", "_why": "o indice mantem o nome antigo; a Entity seguiu"},
+  {"op": "get", "target": "$sql", "_why": "o Statement do SQL foi regenerado"},
+  {"op": "get", "target": "$a2", "_why": "o literal nao mudou"},
+  {"op": "usages", "target": "$WfRenNotice", "max": 30},
+
+  {"op": "rename", "target": "$WfRenNotice.Body", "name": "Message", "_why": "7. o rename do atributo"},
+  {"op": "get", "target": "$WfRenNotice.Body", "_why": "LER DE VOLTA: Description e Label do atributo continuam a dizer Body/Notice"},
+  {"op": "get", "target": "$sql"},
+  {"op": "get", "target": "$ex", "_why": "a expressao da tela foi reescrita nas duas partes"},
+  {"op": "usages", "target": "$WfRenNotice.Body"},
+
+  {"op": "rename", "target": "$var", "name": "AlertLabel", "_why": "8. o rename da variavel local"},
+  {"op": "get", "target": "$a3"},
+  {"op": "get", "target": "$a2"},
+
+  {"op": "dump", "target": "$scr", "depth": 5},
+  {"op": "dump", "target": "$rep", "depth": 4}
+ ]
+}

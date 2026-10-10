@@ -1,0 +1,14 @@
+{
+ "description": "TabsHeaderItem do OSUI: um cabecalho de aba com texto, no Header de um Tabs vazio.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "TabsHeaderDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Tabs1", "source": "IMobileBlock:Tabs", "empty": true, "as": "$tabs"},
+  {"op": "create", "parent": "$tabs/Header", "type": "IMobileBlockInstanceWidget", "name": "TabsHeaderItem1", "source": "IMobileBlock:TabsHeaderItem", "as": "$h"},
+  {"op": "create", "parent": "$h/Title", "type": "ITextWidget", "as": "$text1"},
+  {"op": "set", "target": "$text1", "prop": "Text", "value": "Details"}
+ ]
+}

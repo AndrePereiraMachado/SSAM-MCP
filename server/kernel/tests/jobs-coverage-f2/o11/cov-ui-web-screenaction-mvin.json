@@ -1,0 +1,57 @@
+{
+ "description": "Cobertura testada (fase 2): move into (copy of IWebBlock) de OutSystems.Model.UI.Web.IScreenAction (o11) em webBlock. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedAction",
+   "element": "HeadlessTrad_UI (ESpace) / MainFlow (WebFlow) / CovSWebBlockMv (WebBlock) / CovAScreenAction (ScreenAction)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IWebFlow:MainFlow",
+   "type": "IWebBlock",
+   "name": "CovSWebBlock",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "OutSystems.Model.UI.Web.IScreenAction",
+   "name": "CovAScreenAction",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IStartNode",
+   "as": "$a_s"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IEndNode",
+   "as": "$a_e"
+  },
+  {
+   "op": "link",
+   "from": "$a_s",
+   "to": "$a_e"
+  },
+  {
+   "op": "create",
+   "parent": "IWebFlow:MainFlow",
+   "type": "IWebBlock",
+   "name": "CovSWebBlockMv",
+   "as": "$p_mv"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "into": "$p_mv"
+  }
+ ]
+}

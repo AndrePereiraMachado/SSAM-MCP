@@ -1,0 +1,15 @@
+{
+ "_leia": "Controle negativo AR1: estagio job no modo autor; a ferramenta tem de dar exit 1 e acusar AR1.",
+ "stage": "job",
+ "mode": "autor",
+ "module": "Engine_Core_CS",
+ "exitCode": 1,
+ "mustFind": [
+  {
+   "rule": "AR1",
+   "severity": "erro",
+   "stage": "job",
+   "contains": "End-user"
+  }
+ ]
+}

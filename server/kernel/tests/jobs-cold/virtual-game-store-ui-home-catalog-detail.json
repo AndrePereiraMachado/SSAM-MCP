@@ -1,0 +1,2091 @@
+{
+  "description": "Headless_UI: Home, Catalog e GameDetail para a loja virtual de videogames, com Data Actions e interações consumindo ações públicas do Headless_CS",
+  "base": "tests/fixtures/reactive-ui.oml",
+  "expectValid": true,
+  "ops": [
+    {
+      "op": "reference",
+      "producer": "Headless_CS",
+      "elements": [
+        "IServerEntity:Game",
+        "IServerEntity:GameEdition",
+        "IServerEntity:GameMedia",
+        "IServerEntity:GameReview",
+        "IServerEntity:Genre",
+        "IServerEntity:Platform",
+        "IServerAction:Game_ListFeatured",
+        "IServerAction:Game_Search",
+        "IServerAction:Game_Get",
+        "IServerAction:GameEdition_ListAvailable",
+        "IServerAction:GameReview_List",
+        "IServerAction:Cart_AddItem",
+        "IServerAction:Wishlist_Add",
+        "IServerAction:ReviewVote_Set"
+      ],
+      "as": "$cs"
+    },
+
+    {
+      "op": "create",
+      "parent": "IMobileFlow:MainFlow",
+      "type": "IMobileScreen",
+      "name": "GameDetail",
+      "as": "$detail"
+    },
+    {
+      "op": "set",
+      "target": "$detail/#IMobileBlockInstanceWidget",
+      "prop": "SourceBlock",
+      "value": "IMobileBlock:LayoutTopMenu"
+    },
+    {
+      "op": "create",
+      "parent": "$detail",
+      "type": "IInputParameter",
+      "name": "GameId",
+      "as": "$detailGameId"
+    },
+    {
+      "op": "set",
+      "target": "$detailGameId",
+      "prop": "DataType",
+      "value": "Game Identifier"
+    },
+    {
+      "op": "create",
+      "parent": "IMobileFlow:MainFlow",
+      "type": "IMobileScreen",
+      "name": "Catalog",
+      "as": "$catalog"
+    },
+    {
+      "op": "set",
+      "target": "$catalog/#IMobileBlockInstanceWidget",
+      "prop": "SourceBlock",
+      "value": "IMobileBlock:LayoutTopMenu"
+    },
+
+    {
+      "op": "create",
+      "parent": "IMobileFlow:MainFlow",
+      "type": "IMobileScreen",
+      "name": "Home",
+      "as": "$home"
+    },
+    {
+      "op": "set",
+      "target": "$home/#IMobileBlockInstanceWidget",
+      "prop": "SourceBlock",
+      "value": "IMobileBlock:LayoutTopMenu"
+    },
+    {
+      "op": "create",
+      "parent": "$home/#IMobileBlockInstanceWidget/Title",
+      "type": "IExpression",
+      "as": "$homeTitle"
+    },
+    {
+      "op": "set",
+      "target": "$homeTitle",
+      "prop": "Value",
+      "value": "\"Game Store\""
+    },
+    {
+      "op": "create",
+      "parent": "$home",
+      "type": "IDataAction",
+      "name": "LoadFeatured",
+      "as": "$homeDa"
+    },
+    {
+      "op": "delete",
+      "target": "$homeDa/Out1",
+      "_why": "a Data Action nasce com output de exemplo"
+    },
+    {
+      "op": "create",
+      "parent": "$homeDa",
+      "type": "IOutputParameter",
+      "name": "Games",
+      "as": "$homeGames"
+    },
+    {
+      "op": "set",
+      "target": "$homeGames",
+      "prop": "DataType",
+      "value": "Game List"
+    },
+    {
+      "op": "create",
+      "parent": "$homeDa",
+      "type": "IOutputParameter",
+      "name": "TotalCount",
+      "as": "$homeCount"
+    },
+    {
+      "op": "set",
+      "target": "$homeCount",
+      "prop": "DataType",
+      "value": "Long Integer"
+    },
+    {
+      "op": "create",
+      "parent": "$homeDa",
+      "type": "IStartNode",
+      "as": "$homeStart"
+    },
+    {
+      "op": "create",
+      "parent": "$homeDa",
+      "type": "IExecuteServerActionNode",
+      "name": "Game_ListFeatured",
+      "as": "$homeCall"
+    },
+    {
+      "op": "set",
+      "target": "$homeCall",
+      "prop": "Action",
+      "value": "IActionSignature:Game_ListFeatured"
+    },
+    {
+      "op": "set",
+      "target": "$homeCall/Page",
+      "prop": "Value",
+      "value": "1"
+    },
+    {
+      "op": "set",
+      "target": "$homeCall/PageSize",
+      "prop": "Value",
+      "value": "8"
+    },
+    {
+      "op": "create",
+      "parent": "$homeDa",
+      "type": "IAssignNode",
+      "name": "SetFeaturedOutput",
+      "as": "$homeAssign"
+    },
+    {
+      "op": "set",
+      "target": "$homeAssign",
+      "prop": "Label",
+      "value": "SetFeaturedOutput"
+    },
+    {
+      "op": "create",
+      "parent": "$homeAssign",
+      "type": "IAssignment",
+      "as": "$homeGamesAssign"
+    },
+    {
+      "op": "set",
+      "target": "$homeGamesAssign",
+      "prop": "Variable",
+      "value": "Games"
+    },
+    {
+      "op": "set",
+      "target": "$homeGamesAssign",
+      "prop": "Value",
+      "value": "Game_ListFeatured.Games"
+    },
+    {
+      "op": "create",
+      "parent": "$homeAssign",
+      "type": "IAssignment",
+      "as": "$homeCountAssign"
+    },
+    {
+      "op": "set",
+      "target": "$homeCountAssign",
+      "prop": "Variable",
+      "value": "TotalCount"
+    },
+    {
+      "op": "set",
+      "target": "$homeCountAssign",
+      "prop": "Value",
+      "value": "Game_ListFeatured.TotalCount"
+    },
+    {
+      "op": "create",
+      "parent": "$homeDa",
+      "type": "IEndNode",
+      "as": "$homeEnd"
+    },
+    {
+      "op": "link",
+      "from": "$homeStart",
+      "to": "$homeCall"
+    },
+    {
+      "op": "link",
+      "from": "$homeCall",
+      "to": "$homeAssign"
+    },
+    {
+      "op": "link",
+      "from": "$homeAssign",
+      "to": "$homeEnd"
+    },
+    {
+      "op": "layout",
+      "target": "$homeDa"
+    },
+    {
+      "op": "create",
+      "parent": "$home/#IMobileBlockInstanceWidget/MainContent",
+      "type": "IExpression",
+      "as": "$homeWelcome"
+    },
+    {
+      "op": "set",
+      "target": "$homeWelcome",
+      "prop": "Value",
+      "value": "\"Destaques da semana\""
+    },
+    {
+      "op": "create",
+      "parent": "$home/#IMobileBlockInstanceWidget/MainContent",
+      "type": "IList",
+      "name": "FeaturedGamesList",
+      "as": "$homeList"
+    },
+    {
+      "op": "set",
+      "target": "$homeList",
+      "prop": "Source",
+      "value": "LoadFeatured.Games"
+    },
+    {
+      "op": "create",
+      "parent": "$homeList",
+      "type": "IListItem",
+      "name": "FeaturedGameItem",
+      "as": "$homeItem"
+    },
+    {
+      "op": "delete",
+      "target": "$homeItem/RightActions/#IListItemAction",
+      "_why": "remove swipe action de exemplo sem destino"
+    },
+    {
+      "op": "create",
+      "parent": "$homeItem/Content",
+      "type": "IExpression",
+      "as": "$homeGameTitle"
+    },
+    {
+      "op": "set",
+      "target": "$homeGameTitle",
+      "prop": "Value",
+      "value": "LoadFeatured.Games.Current.Title"
+    },
+    {
+      "op": "create",
+      "parent": "$homeItem/Content",
+      "type": "IExpression",
+      "as": "$homeGameDescription"
+    },
+    {
+      "op": "set",
+      "target": "$homeGameDescription",
+      "prop": "Value",
+      "value": "LoadFeatured.Games.Current.ShortDescription"
+    },
+    {
+      "op": "create",
+      "parent": "$homeItem/Content",
+      "type": "ILink",
+      "name": "FeaturedGameDetails",
+      "as": "$homeDetails"
+    },
+    {
+      "op": "set",
+      "target": "$homeDetails/#ITextWidget",
+      "prop": "Text",
+      "value": "Ver detalhes"
+    },
+    {
+      "op": "set",
+      "target": "$homeDetails/OnClick",
+      "prop": "Destination",
+      "value": "IMobileScreen:GameDetail"
+    },
+    {
+      "op": "set",
+      "target": "$homeDetails/OnClick/GameId",
+      "prop": "Value",
+      "value": "LoadFeatured.Games.Current.Id"
+    },
+    {
+      "op": "create",
+      "parent": "$home/#IMobileBlockInstanceWidget/Actions",
+      "type": "IButton",
+      "name": "BrowseCatalog",
+      "as": "$homeBrowse"
+    },
+    {
+      "op": "set",
+      "target": "$homeBrowse/#ITextWidget",
+      "prop": "Text",
+      "value": "Explorar catálogo"
+    },
+    {
+      "op": "set",
+      "target": "$homeBrowse/OnClick",
+      "prop": "Destination",
+      "value": "IMobileScreen:Catalog"
+    },
+    {
+      "op": "create",
+      "parent": "$home",
+      "type": "IScreenAction",
+      "name": "HomeAddToWishlist",
+      "as": "$homeWishlistAction"
+    },
+    {
+      "op": "create",
+      "parent": "$homeWishlistAction",
+      "type": "IInputParameter",
+      "name": "GameId",
+      "as": "$homeWishlistGameId"
+    },
+    {
+      "op": "set",
+      "target": "$homeWishlistGameId",
+      "prop": "DataType",
+      "value": "Game Identifier"
+    },
+    {
+      "op": "create",
+      "parent": "$homeWishlistAction",
+      "type": "IStartNode",
+      "as": "$homeWishlistStart"
+    },
+    {
+      "op": "create",
+      "parent": "$homeWishlistAction",
+      "type": "IExecuteServerActionNode",
+      "name": "Wishlist_Add",
+      "as": "$homeWishlistCall"
+    },
+    {
+      "op": "set",
+      "target": "$homeWishlistCall",
+      "prop": "Action",
+      "value": "IActionSignature:Wishlist_Add"
+    },
+    {
+      "op": "set",
+      "target": "$homeWishlistCall/GameId",
+      "prop": "Value",
+      "value": "GameId"
+    },
+    {
+      "op": "set",
+      "target": "$homeWishlistCall/NotifyOnPriceDrop",
+      "prop": "Value",
+      "value": "True"
+    },
+    {
+      "op": "create",
+      "parent": "$homeWishlistAction",
+      "type": "IEndNode",
+      "as": "$homeWishlistEnd"
+    },
+    {
+      "op": "link",
+      "from": "$homeWishlistStart",
+      "to": "$homeWishlistCall"
+    },
+    {
+      "op": "link",
+      "from": "$homeWishlistCall",
+      "to": "$homeWishlistEnd"
+    },
+    {
+      "op": "layout",
+      "target": "$homeWishlistAction"
+    },
+    {
+      "op": "create",
+      "parent": "$homeItem/Content",
+      "type": "IButton",
+      "name": "AddFeaturedToWishlist",
+      "as": "$homeWishlistButton"
+    },
+    {
+      "op": "set",
+      "target": "$homeWishlistButton/#ITextWidget",
+      "prop": "Text",
+      "value": "Wishlist"
+    },
+    {
+      "op": "set",
+      "target": "$homeWishlistButton/OnClick",
+      "prop": "Destination",
+      "value": "$homeWishlistAction"
+    },
+    {
+      "op": "set",
+      "target": "$homeWishlistButton/OnClick/GameId",
+      "prop": "Value",
+      "value": "LoadFeatured.Games.Current.Id"
+    },
+
+    {
+      "op": "create",
+      "parent": "$catalog/#IMobileBlockInstanceWidget/Title",
+      "type": "IExpression",
+      "as": "$catalogTitle"
+    },
+    {
+      "op": "set",
+      "target": "$catalogTitle",
+      "prop": "Value",
+      "value": "\"Catálogo\""
+    },
+    {
+      "op": "create",
+      "parent": "$catalog",
+      "type": "ILocalVariable",
+      "name": "SearchText",
+      "as": "$searchText"
+    },
+    {
+      "op": "set",
+      "target": "$searchText",
+      "prop": "DataType",
+      "value": "Text"
+    },
+    {
+      "op": "create",
+      "parent": "$catalog",
+      "type": "ILocalVariable",
+      "name": "SelectedGenreId",
+      "as": "$genreId"
+    },
+    {
+      "op": "set",
+      "target": "$genreId",
+      "prop": "DataType",
+      "value": "Genre Identifier"
+    },
+    {
+      "op": "create",
+      "parent": "$catalog",
+      "type": "ILocalVariable",
+      "name": "SelectedPlatformId",
+      "as": "$platformId"
+    },
+    {
+      "op": "set",
+      "target": "$platformId",
+      "prop": "DataType",
+      "value": "Platform Identifier"
+    },
+    {
+      "op": "create",
+      "parent": "$catalog",
+      "type": "IScreenAggregate",
+      "name": "GetGenres",
+      "as": "$genres"
+    },
+    {
+      "op": "create",
+      "parent": "$genres",
+      "type": "IAliasedSource",
+      "args": {
+        "dataSource": "IEntitySignature:Genre"
+      }
+    },
+    {
+      "op": "create",
+      "parent": "$genres",
+      "type": "ISort",
+      "as": "$genreSort"
+    },
+    {
+      "op": "set",
+      "target": "$genreSort",
+      "prop": "Attribute",
+      "value": "Genre.Name"
+    },
+    {
+      "op": "set",
+      "target": "$genreSort",
+      "prop": "SortDirection",
+      "value": "Ascending"
+    },
+    {
+      "op": "create",
+      "parent": "$catalog",
+      "type": "IScreenAggregate",
+      "name": "GetPlatforms",
+      "as": "$platforms"
+    },
+    {
+      "op": "create",
+      "parent": "$platforms",
+      "type": "IAliasedSource",
+      "args": {
+        "dataSource": "IEntitySignature:Platform"
+      }
+    },
+    {
+      "op": "create",
+      "parent": "$platforms",
+      "type": "ISort",
+      "as": "$platformSort"
+    },
+    {
+      "op": "set",
+      "target": "$platformSort",
+      "prop": "Attribute",
+      "value": "Platform.Name"
+    },
+    {
+      "op": "set",
+      "target": "$platformSort",
+      "prop": "SortDirection",
+      "value": "Ascending"
+    },
+    {
+      "op": "create",
+      "parent": "$catalog",
+      "type": "IDataAction",
+      "name": "SearchCatalog",
+      "as": "$catalogDa"
+    },
+    {
+      "op": "delete",
+      "target": "$catalogDa/Out1",
+      "_why": "a Data Action nasce com output de exemplo"
+    },
+    {
+      "op": "create",
+      "parent": "$catalogDa",
+      "type": "IOutputParameter",
+      "name": "Games",
+      "as": "$catalogGames"
+    },
+    {
+      "op": "set",
+      "target": "$catalogGames",
+      "prop": "DataType",
+      "value": "Game List"
+    },
+    {
+      "op": "create",
+      "parent": "$catalogDa",
+      "type": "IOutputParameter",
+      "name": "TotalCount",
+      "as": "$catalogCount"
+    },
+    {
+      "op": "set",
+      "target": "$catalogCount",
+      "prop": "DataType",
+      "value": "Long Integer"
+    },
+    {
+      "op": "create",
+      "parent": "$catalogDa",
+      "type": "IStartNode",
+      "as": "$catalogStart"
+    },
+    {
+      "op": "create",
+      "parent": "$catalogDa",
+      "type": "IExecuteServerActionNode",
+      "name": "Game_Search",
+      "as": "$catalogCall"
+    },
+    {
+      "op": "set",
+      "target": "$catalogCall",
+      "prop": "Action",
+      "value": "IActionSignature:Game_Search"
+    },
+    {
+      "op": "set",
+      "target": "$catalogCall/SearchText",
+      "prop": "Value",
+      "value": "SearchText"
+    },
+    {
+      "op": "set",
+      "target": "$catalogCall/GenreId",
+      "prop": "Value",
+      "value": "SelectedGenreId"
+    },
+    {
+      "op": "set",
+      "target": "$catalogCall/PlatformId",
+      "prop": "Value",
+      "value": "SelectedPlatformId"
+    },
+    {
+      "op": "set",
+      "target": "$catalogCall/AgeRatingId",
+      "prop": "Value",
+      "value": "NullIdentifier()"
+    },
+    {
+      "op": "set",
+      "target": "$catalogCall/Page",
+      "prop": "Value",
+      "value": "1"
+    },
+    {
+      "op": "set",
+      "target": "$catalogCall/PageSize",
+      "prop": "Value",
+      "value": "24"
+    },
+    {
+      "op": "create",
+      "parent": "$catalogDa",
+      "type": "IAssignNode",
+      "name": "SetCatalogOutput",
+      "as": "$catalogAssign"
+    },
+    {
+      "op": "set",
+      "target": "$catalogAssign",
+      "prop": "Label",
+      "value": "SetCatalogOutput"
+    },
+    {
+      "op": "create",
+      "parent": "$catalogAssign",
+      "type": "IAssignment",
+      "as": "$catalogGamesAssign"
+    },
+    {
+      "op": "set",
+      "target": "$catalogGamesAssign",
+      "prop": "Variable",
+      "value": "Games"
+    },
+    {
+      "op": "set",
+      "target": "$catalogGamesAssign",
+      "prop": "Value",
+      "value": "Game_Search.Games"
+    },
+    {
+      "op": "create",
+      "parent": "$catalogAssign",
+      "type": "IAssignment",
+      "as": "$catalogCountAssign"
+    },
+    {
+      "op": "set",
+      "target": "$catalogCountAssign",
+      "prop": "Variable",
+      "value": "TotalCount"
+    },
+    {
+      "op": "set",
+      "target": "$catalogCountAssign",
+      "prop": "Value",
+      "value": "Game_Search.TotalCount"
+    },
+    {
+      "op": "create",
+      "parent": "$catalogDa",
+      "type": "IEndNode",
+      "as": "$catalogEnd"
+    },
+    {
+      "op": "link",
+      "from": "$catalogStart",
+      "to": "$catalogCall"
+    },
+    {
+      "op": "link",
+      "from": "$catalogCall",
+      "to": "$catalogAssign"
+    },
+    {
+      "op": "link",
+      "from": "$catalogAssign",
+      "to": "$catalogEnd"
+    },
+    {
+      "op": "layout",
+      "target": "$catalogDa"
+    },
+    {
+      "op": "create",
+      "parent": "$catalog/#IMobileBlockInstanceWidget/MainContent",
+      "type": "IInput",
+      "name": "CatalogSearchInput",
+      "as": "$catalogSearchInput"
+    },
+    {
+      "op": "set",
+      "target": "$catalogSearchInput",
+      "prop": "Variable",
+      "value": "SearchText"
+    },
+    {
+      "op": "set",
+      "target": "$catalogSearchInput",
+      "prop": "Prompt",
+      "value": "\"Buscar jogos\""
+    },
+    {
+      "op": "create",
+      "parent": "$catalog/#IMobileBlockInstanceWidget/MainContent",
+      "type": "IDropdown",
+      "name": "GenreFilter",
+      "as": "$genreDropdown",
+      "empty": true
+    },
+    {
+      "op": "set",
+      "target": "$genreDropdown",
+      "prop": "List",
+      "value": "GetGenres.List"
+    },
+    {
+      "op": "set",
+      "target": "$genreDropdown",
+      "prop": "Values",
+      "value": "Genre.Id"
+    },
+    {
+      "op": "set",
+      "target": "$genreDropdown",
+      "prop": "Labels",
+      "value": "Genre.Name"
+    },
+    {
+      "op": "set",
+      "target": "$genreDropdown",
+      "prop": "Variable",
+      "value": "SelectedGenreId"
+    },
+    {
+      "op": "create",
+      "parent": "$catalog/#IMobileBlockInstanceWidget/MainContent",
+      "type": "IDropdown",
+      "name": "PlatformFilter",
+      "as": "$platformDropdown",
+      "empty": true
+    },
+    {
+      "op": "set",
+      "target": "$platformDropdown",
+      "prop": "List",
+      "value": "GetPlatforms.List"
+    },
+    {
+      "op": "set",
+      "target": "$platformDropdown",
+      "prop": "Values",
+      "value": "Platform.Id"
+    },
+    {
+      "op": "set",
+      "target": "$platformDropdown",
+      "prop": "Labels",
+      "value": "Platform.Name"
+    },
+    {
+      "op": "set",
+      "target": "$platformDropdown",
+      "prop": "Variable",
+      "value": "SelectedPlatformId"
+    },
+    {
+      "op": "create",
+      "parent": "$catalog/#IMobileBlockInstanceWidget/MainContent",
+      "type": "IList",
+      "name": "CatalogGamesList",
+      "as": "$catalogList"
+    },
+    {
+      "op": "set",
+      "target": "$catalogList",
+      "prop": "Source",
+      "value": "SearchCatalog.Games"
+    },
+    {
+      "op": "create",
+      "parent": "$catalogList",
+      "type": "IListItem",
+      "name": "CatalogGameItem",
+      "as": "$catalogItem"
+    },
+    {
+      "op": "delete",
+      "target": "$catalogItem/RightActions/#IListItemAction",
+      "_why": "remove swipe action de exemplo sem destino"
+    },
+    {
+      "op": "create",
+      "parent": "$catalogItem/Content",
+      "type": "IExpression",
+      "as": "$catalogGameTitle"
+    },
+    {
+      "op": "set",
+      "target": "$catalogGameTitle",
+      "prop": "Value",
+      "value": "SearchCatalog.Games.Current.Title"
+    },
+    {
+      "op": "create",
+      "parent": "$catalogItem/Content",
+      "type": "IExpression",
+      "as": "$catalogGameDescription"
+    },
+    {
+      "op": "set",
+      "target": "$catalogGameDescription",
+      "prop": "Value",
+      "value": "SearchCatalog.Games.Current.ShortDescription"
+    },
+    {
+      "op": "create",
+      "parent": "$catalogItem/Content",
+      "type": "ILink",
+      "name": "CatalogGameDetails",
+      "as": "$catalogDetails"
+    },
+    {
+      "op": "set",
+      "target": "$catalogDetails/#ITextWidget",
+      "prop": "Text",
+      "value": "Ver detalhes"
+    },
+    {
+      "op": "set",
+      "target": "$catalogDetails/OnClick",
+      "prop": "Destination",
+      "value": "IMobileScreen:GameDetail"
+    },
+    {
+      "op": "set",
+      "target": "$catalogDetails/OnClick/GameId",
+      "prop": "Value",
+      "value": "SearchCatalog.Games.Current.Id"
+    },
+    {
+      "op": "create",
+      "parent": "$catalog",
+      "type": "IScreenAction",
+      "name": "RefreshCatalog",
+      "as": "$refreshCatalog"
+    },
+    {
+      "op": "create",
+      "parent": "$refreshCatalog",
+      "type": "IStartNode",
+      "as": "$refreshStart"
+    },
+    {
+      "op": "create",
+      "parent": "$refreshCatalog",
+      "type": "IRefreshDataNode",
+      "name": "RefreshSearchCatalog",
+      "as": "$refreshNode"
+    },
+    {
+      "op": "set",
+      "target": "$refreshNode",
+      "prop": "DataSource",
+      "value": "$catalogDa"
+    },
+    {
+      "op": "create",
+      "parent": "$refreshCatalog",
+      "type": "IEndNode",
+      "as": "$refreshEnd"
+    },
+    {
+      "op": "link",
+      "from": "$refreshStart",
+      "to": "$refreshNode"
+    },
+    {
+      "op": "link",
+      "from": "$refreshNode",
+      "to": "$refreshEnd"
+    },
+    {
+      "op": "layout",
+      "target": "$refreshCatalog"
+    },
+    {
+      "op": "create",
+      "parent": "$catalog",
+      "type": "IScreenAction",
+      "name": "ClearCatalogFilters",
+      "as": "$clearCatalogAction"
+    },
+    {
+      "op": "create",
+      "parent": "$clearCatalogAction",
+      "type": "IStartNode",
+      "as": "$clearCatalogStart"
+    },
+    {
+      "op": "create",
+      "parent": "$clearCatalogAction",
+      "type": "IAssignNode",
+      "name": "ResetFilters",
+      "as": "$clearCatalogAssign"
+    },
+    {
+      "op": "set",
+      "target": "$clearCatalogAssign",
+      "prop": "Label",
+      "value": "ResetFilters"
+    },
+    {
+      "op": "create",
+      "parent": "$clearCatalogAssign",
+      "type": "IAssignment",
+      "as": "$clearCatalogSearch"
+    },
+    {
+      "op": "set",
+      "target": "$clearCatalogSearch",
+      "prop": "Variable",
+      "value": "SearchText"
+    },
+    {
+      "op": "set",
+      "target": "$clearCatalogSearch",
+      "prop": "Value",
+      "value": "\"\""
+    },
+    {
+      "op": "create",
+      "parent": "$clearCatalogAssign",
+      "type": "IAssignment",
+      "as": "$clearCatalogGenre"
+    },
+    {
+      "op": "set",
+      "target": "$clearCatalogGenre",
+      "prop": "Variable",
+      "value": "SelectedGenreId"
+    },
+    {
+      "op": "set",
+      "target": "$clearCatalogGenre",
+      "prop": "Value",
+      "value": "NullIdentifier()"
+    },
+    {
+      "op": "create",
+      "parent": "$clearCatalogAssign",
+      "type": "IAssignment",
+      "as": "$clearCatalogPlatform"
+    },
+    {
+      "op": "set",
+      "target": "$clearCatalogPlatform",
+      "prop": "Variable",
+      "value": "SelectedPlatformId"
+    },
+    {
+      "op": "set",
+      "target": "$clearCatalogPlatform",
+      "prop": "Value",
+      "value": "NullIdentifier()"
+    },
+    {
+      "op": "create",
+      "parent": "$clearCatalogAction",
+      "type": "IRefreshDataNode",
+      "name": "RefreshAfterClear",
+      "as": "$clearCatalogRefresh"
+    },
+    {
+      "op": "set",
+      "target": "$clearCatalogRefresh",
+      "prop": "DataSource",
+      "value": "$catalogDa"
+    },
+    {
+      "op": "create",
+      "parent": "$clearCatalogAction",
+      "type": "IEndNode",
+      "as": "$clearCatalogEnd"
+    },
+    {
+      "op": "link",
+      "from": "$clearCatalogStart",
+      "to": "$clearCatalogAssign"
+    },
+    {
+      "op": "link",
+      "from": "$clearCatalogAssign",
+      "to": "$clearCatalogRefresh"
+    },
+    {
+      "op": "link",
+      "from": "$clearCatalogRefresh",
+      "to": "$clearCatalogEnd"
+    },
+    {
+      "op": "layout",
+      "target": "$clearCatalogAction"
+    },
+    {
+      "op": "create",
+      "parent": "$catalog/#IMobileBlockInstanceWidget/Actions",
+      "type": "IButton",
+      "name": "SearchButton",
+      "as": "$searchButton"
+    },
+    {
+      "op": "set",
+      "target": "$searchButton/#ITextWidget",
+      "prop": "Text",
+      "value": "Buscar"
+    },
+    {
+      "op": "set",
+      "target": "$searchButton/OnClick",
+      "prop": "Destination",
+      "value": "$refreshCatalog"
+    },
+    {
+      "op": "create",
+      "parent": "$catalog/#IMobileBlockInstanceWidget/Actions",
+      "type": "IButton",
+      "name": "ClearCatalogFilters",
+      "as": "$clearButton"
+    },
+    {
+      "op": "set",
+      "target": "$clearButton/#ITextWidget",
+      "prop": "Text",
+      "value": "Limpar filtros"
+    },
+    {
+      "op": "set",
+      "target": "$clearButton/OnClick",
+      "prop": "Destination",
+      "value": "$clearCatalogAction"
+    },
+    {
+      "op": "create",
+      "parent": "$catalog",
+      "type": "IScreenAction",
+      "name": "CatalogAddToWishlist",
+      "as": "$catalogWishlistAction"
+    },
+    {
+      "op": "create",
+      "parent": "$catalogWishlistAction",
+      "type": "IInputParameter",
+      "name": "GameId",
+      "as": "$catalogWishlistGameId"
+    },
+    {
+      "op": "set",
+      "target": "$catalogWishlistGameId",
+      "prop": "DataType",
+      "value": "Game Identifier"
+    },
+    {
+      "op": "create",
+      "parent": "$catalogWishlistAction",
+      "type": "IStartNode",
+      "as": "$catalogWishlistStart"
+    },
+    {
+      "op": "create",
+      "parent": "$catalogWishlistAction",
+      "type": "IExecuteServerActionNode",
+      "name": "Wishlist_Add",
+      "as": "$catalogWishlistCall"
+    },
+    {
+      "op": "set",
+      "target": "$catalogWishlistCall",
+      "prop": "Action",
+      "value": "IActionSignature:Wishlist_Add"
+    },
+    {
+      "op": "set",
+      "target": "$catalogWishlistCall/GameId",
+      "prop": "Value",
+      "value": "GameId"
+    },
+    {
+      "op": "set",
+      "target": "$catalogWishlistCall/NotifyOnPriceDrop",
+      "prop": "Value",
+      "value": "True"
+    },
+    {
+      "op": "create",
+      "parent": "$catalogWishlistAction",
+      "type": "IEndNode",
+      "as": "$catalogWishlistEnd"
+    },
+    {
+      "op": "link",
+      "from": "$catalogWishlistStart",
+      "to": "$catalogWishlistCall"
+    },
+    {
+      "op": "link",
+      "from": "$catalogWishlistCall",
+      "to": "$catalogWishlistEnd"
+    },
+    {
+      "op": "layout",
+      "target": "$catalogWishlistAction"
+    },
+    {
+      "op": "create",
+      "parent": "$catalogItem/Content",
+      "type": "IButton",
+      "name": "AddCatalogToWishlist",
+      "as": "$catalogWishlistButton"
+    },
+    {
+      "op": "set",
+      "target": "$catalogWishlistButton/#ITextWidget",
+      "prop": "Text",
+      "value": "Wishlist"
+    },
+    {
+      "op": "set",
+      "target": "$catalogWishlistButton/OnClick",
+      "prop": "Destination",
+      "value": "$catalogWishlistAction"
+    },
+    {
+      "op": "set",
+      "target": "$catalogWishlistButton/OnClick/GameId",
+      "prop": "Value",
+      "value": "SearchCatalog.Games.Current.Id"
+    },
+
+    {
+      "op": "create",
+      "parent": "$detail/#IMobileBlockInstanceWidget/Title",
+      "type": "IExpression",
+      "as": "$detailTitle"
+    },
+    {
+      "op": "set",
+      "target": "$detailTitle",
+      "prop": "Value",
+      "value": "\"Detalhes do jogo\""
+    },
+    {
+      "op": "create",
+      "parent": "$detail",
+      "type": "IDataAction",
+      "name": "LoadGame",
+      "as": "$detailGameDa"
+    },
+    {
+      "op": "delete",
+      "target": "$detailGameDa/Out1",
+      "_why": "a Data Action nasce com output de exemplo"
+    },
+    {
+      "op": "create",
+      "parent": "$detailGameDa",
+      "type": "IOutputParameter",
+      "name": "Game",
+      "as": "$detailGameOut"
+    },
+    {
+      "op": "set",
+      "target": "$detailGameOut",
+      "prop": "DataType",
+      "value": "Game"
+    },
+    {
+      "op": "create",
+      "parent": "$detailGameDa",
+      "type": "IOutputParameter",
+      "name": "Found",
+      "as": "$detailFoundOut"
+    },
+    {
+      "op": "set",
+      "target": "$detailFoundOut",
+      "prop": "DataType",
+      "value": "Boolean"
+    },
+    {
+      "op": "create",
+      "parent": "$detailGameDa",
+      "type": "IStartNode",
+      "as": "$detailGameStart"
+    },
+    {
+      "op": "create",
+      "parent": "$detailGameDa",
+      "type": "IExecuteServerActionNode",
+      "name": "Game_Get",
+      "as": "$detailGameCall"
+    },
+    {
+      "op": "set",
+      "target": "$detailGameCall",
+      "prop": "Action",
+      "value": "IActionSignature:Game_Get"
+    },
+    {
+      "op": "set",
+      "target": "$detailGameCall/GameId",
+      "prop": "Value",
+      "value": "GameId"
+    },
+    {
+      "op": "create",
+      "parent": "$detailGameDa",
+      "type": "IAssignNode",
+      "name": "SetGameOutput",
+      "as": "$detailGameAssign"
+    },
+    {
+      "op": "set",
+      "target": "$detailGameAssign",
+      "prop": "Label",
+      "value": "SetGameOutput"
+    },
+    {
+      "op": "create",
+      "parent": "$detailGameAssign",
+      "type": "IAssignment",
+      "as": "$detailGameAssignRecord"
+    },
+    {
+      "op": "set",
+      "target": "$detailGameAssignRecord",
+      "prop": "Variable",
+      "value": "Game"
+    },
+    {
+      "op": "set",
+      "target": "$detailGameAssignRecord",
+      "prop": "Value",
+      "value": "Game_Get.Game"
+    },
+    {
+      "op": "create",
+      "parent": "$detailGameAssign",
+      "type": "IAssignment",
+      "as": "$detailGameAssignFound"
+    },
+    {
+      "op": "set",
+      "target": "$detailGameAssignFound",
+      "prop": "Variable",
+      "value": "Found"
+    },
+    {
+      "op": "set",
+      "target": "$detailGameAssignFound",
+      "prop": "Value",
+      "value": "Game_Get.Found"
+    },
+    {
+      "op": "create",
+      "parent": "$detailGameDa",
+      "type": "IEndNode",
+      "as": "$detailGameEnd"
+    },
+    {
+      "op": "link",
+      "from": "$detailGameStart",
+      "to": "$detailGameCall"
+    },
+    {
+      "op": "link",
+      "from": "$detailGameCall",
+      "to": "$detailGameAssign"
+    },
+    {
+      "op": "link",
+      "from": "$detailGameAssign",
+      "to": "$detailGameEnd"
+    },
+    {
+      "op": "layout",
+      "target": "$detailGameDa"
+    },
+    {
+      "op": "create",
+      "parent": "$detail",
+      "type": "IDataAction",
+      "name": "LoadEditions",
+      "as": "$detailEditionDa"
+    },
+    {
+      "op": "delete",
+      "target": "$detailEditionDa/Out1",
+      "_why": "a Data Action nasce com output de exemplo"
+    },
+    {
+      "op": "create",
+      "parent": "$detailEditionDa",
+      "type": "IOutputParameter",
+      "name": "GameEditions",
+      "as": "$detailEditionsOut"
+    },
+    {
+      "op": "set",
+      "target": "$detailEditionsOut",
+      "prop": "DataType",
+      "value": "GameEdition List"
+    },
+    {
+      "op": "create",
+      "parent": "$detailEditionDa",
+      "type": "IOutputParameter",
+      "name": "TotalCount",
+      "as": "$detailEditionCount"
+    },
+    {
+      "op": "set",
+      "target": "$detailEditionCount",
+      "prop": "DataType",
+      "value": "Long Integer"
+    },
+    {
+      "op": "create",
+      "parent": "$detailEditionDa",
+      "type": "IStartNode",
+      "as": "$detailEditionStart"
+    },
+    {
+      "op": "create",
+      "parent": "$detailEditionDa",
+      "type": "IExecuteServerActionNode",
+      "name": "GameEdition_ListAvailable",
+      "as": "$detailEditionCall"
+    },
+    {
+      "op": "set",
+      "target": "$detailEditionCall",
+      "prop": "Action",
+      "value": "IActionSignature:GameEdition_ListAvailable"
+    },
+    {
+      "op": "set",
+      "target": "$detailEditionCall/GameId",
+      "prop": "Value",
+      "value": "GameId"
+    },
+    {
+      "op": "set",
+      "target": "$detailEditionCall/CountryCode",
+      "prop": "Value",
+      "value": "\"BR\""
+    },
+    {
+      "op": "create",
+      "parent": "$detailEditionDa",
+      "type": "IAssignNode",
+      "name": "SetEditionOutput",
+      "as": "$detailEditionAssign"
+    },
+    {
+      "op": "set",
+      "target": "$detailEditionAssign",
+      "prop": "Label",
+      "value": "SetEditionOutput"
+    },
+    {
+      "op": "create",
+      "parent": "$detailEditionAssign",
+      "type": "IAssignment",
+      "as": "$detailEditionListAssign"
+    },
+    {
+      "op": "set",
+      "target": "$detailEditionListAssign",
+      "prop": "Variable",
+      "value": "GameEditions"
+    },
+    {
+      "op": "set",
+      "target": "$detailEditionListAssign",
+      "prop": "Value",
+      "value": "GameEdition_ListAvailable.GameEditions"
+    },
+    {
+      "op": "create",
+      "parent": "$detailEditionAssign",
+      "type": "IAssignment",
+      "as": "$detailEditionCountAssign"
+    },
+    {
+      "op": "set",
+      "target": "$detailEditionCountAssign",
+      "prop": "Variable",
+      "value": "TotalCount"
+    },
+    {
+      "op": "set",
+      "target": "$detailEditionCountAssign",
+      "prop": "Value",
+      "value": "GameEdition_ListAvailable.TotalCount"
+    },
+    {
+      "op": "create",
+      "parent": "$detailEditionDa",
+      "type": "IEndNode",
+      "as": "$detailEditionEnd"
+    },
+    {
+      "op": "link",
+      "from": "$detailEditionStart",
+      "to": "$detailEditionCall"
+    },
+    {
+      "op": "link",
+      "from": "$detailEditionCall",
+      "to": "$detailEditionAssign"
+    },
+    {
+      "op": "link",
+      "from": "$detailEditionAssign",
+      "to": "$detailEditionEnd"
+    },
+    {
+      "op": "layout",
+      "target": "$detailEditionDa"
+    },
+    {
+      "op": "create",
+      "parent": "$detail",
+      "type": "IDataAction",
+      "name": "LoadReviews",
+      "as": "$detailReviewDa"
+    },
+    {
+      "op": "delete",
+      "target": "$detailReviewDa/Out1",
+      "_why": "a Data Action nasce com output de exemplo"
+    },
+    {
+      "op": "create",
+      "parent": "$detailReviewDa",
+      "type": "IOutputParameter",
+      "name": "Reviews",
+      "as": "$detailReviewsOut"
+    },
+    {
+      "op": "set",
+      "target": "$detailReviewsOut",
+      "prop": "DataType",
+      "value": "GameReview List"
+    },
+    {
+      "op": "create",
+      "parent": "$detailReviewDa",
+      "type": "IOutputParameter",
+      "name": "TotalCount",
+      "as": "$detailReviewCount"
+    },
+    {
+      "op": "set",
+      "target": "$detailReviewCount",
+      "prop": "DataType",
+      "value": "Long Integer"
+    },
+    {
+      "op": "create",
+      "parent": "$detailReviewDa",
+      "type": "IStartNode",
+      "as": "$detailReviewStart"
+    },
+    {
+      "op": "create",
+      "parent": "$detailReviewDa",
+      "type": "IExecuteServerActionNode",
+      "name": "GameReview_List",
+      "as": "$detailReviewCall"
+    },
+    {
+      "op": "set",
+      "target": "$detailReviewCall",
+      "prop": "Action",
+      "value": "IActionSignature:GameReview_List"
+    },
+    {
+      "op": "set",
+      "target": "$detailReviewCall/GameId",
+      "prop": "Value",
+      "value": "GameId"
+    },
+    {
+      "op": "set",
+      "target": "$detailReviewCall/Page",
+      "prop": "Value",
+      "value": "1"
+    },
+    {
+      "op": "set",
+      "target": "$detailReviewCall/PageSize",
+      "prop": "Value",
+      "value": "10"
+    },
+    {
+      "op": "set",
+      "target": "$detailReviewCall/OnlyPublished",
+      "prop": "Value",
+      "value": "True"
+    },
+    {
+      "op": "create",
+      "parent": "$detailReviewDa",
+      "type": "IAssignNode",
+      "name": "SetReviewOutput",
+      "as": "$detailReviewAssign"
+    },
+    {
+      "op": "set",
+      "target": "$detailReviewAssign",
+      "prop": "Label",
+      "value": "SetReviewOutput"
+    },
+    {
+      "op": "create",
+      "parent": "$detailReviewAssign",
+      "type": "IAssignment",
+      "as": "$detailReviewsListAssign"
+    },
+    {
+      "op": "set",
+      "target": "$detailReviewsListAssign",
+      "prop": "Variable",
+      "value": "Reviews"
+    },
+    {
+      "op": "set",
+      "target": "$detailReviewsListAssign",
+      "prop": "Value",
+      "value": "GameReview_List.Reviews"
+    },
+    {
+      "op": "create",
+      "parent": "$detailReviewAssign",
+      "type": "IAssignment",
+      "as": "$detailReviewCountAssign"
+    },
+    {
+      "op": "set",
+      "target": "$detailReviewCountAssign",
+      "prop": "Variable",
+      "value": "TotalCount"
+    },
+    {
+      "op": "set",
+      "target": "$detailReviewCountAssign",
+      "prop": "Value",
+      "value": "GameReview_List.TotalCount"
+    },
+    {
+      "op": "create",
+      "parent": "$detailReviewDa",
+      "type": "IEndNode",
+      "as": "$detailReviewEnd"
+    },
+    {
+      "op": "link",
+      "from": "$detailReviewStart",
+      "to": "$detailReviewCall"
+    },
+    {
+      "op": "link",
+      "from": "$detailReviewCall",
+      "to": "$detailReviewAssign"
+    },
+    {
+      "op": "link",
+      "from": "$detailReviewAssign",
+      "to": "$detailReviewEnd"
+    },
+    {
+      "op": "layout",
+      "target": "$detailReviewDa"
+    },
+    {
+      "op": "create",
+      "parent": "$detail/#IMobileBlockInstanceWidget/MainContent",
+      "type": "IContainer",
+      "name": "GameSummary",
+      "as": "$detailSummary"
+    },
+    {
+      "op": "create",
+      "parent": "$detailSummary",
+      "type": "IExpression",
+      "as": "$detailGameName"
+    },
+    {
+      "op": "set",
+      "target": "$detailGameName",
+      "prop": "Value",
+      "value": "LoadGame.Game.Title"
+    },
+    {
+      "op": "create",
+      "parent": "$detailSummary",
+      "type": "IExpression",
+      "as": "$detailGameShortDescription"
+    },
+    {
+      "op": "set",
+      "target": "$detailGameShortDescription",
+      "prop": "Value",
+      "value": "LoadGame.Game.ShortDescription"
+    },
+    {
+      "op": "create",
+      "parent": "$detailSummary",
+      "type": "IExpression",
+      "as": "$detailGameDescription"
+    },
+    {
+      "op": "set",
+      "target": "$detailGameDescription",
+      "prop": "Value",
+      "value": "LoadGame.Game.Description"
+    },
+    {
+      "op": "create",
+      "parent": "$detail/#IMobileBlockInstanceWidget/MainContent",
+      "type": "IExpression",
+      "as": "$editionsHeading"
+    },
+    {
+      "op": "set",
+      "target": "$editionsHeading",
+      "prop": "Value",
+      "value": "\"Edições disponíveis\""
+    },
+    {
+      "op": "create",
+      "parent": "$detail/#IMobileBlockInstanceWidget/MainContent",
+      "type": "IList",
+      "name": "GameEditionsList",
+      "as": "$editionList"
+    },
+    {
+      "op": "set",
+      "target": "$editionList",
+      "prop": "Source",
+      "value": "LoadEditions.GameEditions"
+    },
+    {
+      "op": "create",
+      "parent": "$editionList",
+      "type": "IListItem",
+      "name": "GameEditionItem",
+      "as": "$editionItem"
+    },
+    {
+      "op": "delete",
+      "target": "$editionItem/RightActions/#IListItemAction",
+      "_why": "remove swipe action de exemplo sem destino"
+    },
+    {
+      "op": "create",
+      "parent": "$editionItem/Content",
+      "type": "IExpression",
+      "as": "$editionName"
+    },
+    {
+      "op": "set",
+      "target": "$editionName",
+      "prop": "Value",
+      "value": "LoadEditions.GameEditions.Current.Name"
+    },
+    {
+      "op": "create",
+      "parent": "$editionItem/Content",
+      "type": "IExpression",
+      "as": "$editionPrice"
+    },
+    {
+      "op": "set",
+      "target": "$editionPrice",
+      "prop": "Value",
+      "value": "LoadEditions.GameEditions.Current.BasePrice"
+    },
+    {
+      "op": "create",
+      "parent": "$detail/#IMobileBlockInstanceWidget/MainContent",
+      "type": "IExpression",
+      "as": "$reviewsHeading"
+    },
+    {
+      "op": "set",
+      "target": "$reviewsHeading",
+      "prop": "Value",
+      "value": "\"Avaliações\""
+    },
+    {
+      "op": "create",
+      "parent": "$detail/#IMobileBlockInstanceWidget/MainContent",
+      "type": "IList",
+      "name": "GameReviewsList",
+      "as": "$reviewList"
+    },
+    {
+      "op": "set",
+      "target": "$reviewList",
+      "prop": "Source",
+      "value": "LoadReviews.Reviews"
+    },
+    {
+      "op": "create",
+      "parent": "$reviewList",
+      "type": "IListItem",
+      "name": "GameReviewItem",
+      "as": "$reviewItem"
+    },
+    {
+      "op": "delete",
+      "target": "$reviewItem/RightActions/#IListItemAction",
+      "_why": "remove swipe action de exemplo sem destino"
+    },
+    {
+      "op": "create",
+      "parent": "$reviewItem/Content",
+      "type": "IExpression",
+      "as": "$reviewTitle"
+    },
+    {
+      "op": "set",
+      "target": "$reviewTitle",
+      "prop": "Value",
+      "value": "LoadReviews.Reviews.Current.Title"
+    },
+    {
+      "op": "create",
+      "parent": "$reviewItem/Content",
+      "type": "IExpression",
+      "as": "$reviewBody"
+    },
+    {
+      "op": "set",
+      "target": "$reviewBody",
+      "prop": "Value",
+      "value": "LoadReviews.Reviews.Current.Body"
+    },
+    {
+      "op": "create",
+      "parent": "$reviewItem/Content",
+      "type": "IExpression",
+      "as": "$reviewRating"
+    },
+    {
+      "op": "set",
+      "target": "$reviewRating",
+      "prop": "Value",
+      "value": "IntegerToText(LoadReviews.Reviews.Current.Rating)"
+    },
+    {
+      "op": "create",
+      "parent": "$editionItem/Content",
+      "type": "IButton",
+      "name": "AddEditionToCart",
+      "as": "$editionCartButton"
+    },
+    {
+      "op": "set",
+      "target": "$editionCartButton/#ITextWidget",
+      "prop": "Text",
+      "value": "Adicionar ao carrinho"
+    },
+    {
+      "op": "create",
+      "parent": "$detail",
+      "type": "IScreenAction",
+      "name": "DetailAddToCart",
+      "as": "$detailCartAction"
+    },
+    {
+      "op": "create",
+      "parent": "$detailCartAction",
+      "type": "IInputParameter",
+      "name": "GameEditionId",
+      "as": "$detailCartEditionId"
+    },
+    {
+      "op": "set",
+      "target": "$detailCartEditionId",
+      "prop": "DataType",
+      "value": "GameEdition Identifier"
+    },
+    {
+      "op": "create",
+      "parent": "$detailCartAction",
+      "type": "IStartNode",
+      "as": "$detailCartStart"
+    },
+    {
+      "op": "create",
+      "parent": "$detailCartAction",
+      "type": "IExecuteServerActionNode",
+      "name": "Cart_AddItem",
+      "as": "$detailCartCall"
+    },
+    {
+      "op": "set",
+      "target": "$detailCartCall",
+      "prop": "Action",
+      "value": "IActionSignature:Cart_AddItem"
+    },
+    {
+      "op": "set",
+      "target": "$detailCartCall/GameEditionId",
+      "prop": "Value",
+      "value": "GameEditionId"
+    },
+    {
+      "op": "create",
+      "parent": "$detailCartAction",
+      "type": "IEndNode",
+      "as": "$detailCartEnd"
+    },
+    {
+      "op": "link",
+      "from": "$detailCartStart",
+      "to": "$detailCartCall"
+    },
+    {
+      "op": "link",
+      "from": "$detailCartCall",
+      "to": "$detailCartEnd"
+    },
+    {
+      "op": "layout",
+      "target": "$detailCartAction"
+    },
+    {
+      "op": "set",
+      "target": "$editionCartButton/OnClick",
+      "prop": "Destination",
+      "value": "$detailCartAction"
+    },
+    {
+      "op": "set",
+      "target": "$editionCartButton/OnClick/GameEditionId",
+      "prop": "Value",
+      "value": "LoadEditions.GameEditions.Current.Id"
+    },
+    {
+      "op": "create",
+      "parent": "$detail",
+      "type": "IScreenAction",
+      "name": "DetailAddToWishlist",
+      "as": "$detailWishlistAction"
+    },
+    {
+      "op": "create",
+      "parent": "$detailWishlistAction",
+      "type": "IStartNode",
+      "as": "$detailWishlistStart"
+    },
+    {
+      "op": "create",
+      "parent": "$detailWishlistAction",
+      "type": "IExecuteServerActionNode",
+      "name": "Wishlist_Add",
+      "as": "$detailWishlistCall"
+    },
+    {
+      "op": "set",
+      "target": "$detailWishlistCall",
+      "prop": "Action",
+      "value": "IActionSignature:Wishlist_Add"
+    },
+    {
+      "op": "set",
+      "target": "$detailWishlistCall/GameId",
+      "prop": "Value",
+      "value": "GameId"
+    },
+    {
+      "op": "set",
+      "target": "$detailWishlistCall/NotifyOnPriceDrop",
+      "prop": "Value",
+      "value": "True"
+    },
+    {
+      "op": "create",
+      "parent": "$detailWishlistAction",
+      "type": "IEndNode",
+      "as": "$detailWishlistEnd"
+    },
+    {
+      "op": "link",
+      "from": "$detailWishlistStart",
+      "to": "$detailWishlistCall"
+    },
+    {
+      "op": "link",
+      "from": "$detailWishlistCall",
+      "to": "$detailWishlistEnd"
+    },
+    {
+      "op": "layout",
+      "target": "$detailWishlistAction"
+    },
+    {
+      "op": "create",
+      "parent": "$detail/#IMobileBlockInstanceWidget/Actions",
+      "type": "IButton",
+      "name": "AddGameToWishlist",
+      "as": "$detailWishlistButton"
+    },
+    {
+      "op": "set",
+      "target": "$detailWishlistButton/#ITextWidget",
+      "prop": "Text",
+      "value": "Adicionar à wishlist"
+    },
+    {
+      "op": "set",
+      "target": "$detailWishlistButton/OnClick",
+      "prop": "Destination",
+      "value": "$detailWishlistAction"
+    },
+    {
+      "op": "create",
+      "parent": "$detail",
+      "type": "IScreenAction",
+      "name": "MarkReviewHelpful",
+      "as": "$helpfulAction"
+    },
+    {
+      "op": "create",
+      "parent": "$helpfulAction",
+      "type": "IInputParameter",
+      "name": "ReviewId",
+      "as": "$helpfulReviewId"
+    },
+    {
+      "op": "set",
+      "target": "$helpfulReviewId",
+      "prop": "DataType",
+      "value": "GameReview Identifier"
+    },
+    {
+      "op": "create",
+      "parent": "$helpfulAction",
+      "type": "IStartNode",
+      "as": "$helpfulStart"
+    },
+    {
+      "op": "create",
+      "parent": "$helpfulAction",
+      "type": "IExecuteServerActionNode",
+      "name": "ReviewVote_Set",
+      "as": "$helpfulCall"
+    },
+    {
+      "op": "set",
+      "target": "$helpfulCall",
+      "prop": "Action",
+      "value": "IActionSignature:ReviewVote_Set"
+    },
+    {
+      "op": "set",
+      "target": "$helpfulCall/ReviewId",
+      "prop": "Value",
+      "value": "ReviewId"
+    },
+    {
+      "op": "set",
+      "target": "$helpfulCall/IsHelpful",
+      "prop": "Value",
+      "value": "True"
+    },
+    {
+      "op": "create",
+      "parent": "$helpfulAction",
+      "type": "IEndNode",
+      "as": "$helpfulEnd"
+    },
+    {
+      "op": "link",
+      "from": "$helpfulStart",
+      "to": "$helpfulCall"
+    },
+    {
+      "op": "link",
+      "from": "$helpfulCall",
+      "to": "$helpfulEnd"
+    },
+    {
+      "op": "layout",
+      "target": "$helpfulAction"
+    },
+    {
+      "op": "create",
+      "parent": "$reviewItem/Content",
+      "type": "IButton",
+      "name": "ReviewHelpfulButton",
+      "as": "$helpfulButton"
+    },
+    {
+      "op": "set",
+      "target": "$helpfulButton/#ITextWidget",
+      "prop": "Text",
+      "value": "Útil"
+    },
+    {
+      "op": "set",
+      "target": "$helpfulButton/OnClick",
+      "prop": "Destination",
+      "value": "$helpfulAction"
+    },
+    {
+      "op": "set",
+      "target": "$helpfulButton/OnClick/ReviewId",
+      "prop": "Value",
+      "value": "LoadReviews.Reviews.Current.Id"
+    },
+    {
+      "op": "find",
+      "name": "Home"
+    },
+    {
+      "op": "find",
+      "name": "Catalog"
+    },
+    {
+      "op": "find",
+      "name": "GameDetail"
+    },
+    {
+      "op": "find",
+      "name": "Game_Search"
+    },
+    {
+      "op": "find",
+      "name": "Cart_AddItem"
+    },
+    {
+      "op": "dump",
+      "target": "$detail",
+      "depth": 5
+    }
+  ]
+}

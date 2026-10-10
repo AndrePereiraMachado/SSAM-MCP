@@ -1,0 +1,175 @@
+// Independent ordinary CLR execution of the unchanged TemporalInstants.cs fixture.
+// Inputs are adversarial values, never derived from generated native expressions.
+using System.Globalization;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Text.Json;
+CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+CultureInfo.CurrentUICulture = CultureInfo.InvariantCulture;
+if (Environment.Version.Major != 8) throw new Exception("Oracle requires ordinary .NET 8 execution.");
+var cases = new List<object>();
+var expected = new List<object>();
+var methods = typeof(Instants).GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
+object Schema(Type type) {
+    var nullable = Nullable.GetUnderlyingType(type);
+    if (nullable != null) return new { kind = "nullable", value = Schema(nullable) };
+    var kind = type == typeof(DateOnly) ? "date" : type == typeof(TimeOnly) ? "time" : type == typeof(TimeSpan) ? "duration" : type == typeof(DateTimeOffset) ? "offset" : type == typeof(int) ? "int" : type == typeof(long) ? "long" : type == typeof(bool) ? "bool" : type == typeof(string) ? "string" : "record";
+    return kind != "record" ? (object)new { kind } : new { kind, fields = type.GetProperties().ToDictionary(p => p.Name, p => Schema(p.PropertyType)) };
+}
+object? Normalize(object? value) => value switch {
+    null => null,
+    DateOnly date => new { DayNumber = date.DayNumber },
+    TimeOnly clock => new { Ticks = clock.Ticks.ToString(CultureInfo.InvariantCulture) },
+    TimeSpan duration => new { Ticks = duration.Ticks.ToString(CultureInfo.InvariantCulture) },
+    DateTimeOffset instant => new { UtcTicks = instant.UtcTicks.ToString(CultureInfo.InvariantCulture), OffsetMinutes = (int)instant.Offset.TotalMinutes },
+    long number => number.ToString(CultureInfo.InvariantCulture),
+    int or bool or string => value,
+    _ => throw new Exception("Unexpected oracle result type: " + value.GetType())
+};
+void Case(string id, string methodName, params object?[] arguments) {
+    var method = methods.Single(m => m.Name == methodName);
+    var parameters = method.GetParameters();
+    if (arguments.Length != parameters.Length) throw new Exception("Wrong case arity: " + id);
+    cases.Add(new { id, method = methodName, arguments = parameters.Select((p, i) => (p.Name!, Value: Normalize(arguments[i]))).ToDictionary(p => p.Item1, p => p.Value) });
+    try { expected.Add(new { id, result = Normalize(method.Invoke(null, arguments)), error = (object?)null }); }
+    catch (TargetInvocationException exception) when (exception.InnerException != null) {
+        var error = exception.InnerException;
+        expected.Add(new { id, result = (object?)null, error = new { type = error.GetType().FullName, message = error.Message } });
+    }
+}
+var dmin = TimeSpan.MinValue; var dmax = TimeSpan.MaxValue; var tick = TimeSpan.FromTicks(1); var zero = TimeSpan.Zero;
+var first = DateTimeOffset.MinValue; var last = DateTimeOffset.MaxValue;
+var plus14 = TimeSpan.FromHours(14); var minus14 = -plus14;
+var utcMinEast = new DateTimeOffset(plus14.Ticks, plus14);
+var civilMinWest = new DateTimeOffset(0, minus14);
+var utcMaxWest = new DateTimeOffset(last.Ticks - plus14.Ticks, minus14);
+var civilMaxEast = new DateTimeOffset(last.Ticks, plus14);
+var east = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.FromMinutes(345)).AddTicks(1234567);
+var west = new DateTimeOffset(1999, 12, 31, 23, 59, 59, TimeSpan.FromMinutes(-210)).AddTicks(9999999);
+var sameInstant = east.ToOffset(TimeSpan.FromHours(-4));
+var sameClock = new DateTimeOffset(east.Ticks, TimeSpan.FromMinutes(-210));
+
+Case("duration_min", "Duration", long.MinValue);
+Case("duration_max", "Duration", long.MaxValue);
+Case("duration_above_double_integer", "Duration", 9007199254740993L);
+Case("duration_negative_above_double_integer", "Duration", -9007199254740993L);
+Case("sum_cancel_limits", "Sum", dmin, dmax);
+Case("sum_exact_large", "Sum", TimeSpan.FromTicks(9007199254740992L), tick);
+Case("sum_positive_overflow", "Sum", dmax, tick);
+Case("sum_negative_overflow", "Sum", dmin, -tick);
+Case("difference_min_minus_max", "Difference", dmin, dmax);
+Case("difference_max_minus_min", "Difference", dmax, dmin);
+Case("difference_exact_limit", "Difference", dmin, zero);
+Case("negate_min", "Negate", dmin);
+Case("negate_max", "Negate", dmax);
+Case("compound_exact", "Compound", dmin, dmax);
+Case("compound_overflow", "Compound", dmax, tick);
+Case("lifted_left_null_overflow_operand", "Lifted", null, dmax);
+Case("lifted_right_null", "Lifted", dmin, null);
+Case("lifted_present_overflow", "Lifted", dmin, -tick);
+Case("lifted_negate_null", "LiftedNegate", (object?)null);
+Case("lifted_negate_min", "LiftedNegate", dmin);
+Case("compound_nullable_null", "CompoundNullable", null, dmax);
+Case("compound_nullable_present", "CompoundNullable", dmin, dmax);
+Case("wrap_below_factor_boundary", "WrapProduct", 2147483647L);
+Case("wrap_factor_boundary", "WrapProduct", 2147483648L);
+Case("wrap_above_factor_boundary", "WrapProduct", 2147483649L);
+Case("wrap_int64_min", "WrapProduct", long.MinValue);
+Case("wrap_int64_max", "WrapProduct", long.MaxValue);
+Case("days_positive_last", "Days", 10675199);
+Case("days_negative_last", "Days", -10675199);
+Case("days_positive_overflow", "Days", 10675200);
+Case("days_negative_overflow", "Days", -10675200);
+Case("minutes_int_max", "Minutes", int.MaxValue);
+Case("minutes_int_min", "Minutes", int.MinValue);
+Case("rounded_minutes", "RoundedMinutes");
+Case("positive_limit", "PositiveLimit");
+Case("nan_duration", "BadDuration");
+Case("minimum_duration", "MinimumDuration");
+Case("maximum_duration", "MaximumDuration");
+Case("product_int_max", "Product", int.MaxValue);
+Case("product_int_min", "Product", int.MinValue);
+
+Case("make_east_exact", "Make", east.Ticks, east.Offset.Ticks);
+Case("make_west_exact", "Make", west.Ticks, west.Offset.Ticks);
+Case("make_subminute_offset", "Make", east.Ticks, 1L);
+Case("make_offset_past_positive_limit", "Make", east.Ticks, plus14.Ticks + TimeSpan.TicksPerMinute);
+Case("make_offset_past_negative_limit", "Make", east.Ticks, minus14.Ticks - TimeSpan.TicksPerMinute);
+Case("make_negative_ticks", "Make", -1L, 0L);
+Case("make_clock_overflow", "Make", last.Ticks + 1, 0L);
+Case("make_utc_underflow", "Make", 0L, TimeSpan.TicksPerMinute);
+Case("make_utc_overflow", "Make", last.Ticks, -TimeSpan.TicksPerMinute);
+Case("make_invalid_offset_precedes_ticks", "Make", -1L, long.MinValue);
+Case("first", "First"); Case("last", "Last");
+Case("shift_year_back", "Shift", east, -1);
+Case("shift_utc_underflow", "Shift", utcMinEast, -1);
+Case("shift_civil_overflow", "Shift", civilMaxEast, 1);
+Case("fraction_exact", "Fraction", east);
+Case("fraction_at_min", "Fraction", first);
+Case("fraction_overflow", "Fraction", last);
+Case("add_ticks_exact_large", "AddTicks", east, 1L);
+Case("add_ticks_utc_overflow", "AddTicks", utcMaxWest, 1L);
+Case("add_ticks_civil_underflow", "AddTicks", civilMinWest, -1L);
+Case("add_ticks_int64_overflow", "AddTicks", east, long.MaxValue);
+Case("add_duration_exact", "AddDuration", west, tick);
+Case("add_duration_utc_underflow", "AddDuration", utcMinEast, -tick);
+Case("add_duration_civil_overflow", "AddDuration", civilMaxEast, tick);
+Case("subtract_duration_exact", "SubtractDuration", east, tick);
+Case("subtract_duration_int64_min", "SubtractDuration", east, dmin);
+Case("subtract_duration_utc_underflow", "SubtractDuration", utcMinEast, tick);
+Case("add_method_exact", "AddDurationMethod", west, tick);
+Case("add_method_civil_underflow", "AddDurationMethod", civilMinWest, -tick);
+Case("compound_offset_null_left", "CompoundOffsetNullable", null, dmax);
+Case("compound_offset_null_right", "CompoundOffsetNullable", last, null);
+Case("compound_offset_present", "CompoundOffsetNullable", west, tick);
+Case("compound_offset_overflow", "CompoundOffsetNullable", utcMaxWest, tick);
+
+Case("elapsed_same_instant", "Elapsed", east, sameInstant);
+Case("elapsed_equal_clocks", "Elapsed", east, sameClock);
+Case("elapsed_full_range", "Elapsed", first, last);
+Case("civil_ticks_fraction", "ClockTicks", east);
+Case("utc_ticks_fraction", "UtcTicks", east);
+Case("offset_positive", "Offset", east);
+Case("offset_negative", "Offset", west);
+Case("same_instant_other_offset", "Same", east, sameInstant);
+Case("same_clock_other_offset", "Same", east, sameClock);
+Case("exact_same", "Exact", east, east);
+Case("exact_different_offset", "Exact", east, sameInstant);
+Case("before_nulls", "Before", null, null);
+Case("before_left_null", "Before", null, east);
+Case("before_right_null", "Before", east, null);
+Case("before_present", "Before", first, last);
+Case("date_east_previous_year", "Date", east);
+Case("date_west_next_year", "Date", west);
+Case("time_east_fraction", "Time", east);
+Case("time_west_last_fraction", "Time", west);
+Case("utc_kind", "UtcKind", east);
+Case("civil_kind", "CivilKind", east);
+Case("civil_date_east", "CivilDate", east);
+Case("civil_date_west", "CivilDate", west);
+Case("date_from_ticks_max", "DateFromTicks", last.Ticks);
+Case("date_from_ticks_negative", "DateFromTicks", -1L);
+Case("date_from_ticks_overflow", "DateFromTicks", last.Ticks + 1);
+Case("kind_unspecified", "KindFromTicks", 0L, 0);
+Case("kind_utc", "KindFromTicks", last.Ticks, 1);
+Case("kind_local", "KindFromTicks", east.Ticks, 2);
+Case("kind_negative", "KindFromTicks", east.Ticks, -1);
+Case("kind_high", "KindFromTicks", east.Ticks, 3);
+Case("kind_invalid_ticks_precedence", "KindFromTicks", -1L, 3);
+Case("stamp_civil_literal_z", "Stamp", east);
+Case("stamp_first_tick", "Stamp", first.AddTicks(1));
+Case("stamp_last", "Stamp", last);
+Case("roundtrip_east", "Roundtrip", east);
+Case("roundtrip_west", "Roundtrip", west);
+Case("roundtrip_zero_offset", "Roundtrip", first.AddTicks(1));
+Case("clock_duration_last", "ClockDuration", TimeOnly.MaxValue);
+Case("clock_duration_first_tick", "ClockDuration", new TimeOnly(1));
+Case("clock_difference_wrap", "ClockDifference", TimeOnly.MinValue, TimeOnly.MaxValue);
+Case("clock_difference_reverse", "ClockDifference", TimeOnly.MaxValue, TimeOnly.MinValue);
+Case("clock_difference_equal", "ClockDifference", new TimeOnly(1), new TimeOnly(1));
+
+var descriptors = methods.OrderBy(m => m.Name).Select(m => new {
+    source = "Instants." + m.Name, method = m.Name,
+    inputs = m.GetParameters().Select(p => new { name = p.Name, schema = Schema(p.ParameterType) }), output = Schema(m.ReturnType)
+});
+Console.Write(JsonSerializer.Serialize(new { runtime = new { framework = RuntimeInformation.FrameworkDescription, version = Environment.Version.ToString(), culture = CultureInfo.CurrentCulture.Name, newline = Environment.NewLine, architecture = RuntimeInformation.ProcessArchitecture.ToString(), os = RuntimeInformation.OSDescription }, methods = descriptors, cases, expected }, new JsonSerializerOptions { WriteIndented = true }));

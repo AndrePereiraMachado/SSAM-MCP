@@ -1,0 +1,23 @@
+{
+ "description": "ODC: a RECUSA de um segundo indice explicito com a MESMA composicao de atributos que IX_WfCovTask_ProjectDone (so um AutoIndex gerado pela plataforma pode ser promovido por um indice explicito igual). Lote de dados, fase 3.",
+ "base": "job:data-full-model",
+ "expectValid": true,
+ "expectError": [
+  "EntityIndex duplicates an existing explicit index"
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IServerEntity:WfCovTask",
+   "type": "EntityIndex",
+   "name": "IX_WfCovTask_ProjectDone2",
+   "args": {
+    "unique": true,
+    "attributes": [
+     "IServerEntity:WfCovTask/ProjectId",
+     "IServerEntity:WfCovTask/IsDone"
+    ]
+   }
+  }
+ ]
+}

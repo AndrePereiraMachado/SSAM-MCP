@@ -1,0 +1,199 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Anvil.Authoring;
+
+namespace ColdDataMaterialization;
+
+[Entity]
+public sealed class StockRow
+{
+    public long Id { get; set; }
+    public int Group { get; set; }
+    public int Quantity { get; set; }
+    public string? Note { get; set; }
+}
+
+public sealed class RowPair
+{
+    public StockRow Left { get; set; } = null!;
+    public StockRow Right { get; set; } = null!;
+}
+
+public sealed class RowBox
+{
+    public StockRow Item { get; set; } = null!;
+}
+
+public sealed class BoxPair
+{
+    public RowBox Left { get; set; } = null!;
+    public StockRow Right { get; set; } = null!;
+}
+
+public static class Rules
+{
+    public static bool DuplicateProjectionMembers(IDataSession data)
+    {
+        var pair = data.Query<StockRow>().Where(x => x.Id == 1)
+            .Select(x => new RowPair { Left = x, Right = x }).Single();
+        pair.Left.Quantity = 41;
+        pair.Left.Note = "";
+        return object.ReferenceEquals(pair.Left, pair.Right)
+            && pair.Right.Quantity == 41 && pair.Right.Note == "";
+    }
+
+    public static bool AliasesSurviveAnotherProjection(IDataSession data)
+    {
+        var pair = data.Query<StockRow>().Where(x => x.Id == 1)
+            .Select(x => new RowPair { Left = x, Right = x })
+            .Select(x => new RowPair { Left = x.Left, Right = x.Right }).Single();
+        pair.Left.Quantity = 42;
+        return object.ReferenceEquals(pair.Left, pair.Right) && pair.Right.Quantity == 42;
+    }
+
+    public static bool EqualConstructedObjectsStayDistinct(IDataSession data)
+    {
+        var pair = data.Query<StockRow>().Where(x => x.Id == 1)
+            .Select(x => new RowPair
+            {
+                Left = new StockRow { Id = x.Id, Group = x.Group, Quantity = x.Quantity, Note = x.Note },
+                Right = new StockRow { Id = x.Id, Group = x.Group, Quantity = x.Quantity, Note = x.Note }
+            }).Single();
+        pair.Left.Quantity = 43;
+        return !object.ReferenceEquals(pair.Left, pair.Right)
+            && pair.Left.Id == pair.Right.Id && pair.Right.Quantity == 10;
+    }
+
+    public static bool SeparateQueriesDetachTheSameKey(IDataSession data)
+    {
+        var first = data.Query<StockRow>().Single(x => x.Id == 1);
+        var second = data.Query<StockRow>().Single(x => x.Id == 1);
+        first.Quantity = 44;
+        return !object.ReferenceEquals(first, second)
+            && first.Id == second.Id && second.Quantity == 10;
+    }
+
+    public static bool MutationWithoutUpdateStaysDetached(IDataSession data)
+    {
+        var loaded = data.Query<StockRow>().First(x => x.Id == 1);
+        var alias = loaded;
+        alias.Quantity = 45;
+        alias.Note = "local";
+        var persisted = data.Query<StockRow>().Single(x => x.Id == 1);
+        return object.ReferenceEquals(loaded, alias)
+            && loaded.Quantity == 45 && loaded.Note == "local"
+            && persisted.Quantity == 10 && persisted.Note == null;
+    }
+
+    public static bool UpdateSavesTheCurrentDetachedFields(IDataSession data)
+    {
+        var loaded = data.Query<StockRow>().Single(x => x.Id == 1);
+        var alias = loaded;
+        alias.Quantity = 46;
+        alias.Note = "saved";
+        data.Update(loaded);
+        loaded.Quantity = 99;
+        loaded.Note = null;
+        var persisted = data.Query<StockRow>().Single(x => x.Id == 1);
+        return object.ReferenceEquals(loaded, alias)
+            && alias.Quantity == 99 && alias.Note == null
+            && persisted.Quantity == 46 && persisted.Note == "saved";
+    }
+
+    public static bool InsertReturnsIdentityWithoutMutatingTheArgument(IDataSession data)
+    {
+        var created = new StockRow { Group = 9, Quantity = 47, Note = "inserted" };
+        var alias = created;
+        var id = data.Insert(created);
+        created.Quantity = 99;
+        created.Note = null;
+        var persisted = data.Query<StockRow>().Single(x => x.Id == id.Value);
+        return id.Value > 0 && created.Id == 0 && alias.Id == 0
+            && object.ReferenceEquals(created, alias)
+            && persisted.Quantity == 47 && persisted.Note == "inserted";
+    }
+
+    public static bool JoinFanoutReusesTheLeftSourceObject(IDataSession data)
+    {
+        var pairs = data.Query<StockRow>().Where(x => x.Id == 1)
+            .Join(data.Query<StockRow>().Where(x => x.Group == 7),
+                left => left.Group, right => right.Group,
+                (left, right) => new RowPair { Left = left, Right = right })
+            .OrderBy(x => x.Right.Id).ToList();
+        pairs[0].Left.Quantity = 48;
+        return pairs.Count == 2
+            && !object.ReferenceEquals(pairs[0], pairs[1])
+            && object.ReferenceEquals(pairs[0].Left, pairs[1].Left)
+            && !object.ReferenceEquals(pairs[0].Left, pairs[0].Right)
+            && pairs[1].Left.Quantity == 48 && pairs[0].Right.Quantity == 10;
+    }
+
+    public static bool JoinFanoutReusesBothSourceSides(IDataSession data)
+    {
+        var pairs = data.Query<StockRow>().Where(x => x.Group == 7)
+            .Join(data.Query<StockRow>().Where(x => x.Group == 7),
+                left => left.Group, right => right.Group,
+                (left, right) => new RowPair { Left = left, Right = right })
+            .OrderBy(x => x.Left.Id).ThenBy(x => x.Right.Id).ToList();
+        pairs[0].Left.Quantity = 49;
+        pairs[0].Right.Quantity = 50;
+        return pairs.Count == 4
+            && object.ReferenceEquals(pairs[0].Left, pairs[1].Left)
+            && object.ReferenceEquals(pairs[2].Left, pairs[3].Left)
+            && object.ReferenceEquals(pairs[0].Right, pairs[2].Right)
+            && object.ReferenceEquals(pairs[1].Right, pairs[3].Right)
+            && !object.ReferenceEquals(pairs[0].Left, pairs[0].Right)
+            && !object.ReferenceEquals(pairs[0], pairs[1])
+            && pairs[1].Left.Quantity == 49 && pairs[2].Right.Quantity == 50
+            && pairs[2].Left.Quantity == 20 && pairs[1].Right.Quantity == 20;
+    }
+
+    public static bool ProjectionBeforeJoinRetainsItsOwnIdentity(IDataSession data)
+    {
+        var pairs = data.Query<StockRow>().Where(x => x.Id == 1)
+            .Select(x => new RowBox { Item = x })
+            .Join(data.Query<StockRow>().Where(x => x.Group == 7),
+                left => left.Item.Group, right => right.Group,
+                (left, right) => new BoxPair { Left = left, Right = right })
+            .OrderBy(x => x.Right.Id).ToList();
+        pairs[0].Left.Item.Quantity = 51;
+        return pairs.Count == 2
+            && object.ReferenceEquals(pairs[0].Left, pairs[1].Left)
+            && object.ReferenceEquals(pairs[0].Left.Item, pairs[1].Left.Item)
+            && !object.ReferenceEquals(pairs[0], pairs[1])
+            && pairs[1].Left.Item.Quantity == 51 && pairs[0].Right.Quantity == 10;
+    }
+
+    public static bool ProjectionAfterJoinAllocatesForEveryOccurrence(IDataSession data)
+    {
+        var boxes = data.Query<StockRow>().Where(x => x.Id == 1)
+            .Join(data.Query<StockRow>().Where(x => x.Group == 7),
+                left => left.Group, right => right.Group,
+                (left, right) => new RowPair { Left = left, Right = right })
+            .OrderBy(x => x.Right.Id)
+            .Select(x => new RowBox { Item = x.Left }).ToList();
+        boxes[0].Item.Quantity = 52;
+        return boxes.Count == 2 && !object.ReferenceEquals(boxes[0], boxes[1])
+            && object.ReferenceEquals(boxes[0].Item, boxes[1].Item)
+            && boxes[1].Item.Quantity == 52;
+    }
+
+    public static bool ArrayResultsPreserveMembersAndDistinctRows(IDataSession data)
+    {
+        var pairs = data.Query<StockRow>().Where(x => x.Group == 7)
+            .OrderBy(x => x.Id).Select(x => new RowPair { Left = x, Right = x }).ToArray();
+        pairs[0].Left.Quantity = 53;
+        return pairs.Length == 2
+            && object.ReferenceEquals(pairs[0].Left, pairs[0].Right)
+            && !object.ReferenceEquals(pairs[0].Left, pairs[1].Left)
+            && pairs[0].Right.Quantity == 53 && pairs[1].Left.Quantity == 20;
+    }
+
+    public static bool DefaultTerminalReturnsNullForNoRows(IDataSession data)
+    {
+        var first = data.Query<StockRow>().FirstOrDefault(x => x.Id == 999);
+        var single = data.Query<StockRow>().SingleOrDefault(x => x.Id == 999);
+        return first == null && single == null;
+    }
+}

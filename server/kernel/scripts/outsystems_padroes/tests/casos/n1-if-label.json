@@ -1,0 +1,19 @@
+{
+ "description": "NEG N1 (OutSystems padroes): If com Label que nao e pergunta.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "logic", "data": {"actions": [
+   {"name": "CheckQuota", "kind": "server", "public": true,
+    "description": "Decide se a cota foi excedida com um If sem pergunta no Label (violacao proposital da N1).",
+    "inputs": [{"name": "UsedUnits", "type": "Integer", "description": "Quantidade de unidades ja consumidas da cota."}],
+    "outputs": [{"name": "IsWithinQuota", "type": "Boolean", "description": "Verdadeiro quando ainda ha cota disponivel."}],
+    "steps": [
+     {"if": "UsedUnits < 1", "as": "QuotaCheck",
+      "then": [{"assign": {"IsWithinQuota": "True"}, "as": "Mark as within quota"}],
+      "else": [{"assign": {"IsWithinQuota": "False"}, "as": "Mark the quota as exceeded"}]}
+    ]}
+  ]}}
+ ]
+}

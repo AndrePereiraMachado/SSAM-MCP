@@ -1,0 +1,54 @@
+# Caixa server
+
+Servidor MCP hospedado do SSAM: `ssam serve`, hub do agente, tokens, kernels O11 e ODC, builder ODC, imagem Docker e
+painel do dono. Cópia de `servidor/fase4` (`e7b2119b`) de `C:\Users\andre\SSAM-Hybrid-servidor`, sem edição.
+Esta pasta é a raiz do repositório antigo: caminhos relativos, Dockerfile e compose funcionam daqui.
+
+O servidor no ar continua rodando do original (porta 7310). Não use essa porta para testar esta cópia.
+
+## Compilar
+
+```powershell
+pnpm install --frozen-lockfile
+pnpm -C platforms/odc install --frozen-lockfile
+dotnet build kernel/src/Anvil.Cli -c Release -nologo -v q -nodeReuse:false -p:SSDir="<Service Studio 11.55.91>" -o kernel/.local/cli
+dotnet build kernel/src/Anvil.Cli.Odc -c Release -nologo -v q -nodeReuse:false -p:OdcInstall="<ODC Studio 1.7.27+>" -o kernel/.local/lane-odc/cli
+dotnet build platforms/odc/studio/builder/Builder.csproj -c Release -nologo -v q -nodeReuse:false -p:OdcInstall="<ODC Studio>"
+dotnet build platforms/odc/studio/bridge/Bridge.csproj -c Release -nologo -v q -p:OdcInstall="<ODC Studio>"
+dotnet build platforms/odc/studio/bridge/client/Client.csproj -c Release -nologo -v q
+```
+
+Ou `scripts/setup-dev.ps1 -Yes -NoUserEnv -SkipInstall -SkipMcp -SkipDoctor`.
+
+## Rodar
+
+```powershell
+$env:SSAM_SERVER_DIR = '<pasta de estado>'
+.\scripts\servidor.ps1 start -Port <porta>     # status | stop
+.\ssam server-token issue --customer "Nome" --days 30 --lanes "odc,o11"
+node scripts/dashboard.mjs --dir <pasta de estado> --port 7320
+```
+
+## Testar
+
+```powershell
+node --test platforms/odc/facade/tests/agent-hub.test.mjs platforms/odc/facade/tests/http-server.test.mjs platforms/odc/facade/tests/server-tokens.test.mjs platforms/odc/facade/tests/fase4-*.test.mjs platforms/odc/facade/tests/hosted-*.test.mjs tests/servidor-ps1.test.mjs tests/tunel.test.mjs
+node --test platforms/odc/tests/public-signature-drift.test.mjs
+dotnet test platforms/odc/studio/builder/tests/Builder.Tests.csproj -c Release -p:OdcInstall="<ODC Studio>"
+```
+
+Em 2026-10-10: 154 de 163 passam. O `hosted-e2e` pula (o agente está na outra caixa). As 8 falhas vêm da falta de
+`platforms/odc/tenants.json`, que é dado do dono e ficou de fora. Builder.Tests 7/7.
+
+## Deploy
+
+1. Instaladores ou bundles dos Studios em `docker/installers` (veja o README de lá).
+2. `.env` a partir de `.env.example` (`NGROK_DOMAIN`, `NGROK_AUTHTOKEN`).
+3. `node --test platforms/odc/facade/tests/hosted-image-denylist.test.mjs` antes de cada build.
+4. `docker compose build` e `docker compose up -d`.
+5. `kernel.json` no volume: `{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v48"}` em `/data/server/kernel.json`.
+6. `Features.xml` do ODC Studio em `/data/odc-features/`.
+7. Tokens: `docker compose run --rm ssam-admin server-token issue ...`.
+
+Pendências: Docker ainda não provado; `kernel/Anvil.slnx` lista a bridge fina (que está na caixa agent); os `.mcp.json`
+apontam para `C:\Users\andre\SSAM-Hybrid` (rode `node scripts/configure-mcp.mjs`). Detalhes no `README.md` da raiz.

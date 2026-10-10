@@ -1,0 +1,31 @@
+{
+ "description": "SectionGroup do OSUI com titulos fixos (HasStickyTitles) e duas Section com conteudo ligado a variaveis.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "SettingsPage", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Settings\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Email", "as": "$vEmail"},
+  {"op": "set", "target": "$vEmail", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$vEmail", "prop": "DefaultValue", "value": "\"me@example.com\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Language", "as": "$vLanguage"},
+  {"op": "set", "target": "$vLanguage", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$vLanguage", "prop": "DefaultValue", "value": "\"English\""},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "SectionGroup1", "source": "IMobileBlock:SectionGroup", "as": "$sg"},
+  {"op": "set", "target": "$sg/HasStickyTitles", "prop": "Value", "value": "True"},
+  {"op": "set", "target": "$sg/TopPosition", "prop": "Value", "value": "56"},
+  {"op": "create", "parent": "$sg/Sections", "type": "IMobileBlockInstanceWidget", "name": "AccountSection", "source": "IMobileBlock:Section", "as": "$s1"},
+  {"op": "create", "parent": "$s1/Title", "type": "ITextWidget", "as": "$text1"},
+  {"op": "set", "target": "$text1", "prop": "Text", "value": "Account"},
+  {"op": "create", "parent": "$s1/Content", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "Email"},
+  {"op": "create", "parent": "$sg/Sections", "type": "IMobileBlockInstanceWidget", "name": "LanguageSection", "source": "IMobileBlock:Section", "as": "$s2"},
+  {"op": "create", "parent": "$s2/Title", "type": "ITextWidget", "as": "$text2"},
+  {"op": "set", "target": "$text2", "prop": "Text", "value": "Language"},
+  {"op": "create", "parent": "$s2/Content", "type": "IExpression", "as": "$expr2"},
+  {"op": "set", "target": "$expr2", "prop": "Value", "value": "Language"}
+ ]
+}

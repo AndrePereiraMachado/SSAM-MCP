@@ -1,0 +1,2383 @@
+{
+ "description": "Tickets: leituras para telas e relatorios (get com permissoes, pesquisa, timeline, dashboard)",
+ "base": "job:tickets-06-sla",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Ticket_Get",
+   "as": "$Ticket_Get"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get",
+   "prop": "Description",
+   "value": "Ticket + permissoes do viewer + transicoes permitidas"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get",
+   "type": "IInputParameter",
+   "name": "TicketId",
+   "as": "$Ticket_Get_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_in1",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get",
+   "type": "IInputParameter",
+   "name": "ViewerId",
+   "as": "$Ticket_Get_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_in2",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get",
+   "type": "IOutputParameter",
+   "name": "Ticket",
+   "as": "$Ticket_Get_out3"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_out3",
+   "prop": "DataType",
+   "value": "Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get",
+   "type": "IOutputParameter",
+   "name": "Found",
+   "as": "$Ticket_Get_out4"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_out4",
+   "prop": "DataType",
+   "value": "Boolean"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get",
+   "type": "IOutputParameter",
+   "name": "CanEdit",
+   "as": "$Ticket_Get_out5"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_out5",
+   "prop": "DataType",
+   "value": "Boolean"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get",
+   "type": "IOutputParameter",
+   "name": "CanClose",
+   "as": "$Ticket_Get_out6"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_out6",
+   "prop": "DataType",
+   "value": "Boolean"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get",
+   "type": "IOutputParameter",
+   "name": "AllowedTransitions",
+   "as": "$Ticket_Get_out7"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_out7",
+   "prop": "DataType",
+   "value": "TicketStatus Identifier List"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get",
+   "type": "IStartNode",
+   "as": "$Ticket_Get_start8"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get",
+   "type": "IAggregateNode",
+   "name": "GetTicket",
+   "as": "$Ticket_Get_agg9"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get_agg9",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get_agg9",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.Id = TicketId"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_agg9",
+   "prop": "MaxRecords",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get",
+   "type": "IIfNode",
+   "name": "Found",
+   "as": "$Ticket_Get_if10"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_if10",
+   "prop": "Label",
+   "value": "Found"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_if10",
+   "prop": "Condition",
+   "value": "not GetTicket.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get",
+   "type": "IAssignNode",
+   "name": "NotFound",
+   "as": "$Ticket_Get_asg11"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_asg11",
+   "prop": "Label",
+   "value": "NotFound"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get_asg11",
+   "type": "IAssignment",
+   "as": "$Ticket_Get_a12"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_a12",
+   "prop": "Variable",
+   "value": "Found"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_a12",
+   "prop": "Value",
+   "value": "False"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get",
+   "type": "IExecuteServerActionNode",
+   "name": "Permissions",
+   "as": "$Ticket_Get_call13"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_call13",
+   "prop": "Action",
+   "value": "IServerAction:User_Permissions"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_call13/UserId",
+   "prop": "Value",
+   "value": "ViewerId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get",
+   "type": "IAssignNode",
+   "name": "Fill",
+   "as": "$Ticket_Get_asg14"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_asg14",
+   "prop": "Label",
+   "value": "Fill"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get_asg14",
+   "type": "IAssignment",
+   "as": "$Ticket_Get_a15"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_a15",
+   "prop": "Variable",
+   "value": "Found"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_a15",
+   "prop": "Value",
+   "value": "True"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get_asg14",
+   "type": "IAssignment",
+   "as": "$Ticket_Get_a16"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_a16",
+   "prop": "Variable",
+   "value": "Ticket"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_a16",
+   "prop": "Value",
+   "value": "GetTicket.List.Current.Ticket"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get_asg14",
+   "type": "IAssignment",
+   "as": "$Ticket_Get_a17"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_a17",
+   "prop": "Variable",
+   "value": "CanEdit"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_a17",
+   "prop": "Value",
+   "value": "Permissions.IsAgent or GetTicket.List.Current.Ticket.RequesterId = ViewerId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get_asg14",
+   "type": "IAssignment",
+   "as": "$Ticket_Get_a18"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_a18",
+   "prop": "Variable",
+   "value": "CanClose"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_a18",
+   "prop": "Value",
+   "value": "Permissions.IsManager or GetTicket.List.Current.Ticket.AssigneeId = ViewerId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get",
+   "type": "IAggregateNode",
+   "name": "GetStatuses",
+   "as": "$Ticket_Get_agg19"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get_agg19",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:TicketStatus"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get",
+   "type": "IForEachNode",
+   "name": "EachStatus",
+   "as": "$Ticket_Get_fe20"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_fe20",
+   "prop": "Label",
+   "value": "EachStatus"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_fe20",
+   "prop": "RecordList",
+   "value": "GetStatuses.List"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get",
+   "type": "IExecuteServerActionNode",
+   "name": "CanTransition",
+   "as": "$Ticket_Get_call21"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_call21",
+   "prop": "Action",
+   "value": "IServerAction:Ticket_CanTransition"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_call21/FromStatusId",
+   "prop": "Value",
+   "value": "Ticket.StatusId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_call21/ToStatusId",
+   "prop": "Value",
+   "value": "GetStatuses.List.Current.TicketStatus.Id"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_call21/IsManager",
+   "prop": "Value",
+   "value": "Permissions.IsManager"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get",
+   "type": "IIfNode",
+   "name": "Allowed",
+   "as": "$Ticket_Get_if22"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_if22",
+   "prop": "Label",
+   "value": "Allowed"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_if22",
+   "prop": "Condition",
+   "value": "CanTransition.Allowed"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get",
+   "type": "IExecuteServerActionNode",
+   "name": "AppendStatus",
+   "as": "$Ticket_Get_call23"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_call23",
+   "prop": "Action",
+   "value": "IActionSignature:ListAppend"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_call23/List",
+   "prop": "Value",
+   "value": "AllowedTransitions"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Get_call23/Element",
+   "prop": "Value",
+   "value": "GetStatuses.List.Current.TicketStatus.Id"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Get",
+   "type": "IEndNode",
+   "as": "$Ticket_Get_end24"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Get_start8",
+   "to": "$Ticket_Get_agg9"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Get_agg9",
+   "to": "$Ticket_Get_if10"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Get_if10",
+   "to": "$Ticket_Get_asg11",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Get_asg11",
+   "to": "$Ticket_Get_end24"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Get_if10",
+   "to": "$Ticket_Get_call13",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Get_call13",
+   "to": "$Ticket_Get_asg14"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Get_asg14",
+   "to": "$Ticket_Get_agg19"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Get_agg19",
+   "to": "$Ticket_Get_fe20"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Get_fe20",
+   "to": "$Ticket_Get_call21",
+   "connector": "CycleTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Get_call21",
+   "to": "$Ticket_Get_if22"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Get_if22",
+   "to": "$Ticket_Get_call23",
+   "connector": "TrueTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Get_call23",
+   "to": "$Ticket_Get_fe20"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Get_if22",
+   "to": "$Ticket_Get_fe20",
+   "connector": "FalseTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Get_fe20",
+   "to": "$Ticket_Get_end24"
+  },
+  {
+   "op": "layout",
+   "target": "$Ticket_Get"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Ticket_Search",
+   "as": "$Ticket_Search"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search",
+   "prop": "Description",
+   "value": "Pesquisa paginada com filtros opcionais e visibilidade (requester ve os seus; agente e manager veem tudo)"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search",
+   "type": "IInputParameter",
+   "name": "Search",
+   "as": "$Ticket_Search_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in1",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in1",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search",
+   "type": "IInputParameter",
+   "name": "StatusId",
+   "as": "$Ticket_Search_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in2",
+   "prop": "DataType",
+   "value": "TicketStatus Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in2",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search",
+   "type": "IInputParameter",
+   "name": "PriorityId",
+   "as": "$Ticket_Search_in3"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in3",
+   "prop": "DataType",
+   "value": "TicketPriority Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in3",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search",
+   "type": "IInputParameter",
+   "name": "TeamId",
+   "as": "$Ticket_Search_in4"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in4",
+   "prop": "DataType",
+   "value": "Team Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in4",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search",
+   "type": "IInputParameter",
+   "name": "AssigneeId",
+   "as": "$Ticket_Search_in5"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in5",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in5",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search",
+   "type": "IInputParameter",
+   "name": "RequesterId",
+   "as": "$Ticket_Search_in6"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in6",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in6",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search",
+   "type": "IInputParameter",
+   "name": "CategoryId",
+   "as": "$Ticket_Search_in7"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in7",
+   "prop": "DataType",
+   "value": "Category Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in7",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search",
+   "type": "IInputParameter",
+   "name": "FromDate",
+   "as": "$Ticket_Search_in8"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in8",
+   "prop": "DataType",
+   "value": "Date Time"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in8",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search",
+   "type": "IInputParameter",
+   "name": "ToDate",
+   "as": "$Ticket_Search_in9"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in9",
+   "prop": "DataType",
+   "value": "Date Time"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in9",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search",
+   "type": "IInputParameter",
+   "name": "ViewerId",
+   "as": "$Ticket_Search_in10"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in10",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search",
+   "type": "IInputParameter",
+   "name": "StartIndex",
+   "as": "$Ticket_Search_in11"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in11",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in11",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search",
+   "type": "IInputParameter",
+   "name": "MaxRecords",
+   "as": "$Ticket_Search_in12"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in12",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_in12",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search",
+   "type": "IOutputParameter",
+   "name": "Tickets",
+   "as": "$Ticket_Search_out13"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_out13",
+   "prop": "DataType",
+   "value": "Ticket List"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search",
+   "type": "IOutputParameter",
+   "name": "Count",
+   "as": "$Ticket_Search_out14"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_out14",
+   "prop": "DataType",
+   "value": "Long Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search",
+   "type": "IStartNode",
+   "as": "$Ticket_Search_start15"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search",
+   "type": "IExecuteServerActionNode",
+   "name": "Permissions",
+   "as": "$Ticket_Search_call16"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_call16",
+   "prop": "Action",
+   "value": "IServerAction:User_Permissions"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_call16/UserId",
+   "prop": "Value",
+   "value": "ViewerId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search",
+   "type": "IAggregateNode",
+   "name": "SearchTickets",
+   "as": "$Ticket_Search_agg17"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_agg17",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_agg17",
+   "type": "IFilter",
+   "args": {
+    "condition": "Search = \"\" or Ticket.Subject like \"%\" + Search + \"%\" or Ticket.Number like \"%\" + Search + \"%\""
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_agg17",
+   "type": "IFilter",
+   "args": {
+    "condition": "StatusId = NullIdentifier() or Ticket.StatusId = StatusId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_agg17",
+   "type": "IFilter",
+   "args": {
+    "condition": "PriorityId = NullIdentifier() or Ticket.PriorityId = PriorityId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_agg17",
+   "type": "IFilter",
+   "args": {
+    "condition": "TeamId = NullIdentifier() or Ticket.TeamId = TeamId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_agg17",
+   "type": "IFilter",
+   "args": {
+    "condition": "AssigneeId = NullIdentifier() or Ticket.AssigneeId = AssigneeId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_agg17",
+   "type": "IFilter",
+   "args": {
+    "condition": "RequesterId = NullIdentifier() or Ticket.RequesterId = RequesterId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_agg17",
+   "type": "IFilter",
+   "args": {
+    "condition": "CategoryId = NullIdentifier() or Ticket.CategoryId = CategoryId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_agg17",
+   "type": "IFilter",
+   "args": {
+    "condition": "FromDate = NullDate() or Ticket.CreatedOn >= FromDate"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_agg17",
+   "type": "IFilter",
+   "args": {
+    "condition": "ToDate = NullDate() or Ticket.CreatedOn <= ToDate"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_agg17",
+   "type": "IFilter",
+   "args": {
+    "condition": "Permissions.IsAgent or Permissions.IsManager or Ticket.RequesterId = ViewerId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_agg17",
+   "type": "ISort",
+   "as": "$Ticket_Search_sort18"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sort18",
+   "prop": "Attribute",
+   "value": "Ticket.CreatedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sort18",
+   "prop": "SortDirection",
+   "value": "Descending"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_agg17",
+   "prop": "MaxRecords",
+   "value": "If(MaxRecords <= 0, 50, MaxRecords)"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_agg17",
+   "prop": "StartIndex",
+   "value": "StartIndex"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search",
+   "type": "IAssignNode",
+   "name": "SetOutputs",
+   "as": "$Ticket_Search_asg19"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_asg19",
+   "prop": "Label",
+   "value": "SetOutputs"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_asg19",
+   "type": "IAssignment",
+   "as": "$Ticket_Search_a20"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_a20",
+   "prop": "Variable",
+   "value": "Tickets"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_a20",
+   "prop": "Value",
+   "value": "SearchTickets.List"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_asg19",
+   "type": "IAssignment",
+   "as": "$Ticket_Search_a21"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_a21",
+   "prop": "Variable",
+   "value": "Count"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_a21",
+   "prop": "Value",
+   "value": "SearchTickets.Count"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search",
+   "type": "IEndNode",
+   "as": "$Ticket_Search_end22"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Search_start15",
+   "to": "$Ticket_Search_call16"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Search_call16",
+   "to": "$Ticket_Search_agg17"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Search_agg17",
+   "to": "$Ticket_Search_asg19"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Search_asg19",
+   "to": "$Ticket_Search_end22"
+  },
+  {
+   "op": "layout",
+   "target": "$Ticket_Search"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Ticket_Timeline",
+   "as": "$Ticket_Timeline"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline",
+   "prop": "Description",
+   "value": "Comentarios (internos so para a equipa) e eventos numa lista unica"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline",
+   "type": "IInputParameter",
+   "name": "TicketId",
+   "as": "$Ticket_Timeline_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_in1",
+   "prop": "DataType",
+   "value": "Ticket Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline",
+   "type": "IInputParameter",
+   "name": "ViewerId",
+   "as": "$Ticket_Timeline_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_in2",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline",
+   "type": "IOutputParameter",
+   "name": "Items",
+   "as": "$Ticket_Timeline_out3"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_out3",
+   "prop": "DataType",
+   "value": "TimelineItem List"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline",
+   "type": "ILocalVariable",
+   "name": "I",
+   "as": "$Ticket_Timeline_var4"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_var4",
+   "prop": "DataType",
+   "value": "TimelineItem"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline",
+   "type": "IStartNode",
+   "as": "$Ticket_Timeline_start5"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline",
+   "type": "IExecuteServerActionNode",
+   "name": "Permissions",
+   "as": "$Ticket_Timeline_call6"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_call6",
+   "prop": "Action",
+   "value": "IServerAction:User_Permissions"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_call6/UserId",
+   "prop": "Value",
+   "value": "ViewerId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline",
+   "type": "IAggregateNode",
+   "name": "GetComments",
+   "as": "$Ticket_Timeline_agg7"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline_agg7",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:TicketComment"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline_agg7",
+   "type": "IFilter",
+   "args": {
+    "condition": "TicketComment.TicketId = TicketId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline_agg7",
+   "type": "IFilter",
+   "args": {
+    "condition": "not TicketComment.IsInternal or Permissions.IsAgent"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline_agg7",
+   "type": "ISort",
+   "as": "$Ticket_Timeline_sort8"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_sort8",
+   "prop": "Attribute",
+   "value": "TicketComment.CreatedOn"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_sort8",
+   "prop": "SortDirection",
+   "value": "Ascending"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline",
+   "type": "IForEachNode",
+   "name": "EachComment",
+   "as": "$Ticket_Timeline_fe9"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_fe9",
+   "prop": "Label",
+   "value": "EachComment"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_fe9",
+   "prop": "RecordList",
+   "value": "GetComments.List"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline",
+   "type": "IAssignNode",
+   "name": "CommentItem",
+   "as": "$Ticket_Timeline_asg10"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_asg10",
+   "prop": "Label",
+   "value": "CommentItem"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline_asg10",
+   "type": "IAssignment",
+   "as": "$Ticket_Timeline_a11"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_a11",
+   "prop": "Variable",
+   "value": "I.Kind"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_a11",
+   "prop": "Value",
+   "value": "\"comment\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline_asg10",
+   "type": "IAssignment",
+   "as": "$Ticket_Timeline_a12"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_a12",
+   "prop": "Variable",
+   "value": "I.OccurredOn"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_a12",
+   "prop": "Value",
+   "value": "GetComments.List.Current.TicketComment.CreatedOn"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline_asg10",
+   "type": "IAssignment",
+   "as": "$Ticket_Timeline_a13"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_a13",
+   "prop": "Variable",
+   "value": "I.ActorId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_a13",
+   "prop": "Value",
+   "value": "GetComments.List.Current.TicketComment.AuthorId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline_asg10",
+   "type": "IAssignment",
+   "as": "$Ticket_Timeline_a14"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_a14",
+   "prop": "Variable",
+   "value": "I.Text"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_a14",
+   "prop": "Value",
+   "value": "GetComments.List.Current.TicketComment.Body"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline_asg10",
+   "type": "IAssignment",
+   "as": "$Ticket_Timeline_a15"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_a15",
+   "prop": "Variable",
+   "value": "I.IsInternal"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_a15",
+   "prop": "Value",
+   "value": "GetComments.List.Current.TicketComment.IsInternal"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline",
+   "type": "IExecuteServerActionNode",
+   "name": "AppendComment",
+   "as": "$Ticket_Timeline_call16"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_call16",
+   "prop": "Action",
+   "value": "IActionSignature:ListAppend"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_call16/List",
+   "prop": "Value",
+   "value": "Items"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_call16/Element",
+   "prop": "Value",
+   "value": "I"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline",
+   "type": "IAggregateNode",
+   "name": "GetEvents",
+   "as": "$Ticket_Timeline_agg17"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline_agg17",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:TicketEvent"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline_agg17",
+   "type": "IFilter",
+   "args": {
+    "condition": "TicketEvent.TicketId = TicketId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline_agg17",
+   "type": "ISort",
+   "as": "$Ticket_Timeline_sort18"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_sort18",
+   "prop": "Attribute",
+   "value": "TicketEvent.OccurredOn"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_sort18",
+   "prop": "SortDirection",
+   "value": "Ascending"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline",
+   "type": "IForEachNode",
+   "name": "EachEvent",
+   "as": "$Ticket_Timeline_fe19"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_fe19",
+   "prop": "Label",
+   "value": "EachEvent"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_fe19",
+   "prop": "RecordList",
+   "value": "GetEvents.List"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline",
+   "type": "IAssignNode",
+   "name": "EventItem",
+   "as": "$Ticket_Timeline_asg20"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_asg20",
+   "prop": "Label",
+   "value": "EventItem"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline_asg20",
+   "type": "IAssignment",
+   "as": "$Ticket_Timeline_a21"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_a21",
+   "prop": "Variable",
+   "value": "I.Kind"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_a21",
+   "prop": "Value",
+   "value": "\"event\""
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline_asg20",
+   "type": "IAssignment",
+   "as": "$Ticket_Timeline_a22"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_a22",
+   "prop": "Variable",
+   "value": "I.OccurredOn"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_a22",
+   "prop": "Value",
+   "value": "GetEvents.List.Current.TicketEvent.OccurredOn"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline_asg20",
+   "type": "IAssignment",
+   "as": "$Ticket_Timeline_a23"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_a23",
+   "prop": "Variable",
+   "value": "I.ActorId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_a23",
+   "prop": "Value",
+   "value": "GetEvents.List.Current.TicketEvent.ActorId"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline_asg20",
+   "type": "IAssignment",
+   "as": "$Ticket_Timeline_a24"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_a24",
+   "prop": "Variable",
+   "value": "I.Text"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_a24",
+   "prop": "Value",
+   "value": "GetEvents.List.Current.TicketEvent.FromValue + \" -> \" + GetEvents.List.Current.TicketEvent.ToValue + \" \" + GetEvents.List.Current.TicketEvent.Note"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline_asg20",
+   "type": "IAssignment",
+   "as": "$Ticket_Timeline_a25"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_a25",
+   "prop": "Variable",
+   "value": "I.IsInternal"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_a25",
+   "prop": "Value",
+   "value": "False"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline",
+   "type": "IExecuteServerActionNode",
+   "name": "AppendEvent",
+   "as": "$Ticket_Timeline_call26"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_call26",
+   "prop": "Action",
+   "value": "IActionSignature:ListAppend"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_call26/List",
+   "prop": "Value",
+   "value": "Items"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Timeline_call26/Element",
+   "prop": "Value",
+   "value": "I"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Timeline",
+   "type": "IEndNode",
+   "as": "$Ticket_Timeline_end27"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Timeline_start5",
+   "to": "$Ticket_Timeline_call6"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Timeline_call6",
+   "to": "$Ticket_Timeline_agg7"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Timeline_agg7",
+   "to": "$Ticket_Timeline_fe9"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Timeline_fe9",
+   "to": "$Ticket_Timeline_asg10",
+   "connector": "CycleTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Timeline_asg10",
+   "to": "$Ticket_Timeline_call16"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Timeline_call16",
+   "to": "$Ticket_Timeline_fe9"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Timeline_fe9",
+   "to": "$Ticket_Timeline_agg17"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Timeline_agg17",
+   "to": "$Ticket_Timeline_fe19"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Timeline_fe19",
+   "to": "$Ticket_Timeline_asg20",
+   "connector": "CycleTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Timeline_asg20",
+   "to": "$Ticket_Timeline_call26"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Timeline_call26",
+   "to": "$Ticket_Timeline_fe19"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Timeline_fe19",
+   "to": "$Ticket_Timeline_end27"
+  },
+  {
+   "op": "layout",
+   "target": "$Ticket_Timeline"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Dashboard_Metrics",
+   "as": "$Dashboard_Metrics"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics",
+   "prop": "Description",
+   "value": "Contagens por status, urgentes, brechas de SLA, medias de resposta e resolucao no periodo"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics",
+   "type": "IInputParameter",
+   "name": "TeamId",
+   "as": "$Dashboard_Metrics_in1"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_in1",
+   "prop": "DataType",
+   "value": "Team Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_in1",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics",
+   "type": "IInputParameter",
+   "name": "FromDate",
+   "as": "$Dashboard_Metrics_in2"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_in2",
+   "prop": "DataType",
+   "value": "Date Time"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_in2",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics",
+   "type": "IInputParameter",
+   "name": "ToDate",
+   "as": "$Dashboard_Metrics_in3"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_in3",
+   "prop": "DataType",
+   "value": "Date Time"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_in3",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics",
+   "type": "IOutputParameter",
+   "name": "Metrics",
+   "as": "$Dashboard_Metrics_out4"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_out4",
+   "prop": "DataType",
+   "value": "DashboardMetrics"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics",
+   "type": "ILocalVariable",
+   "name": "SumFirst",
+   "as": "$Dashboard_Metrics_var5"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_var5",
+   "prop": "DataType",
+   "value": "Decimal"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics",
+   "type": "ILocalVariable",
+   "name": "NFirst",
+   "as": "$Dashboard_Metrics_var6"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_var6",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics",
+   "type": "ILocalVariable",
+   "name": "SumRes",
+   "as": "$Dashboard_Metrics_var7"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_var7",
+   "prop": "DataType",
+   "value": "Decimal"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics",
+   "type": "ILocalVariable",
+   "name": "NRes",
+   "as": "$Dashboard_Metrics_var8"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_var8",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics",
+   "type": "IStartNode",
+   "as": "$Dashboard_Metrics_start9"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics",
+   "type": "IAggregateNode",
+   "name": "GetOpen",
+   "as": "$Dashboard_Metrics_agg10"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg10",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg10",
+   "type": "IFilter",
+   "args": {
+    "condition": "TeamId = NullIdentifier() or Ticket.TeamId = TeamId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg10",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.StatusId = Entities.TicketStatus.Open or Ticket.StatusId = Entities.TicketStatus.New"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg10",
+   "type": "IFilter",
+   "args": {
+    "condition": "FromDate = NullDate() or Ticket.CreatedOn >= FromDate"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg10",
+   "type": "IFilter",
+   "args": {
+    "condition": "ToDate = NullDate() or Ticket.CreatedOn <= ToDate"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics",
+   "type": "IAggregateNode",
+   "name": "GetPending",
+   "as": "$Dashboard_Metrics_agg11"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg11",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg11",
+   "type": "IFilter",
+   "args": {
+    "condition": "TeamId = NullIdentifier() or Ticket.TeamId = TeamId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg11",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.StatusId = Entities.TicketStatus.Pending"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg11",
+   "type": "IFilter",
+   "args": {
+    "condition": "FromDate = NullDate() or Ticket.CreatedOn >= FromDate"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg11",
+   "type": "IFilter",
+   "args": {
+    "condition": "ToDate = NullDate() or Ticket.CreatedOn <= ToDate"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics",
+   "type": "IAggregateNode",
+   "name": "GetResolved",
+   "as": "$Dashboard_Metrics_agg12"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg12",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg12",
+   "type": "IFilter",
+   "args": {
+    "condition": "TeamId = NullIdentifier() or Ticket.TeamId = TeamId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg12",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.StatusId = Entities.TicketStatus.Resolved"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg12",
+   "type": "IFilter",
+   "args": {
+    "condition": "FromDate = NullDate() or Ticket.CreatedOn >= FromDate"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg12",
+   "type": "IFilter",
+   "args": {
+    "condition": "ToDate = NullDate() or Ticket.CreatedOn <= ToDate"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics",
+   "type": "IAggregateNode",
+   "name": "GetClosed",
+   "as": "$Dashboard_Metrics_agg13"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg13",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg13",
+   "type": "IFilter",
+   "args": {
+    "condition": "TeamId = NullIdentifier() or Ticket.TeamId = TeamId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg13",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.StatusId = Entities.TicketStatus.Closed"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg13",
+   "type": "IFilter",
+   "args": {
+    "condition": "FromDate = NullDate() or Ticket.CreatedOn >= FromDate"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg13",
+   "type": "IFilter",
+   "args": {
+    "condition": "ToDate = NullDate() or Ticket.CreatedOn <= ToDate"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics",
+   "type": "IAggregateNode",
+   "name": "GetUrgent",
+   "as": "$Dashboard_Metrics_agg14"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg14",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg14",
+   "type": "IFilter",
+   "args": {
+    "condition": "TeamId = NullIdentifier() or Ticket.TeamId = TeamId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg14",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.PriorityId = Entities.TicketPriority.Urgent"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg14",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.StatusId <> Entities.TicketStatus.Closed"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg14",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.StatusId <> Entities.TicketStatus.Cancelled"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics",
+   "type": "IAggregateNode",
+   "name": "GetBreaches",
+   "as": "$Dashboard_Metrics_agg15"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg15",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:TicketSlaBreach"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg15",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg15",
+   "type": "IFilter",
+   "args": {
+    "condition": "TicketSlaBreach.TicketId = Ticket.Id"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg15",
+   "type": "IFilter",
+   "args": {
+    "condition": "TeamId = NullIdentifier() or Ticket.TeamId = TeamId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg15",
+   "type": "IFilter",
+   "args": {
+    "condition": "FromDate = NullDate() or Ticket.CreatedOn >= FromDate"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg15",
+   "type": "IFilter",
+   "args": {
+    "condition": "ToDate = NullDate() or Ticket.CreatedOn <= ToDate"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics",
+   "type": "IAggregateNode",
+   "name": "GetDone",
+   "as": "$Dashboard_Metrics_agg16"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg16",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IServerEntity:Ticket"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg16",
+   "type": "IFilter",
+   "args": {
+    "condition": "TeamId = NullIdentifier() or Ticket.TeamId = TeamId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg16",
+   "type": "IFilter",
+   "args": {
+    "condition": "Ticket.ResolvedOn <> NullDate()"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg16",
+   "type": "IFilter",
+   "args": {
+    "condition": "FromDate = NullDate() or Ticket.CreatedOn >= FromDate"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_agg16",
+   "type": "IFilter",
+   "args": {
+    "condition": "ToDate = NullDate() or Ticket.CreatedOn <= ToDate"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics",
+   "type": "IForEachNode",
+   "name": "EachDone",
+   "as": "$Dashboard_Metrics_fe17"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_fe17",
+   "prop": "Label",
+   "value": "EachDone"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_fe17",
+   "prop": "RecordList",
+   "value": "GetDone.List"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics",
+   "type": "IAssignNode",
+   "name": "Accumulate",
+   "as": "$Dashboard_Metrics_asg18"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_asg18",
+   "prop": "Label",
+   "value": "Accumulate"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_asg18",
+   "type": "IAssignment",
+   "as": "$Dashboard_Metrics_a19"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a19",
+   "prop": "Variable",
+   "value": "SumRes"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a19",
+   "prop": "Value",
+   "value": "SumRes + DiffMinutes(GetDone.List.Current.Ticket.CreatedOn, GetDone.List.Current.Ticket.ResolvedOn)"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_asg18",
+   "type": "IAssignment",
+   "as": "$Dashboard_Metrics_a20"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a20",
+   "prop": "Variable",
+   "value": "NRes"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a20",
+   "prop": "Value",
+   "value": "NRes + 1"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_asg18",
+   "type": "IAssignment",
+   "as": "$Dashboard_Metrics_a21"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a21",
+   "prop": "Variable",
+   "value": "SumFirst"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a21",
+   "prop": "Value",
+   "value": "If(GetDone.List.Current.Ticket.FirstRespondedOn = NullDate(), SumFirst, SumFirst + DiffMinutes(GetDone.List.Current.Ticket.CreatedOn, GetDone.List.Current.Ticket.FirstRespondedOn))"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_asg18",
+   "type": "IAssignment",
+   "as": "$Dashboard_Metrics_a22"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a22",
+   "prop": "Variable",
+   "value": "NFirst"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a22",
+   "prop": "Value",
+   "value": "If(GetDone.List.Current.Ticket.FirstRespondedOn = NullDate(), NFirst, NFirst + 1)"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics",
+   "type": "IAssignNode",
+   "name": "FillMetrics",
+   "as": "$Dashboard_Metrics_asg23"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_asg23",
+   "prop": "Label",
+   "value": "FillMetrics"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_asg23",
+   "type": "IAssignment",
+   "as": "$Dashboard_Metrics_a24"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a24",
+   "prop": "Variable",
+   "value": "Metrics.OpenCount"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a24",
+   "prop": "Value",
+   "value": "GetOpen.Count"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_asg23",
+   "type": "IAssignment",
+   "as": "$Dashboard_Metrics_a25"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a25",
+   "prop": "Variable",
+   "value": "Metrics.PendingCount"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a25",
+   "prop": "Value",
+   "value": "GetPending.Count"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_asg23",
+   "type": "IAssignment",
+   "as": "$Dashboard_Metrics_a26"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a26",
+   "prop": "Variable",
+   "value": "Metrics.ResolvedCount"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a26",
+   "prop": "Value",
+   "value": "GetResolved.Count"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_asg23",
+   "type": "IAssignment",
+   "as": "$Dashboard_Metrics_a27"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a27",
+   "prop": "Variable",
+   "value": "Metrics.ClosedCount"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a27",
+   "prop": "Value",
+   "value": "GetClosed.Count"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_asg23",
+   "type": "IAssignment",
+   "as": "$Dashboard_Metrics_a28"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a28",
+   "prop": "Variable",
+   "value": "Metrics.UrgentCount"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a28",
+   "prop": "Value",
+   "value": "GetUrgent.Count"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_asg23",
+   "type": "IAssignment",
+   "as": "$Dashboard_Metrics_a29"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a29",
+   "prop": "Variable",
+   "value": "Metrics.SlaBreaches"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a29",
+   "prop": "Value",
+   "value": "GetBreaches.Count"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_asg23",
+   "type": "IAssignment",
+   "as": "$Dashboard_Metrics_a30"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a30",
+   "prop": "Variable",
+   "value": "Metrics.Backlog"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a30",
+   "prop": "Value",
+   "value": "GetOpen.Count + GetPending.Count"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_asg23",
+   "type": "IAssignment",
+   "as": "$Dashboard_Metrics_a31"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a31",
+   "prop": "Variable",
+   "value": "Metrics.AvgFirstResponseMinutes"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a31",
+   "prop": "Value",
+   "value": "If(NFirst = 0, 0, SumFirst / NFirst)"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics_asg23",
+   "type": "IAssignment",
+   "as": "$Dashboard_Metrics_a32"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a32",
+   "prop": "Variable",
+   "value": "Metrics.AvgResolutionMinutes"
+  },
+  {
+   "op": "set",
+   "target": "$Dashboard_Metrics_a32",
+   "prop": "Value",
+   "value": "If(NRes = 0, 0, SumRes / NRes)"
+  },
+  {
+   "op": "create",
+   "parent": "$Dashboard_Metrics",
+   "type": "IEndNode",
+   "as": "$Dashboard_Metrics_end33"
+  },
+  {
+   "op": "link",
+   "from": "$Dashboard_Metrics_start9",
+   "to": "$Dashboard_Metrics_agg10"
+  },
+  {
+   "op": "link",
+   "from": "$Dashboard_Metrics_agg10",
+   "to": "$Dashboard_Metrics_agg11"
+  },
+  {
+   "op": "link",
+   "from": "$Dashboard_Metrics_agg11",
+   "to": "$Dashboard_Metrics_agg12"
+  },
+  {
+   "op": "link",
+   "from": "$Dashboard_Metrics_agg12",
+   "to": "$Dashboard_Metrics_agg13"
+  },
+  {
+   "op": "link",
+   "from": "$Dashboard_Metrics_agg13",
+   "to": "$Dashboard_Metrics_agg14"
+  },
+  {
+   "op": "link",
+   "from": "$Dashboard_Metrics_agg14",
+   "to": "$Dashboard_Metrics_agg15"
+  },
+  {
+   "op": "link",
+   "from": "$Dashboard_Metrics_agg15",
+   "to": "$Dashboard_Metrics_agg16"
+  },
+  {
+   "op": "link",
+   "from": "$Dashboard_Metrics_agg16",
+   "to": "$Dashboard_Metrics_fe17"
+  },
+  {
+   "op": "link",
+   "from": "$Dashboard_Metrics_fe17",
+   "to": "$Dashboard_Metrics_asg18",
+   "connector": "CycleTarget"
+  },
+  {
+   "op": "link",
+   "from": "$Dashboard_Metrics_asg18",
+   "to": "$Dashboard_Metrics_fe17"
+  },
+  {
+   "op": "link",
+   "from": "$Dashboard_Metrics_fe17",
+   "to": "$Dashboard_Metrics_asg23"
+  },
+  {
+   "op": "link",
+   "from": "$Dashboard_Metrics_asg23",
+   "to": "$Dashboard_Metrics_end33"
+  },
+  {
+   "op": "layout",
+   "target": "$Dashboard_Metrics"
+  }
+ ]
+}

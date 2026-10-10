@@ -1,0 +1,87 @@
+{
+  "fixture": "mobile-ui",
+  "features": [
+    "block-trigger-event",
+    "screen"
+  ],
+  "contract": {
+    "logic": {
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "screen",
+          "owner": "IMobileBlock:CoverageBlock",
+          "steps": [
+            {
+              "node": "ITriggerNode",
+              "as": "Notify",
+              "properties": {
+                "Event": "IMobileBlock:CoverageBlock/Changed"
+              },
+              "args": {
+                "Value": "1"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "setup": [
+    {
+      "op": "create",
+      "parent": "IMobileFlow:MainFlow",
+      "type": "IMobileBlock",
+      "name": "CoverageBlock"
+    },
+    {
+      "op": "set",
+      "target": "IMobileBlock:CoverageBlock",
+      "prop": "Public",
+      "value": true
+    },
+    {
+      "op": "create",
+      "parent": "IMobileBlock:CoverageBlock",
+      "type": "IBlockEvent",
+      "name": "Changed"
+    },
+    {
+      "op": "create",
+      "parent": "IMobileBlock:CoverageBlock/Changed",
+      "type": "IInputParameter",
+      "name": "Value"
+    },
+    {
+      "op": "set",
+      "target": "IMobileBlock:CoverageBlock/Changed/Value",
+      "prop": "DataType",
+      "value": "Integer"
+    },
+    {
+      "op": "create",
+      "parent": "IMobileBlock:CoverageBlock",
+      "type": "IButton",
+      "name": "Run"
+    },
+    {
+      "op": "set",
+      "target": "IMobileBlock:CoverageBlock/Run/#ITextWidget",
+      "prop": "Text",
+      "value": "Notify"
+    }
+  ],
+  "bindings": [
+    {
+      "op": "set",
+      "target": "IMobileBlock:CoverageBlock/Run/OnClick",
+      "prop": "Destination",
+      "value": "IMobileBlock:CoverageBlock/Coverage"
+    }
+  ],
+  "mutation": {
+    "target": "IMobileBlock:CoverageBlock/Coverage/Notify/arg:Value",
+    "prop": "Value",
+    "value": "2"
+  }
+}

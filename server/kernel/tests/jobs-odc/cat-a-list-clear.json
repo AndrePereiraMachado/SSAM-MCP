@@ -1,0 +1,19 @@
+{
+ "description": "Frente A (catalogo abrangente), faixa ODC: esvaziar uma lista chamando a action de sistema ListClear pela linguagem compacta (call com args.List), a alternativa a copiar uma lista vazia. Na faixa O11 a mesma chamada so tem o contrato unitario de tests/contracts/action-coverage (*-list-operations); este job mede se a action de sistema resolve no ODC sem referencia explicita e se o Verify aceita. Headless: prova o modelo, nao o valor em tempo de execucao.",
+ "base": "job:logic-steps",
+ "expectValid": true,
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / CatA_ClearTexts (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "ops": [
+  {"op": "logic", "data": {"actions": [{
+   "name": "CatA_ClearTexts", "kind": "server",
+   "description": "Frente A: devolve a lista recebida depois de a esvaziar com ListClear",
+   "inputs": [{"name": "Items", "type": "Text List"}],
+   "outputs": [{"name": "Result", "type": "Text List"}],
+   "steps": [
+    {"assign": {"Result": "Items"}, "as": "CopyInput"},
+    {"call": "ListClear", "as": "Clear", "args": {"List": "Result"}}
+   ]}]}, "_why": "publica para nao nascer como action privada sem consumidor (UnusedUserAction no ODC)"},
+  {"op": "dump", "target": "IServerAction:CatA_ClearTexts", "depth": 3, "_why": "o no de chamada e o Action que ele resolveu (a assinatura da action de sistema)"},
+  {"op": "get", "target": "IServerAction:CatA_ClearTexts/Clear", "_why": "o no Clear: Action e Arguments"}
+ ]
+}

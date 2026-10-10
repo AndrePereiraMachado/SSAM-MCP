@@ -1,0 +1,12 @@
+{
+ "description": "ODC: a RECUSA do move de um registo de static entity. A ordem de leitura dos registos e o valor do atributo Order (OrderByAttribute), nao a posicao na arvore, e o verbo move so reordena dentro de uma ISequence do pai; o kernel recusa e diz que sequencias o pai tem. A alternativa provada e escrever o valor de Order (set <registo>/Order prop Value), como em tests/jobs-odc/static-entity-lifecycle.json.",
+ "base": "job:static-entity",
+ "expectValid": true,
+ "expectError": [
+  "move: IStaticEntity 'WfClaimStage' does not keep IStaticEntityRecord 'Closed' in an ordered sequence",
+  "Sequences of this parent: Attributes"
+ ],
+ "ops": [
+  {"op": "move", "target": "IStaticEntity:WfClaimStage/Closed", "first": true}
+ ]
+}

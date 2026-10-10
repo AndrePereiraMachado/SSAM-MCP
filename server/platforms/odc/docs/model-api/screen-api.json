@@ -1,0 +1,278 @@
+[
+  {
+    "key": "LyAkODhd30iwRzmewmMRkg",
+    "kind": "OutSystems.Model.UI.Mobile.IMobileScreen",
+    "methods": [
+      "System.String get_StyleSheet()",
+      "Void set_StyleSheet(System.String)",
+      "Void ReplaceEntity(OutSystems.Model.Data.IEntitySignature, OutSystems.Model.Data.IEntitySignature, System.Collections.Generic.Dictionary\u00602[OutSystems.Model.Data.IEntityAttributeSignature,OutSystems.Model.Data.IEntityAttributeSignature])",
+      "System.String get_CreatedBy()",
+      "Void set_CreatedBy(System.String)",
+      "System.String get_Description()",
+      "Void set_Description(System.String)",
+      "Byte[] get_Icon()",
+      "Void set_Icon(Byte[])",
+      "System.String get_LastModifiedBy()",
+      "Void set_LastModifiedBy(System.String)",
+      "System.DateTime get_LastModifiedDate()",
+      "Void set_LastModifiedDate(System.DateTime)",
+      "Boolean get_Public()",
+      "Void set_Public(Boolean)",
+      "System.Collections.Generic.ICollection\u00601[OutSystems.Model.Logic.IRoleSignature] get_Roles()",
+      "Boolean get_Shareable()",
+      "Void set_Shareable(Boolean)",
+      "OutSystems.Model.ISequence\u00601[OutSystems.Model.IInputParameter] get_InputParameters()",
+      "OutSystems.Model.ISequence\u00601[OutSystems.Model.ILocalVariable] get_LocalVariables()",
+      "OutSystems.Model.ISequence\u00601[OutSystems.Model.UI.IWidget] get_Widgets()",
+      "OutSystems.Model.IInputParameter CreateInputParameter(System.String, OutSystems.Model.IKey)",
+      "OutSystems.Model.ILocalVariable CreateLocalVariable(System.String, OutSystems.Model.IKey)",
+      "T CreateWidget[T](System.String, OutSystems.Model.IKey)",
+      "OutSystems.Model.UI.IWidget CreateWidget(System.Type, System.String, OutSystems.Model.IKey)",
+      "OutSystems.Model.UI.IScreenDescriptor get_Descriptor()",
+      "System.String get_CreatedBy()",
+      "System.String get_Description()",
+      "Byte[] get_Icon()",
+      "System.String get_LastMergedBy()",
+      "System.DateTime get_LastMergedDate()",
+      "System.String get_LastModifiedBy()",
+      "System.DateTime get_LastModifiedDate()",
+      "System.String get_Name()",
+      "Void set_Name(System.String)",
+      "System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.IInputParameterSignature] get_InputParameters()",
+      "OutSystems.Model.UI.IScreenSignatureDescriptor get_Descriptor()",
+      "OutSystems.Model.UI.IUIFlowNodeSignatureDescriptor get_Descriptor()",
+      "OutSystems.Model.ISequence\u00601[OutSystems.Model.IMetadata] get_Metadata()",
+      "T CreateMetadata[T](System.String, System.String, OutSystems.Model.IKey)",
+      "OutSystems.Model.IFlowNodeSignatureDescriptor get_Descriptor()",
+      "OutSystems.Model.IKey get_ObjectKey()",
+      "OutSystems.Model.IESpace GetESpace()",
+      "Boolean get_IsValid()",
+      "System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.IValidationMessage] GetValidationMessages(Boolean)",
+      "System.Collections.Generic.IEnumerable\u00601[T] GetAllDescendantsOfType[T]()",
+      "System.String get_Digest()",
+      "Void ReplaceReferences(OutSystems.Model.IObjectSignature, OutSystems.Model.IObjectSignature)",
+      "System.String get_ReadableIdentifier()",
+      "Boolean get_IsSystemObject()",
+      "OutSystems.Model.IObjectSignatureDescriptor get_Descriptor()",
+      "System.String get_DisplayName()",
+      "OutSystems.Model.IKey get_Key()",
+      "OutSystems.Model.IGlobalKey get_GlobalKey()",
+      "OutSystems.Model.MetaModel.IClassDescriptor get_Descriptor()",
+      "OutSystems.Model.MetaModel.IChildCollection get_CollectionDescriptor()",
+      "System.Type GetInterface()",
+      "OutSystems.Model.IModelObject get_Parent()",
+      "Int64 get_Generation()",
+      "System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.IModelObject] get_Children()",
+      "Void Delete()",
+      "Boolean get_WasDeleted()",
+      "System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.IModelObject] get_Referrers()",
+      "Boolean get_IsDetached()",
+      "OutSystems.Model.Versioning.ITransactionsManager get_TransactionsManager()",
+      "Int64 get_Generation()",
+      "Void Delete()",
+      "Boolean get_WasDeleted()",
+      "System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.UI.IUIFlowConnector] get_Connectors()",
+      "System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.UI.IUIFlowConnector] get_IncomingConnectors()",
+      "OutSystems.Model.UI.IUIFlowNodeDescriptor get_Descriptor()",
+      "System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.IConnector] get_Connectors()",
+      "Int32 get_HorizontalPosition()",
+      "Void set_HorizontalPosition(Int32)",
+      "System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.IConnector] get_IncomingConnectors()",
+      "Boolean get_IsDisabled()",
+      "Void set_IsDisabled(Boolean)",
+      "System.Collections.Generic.IEnumerable\u00601[System.String] get_TextResourcesIds()",
+      "Int32 get_VerticalPosition()",
+      "Void set_VerticalPosition(Int32)",
+      "System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.ITextResource] get_TextResources()",
+      "Void CreateOrUpdateTranslation(OutSystems.Model.Enumerations.Culture, System.String, System.String)",
+      "System.Collections.Generic.IEnumerable\u00601[System.String] GetTextResourcesIdsForText(System.String)",
+      "Void SetTranslationBehavior(System.String, OutSystems.Model.Enumerations.TranslationBehavior)",
+      "OutSystems.Model.IFlowNodeDescriptor get_Descriptor()",
+      "OutSystems.Model.IObjectSignature Copy(OutSystems.Model.IObjectSignature)",
+      "System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.IObjectSignature] Copy(System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.IObjectSignature])",
+      "OutSystems.Model.Expressions.IEnvironment GetEnvironment(OutSystems.Model.MetaModel.IExpressionProperty)",
+      "T CreateSibling[T](System.String, OutSystems.Model.IKey)",
+      "OutSystems.Model.IModelObject CreateSibling(System.Type, System.String, OutSystems.Model.IKey)",
+      "OutSystems.Model.IObjectSignature Duplicate(OutSystems.Model.IObjectSignature)",
+      "System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.IObjectSignature] Duplicate(System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.IObjectSignature])",
+      "Void MoveToEnd()",
+      "Void MoveBefore()",
+      "Void MoveAfter()",
+      "Void MoveToNewAbsoluteIndex(Int32)",
+      "Void MoveAfterSibling(OutSystems.Model.IObject)",
+      "Void MoveBeforeSibling(OutSystems.Model.IObject)",
+      "Void MoveToNewRelativeIndex(Int32)",
+      "Int32 get_IndexInParent()",
+      "Boolean get_CanMoveBefore()",
+      "Boolean get_CanMoveAfter()",
+      "Boolean CanMoveToNewAbsoluteIndex(Int32)",
+      "Boolean CanMoveToNewRelativeIndex(Int32)",
+      "OutSystems.Model.IObjectDescriptor get_Descriptor()",
+      "OutSystems.Model.UI.Mobile.IMobileFlowNodeDescriptor get_Descriptor()",
+      "OutSystems.Model.UI.Mobile.IMobileFlowNodeSignatureDescriptor get_Descriptor()",
+      "System.String get_PageName()",
+      "OutSystems.Model.Enumerations.URLStructure get_URLStructure()",
+      "OutSystems.Model.UI.Mobile.IMobileScreenSignatureDescriptor get_Descriptor()",
+      "System.Collections.Generic.ICollection\u00601[OutSystems.Model.UI.IScriptSignature] get_RequiredScripts()",
+      "System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.UI.Mobile.IScreenAggregate] get_ScreenAggregates()",
+      "OutSystems.Model.UI.Mobile.IScreenAggregate CreateScreenAggregate(Boolean, System.String, OutSystems.Model.IKey)",
+      "Boolean get_AnonymousAccess()",
+      "Void set_AnonymousAccess(Boolean)",
+      "System.String get_CreatedByAgent()",
+      "OutSystems.Model.Enumerations.CreatedByTool get_CreatedByTool()",
+      "Boolean get_CustomURL()",
+      "Void set_CustomURL(Boolean)",
+      "System.String get_LastModifiedByAgent()",
+      "OutSystems.Model.Enumerations.CreatedByTool get_LastModifiedByTool()",
+      "System.Collections.Generic.IReadOnlyList\u00601[System.String] get_ModifiedByAgents()",
+      "OutSystems.Model.Enumerations.CreatedByTool get_ModifiedByTools()",
+      "System.String get_PageName()",
+      "Void set_PageName(System.String)",
+      "System.Collections.Generic.ICollection\u00601[OutSystems.Model.UI.IUIFlowNode] get_Targets()",
+      "OutSystems.Model.Expressions.IExpression get_Title()",
+      "Void SetTitle(OutSystems.Model.Expressions.ExpressionDefinition)",
+      "OutSystems.Model.Enumerations.URLStructure get_URLStructure()",
+      "Void set_URLStructure(OutSystems.Model.Enumerations.URLStructure)",
+      "System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.UI.Mobile.IDataAction] get_DataActions()",
+      "OutSystems.Model.UI.Mobile.Events.IUILifeCycleEvent get_OnDestroy()",
+      "OutSystems.Model.UI.Mobile.Events.IUILifeCycleEvent get_OnInitialize()",
+      "OutSystems.Model.UI.Mobile.Events.IUILifeCycleEvent get_OnReady()",
+      "OutSystems.Model.UI.Mobile.Events.IUILifeCycleEvent get_OnRender()",
+      "OutSystems.Model.UI.Mobile.Events.IOnSyncCompleteEvent get_OnSyncComplete()",
+      "OutSystems.Model.UI.Mobile.Events.IOnSyncErrorEvent get_OnSyncError()",
+      "OutSystems.Model.UI.Mobile.Events.IOnSyncStartEvent get_OnSyncStart()",
+      "System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.UI.Mobile.IScreenAction] get_ScreenActions()",
+      "OutSystems.Model.ISequence\u00601[OutSystems.Model.UI.Mobile.Widgets.IMobileWidget] get_Widgets()",
+      "OutSystems.Model.UI.Mobile.IDataAction CreateDataAction(System.String, OutSystems.Model.IKey)",
+      "OutSystems.Model.UI.Mobile.Events.IOnSyncCompleteEvent CreateOnSyncComplete()",
+      "OutSystems.Model.UI.Mobile.Events.IOnSyncErrorEvent CreateOnSyncError()",
+      "OutSystems.Model.UI.Mobile.Events.IOnSyncStartEvent CreateOnSyncStart()",
+      "OutSystems.Model.UI.Mobile.IScreenAction CreateScreenAction(System.String, OutSystems.Model.IKey)",
+      "T CreateWidget[T](System.String, OutSystems.Model.IKey)",
+      "OutSystems.Model.UI.Mobile.Widgets.IMobileWidget CreateWidget(OutSystems.Model.UI.IWidgetDefinitionSignature, System.String, OutSystems.Model.IKey)",
+      "OutSystems.Model.UI.Mobile.IMobileScreenDescriptor get_Descriptor()"
+    ],
+    "properties": [
+      {
+        "name": "AnonymousAccess",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.Boolean]"
+      },
+      {
+        "name": "Connectors",
+        "type": "OutSystems.Model.MetaModel.Property\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.Collections.Generic.IEnumerable\u00601[OutSystems.Model.UI.IUIFlowConnector]]"
+      },
+      {
+        "name": "CreatedBy",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.String]"
+      },
+      {
+        "name": "CreatedByAgent",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.String]"
+      },
+      {
+        "name": "CreatedByTool",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,OutSystems.Model.Enumerations.CreatedByTool]"
+      },
+      {
+        "name": "CustomURL",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.Boolean]"
+      },
+      {
+        "name": "Description",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.String]"
+      },
+      {
+        "name": "HorizontalPosition",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.Int32]"
+      },
+      {
+        "name": "Icon",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.Byte[]]"
+      },
+      {
+        "name": "IsDisabled",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.Boolean]"
+      },
+      {
+        "name": "LastMergedBy",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.String]"
+      },
+      {
+        "name": "LastMergedDate",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.DateTime]"
+      },
+      {
+        "name": "LastModifiedBy",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.String]"
+      },
+      {
+        "name": "LastModifiedByAgent",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.String]"
+      },
+      {
+        "name": "LastModifiedByTool",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,OutSystems.Model.Enumerations.CreatedByTool]"
+      },
+      {
+        "name": "LastModifiedDate",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.DateTime]"
+      },
+      {
+        "name": "ModifiedByAgents",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.Collections.Generic.IReadOnlyList\u00601[System.String]]"
+      },
+      {
+        "name": "ModifiedByTools",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,OutSystems.Model.Enumerations.CreatedByTool]"
+      },
+      {
+        "name": "Name",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.String]"
+      },
+      {
+        "name": "PageName",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.String]"
+      },
+      {
+        "name": "Public",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.Boolean]"
+      },
+      {
+        "name": "Roles",
+        "type": "OutSystems.Model.MetaModel.Property\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.Collections.Generic.ICollection\u00601[OutSystems.Model.Logic.IRoleSignature]]"
+      },
+      {
+        "name": "Shareable",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.Boolean]"
+      },
+      {
+        "name": "Targets",
+        "type": "OutSystems.Model.MetaModel.Property\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.Collections.Generic.ICollection\u00601[OutSystems.Model.UI.IUIFlowNode]]"
+      },
+      {
+        "name": "Title",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelExpressionProperty\u00601[OutSystems.Model.UI.Mobile.IMobileScreen]"
+      },
+      {
+        "name": "URLStructure",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,OutSystems.Model.Enumerations.URLStructure]"
+      },
+      {
+        "name": "VerticalPosition",
+        "type": "OutSystems.Model.MetaModel.UnderlyingModelProperty\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.Int32]"
+      },
+      {
+        "name": "RequiredScripts",
+        "type": "OutSystems.Model.MetaModel.Property\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.Collections.Generic.ICollection\u00601[OutSystems.Model.UI.IScriptSignature]]"
+      },
+      {
+        "name": "ReadableIdentifier",
+        "type": "OutSystems.Model.MetaModel.Property\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.String]"
+      },
+      {
+        "name": "StyleSheet",
+        "type": "OutSystems.Model.MetaModel.Property\u00602[OutSystems.Model.UI.Mobile.IMobileScreen,System.String]"
+      }
+    ]
+  }
+]

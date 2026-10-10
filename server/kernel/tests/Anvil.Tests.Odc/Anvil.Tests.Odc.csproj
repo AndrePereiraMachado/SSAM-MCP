@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    ODC lane tests (WS1). A separate test project because Anvil.Core and Anvil.Core.Odc compile the same kernel
+    types under the same names against different Studio assemblies: one test assembly cannot reference both.
+    Needs the ODC Studio installed (ANVIL_ODC_STUDIO_DIR or the default Program Files path); without it the tests
+    are skipped, like JobTests without the Service Studio.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RollForward>Major</RollForward>
+    <OdcInstall Condition="'$(OdcInstall)' == ''">$(ProgramFiles)\OutSystems\ODC Studio\ODC Studio</OdcInstall>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Anvil.Core.Odc\Anvil.Core.Odc.csproj" />
+    <Reference Include="$(OdcInstall)/OutSystems.Model.dll" Private="false" />
+    <Reference Include="$(OdcInstall)/OutSystems.Model.V1.dll" Private="false" />
+    <Reference Include="$(OdcInstall)/OutSystems.Model.Implementation.dll" Private="false" />
+    <Reference Include="$(OdcInstall)/OutSystems.MetaModel.dll" Private="false" />
+    <Reference Include="$(OdcInstall)/OutSystems.ModelAPILoader.dll" Private="false" />
+    <Reference Include="$(OdcInstall)/OutSystems.Model.Versioning.dll" Private="false" />
+    <Reference Include="$(OdcInstall)/OutSystems.RuntimeCommon.dll" Private="false" />
+    <Reference Include="$(OdcInstall)/OutSystems.ServiceStudio.PluginAPI.dll" Private="false" />
+    <Reference Include="$(OdcInstall)/OutSystems.ServiceStudio.Observability.dll" Private="false" />
+    <Reference Include="$(OdcInstall)/ServiceStudio.Framework.dll" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Include="../Shared/ModelReadingTests.cs" Link="ModelReadingTests.cs" />
+    <Compile Include="../Shared/ModuleIndexTests.cs" Link="ModuleIndexTests.cs" />
+    <Compile Include="../Shared/AutomaticFlowLayoutTests.cs" Link="AutomaticFlowLayoutTests.cs" />
+    <Compile Include="../Shared/DataContractIdentityScenarios.cs" Link="DataContractIdentityScenarios.cs" />
+    <Compile Include="../Shared/QueryRulesScenarios.cs" Link="QueryRulesScenarios.cs" />
+    <!-- The ODC bridge's merge order and verification, over the ODC Studio's own model (OdcMergeOrderTests). -->
+    <Compile Include="../../../platforms/odc/studio/engine/NativeMergeOrder.cs" Link="engine/NativeMergeOrder.cs" />
+    <Compile Include="../../../platforms/odc/studio/engine/NativeMergeVerification.cs" Link="engine/NativeMergeVerification.cs" />
+  </ItemGroup>
+</Project>

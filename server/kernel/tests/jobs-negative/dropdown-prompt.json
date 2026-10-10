@@ -1,0 +1,26 @@
+{
+  "description": "Dropdown has EmptyValue, not Prompt; reports the writable expression properties.",
+  "base": "reactive-ui.oml",
+  "expectValid": true,
+  "ops": [
+    {
+      "op": "create",
+      "parent": "IMobileFlow:MainFlow",
+      "type": "IMobileScreen",
+      "name": "PropertyProbe",
+      "as": "$s"
+    },
+    {
+      "op": "create",
+      "parent": "$s/#IMobileBlockInstanceWidget/MainContent",
+      "type": "IDropdown",
+      "as": "$d"
+    },
+    {
+      "op": "set",
+      "target": "$d",
+      "prop": "Prompt",
+      "value": "\"Pick\""
+    }
+  ]
+}

@@ -1,0 +1,2984 @@
+{
+  "scope": "All concrete Model API action-node types applicable to ordinary server/service/client or their screen/block/email contexts; structural/native merge coverage, not all runtime/business behavior",
+  "runtimeCatalogVerified": true,
+  "runtimeCatalogSha256": "46583f8d17dbacff105abecfd9261a3dde0c93b39e3086176d984f77700fd467",
+  "catalog": "catalog/model-api-11.55.69.json",
+  "catalogSha256": "d04db837a8ddb01e15cdea67daab3dbb2d0f033585e8f40e45b4675d17c80f96",
+  "suite": {
+    "counts": {
+      "total": "408",
+      "executed": "408",
+      "passed": "408",
+      "failed": "0",
+      "error": "0",
+      "timeout": "0",
+      "aborted": "0",
+      "inconclusive": "0",
+      "passedButRunAborted": "0",
+      "notRunnable": "0",
+      "notExecuted": "0",
+      "disconnected": "0",
+      "warning": "0",
+      "completed": "0",
+      "inProgress": "0",
+      "pending": "0"
+    },
+    "trx": ".local\\action-contract-dev\\results\\action-matrix-final.trx",
+    "sha256": "42b687f7017f2003d20f2390b4164ebf0a86e78e071d6819ad08135f41086a96"
+  },
+  "concreteWidgets": 26,
+  "positiveContexts": 63,
+  "contextRejections": 4,
+  "cases": [
+    {
+      "case": "blank-service-client-client-action-not-in-service",
+      "contract": "tests/contracts/action-coverage/blank-service-client-client-action-not-in-service.json",
+      "sha256": "886617e08f179370f3aa19c8071ecd87ad8df2782681a6b04ab74ef9d68441a3",
+      "caseKey": "886617E08F17",
+      "status": "passed",
+      "fixture": "blank-service",
+      "features": [
+        "client-action-not-in-service",
+        "client"
+      ],
+      "invalidContextRejected": true,
+      "positiveSupport": false,
+      "error": "op #24 (logic ): InvalidOperationException: logic op #0 (create Coverage on @espace): InvalidOperationException: Client Action objects can't be children of Module objects"
+    },
+    {
+      "case": "blank-service-server-aggregate-full",
+      "contract": "tests/contracts/action-coverage/blank-service-server-aggregate-full.json",
+      "sha256": "8d4938f661b924cf36367a0b4db1ab4c37c54480865aeef84883ade56b8e2a3d",
+      "caseKey": "8D4938F661B9",
+      "status": "passed",
+      "fixture": "blank-service",
+      "features": [
+        "aggregate-join-group-calculated-count-sum-max-min-avg",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 131,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 7,
+          "nodeKinds": [
+            "IAggregateNode",
+            "IAssignNode",
+            "IEndNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "blank-service-server-aggregate-sql-crud-transaction",
+      "contract": "tests/contracts/action-coverage/blank-service-server-aggregate-sql-crud-transaction.json",
+      "sha256": "a86e0a9c765dda1236f9c45a230590df4df1367eee7b09b3d657da37cb5a6aa9",
+      "caseKey": "A86E0A9C765D",
+      "status": "passed",
+      "fixture": "blank-service",
+      "features": [
+        "aggregate-sql-crud-transaction",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 134,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 12,
+          "nodeKinds": [
+            "IAggregateNode",
+            "IAssignNode",
+            "IEndNode",
+            "IExecuteServerActionNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "ISQLNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "blank-service-server-excel-roundtrip",
+      "contract": "tests/contracts/action-coverage/blank-service-server-excel-roundtrip.json",
+      "sha256": "a1fc3c874ddce0b25a2a64f0aacf86df9436f185318207953088a3424c72b778",
+      "caseKey": "A1FC3C874DDC",
+      "status": "passed",
+      "fixture": "blank-service",
+      "features": [
+        "excel-roundtrip",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 89,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 7,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IExcelToRecordListNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IRecordListToExcelNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 2
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "blank-service-server-json-nested-structures",
+      "contract": "tests/contracts/action-coverage/blank-service-server-json-nested-structures.json",
+      "sha256": "4cb9169ccbdc57002618ecde47468be78bf4e0d291766991231eeb8e8cb23672",
+      "caseKey": "4CB9169CCBDC",
+      "status": "passed",
+      "fixture": "blank-service",
+      "features": [
+        "json-nested-structures",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 86,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 7,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IIfNode",
+            "IJSONDeserializeNode",
+            "IJSONSerializeNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "blank-service-server-list-operations",
+      "contract": "tests/contracts/action-coverage/blank-service-server-list-operations.json",
+      "sha256": "df2e5cfb3ea24f865374959c76673479ed1afa05a0d0ddda471330e180a7ad53",
+      "caseKey": "DF2E5CFB3EA2",
+      "status": "passed",
+      "fixture": "blank-service",
+      "features": [
+        "list-operations",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 179,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 17,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IExecuteServerActionNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 2,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "blank-service-server-switch-loop-handler-comment",
+      "contract": "tests/contracts/action-coverage/blank-service-server-switch-loop-handler-comment.json",
+      "sha256": "78a796b6f0100d7f276bdeed492a1121c6afeee20983e9fa88e9a762aad0e2de",
+      "caseKey": "78A796B6F010",
+      "status": "passed",
+      "fixture": "blank-service",
+      "features": [
+        "switch-loop-handler-comment",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 127,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 15,
+          "nodeKinds": [
+            "IAssignNode",
+            "ICommentNode",
+            "IEndNode",
+            "IExceptionHandlerNode",
+            "IForEachNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode",
+            "ISwitchNode"
+          ],
+          "inputs": 2,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "blank-service-server-types-and-nested-call",
+      "contract": "tests/contracts/action-coverage/blank-service-server-types-and-nested-call.json",
+      "sha256": "bc647a37a555c4db5d04cc0e423888ab25aeb5a08efc872ece9b667978d16929",
+      "caseKey": "BC647A37A555",
+      "status": "passed",
+      "fixture": "blank-service",
+      "features": [
+        "types-and-nested-call",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 491,
+      "actions": [
+        {
+          "name": "Echo",
+          "kind": "IServerAction",
+          "nodes": 4,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IStartNode"
+          ],
+          "inputs": 20,
+          "outputs": 20
+        },
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 6,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IExecuteServerActionNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 20,
+          "outputs": 20
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "blank-service-service-aggregate-full",
+      "contract": "tests/contracts/action-coverage/blank-service-service-aggregate-full.json",
+      "sha256": "3985e5782cbc80b5b432b147b42f6c97d322e2e5cf8f5d22c8c511553a87e7f0",
+      "caseKey": "3985E5782CBC",
+      "status": "passed",
+      "fixture": "blank-service",
+      "features": [
+        "aggregate-join-group-calculated-count-sum-max-min-avg",
+        "service"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 130,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServiceAction",
+          "nodes": 7,
+          "nodeKinds": [
+            "IAggregateNode",
+            "IAssignNode",
+            "ICommentNode",
+            "IEndNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "blank-service-service-aggregate-sql-crud-transaction",
+      "contract": "tests/contracts/action-coverage/blank-service-service-aggregate-sql-crud-transaction.json",
+      "sha256": "d90daccad63d2e6086ccca96bc56e7579c72b00630355a37e1b8cf7c71a72b64",
+      "caseKey": "D90DACCAD63D",
+      "status": "passed",
+      "fixture": "blank-service",
+      "features": [
+        "aggregate-sql-crud-transaction",
+        "service"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 133,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServiceAction",
+          "nodes": 12,
+          "nodeKinds": [
+            "IAggregateNode",
+            "IAssignNode",
+            "ICommentNode",
+            "IEndNode",
+            "IExecuteServerActionNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "ISQLNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "blank-service-service-excel-roundtrip",
+      "contract": "tests/contracts/action-coverage/blank-service-service-excel-roundtrip.json",
+      "sha256": "0bfa8b6c77ad028c181fc35eb9909938fdba0caf5d91840c39167095325dea7d",
+      "caseKey": "0BFA8B6C77AD",
+      "status": "passed",
+      "fixture": "blank-service",
+      "features": [
+        "excel-roundtrip",
+        "service"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 88,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServiceAction",
+          "nodes": 7,
+          "nodeKinds": [
+            "IAssignNode",
+            "ICommentNode",
+            "IEndNode",
+            "IExcelToRecordListNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IRecordListToExcelNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 2
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "blank-service-service-json-nested-structures",
+      "contract": "tests/contracts/action-coverage/blank-service-service-json-nested-structures.json",
+      "sha256": "8bfbe3aea7191da6186950207709a608023bd2f877f9427fc1e29e3d7f6d88db",
+      "caseKey": "8BFBE3AEA719",
+      "status": "passed",
+      "fixture": "blank-service",
+      "features": [
+        "json-nested-structures",
+        "service"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 85,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServiceAction",
+          "nodes": 7,
+          "nodeKinds": [
+            "IAssignNode",
+            "ICommentNode",
+            "IEndNode",
+            "IIfNode",
+            "IJSONDeserializeNode",
+            "IJSONSerializeNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "blank-service-service-list-operations",
+      "contract": "tests/contracts/action-coverage/blank-service-service-list-operations.json",
+      "sha256": "16f23b08eee2f03c22ed2ca63452b5072ea67507fce0e69c229772f2af590cd6",
+      "caseKey": "16F23B08EEE2",
+      "status": "passed",
+      "fixture": "blank-service",
+      "features": [
+        "list-operations",
+        "service"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 178,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServiceAction",
+          "nodes": 17,
+          "nodeKinds": [
+            "IAssignNode",
+            "ICommentNode",
+            "IEndNode",
+            "IExecuteServerActionNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 2,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "blank-service-service-switch-loop-handler-comment",
+      "contract": "tests/contracts/action-coverage/blank-service-service-switch-loop-handler-comment.json",
+      "sha256": "69ae18d3e1308aa2678d27823c0229f008a2c977af88432166d89d4890214c44",
+      "caseKey": "69AE18D3E130",
+      "status": "passed",
+      "fixture": "blank-service",
+      "features": [
+        "switch-loop-handler-comment",
+        "service"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 126,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServiceAction",
+          "nodes": 15,
+          "nodeKinds": [
+            "IAssignNode",
+            "ICommentNode",
+            "IEndNode",
+            "IExceptionHandlerNode",
+            "IForEachNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode",
+            "ISwitchNode"
+          ],
+          "inputs": 2,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "blank-service-service-types-and-nested-call",
+      "contract": "tests/contracts/action-coverage/blank-service-service-types-and-nested-call.json",
+      "sha256": "39b3044ab53daaddb6d4a7b429dc953d32f4d4dd8627e1ee7514c3541d0ae931",
+      "caseKey": "39B3044AB53D",
+      "status": "passed",
+      "fixture": "blank-service",
+      "features": [
+        "types-and-nested-call",
+        "service"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 490,
+      "actions": [
+        {
+          "name": "Echo",
+          "kind": "IServerAction",
+          "nodes": 4,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IStartNode"
+          ],
+          "inputs": 20,
+          "outputs": 20
+        },
+        {
+          "name": "Coverage",
+          "kind": "IServiceAction",
+          "nodes": 6,
+          "nodeKinds": [
+            "IAssignNode",
+            "ICommentNode",
+            "IEndNode",
+            "IExecuteServerActionNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 20,
+          "outputs": 20
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "mobile-ui-block-trigger-event",
+      "contract": "tests/contracts/action-coverage/mobile-ui-block-trigger-event.json",
+      "sha256": "86bdc70517b709c7d79bc5f29db7f88b9134bdc8ea6632145b47aa6fb4e817df",
+      "caseKey": "86BDC70517B7",
+      "status": "passed",
+      "fixture": "mobile-ui",
+      "features": [
+        "block-trigger-event",
+        "screen"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 20,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "OutSystems.Model.UI.Mobile.IScreenAction",
+          "nodes": 3,
+          "nodeKinds": [
+            "IEndNode",
+            "IStartNode",
+            "ITriggerNode"
+          ],
+          "inputs": 0,
+          "outputs": 0
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "mobile-ui-client-client-calls-server",
+      "contract": "tests/contracts/action-coverage/mobile-ui-client-client-calls-server.json",
+      "sha256": "1ed9a9de6287383da09e531d367fe6cb35b12e7f3cbcee3b81d6ec6f37840732",
+      "caseKey": "1ED9A9DE6287",
+      "status": "passed",
+      "fixture": "mobile-ui",
+      "features": [
+        "client-calls-server",
+        "client"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 104,
+      "actions": [
+        {
+          "name": "ServerEcho",
+          "kind": "IServerAction",
+          "nodes": 5,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        },
+        {
+          "name": "Coverage",
+          "kind": "IClientAction",
+          "nodes": 4,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IExecuteServerActionNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "mobile-ui-client-download",
+      "contract": "tests/contracts/action-coverage/mobile-ui-client-download.json",
+      "sha256": "ed16392e5cdce1b474f3bb1eba625713cf3d5f05532edd48b23b42bb4bbac399",
+      "caseKey": "ED16392E5CDC",
+      "status": "passed",
+      "fixture": "mobile-ui",
+      "features": [
+        "download",
+        "client"
+      ],
+      "invalidContextRejected": true,
+      "positiveSupport": false,
+      "error": "op #24 (logic ): InvalidOperationException: logic op #5 (create Download on $Coverage): InvalidOperationException: Nodes of type IDownloadNode are not allowed in IClientAction or eSpaces of type Mobile"
+    },
+    {
+      "case": "mobile-ui-client-javascript",
+      "contract": "tests/contracts/action-coverage/mobile-ui-client-javascript.json",
+      "sha256": "00c4e91a7f7a2822f3e1e72d4415db8e001bca18dc5e228a956fb676813ccdd7",
+      "caseKey": "00C4E91A7F7A",
+      "status": "passed",
+      "fixture": "mobile-ui",
+      "features": [
+        "javascript",
+        "client"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 77,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IClientAction",
+          "nodes": 4,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IJavaScriptNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "mobile-ui-client-json-nested-structures",
+      "contract": "tests/contracts/action-coverage/mobile-ui-client-json-nested-structures.json",
+      "sha256": "df57e1ece5aeb7f85a83ebbb37839fdeb14312941fd2043a6b7ee9222b1249b6",
+      "caseKey": "DF57E1ECE5AE",
+      "status": "passed",
+      "fixture": "mobile-ui",
+      "features": [
+        "json-nested-structures",
+        "client"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 75,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IClientAction",
+          "nodes": 5,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IJSONDeserializeNode",
+            "IJSONSerializeNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "mobile-ui-client-list-operations",
+      "contract": "tests/contracts/action-coverage/mobile-ui-client-list-operations.json",
+      "sha256": "27ca51283c21ffd8a10256c10c268dbfdf49b2f496ac8b484f8c40e442796d2d",
+      "caseKey": "27CA51283C21",
+      "status": "passed",
+      "fixture": "mobile-ui",
+      "features": [
+        "list-operations",
+        "client"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 168,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IClientAction",
+          "nodes": 15,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IExecuteClientActionNode",
+            "IStartNode"
+          ],
+          "inputs": 2,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "mobile-ui-client-local-storage",
+      "contract": "tests/contracts/action-coverage/mobile-ui-client-local-storage.json",
+      "sha256": "85f559f5e510cb831900ab970252ae67d42fe0499dba714ef327e634c9a82533",
+      "caseKey": "85F559F5E510",
+      "status": "passed",
+      "fixture": "mobile-ui",
+      "features": [
+        "client-CRUD",
+        "client-aggregate"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 88,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IClientAction",
+          "nodes": 9,
+          "nodeKinds": [
+            "IAggregateNode",
+            "IAssignNode",
+            "IEndNode",
+            "IExecuteClientActionNode",
+            "IStartNode"
+          ],
+          "inputs": 2,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "mobile-ui-client-message",
+      "contract": "tests/contracts/action-coverage/mobile-ui-client-message.json",
+      "sha256": "ee81a75e8293f95d54fd95e621e1ed3bbf1f6d4859b6008d88ec1744b826b0a0",
+      "caseKey": "EE81A75E8293",
+      "status": "passed",
+      "fixture": "mobile-ui",
+      "features": [
+        "message",
+        "client"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 59,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IClientAction",
+          "nodes": 3,
+          "nodeKinds": [
+            "IEndNode",
+            "IMessageNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 0
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "mobile-ui-client-switch-loop-handler-comment",
+      "contract": "tests/contracts/action-coverage/mobile-ui-client-switch-loop-handler-comment.json",
+      "sha256": "6130dae055bd600b3dad494d63d0c737784449c5424cf748e424a4858590df65",
+      "caseKey": "6130DAE055BD",
+      "status": "passed",
+      "fixture": "mobile-ui",
+      "features": [
+        "switch-loop-handler-comment",
+        "client"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 116,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IClientAction",
+          "nodes": 13,
+          "nodeKinds": [
+            "IAssignNode",
+            "ICommentNode",
+            "IEndNode",
+            "IExceptionHandlerNode",
+            "IForEachNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode",
+            "ISwitchNode"
+          ],
+          "inputs": 2,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "mobile-ui-client-types-and-nested-call",
+      "contract": "tests/contracts/action-coverage/mobile-ui-client-types-and-nested-call.json",
+      "sha256": "6d3e1ca991e40edde157d146d2d99c4453a678105c72dc9d35715b1b2b4d12c3",
+      "caseKey": "6D3E1CA991E4",
+      "status": "passed",
+      "fixture": "mobile-ui",
+      "features": [
+        "types-and-nested-call",
+        "client"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 480,
+      "actions": [
+        {
+          "name": "Echo",
+          "kind": "IClientAction",
+          "nodes": 4,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IStartNode"
+          ],
+          "inputs": 20,
+          "outputs": 20
+        },
+        {
+          "name": "Coverage",
+          "kind": "IClientAction",
+          "nodes": 4,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IExecuteClientActionNode",
+            "IStartNode"
+          ],
+          "inputs": 20,
+          "outputs": 20
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "mobile-ui-screen-navigation",
+      "contract": "tests/contracts/action-coverage/mobile-ui-screen-navigation.json",
+      "sha256": "f0a412a5facdd06c619bbf81e1654f8496337a7b9b5b5879a7dd78190c279ede",
+      "caseKey": "F0A412A5FACD",
+      "status": "passed",
+      "fixture": "mobile-ui",
+      "features": [
+        "screen-navigation",
+        "screen"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 15,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "OutSystems.Model.UI.Mobile.IScreenAction",
+          "nodes": 2,
+          "nodeKinds": [
+            "IDestinationNode",
+            "IStartNode"
+          ],
+          "inputs": 0,
+          "outputs": 0
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "mobile-ui-screen-refresh-data",
+      "contract": "tests/contracts/action-coverage/mobile-ui-screen-refresh-data.json",
+      "sha256": "023b09687c183d7572a18003f6e39a03915cf23c2e1c6c7e8b0191423206720e",
+      "caseKey": "023B09687C18",
+      "status": "passed",
+      "fixture": "mobile-ui",
+      "features": [
+        "screen-refresh-data",
+        "screen"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 18,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "OutSystems.Model.UI.Mobile.IScreenAction",
+          "nodes": 3,
+          "nodeKinds": [
+            "IEndNode",
+            "IRefreshDataNode",
+            "IStartNode"
+          ],
+          "inputs": 0,
+          "outputs": 0
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "mobile-ui-server-aggregate-full",
+      "contract": "tests/contracts/action-coverage/mobile-ui-server-aggregate-full.json",
+      "sha256": "dfa6089908e468dc082a5e784c35eadb8a93e5a869afddf724f25b9f18053935",
+      "caseKey": "DFA6089908E4",
+      "status": "passed",
+      "fixture": "mobile-ui",
+      "features": [
+        "aggregate-join-group-calculated-count-sum-max-min-avg",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 131,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 7,
+          "nodeKinds": [
+            "IAggregateNode",
+            "IAssignNode",
+            "IEndNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "mobile-ui-server-aggregate-sql-crud-transaction",
+      "contract": "tests/contracts/action-coverage/mobile-ui-server-aggregate-sql-crud-transaction.json",
+      "sha256": "19a4aa8147c3317da199f369109776025cbf9b0162edf5625e6caddfeab004ca",
+      "caseKey": "19A4AA8147C3",
+      "status": "passed",
+      "fixture": "mobile-ui",
+      "features": [
+        "aggregate-sql-crud-transaction",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 134,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 12,
+          "nodeKinds": [
+            "IAggregateNode",
+            "IAssignNode",
+            "IEndNode",
+            "IExecuteServerActionNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "ISQLNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "mobile-ui-server-calls-referenced-service",
+      "contract": "tests/contracts/action-coverage/mobile-ui-server-calls-referenced-service.json",
+      "sha256": "d1e9ec0235322e04618cb5f00ec9abf8077d7610a8973da8b473da7705268de8",
+      "caseKey": "D1E9EC023532",
+      "status": "passed",
+      "fixture": "mobile-ui",
+      "features": [
+        "service-reference",
+        "server-calls-service"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 43,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 6,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IExecuteServerActionNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "mobile-ui-server-excel-roundtrip",
+      "contract": "tests/contracts/action-coverage/mobile-ui-server-excel-roundtrip.json",
+      "sha256": "7efad88bf1b596c39a427addba3bbf83222a4069ee1593b82129ff44f71fb73c",
+      "caseKey": "7EFAD88BF1B5",
+      "status": "passed",
+      "fixture": "mobile-ui",
+      "features": [
+        "excel-roundtrip",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 89,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 7,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IExcelToRecordListNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IRecordListToExcelNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 2
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "mobile-ui-server-json-nested-structures",
+      "contract": "tests/contracts/action-coverage/mobile-ui-server-json-nested-structures.json",
+      "sha256": "ecb064f263c4e2cd2e1aa0e379260c1751207e8295c3e1a0670bf8a06f6bbda4",
+      "caseKey": "ECB064F263C4",
+      "status": "passed",
+      "fixture": "mobile-ui",
+      "features": [
+        "json-nested-structures",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 86,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 7,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IIfNode",
+            "IJSONDeserializeNode",
+            "IJSONSerializeNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "mobile-ui-server-list-operations",
+      "contract": "tests/contracts/action-coverage/mobile-ui-server-list-operations.json",
+      "sha256": "db3929fac3fe8ad7f8237f608d1ecb16d119f89f77cbe76c0ea03ab82a9bed5d",
+      "caseKey": "DB3929FAC3FE",
+      "status": "passed",
+      "fixture": "mobile-ui",
+      "features": [
+        "list-operations",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 179,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 17,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IExecuteServerActionNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 2,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "mobile-ui-server-switch-loop-handler-comment",
+      "contract": "tests/contracts/action-coverage/mobile-ui-server-switch-loop-handler-comment.json",
+      "sha256": "1de2b7709f6509e04df7ceb031b5fe9c3047c850faecb2f40a69c3f02853835c",
+      "caseKey": "1DE2B7709F65",
+      "status": "passed",
+      "fixture": "mobile-ui",
+      "features": [
+        "switch-loop-handler-comment",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 127,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 15,
+          "nodeKinds": [
+            "IAssignNode",
+            "ICommentNode",
+            "IEndNode",
+            "IExceptionHandlerNode",
+            "IForEachNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode",
+            "ISwitchNode"
+          ],
+          "inputs": 2,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "mobile-ui-server-types-and-nested-call",
+      "contract": "tests/contracts/action-coverage/mobile-ui-server-types-and-nested-call.json",
+      "sha256": "489be312d4e4f2b533bf605eb1b3d0af5ea46e4594e3c7ae154b6fec6dfd8fac",
+      "caseKey": "489BE312D4E4",
+      "status": "passed",
+      "fixture": "mobile-ui",
+      "features": [
+        "types-and-nested-call",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 491,
+      "actions": [
+        {
+          "name": "Echo",
+          "kind": "IServerAction",
+          "nodes": 4,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IStartNode"
+          ],
+          "inputs": 20,
+          "outputs": 20
+        },
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 6,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IExecuteServerActionNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 20,
+          "outputs": 20
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "reactive-ui-block-trigger-event",
+      "contract": "tests/contracts/action-coverage/reactive-ui-block-trigger-event.json",
+      "sha256": "7e755470c49368772e0ae9fcdb12bdd41f396a9fc8bb643c297a68d3eca97975",
+      "caseKey": "7E755470C493",
+      "status": "passed",
+      "fixture": "reactive-ui",
+      "features": [
+        "block-trigger-event",
+        "screen"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 20,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "OutSystems.Model.UI.Mobile.IScreenAction",
+          "nodes": 3,
+          "nodeKinds": [
+            "IEndNode",
+            "IStartNode",
+            "ITriggerNode"
+          ],
+          "inputs": 0,
+          "outputs": 0
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "reactive-ui-client-client-calls-server",
+      "contract": "tests/contracts/action-coverage/reactive-ui-client-client-calls-server.json",
+      "sha256": "7fd7dc7d6aec3e50ac1dca020efb2e9d6056fbb6b30d725548e791c3975b44f1",
+      "caseKey": "7FD7DC7D6AEC",
+      "status": "passed",
+      "fixture": "reactive-ui",
+      "features": [
+        "client-calls-server",
+        "client"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 104,
+      "actions": [
+        {
+          "name": "ServerEcho",
+          "kind": "IServerAction",
+          "nodes": 5,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        },
+        {
+          "name": "Coverage",
+          "kind": "IClientAction",
+          "nodes": 4,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IExecuteServerActionNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "reactive-ui-client-download",
+      "contract": "tests/contracts/action-coverage/reactive-ui-client-download.json",
+      "sha256": "5e65d794cae447858f5f6be9b3e2619de0e75897dd5f704f32ec38cd0c73ba1b",
+      "caseKey": "5E65D794CAE4",
+      "status": "passed",
+      "fixture": "reactive-ui",
+      "features": [
+        "download",
+        "client"
+      ],
+      "invalidContextRejected": true,
+      "positiveSupport": false,
+      "error": "op #24 (logic ): InvalidOperationException: logic op #5 (create Download on $Coverage): InvalidOperationException: Nodes of type IDownloadNode are not allowed in IClientAction or eSpaces of type CrossDevice"
+    },
+    {
+      "case": "reactive-ui-client-javascript",
+      "contract": "tests/contracts/action-coverage/reactive-ui-client-javascript.json",
+      "sha256": "c6084804c8186ad1c2b88e0109ed082318b34aa824f8fa409650bc7f89edc48f",
+      "caseKey": "C6084804C818",
+      "status": "passed",
+      "fixture": "reactive-ui",
+      "features": [
+        "javascript",
+        "client"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 77,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IClientAction",
+          "nodes": 4,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IJavaScriptNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "reactive-ui-client-json-nested-structures",
+      "contract": "tests/contracts/action-coverage/reactive-ui-client-json-nested-structures.json",
+      "sha256": "35072ffe72cad379a3d65bd9ac23fa296314c0b913a50c8035bf4b1b04b61ef7",
+      "caseKey": "35072FFE72CA",
+      "status": "passed",
+      "fixture": "reactive-ui",
+      "features": [
+        "json-nested-structures",
+        "client"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 75,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IClientAction",
+          "nodes": 5,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IJSONDeserializeNode",
+            "IJSONSerializeNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "reactive-ui-client-list-operations",
+      "contract": "tests/contracts/action-coverage/reactive-ui-client-list-operations.json",
+      "sha256": "5158ec6c7ff0ce88cd070d3313486ce71ceb6635d73ee7ffbfec334db23a2899",
+      "caseKey": "5158EC6C7FF0",
+      "status": "passed",
+      "fixture": "reactive-ui",
+      "features": [
+        "list-operations",
+        "client"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 168,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IClientAction",
+          "nodes": 15,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IExecuteClientActionNode",
+            "IStartNode"
+          ],
+          "inputs": 2,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "reactive-ui-client-message",
+      "contract": "tests/contracts/action-coverage/reactive-ui-client-message.json",
+      "sha256": "6abd1b52b827d1b713c41c0c690a5cfce54113dfec48cebc38fb0c2f7a79b7de",
+      "caseKey": "6ABD1B52B827",
+      "status": "passed",
+      "fixture": "reactive-ui",
+      "features": [
+        "message",
+        "client"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 59,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IClientAction",
+          "nodes": 3,
+          "nodeKinds": [
+            "IEndNode",
+            "IMessageNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 0
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "reactive-ui-client-switch-loop-handler-comment",
+      "contract": "tests/contracts/action-coverage/reactive-ui-client-switch-loop-handler-comment.json",
+      "sha256": "979c9460448fa122c67faccc958c40065734edb06f79ee5ca87dc57a7d229b4f",
+      "caseKey": "979C9460448F",
+      "status": "passed",
+      "fixture": "reactive-ui",
+      "features": [
+        "switch-loop-handler-comment",
+        "client"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 116,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IClientAction",
+          "nodes": 13,
+          "nodeKinds": [
+            "IAssignNode",
+            "ICommentNode",
+            "IEndNode",
+            "IExceptionHandlerNode",
+            "IForEachNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode",
+            "ISwitchNode"
+          ],
+          "inputs": 2,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "reactive-ui-client-types-and-nested-call",
+      "contract": "tests/contracts/action-coverage/reactive-ui-client-types-and-nested-call.json",
+      "sha256": "f8336c92c6e7e3cd2f319cbc62e2b3789a22f21789e38173c70f9d7d581f25ad",
+      "caseKey": "F8336C92C6E7",
+      "status": "passed",
+      "fixture": "reactive-ui",
+      "features": [
+        "types-and-nested-call",
+        "client"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 480,
+      "actions": [
+        {
+          "name": "Echo",
+          "kind": "IClientAction",
+          "nodes": 4,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IStartNode"
+          ],
+          "inputs": 20,
+          "outputs": 20
+        },
+        {
+          "name": "Coverage",
+          "kind": "IClientAction",
+          "nodes": 4,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IExecuteClientActionNode",
+            "IStartNode"
+          ],
+          "inputs": 20,
+          "outputs": 20
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "reactive-ui-screen-navigation",
+      "contract": "tests/contracts/action-coverage/reactive-ui-screen-navigation.json",
+      "sha256": "5b60d2b395343ead9f545a603a403731dc597d031c92123429c99183ce37de11",
+      "caseKey": "5B60D2B39534",
+      "status": "passed",
+      "fixture": "reactive-ui",
+      "features": [
+        "screen-navigation",
+        "screen"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 15,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "OutSystems.Model.UI.Mobile.IScreenAction",
+          "nodes": 2,
+          "nodeKinds": [
+            "IDestinationNode",
+            "IStartNode"
+          ],
+          "inputs": 0,
+          "outputs": 0
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "reactive-ui-screen-refresh-data",
+      "contract": "tests/contracts/action-coverage/reactive-ui-screen-refresh-data.json",
+      "sha256": "942a4edb349fcd6b6e1906557896c63f72d62e629485d4ca7fec67dd8a32fa11",
+      "caseKey": "942A4EDB349F",
+      "status": "passed",
+      "fixture": "reactive-ui",
+      "features": [
+        "screen-refresh-data",
+        "screen"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 18,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "OutSystems.Model.UI.Mobile.IScreenAction",
+          "nodes": 3,
+          "nodeKinds": [
+            "IEndNode",
+            "IRefreshDataNode",
+            "IStartNode"
+          ],
+          "inputs": 0,
+          "outputs": 0
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "reactive-ui-server-aggregate-full",
+      "contract": "tests/contracts/action-coverage/reactive-ui-server-aggregate-full.json",
+      "sha256": "09db0c45929b4d3712ce4538fad3e5c217d6077f928533027125371e43c0e53b",
+      "caseKey": "09DB0C45929B",
+      "status": "passed",
+      "fixture": "reactive-ui",
+      "features": [
+        "aggregate-join-group-calculated-count-sum-max-min-avg",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 131,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 7,
+          "nodeKinds": [
+            "IAggregateNode",
+            "IAssignNode",
+            "IEndNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "reactive-ui-server-aggregate-sql-crud-transaction",
+      "contract": "tests/contracts/action-coverage/reactive-ui-server-aggregate-sql-crud-transaction.json",
+      "sha256": "983d52c93cd9f058a0177e5c4a8909b40e6af61eaee0377a60ad70df351430a2",
+      "caseKey": "983D52C93CD9",
+      "status": "passed",
+      "fixture": "reactive-ui",
+      "features": [
+        "aggregate-sql-crud-transaction",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 134,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 12,
+          "nodeKinds": [
+            "IAggregateNode",
+            "IAssignNode",
+            "IEndNode",
+            "IExecuteServerActionNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "ISQLNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "reactive-ui-server-calls-referenced-service",
+      "contract": "tests/contracts/action-coverage/reactive-ui-server-calls-referenced-service.json",
+      "sha256": "aec728c156487f4b869eb1ebb78aeada3ff515144c3e4c038e55284cb93f14c6",
+      "caseKey": "AEC728C15648",
+      "status": "passed",
+      "fixture": "reactive-ui",
+      "features": [
+        "service-reference",
+        "server-calls-service"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 43,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 6,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IExecuteServerActionNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "reactive-ui-server-excel-roundtrip",
+      "contract": "tests/contracts/action-coverage/reactive-ui-server-excel-roundtrip.json",
+      "sha256": "48408a6959613cb183e15fe5570c4b51c122dabf170ff7b4066332b34499caa9",
+      "caseKey": "48408A695961",
+      "status": "passed",
+      "fixture": "reactive-ui",
+      "features": [
+        "excel-roundtrip",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 89,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 7,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IExcelToRecordListNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IRecordListToExcelNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 2
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "reactive-ui-server-json-nested-structures",
+      "contract": "tests/contracts/action-coverage/reactive-ui-server-json-nested-structures.json",
+      "sha256": "e1c7b4cb67effb8eb550649de1fe7ceca7e2209efdf52f8f752737c4aceab0f6",
+      "caseKey": "E1C7B4CB67EF",
+      "status": "passed",
+      "fixture": "reactive-ui",
+      "features": [
+        "json-nested-structures",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 86,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 7,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IIfNode",
+            "IJSONDeserializeNode",
+            "IJSONSerializeNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "reactive-ui-server-list-operations",
+      "contract": "tests/contracts/action-coverage/reactive-ui-server-list-operations.json",
+      "sha256": "da6a27676e9d960a2fc8b43c8fd0047f24391373397cabb6c4e91a0865e2ef15",
+      "caseKey": "DA6A27676E9D",
+      "status": "passed",
+      "fixture": "reactive-ui",
+      "features": [
+        "list-operations",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 179,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 17,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IExecuteServerActionNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 2,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "reactive-ui-server-switch-loop-handler-comment",
+      "contract": "tests/contracts/action-coverage/reactive-ui-server-switch-loop-handler-comment.json",
+      "sha256": "1d2dda2b7f2076b9cc0b0e9632b0409ab0a68f78516af27164d3517ba5c39ebc",
+      "caseKey": "1D2DDA2B7F20",
+      "status": "passed",
+      "fixture": "reactive-ui",
+      "features": [
+        "switch-loop-handler-comment",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 127,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 15,
+          "nodeKinds": [
+            "IAssignNode",
+            "ICommentNode",
+            "IEndNode",
+            "IExceptionHandlerNode",
+            "IForEachNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode",
+            "ISwitchNode"
+          ],
+          "inputs": 2,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "reactive-ui-server-types-and-nested-call",
+      "contract": "tests/contracts/action-coverage/reactive-ui-server-types-and-nested-call.json",
+      "sha256": "87a2219000290c2ce463edd259f1ac79825dbf84a0802c53eec78d1a92c11c50",
+      "caseKey": "87A221900029",
+      "status": "passed",
+      "fixture": "reactive-ui",
+      "features": [
+        "types-and-nested-call",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 491,
+      "actions": [
+        {
+          "name": "Echo",
+          "kind": "IServerAction",
+          "nodes": 4,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IStartNode"
+          ],
+          "inputs": 20,
+          "outputs": 20
+        },
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 6,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IExecuteServerActionNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 20,
+          "outputs": 20
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "reactive-ui-service-service-action-not-in-ui",
+      "contract": "tests/contracts/action-coverage/reactive-ui-service-service-action-not-in-ui.json",
+      "sha256": "5b3e23e75b7d6a9ec00dd24f439b9c4cb3252b5b4f4f7c59db86b8dce436c531",
+      "caseKey": "5B3E23E75B7D",
+      "status": "passed",
+      "fixture": "reactive-ui",
+      "features": [
+        "service-action-not-in-ui",
+        "service"
+      ],
+      "invalidContextRejected": true,
+      "positiveSupport": false,
+      "error": "op #25 (logic ): InvalidOperationException: logic op #0 (create Coverage on @espace): InvalidOperationException: Service Action objects can't be children of Module objects"
+    },
+    {
+      "case": "traditional-ui-email-attachment",
+      "contract": "tests/contracts/action-coverage/traditional-ui-email-attachment.json",
+      "sha256": "c37dbfee212e146af38054a092738a8e4742b493df8c4a258372c5b1d8b1c301",
+      "caseKey": "C37DBFEE212E",
+      "status": "passed",
+      "fixture": "traditional-ui",
+      "features": [
+        "ISendEmailNode",
+        "IAttachFileNode",
+        "preparation",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 54,
+      "actions": [
+        {
+          "name": "Preparation",
+          "kind": "IPreparation",
+          "nodes": 3,
+          "nodeKinds": [
+            "IAttachFileNode",
+            "IEndNode",
+            "IStartNode"
+          ],
+          "inputs": 0,
+          "outputs": 0
+        },
+        {
+          "name": "SendProof",
+          "kind": "IServerAction",
+          "nodes": 5,
+          "nodeKinds": [
+            "IEndNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "ISendEmailNode",
+            "IStartNode"
+          ],
+          "inputs": 0,
+          "outputs": 0
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "traditional-ui-screen-ajax-message",
+      "contract": "tests/contracts/action-coverage/traditional-ui-screen-ajax-message.json",
+      "sha256": "bbbe96beeac4a6abcb1d11855758e9c8b03dd5434849e9e16e4264119804d910",
+      "caseKey": "BBBE96BEEAC4",
+      "status": "passed",
+      "fixture": "traditional-ui",
+      "features": [
+        "screen-ajax-message",
+        "screen"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 18,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "OutSystems.Model.UI.Web.IScreenAction",
+          "nodes": 3,
+          "nodeKinds": [
+            "IAjaxRefreshNode",
+            "IEndNode",
+            "IStartNode"
+          ],
+          "inputs": 0,
+          "outputs": 0
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "traditional-ui-screen-download",
+      "contract": "tests/contracts/action-coverage/traditional-ui-screen-download.json",
+      "sha256": "99e40b2c35d92dc4a947cf3dc7598af2fd83f44cce26b34dc72ba6335ff90900",
+      "caseKey": "99E40B2C35D9",
+      "status": "passed",
+      "fixture": "traditional-ui",
+      "features": [
+        "screen-download",
+        "screen"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 20,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "OutSystems.Model.UI.Web.IScreenAction",
+          "nodes": 2,
+          "nodeKinds": [
+            "IDownloadNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 0
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "traditional-ui-screen-navigation",
+      "contract": "tests/contracts/action-coverage/traditional-ui-screen-navigation.json",
+      "sha256": "4b73f6af345a36e373f3227e425241dbdc1523ce470cfb25eefc365e9b9bb8a8",
+      "caseKey": "4B73F6AF345A",
+      "status": "passed",
+      "fixture": "traditional-ui",
+      "features": [
+        "screen-navigation",
+        "screen"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 15,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "OutSystems.Model.UI.Web.IScreenAction",
+          "nodes": 2,
+          "nodeKinds": [
+            "IDestinationNode",
+            "IStartNode"
+          ],
+          "inputs": 0,
+          "outputs": 0
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "traditional-ui-server-aggregate-full",
+      "contract": "tests/contracts/action-coverage/traditional-ui-server-aggregate-full.json",
+      "sha256": "72bf9bbfbbe89320592adffc88453f629f1b9b53a47f7778a653f32fda04330f",
+      "caseKey": "72BF9BBFBBE8",
+      "status": "passed",
+      "fixture": "traditional-ui",
+      "features": [
+        "aggregate-join-group-calculated-count-sum-max-min-avg",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 131,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 7,
+          "nodeKinds": [
+            "IAggregateNode",
+            "IAssignNode",
+            "IEndNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "traditional-ui-server-aggregate-sql-crud-transaction",
+      "contract": "tests/contracts/action-coverage/traditional-ui-server-aggregate-sql-crud-transaction.json",
+      "sha256": "b4ebb145888239a914dfe8c52934fa12a7d877a910173ca84bc04d2a3265d1ac",
+      "caseKey": "B4EBB1458882",
+      "status": "passed",
+      "fixture": "traditional-ui",
+      "features": [
+        "aggregate-sql-crud-transaction",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 134,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 12,
+          "nodeKinds": [
+            "IAggregateNode",
+            "IAssignNode",
+            "IEndNode",
+            "IExecuteServerActionNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "ISQLNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "traditional-ui-server-calls-referenced-service",
+      "contract": "tests/contracts/action-coverage/traditional-ui-server-calls-referenced-service.json",
+      "sha256": "c91c8b2d492da4dc892341a0e2d476d9a3b45598936adfe8a89517833d0b9296",
+      "caseKey": "C91C8B2D492D",
+      "status": "passed",
+      "fixture": "traditional-ui",
+      "features": [
+        "service-reference",
+        "server-calls-service"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 43,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 6,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IExecuteServerActionNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "traditional-ui-server-excel-roundtrip",
+      "contract": "tests/contracts/action-coverage/traditional-ui-server-excel-roundtrip.json",
+      "sha256": "3b1d26959e837320888931f941122e61cfee55c929614393f0131465ebd5e09f",
+      "caseKey": "3B1D26959E83",
+      "status": "passed",
+      "fixture": "traditional-ui",
+      "features": [
+        "excel-roundtrip",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 89,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 7,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IExcelToRecordListNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IRecordListToExcelNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 2
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "traditional-ui-server-json-nested-structures",
+      "contract": "tests/contracts/action-coverage/traditional-ui-server-json-nested-structures.json",
+      "sha256": "6a0bf95f6d5952356132ea7e7cfa0dc227199b18337a470e113341d78123aa22",
+      "caseKey": "6A0BF95F6D59",
+      "status": "passed",
+      "fixture": "traditional-ui",
+      "features": [
+        "json-nested-structures",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 86,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 7,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IIfNode",
+            "IJSONDeserializeNode",
+            "IJSONSerializeNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 1,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "traditional-ui-server-list-operations",
+      "contract": "tests/contracts/action-coverage/traditional-ui-server-list-operations.json",
+      "sha256": "36fed64fb6c158635fbc5b6d111524fc8d7a3b475124ee63e59c37c2688e6f97",
+      "caseKey": "36FED64FB6C1",
+      "status": "passed",
+      "fixture": "traditional-ui",
+      "features": [
+        "list-operations",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 179,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 17,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IExecuteServerActionNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 2,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "traditional-ui-server-switch-loop-handler-comment",
+      "contract": "tests/contracts/action-coverage/traditional-ui-server-switch-loop-handler-comment.json",
+      "sha256": "2353f15557f3b24fc6fa07542b8779d7e8ed638d80ab4b94de438ca712382f30",
+      "caseKey": "2353F15557F3",
+      "status": "passed",
+      "fixture": "traditional-ui",
+      "features": [
+        "switch-loop-handler-comment",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 127,
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 15,
+          "nodeKinds": [
+            "IAssignNode",
+            "ICommentNode",
+            "IEndNode",
+            "IExceptionHandlerNode",
+            "IForEachNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode",
+            "ISwitchNode"
+          ],
+          "inputs": 2,
+          "outputs": 1
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    },
+    {
+      "case": "traditional-ui-server-types-and-nested-call",
+      "contract": "tests/contracts/action-coverage/traditional-ui-server-types-and-nested-call.json",
+      "sha256": "00983f5fe7f8a84444f7b4af7fc8f947b7ea57fbfd8bdfb9893a7a47d6a95dd3",
+      "caseKey": "00983F5FE7F8",
+      "status": "passed",
+      "fixture": "traditional-ui",
+      "features": [
+        "types-and-nested-call",
+        "server"
+      ],
+      "verified": true,
+      "reloaded": true,
+      "nativeMerge": true,
+      "contractChecks": 491,
+      "actions": [
+        {
+          "name": "Echo",
+          "kind": "IServerAction",
+          "nodes": 4,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IStartNode"
+          ],
+          "inputs": 20,
+          "outputs": 20
+        },
+        {
+          "name": "Coverage",
+          "kind": "IServerAction",
+          "nodes": 6,
+          "nodeKinds": [
+            "IAssignNode",
+            "IEndNode",
+            "IExecuteServerActionNode",
+            "IIfNode",
+            "IRaiseExceptionNode",
+            "IStartNode"
+          ],
+          "inputs": 20,
+          "outputs": 20
+        }
+      ],
+      "validMutationRejected": true,
+      "remoteRuntime": false
+    }
+  ],
+  "widgets": [
+    {
+      "interface": "IActionNode",
+      "status": "not-applicable",
+      "reason": "Abstract base interface, not a concrete widget",
+      "cases": []
+    },
+    {
+      "interface": "IAggregateNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "blank-service-server-aggregate-full",
+        "blank-service-server-aggregate-sql-crud-transaction",
+        "blank-service-service-aggregate-full",
+        "blank-service-service-aggregate-sql-crud-transaction",
+        "mobile-ui-client-local-storage",
+        "mobile-ui-server-aggregate-full",
+        "mobile-ui-server-aggregate-sql-crud-transaction",
+        "reactive-ui-server-aggregate-full",
+        "reactive-ui-server-aggregate-sql-crud-transaction",
+        "traditional-ui-server-aggregate-full",
+        "traditional-ui-server-aggregate-sql-crud-transaction"
+      ]
+    },
+    {
+      "interface": "IAjaxRefreshNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "traditional-ui-screen-ajax-message"
+      ]
+    },
+    {
+      "interface": "IAssignNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "blank-service-server-aggregate-full",
+        "blank-service-server-aggregate-sql-crud-transaction",
+        "blank-service-server-excel-roundtrip",
+        "blank-service-server-json-nested-structures",
+        "blank-service-server-list-operations",
+        "blank-service-server-switch-loop-handler-comment",
+        "blank-service-server-types-and-nested-call",
+        "blank-service-service-aggregate-full",
+        "blank-service-service-aggregate-sql-crud-transaction",
+        "blank-service-service-excel-roundtrip",
+        "blank-service-service-json-nested-structures",
+        "blank-service-service-list-operations",
+        "blank-service-service-switch-loop-handler-comment",
+        "blank-service-service-types-and-nested-call",
+        "mobile-ui-client-client-calls-server",
+        "mobile-ui-client-javascript",
+        "mobile-ui-client-json-nested-structures",
+        "mobile-ui-client-list-operations",
+        "mobile-ui-client-local-storage",
+        "mobile-ui-client-switch-loop-handler-comment",
+        "mobile-ui-client-types-and-nested-call",
+        "mobile-ui-server-aggregate-full",
+        "mobile-ui-server-aggregate-sql-crud-transaction",
+        "mobile-ui-server-calls-referenced-service",
+        "mobile-ui-server-excel-roundtrip",
+        "mobile-ui-server-json-nested-structures",
+        "mobile-ui-server-list-operations",
+        "mobile-ui-server-switch-loop-handler-comment",
+        "mobile-ui-server-types-and-nested-call",
+        "reactive-ui-client-client-calls-server",
+        "reactive-ui-client-javascript",
+        "reactive-ui-client-json-nested-structures",
+        "reactive-ui-client-list-operations",
+        "reactive-ui-client-switch-loop-handler-comment",
+        "reactive-ui-client-types-and-nested-call",
+        "reactive-ui-server-aggregate-full",
+        "reactive-ui-server-aggregate-sql-crud-transaction",
+        "reactive-ui-server-calls-referenced-service",
+        "reactive-ui-server-excel-roundtrip",
+        "reactive-ui-server-json-nested-structures",
+        "reactive-ui-server-list-operations",
+        "reactive-ui-server-switch-loop-handler-comment",
+        "reactive-ui-server-types-and-nested-call",
+        "traditional-ui-server-aggregate-full",
+        "traditional-ui-server-aggregate-sql-crud-transaction",
+        "traditional-ui-server-calls-referenced-service",
+        "traditional-ui-server-excel-roundtrip",
+        "traditional-ui-server-json-nested-structures",
+        "traditional-ui-server-list-operations",
+        "traditional-ui-server-switch-loop-handler-comment",
+        "traditional-ui-server-types-and-nested-call"
+      ]
+    },
+    {
+      "interface": "IAttachFileNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "traditional-ui-email-attachment"
+      ]
+    },
+    {
+      "interface": "ICommentNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "blank-service-server-switch-loop-handler-comment",
+        "blank-service-service-aggregate-full",
+        "blank-service-service-aggregate-sql-crud-transaction",
+        "blank-service-service-excel-roundtrip",
+        "blank-service-service-json-nested-structures",
+        "blank-service-service-list-operations",
+        "blank-service-service-switch-loop-handler-comment",
+        "blank-service-service-types-and-nested-call",
+        "mobile-ui-client-switch-loop-handler-comment",
+        "mobile-ui-server-switch-loop-handler-comment",
+        "reactive-ui-client-switch-loop-handler-comment",
+        "reactive-ui-server-switch-loop-handler-comment",
+        "traditional-ui-server-switch-loop-handler-comment"
+      ]
+    },
+    {
+      "interface": "IDecisionOutcomeNode",
+      "status": "not-applicable",
+      "reason": "BPT decision outcome; native creation rejected in ordinary server/service/client actions",
+      "cases": []
+    },
+    {
+      "interface": "IDestinationNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "mobile-ui-screen-navigation",
+        "reactive-ui-screen-navigation",
+        "traditional-ui-screen-navigation"
+      ]
+    },
+    {
+      "interface": "IDownloadNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "traditional-ui-screen-download"
+      ]
+    },
+    {
+      "interface": "IEndNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "blank-service-server-aggregate-full",
+        "blank-service-server-aggregate-sql-crud-transaction",
+        "blank-service-server-excel-roundtrip",
+        "blank-service-server-json-nested-structures",
+        "blank-service-server-list-operations",
+        "blank-service-server-switch-loop-handler-comment",
+        "blank-service-server-types-and-nested-call",
+        "blank-service-service-aggregate-full",
+        "blank-service-service-aggregate-sql-crud-transaction",
+        "blank-service-service-excel-roundtrip",
+        "blank-service-service-json-nested-structures",
+        "blank-service-service-list-operations",
+        "blank-service-service-switch-loop-handler-comment",
+        "blank-service-service-types-and-nested-call",
+        "mobile-ui-block-trigger-event",
+        "mobile-ui-client-client-calls-server",
+        "mobile-ui-client-javascript",
+        "mobile-ui-client-json-nested-structures",
+        "mobile-ui-client-list-operations",
+        "mobile-ui-client-local-storage",
+        "mobile-ui-client-message",
+        "mobile-ui-client-switch-loop-handler-comment",
+        "mobile-ui-client-types-and-nested-call",
+        "mobile-ui-screen-refresh-data",
+        "mobile-ui-server-aggregate-full",
+        "mobile-ui-server-aggregate-sql-crud-transaction",
+        "mobile-ui-server-calls-referenced-service",
+        "mobile-ui-server-excel-roundtrip",
+        "mobile-ui-server-json-nested-structures",
+        "mobile-ui-server-list-operations",
+        "mobile-ui-server-switch-loop-handler-comment",
+        "mobile-ui-server-types-and-nested-call",
+        "reactive-ui-block-trigger-event",
+        "reactive-ui-client-client-calls-server",
+        "reactive-ui-client-javascript",
+        "reactive-ui-client-json-nested-structures",
+        "reactive-ui-client-list-operations",
+        "reactive-ui-client-message",
+        "reactive-ui-client-switch-loop-handler-comment",
+        "reactive-ui-client-types-and-nested-call",
+        "reactive-ui-screen-refresh-data",
+        "reactive-ui-server-aggregate-full",
+        "reactive-ui-server-aggregate-sql-crud-transaction",
+        "reactive-ui-server-calls-referenced-service",
+        "reactive-ui-server-excel-roundtrip",
+        "reactive-ui-server-json-nested-structures",
+        "reactive-ui-server-list-operations",
+        "reactive-ui-server-switch-loop-handler-comment",
+        "reactive-ui-server-types-and-nested-call",
+        "traditional-ui-email-attachment",
+        "traditional-ui-screen-ajax-message",
+        "traditional-ui-server-aggregate-full",
+        "traditional-ui-server-aggregate-sql-crud-transaction",
+        "traditional-ui-server-calls-referenced-service",
+        "traditional-ui-server-excel-roundtrip",
+        "traditional-ui-server-json-nested-structures",
+        "traditional-ui-server-list-operations",
+        "traditional-ui-server-switch-loop-handler-comment",
+        "traditional-ui-server-types-and-nested-call"
+      ]
+    },
+    {
+      "interface": "IExcelToRecordListNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "blank-service-server-excel-roundtrip",
+        "blank-service-service-excel-roundtrip",
+        "mobile-ui-server-excel-roundtrip",
+        "reactive-ui-server-excel-roundtrip",
+        "traditional-ui-server-excel-roundtrip"
+      ]
+    },
+    {
+      "interface": "IExceptionHandlerNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "blank-service-server-switch-loop-handler-comment",
+        "blank-service-service-switch-loop-handler-comment",
+        "mobile-ui-client-switch-loop-handler-comment",
+        "mobile-ui-server-switch-loop-handler-comment",
+        "reactive-ui-client-switch-loop-handler-comment",
+        "reactive-ui-server-switch-loop-handler-comment",
+        "traditional-ui-server-switch-loop-handler-comment"
+      ]
+    },
+    {
+      "interface": "IExecuteClientActionNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "mobile-ui-client-list-operations",
+        "mobile-ui-client-local-storage",
+        "mobile-ui-client-types-and-nested-call",
+        "reactive-ui-client-list-operations",
+        "reactive-ui-client-types-and-nested-call"
+      ]
+    },
+    {
+      "interface": "IExecuteServerActionNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "blank-service-server-aggregate-sql-crud-transaction",
+        "blank-service-server-list-operations",
+        "blank-service-server-types-and-nested-call",
+        "blank-service-service-aggregate-sql-crud-transaction",
+        "blank-service-service-list-operations",
+        "blank-service-service-types-and-nested-call",
+        "mobile-ui-client-client-calls-server",
+        "mobile-ui-server-aggregate-sql-crud-transaction",
+        "mobile-ui-server-calls-referenced-service",
+        "mobile-ui-server-list-operations",
+        "mobile-ui-server-types-and-nested-call",
+        "reactive-ui-client-client-calls-server",
+        "reactive-ui-server-aggregate-sql-crud-transaction",
+        "reactive-ui-server-calls-referenced-service",
+        "reactive-ui-server-list-operations",
+        "reactive-ui-server-types-and-nested-call",
+        "traditional-ui-server-aggregate-sql-crud-transaction",
+        "traditional-ui-server-calls-referenced-service",
+        "traditional-ui-server-list-operations",
+        "traditional-ui-server-types-and-nested-call"
+      ]
+    },
+    {
+      "interface": "IForEachNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "blank-service-server-switch-loop-handler-comment",
+        "blank-service-service-switch-loop-handler-comment",
+        "mobile-ui-client-switch-loop-handler-comment",
+        "mobile-ui-server-switch-loop-handler-comment",
+        "reactive-ui-client-switch-loop-handler-comment",
+        "reactive-ui-server-switch-loop-handler-comment",
+        "traditional-ui-server-switch-loop-handler-comment"
+      ]
+    },
+    {
+      "interface": "IIfNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "blank-service-server-aggregate-full",
+        "blank-service-server-aggregate-sql-crud-transaction",
+        "blank-service-server-excel-roundtrip",
+        "blank-service-server-json-nested-structures",
+        "blank-service-server-list-operations",
+        "blank-service-server-switch-loop-handler-comment",
+        "blank-service-server-types-and-nested-call",
+        "blank-service-service-aggregate-full",
+        "blank-service-service-aggregate-sql-crud-transaction",
+        "blank-service-service-excel-roundtrip",
+        "blank-service-service-json-nested-structures",
+        "blank-service-service-list-operations",
+        "blank-service-service-switch-loop-handler-comment",
+        "blank-service-service-types-and-nested-call",
+        "mobile-ui-client-client-calls-server",
+        "mobile-ui-client-switch-loop-handler-comment",
+        "mobile-ui-server-aggregate-full",
+        "mobile-ui-server-aggregate-sql-crud-transaction",
+        "mobile-ui-server-calls-referenced-service",
+        "mobile-ui-server-excel-roundtrip",
+        "mobile-ui-server-json-nested-structures",
+        "mobile-ui-server-list-operations",
+        "mobile-ui-server-switch-loop-handler-comment",
+        "mobile-ui-server-types-and-nested-call",
+        "reactive-ui-client-client-calls-server",
+        "reactive-ui-client-switch-loop-handler-comment",
+        "reactive-ui-server-aggregate-full",
+        "reactive-ui-server-aggregate-sql-crud-transaction",
+        "reactive-ui-server-calls-referenced-service",
+        "reactive-ui-server-excel-roundtrip",
+        "reactive-ui-server-json-nested-structures",
+        "reactive-ui-server-list-operations",
+        "reactive-ui-server-switch-loop-handler-comment",
+        "reactive-ui-server-types-and-nested-call",
+        "traditional-ui-email-attachment",
+        "traditional-ui-server-aggregate-full",
+        "traditional-ui-server-aggregate-sql-crud-transaction",
+        "traditional-ui-server-calls-referenced-service",
+        "traditional-ui-server-excel-roundtrip",
+        "traditional-ui-server-json-nested-structures",
+        "traditional-ui-server-list-operations",
+        "traditional-ui-server-switch-loop-handler-comment",
+        "traditional-ui-server-types-and-nested-call"
+      ]
+    },
+    {
+      "interface": "IJSONDeserializeNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "blank-service-server-json-nested-structures",
+        "blank-service-service-json-nested-structures",
+        "mobile-ui-client-json-nested-structures",
+        "mobile-ui-server-json-nested-structures",
+        "reactive-ui-client-json-nested-structures",
+        "reactive-ui-server-json-nested-structures",
+        "traditional-ui-server-json-nested-structures"
+      ]
+    },
+    {
+      "interface": "IJSONSerializeNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "blank-service-server-json-nested-structures",
+        "blank-service-service-json-nested-structures",
+        "mobile-ui-client-json-nested-structures",
+        "mobile-ui-server-json-nested-structures",
+        "reactive-ui-client-json-nested-structures",
+        "reactive-ui-server-json-nested-structures",
+        "traditional-ui-server-json-nested-structures"
+      ]
+    },
+    {
+      "interface": "IJavaScriptNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "mobile-ui-client-javascript",
+        "reactive-ui-client-javascript"
+      ]
+    },
+    {
+      "interface": "IMessageNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "mobile-ui-client-message",
+        "reactive-ui-client-message"
+      ]
+    },
+    {
+      "interface": "IRaiseExceptionNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "blank-service-server-aggregate-full",
+        "blank-service-server-aggregate-sql-crud-transaction",
+        "blank-service-server-excel-roundtrip",
+        "blank-service-server-json-nested-structures",
+        "blank-service-server-list-operations",
+        "blank-service-server-switch-loop-handler-comment",
+        "blank-service-server-types-and-nested-call",
+        "blank-service-service-aggregate-full",
+        "blank-service-service-aggregate-sql-crud-transaction",
+        "blank-service-service-excel-roundtrip",
+        "blank-service-service-json-nested-structures",
+        "blank-service-service-list-operations",
+        "blank-service-service-switch-loop-handler-comment",
+        "blank-service-service-types-and-nested-call",
+        "mobile-ui-client-client-calls-server",
+        "mobile-ui-client-switch-loop-handler-comment",
+        "mobile-ui-server-aggregate-full",
+        "mobile-ui-server-aggregate-sql-crud-transaction",
+        "mobile-ui-server-calls-referenced-service",
+        "mobile-ui-server-excel-roundtrip",
+        "mobile-ui-server-json-nested-structures",
+        "mobile-ui-server-list-operations",
+        "mobile-ui-server-switch-loop-handler-comment",
+        "mobile-ui-server-types-and-nested-call",
+        "reactive-ui-client-client-calls-server",
+        "reactive-ui-client-switch-loop-handler-comment",
+        "reactive-ui-server-aggregate-full",
+        "reactive-ui-server-aggregate-sql-crud-transaction",
+        "reactive-ui-server-calls-referenced-service",
+        "reactive-ui-server-excel-roundtrip",
+        "reactive-ui-server-json-nested-structures",
+        "reactive-ui-server-list-operations",
+        "reactive-ui-server-switch-loop-handler-comment",
+        "reactive-ui-server-types-and-nested-call",
+        "traditional-ui-email-attachment",
+        "traditional-ui-server-aggregate-full",
+        "traditional-ui-server-aggregate-sql-crud-transaction",
+        "traditional-ui-server-calls-referenced-service",
+        "traditional-ui-server-excel-roundtrip",
+        "traditional-ui-server-json-nested-structures",
+        "traditional-ui-server-list-operations",
+        "traditional-ui-server-switch-loop-handler-comment",
+        "traditional-ui-server-types-and-nested-call"
+      ]
+    },
+    {
+      "interface": "IRecordListToExcelNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "blank-service-server-excel-roundtrip",
+        "blank-service-service-excel-roundtrip",
+        "mobile-ui-server-excel-roundtrip",
+        "reactive-ui-server-excel-roundtrip",
+        "traditional-ui-server-excel-roundtrip"
+      ]
+    },
+    {
+      "interface": "IRefreshDataNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "mobile-ui-screen-refresh-data",
+        "reactive-ui-screen-refresh-data"
+      ]
+    },
+    {
+      "interface": "ISQLNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "blank-service-server-aggregate-sql-crud-transaction",
+        "blank-service-service-aggregate-sql-crud-transaction",
+        "mobile-ui-server-aggregate-sql-crud-transaction",
+        "reactive-ui-server-aggregate-sql-crud-transaction",
+        "traditional-ui-server-aggregate-sql-crud-transaction"
+      ]
+    },
+    {
+      "interface": "ISendEmailNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "traditional-ui-email-attachment"
+      ]
+    },
+    {
+      "interface": "IStartNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "blank-service-server-aggregate-full",
+        "blank-service-server-aggregate-sql-crud-transaction",
+        "blank-service-server-excel-roundtrip",
+        "blank-service-server-json-nested-structures",
+        "blank-service-server-list-operations",
+        "blank-service-server-switch-loop-handler-comment",
+        "blank-service-server-types-and-nested-call",
+        "blank-service-service-aggregate-full",
+        "blank-service-service-aggregate-sql-crud-transaction",
+        "blank-service-service-excel-roundtrip",
+        "blank-service-service-json-nested-structures",
+        "blank-service-service-list-operations",
+        "blank-service-service-switch-loop-handler-comment",
+        "blank-service-service-types-and-nested-call",
+        "mobile-ui-block-trigger-event",
+        "mobile-ui-client-client-calls-server",
+        "mobile-ui-client-javascript",
+        "mobile-ui-client-json-nested-structures",
+        "mobile-ui-client-list-operations",
+        "mobile-ui-client-local-storage",
+        "mobile-ui-client-message",
+        "mobile-ui-client-switch-loop-handler-comment",
+        "mobile-ui-client-types-and-nested-call",
+        "mobile-ui-screen-navigation",
+        "mobile-ui-screen-refresh-data",
+        "mobile-ui-server-aggregate-full",
+        "mobile-ui-server-aggregate-sql-crud-transaction",
+        "mobile-ui-server-calls-referenced-service",
+        "mobile-ui-server-excel-roundtrip",
+        "mobile-ui-server-json-nested-structures",
+        "mobile-ui-server-list-operations",
+        "mobile-ui-server-switch-loop-handler-comment",
+        "mobile-ui-server-types-and-nested-call",
+        "reactive-ui-block-trigger-event",
+        "reactive-ui-client-client-calls-server",
+        "reactive-ui-client-javascript",
+        "reactive-ui-client-json-nested-structures",
+        "reactive-ui-client-list-operations",
+        "reactive-ui-client-message",
+        "reactive-ui-client-switch-loop-handler-comment",
+        "reactive-ui-client-types-and-nested-call",
+        "reactive-ui-screen-navigation",
+        "reactive-ui-screen-refresh-data",
+        "reactive-ui-server-aggregate-full",
+        "reactive-ui-server-aggregate-sql-crud-transaction",
+        "reactive-ui-server-calls-referenced-service",
+        "reactive-ui-server-excel-roundtrip",
+        "reactive-ui-server-json-nested-structures",
+        "reactive-ui-server-list-operations",
+        "reactive-ui-server-switch-loop-handler-comment",
+        "reactive-ui-server-types-and-nested-call",
+        "traditional-ui-email-attachment",
+        "traditional-ui-screen-ajax-message",
+        "traditional-ui-screen-download",
+        "traditional-ui-screen-navigation",
+        "traditional-ui-server-aggregate-full",
+        "traditional-ui-server-aggregate-sql-crud-transaction",
+        "traditional-ui-server-calls-referenced-service",
+        "traditional-ui-server-excel-roundtrip",
+        "traditional-ui-server-json-nested-structures",
+        "traditional-ui-server-list-operations",
+        "traditional-ui-server-switch-loop-handler-comment",
+        "traditional-ui-server-types-and-nested-call"
+      ]
+    },
+    {
+      "interface": "ISwitchNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "blank-service-server-switch-loop-handler-comment",
+        "blank-service-service-switch-loop-handler-comment",
+        "mobile-ui-client-switch-loop-handler-comment",
+        "mobile-ui-server-switch-loop-handler-comment",
+        "reactive-ui-client-switch-loop-handler-comment",
+        "reactive-ui-server-switch-loop-handler-comment",
+        "traditional-ui-server-switch-loop-handler-comment"
+      ]
+    },
+    {
+      "interface": "ITriggerNode",
+      "status": "native-merge-proved",
+      "reason": null,
+      "cases": [
+        "mobile-ui-block-trigger-event",
+        "reactive-ui-block-trigger-event"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "schema": "ssam-client-denylist/1",
+  "_doc": [
+    "Client names that never ship in the ssam-server image (owner rule of 2026-10-07: client content may ship, client NAMES may not).",
+    "This file never ships itself: .dockerignore excludes it, and the guard test (platforms/odc/facade/tests/hosted-image-denylist.test.mjs) fails when it does not.",
+    "terms[].pattern: a JavaScript regular expression source, matched case-insensitively over every file of the build context that .dockerignore keeps (each file read as Latin-1, so UTF-8 text and binary names both match). Separators are optional where a name has two words.",
+    "terms[].search: the plain text the anonymizer (scripts/anonymize-odc-fixture.mjs) searches in a module with the kernel reader (inspect --text); every element it finds is renamed or rewritten with replacements.",
+    "replacements: ordered [pattern, replacement] pairs (case-sensitive JavaScript regular expressions, applied in order) that the anonymizer applies to names, labels, texts, descriptions and expressions, and that turned the client names of the job suites into neutral ones."
+  ],
+  "terms": [
+    { "pattern": "wright[\\s_.-]*flood", "search": "wright", "label": "client company and its modules (WrightFlood, WrightFlood_UI, WrightFlood_Patterns...)" },
+    { "pattern": "(?<![a-z])wright(?![a-z])", "search": "wright", "label": "client company name alone (not inside a word such as arrowRight)" },
+    { "pattern": "flood[\\s_.-]*quotes", "search": "floodquote", "label": "client module" },
+    { "pattern": "flood[\\s_.-]*services", "search": "floodservice", "label": "client module" },
+    { "pattern": "hanford", "search": "hanford", "label": "client site" },
+    { "pattern": "(?<![a-z])hmis", "search": "hmis", "label": "client system (HMIS, HMISJHA; not inside a word such as Mismatch)" },
+    { "pattern": "dcips", "search": "dcips", "label": "client program (DCIPS migration)" },
+    { "pattern": "elbit", "search": "elbit", "label": "client company" },
+    { "pattern": "(?<![a-z])davi(?![a-z])", "search": "davi", "label": "person name" },
+    { "pattern": "unimed", "search": "unimed", "label": "client company" },
+    { "pattern": "agentops[\\s_.-]*core", "search": "agentops", "label": "module of the HMIS environment (AgentOps_Core_CS)" }
+  ],
+  "replacements": [
+    ["WRIGHT[ _.-]?FLOOD", "INSURANCEAPP"],
+    ["WrightFlood", "InsuranceApp"],
+    ["Wrightflood", "Insuranceapp"],
+    ["wrightflood", "insuranceapp"],
+    ["Wright[ _.-]Flood", "Insurance App"],
+    ["wright[ _.-]flood", "insurance app"],
+    ["\\bWRIGHT\\b", "INSURANCE"],
+    ["\\bWright\\b", "Insurance"],
+    ["\\bwright\\b", "insurance"],
+    ["UnimedPortoAlegre", "ClientPortal"],
+    ["Unimed Porto Alegre", "Client Portal"],
+    ["UnimedPOA", "ClientPOA"],
+    ["unimedpoa", "clienttenant"],
+    ["Unimed", "Client"],
+    ["unimed", "client"]
+  ]
+}

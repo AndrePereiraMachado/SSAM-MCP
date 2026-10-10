@@ -1,0 +1,259 @@
+{
+  "description": "Telas 1-6 do Kanban_UI: shell, Home, workspace, board, detalhe e criacao de card, ligadas ao contrato Kanban_CS.",
+  "base": "tests/fixtures/reactive-ui.oml",
+  "expectValid": true,
+  "expectedMessages": [],
+  "ops": [
+    {
+      "op": "reference",
+      "producer": "Kanban_CS",
+      "elements": [
+        "IServerEntity:Workspace",
+        "IServerEntity:Board",
+        "IServerEntity:BoardColumn",
+        "IServerEntity:Card",
+        "IServerEntity:CardComment",
+        "IStaticEntity:CardPriority",
+        "IServiceAction:Workspace_ListMine",
+        "IServiceAction:Workspace_GetById",
+        "IServiceAction:Board_ListByWorkspace",
+        "IServiceAction:Board_GetKanban",
+        "IServiceAction:Card_GetById",
+        "IServiceAction:Card_Create",
+        "IServiceAction:Card_Archive",
+        "IServiceAction:CardComment_List",
+        "IServiceAction:CardComment_Create",
+        "IServiceAction:CardActivity_List",
+        "IServiceAction:CardLabel_List",
+        "IServiceAction:CardAssignee_List"
+      ]
+    },
+    { "op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "Home", "as": "$home" },
+    { "op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WorkspaceOverview", "as": "$workspace" },
+    { "op": "create", "parent": "$workspace", "type": "IInputParameter", "name": "WorkspaceId", "as": "$workspaceId" },
+    { "op": "set", "target": "$workspaceId", "prop": "DataType", "value": "Workspace Identifier" },
+    { "op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "BoardKanban", "as": "$board" },
+    { "op": "create", "parent": "$board", "type": "IInputParameter", "name": "BoardId", "as": "$boardId" },
+    { "op": "set", "target": "$boardId", "prop": "DataType", "value": "Board Identifier" },
+    { "op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CardDetails", "as": "$details" },
+    { "op": "create", "parent": "$details", "type": "IInputParameter", "name": "CardId", "as": "$detailsCardId" },
+    { "op": "set", "target": "$detailsCardId", "prop": "DataType", "value": "Card Identifier" },
+    { "op": "create", "parent": "$details", "type": "ILocalVariable", "name": "CommentBody", "as": "$commentBody" },
+    { "op": "set", "target": "$commentBody", "prop": "DataType", "value": "Text" },
+    { "op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CardForm", "as": "$form" },
+    { "op": "create", "parent": "$form", "type": "IInputParameter", "name": "BoardId", "as": "$formBoardId" },
+    { "op": "set", "target": "$formBoardId", "prop": "DataType", "value": "Board Identifier" },
+    { "op": "create", "parent": "$form", "type": "IInputParameter", "name": "ColumnId", "as": "$formColumnId" },
+    { "op": "set", "target": "$formColumnId", "prop": "DataType", "value": "BoardColumn Identifier" },
+    { "op": "create", "parent": "$form", "type": "ILocalVariable", "name": "CardTitle", "as": "$formTitle" },
+    { "op": "set", "target": "$formTitle", "prop": "DataType", "value": "Text" },
+    { "op": "create", "parent": "$form", "type": "ILocalVariable", "name": "CardDescription", "as": "$formDescription" },
+    { "op": "set", "target": "$formDescription", "prop": "DataType", "value": "Text" },
+    { "op": "create", "parent": "$form", "type": "ILocalVariable", "name": "CardPriorityId", "as": "$formPriority" },
+    { "op": "set", "target": "$formPriority", "prop": "DataType", "value": "CardPriority Identifier" },
+    { "op": "set", "target": "$formPriority", "prop": "DefaultValue", "value": "Entities.CardPriority.Normal" },
+    { "op": "create", "parent": "$form", "type": "ILocalVariable", "name": "CardDueDate", "as": "$formDueDate" },
+    { "op": "set", "target": "$formDueDate", "prop": "DataType", "value": "Date" },
+    { "op": "set", "target": "@espace", "prop": "DefaultScreen", "value": "$home" },
+    {
+      "op": "html",
+      "data": {
+        "screen": "Home",
+        "title": "Kanban",
+        "layout": "blank",
+        "sources": [
+          { "action": "Workspace_ListMine", "as": "LoadWorkspaces", "args": { "OwnerId": "GetUserId()" }, "state": true }
+        ],
+        "bindings": {
+          "home.avatar": { "kind": "block", "block": "KanbanUserAvatar", "args": { "name": "\"Mariana Costa\"" } },
+          "home.workspaces": { "kind": "list", "source": "LoadWorkspaces", "output": "Workspaces" },
+          "home.workspace.name": { "kind": "field", "field": "Name" },
+          "home.workspace.description": { "kind": "field", "field": "Description" },
+          "home.workspace.open": { "kind": "navigate", "destination": "WorkspaceOverview", "args": { "WorkspaceId": "LoadWorkspaces.Workspaces.Current.Id" } },
+          "home.retry": { "kind": "refresh", "sources": ["LoadWorkspaces"] },
+          "home.loading": { "kind": "visible", "condition": "not LoadWorkspaces.IsDataFetched" },
+          "home.error": { "kind": "visible", "condition": "LoadWorkspaces.IsDataFetched and not LoadWorkspaces.FetchSucceeded" },
+          "home.ready": { "kind": "visible", "condition": "LoadWorkspaces.IsDataFetched and LoadWorkspaces.FetchSucceeded" }
+        },
+        "html": "<style>.shell{background:#fff;display:flex;min-height:100vh;color:#18181b;font-family:Inter,Arial,sans-serif}.sidebar{background:#fafafa;border-right:1px solid #e4e4e7;box-sizing:border-box;display:flex;flex:0 0 220px;flex-direction:column;padding:20px 12px}.brand{font-size:16px;font-weight:750;letter-spacing:-.02em;margin:0 8px 30px}.nav-item{border-radius:6px;color:#52525b;font-size:13px;margin:1px 0;padding:9px 10px}.nav-active{background:#f4f4f5;color:#18181b;font-weight:650}.nav-label{color:#a1a1aa;font-size:10px;font-weight:700;letter-spacing:.08em;margin:25px 10px 7px;text-transform:uppercase}.profile{align-items:center;border-top:1px solid #e4e4e7;display:flex;gap:9px;margin-top:auto;padding:14px 8px 0}.profile p{font-size:12px;font-weight:650;margin:0}.profile small{color:#71717a;font-size:11px}.main{box-sizing:border-box;max-width:1000px;padding:42px 48px;width:100%}.eyebrow{color:#a1a1aa;font-size:12px;margin:0 0 7px}.main h1{font-size:28px;letter-spacing:-.04em;margin:0}.welcome{color:#71717a;font-size:14px;margin:8px 0 30px}.section-head{align-items:center;display:flex;justify-content:space-between;margin:0 0 12px}.section-head h2{font-size:15px;margin:0}.muted{color:#71717a;font-size:12px}.workspace-list{border:1px solid #e4e4e7;border-radius:10px;overflow:hidden}.workspace{align-items:center;border-bottom:1px solid #e4e4e7;display:flex;gap:16px;justify-content:space-between;padding:17px 18px}.workspace:last-child{border-bottom:0}.workspace h3{font-size:14px;margin:0}.workspace p{color:#71717a;font-size:12px;margin:4px 0 0;max-width:520px}.open-link{background:#18181b;border-radius:6px;color:#fff;font-size:12px;font-weight:650;padding:7px 11px;text-decoration:none}.state{color:#71717a;font-size:13px;padding:18px 0}.retry{border:0;border-radius:6px;color:#4f46e5;font-size:12px;margin-left:6px;padding:0}</style><div class=\"shell\"><aside class=\"sidebar\"><p class=\"brand\">Kanban</p><p class=\"nav-item nav-active\">Início</p><p class=\"nav-item\">Workspaces</p><p class=\"nav-label\">Seus workspaces</p><p class=\"nav-item\">Produto Digital</p><p class=\"nav-item\">Marketing &amp; Growth</p><div class=\"profile\"><div data-av=\"home.avatar\"></div><div><p>Mariana Costa</p><small>mariana@empresa.com</small></div></div></aside><main class=\"main\"><p class=\"eyebrow\">quarta-feira, 9 de setembro</p><h1>Olá, Mariana</h1><p class=\"welcome\">Tudo o que você precisa para acompanhar seus boards.</p><div class=\"section-head\"><h2>Workspaces</h2><span class=\"muted\">Selecione um workspace para continuar</span></div><div class=\"state\" data-av=\"home.loading\">Carregando workspaces…</div><div class=\"state\" data-av=\"home.error\">Não foi possível carregar seus workspaces. <button class=\"retry\" data-av=\"home.retry\">Tentar novamente</button></div><div data-av=\"home.ready\"><div class=\"workspace-list\" data-av=\"home.workspaces\"><article class=\"workspace\"><div><h3 data-av=\"home.workspace.name\">Produto Digital</h3><p data-av=\"home.workspace.description\">Time responsável pelo produto principal.</p></div><a class=\"open-link\" data-av=\"home.workspace.open\" href=\"#\">Abrir</a></article></div></div></main></div>"
+      }
+    },
+    {
+      "op": "html",
+      "data": {
+        "screen": "WorkspaceOverview",
+        "title": "Workspace",
+        "layout": "blank",
+        "sources": [
+          { "action": "Workspace_GetById", "as": "LoadWorkspace", "args": { "WorkspaceId": "WorkspaceId" }, "state": true },
+          { "action": "Board_ListByWorkspace", "as": "LoadBoards", "args": { "WorkspaceId": "WorkspaceId" }, "state": true }
+        ],
+        "bindings": {
+          "workspace.back": { "kind": "navigate", "destination": "Home", "args": {} },
+          "workspace.rows": { "kind": "list", "source": "LoadWorkspace", "output": "Workspaces" },
+          "workspace.name": { "kind": "field", "field": "Name" },
+          "workspace.description": { "kind": "field", "field": "Description" },
+          "workspace.boards": { "kind": "list", "source": "LoadBoards", "output": "Boards" },
+          "workspace.board.name": { "kind": "field", "field": "Name" },
+          "workspace.board.description": { "kind": "field", "field": "Description" },
+          "workspace.board.open": { "kind": "navigate", "destination": "BoardKanban", "args": { "BoardId": "LoadBoards.Boards.Current.Id" } },
+          "workspace.loading": { "kind": "visible", "condition": "not LoadWorkspace.IsDataFetched or not LoadBoards.IsDataFetched" },
+          "workspace.ready": { "kind": "visible", "condition": "LoadWorkspace.IsDataFetched and LoadWorkspace.FetchSucceeded and LoadBoards.IsDataFetched and LoadBoards.FetchSucceeded" }
+        },
+        "html": "<style>.shell{background:#fff;display:flex;min-height:100vh;color:#18181b;font-family:Inter,Arial,sans-serif}.sidebar{background:#fafafa;border-right:1px solid #e4e4e7;box-sizing:border-box;flex:0 0 220px;padding:20px 12px}.brand{font-size:16px;font-weight:750;margin:0 8px 30px}.nav-item{border-radius:6px;color:#52525b;font-size:13px;margin:1px 0;padding:9px 10px}.nav-active{background:#f4f4f5;color:#18181b;font-weight:650}.main{min-width:0;width:100%}.crumbs{align-items:center;border-bottom:1px solid #e4e4e7;display:flex;gap:7px;padding:17px 32px}.crumbs a{color:#71717a;font-size:12px;text-decoration:none}.crumbs span{color:#a1a1aa;font-size:12px}.workspace-head{border-bottom:1px solid #e4e4e7;padding:30px 32px 0}.workspace-title{align-items:center;display:flex;gap:12px}.mark{align-items:center;background:#eef2ff;border-radius:8px;color:#4f46e5;display:flex;font-size:18px;font-weight:750;height:38px;justify-content:center;width:38px}.workspace-title h1{font-size:22px;letter-spacing:-.03em;margin:0}.workspace-title p{color:#71717a;font-size:13px;margin:3px 0 0}.tabs{display:flex;gap:4px;margin-top:24px}.tab{border-bottom:2px solid transparent;color:#71717a;font-size:13px;padding:11px 13px}.tab-active{border-bottom-color:#6366f1;color:#3730a3;font-weight:700}.content{padding:30px 32px;max-width:1000px}.content-head{align-items:center;display:flex;justify-content:space-between;margin-bottom:16px}.content-head h2{font-size:16px;margin:0}.add-board{background:#18181b;border-radius:6px;color:#fff;font-size:12px;font-weight:650;padding:8px 12px}.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}.board{background:#fff;border:1px solid #e4e4e7;border-radius:9px;display:flex;flex-direction:column;min-height:150px;padding:18px}.board-dot{background:#6366f1;border-radius:6px;height:28px;width:28px}.board h3{font-size:15px;margin:14px 0 3px}.board p{color:#71717a;font-size:12px;line-height:18px;margin:0}.board a{color:#4f46e5;font-size:12px;font-weight:650;margin-top:auto;padding-top:14px;text-decoration:none}.state{color:#71717a;font-size:13px;padding:20px 0}</style><div class=\"shell\"><aside class=\"sidebar\"><p class=\"brand\">Kanban</p><p class=\"nav-item\">Início</p><p class=\"nav-item nav-active\">Workspaces</p><p class=\"nav-item\">Produto Digital</p><p class=\"nav-item\">Marketing &amp; Growth</p></aside><main class=\"main\"><div class=\"crumbs\"><a data-av=\"workspace.back\" href=\"#\">Home</a><span>/</span><span>Workspace</span></div><div data-av=\"workspace.rows\"><section class=\"workspace-head\"><div class=\"workspace-title\"><span class=\"mark\">P</span><div><h1 data-av=\"workspace.name\">Produto Digital</h1><p data-av=\"workspace.description\">Time responsável pelo produto principal.</p></div></div><nav class=\"tabs\"><span class=\"tab tab-active\">Boards</span><span class=\"tab\">Membros</span><span class=\"tab\">Configurações</span></nav></section></div><div class=\"content\"><div class=\"content-head\"><h2>Boards</h2><span class=\"add-board\">+ Novo board</span></div><div class=\"state\" data-av=\"workspace.loading\">Carregando boards…</div><div data-av=\"workspace.ready\"><div class=\"grid\" data-av=\"workspace.boards\"><article class=\"board\"><span class=\"board-dot\"></span><h3 data-av=\"workspace.board.name\">Roadmap Q3</h3><p data-av=\"workspace.board.description\">Planejamento do próximo ciclo.</p><a data-av=\"workspace.board.open\" href=\"#\">Abrir board</a></article></div></div></div></main></div>"
+      }
+    },
+    {
+      "op": "html",
+      "data": {
+        "screen": "BoardKanban",
+        "title": "Board",
+        "layout": "blank",
+        "sources": [
+          { "action": "Board_GetKanban", "as": "LoadKanban", "args": { "BoardId": "BoardId" }, "state": true }
+        ],
+        "bindings": {
+          "board.back": { "kind": "navigate", "destination": "Home", "args": {} },
+          "board.columns": { "kind": "list", "source": "LoadKanban", "output": "Columns" },
+          "board.column.name": { "kind": "field", "field": "Name" },
+          "board.column.add": { "kind": "navigate", "destination": "CardForm", "args": { "BoardId": "BoardId", "ColumnId": "LoadKanban.Columns.Current.Id" } },
+          "board.cards": { "kind": "list", "source": "LoadKanban", "output": "Cards" },
+          "board.card.incolumn": { "kind": "visible", "condition": "LoadKanban.Cards.Current.ColumnId = LoadKanban.Columns.Current.Id and not LoadKanban.Cards.Current.IsArchived" },
+          "board.card.title": { "kind": "field", "field": "Title" },
+          "board.card.description": { "kind": "field", "field": "Description" },
+          "board.card.due": { "kind": "field", "field": "DueDate" },
+          "board.card.open": { "kind": "navigate", "destination": "CardDetails", "args": { "CardId": "LoadKanban.Cards.Current.Id" } },
+          "board.loading": { "kind": "visible", "condition": "not LoadKanban.IsDataFetched" },
+          "board.ready": { "kind": "visible", "condition": "LoadKanban.IsDataFetched and LoadKanban.FetchSucceeded" }
+        },
+        "html": "<style>.shell{background:#fff;display:flex;min-height:100vh;color:#18181b;font-family:Inter,Arial,sans-serif}.sidebar{background:#fafafa;border-right:1px solid #e4e4e7;box-sizing:border-box;flex:0 0 220px;padding:20px 12px}.brand{font-size:16px;font-weight:750;margin:0 8px 30px}.nav-item{border-radius:6px;color:#52525b;font-size:13px;margin:1px 0;padding:9px 10px}.nav-active{background:#f4f4f5;color:#18181b;font-weight:650}.board-main{min-width:0;width:100%}.crumbs{align-items:center;border-bottom:1px solid #e4e4e7;display:flex;gap:7px;padding:15px 24px}.crumbs a,.crumbs span{color:#71717a;font-size:12px;text-decoration:none}.toolbar{align-items:center;border-bottom:1px solid #e4e4e7;display:flex;justify-content:space-between;padding:18px 24px}.board-name{align-items:center;display:flex;gap:10px}.color{background:#6366f1;border-radius:5px;height:22px;width:22px}.board-name h1{font-size:18px;margin:0}.tools{align-items:center;display:flex;gap:7px}.tool{border:1px solid #e4e4e7;border-radius:6px;color:#52525b;font-size:12px;padding:7px 10px}.tool-primary{background:#18181b;border-color:#18181b;color:#fff}.filter{border-bottom:1px solid #e4e4e7;color:#71717a;font-size:12px;padding:13px 24px}.columns{display:flex;min-height:calc(100vh - 145px);overflow-x:auto}.column{background:#fafafa;border-right:1px solid #e4e4e7;box-sizing:border-box;flex:0 0 286px;min-height:480px}.column-head{align-items:center;background:#fff;border-bottom:1px solid #e4e4e7;display:flex;justify-content:space-between;padding:12px 13px}.column-head h2{font-size:12px;letter-spacing:.02em;margin:0}.column-head a{color:#71717a;font-size:20px;line-height:18px;text-decoration:none}.cards{display:flex;flex-direction:column;gap:8px;padding:10px}.card{background:#fff;border:1px solid #e4e4e7;border-radius:8px;padding:12px}.badge{background:#eef2ff;border-radius:999px;color:#4f46e5;font-size:10px;font-weight:700;padding:3px 7px}.card h3{font-size:13px;line-height:19px;margin:8px 0 0}.card p{color:#71717a;font-size:12px;line-height:17px;margin:5px 0 0}.card-foot{align-items:center;display:flex;justify-content:space-between;margin-top:12px}.due{color:#a1a1aa;font-size:11px}.initial{align-items:center;background:#6366f1;border:2px solid #fff;border-radius:50%;color:#fff;display:flex;font-size:9px;font-weight:750;height:26px;justify-content:center;width:26px}.card a{color:#4f46e5;font-size:11px;font-weight:700;text-decoration:none}.state{color:#71717a;font-size:13px;padding:24px}</style><div class=\"shell\"><aside class=\"sidebar\"><p class=\"brand\">Kanban</p><p class=\"nav-item\">Início</p><p class=\"nav-item nav-active\">Produto Digital</p><p class=\"nav-item\">Marketing &amp; Growth</p></aside><main class=\"board-main\"><div class=\"crumbs\"><a data-av=\"board.back\" href=\"#\">Home</a><span>/</span><span>Produto Digital</span><span>/</span><span>Board</span></div><header class=\"toolbar\"><div class=\"board-name\"><span class=\"color\"></span><h1>Board Kanban</h1></div><div class=\"tools\"><span class=\"tool\">Selecionar</span><span class=\"tool\">Arquivados</span><span class=\"tool\">Config.</span><span class=\"tool tool-primary\">+ Card</span></div></header><div class=\"filter\">Filtrar cards, responsáveis ou etiquetas…</div><div class=\"state\" data-av=\"board.loading\">Carregando board…</div><div data-av=\"board.ready\"><div class=\"columns\" data-av=\"board.columns\"><section class=\"column\"><header class=\"column-head\"><h2 data-av=\"board.column.name\">Backlog</h2><a data-av=\"board.column.add\" href=\"#\">+</a></header><div class=\"cards\" data-av=\"board.cards\"><div class=\"card\" data-av=\"board.card.incolumn\"><span class=\"badge\">Card</span><h3 data-av=\"board.card.title\">Título do card</h3><p data-av=\"board.card.description\">Descrição do card.</p><div class=\"card-foot\"><span class=\"due\" data-av=\"board.card.due\">Sem prazo</span><span class=\"initial\">MC</span></div><a data-av=\"board.card.open\" href=\"#\">Abrir card</a></div></div></section></div></div></main></div>"
+      }
+    },
+    {
+      "op": "html",
+      "data": {
+        "screen": "CardDetails",
+        "title": "Card",
+        "layout": "blank",
+        "vars": [
+          { "name": "CommentBody", "type": "Text" }
+        ],
+        "sources": [
+          { "action": "Card_GetById", "as": "LoadCard", "args": { "CardId": "CardId" }, "state": true },
+          { "action": "CardComment_List", "as": "LoadComments", "args": { "CardId": "CardId" }, "state": true },
+          { "action": "CardActivity_List", "as": "LoadActivities", "args": { "CardId": "CardId" }, "state": true },
+          { "action": "CardLabel_List", "as": "LoadLabels", "args": { "CardId": "CardId" }, "state": true },
+          { "action": "CardAssignee_List", "as": "LoadAssignees", "args": { "CardId": "CardId" }, "state": true }
+        ],
+        "bindings": {
+          "details.back": { "kind": "navigate", "destination": "Home", "args": {} },
+          "details.panel": { "kind": "visible", "condition": "LoadCard.IsDataFetched and LoadCard.FetchSucceeded and not LoadCard.Cards.Empty" },
+          "details.title": { "kind": "text", "value": "LoadCard.Cards.Current.Title" },
+          "details.description": { "kind": "text", "value": "LoadCard.Cards.Current.Description" },
+          "details.due": { "kind": "text", "value": "LoadCard.Cards.Current.DueDate" },
+          "details.archive": { "kind": "call", "action": "Card_Archive", "args": { "CardId": "LoadCard.Cards.Current.Id", "ActorId": "GetUserId()" } },
+          "details.comments": { "kind": "list", "source": "LoadComments", "output": "Comments" },
+          "details.comment.body": { "kind": "field", "field": "Body" },
+          "details.activities": { "kind": "list", "source": "LoadActivities", "output": "Activities" },
+          "details.activity.text": { "kind": "field", "field": "Details" },
+          "details.comment.editor": { "kind": "visible", "condition": "True" },
+          "details.loading": { "kind": "visible", "condition": "not LoadCard.IsDataFetched" },
+          "details.ready": { "kind": "visible", "condition": "LoadCard.IsDataFetched and LoadCard.FetchSucceeded" }
+        },
+        "html": "<style>.shell{background:#fff;display:flex;min-height:100vh;color:#18181b;font-family:Inter,Arial,sans-serif}.sidebar{background:#fafafa;border-right:1px solid #e4e4e7;box-sizing:border-box;flex:0 0 220px;padding:20px 12px}.brand{font-size:16px;font-weight:750;margin:0 8px 30px}.nav-item{border-radius:6px;color:#52525b;font-size:13px;margin:1px 0;padding:9px 10px}.nav-active{background:#f4f4f5;color:#18181b;font-weight:650}.detail-main{min-width:0;width:100%}.crumbs{align-items:center;border-bottom:1px solid #e4e4e7;display:flex;gap:7px;padding:15px 32px}.crumbs a,.crumbs span{color:#71717a;font-size:12px;text-decoration:none}.detail{display:grid;grid-template-columns:minmax(0,1fr) 268px;min-height:calc(100vh - 47px)}.article{padding:34px 42px}.topline{align-items:center;display:flex;justify-content:space-between}.pill{background:#eef2ff;border-radius:999px;color:#4f46e5;font-size:11px;font-weight:700;padding:4px 9px}.archive{background:#fff;border:1px solid #e4e4e7;border-radius:6px;color:#52525b;font-size:12px;padding:7px 10px}.article h1{font-size:26px;letter-spacing:-.04em;line-height:34px;margin:16px 0 8px}.description{color:#52525b;font-size:14px;line-height:22px;margin:0}.section{border-top:1px solid #e4e4e7;margin-top:28px;padding-top:21px}.section h2{font-size:14px;margin:0 0 13px}.comment{border-bottom:1px solid #f0f0f1;padding:12px 0}.comment strong{font-size:12px}.comment p{color:#52525b;font-size:13px;line-height:19px;margin:5px 0 0}.activity{color:#71717a;font-size:12px;padding:7px 0}.editor{background:#fafafa;border:1px solid #e4e4e7;border-radius:8px;margin-top:10px;padding:10px}.details-panel{background:#fafafa;border-left:1px solid #e4e4e7;padding:28px 22px}.details-panel h2{font-size:13px;margin:0 0 20px}.detail-row{border-bottom:1px solid #e4e4e7;padding:12px 0}.detail-row small{color:#a1a1aa;display:block;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}.detail-row p{font-size:12px;margin:6px 0 0}.state{color:#71717a;font-size:13px;padding:24px}.comment-input{margin-top:6px;width:100%}.comment-save{background:#18181b;border:0;border-radius:6px;color:#fff;font-size:12px;font-weight:650;margin-top:8px;padding:7px 11px}</style><div class=\"shell\"><aside class=\"sidebar\"><p class=\"brand\">Kanban</p><p class=\"nav-item\">Início</p><p class=\"nav-item nav-active\">Produto Digital</p></aside><main class=\"detail-main\"><div class=\"crumbs\"><a data-av=\"details.back\" href=\"#\">Home</a><span>/</span><span>Board</span><span>/</span><span>Card</span></div><div class=\"state\" data-av=\"details.loading\">Carregando card…</div><div data-av=\"details.ready\"><div class=\"detail\" data-av=\"details.panel\"><article class=\"article\"><div class=\"topline\"><span class=\"pill\">Prioridade normal</span><button class=\"archive\" data-av=\"details.archive\">Arquivar</button></div><h1 data-av=\"details.title\">Título do card</h1><p class=\"description\" data-av=\"details.description\">Descrição do card.</p><section class=\"section\"><h2>Comentários</h2><div data-av=\"details.comments\"><article class=\"comment\"><strong>Membro do time</strong><p data-av=\"details.comment.body\">Comentário.</p></article></div><div class=\"editor\" data-av=\"details.comment.editor\"><p>Adicionar comentário</p></div></section><section class=\"section\"><h2>Atividade</h2><div data-av=\"details.activities\"><p class=\"activity\" data-av=\"details.activity.text\">Atividade do card.</p></div></section></article><aside class=\"details-panel\"><h2>Detalhes</h2><div class=\"detail-row\"><small>Prazo</small><p data-av=\"details.due\">Sem prazo</p></div><div class=\"detail-row\"><small>Responsáveis</small><p>MC</p></div><div class=\"detail-row\"><small>Etiquetas</small><p>Sem etiquetas</p></div></aside></div></div></main></div>"
+      }
+    },
+    {
+      "op": "html",
+      "data": {
+        "screen": "CardForm",
+        "title": "Novo card",
+        "layout": "blank",
+        "sources": [
+          { "action": "Board_GetKanban", "as": "LoadFormBoard", "args": { "BoardId": "BoardId" }, "state": true }
+        ],
+        "vars": [
+          { "name": "CardTitle", "type": "Text" },
+          { "name": "CardDescription", "type": "Text" },
+          { "name": "CardPriorityId", "type": "CardPriority Identifier" },
+          { "name": "CardDueDate", "type": "Date" }
+        ],
+        "bindings": {
+          "form.cancel": { "kind": "navigate", "destination": "BoardKanban", "args": { "BoardId": "BoardId" } },
+          "form.title.field": { "kind": "visible", "condition": "True" },
+          "form.description.field": { "kind": "visible", "condition": "True" },
+          "form.priority.field": { "kind": "visible", "condition": "True" },
+          "form.due": { "kind": "date", "variable": "CardDueDate", "format": "yyyy-MM-dd" },
+          "form.save.field": { "kind": "visible", "condition": "True" }
+        },
+        "html": "<style>.form-screen{align-items:center;background:#f4f4f5;box-sizing:border-box;display:flex;justify-content:center;min-height:100vh;padding:28px;color:#18181b;font-family:Inter,Arial,sans-serif}.dialog{background:#fff;border:1px solid #e4e4e7;border-radius:12px;box-shadow:0 22px 65px rgba(24,24,27,.16);box-sizing:border-box;max-width:570px;padding:25px;width:100%}.dialog-head{align-items:flex-start;border-bottom:1px solid #e4e4e7;display:flex;justify-content:space-between;margin-bottom:21px;padding-bottom:17px}.dialog h1{font-size:19px;letter-spacing:-.03em;margin:0}.dialog-head p{color:#71717a;font-size:12px;margin:4px 0 0}.field{margin-top:16px}.field-label{color:#3f3f46;font-size:12px;font-weight:700;margin:0 0 7px}.field-help{color:#71717a;font-size:11px;margin:4px 0 0}.form-input,.form-textarea,.form-priority{border:1px solid #d4d4d8;border-radius:7px;box-sizing:border-box;font-size:13px;width:100%}.form-textarea{min-height:86px}.footer{align-items:center;border-top:1px solid #e4e4e7;display:flex;gap:8px;justify-content:flex-end;margin-top:24px;padding-top:17px}.cancel{color:#52525b;font-size:12px;padding:8px 11px;text-decoration:none}.save-card{background:#18181b;border:0;border-radius:6px;color:#fff;font-size:12px;font-weight:700;padding:8px 13px}.DatePicker{width:100%}</style><main class=\"form-screen\"><section class=\"dialog\"><header class=\"dialog-head\"><div><h1>Novo card</h1><p>Adicione um item ao board.</p></div><span>×</span></header><div class=\"field\" data-av=\"form.title.field\"><p class=\"field-label\">Título</p></div><div class=\"field\" data-av=\"form.description.field\"><p class=\"field-label\">Descrição</p></div><div class=\"field\" data-av=\"form.priority.field\"><p class=\"field-label\">Prioridade</p></div><div class=\"field\"><p class=\"field-label\">Prazo</p><input type=\"date\" class=\"form-input\" data-av=\"form.due\"></div><div class=\"field\"><p class=\"field-label\">Responsável</p><p class=\"field-help\">O card será criado por você.</p></div><footer class=\"footer\"><a class=\"cancel\" data-av=\"form.cancel\" href=\"#\">Cancelar</a><div data-av=\"form.save.field\"></div></footer></section></main>"
+      }
+    },
+    { "op": "create", "parent": "IMobileScreen:CardDetails/#IMobileBlockInstanceWidget/Content/Page", "type": "ITextArea", "name": "CommentBodyInput", "as": "$commentInput" },
+    { "op": "set", "target": "$commentInput", "prop": "Variable", "value": "CommentBody" },
+    { "op": "set", "target": "$commentInput", "prop": "Prompt", "value": "\"Escreva um comentário…\"" },
+    { "op": "set", "target": "$commentInput", "prop": "TextLines", "value": 3 },
+    { "op": "set", "target": "$commentInput", "prop": "Style", "value": "\"comment-input\"" },
+    { "op": "create", "parent": "IMobileScreen:CardDetails/#IMobileBlockInstanceWidget/Content/Page", "type": "IButton", "name": "SaveComment", "as": "$saveCommentButton" },
+    { "op": "set", "target": "$saveCommentButton/#ITextWidget", "prop": "Text", "value": "Enviar comentário" },
+    { "op": "set", "target": "$saveCommentButton", "prop": "Style", "value": "\"comment-save\"" },
+    { "op": "create", "parent": "IMobileScreen:CardDetails", "type": "IScreenAction", "name": "CreateComment", "as": "$createComment" },
+    { "op": "create", "parent": "$createComment", "type": "IStartNode", "as": "$createCommentStart" },
+    { "op": "create", "parent": "$createComment", "type": "IExecuteServerActionNode", "name": "CardComment_Create", "as": "$createCommentCall" },
+    { "op": "set", "target": "$createCommentCall", "prop": "Action", "value": "IServiceAction:CardComment_Create" },
+    { "op": "set", "target": "$createCommentCall/CardId", "prop": "Value", "value": "CardId" },
+    { "op": "set", "target": "$createCommentCall/AuthorId", "prop": "Value", "value": "GetUserId()" },
+    { "op": "set", "target": "$createCommentCall/Body", "prop": "Value", "value": "CommentBody" },
+    { "op": "create", "parent": "$createComment", "type": "IRefreshDataNode", "name": "RefreshComments", "as": "$refreshComments" },
+    { "op": "set", "target": "$refreshComments", "prop": "DataSource", "value": "IMobileScreen:CardDetails/LoadComments" },
+    { "op": "create", "parent": "$createComment", "type": "IEndNode", "as": "$createCommentEnd" },
+    { "op": "link", "from": "$createCommentStart", "to": "$createCommentCall" },
+    { "op": "link", "from": "$createCommentCall", "to": "$refreshComments" },
+    { "op": "link", "from": "$refreshComments", "to": "$createCommentEnd" },
+    { "op": "layout", "target": "$createComment" },
+    { "op": "set", "target": "$saveCommentButton/OnClick", "prop": "Destination", "value": "$createComment" },
+    { "op": "create", "parent": "IMobileScreen:CardForm/#IMobileBlockInstanceWidget/Content/Page", "type": "IInput", "name": "TitleInput", "as": "$titleInput" },
+    { "op": "set", "target": "$titleInput", "prop": "Variable", "value": "CardTitle" },
+    { "op": "set", "target": "$titleInput", "prop": "Prompt", "value": "\"Ex.: Preparar revisão de UX\"" },
+    { "op": "set", "target": "$titleInput", "prop": "Mandatory", "value": "True" },
+    { "op": "set", "target": "$titleInput", "prop": "Style", "value": "\"form-input\"" },
+    { "op": "create", "parent": "IMobileScreen:CardForm/#IMobileBlockInstanceWidget/Content/Page", "type": "ITextArea", "name": "DescriptionInput", "as": "$descriptionInput" },
+    { "op": "set", "target": "$descriptionInput", "prop": "Variable", "value": "CardDescription" },
+    { "op": "set", "target": "$descriptionInput", "prop": "Prompt", "value": "\"Inclua o contexto e os critérios de conclusão\"" },
+    { "op": "set", "target": "$descriptionInput", "prop": "TextLines", "value": 4 },
+    { "op": "set", "target": "$descriptionInput", "prop": "Style", "value": "\"form-textarea\"" },
+    { "op": "create", "parent": "IMobileScreen:CardForm", "type": "IScreenAggregate", "name": "GetPriorities", "as": "$priorities" },
+    { "op": "create", "parent": "$priorities", "type": "IAliasedSource", "args": { "dataSource": "IStaticEntity:CardPriority" } },
+    { "op": "create", "parent": "IMobileScreen:CardForm/#IMobileBlockInstanceWidget/Content/Page", "type": "IDropdown", "name": "PriorityInput", "as": "$priorityInput" },
+    { "op": "set", "target": "$priorityInput", "prop": "List", "value": "GetPriorities.List" },
+    { "op": "set", "target": "$priorityInput", "prop": "Values", "value": "CardPriority.Id" },
+    { "op": "set", "target": "$priorityInput", "prop": "Labels", "value": "CardPriority.Label" },
+    { "op": "set", "target": "$priorityInput", "prop": "Variable", "value": "CardPriorityId" },
+    { "op": "set", "target": "$priorityInput", "prop": "Style", "value": "\"form-priority\"" },
+    { "op": "create", "parent": "IMobileScreen:CardForm/#IMobileBlockInstanceWidget/Content/Page", "type": "IButton", "name": "CreateCardButton", "as": "$createCardButton" },
+    { "op": "set", "target": "$createCardButton/#ITextWidget", "prop": "Text", "value": "Criar card" },
+    { "op": "set", "target": "$createCardButton", "prop": "Style", "value": "\"save-card\"" },
+    { "op": "create", "parent": "IMobileScreen:CardForm", "type": "IScreenAction", "name": "CreateCard", "as": "$createCard" },
+    { "op": "create", "parent": "$createCard", "type": "IStartNode", "as": "$createCardStart" },
+    { "op": "create", "parent": "$createCard", "type": "IExecuteServerActionNode", "name": "Card_Create", "as": "$createCardCall" },
+    { "op": "set", "target": "$createCardCall", "prop": "Action", "value": "IServiceAction:Card_Create" },
+    { "op": "set", "target": "$createCardCall/BoardId", "prop": "Value", "value": "BoardId" },
+    { "op": "set", "target": "$createCardCall/ColumnId", "prop": "Value", "value": "ColumnId" },
+    { "op": "set", "target": "$createCardCall/Title", "prop": "Value", "value": "CardTitle" },
+    { "op": "set", "target": "$createCardCall/Description", "prop": "Value", "value": "CardDescription" },
+    { "op": "set", "target": "$createCardCall/PriorityId", "prop": "Value", "value": "CardPriorityId" },
+    { "op": "set", "target": "$createCardCall/SortOrder", "prop": "Value", "value": "0" },
+    { "op": "set", "target": "$createCardCall/DueDate", "prop": "Value", "value": "CardDueDate" },
+    { "op": "set", "target": "$createCardCall/CreatedBy", "prop": "Value", "value": "GetUserId()" },
+    { "op": "create", "parent": "$createCard", "type": "IEndNode", "as": "$createCardEnd" },
+    { "op": "link", "from": "$createCardStart", "to": "$createCardCall" },
+    { "op": "link", "from": "$createCardCall", "to": "$createCardEnd" },
+    { "op": "layout", "target": "$createCard" },
+    { "op": "set", "target": "$createCardButton/OnClick", "prop": "Destination", "value": "$createCard" },
+    { "op": "get", "target": "IMobileScreen:Home" },
+    { "op": "get", "target": "IMobileScreen:WorkspaceOverview" },
+    { "op": "get", "target": "IMobileScreen:BoardKanban" },
+    { "op": "get", "target": "IMobileScreen:CardDetails" },
+    { "op": "get", "target": "IMobileScreen:CardForm" }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+ "description": "Icon tipico: icone dentro de um botao, ao lado do texto (o ITextWidget de nascenca continua); o botao refaz o aggregate de tarefas.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetTaskTotals", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "ReloadTasks", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Recarrega as tarefas",
+    "steps": [{"node": "IRefreshDataNode", "as": "RefreshTotals", "properties": {"DataSource": "IScreenAggregate:GetTaskTotals"}}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IButton", "name": "ReloadButton", "as": "$btn"},
+  {"op": "create", "parent": "$btn", "type": "IIcon", "name": "ReloadIcon", "as": "$ico"},
+  {"op": "set", "target": "$ico", "prop": "Icon", "value": "refresh"},
+  {"op": "move", "target": "$ico", "first": true},
+  {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": " Reload"},
+  {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "IScreenAction:ReloadTasks"},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$total"},
+  {"op": "set", "target": "$total", "prop": "Value", "value": "GetTaskTotals.Count + \" task(s)\""}
+ ]
+}

@@ -1,0 +1,62 @@
+{
+ "description": "Processo BPT com atividades automaticas e fluxo ligado.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "ProcessMissingInboxDetail",
+   "element": "Headless_CS (ESpace) / ApproveBooking (Process)",
+   "why": "Processo minimo sem tela de detalhe de Taskbox; o teste demonstra as atividades automaticas e os conectores."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IProcess",
+   "name": "ApproveBooking",
+   "as": "$p"
+  },
+  {
+   "op": "dump",
+   "target": "$p",
+   "depth": 1
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IStartNode",
+   "name": "Start",
+   "as": "$start"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IAutomaticActivityNode",
+   "name": "Notify",
+   "as": "$auto"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEndNode",
+   "name": "End",
+   "as": "$end"
+  },
+  {
+   "op": "link",
+   "from": "$start",
+   "to": "$auto"
+  },
+  {
+   "op": "link",
+   "from": "$auto",
+   "to": "$end"
+  },
+  {
+   "op": "dump",
+   "target": "$p",
+   "depth": 2
+  }
+ ]
+}

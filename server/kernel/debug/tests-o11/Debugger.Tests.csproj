@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><StudioDir Condition="'$(StudioDir)' == ''">$(USERPROFILE)/OutSystems/Service Studio 11 - Anvil 4516/Service Studio</StudioDir><AssemblyName>SSAM.Debugger.Tests</AssemblyName></PropertyGroup>
+  <Import Project="../NativeReferences.props" />
+  <ItemGroup>
+    <Compile Remove="../shared/Program.cs" /><Compile Include="../tests/*.cs" />
+    <Compile Include="../o11/O11Authentication.cs" /><Compile Include="../o11/TransportFactory.cs" /><Compile Include="../../src/Anvil.Core/Kernel/Credentials.cs" />
+    <Compile Include="../o11/SoapTransport.cs" />
+    <Reference Include="$(StudioDir)/OutSystems.Communication.dll" Private="false" />
+    <Reference Include="$(StudioDir)/OutSystems.Communication.Identity.dll" Private="false" />
+    <Reference Include="$(StudioDir)/ServiceStudio.ServerCommunications.ServiceCenter.dll" Private="false" />
+    <Reference Include="$(StudioDir)/System.ServiceModel.Primitives.dll" Private="false" />
+    <Reference Include="$(StudioDir)/System.ServiceModel.Http.dll" Private="false" />
+    <Reference Include="$(StudioDir)/System.Private.ServiceModel.dll" Private="false" />
+  </ItemGroup>
+</Project>

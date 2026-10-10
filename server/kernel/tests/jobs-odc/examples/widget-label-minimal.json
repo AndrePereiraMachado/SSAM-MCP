@@ -1,0 +1,17 @@
+{
+ "description": "Label: a legenda no ITextWidget do Label e TargetWidget apontando o Input que ela descreve.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "LabelDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Coupon", "as": "$coupon"},
+  {"op": "set", "target": "$coupon", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "ILabel", "name": "CouponLabel", "as": "$lbl"},
+  {"op": "set", "target": "$lbl/#ITextWidget", "prop": "Text", "value": "Coupon code"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IInput", "name": "CouponInput", "as": "$in"},
+  {"op": "set", "target": "$in", "prop": "Variable", "value": "Coupon"},
+  {"op": "set", "target": "$lbl", "prop": "TargetWidget", "value": "$in", "_why": "o clique no Label foca o Input; o Input passa a ter o Label como consumidor"}
+ ]
+}

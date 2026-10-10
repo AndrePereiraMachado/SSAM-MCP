@@ -1,0 +1,16 @@
+{
+ "description": "Frente B (catalogo abrangente), faixa O11 Reactive: RENOMEAR o evento de bloco e o no de disparo sobre job:block-events-reactive (bloco RatingPicker com o evento OnRate, disparado pelo ITriggerNode RaiseOnRate da screen action Rate; a tela RatingDemo instancia o bloco como RatingPicker1 e liga o handler RatingPicker1_OnRate). No ODC o rename de IBlockEvent devolve sucesso e nao grava nada (tests/jobs-odc/block-event-lifecycle.json); no O11 nao estava medido. O job renomeia o evento e o trigger, le-os de volta pelos nomes novos e confirma que o handler da instancia e o disparo continuam ligados pela chave (usages do evento: 2).",
+ "base": "job:block-events-reactive",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "usages", "target": "IBlockEvent:OnRate", "_why": "ANTES: 2 consumidores (o trigger e o handler da instancia)"},
+  {"op": "rename", "target": "IBlockEvent:OnRate", "name": "OnRated", "_why": "1. o evento de bloco"},
+  {"op": "get", "target": "IMobileBlock:RatingPicker/OnRated", "_why": "lido pelo nome novo"},
+  {"op": "usages", "target": "IMobileBlock:RatingPicker/OnRated", "_why": "os mesmos 2 consumidores, pela chave"},
+  {"op": "rename", "target": "IMobileBlock:RatingPicker/Rate/RaiseOnRate", "name": "RaiseOnRated", "_why": "2. o no de disparo"},
+  {"op": "get", "target": "IMobileBlock:RatingPicker/Rate/RaiseOnRated", "_why": "lido pelo nome novo; Event continua o mesmo objeto"},
+  {"op": "get", "target": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent/RatingPicker1/#IEventHandler", "_why": "o handler da instancia continua ligado ao evento renomeado"},
+  {"op": "dump", "target": "IMobileBlock:RatingPicker", "depth": 5}
+ ]
+}

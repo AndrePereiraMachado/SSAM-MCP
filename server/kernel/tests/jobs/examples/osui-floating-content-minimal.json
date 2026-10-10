@@ -1,0 +1,10 @@
+{
+ "description": "FloatingContent (OutSystemsUI, Content) minimo: instancia como o Studio cria ao arrastar o bloco; inputs obrigatorios Position com valores simples.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "FloatingContentDemo", "source": "IMobileBlock:FloatingContent", "as": "$b"},
+  {"op": "set", "target": "$b/Position", "prop": "Value", "value": "Entities.Position.Right"}
+ ]
+}

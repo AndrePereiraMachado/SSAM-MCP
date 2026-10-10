@@ -1,0 +1,13 @@
+{
+ "description": "Marker do OutSystemsMaps: um marcador com Position (endereco ou \"lat, lng\") no AddOns_Placeholder de um LeafletMap.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "MarkerDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "LeafletMap1", "source": "IMobileBlock:LeafletMap", "as": "$map"},
+  {"op": "create", "parent": "$map/AddOns_Placeholder", "type": "IMobileBlockInstanceWidget", "name": "Marker1", "source": "IMobileBlock:Marker", "as": "$mk"},
+  {"op": "set", "target": "$mk/Position", "prop": "Value", "value": "\"38.7223, -9.1393\""}
+ ]
+}

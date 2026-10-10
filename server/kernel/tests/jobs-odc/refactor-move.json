@@ -1,0 +1,75 @@
+{
+ "description": "O espelho de tests/jobs/refactor-move.json na faixa ODC: reordenar atributos de uma entidade, widgets dentro de um container, parametros de entrada e variaveis de tela, e posicionar um no de fluxo. Cada move devolve a ORDEM que ficou. Prova que o verbo se comporta igual nas duas faixas, apesar de o IObject do ODC ter metodos de mover no proprio objeto que o kernel nao usa (usa os da sequencia, como no O11). A recusa de um irmao de outro pai esta em tests/jobs-odc-negative/move-foreign-sibling.json.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {"op": "spec", "data": {"entities": [
+   {"name": "WfMoveNotice", "attributes": [
+    {"name": "Title", "type": "Text", "mandatory": true, "length": 100},
+    {"name": "Body", "type": "Text", "length": 500},
+    {"name": "Rank", "type": "Integer"}
+   ]}
+  ]}},
+
+  {"op": "dump", "target": "$WfMoveNotice", "depth": 2},
+  {"op": "move", "target": "$WfMoveNotice.Rank", "after": "$WfMoveNotice.Title", "_why": "Id, Title, Rank, Body"},
+  {"op": "move", "target": "$WfMoveNotice.Body", "first": true, "_why": "Body passa a frente do proprio Id: a API deixa nas duas faixas"},
+  {"op": "move", "target": "$WfMoveNotice.Body", "last": true},
+  {"op": "dump", "target": "$WfMoveNotice", "depth": 2},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfMoveScreen", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Mover\""},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "Box", "as": "$box"},
+  {"op": "create", "parent": "$box", "type": "IContainer", "name": "Um", "as": "$c1"},
+  {"op": "create", "parent": "$box", "type": "IContainer", "name": "Dois", "as": "$c2"},
+  {"op": "create", "parent": "$box", "type": "IContainer", "name": "Tres", "as": "$c3"},
+  {"op": "dump", "target": "$box", "depth": 2},
+
+  {"op": "move", "target": "$c3", "first": true, "_why": "Tres, Um, Dois"},
+  {"op": "move", "target": "$c3", "after": "$c1", "_why": "Um, Tres, Dois -- o after decisivo"},
+  {"op": "move", "target": "$c1", "before": "$c2", "_why": "Tres, Um, Dois"},
+  {"op": "move", "target": "$c2", "last": true, "_why": "last e idempotente quando ja esta no fim"},
+  {"op": "dump", "target": "$box", "depth": 2},
+
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Zebra", "as": "$v1"},
+  {"op": "set", "target": "$v1", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Abelha", "as": "$v2"},
+  {"op": "set", "target": "$v2", "prop": "DataType", "value": "Integer"},
+
+  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "Beta", "as": "$beta"},
+  {"op": "create", "parent": "$beta", "type": "IInputParameter", "name": "Nome", "as": "$p1"},
+  {"op": "set", "target": "$p1", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$beta", "type": "IInputParameter", "name": "Quantos", "as": "$p2"},
+  {"op": "set", "target": "$p2", "prop": "DataType", "value": "Integer"},
+  {"op": "create", "parent": "$beta", "type": "IStartNode", "as": "$b0"},
+  {"op": "create", "parent": "$beta", "type": "IAssignNode", "as": "$b1"},
+  {"op": "set", "target": "$b1", "prop": "Label", "value": "PassoB"},
+  {"op": "create", "parent": "$b1", "type": "IAssignment", "as": "$b1a"},
+  {"op": "set", "target": "$b1a", "prop": "Variable", "value": "Zebra"},
+  {"op": "set", "target": "$b1a", "prop": "Value", "value": "Nome"},
+  {"op": "create", "parent": "$b1", "type": "IAssignment", "as": "$b1b"},
+  {"op": "set", "target": "$b1b", "prop": "Variable", "value": "Abelha"},
+  {"op": "set", "target": "$b1b", "prop": "Value", "value": "Quantos"},
+  {"op": "create", "parent": "$beta", "type": "IEndNode", "as": "$b9"},
+  {"op": "link", "from": "$b0", "to": "$b1"},
+  {"op": "link", "from": "$b1", "to": "$b9"},
+  {"op": "layout", "target": "$beta"},
+
+  {"op": "create", "parent": "$c1", "type": "IButton", "name": "GoBeta", "as": "$btnB"},
+  {"op": "set", "target": "$btnB/#ITextWidget", "prop": "Text", "value": "Beta"},
+  {"op": "set", "target": "$btnB/OnClick", "prop": "Destination", "value": "$beta"},
+  {"op": "set", "target": "$btnB/OnClick/Nome", "prop": "Value", "value": "\"ola\""},
+  {"op": "set", "target": "$btnB/OnClick/Quantos", "prop": "Value", "value": "1"},
+
+  {"op": "move", "target": "$p2", "first": true, "_why": "a ORDEM dos parametros de entrada e a ordem que quem chama ve"},
+  {"op": "move", "target": "$v2", "first": true, "_why": "Abelha, Zebra"},
+  {"op": "dump", "target": "$beta", "depth": 1},
+  {"op": "dump", "target": "$scr", "depth": 1},
+
+  {"op": "move", "target": "$b1", "x": 5000, "y": 3000},
+  {"op": "get", "target": "$b1"}
+ ]
+}

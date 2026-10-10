@@ -1,0 +1,65 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "native-widget",
+    "web:ICheckBoxWidget"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Subject",
+            "type": "ICheckBoxWidget",
+            "properties": {
+              "Variable": "Value",
+              "StyleClasses": "coverage"
+            }
+          },
+          {
+            "name": "Submit",
+            "type": "IButtonWidget",
+            "properties": {
+              "Label": "\"Submit\""
+            },
+            "events": {
+              "OnClick": {
+                "destination": "IWebScreen:Coverage/Handle1"
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value",
+            "type": "Boolean"
+          }
+        ]
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "name": "Handle1",
+          "kind": "screen",
+          "owner": "IWebScreen:Coverage",
+          "steps": []
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IWebScreen:Coverage/Subject",
+    "prop": "StyleClasses",
+    "value": "changed"
+  }
+}

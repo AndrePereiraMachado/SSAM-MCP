@@ -1,0 +1,38 @@
+{
+ "_leia": "No estagio oml: com a base igual ao candidato, todo achado do OML (inclusive N1/N2 dos helpers de nome) sai preexisting=true; a severidade nao muda.",
+ "stage": "oml",
+ "mode": "autor",
+ "oml": "o-composite-service.oml",
+ "baseOml": "o-composite-service.oml",
+ "exitCode": 1,
+ "mustFind": [
+  {
+   "rule": "D5",
+   "severity": "erro",
+   "preexisting": true
+  },
+  {
+   "rule": "N1",
+   "severity": "erro",
+   "preexisting": true
+  }
+ ],
+ "mustNotFind": [
+  {
+   "rule": "N1",
+   "preexisting": false
+  },
+  {
+   "rule": "N2",
+   "preexisting": false
+  },
+  {
+   "rule": "D5",
+   "preexisting": false
+  },
+  {
+   "rule": "P7",
+   "preexisting": false
+  }
+ ]
+}

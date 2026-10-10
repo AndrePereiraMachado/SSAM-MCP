@@ -1,0 +1,14 @@
+{
+ "description": "ODC: op rest (REST consumido declarativo) sobre a fixture do InsuranceApp, com estrutura declarada e input na URL; espelha tests/jobs/rest-spec-consume.json.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "rest", "data": {
+    "client": {"name": "WfSpecViaCepApi", "baseUrl": "https://viacep.com.br"},
+    "structures": [{"name": "WfSpecAddress", "attributes": [{"name": "cep", "type": "Text", "json": "cep"}, {"name": "uf", "type": "Text", "json": "uf"}]}],
+    "methods": [{"name": "WfSpecGetAddress", "http": "GET", "path": "/ws/{CEP}/json/",
+                 "inputs": [{"name": "CEP", "type": "Text", "in": "url"}], "response": {"structure": "WfSpecAddress"}}]}},
+  {"op": "get", "target": "IRestAction:WfSpecGetAddress"}
+ ]
+}

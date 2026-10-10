@@ -1,0 +1,6 @@
+{
+  "note": "O11 environments known to the Service Center tools. class personal: writes need the user's words and an operationId; any other class, and every host not listed here, counts as corporate: each write also needs confirmHost=<host> and words that name the environment. read-only refuses every write. No credential lives in this file.",
+  "hosts": {
+    "personal-2qqw9srv.outsystemscloud.com": { "class": "personal", "label": "Personal O11 environment (SSO); hibernates when idle" }
+  }
+}

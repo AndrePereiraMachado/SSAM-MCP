@@ -1,0 +1,13 @@
+{
+  "description": "Aggregate Current requires User before Name.",
+  "base": "job:data-action-entity-list-reactive",
+  "expectValid": true,
+  "ops": [
+    {
+      "op": "set",
+      "target": "IDataAction:GetGames/**IAssignment[1]",
+      "prop": "Value",
+      "value": "GetUsers.List.Current.Name"
+    }
+  ]
+}

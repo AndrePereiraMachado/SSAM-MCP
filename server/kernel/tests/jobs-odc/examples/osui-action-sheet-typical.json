@@ -1,0 +1,28 @@
+{
+ "description": "ActionSheet do OSUI: um botao abre a folha, dois botoes nos placeholders Button1/Button2 e o OnClose fecha (IsOpen volta a False).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ShareSheet", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Share\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "IsSheetOpen", "as": "$vIsSheetOpen"},
+  {"op": "set", "target": "$vIsSheetOpen", "prop": "DataType", "value": "Boolean"},
+  {"op": "logic", "data": {"actions": [{"name": "OpenSheet", "kind": "screen", "owner": "IMobileScreen:ShareSheet", "steps": [{"assign": {"IsSheetOpen": "True"}, "as": "Open"}]}]}},
+  {"op": "logic", "data": {"actions": [{"name": "CloseSheet", "kind": "screen", "owner": "IMobileScreen:ShareSheet", "steps": [{"assign": {"IsSheetOpen": "False"}, "as": "Close"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IButton", "name": "ShareButton", "as": "$bShareButton"},
+  {"op": "set", "target": "$bShareButton/#ITextWidget", "prop": "Text", "value": "Share"},
+  {"op": "set", "target": "$bShareButton/OnClick", "prop": "Destination", "value": "IMobileScreen:ShareSheet/OpenSheet"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ActionSheet1", "source": "IMobileBlock:ActionSheet", "as": "$as"},
+  {"op": "set", "target": "$as/IsOpen", "prop": "Value", "value": "IsSheetOpen"},
+  {"op": "set", "target": "$as/OnClose", "prop": "Handler", "value": "IMobileScreen:ShareSheet/CloseSheet"},
+  {"op": "create", "parent": "$as/Button1", "type": "IButton", "name": "CopyButton", "as": "$bCopyButton"},
+  {"op": "set", "target": "$bCopyButton/#ITextWidget", "prop": "Text", "value": "Copy link"},
+  {"op": "set", "target": "$bCopyButton/OnClick", "prop": "Destination", "value": "IMobileScreen:ShareSheet/CloseSheet"},
+  {"op": "create", "parent": "$as/Button2", "type": "IButton", "name": "CancelButton", "as": "$bCancelButton"},
+  {"op": "set", "target": "$bCancelButton/#ITextWidget", "prop": "Text", "value": "Cancel"},
+  {"op": "set", "target": "$bCancelButton/OnClick", "prop": "Destination", "value": "IMobileScreen:ShareSheet/CloseSheet"}
+ ]
+}

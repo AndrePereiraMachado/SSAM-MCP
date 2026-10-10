@@ -1,0 +1,23 @@
+{
+ "description": "A RECUSA de `duplicate` de um tipo que a plataforma nao copia sozinho (faixa O11): um Sort de agregado tem CanBeRootOfImport falso (o Copy do Studio fica desligado para ele) e so viaja dentro do agregado. Nenhum destino muda isso; a mensagem diz o porque e manda duplicar o IAggregateNode ou criar outro Sort.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectError": [
+  "duplicate: ISort '' cannot be copied on its own",
+  "CanBeRootOfImport is false",
+  "duplicate IAggregateNode 'DupQuery' instead"
+ ],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "DupEntity", "attributes": [{"name": "Title", "type": "Text", "length": 50}]}]}},
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "DupFlow", "as": "$flow"},
+  {"op": "create", "parent": "$flow", "type": "IStartNode", "as": "$start"},
+  {"op": "create", "parent": "$flow", "type": "IEndNode", "as": "$end"},
+  {"op": "create", "parent": "$flow", "type": "IAggregateNode", "name": "DupQuery", "as": "$query"},
+  {"op": "create", "parent": "$query", "type": "IAliasedSource", "args": {"dataSource": "$DupEntity"}, "as": "$source"},
+  {"op": "link", "from": "$start", "to": "$query"},
+  {"op": "link", "from": "$query", "to": "$end"},
+  {"op": "create", "parent": "$query", "type": "ISort", "as": "$sort"},
+  {"op": "set", "target": "$sort", "prop": "Attribute", "value": "DupEntity.Title"},
+  {"op": "duplicate", "target": "$sort", "as": "$copy"}
+ ]
+}

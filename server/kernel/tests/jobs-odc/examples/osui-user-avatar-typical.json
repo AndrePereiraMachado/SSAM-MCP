@@ -1,0 +1,24 @@
+{
+ "description": "UserAvatar do OSUI por linha: nome do registro, tamanho pequeno, forma redonda e cor por expressao.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Contact", "attributes": [{"name": "FullName", "type": "Text", "length": 100, "mandatory": true}, {"name": "IsVip", "type": "Boolean"}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ContactAvatars", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Contacts\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetContacts", "as": "$GetContacts"},
+  {"op": "create", "parent": "$GetContacts", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Contact"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "ContactList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetContacts.List"},
+  {"op": "create", "parent": "$list", "type": "IMobileBlockInstanceWidget", "name": "ContactAvatar", "source": "IMobileBlock:UserAvatar", "as": "$av"},
+  {"op": "set", "target": "$av/Name", "prop": "Value", "value": "GetContacts.List.Current.Contact.FullName"},
+  {"op": "set", "target": "$av/Size", "prop": "Value", "value": "Entities.Size.Small"},
+  {"op": "set", "target": "$av/Shape", "prop": "Value", "value": "Entities.Shape.Rounded"},
+  {"op": "set", "target": "$av/Color", "prop": "Value", "value": "If(GetContacts.List.Current.Contact.IsVip, Entities.Color.Violet, Entities.Color.Neutral5)"},
+  {"op": "create", "parent": "$list", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "GetContacts.List.Current.Contact.FullName"}
+ ]
+}

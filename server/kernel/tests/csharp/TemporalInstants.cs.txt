@@ -1,0 +1,49 @@
+using System.Globalization;
+public static class Instants
+{
+    public static TimeSpan Duration(long ticks)=>new(ticks);
+    public static TimeSpan Sum(TimeSpan a,TimeSpan b)=>a+b;
+    public static TimeSpan Difference(TimeSpan a,TimeSpan b)=>a-b;
+    public static TimeSpan Negate(TimeSpan a)=>-a;
+    public static TimeSpan Compound(TimeSpan a,TimeSpan b){a+=b;return a;}
+    public static TimeSpan? Lifted(TimeSpan? a,TimeSpan? b)=>a+b;
+    public static TimeSpan? LiftedNegate(TimeSpan? a)=>-a;
+    public static TimeSpan? CompoundNullable(TimeSpan? a,TimeSpan? b){a+=b;return a;}
+    public static long WrapProduct(long value)=>unchecked(value * -8589934591L);
+    public static TimeSpan Days(int days)=>TimeSpan.FromDays(days);
+    public static TimeSpan Minutes(int minutes)=>TimeSpan.FromMinutes(minutes);
+    public static TimeSpan RoundedMinutes()=>TimeSpan.FromMinutes(7686143365d);
+    public static TimeSpan PositiveLimit()=>TimeSpan.FromMinutes(15372286728.091293d);
+    public static TimeSpan BadDuration()=>TimeSpan.FromDays(double.NaN);
+    public static TimeSpan MinimumDuration()=>TimeSpan.MinValue;
+    public static TimeSpan MaximumDuration()=>TimeSpan.MaxValue;
+    public static long Product(int minutes)=>(long)minutes*TimeSpan.TicksPerMinute;
+    public static DateTimeOffset Make(long ticks,long offsetTicks)=>new(ticks,new TimeSpan(offsetTicks));
+    public static DateTimeOffset First()=>DateTimeOffset.MinValue;
+    public static DateTimeOffset Last()=>DateTimeOffset.MaxValue;
+    public static DateTimeOffset Shift(DateTimeOffset value,int minutes)=>value.AddMinutes(minutes);
+    public static DateTimeOffset Fraction(DateTimeOffset value)=>value.AddMinutes(0.00000001);
+    public static DateTimeOffset AddTicks(DateTimeOffset value,long ticks)=>value.AddTicks(ticks);
+    public static DateTimeOffset AddDuration(DateTimeOffset value,TimeSpan duration)=>value+duration;
+    public static DateTimeOffset SubtractDuration(DateTimeOffset value,TimeSpan duration)=>value-duration;
+    public static DateTimeOffset AddDurationMethod(DateTimeOffset value,TimeSpan duration)=>value.Add(duration);
+    public static DateTimeOffset? CompoundOffsetNullable(DateTimeOffset? value,TimeSpan? duration){value+=duration;return value;}
+    public static TimeSpan Elapsed(DateTimeOffset a,DateTimeOffset b)=>a-b;
+    public static long ClockTicks(DateTimeOffset value)=>value.Ticks;
+    public static long UtcTicks(DateTimeOffset value)=>value.UtcTicks;
+    public static TimeSpan Offset(DateTimeOffset value)=>value.Offset;
+    public static bool Same(DateTimeOffset a,DateTimeOffset b)=>a==b;
+    public static bool Exact(DateTimeOffset a,DateTimeOffset b)=>a.EqualsExact(b);
+    public static bool? Before(DateTimeOffset? a,DateTimeOffset? b)=>a<b;
+    public static DateOnly Date(DateTimeOffset value)=>DateOnly.FromDateTime(value.UtcDateTime);
+    public static TimeOnly Time(DateTimeOffset value)=>TimeOnly.FromDateTime(value.UtcDateTime);
+    public static int UtcKind(DateTimeOffset value)=>(int)value.UtcDateTime.Kind;
+    public static int CivilKind(DateTimeOffset value)=>(int)value.DateTime.Kind;
+    public static DateOnly CivilDate(DateTimeOffset value)=>DateOnly.FromDateTime(value.DateTime);
+    public static DateOnly DateFromTicks(long ticks)=>DateOnly.FromDateTime(new DateTime(ticks));
+    public static int KindFromTicks(long ticks,int kind)=>(int)new DateTime(ticks,(DateTimeKind)kind).Kind;
+    public static string Stamp(DateTimeOffset value)=>value.ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'",CultureInfo.InvariantCulture);
+    public static string Roundtrip(DateTimeOffset value)=>value.ToString("O",CultureInfo.InvariantCulture);
+    public static TimeSpan ClockDuration(TimeOnly time)=>time.ToTimeSpan();
+    public static TimeSpan ClockDifference(TimeOnly a,TimeOnly b)=>a-b;
+}

@@ -1,0 +1,49 @@
+{
+ "description": "Cobertura testada (fase 1, medir): del de ServiceStudio.Plugin.NRWidgets.IListItemAction (odc) em uiListItem. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "CovSScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IContainer",
+   "name": "CovSBox",
+   "as": "$box"
+  },
+  {
+   "op": "create",
+   "parent": "$box",
+   "type": "IListItem",
+   "name": "CovSItem",
+   "as": "$li"
+  },
+  {
+   "op": "delete",
+   "target": "$li/RightActions/#IListItemAction"
+  },
+  {
+   "op": "create",
+   "parent": "$li/RightActions",
+   "type": "IListItemAction",
+   "name": "CovAListItemAction",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

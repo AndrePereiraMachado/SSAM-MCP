@@ -1,0 +1,286 @@
+{
+ "schemaVersion": "ssam-discovery-fragment/1",
+ "contract": "ssam-catalog-contribution/1",
+ "front": "B",
+ "title": "Compact UI routes of the kernel: HTML fragment to native widgets (html-visual), screen archetypes (screen), whole page with bindings (html data)",
+ "reviewedAt": "2026-09-23",
+ "synonyms": {},
+ "capabilities": [
+  {
+   "id": "ui.html-visual",
+   "supersedes": [
+    "ui.html-visual"
+   ],
+   "category": "ui",
+   "title": "HTML/CSS fragment into an existing screen or block (native widgets)",
+   "keywords": [
+    "html",
+    "fragment",
+    "markup",
+    "css class",
+    "visual",
+    "layout of widgets"
+   ],
+   "summary": "The fragment becomes native widgets under an existing parent: div->Container, tags->IAdvancedHtml, text->Text, `{{ expr }}`->Expression (an OutSystems expression, never JavaScript), input/checkbox/textarea/select/button/a/label/img, `<div list as>`, `<div if>`/`<div else>`, `<Block name :Input @Event><slot>`; names must exist in the module; `<style>` is rewritten under the fragment root class. It is a translator of a closed table, not a general HTML/JS converter: logic, data and variables stay native.",
+   "route": {
+    "kind": "job",
+    "operation": "{\"op\":\"html\",\"parent\":\"<widget ref>\",\"file\":\"fragment.html\"}  (api --op html-visual)"
+   },
+   "contract": [
+    "html-visual.shape",
+    "html-visual.tags",
+    "html-visual.attributes",
+    "html-visual.rejected",
+    "html-visual.names"
+   ],
+   "depends": [
+    {
+     "id": "ui.screen",
+     "unless": "the parent screen or block already exists (the fragment always needs an existing parent)"
+    }
+   ],
+   "alternatives": [
+    {
+     "id": "ui.html-page",
+     "when": "a whole new page with a bindings manifest"
+    }
+   ],
+   "guidance": "The widgets it creates are the ones of ui.widget, ui.input, ui.list, ui.dropdown and ui.block-instance: their evidence is stated there per role. Events: `onclick` names an existing action; `<Block @Event>` sets the instance Handler and passes the event parameters by name.",
+   "example": {
+    "ops": [
+     "html"
+    ],
+    "max": 2
+   },
+   "platforms": {
+    "odc": {
+     "proofs": [
+      "html-visual-alert",
+      "html-visual-list",
+      "html-visual-block",
+      "block-events"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileScreen"
+      ]
+     },
+     "limits": [
+      {
+       "text": "Rejected: script, an <i> without weight, names that do not exist, tags outside the table, `#id` selectors, `@import`/at-statements, `<style media>`, attributes on an If or a block instance; logic, data and events stay in native verbs.",
+       "origin": "api --op html-visual rejected; kernel/src/Anvil.Core/Kernel/HtmlVisual.cs:184-244,409-429,493-521"
+      },
+      {
+       "text": "The parent must be inside an IMobileScreen or IMobileBlock; the fragment never creates logic, data or variables.",
+       "origin": "kernel/src/Anvil.Core/Kernel/HtmlVisual.cs:602-628"
+      }
+     ],
+     "differences": [
+      "IIcon has Weight on ODC (mandatory in the fragment)"
+     ]
+    },
+    "o11": {
+     "proofs": [
+      "html-visual-alert",
+      "html-visual-list",
+      "html-visual-block"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileScreen"
+      ]
+     },
+     "limits": [
+      {
+       "text": "Rejected: script, names that do not exist, tags outside the table, `#id` selectors; logic, data and events stay in native verbs. Traditional Web screens are not a target of this op.",
+       "origin": "api --op html-visual rejected; kernel/docs/UI-HTML-VISUAL.md"
+      }
+     ],
+     "differences": [
+      "IIcon has no Weight on O11"
+     ]
+    }
+   }
+  },
+  {
+   "id": "ui.screen-spec",
+   "supersedes": [
+    "ui.screen-spec"
+   ],
+   "category": "ui",
+   "title": "Screen archetypes (cards, table, detail, form, dashboard) by op screen",
+   "keywords": [
+    "archetype",
+    "cards",
+    "catalog",
+    "dashboard",
+    "detail tabs",
+    "table screen",
+    "pagination",
+    "search box"
+   ],
+   "summary": "One `screen` op declares screens by kind with source (entity or action), search, filters (native dropdown over a static entity), fields/columns/tabs/actions; the compiler composes OutSystemsUI blocks already referenced by the module (Search, Pagination, CardSectioned, Tabs, Gallery/Carousel, Counter).",
+   "route": {
+    "kind": "job",
+    "operation": "{\"op\":\"screen\",\"data\":{\"screens\":[{\"name\":\"X\",\"kind\":\"form\",...}]}}"
+   },
+   "contract": [
+    "screen.kinds",
+    "screen.shapes.screen",
+    "screen.shapes.source",
+    "screen.shapes.field",
+    "screen.shapes.filter",
+    "screen.shapes.action"
+   ],
+   "depends": [
+    {
+     "id": "data.entity",
+     "unless": "the source entity already exists"
+    }
+   ],
+   "alternatives": [
+    {
+     "id": "ui.screen",
+     "when": "the screen needs anything outside the archetypes, or the ODC proofs are needed today (raw verbs are the proven path there)"
+    }
+   ],
+   "guidance": "Deliver directly (the deliver call validates and refuses before any change; a headless proof only when the person asks for one); declare the required blocks by reading context.reads MobileBlockSignature.",
+   "example": {
+    "ops": [
+     "screen"
+    ],
+    "max": 2
+   },
+   "platforms": {
+    "odc": {
+     "proofs": [
+      "examples/cap-screen-spec-minimal",
+      "examples/cap-screen-spec-typical"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileBlockSignature"
+      ]
+     },
+     "limits": [
+      {
+       "text": "Accepted by the compiler for CrossDevice modules but no ODC job runs it (proven on O11: screen-spec-*.json). Form fields are input|textarea|checkbox only (no dropdown field); existing screen names are refused; the referenced OutSystemsUI blocks must exist in the module.",
+       "origin": "ScreenExpander (kernel); index: ODC jobs"
+      }
+     ],
+     "differences": []
+    },
+    "o11": {
+     "proofs": [
+      "screen-spec-cards-reactive",
+      "screen-spec-table-reactive",
+      "screen-spec-detail-tabs-reactive",
+      "screen-spec-form-reactive",
+      "screen-spec-dashboard-reactive",
+      "screen-spec-store-reactive",
+      "screen-spec-cards-mobile"
+     ],
+     "negative": [
+      "screen-unknown-kind"
+     ],
+     "context": {
+      "kinds": [
+       "MobileBlockSignature"
+      ]
+     },
+     "limits": [
+      {
+       "text": "Only Reactive and Mobile screens are supported by the archetypes: a Traditional Web module is refused ('only Reactive and Mobile screens are supported'); an unknown kind is refused.",
+       "origin": "kernel/src/Anvil.Core/Kernel/ScreenExpander.cs:33; jobs-negative/screen-unknown-kind"
+      }
+     ],
+     "differences": [
+      "proven in Reactive and Mobile (screen-spec-cards-mobile) modules"
+     ]
+    }
+   }
+  },
+  {
+   "id": "ui.html-page",
+   "supersedes": [
+    "ui.html-page"
+   ],
+   "category": "ui",
+   "title": "Whole page from HTML + bindings manifest (op html data)",
+   "keywords": [
+    "dashboard page",
+    "whole page",
+    "bindings",
+    "manifest",
+    "data-av"
+   ],
+   "summary": "The page HTML/CSS plus a typed bindings manifest (text, field, list, visible, style, class, date, navigate, call, refresh, page, block) compiled to native widgets, data sources and screen actions; CSS installed in the theme author half.",
+   "route": {
+    "kind": "job",
+    "operation": "{\"op\":\"html\",\"data\":{\"screen\":\"X\",\"html\":\"...\",\"bindings\":{...}}}  (api --op html)"
+   },
+   "contract": [
+    "html.shapes.data",
+    "html.kinds",
+    "html.tags",
+    "html.attributes"
+   ],
+   "depends": [],
+   "alternatives": [
+    {
+     "id": "ui.html-visual",
+     "when": "the logic stays native and only a fragment is authored (proven on both lanes)"
+    }
+   ],
+   "guidance": "JavaScript only enters as declared scripts[] that become client actions with a JavaScript node (basic input types); the browser rendering of the result is not verified by the kernel.",
+   "example": {
+    "ops": [
+     "html"
+    ],
+    "max": 2
+   },
+   "platforms": {
+    "odc": {
+     "proofs": [],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileScreen"
+      ]
+     },
+     "limits": [
+      {
+       "text": "No ODC job (proven on O11: html-dashboard-reactive.json). id selectors in CSS are always refused; <form>, <img>, <script>, <link>, <dialog>, <textarea>, <svg>, <iframe>, <video>, <audio> are rejected. Applying it to an existing screen that already has a lifecycle handler is refused.",
+       "origin": "index: ODC jobs; kernel/AGENTS.md 3.5; kernel/src/Anvil.Core/Kernel/HtmlExpander.cs:18-62; HtmlDelta.cs:111-115"
+      }
+     ],
+     "differences": []
+    },
+    "o11": {
+     "proofs": [
+      "html-dashboard-reactive",
+      "html-dashboard-update"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileScreen"
+      ]
+     },
+     "limits": [
+      {
+       "text": "Only Reactive and Mobile screens: Traditional Web modules are refused by the html op. The legacy `data.components` (HtmlComponents, JavaScript parsed, never evaluated) is not the route to use.",
+       "origin": "kernel/src/Anvil.Core/Kernel/HtmlExpander.cs:68; kernel/AGENTS.md:632"
+      }
+     ],
+     "differences": []
+    }
+   }
+  }
+ ],
+ "unavailable": [],
+ "coverage": []
+}

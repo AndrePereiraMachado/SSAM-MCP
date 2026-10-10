@@ -1,0 +1,664 @@
+{
+  "date": "2026-09-05",
+  "task": "Autoria HTML/CSS -> Incidents_UI/Dashboard nativo (op html): compilador, referencia completa, delta de tela existente, CSS no tema, provas headless",
+  "scope": "Sem bridge, worker, snapshot, merge no Studio, publicacao ou faixas; o ensaio no modulo real usa OMLs pos-merge do ultimo recibo (17:40) e nao e uma entrega",
+  "sources": {
+    "tests/html/incidents-dashboard.html": "d90f5be2b5ebe781549914f19b5c73029d65e0f91cfc20b8356fae24f0b0977c",
+    "tests/html/incidents-dashboard.bindings.json": "8e5bcbc857185f9a7fd0c24c6d14b21303e721791a2999b0971046daf0f22ed9",
+    "tests/html/incidents-dashboard.fixture.json": "ef1d33ecc0446bd7b955d4b467e6c5980909dbbe277a39356f573678e607cd1f",
+    "tests/html/incidents-dashboard.product.json": "c7e82882279f9fc5672aba7bf808b16bb48b526c453ec16a9e0bbfc4a06c500f",
+    "tests/jobs/html-dashboard-reactive.json": "013cc26bea38af7dab3ada5305d5d4d4dbae5e9ef1ddec6f565b7785e8cdcfeb",
+    "tests/jobs/html-dashboard-update.json": "ed2bdba9b1025154e9a9b5b4d055ce35aaa65d2c0780240dc22e8b8937edd63f",
+    "tests/jobs-live/html-dashboard-incidents.json": "d73cdd260c1f800906dab2078996b27f33035127e8a7d3d8a57fb936a603eafb"
+  },
+  "fixture": {
+    "base": "reactive-ui.oml",
+    "job": "html-dashboard-reactive.json",
+    "isValid": true,
+    "accepted": true,
+    "messages": 0,
+    "validation": {
+      "new": 0,
+      "fixed": 0,
+      "preexisting": 0,
+      "unexpected": 0,
+      "missingExpected": 0,
+      "ambiguous": 0
+    },
+    "mode": "create",
+    "htmlOps": 806,
+    "elements": 325,
+    "keys": 45,
+    "sources": [
+      "LoadDashboard",
+      "LoadNearDue",
+      "LoadMine",
+      "LoadRecent"
+    ],
+    "variables": {
+      "kept": [],
+      "created": [
+        "DashboardStartDate",
+        "DashboardEndDate",
+        "SearchText",
+        "Filter_PriorityId",
+        "StatusMax",
+        "LastDatePickerId"
+      ]
+    },
+    "stylesheet": {
+      "mode": "theme",
+      "scope": ".av-dashboard",
+      "rules": 84,
+      "chars": 5330,
+      "sha256": "7e1e0b755560e0ad4db692ca7b15139264e636ed0914d8e3aa7d6302a720d502",
+      "installed": true,
+      "scopedChars": 7040,
+      "theme": "Headless_UI"
+    },
+    "timingsMs": {
+      "loadMs": 1316,
+      "verifyBeforeMs": 0,
+      "applyMs": 8312,
+      "verifyAfterMs": 0,
+      "describeMs": 32,
+      "detailsMs": 137,
+      "saveMs": 941,
+      "releaseMs": 7,
+      "totalMs": 10749
+    },
+    "objects": 14000
+  },
+  "productRehearsal": {
+    "base": ".local/work/deliver/33813db3fb9c46c0a20847bb5293a42c/foreign.oml (Incidents_UI pos-merge 17:40, inventario, nao snapshot de entrega)",
+    "producer": ".local/work/deliver/4e40a61851e14a668f32db136f461d2d/foreign.oml (Incidents_CS pos-merge)",
+    "job": "tests/jobs-live/html-dashboard-incidents.json",
+    "isValid": true,
+    "accepted": true,
+    "messages": 0,
+    "validation": {
+      "new": 0,
+      "fixed": 0,
+      "preexisting": 0,
+      "unexpected": 0,
+      "missingExpected": 0,
+      "ambiguous": 0
+    },
+    "mode": "update",
+    "htmlOps": 797,
+    "elements": 323,
+    "keys": 45,
+    "sources": [
+      "LoadDashboard",
+      "LoadNearDue",
+      "LoadMine",
+      "LoadRecent"
+    ],
+    "variables": {
+      "kept": [
+        "DashboardStartDate",
+        "DashboardEndDate"
+      ],
+      "created": [
+        "SearchText",
+        "Filter_PriorityId",
+        "StatusMax",
+        "LastDatePickerId"
+      ]
+    },
+    "stylesheet": {
+      "mode": "theme",
+      "scope": ".av-dashboard",
+      "rules": 84,
+      "chars": 5330,
+      "sha256": "7e1e0b755560e0ad4db692ca7b15139264e636ed0914d8e3aa7d6302a720d502",
+      "installed": true,
+      "scopedChars": 7040,
+      "theme": "Incidents_UI"
+    },
+    "timingsMs": {
+      "loadMs": 2100,
+      "verifyBeforeMs": 2,
+      "applyMs": 13265,
+      "verifyAfterMs": 0,
+      "describeMs": 32,
+      "detailsMs": 191,
+      "saveMs": 1766,
+      "releaseMs": 9,
+      "totalMs": 17371
+    },
+    "delta": {
+      "screen": "k6ppUFvdxkCWTmO_wD3P5A",
+      "removed": {
+        "widgets": [
+          {
+            "name": "CardSectioned1",
+            "type": "IMobileBlockInstanceWidget",
+            "key": "4ELp_2G070mjRyXsywidKQ"
+          },
+          {
+            "name": "CardSectioned2",
+            "type": "IMobileBlockInstanceWidget",
+            "key": "+FfaizH49EKIOVk0K_h2vw"
+          },
+          {
+            "name": "CardSectioned3",
+            "type": "IMobileBlockInstanceWidget",
+            "key": "SgfXFCuWlUa3QeiZJecFfQ"
+          },
+          {
+            "name": "CardSectioned4",
+            "type": "IMobileBlockInstanceWidget",
+            "key": "zGm+ZqIRUU6vXXI97yyhFQ"
+          },
+          {
+            "name": "CardSectioned5",
+            "type": "IMobileBlockInstanceWidget",
+            "key": "KwLtiS3HRUe5DK1i+E3wcw"
+          },
+          {
+            "name": "CardSectioned6",
+            "type": "IMobileBlockInstanceWidget",
+            "key": "oqdxUM+OvkKO2M1wgwTxwg"
+          },
+          {
+            "name": "CardSectioned7",
+            "type": "IMobileBlockInstanceWidget",
+            "key": "s7YDthfVCUy_LygMDiCx2Q"
+          },
+          {
+            "name": "RefreshDashboard",
+            "type": "IButton",
+            "key": "nzezL8aOSkWwp2VDG+8wsA"
+          },
+          {
+            "name": "DashboardHeader",
+            "type": "IContainer",
+            "key": "bvDkygm6CEujToIpsq7i_w"
+          },
+          {
+            "name": "DashboardCharts",
+            "type": "IMobileBlockInstanceWidget",
+            "key": "C7iye0GstESlEQqg+Q2NoQ"
+          },
+          {
+            "name": "IncidentOperationalLists",
+            "type": "IContainer",
+            "key": "NNStlYmaqke3+oBhpzw0hA"
+          },
+          {
+            "name": "RefreshOperationalData",
+            "type": "IButton",
+            "key": "o4Uq25yc20yGBCBgu_v5Qg"
+          },
+          {
+            "name": "DashboardPeriodFilter",
+            "type": "IContainer",
+            "key": "Cp+LFQzSYUa6eCCvkElx0w"
+          }
+        ],
+        "title": [
+          {
+            "name": null,
+            "type": "IExpression",
+            "key": "FCMxyB_aVEyL+5scgq8dsQ"
+          }
+        ],
+        "screenActions": [
+          {
+            "name": "RefreshOperationalData",
+            "type": "IScreenAction",
+            "key": "4k1aEYLayU2mXg4LDbnhBg"
+          },
+          {
+            "name": "DashboardStartSelected",
+            "type": "IScreenAction",
+            "key": "d5ALuc13yk+1frEFGLeIig"
+          },
+          {
+            "name": "DashboardEndSelected",
+            "type": "IScreenAction",
+            "key": "SA3xeRAcGUuiMN8HiLJmiw"
+          },
+          {
+            "name": "RefreshDashboardHandler",
+            "type": "IScreenAction",
+            "key": "dvGY1SUuOEmNyxoWDP7Bzg"
+          }
+        ],
+        "dataActions": [
+          {
+            "name": "LoadOperationalData",
+            "type": "IDataAction",
+            "key": "KvnGiSOruUOSt8CHrxVmZQ"
+          },
+          {
+            "name": "LoadDashboard",
+            "type": "IDataAction",
+            "key": "iP182BVYg0CjQ7zAz6l50Q"
+          }
+        ],
+        "aggregates": []
+      },
+      "variablesPruned": [
+        "DashboardLastDatePickerId"
+      ],
+      "variablesKeptInUse": []
+    },
+    "reference": {
+      "producer": "Incidents_CS",
+      "added": 8,
+      "referenceExisted": true,
+      "referenceElements": [
+        "IServerActionSignature:GetIncidentDetails",
+        "IServerActionSignature:GetIncidentsNearDue",
+        "IServerActionSignature:GetIncidentList",
+        "IServerActionSignature:Category_SetActive",
+        "IServerActionSignature:ChangeIncidentPriority",
+        "IServerActionSignature:CanManageAssignments",
+        "IServerActionSignature:GetDashboardMetrics",
+        "IServerActionSignature:Incident_Create",
+        "IServerActionSignature:Category_Update",
+        "IServerActionSignature:GetDashboardMetricsForPeriod",
+        "IServerActionSignature:AddIncidentComment",
+        "IServerActionSignature:GetIncidentList2",
+        "IServerActionSignature:Category_Create",
+        "IServerActionSignature:ChangeIncidentStatus",
+        "IServerActionSignature:Category_Delete",
+        "IServerActionSignature:ChangeIncidentStatusWithData",
+        "IServerActionSignature:AssignIncident",
+        "IServerActionSignature:GetIncidentListBySla",
+        "IServerEntitySignature:IncidentComment",
+        "IServerEntitySignature:IncidentHistory",
+        "IStaticEntitySignature:IncidentPriority",
+        "IServerEntitySignature:Category",
+        "IStaticEntitySignature:IncidentStatus",
+        "IServerEntitySignature:Incident",
+        "IStructureSignature:IncidentPriorityMetric",
+        "IStructureSignature:IncidentDetail",
+        "IStructureSignature:IncidentStatusMetric",
+        "IRoleSignature:Administrator"
+      ],
+      "references": [
+        "OutSystemsCharts",
+        "(System)",
+        "OutSystemsMaps",
+        "OutSystemsUI",
+        "Users",
+        "Incidents_CS"
+      ]
+    }
+  },
+  "headlessMerge": {
+    "command": "anvil merge-probe --base <Incidents_UI pos-merge> --foreign .local/html-authoring-dev/product-rehearsal.oml",
+    "LocalObjects": 17125,
+    "ForeignObjects": 17125,
+    "LocalIsValid": true,
+    "Errors": 0,
+    "Warnings": 0,
+    "HasConflicts": false
+  },
+  "tests": {
+    "HtmlSpecTests": "32/32",
+    "JobTests": "html-dashboard-reactive, html-dashboard-update",
+    "HtmlDeltaTests": "chaves da tela e das variaveis preservadas, um bloco no tema, sem duplicatas, merge 3 vias sem conflito"
+  },
+  "rules": [
+    "Seletor CSS por id (#x) e sempre recusado (InvalidHTMLAttribute_Id); id so para label for -> TargetWidget",
+    "No JavaScript nao aceita lista de estrutura como input (InvalidPropertyValue_UnsupportedJSNodeInputVariableType): valores agregados sobre listas usam derived (logica nativa no OnAfterFetch)",
+    "IncidentList real nao tem input OnlyOpen: o card de abertos navega so com o periodo, como o Dashboard atual"
+  ],
+  "notProved": [
+    "Renderizacao e comparacao visual no navegador (referencia HTML vs pagina publicada)",
+    "Snapshot atual, merge no Studio e publicacao do Incidents_UI",
+    "Instalacao do build nas faixas SS4/SS5",
+    "Comportamento em execucao da funcao JS SlaCountdown e do OnAfterFetch (so Verify)",
+    "Forms, imagens, delta de tipo/reparenting de widgets, Figma",
+    "Publicacao e comparacao visual no navegador (publicacao e humana)"
+  ],
+  "blocker": "Acesso autenticado ao controlador (bridge.key no cache do pacote Codex): entrega e instalacao devem sair da sessao Codex ssam-app; ver plano, secao 8",
+  "delivery": {
+    "lane": "SS4 (bridge 4516)",
+    "module": "Incidents_UI",
+    "moduleKey": "0D3NmEARk0CxZTANvTsZdA",
+    "environment": "personal-2qqw9srv.outsystemscloud.com",
+    "taskId": "62f8fc591d9f443fa40fc36f3f68e1e7",
+    "receipt": ".local/work/deliver/62f8fc591d9f443fa40fc36f3f68e1e7/result.json",
+    "snapshotSha256": "C0D041E0DBE70C1E81375728BA6640A377171F3E310902F1C86309B99DB813EC",
+    "producer": "Incidents_CS snapshot atual (chave QnnqNFUBkkSC2CwErHWZMw)",
+    "job": "tests/jobs-live/html-dashboard-incidents.json",
+    "delivered": true,
+    "writeState": "applied",
+    "merge": {
+      "mode": "auto",
+      "hasConflicts": false,
+      "hasNoDifferences": false
+    },
+    "checks": {
+      "Dashboard": 1,
+      "Page": 1,
+      "LoadDashboard": 1,
+      "LoadRecent": 1,
+      "PeriodStart": 1,
+      "Recent": 1
+    },
+    "newErrors": 0,
+    "validation": {
+      "isValid": true,
+      "errors": 0,
+      "warnings": 18,
+      "new": [
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"_nMbS8FVGUij7gvUteOOrA\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / Dashboard (MobileScreen) / LoadDashboard (DataAction) / ReadSource (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        },
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"E0JtLxxzA0ambh6hL7Bkag\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / Dashboard (MobileScreen) / LoadMine (DataAction) / ReadSource (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        },
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"Lcp9JSelbESBZ5nP5m6Dug\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / Dashboard (MobileScreen) / LoadNearDue (DataAction) / ReadSource (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        },
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"JTnLMVhQw0\\u002B1tDPzDKWSpA\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / Dashboard (MobileScreen) / LoadRecent (DataAction) / ReadSource (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        }
+      ],
+      "fixed": [
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"6xvXFiygnEiEHSCxfGqYaQ\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / Dashboard (MobileScreen) / LoadDashboard (DataAction) / ReadSource (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        },
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"o8WLj2GuPU6hsoust1BYBg\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / Dashboard (MobileScreen) / LoadOperationalData (DataAction) / AppendPriorityPoint (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        },
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"3g\\u002Bngxarw0edijmBdcGNSQ\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / Dashboard (MobileScreen) / LoadOperationalData (DataAction) / AppendStatusPoint (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        },
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"zYW5vGsQSUaxbbdCHyQpBg\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / Dashboard (MobileScreen) / LoadOperationalData (DataAction) / ReadMetrics (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        },
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"ASYkQujqgU6N\\u002BJvDqdQigQ\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / Dashboard (MobileScreen) / LoadOperationalData (DataAction) / ReadMine (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        },
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"HJNN9COhoUK3adC1w24nww\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / Dashboard (MobileScreen) / LoadOperationalData (DataAction) / ReadNearDue (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        },
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"YRG6gjqB2EGhFnBjDUadFw\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / Dashboard (MobileScreen) / RefreshDashboardHandler (ScreenAction) / LoadDashboardSummary (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        }
+      ],
+      "preexisting": [
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"2pmS20ur60\\u002BGt1kADee0UQ\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / CategoryManagement (MobileScreen) / DeleteCategory (ScreenAction) / Category_Delete (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        },
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"RXjmUf2LI0yIKkMpv4Pesg\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / CategoryManagement (MobileScreen) / SaveCategory (ScreenAction) / Category_Create (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        },
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"UPi9RuB27UiAfQ4ch4S97g\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / CategoryManagement (MobileScreen) / SaveCategory (ScreenAction) / Category_Update (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        },
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"t1BCmVmlBkSVbL6oKday_w\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / CategoryManagement (MobileScreen) / ToggleCategoryActive (ScreenAction) / Category_SetActive (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        },
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"ZPh7LtdFMEmGgaKrkY4a_w\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / IncidentCreate (MobileScreen) / CreateIncidentHandler (ScreenAction) / Incident_Create (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        },
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"7jWPIUdvlEaABqh8UFIQFQ\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / IncidentCreate (MobileScreen) / LoadAssignmentPermission (DataAction) / ReadPermission (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        },
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"KUxkpEzjQkeqI5538FRa3Q\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / IncidentDetail (MobileScreen) / ApplyDetailAssignee (ScreenAction) / AssignIncident (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        },
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"pIxYPbNdn0WBsU72aGDmcw\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / IncidentDetail (MobileScreen) / ApplyDetailPriority (ScreenAction) / ChangeIncidentPriority (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        },
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"pXDGdc\\u002B_vkObX0x3_9Cuag\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / IncidentDetail (MobileScreen) / LoadIncident (DataAction) / ReadSource (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        },
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"vebN8YHNKkSuofPdiTSBJA\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / IncidentDetail (MobileScreen) / SubmitDetailComment (ScreenAction) / AddIncidentComment (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        },
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"5TWF_dMdMkSxn1nL9klE8A\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / IncidentDetail (MobileScreen) / TakeOwnershipHandler (ScreenAction) / AssignIncident (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        },
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"\\u002B_cECdfNMkGrNIopMeNa2w\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / IncidentList (MobileScreen) / LoadIncidents (DataAction) / ReadSource (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        },
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"3E7ti_9oeEW\\u002Bgsi5eWAgvQ\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / IncidentList (MobileScreen) / LoadIncidentsBySla (DataAction) / ReadIncidentsBySla (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        },
+        {
+          "id": "CustomObjectWarning",
+          "type": "Warning",
+          "key": "[\"CustomObjectWarning\",\"XySNs9w2EkCCHnwcbOTSdw\",[],[\"Security Warning\",\"You\\u0027re exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen.\"]]",
+          "path": "Incidents_UI (ESpace) / MainFlow (MobileFlow) / IncidentList (MobileScreen) / TakeOwnershipFromList (ScreenAction) / AssignIncident (ExecuteServerActionNode)",
+          "detail": "Security Warning | You're exposing a Server Action for public access and without authentication. Consider removing the Anonymous Role from this Screen."
+        }
+      ],
+      "newErrors": 0
+    },
+    "html": {
+      "mode": "update",
+      "expanded": 797,
+      "elements": 323
+    },
+    "stylesheetTheme": "Incidents_UI",
+    "delta": {
+      "screen": "k6ppUFvdxkCWTmO_wD3P5A",
+      "removed": {
+        "widgets": [
+          {
+            "name": "CardSectioned1",
+            "type": "IMobileBlockInstanceWidget",
+            "key": "4ELp_2G070mjRyXsywidKQ"
+          },
+          {
+            "name": "CardSectioned2",
+            "type": "IMobileBlockInstanceWidget",
+            "key": "+FfaizH49EKIOVk0K_h2vw"
+          },
+          {
+            "name": "CardSectioned3",
+            "type": "IMobileBlockInstanceWidget",
+            "key": "SgfXFCuWlUa3QeiZJecFfQ"
+          },
+          {
+            "name": "CardSectioned4",
+            "type": "IMobileBlockInstanceWidget",
+            "key": "zGm+ZqIRUU6vXXI97yyhFQ"
+          },
+          {
+            "name": "CardSectioned5",
+            "type": "IMobileBlockInstanceWidget",
+            "key": "KwLtiS3HRUe5DK1i+E3wcw"
+          },
+          {
+            "name": "CardSectioned6",
+            "type": "IMobileBlockInstanceWidget",
+            "key": "oqdxUM+OvkKO2M1wgwTxwg"
+          },
+          {
+            "name": "CardSectioned7",
+            "type": "IMobileBlockInstanceWidget",
+            "key": "s7YDthfVCUy_LygMDiCx2Q"
+          },
+          {
+            "name": "RefreshDashboard",
+            "type": "IButton",
+            "key": "nzezL8aOSkWwp2VDG+8wsA"
+          },
+          {
+            "name": "DashboardHeader",
+            "type": "IContainer",
+            "key": "bvDkygm6CEujToIpsq7i_w"
+          },
+          {
+            "name": "DashboardCharts",
+            "type": "IMobileBlockInstanceWidget",
+            "key": "C7iye0GstESlEQqg+Q2NoQ"
+          },
+          {
+            "name": "IncidentOperationalLists",
+            "type": "IContainer",
+            "key": "NNStlYmaqke3+oBhpzw0hA"
+          },
+          {
+            "name": "RefreshOperationalData",
+            "type": "IButton",
+            "key": "o4Uq25yc20yGBCBgu_v5Qg"
+          },
+          {
+            "name": "DashboardPeriodFilter",
+            "type": "IContainer",
+            "key": "Cp+LFQzSYUa6eCCvkElx0w"
+          }
+        ],
+        "title": [
+          {
+            "name": null,
+            "type": "IExpression",
+            "key": "FCMxyB_aVEyL+5scgq8dsQ"
+          }
+        ],
+        "screenActions": [
+          {
+            "name": "RefreshOperationalData",
+            "type": "IScreenAction",
+            "key": "4k1aEYLayU2mXg4LDbnhBg"
+          },
+          {
+            "name": "RefreshDashboardHandler",
+            "type": "IScreenAction",
+            "key": "dvGY1SUuOEmNyxoWDP7Bzg"
+          },
+          {
+            "name": "DashboardStartSelected",
+            "type": "IScreenAction",
+            "key": "d5ALuc13yk+1frEFGLeIig"
+          },
+          {
+            "name": "DashboardEndSelected",
+            "type": "IScreenAction",
+            "key": "SA3xeRAcGUuiMN8HiLJmiw"
+          }
+        ],
+        "dataActions": [
+          {
+            "name": "LoadDashboard",
+            "type": "IDataAction",
+            "key": "iP182BVYg0CjQ7zAz6l50Q"
+          },
+          {
+            "name": "LoadOperationalData",
+            "type": "IDataAction",
+            "key": "KvnGiSOruUOSt8CHrxVmZQ"
+          }
+        ],
+        "aggregates": []
+      },
+      "variablesPruned": [
+        "DashboardLastDatePickerId"
+      ],
+      "variablesKeptInUse": []
+    },
+    "elapsedMs": 20561,
+    "checkDelivery": "accepted, sources unchanged",
+    "toleratedWarnings": "4 CustomObjectWarning (Security Warning, Anonymous Role) nas data actions novas: mesma classe dos 7 avisos das data actions substituidas; declarados no job desta entrega, tolerados pelo gate daqui em diante",
+    "notPublished": true,
+    "browserComparison": "pendente (publicacao humana)"
+  },
+  "lanes": "SS4 aberto desta sessao (bridge autenticada neste contexto); CLI da faixa reconstruido do HEAD 5004e59 limpo (anvil.dll bd18f3eb); copia sincronizada em .local/lane-ss5/cli (SS5 fechado)"
+}

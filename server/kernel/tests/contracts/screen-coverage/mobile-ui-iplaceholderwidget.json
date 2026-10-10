@@ -1,0 +1,31 @@
+{
+  "fixture": "mobile-ui",
+  "features": [
+    "native-widget",
+    "mobile:IPlaceholderWidget"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IMobileBlock",
+        "flow": "MainFlow",
+        "properties": {},
+        "widgets": [
+          {
+            "name": "Subject",
+            "type": "IPlaceholderWidget",
+            "properties": {
+              "StyleClasses": "\"coverage\""
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "mutation": {
+    "target": "IMobileBlock:Coverage/Subject",
+    "prop": "StyleClasses",
+    "value": "\"changed\""
+  }
+}

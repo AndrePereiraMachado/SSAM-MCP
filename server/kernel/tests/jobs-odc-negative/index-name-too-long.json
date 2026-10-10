@@ -1,0 +1,29 @@
+{
+ "description": "ODC: a RECUSA de RENOMEAR um indice para um nome com mais de 28 caracteres: o ODC Studio trunca o nome em silencio (medido em 2026-09-23: UQ_WfCovMilestone_ProjectName ficava UQ_WfCovMilestone_ProjectNam). No `create` o kernel escreve o nome que o Studio guarda e relata em nameTruncations (D2, atritos 3); no `rename` o nome e escolha explicita do autor e o kernel recusa, nas duas faixas.",
+ "base": "job:data-full-model",
+ "expectValid": true,
+ "expectError": [
+  "EntityIndex name 'IX_WfCovTask_ThisNameIsTooLongForOdc' has 36 characters",
+  "truncates index names to 28",
+  "IX_WfCovTask_ThisNameIsTooLo"
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IServerEntity:WfCovTask",
+   "type": "EntityIndex",
+   "name": "IX_WfCovTask_TitleOnly",
+   "args": {
+    "unique": false,
+    "attributes": [
+     "IServerEntity:WfCovTask/Title"
+    ]
+   }
+  },
+  {
+   "op": "rename",
+   "target": "EntityIndex:IX_WfCovTask_TitleOnly",
+   "name": "IX_WfCovTask_ThisNameIsTooLongForOdc"
+  }
+ ]
+}

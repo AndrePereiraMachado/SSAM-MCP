@@ -1,0 +1,17 @@
+{
+ "description": "RangeSlider (OutSystemsUI, Interaction) minimo: instancia como o Studio cria ao arrastar o bloco; inputs obrigatorios MinValue, MaxValue, StartingValue com valores simples; evento obrigatorio OnValueChange ligado a uma screen action vazia.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAction", "name": "RangeSliderDemoOnValueChange", "as": "$hRangeSliderDemoOnValueChange"},
+  {"op": "create", "parent": "$hRangeSliderDemoOnValueChange", "type": "IStartNode", "as": "$hRangeSliderDemoOnValueChangeS"},
+  {"op": "create", "parent": "$hRangeSliderDemoOnValueChange", "type": "IEndNode", "as": "$hRangeSliderDemoOnValueChangeE"},
+  {"op": "link", "from": "$hRangeSliderDemoOnValueChangeS", "to": "$hRangeSliderDemoOnValueChangeE"},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "RangeSliderDemo", "source": "IMobileBlock:RangeSlider", "as": "$b"},
+  {"op": "set", "target": "$b/MinValue", "prop": "Value", "value": "0"},
+  {"op": "set", "target": "$b/MaxValue", "prop": "Value", "value": "100"},
+  {"op": "set", "target": "$b/StartingValue", "prop": "Value", "value": "50"},
+  {"op": "set", "target": "$b/OnValueChange", "prop": "Handler", "value": "IScreenAction:RangeSliderDemoOnValueChange"}
+ ]
+}

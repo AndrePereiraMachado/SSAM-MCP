@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "ssam-discovery-capabilities/1",
+  "lane": "o11",
+  "reviewedAt": "2026-09-23",
+  "note": "O11 lane descriptor of the shared-contract pilot. It carries only what is specific to this lane (routes, entries); every capability of this lane comes from discovery-capabilities-shared.json restricted to the pilot scope (static entities, records, structures, structure attributes). Nothing is inherited from the ODC descriptor: an intent outside the pilot answers with the coverage available on this lane, not with ODC capabilities.",
+  "routes": {
+    "job": {
+      "operation": "kernel job JSON {description, base, expectValid, expectedMessages, ops[]} using the compact ops (spec/logic/screen/html) or the raw verbs (api --op verbs)",
+      "prove": ".\\ssam job --lane o11 <job.json>  (only when the person asks for a headless proof on the declared base; delivers nothing) / MCP ssam_job {lane:\"o11\", job}",
+      "deliver": "o11_deliver {module, job, checks, authorize}  (directly: captures the open module, validates and merges in Service Studio in one call; o11_publish {module, authorize} publishes with the user's words)",
+      "entries": ["ssam job --lane o11", "ssam_job", "o11_job", "ssam deliver --lane o11"]
+    },
+    "reader": {
+      "operation": "read a capture (.oml) headless, starting with the module map; identities are bound to sourceSha256",
+      "prove": null,
+      "deliver": null,
+      "entries": [".\\ssam map --lane o11 <capture.oml> [--kind K] [--name N] [--prefix P] [--role R] [--parent @key] [--offset N] [--max N] (first: every element with its @key)", "ssam_map {lane:\"o11\", target:<capture.oml>, kind, name, prefix, role, parent, offset, max}", ".\\ssam inspect --lane o11 --oml <capture.oml> [--kind K] [--name N] [--text T] [--path P|@key] [--select ...] [--depth N] [--max N] --expectedSourceSha256 <hash>", "ssam_discover {lane:\"o11\", intent, app:<capture.oml>}"]
+    },
+    "data": {
+      "operation": "headless Edit Data on the development database",
+      "prove": null,
+      "deliver": null,
+      "entries": ["o11_data"]
+    },
+    "delivery": {
+      "operation": "job -> o11_deliver (snapshot, apply, checks, merge) -> o11_publish with the user's words",
+      "prove": null,
+      "deliver": null,
+      "entries": ["ssam deliver --lane o11 --module <M> --job <job> --checks <names>"]
+    }
+  },
+  "synonyms": {},
+  "capabilities": [],
+  "unavailable": []
+}

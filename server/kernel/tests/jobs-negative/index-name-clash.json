@@ -1,0 +1,10 @@
+{
+ "description": "A RECUSA de um indice com nome repetido na mesma entidade, sem distincao de maiusculas: IX_Contact_Email ja existe, ix_contact_email e recusado antes de tocar o modelo. O caminho limpo esta em tests/jobs/entity-lifecycle.json (lote de dados, fase 3).",
+ "base": "job:spec-data",
+ "expectValid": true,
+ "expectError": ["EntityIndex 'ix_contact_email' already exists on Contact"],
+ "ops": [
+  {"op": "create", "parent": "IServerEntity:Contact", "type": "EntityIndex", "name": "IX_Contact_Email", "args": {"unique": false, "attributes": ["IServerEntity:Contact/Email"]}},
+  {"op": "create", "parent": "IServerEntity:Contact", "type": "EntityIndex", "name": "ix_contact_email", "args": {"unique": true, "attributes": ["IServerEntity:Contact/Name"]}}
+ ]
+}

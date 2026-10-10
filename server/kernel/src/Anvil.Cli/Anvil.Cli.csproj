@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Anvil CLI (worker): subcomandos finos sobre Anvil.Core, um JSON por comando. Nunca escreve na instalacao do Studio. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>anvil</AssemblyName>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Anvil.Core\Anvil.Core.csproj" />
+    <!-- anvil xif: headless O11 .NET extensions (no Studio assembly is needed for these verbs). -->
+    <ProjectReference Include="..\Anvil.Xif\Anvil.Xif.csproj" />
+  </ItemGroup>
+</Project>

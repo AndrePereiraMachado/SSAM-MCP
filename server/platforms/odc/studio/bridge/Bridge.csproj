@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- One assembly name per bridge version. A loaded DLL is never replaced: a new version is a new name and a new pipe. -->
+    <AssemblyName>ODC3.Bridge.v48</AssemblyName>
+    <DefineConstants>$(DefineConstants);QUERY_TEST_ODC</DefineConstants>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <!-- Any ODC Studio: ../Directory.Build.targets falls back to the registered one and takes its newer framework copies. -->
+    <OdcInstall Condition="'$(OdcInstall)' == ''">$(ProgramFiles)\OutSystems\ODC Studio\ODC Studio</OdcInstall>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="$(OdcInstall)\OutSystems.Model.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.Model.V1.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.Model.Versioning.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.Model.Implementation.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.Model.Concurrency.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.Communication.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.MetaModel.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.Model.DependencyProviders.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.FrameworkExtensions.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.RuntimeCommon.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\ServiceStudio.Framework.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\ServiceStudio.Common.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\ServiceStudio.Presenter.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\ServiceStudio.ServerCommunications.API.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\ServiceStudio.ServerCommunications.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\ServiceStudio.Identity.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.ServiceStudio.Observability.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.ServiceStudio.PluginAPI.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.Model.Plugin.NRWidgets.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.C5.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\Avalonia.Base.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\Avalonia.Controls.dll" Private="false" />
+    <!-- Portal window (portal-session): the Studio's own embedded browser control and engine. -->
+    <Reference Include="$(OdcInstall)\WebViewControl.Avalonia.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\Xilium.CefGlue.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\Xilium.CefGlue.Common.dll" Private="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="StartupHook.cs" />
+    <Compile Include="QueryTestCommands.cs" />
+    <Compile Include="../../../../kernel/query-test/*.cs" Link="QueryTest/%(Filename)%(Extension)" />
+    <Compile Include="DataCommands.cs" />
+    <Compile Include="ReferenceCommands.cs" />
+    <Compile Include="AppCreationCommands.cs" />
+    <Compile Include="TemplateCache.cs" />
+    <Compile Include="PublishLogCore.cs" />
+    <Compile Include="MergeDiagnostics.cs" />
+    <Compile Include="PublishLogCommands.cs" />
+    <Compile Include="PortalCore.cs" />
+    <Compile Include="PortalCommands.cs" />
+    <Compile Include="PortalUpload.cs" />
+    <Compile Include="PortalVault.cs" />
+    <Compile Include="PublicSignatureReader.cs" />
+    <Compile Include="..\shared\Journal.cs" Link="shared\Journal.cs" />
+    <Compile Include="..\shared\Manifest.cs" Link="shared\Manifest.cs" />
+    <Compile Include="..\engine\NativeMergeVerification.cs" Link="engine\NativeMergeVerification.cs" />
+    <Compile Include="..\engine\NativeMergeOrder.cs" Link="engine\NativeMergeOrder.cs" />
+    <!-- The merge order's rule: the bridge's copy of kernel/src/Anvil.Core/Kernel/MergeOrder.cs, never the kernel file. -->
+    <Compile Include="MergeOrderCopy.cs" />
+    <!-- G-2 (C16): after the merge only errors and security warnings block, by the bridge's copy of the kernel's list
+         (kernel/src/Anvil.Core/Kernel/SecurityWarnings.cs), never the kernel file. -->
+    <Compile Include="SecurityWarningsCopy.cs" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,16 @@
+{
+ "description": "ODC: a RECUSA do create de um Button Group Item fora de um Button Group. A plataforma ODC ja recusava ('A Button Group Item must be placed inside a Button Group widget'); o kernel recusa antes, com o mesmo texto e o como fazer, igual nas duas faixas (no O11 o Verify nativo caia fora de qualquer op). Dentro do Content do grupo o create funciona: tests/jobs-coverage/odc/cov-nrwidgets-buttongroupitem-life.json. Cobertura testada, fase 2.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectError": [
+  "create IButtonGroupItem: a Button Group Item must be placed inside a Button Group widget",
+  "IContainer 'GroupLessBox' is not inside one",
+  "Create the IButtonGroup first"
+ ],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "GroupLess", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "GroupLessBox", "as": "$box"},
+  {"op": "create", "parent": "$box", "type": "IButtonGroupItem", "name": "LooseItem"}
+ ]
+}

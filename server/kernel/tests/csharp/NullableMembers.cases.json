@@ -1,0 +1,101 @@
+[
+  {
+    "method": "ReadValue",
+    "arguments": [
+      {
+        "Value": 0,
+        "HasValue": false
+      }
+    ],
+    "expected": 0
+  },
+  {
+    "method": "ReadHasValue",
+    "arguments": [
+      {
+        "Value": 9,
+        "HasValue": false
+      }
+    ],
+    "expected": false
+  },
+  {
+    "method": "Guarded",
+    "arguments": [
+      {
+        "Value": 7,
+        "HasValue": true
+      }
+    ],
+    "expected": 7
+  },
+  {
+    "method": "TextLength",
+    "arguments": [
+      "abc"
+    ],
+    "expected": 3
+  },
+  {
+    "method": "ListCount",
+    "arguments": [
+      [
+        1,
+        2
+      ]
+    ],
+    "expected": 2
+  },
+  {
+    "method": "ArraySum",
+    "arguments": [
+      [
+        2,
+        3
+      ]
+    ],
+    "expected": 5
+  },
+  {
+    "method": "ReadValue",
+    "arguments": [
+      null
+    ],
+    "exception": "NullReferenceException"
+  },
+  {
+    "method": "ReadHasValue",
+    "arguments": [
+      null
+    ],
+    "exception": "NullReferenceException"
+  },
+  {
+    "method": "TextLength",
+    "arguments": [
+      null
+    ],
+    "exception": "NullReferenceException"
+  },
+  {
+    "method": "ListCount",
+    "arguments": [
+      null
+    ],
+    "exception": "NullReferenceException"
+  },
+  {
+    "method": "ArraySum",
+    "arguments": [
+      null
+    ],
+    "exception": "NullReferenceException"
+  },
+  {
+    "method": "Guarded",
+    "arguments": [
+      null
+    ],
+    "exception": "ArgumentException"
+  }
+]

@@ -1,0 +1,110 @@
+{
+  "date": "2026-09-06",
+  "scope": "architecture research, not complete product implementation",
+  "nativeBlock": {
+    "passed": true,
+    "instances": 4,
+    "screens": 2,
+    "verify": true,
+    "reload": true,
+    "nativeMerge": true,
+    "identityPreserved": true,
+    "argumentAndSlotValuesPreserved": true,
+    "browserExecuted": false
+  },
+  "roslyn": {
+    "passed": true,
+    "properties": [
+      {
+        "Name": "Id",
+        "type": "Id<Incident>",
+        "nullable": "NotAnnotated",
+        "attributes": []
+      },
+      {
+        "Name": "Title",
+        "type": "string",
+        "nullable": "NotAnnotated",
+        "attributes": [
+          {
+            "name": "LengthAttribute",
+            "args": [
+              120
+            ]
+          }
+        ]
+      },
+      {
+        "Name": "ResolvedAt",
+        "type": "System.DateTime?",
+        "nullable": "Annotated",
+        "attributes": []
+      },
+      {
+        "Name": "Priority",
+        "type": "IncidentPriority",
+        "nullable": "NotAnnotated",
+        "attributes": []
+      }
+    ],
+    "enumValues": [
+      {
+        "Name": "Low",
+        "ConstantValue": 10
+      },
+      {
+        "Name": "Medium",
+        "ConstantValue": 20
+      },
+      {
+        "Name": "High",
+        "ConstantValue": 30
+      },
+      {
+        "Name": "Critical",
+        "ConstantValue": 40
+      }
+    ],
+    "operations": [
+      "Argument",
+      "Attribute",
+      "Binary",
+      "Block",
+      "ConstantPattern",
+      "DiscardPattern",
+      "FieldInitializer",
+      "FieldReference",
+      "Literal",
+      "MethodBodyOperation",
+      "NameOf",
+      "ObjectCreation",
+      "ParameterReference",
+      "PropertyInitializer",
+      "SwitchExpression",
+      "SwitchExpressionArm",
+      "Throw"
+    ],
+    "pureRuleCases": 7,
+    "integerHalf": 1,
+    "decimalHalf": 1.5,
+    "sourceDiagnostics": [
+      {
+        "Id": "CS0103",
+        "message": "O nome \"Unknown\" não existe no contexto atual",
+        "file": "Broken.cs",
+        "line": 1,
+        "column": 29
+      }
+    ],
+    "nativeTranslationImplemented": false,
+    "outSystemsBehaviorEquivalenceProven": false
+  },
+  "productChanged": false,
+  "startupHookTestedInStudio": false,
+  "sourceSha256": {
+    "Domain.cs.txt": "ff575a05b21b708966e2d322f2cd48921fc0431a1092245b3bd659f3f84f123f",
+    "native-block.json": "8a06b2285b3c6672257bb7698c23d5a398a70dd990cd391d0fb9ab501fab0605",
+    "Program.cs": "c30a7f2d2b285f8238660dbbee6e90230ce6a5ea752f431e7b4b23a2f2ea4c16",
+    "RoslynProbe.csproj": "1bdb0604b935c245019777c9d7fa9b805c4b74d0a5498d26fe8c456deddc393c"
+  }
+}

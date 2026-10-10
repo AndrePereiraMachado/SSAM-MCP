@@ -1,0 +1,1474 @@
+{
+  "schemaVersion": "ssam-discovery-fragment/1",
+  "contract": "ssam-catalog-contribution/1",
+  "front": "A",
+  "title": "Data consolidation (client entities, client variables, type objects, data signatures) and expressions/literals",
+  "reviewedAt": "2026-09-23",
+  "synonyms": {
+    "clients": [
+      "entidade do lado do cliente", "entidades do lado do cliente", "entidade local", "entidades locais", "armazenamento local", "armazenamento no dispositivo",
+      "dados offline", "local storage", "local entity", "local entities", "offline data", "device storage"
+    ],
+    "cliententity": [
+      "client entity", "client entities", "entidade do lado do cliente", "entidades do lado do cliente", "entidade local", "entidades locais", "local entity",
+      "local entities"
+    ],
+    "literal": ["literais", "literal de lista", "literal de registro", "literal de registo", "lista literal", "list literal", "record literal", "literals"],
+    "variable": ["variavel de cliente", "variaveis de cliente"],
+    "record literal field": ["record literal", "literal de registro", "literal de registo"]
+  },
+  "capabilities": [
+    {
+      "id": "data.client-entity",
+      "supersedes": ["data.client-entity"],
+      "category": "data",
+      "title": "ClientEntity (IClientEntity)",
+      "keywords": [
+        "cliententity", "entidade do lado do cliente", "entidade local", "entidades locais", "local entity", "local entities", "local storage", "armazenamento local", "dados offline", "offline data", "device storage",
+        "armazenamento no dispositivo"
+      ],
+      "summary": "Local storage on the device: create IClientEntity at @espace, add an Id IEntityAttribute (Long Integer, IsAutoNumber No) and set IdentifierAttribute; other attributes are the data.entity 'entity attribute' role. Records are written through its entity action CreateOrUpdate<Name> and read by a client-side screen aggregate.",
+      "route": {
+        "kind": "job",
+        "operation": "create IClientEntity at @espace; create IEntityAttribute Id + set DataType \"Long Integer\", IsAutoNumber \"No\"; set <entity> IdentifierAttribute $id; ({\"op\":\"spec\",\"data\":{\"clientEntities\":[...]}} is a compiler contract without a suite job)"
+      },
+      "contract": ["spec.shapes.data", "spec.rules", "verbs.verbs.create", "verbs.verbs.set", "verbs.verbs.get", "verbs.references"],
+      "guidance": "Declare the Id first (Long Integer, IsAutoNumber No: the device owns the id), then IdentifierAttribute. Write records with IExecuteClientActionNode + set Action IEntityActionSignature:CreateOrUpdate<Name> and <node>/Source Value; read them with a screen aggregate created with args.isClientSide true. Do not make it public: expose a public structure instead.",
+      "example": { "ops": ["create", "set"], "max": 9 },
+      "depends": [],
+      "recommends": [
+        { "id": "data.entity", "when": "attributes of the client entity (role entity attribute: Id, DataType, IsMandatory)" },
+        { "id": "logic.client-action", "when": "the client action that writes it with CreateOrUpdate<Name>" },
+        { "id": "logic.aggregate", "when": "reading it on a screen (screen aggregate with args.isClientSide, source = the client entity)" }
+      ],
+      "alternatives": [],
+      "elements": [
+        {
+          "role": "client entity",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Data.IClientEntity", "jobType": "IClientEntity", "address": "IClientEntity:<Name> (created under @espace)" },
+            "o11": { "native": "OutSystems.Model.Data.IClientEntity", "jobType": "IClientEntity", "address": "IClientEntity:<Name> (created under @espace)" }
+          }
+        }
+      ],
+      "operations": {
+        "read": {
+          "route": "get IClientEntity:<Name> (IdentifierAttribute and properties); dump for its attributes",
+          "preconditions": [],
+          "roles": {
+            "client entity": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["client-storage"],
+                "scope": "get of a new client entity shows its IdentifierAttribute; get of the Id shows Long Integer without AutoNumber"
+              },
+              "o11": { "status": "undetermined", "note": "no O11 job reads a client entity" }
+            }
+          }
+        },
+        "create": {
+          "route": "create IClientEntity at @espace, then its attributes (data.entity role entity attribute)",
+          "preconditions": [
+            "Id attribute Long Integer with IsAutoNumber No (the kernel's clientEntities default; the device owns the id)",
+            "set IdentifierAttribute after the Id exists", "not public (the spec compiler refuses a public client entity)"
+          ],
+          "roles": {
+            "client entity": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["client-storage"],
+                "scope": "new client entity with Id, a Text and a Date Time attribute in an app module; written through its entity action and read by a client-side screen aggregate"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["local-storage-mobile", "local-storage-notes-mobile"],
+                "scope": "same shape in a mobile module (two jobs)"
+              }
+            }
+          }
+        },
+        "set": {
+          "route": "set IClientEntity:<Name> IdentifierAttribute <attribute>",
+          "preconditions": ["the identifier attribute must be a child of the same client entity"],
+          "roles": {
+            "client entity": {
+              "odc": { "status": "applicable", "proofs": ["client-storage"], "props": ["IdentifierAttribute"], "scope": "IdentifierAttribute of a new client entity" },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["local-storage-mobile", "local-storage-notes-mobile"],
+                "props": ["IdentifierAttribute"],
+                "scope": "IdentifierAttribute of a new client entity in a mobile module"
+              }
+            }
+          }
+        },
+        "usages": {
+          "route": "usages IClientEntity:<Name>",
+          "preconditions": [],
+          "roles": {
+            "client entity": {
+              "odc": { "status": "undetermined", "note": "not exercised (consumers: local variables, client aggregates, entity actions)" },
+              "o11": { "status": "undetermined", "note": "not exercised" }
+            }
+          }
+        },
+        "rename": {
+          "route": "rename IClientEntity:<Name>",
+          "preconditions": [],
+          "roles": { "client entity": { "odc": { "status": "undetermined", "note": "not exercised" }, "o11": { "status": "undetermined", "note": "not exercised" } } }
+        },
+        "delete": {
+          "route": "delete IClientEntity:<Name>",
+          "preconditions": [],
+          "roles": { "client entity": { "odc": { "status": "undetermined", "note": "not exercised" }, "o11": { "status": "undetermined", "note": "not exercised" } } }
+        }
+      },
+      "platforms": {
+        "odc": {
+          "proofs": ["client-storage"],
+          "negative": [],
+          "context": { "kinds": ["ClientEntity"], "signatures": [] },
+          "limits": [
+            {
+              "text": "Public client entities are not preserved by native merge in this Studio build: the spec compiler refuses them; expose a public structure instead.",
+              "origin": "kernel/src/Anvil.Core/Kernel/ModuleSpecification.cs:96-97"
+            },
+            {
+              "text": "The Id of a client entity is not AutoNumber: the kernel's clientEntities default is IsAutoNumber No and the proof job sets No; a Verify refusal of AutoNumber Yes is declared in the job, not proven by a negative job.",
+              "origin": "kernel/src/Anvil.Core/Kernel/DataRequirements.cs:32; job:client-storage op 3 _why"
+            },
+            {
+              "text": "spec clientEntities is covered by a unit contract only; the proven path is the raw verbs.",
+              "origin": "kernel/tests/contracts/action-coverage/mobile-ui-client-local-storage.json; kernel/src/Anvil.Core/Kernel/SpecExpander.cs:48"
+            },
+            {
+              "text": "usages, rename, replace, duplicate and delete of a client entity have no job.",
+              "origin": "matrix a-matrix.json lanes.odc IClientEntity (create/set/get only)"
+            }
+          ],
+          "differences": []
+        },
+        "o11": {
+          "proofs": ["local-storage-mobile", "local-storage-notes-mobile"],
+          "negative": [],
+          "context": { "kinds": ["ClientEntity"], "signatures": [] },
+          "limits": [
+            {
+              "text": "Only create/set are proven; no O11 job reads a client entity back (get/dump), lists its usages, renames or deletes it.",
+              "origin": "kernel/tests/jobs/local-storage-mobile.json, local-storage-notes-mobile.json (no get/dump/usages/rename/delete)"
+            },
+            {
+              "text": "Public client entities are refused by the spec compiler (native merge does not preserve them).",
+              "origin": "kernel/src/Anvil.Core/Kernel/ModuleSpecification.cs:96-97"
+            },
+            {
+              "text": "Proofs run on a mobile module; Reactive Web and Traditional Web modules are not exercised.",
+              "origin": "jobs local-storage-mobile, local-storage-notes-mobile (base tests/fixtures/mobile-ui.oml)"
+            }
+          ],
+          "differences": []
+        }
+      }
+    },
+    {
+      "id": "data.client-variable",
+      "category": "data",
+      "title": "ClientVariable (IClientVariable)",
+      "keywords": ["client variable", "client variables", "clientvariable", "variavel de cliente", "variaveis de cliente", "client side variable", "client state variable"],
+      "summary": "A client variable is an app-level value kept per user on the device: create IClientVariable at @espace and set DataType (Description optional). Expressions read it and assignments write it as Client.<Name>; usages lists those expressions and rename rewrites them.",
+      "route": {
+        "kind": "job",
+        "operation": "create IClientVariable at @espace; set DataType \"<type>\" (Description); cite it in expressions as Client.<Name>; usages / rename IClientVariable:<Name>"
+      },
+      "contract": ["verbs.verbs.create", "verbs.verbs.set", "verbs.verbs.usages", "verbs.verbs.rename", "verbs.references"],
+      "guidance": "Types are set by name (Text, Integer, Date Time...). The default value is a method (SetDefaultValue), not a writable property: no job sets it. Session variables do not exist on ODC: the client variable is the per-user state there.",
+      "example": { "ops": ["create", "set"], "max": 4 },
+      "depends": [],
+      "recommends": [
+        { "id": "logic.flow", "when": "the assignment that writes Client.<Name> in an action flow" },
+        { "id": "refactor.rename", "when": "renaming it (the expressions that cite it are rewritten by key)" }
+      ],
+      "alternatives": [],
+      "elements": [
+        {
+          "role": "client variable",
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.Data.IClientVariable",
+              "jobType": "IClientVariable",
+              "address": "IClientVariable:<Name> (created under @espace; Client.<Name> in expressions)"
+            },
+            "o11": {
+              "native": "OutSystems.Model.Data.IClientVariable",
+              "jobType": "IClientVariable",
+              "address": "IClientVariable:<Name> (created under @espace; Client.<Name> in expressions)"
+            }
+          }
+        }
+      ],
+      "operations": {
+        "read": {
+          "route": "get IClientVariable:<Name>",
+          "preconditions": [],
+          "roles": {
+            "client variable": {
+              "odc": { "status": "undetermined", "note": "no job reads the variable itself (get/dump); its consumers are read with usages" },
+              "o11": { "status": "undetermined", "note": "no O11 job reads a client variable" }
+            }
+          }
+        },
+        "create": {
+          "route": "create IClientVariable at @espace",
+          "preconditions": ["created at the app/module root (@espace)"],
+          "roles": {
+            "client variable": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["security-settings", "external-site-and-events", "platform-events-lifecycle"],
+                "scope": "new client variables (Text, Integer) at the app root, then read on a screen and written by an assignment"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["security-config-reactive"],
+                "scope": "a Text client variable in a reactive module"
+              }
+            }
+          }
+        },
+        "set": {
+          "route": "set IClientVariable:<Name> DataType \"<type>\" | Description \"<text>\"",
+          "preconditions": [],
+          "roles": {
+            "client variable": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["security-settings", "external-site-and-events", "platform-events-lifecycle"],
+                "props": ["DataType"],
+                "scope": "DataType (Text, Integer) and Description of a new client variable"
+              },
+              "o11": { "status": "applicable", "proofs": ["security-config-reactive"], "props": ["DataType"], "scope": "DataType Text" }
+            }
+          }
+        },
+        "usages": {
+          "route": "usages IClientVariable:<Name>",
+          "preconditions": [],
+          "roles": {
+            "client variable": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["security-settings", "external-site-and-events", "platform-events-lifecycle"],
+                "scope": "consumers are the expressions that cite it: a screen expression that reads it and the assignment that writes it"
+              },
+              "o11": { "status": "undetermined", "note": "not exercised on O11" }
+            }
+          }
+        },
+        "rename": {
+          "route": "rename IClientVariable:<Name> <NewName>",
+          "preconditions": [],
+          "roles": {
+            "client variable": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["platform-events-lifecycle"],
+                "scope": "rename of an inherited client variable rewrote Client.<Name> in the expressions that cite it (an assignment in a system event and a screen expression), read back with get and usages"
+              },
+              "o11": { "status": "undetermined", "note": "not exercised on O11" }
+            }
+          }
+        },
+        "delete": {
+          "route": "delete IClientVariable:<Name>",
+          "preconditions": [],
+          "roles": { "client variable": { "odc": { "status": "undetermined", "note": "not exercised" }, "o11": { "status": "undetermined", "note": "not exercised" } } }
+        }
+      },
+      "platforms": {
+        "odc": {
+          "proofs": ["security-settings", "external-site-and-events", "platform-events-lifecycle"],
+          "negative": [],
+          "context": { "kinds": ["ClientVariable"], "signatures": [] },
+          "limits": [
+            {
+              "text": "The default value is written by a method (SetDefaultValue), not a writable property; no job sets it.",
+              "origin": "docs/evidence/catalogo-abrangente/inventario-reconciliado/inventory.json (odc IClientVariable: writableOwn, ownMethods)"
+            },
+            {
+              "text": "read (get/dump of the variable), delete, duplicate and move of a client variable have no job.",
+              "origin": "matrix a-matrix.json lanes.odc IClientVariable (create/set/usages/rename only)"
+            },
+            {
+              "text": "Session variables do not exist on ODC (the factory refuses); the client variable is the per-user state.",
+              "origin": "kernel/tests/jobs-odc-negative/session-variable-not-in-odc.json"
+            }
+          ],
+          "differences": ["no session variables on ODC: the client variable is the per-user state"]
+        },
+        "o11": {
+          "proofs": ["security-config-reactive"],
+          "negative": [],
+          "context": { "kinds": ["ClientVariable"], "signatures": [] },
+          "limits": [
+            {
+              "text": "One O11 job proves create/set; usages, rename and reading the variable back are not exercised on O11.",
+              "origin": "kernel/tests/jobs/security-config-reactive.json"
+            },
+            {
+              "text": "O11 also has session variables (IESpace.CreateSessionVariable) but no O11 job creates one: they are not represented here.",
+              "origin": "docs/evidence/catalogo-abrangente/inventario-reconciliado/inventory.json (o11 ISessionVariable); matrix a-matrix.json lanes.o11 (no evidence)"
+            }
+          ],
+          "differences": []
+        }
+      }
+    },
+    {
+      "id": "logic.expression",
+      "category": "logic",
+      "title": "ExpressionText, IListLiteralItem, IRecordLiteralField",
+      "keywords": [
+        "expression text", "texto da expressao", "expressiontext", "expression syntax", "sintaxe de expressao", "logic expression", "expression in logic",
+        "expressao de logica", "expression language", "linguagem de expressoes", "list literal", "list literal item", "record literal", "record literal field",
+        "literal de lista", "literal de registro", "literal de registo", "lista literal", "item de literal", "campo de literal", "built-in function",
+        "funcao built-in", "funcoes built-in", "function catalog", "catalogo de funcoes", "unknown function", "unknownfunction", "funcao inexistente",
+        "hint current", "literal field"
+      ],
+      "summary": "An expression is OutSystems text written with `set` on an expression property of its owner (Value, Condition, DefaultValue...). ODC: '{Name: v}' and '[a, b]' written on a virgin argument Value become record/list literals (items and fields); a list literal item can also be created. Only built-in functions of the loaded Studio exist; the kernel adds UnknownFunction and Current hints before the Verify.",
+      "route": {
+        "kind": "job",
+        "operation": "set {target:<owner>, prop:<expression property>, value:\"<OutSystems text>\"}; ODC literals: set <call>/<Input> Value \"{A: 1}\" | \"[{A: 1}, {A: 2}]\" on a virgin argument; create IListLiteralItem under <arg>/#IListLiteralExpression + set Value; read: get/dump <owner>"
+      },
+      "contract": ["verbs.verbs.set", "verbs.verbs.get", "verbs.verbs.dump", "verbs.verbs.create", "verbs.references", "logic.rules"],
+      "guidance": "Expression values are JSON strings holding OutSystems text: \"True\", \"\\\"Hello\\\"\", \"GetX.List.Current.E.Attr\". Other-language names (Right, Left, Len, IIf, Now, ToString) do not exist: use Substr, Length, If, CurrDateTime. Expressions that cite nodes, variables and attributes follow a rename by key; literal text inside quotes does not. The Expression widget on a screen is front B (ui.*), not this capability.",
+      "example": { "ops": ["set", "create"], "max": 8 },
+      "depends": [],
+      "recommends": [
+        { "id": "logic.flow", "when": "the owner of the expression is an assignment, If or Switch condition" },
+        { "id": "logic.variable", "when": "a literal goes into a call argument, or a '<X> List' DataType is needed" },
+        { "id": "refactor.rename", "when": "renaming an element that expressions cite (they are rewritten by key)" }
+      ],
+      "alternatives": [{ "id": "ui.screen", "when": "an Expression widget that shows a value on a screen (front B owns the widget)" }],
+      "elements": [
+        {
+          "role": "list literal item",
+          "child": true,
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.Expressions.IListLiteralItem",
+              "jobType": "IListLiteralItem",
+              "address": "<call>/<Input>/#IListLiteralExpression/#IListLiteralItem[n] or an alias"
+            }
+          }
+        },
+        {
+          "role": "record literal field",
+          "child": true,
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.Expressions.IRecordLiteralField",
+              "jobType": "IRecordLiteralField",
+              "address": "created from the text '{Name: value}'; read with dump of the owning argument"
+            }
+          }
+        }
+      ],
+      "operations": {
+        "read": {
+          "route": "get <argument> recomposes the literal text; dump <argument> depth 3-5 shows the literal tree",
+          "preconditions": [],
+          "roles": {
+            "list literal item": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["expression-literals"],
+                "scope": "dump of the owning argument (depth 5) lists 3 items; no get/dump targets the item itself"
+              },
+              "o11": {
+                "status": "not-applicable",
+                "note": "the O11 Model API has no IListLiteralItem type (reconciled inventory)",
+                "alternative": "build the list in the flow (ListAppend, logic.flow)"
+              }
+            },
+            "record literal field": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["expression-literals"],
+                "scope": "dump of the owning argument shows the fields; get of the argument recomposes the text '{ Name: value, ... }'"
+              },
+              "o11": { "status": "undetermined", "note": "OutSystems.Model.IRecordLiteralField exists without factory; no O11 job" }
+            }
+          }
+        },
+        "create": {
+          "route": "text on a virgin argument Value ('[...]' items, '{...}' fields); or create IListLiteralItem under <arg>/#IListLiteralExpression",
+          "preconditions": [
+            "the argument must be virgin (Value null): over an existing expression the text is stored as a plain text expression",
+            "the argument needs a concrete record or list type (its attributes bind the fields)",
+            "only properties that accept literals: argument Value, and the Value of a field or item (so literals nest)"
+          ],
+          "roles": {
+            "list literal item": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["expression-literals"],
+                "scope": "items from '[...]' text (list of records, list of texts) and one created in an existing list literal (IListLiteralExpression.CreateItem)"
+              },
+              "o11": {
+                "status": "not-applicable",
+                "note": "type absent from the O11 Model API (reconciled inventory)",
+                "alternative": "build the list in the flow (ListAppend, logic.flow)"
+              }
+            },
+            "record literal field": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["expression-literals"],
+                "scope": "fields born from '{Name: value}' text on an argument and inside list items; the factory CreateRecordLiteralField is not exercised"
+              },
+              "o11": { "status": "undetermined", "note": "no factory and no O11 job" }
+            }
+          }
+        },
+        "set": {
+          "route": "set <item> Value \"<literal or expression>\"",
+          "preconditions": ["an item created empty receives its value (a record literal) with set Value"],
+          "roles": {
+            "list literal item": {
+              "odc": { "status": "applicable", "proofs": ["expression-literals"], "props": ["Value"], "scope": "Value of a created item set to a record literal" },
+              "o11": { "status": "not-applicable", "note": "type absent from the O11 Model API (reconciled inventory)" }
+            },
+            "record literal field": {
+              "odc": { "status": "undetermined", "note": "no job sets a field directly (fields are rewritten through the owning text)" },
+              "o11": { "status": "undetermined", "note": "no O11 job" }
+            }
+          }
+        },
+        "delete": {
+          "route": "delete <item>",
+          "preconditions": [],
+          "roles": {
+            "list literal item": {
+              "odc": { "status": "undetermined", "note": "not exercised" },
+              "o11": { "status": "not-applicable", "note": "type absent from the O11 Model API (reconciled inventory)" }
+            }
+          }
+        }
+      },
+      "platforms": {
+        "odc": {
+          "proofs": ["expression-literals", "rename-logic-propagation", "client-storage"],
+          "negative": [],
+          "context": { "kinds": [], "signatures": [] },
+          "limits": [
+            {
+              "text": "Literals are parsed only on a virgin argument Value (and field/item Values); a second set stores the text as a plain expression and does not replace one literal with another.",
+              "origin": "job:expression-literals op 24 _why"
+            },
+            {
+              "text": "The Expression widget on a screen is a UI element owned by front B (ui.*); this capability covers the expression text of logic and data properties.",
+              "origin": "catalog/ownership.json: odc:ServiceStudio.Plugin.NRWidgets.IExpression and odc:OutSystems.Model.UI.Web.Widgets.IExpressionWidget owner B (family ui.widget)"
+            },
+            {
+              "text": "Built-in functions: 128 on ODC (the O11 121 plus NullFile, Size, MIMEType, IsTemp, IsOwnedByCurrentApp, GetAppName, CheckEndUserRole); the kernel reads the catalog of the loaded Studio.",
+              "origin": "kernel/AGENTS.md:292-295; kernel/src/Anvil.Core.Odc/Adapters.ODC/FunctionCatalogOdc.cs"
+            },
+            {
+              "text": "The kernel adds 'Hint UnknownFunction' (closest names) and 'Hint Current' (real fields of a list) before the Verify; no ODC job exercises them.",
+              "origin": "kernel/src/Anvil.Core/Kernel/ExpressionCheck.cs:64, :128"
+            },
+            {
+              "text": "get shows most expression properties as @key.#Prop; an argument Value comes back as text (the literal recomposed); dump shows the literal tree.",
+              "origin": "job:expression-literals ops 33-35; api --op verbs (verbs.verbs.get)"
+            }
+          ],
+          "differences": [
+            "list literal items and the list/record literal expression types exist on ODC only; O11 has IRecordLiteralField without factory (undetermined)",
+            "128 built-in functions (O11: 121)"
+          ]
+        },
+        "o11": {
+          "proofs": ["smoke-data-logic", "rename-logic-propagation", "delete-data-consumers"],
+          "negative": [],
+          "context": { "kinds": [], "signatures": [] },
+          "limits": [
+            {
+              "text": "The O11 Model API has neither IListLiteralItem nor the literal expression types (IListLiteralExpression, IRecordLiteralExpression); OutSystems.Model.IRecordLiteralField exists without factory (undetermined): literal authoring is not established on O11.",
+              "origin": "docs/evidence/catalogo-abrangente/inventario-reconciliado/inventory.json (o11)"
+            },
+            {
+              "text": "The Expression widget on a screen is a UI element owned by front B (ui.*); this capability covers the expression text of logic and data properties.",
+              "origin": "catalog/ownership.json: o11:ServiceStudio.Plugin.NRWidgets.IExpression and o11:OutSystems.Model.UI.Web.Widgets.IExpressionWidget owner B (family ui.widget)"
+            },
+            { "text": "Built-in functions: 121 on O11 (catalog of the loaded Service Studio).", "origin": "kernel/catalog/functions-11.55.87.json" },
+            {
+              "text": "An unknown function (e.g. Right) fails the Verify; the kernel adds 'Hint UnknownFunction' with the closest names (Substr, Length).",
+              "origin": "job:unknown-function (FunctionCatalogTests); kernel/src/Anvil.Core/Kernel/ExpressionCheck.cs:64"
+            },
+            {
+              "text": "A member the row lacks after .Current (a structure list, an aggregate with or without group by, a data action output) fails the Verify; 'Hint Current' lists the real fields.",
+              "origin": "job:structure-list-scope (CurrentHintTests); job:aggregate-list-scope (CurrentHintTests); job:aggregate-group-list-scope (CurrentHintTests); job:dataaction-list-scope (CurrentHintTests); kernel/src/Anvil.Core/Kernel/ExpressionCheck.cs:128"
+            }
+          ],
+          "differences": ["no IListLiteralItem nor list/record literal expression types; IRecordLiteralField without factory (undetermined)", "121 built-in functions"]
+        }
+      }
+    }
+  ],
+  "unavailable": [
+    {
+      "id": "session-variable",
+      "supersedes": ["session-variable"],
+      "lanes": ["odc"],
+      "keywords": [
+        "session variable", "session variables", "variavel de sessao", "variável de sessão", "variaveis de sessao", "variáveis de sessão", "session state",
+        "estado de sessao", "estado de sessão"
+      ],
+      "reason": "Session variables do not exist in the ODC product; the API offers the type but the factory refuses ('Session Variable objects can't be children of App objects').",
+      "evidence": "kernel/tests/jobs-odc-negative/session-variable-not-in-odc.json (suite refusal)",
+      "negative": { "odc": ["session-variable-not-in-odc"] },
+      "alternative": "data.client-variable (a client variable: per-user state kept on the device)"
+    }
+  ],
+  "coverage": [
+    {
+      "type": "odc:OutSystems.Model.Data.IEntity",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface; its concrete implementers (server, static, client entity) are accounted",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "o11:OutSystems.Model.Data.IEntity",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface; its concrete implementers are accounted",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.IRecord",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface on ODC; the static record role of data.static names IStaticEntityRecord",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.ILifeCycleDatabaseEvent",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface of the entity database events (accounted below)",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.IOnCreateLifeCycleDatabaseEvent",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "entity database event (on create): no factory in the inventory, no job, reader or contract names it; unknown how it is created and addressed",
+      "origin": "inventory kindClass undetermined (no factory); matrix a-matrix.json (no evidence)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.IOnDeleteLifeCycleDatabaseEvent",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "entity database event (on delete): no factory, no job; creation and address unknown",
+      "origin": "inventory kindClass undetermined (no factory); matrix a-matrix.json (no evidence)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.IOnUpdateLifeCycleDatabaseEvent",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "entity database event (on update): no factory, no job; creation and address unknown",
+      "origin": "inventory kindClass undetermined (no factory); matrix a-matrix.json (no evidence)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.IEntityDiagram",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "entity diagram (documentation of the data model): a factory exists but no job creates or reads one; whether the generic create reaches it is not verified",
+      "origin": "inventory kindClass concrete-authorable; matrix a-matrix.json (no evidence)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.Nodes.IEntityDiagramNode",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "node of an entity diagram: factory exists, no job; parent/address not verified",
+      "origin": "inventory kindClass concrete-authorable; matrix a-matrix.json (no evidence)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.IEntityVersion",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "no factory and no job: unknown whether it is authored or kept by the platform",
+      "origin": "inventory kindClass undetermined (no factory)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.IExtensibilitySetting",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "factory exists but no job, reader or contract names it; its effect on an entity is not known",
+      "origin": "inventory kindClass concrete-authorable; matrix a-matrix.json (no evidence)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.ISystemStaticEntity",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "platform static entity: read or referenced in the consumer, not authored; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.ISessionVariable",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "session variables do not exist in ODC: the factory refuses (unavailable session-variable)",
+      "origin": "jobs-odc-negative/session-variable-not-in-odc",
+      "alternative": "client variable (data.client-variable)"
+    },
+    {
+      "type": "o11:OutSystems.Model.Data.ISessionVariable",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "factory IESpace.CreateSessionVariable exists (Traditional Web concept); no O11 job creates or reads one, and the module kinds that accept it are not verified",
+      "origin": "inventory kindClass concrete-authorable; matrix a-matrix.json lanes.o11 (no evidence)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Types.IType",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface of the type objects; types are set by name (set DataType)",
+      "origin": "inventory kindClass base-interface; kernel/src/Anvil.Core/Kernel/TypeResolver.cs:15"
+    },
+    {
+      "type": "o11:OutSystems.Model.Types.IType",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface of the type objects; types are set by name (set DataType)",
+      "origin": "inventory kindClass base-interface; kernel/src/Anvil.Core/Kernel/TypeResolver.cs:15"
+    },
+    {
+      "type": "odc:OutSystems.Model.Types.IBasicType",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface; basic types (Text, Integer...) are platform types resolved by name",
+      "origin": "inventory kindClass base-interface; kernel/src/Anvil.Core/Kernel/TypeResolver.cs:43-58"
+    },
+    {
+      "type": "o11:OutSystems.Model.Types.IBasicType",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface; basic types are platform types resolved by name",
+      "origin": "inventory kindClass base-interface; kernel/src/Anvil.Core/Kernel/TypeResolver.cs:43-58"
+    },
+    {
+      "type": "odc:OutSystems.Model.Types.IRecordType",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface of record types (entities, structures) accounted by their roles",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "o11:OutSystems.Model.Types.IRecordType",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface of record types accounted by their roles",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "odc:OutSystems.Model.Types.IAttribute",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface of attributes (entity/structure attribute roles)",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "o11:OutSystems.Model.Types.IAttribute",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface of attributes (entity/structure attribute roles)",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "odc:OutSystems.Model.Types.IListType",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "classification": "generated",
+      "reason": "created by the kernel when a DataType '<X> List' is set (GetOrCreateListType); never addressed by a verb",
+      "origin": "kernel/src/Anvil.Core/Kernel/TypeResolver.cs:26-30; job:structure-list-type description"
+    },
+    {
+      "type": "o11:OutSystems.Model.Types.IListType",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "classification": "generated",
+      "reason": "created by the kernel when a DataType '<X> List' is set; never addressed by a verb",
+      "origin": "kernel/src/Anvil.Core/Kernel/TypeResolver.cs:26-30; job:rename-data-propagation (output 'Contact List' follows the rename)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Types.IAnonymousStructure",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "classification": "generated",
+      "reason": "created by the platform (GetOrCreateAnonymousStructure) for aggregate rows and '<Name> Record'; read through its consumers",
+      "origin": "job:structure-list-type description; data.structure limits (anonymous record)"
+    },
+    {
+      "type": "o11:OutSystems.Model.Types.IAnonymousStructure",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "classification": "generated",
+      "reason": "created by the platform for aggregate rows and '<Name> Record'; not authored",
+      "origin": "kernel/catalog/model-api-11.55.69.json (IESpace.GetOrCreateAnonymousStructure); job:structure-refactor (orphan anonymous record)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Types.IGenericType",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "no factory, no job and no DataType name resolves to it in the kernel; its role is unknown",
+      "origin": "inventory kindClass undetermined; kernel/src/Anvil.Core/Kernel/TypeResolver.cs:15-40"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.IExpression",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface of expressions; expressions are written as text on their owner (logic.expression)",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.ITextBasedExpression",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "classification": "generated",
+      "reason": "the object behind an expression property, created by set on the owner; never addressed itself",
+      "origin": "job:expression-literals op 24 _why"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.IListLiteralExpression",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "classification": "generated",
+      "reason": "created by the parser from '[...]' text on an argument; its items are the list literal item role",
+      "origin": "job:expression-literals ops 25, 35 _why"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.IRecordLiteralExpression",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "classification": "generated",
+      "reason": "created by the parser from '{...}' text; its fields are the record literal field role",
+      "origin": "job:expression-literals ops 24, 34 _why"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.IMutableExpression",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "its own methods are the syntax-tree factories (CreateRecordLiteralField, CreateListLiteral, CreateFunctionCall...); no factory returns it, no inventoried interface has it as a base and no job addresses it: how it is reached is not known",
+      "origin": "docs/evidence/catalogo-abrangente/inventario-reconciliado/inventory.json (odc IMutableExpression: kindClass undetermined, kindBasis, ownMethods)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.ITextWithReferencedElements",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "no factory, no job; presumably text with bound references (not verified)",
+      "origin": "inventory kindClass undetermined"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.ITypeConversionExpression",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "no factory, no job; presumably an implicit conversion kept by the platform (not verified)",
+      "origin": "inventory kindClass undetermined"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.IAIRecordLiteralField",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "AI record literal field (A by inventory rule): no factory, no job; creation route unknown",
+      "origin": "inventory kindClass undetermined; ownership rule 'expressions and literals (A)'"
+    },
+    {
+      "type": "o11:OutSystems.Model.IRecordLiteralField",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "exists in the O11 Model API without factory; no O11 job writes a record literal",
+      "origin": "docs/evidence/catalogo-abrangente/inventario-reconciliado/inventory.json (o11: kindClass undetermined, no factory); matrix a-matrix.json lanes.o11 (no evidence)"
+    },
+    {
+      "type": "odc:OutSystems.Model.IOutputFormat",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "no factory, no job, reader or contract names it; its owner is unknown",
+      "origin": "inventory kindClass undetermined"
+    },
+    {
+      "type": "odc:OutSystems.Model.IOutputFormatAttribute",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "created by IOutputFormat.CreateOutputFormatAttribute; the parent IOutputFormat has no known route, no job",
+      "origin": "inventory factory IOutputFormat.CreateOutputFormatAttribute; matrix a-matrix.json (no evidence)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.IEntityActionSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "entity action (CreateOrUpdate<X>...) called in the consumer by an execute node (set Action); not authored",
+      "origin": "inventory kindClass referenced-signature; job:client-storage op 31"
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.IEntityActionSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "entity action called in the consumer by an execute node (set Action); not authored",
+      "origin": "inventory kindClass referenced-signature; job:local-storage-mobile (set Action IEntityActionSignature:CreateOrUpdateDraft)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.IClientEntitySignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.IEntityAttributeSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.IEntityIndexAttributeSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.IEntityIndexSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.IEntitySignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.IRecordAttributeValueSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.IRecordSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.IServerEntitySignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.IStaticEntityRecordSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.IStaticEntitySignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.IStructureAttributeSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Data.IStructureSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Signatures.IBasicType",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature of a basic type: resolved by name in set DataType",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Signatures.IIdentifierType",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature of an identifier type: '<Entity> Identifier' in set DataType",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Signatures.IListTypeSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature of a list type: '<X> List' in set DataType",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Signatures.ITypeSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Signatures.IEntityAttributeSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Signatures.IEntitySignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Signatures.IStaticEntityRecordSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Signatures.IStaticEntitySignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Signatures.IStaticRecordAttributeValueSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Signatures.IStructureAttributeSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Signatures.IStructureSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Types.IAttributeSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Types.IRecordTypeSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Types.ITypeSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: types are named in set DataType; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.Data.IClientEntitySignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.Data.IEntityAttributeSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.Data.IEntitySignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.Data.IRecordAttributeValueSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.Data.IRecordSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.Data.IServerEntitySignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.Data.IStaticEntitySignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.Data.IStructureAttributeSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.Data.IStructureSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.Types.IAttributeSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.Types.IRecordTypeSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.Types.ITypeSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: types are named in set DataType; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.IAttributeMapping",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.IBinding",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.IBuiltinFunction",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "function catalog / expression environment metadata read by the platform; the kernel exposes the catalog (FunctionCatalog)",
+      "origin": "inventory class outside-object-root; kernel/src/Anvil.Core/Kernel/FunctionCatalog.cs (reads the BuiltinFunctions of the loaded Studio)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.IBuiltinFunctionBinding",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.IBuiltinFunctionInfo",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "function catalog / expression environment metadata read by the platform; the kernel exposes the catalog (FunctionCatalog)",
+      "origin": "inventory class outside-object-root; kernel/src/Anvil.Core/Kernel/FunctionCatalog.cs (reads the BuiltinFunctions of the loaded Studio)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.IBuiltinFunctions",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "function catalog / expression environment metadata read by the platform; the kernel exposes the catalog (FunctionCatalog)",
+      "origin": "inventory class outside-object-root; kernel/src/Anvil.Core/Kernel/FunctionCatalog.cs (reads the BuiltinFunctions of the loaded Studio)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.IByNameBinding",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.IElementOfTextWithReferenceElements",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.IEnvironment",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "function catalog / expression environment metadata read by the platform; the kernel exposes the catalog (FunctionCatalog)",
+      "origin": "inventory class outside-object-root; kernel/src/Anvil.Core/Kernel/FunctionCatalog.cs (reads the BuiltinFunctions of the loaded Studio)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.IEnvironmentEntry",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "function catalog / expression environment metadata read by the platform; the kernel exposes the catalog (FunctionCatalog)",
+      "origin": "inventory class outside-object-root; kernel/src/Anvil.Core/Kernel/FunctionCatalog.cs (reads the BuiltinFunctions of the loaded Studio)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.IObjectBinding",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.IReferenceElement",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.ITextElement",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.IUnknownObjectBinding",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.EnvironmentTree.IEnvironmentTreeFolder",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "function catalog / expression environment metadata read by the platform; the kernel exposes the catalog (FunctionCatalog)",
+      "origin": "inventory class outside-object-root; kernel/src/Anvil.Core/Kernel/FunctionCatalog.cs (reads the BuiltinFunctions of the loaded Studio)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.EnvironmentTree.IEnvironmentTreeFunction",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "function catalog / expression environment metadata read by the platform; the kernel exposes the catalog (FunctionCatalog)",
+      "origin": "inventory class outside-object-root; kernel/src/Anvil.Core/Kernel/FunctionCatalog.cs (reads the BuiltinFunctions of the loaded Studio)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.EnvironmentTree.IEnvironmentTreeItem",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "function catalog / expression environment metadata read by the platform; the kernel exposes the catalog (FunctionCatalog)",
+      "origin": "inventory class outside-object-root; kernel/src/Anvil.Core/Kernel/FunctionCatalog.cs (reads the BuiltinFunctions of the loaded Studio)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.Nodes.IArgument",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.Nodes.IBinaryOperation",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.Nodes.IBooleanLiteral",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.Nodes.IDateLiteral",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.Nodes.IDateTimeLiteral",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.Nodes.IDecimalLiteral",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.Nodes.IExpressionNode",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.Nodes.IExpressionSnippet",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.Nodes.IFieldAccess",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.Nodes.IFunctionCall",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.Nodes.IIdentifier",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.Nodes.IIndexer",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.Nodes.IIntegerLiteral",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.Nodes.IListLiteral",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.Nodes.ILongLiteral",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.Nodes.IRecordLiteral",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.Nodes.IRecordLiteralField",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.Nodes.ITextLiteral",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.Nodes.ITimeLiteral",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.Nodes.ITypeConversion",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.Nodes.ITypeConversionMapping",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Expressions.Nodes.IUnaryOperation",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; ODC parses expressions into ExpressionDefinition (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1057)"
+    },
+    {
+      "type": "o11:OutSystems.Model.Expressions.IBinaryOperation",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; O11 writes the Text of the IExpression and the platform parses it (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1055)"
+    },
+    {
+      "type": "o11:OutSystems.Model.Expressions.IBinding",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; O11 writes the Text of the IExpression and the platform parses it (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1055)"
+    },
+    {
+      "type": "o11:OutSystems.Model.Expressions.IBooleanLiteral",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; O11 writes the Text of the IExpression and the platform parses it (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1055)"
+    },
+    {
+      "type": "o11:OutSystems.Model.Expressions.IDateLiteral",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; O11 writes the Text of the IExpression and the platform parses it (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1055)"
+    },
+    {
+      "type": "o11:OutSystems.Model.Expressions.IDateTimeLiteral",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; O11 writes the Text of the IExpression and the platform parses it (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1055)"
+    },
+    {
+      "type": "o11:OutSystems.Model.Expressions.IDecimalLiteral",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; O11 writes the Text of the IExpression and the platform parses it (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1055)"
+    },
+    {
+      "type": "o11:OutSystems.Model.Expressions.IExpressionElement",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; O11 writes the Text of the IExpression and the platform parses it (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1055)"
+    },
+    {
+      "type": "o11:OutSystems.Model.Expressions.IIdentifier",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; O11 writes the Text of the IExpression and the platform parses it (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1055)"
+    },
+    {
+      "type": "o11:OutSystems.Model.Expressions.IIntegerLiteral",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; O11 writes the Text of the IExpression and the platform parses it (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1055)"
+    },
+    {
+      "type": "o11:OutSystems.Model.Expressions.ILongLiteral",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; O11 writes the Text of the IExpression and the platform parses it (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1055)"
+    },
+    {
+      "type": "o11:OutSystems.Model.Expressions.IObjectBinding",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; O11 writes the Text of the IExpression and the platform parses it (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1055)"
+    },
+    {
+      "type": "o11:OutSystems.Model.Expressions.IRuntimePropertyBinding",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; O11 writes the Text of the IExpression and the platform parses it (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1055)"
+    },
+    {
+      "type": "o11:OutSystems.Model.Expressions.ITextLiteral",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; O11 writes the Text of the IExpression and the platform parses it (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1055)"
+    },
+    {
+      "type": "o11:OutSystems.Model.Expressions.ITimeLiteral",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; O11 writes the Text of the IExpression and the platform parses it (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1055)"
+    },
+    {
+      "type": "o11:OutSystems.Model.Expressions.IUnaryOperation",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; O11 writes the Text of the IExpression and the platform parses it (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1055)"
+    },
+    {
+      "type": "o11:OutSystems.Model.Expressions.IUnknownObjectBinding",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "expression syntax tree/binding produced by the platform from the expression text; not an authoring element; the route is the expression text written with set (verbs.verbs.set)",
+      "origin": "inventory class outside-object-root; O11 writes the Text of the IExpression and the platform parses it (kernel/src/Anvil.Core/Kernel/Verbs.cs:1054-1055)"
+    }
+  ]
+}

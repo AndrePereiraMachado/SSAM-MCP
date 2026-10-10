@@ -1,0 +1,24 @@
+{
+ "description": "ProgressBar do OSUI com dados: Progress calculado do aggregate (feitas sobre total), cores, espessura e o percentual no Content.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Task", "attributes": [{"name": "Title", "type": "Text", "length": 100, "mandatory": true}, {"name": "IsDone", "type": "Boolean"}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProfileProgress", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Progress\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetTasks", "as": "$GetTasks"},
+  {"op": "create", "parent": "$GetTasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "LoadDone", "as": "$LoadDone"},
+  {"op": "create", "parent": "$LoadDone", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "create", "parent": "$LoadDone", "type": "IFilter", "args": {"condition": "Task.IsDone"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ProgressBar1", "source": "IMobileBlock:ProgressBar", "as": "$pb"},
+  {"op": "set", "target": "$pb/Progress", "prop": "Value", "value": "If(GetTasks.Count = 0, 0, DecimalToInteger(LoadDone.Count * 100 / GetTasks.Count))"},
+  {"op": "set", "target": "$pb/ProgressColor", "prop": "Value", "value": "Entities.Color.Green"},
+  {"op": "set", "target": "$pb/Thickness", "prop": "Value", "value": "8"},
+  {"op": "create", "parent": "$pb/Content", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "LoadDone.Count + \" of \" + GetTasks.Count + \" done\""}
+ ]
+}

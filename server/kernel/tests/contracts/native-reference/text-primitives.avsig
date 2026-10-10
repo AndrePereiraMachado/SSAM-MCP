@@ -1,0 +1,28 @@
+{
+  "FormatVersion": 1,
+  "Environment": "fixture.invalid",
+  "ModuleKey": "b183dba3-1a2d-4eb6-ae0d-24e0fdb65070",
+  "ApplicationKey": "00000000-0000-0000-0000-006f74686572",
+  "ModuleKind": "Extension",
+  "ModuleType": "WebResponsive",
+  "Name": "ZZHighCodePrimitives",
+  "Description": "Private laboratory prototype of typed framework intrinsics. Contains no authored business code or dynamic code executor.",
+  "Icon": "",
+  "JQueryVersion": "",
+  "ExtensibilityConfigurations": "",
+  "DatabaseName": "",
+  "SignatureHash": "892d9155-9eac-aa23-e135-d613389b2d24",
+  "SignatureBinary": "4AAAAQB8CFNpZ25hdHVyZXgMQ3JlYXRlZEJ5VG9vbEgCVW5zcGVjaWZpZWR4GUNvbXBhdGliaWxpdHlTaWduYXR1cmVIYXNoSA1RWWM3QTFYYmVDKzZkOWNTOVFMcTVBeBNFbGVtZW50c09yZGVyVmVyc2lvbkgbZDI0MWJhMjctYWJiZS01ZTQ0LTQ2ODQtNGEwZjIzMDNhY2My8DwSQW5vbnltb3VzVHlwZXNOYW1lc/A8EEVsZW1lbnRTaWduYXR1cmVzfA9FbGVtZW50U2lnbmF0dXJleApPcmlnaW5hbEtleUgNUEhTemFwcmx5VVdmSXdzVHpCamEwQQFIDVdNYVRQajZHRVNoMUwyRTFEZ1pRcGd4EEZ1bGxTaWduYXR1cmVIYXNoSA1pZVlyVlNQTW5GS0ZsVlFBSDdSMzFB8HwOUmVmZXJlbmNlQWN0aW9ueAtPcmlnaW5hbE5hbWVIDENTaGFycFRleHRVdGYxNkxlbmd0aHgJSXNGdW5jdGlvbkJZZXMDg3gKRGVzY3JpcHRpb25IWFNvdXJjZS1vd25lZCAuTkVUIHN0cmluZy5MZW5ndGggaW4gVVRGLTE2IGNvZGUgdW5pdHMuIE5vIHNvdXJjZSBleGVjdXRpb24gb3IgdGhpcmQtcGFydHkgcnVudGltZS7wPARJbWFnZfA8DklucHV0UGFyYW1ldGVyc3wnVmFyaWFibGVzLlJlZmVyZW5jZUdlbmVyaWNJbnB1dFBhcmFtZXRlcngDTmFtZURWYWx1ZXgKSXNNYW5kYXRvcnmHeANUeXBlSA4ldVJPT0JYUHZRRXlVNzZOV08rMXV4UQNIDUdCN3RwUENhdlVPQVlhYVVtU0dKZXfwPAtEZWZhdWx0VmFsdWXwPBJUZXN0QXR0cmlidXRlVmFsdWVz//A8D091dHB1dFBhcmFtZXRlcnN8KFZhcmlhYmxlcy5SZWZlcmVuY2VHZW5lcmljT3V0cHV0UGFyYW1ldGVyCEVSZXN1bHR4BEluZGV4QDEKSA4lajJMYzBwaEswa3VnZ2lqNGdRWWZBdwNIDUQ0dE5VQ2EwWmsyRk54U3VhUE9EVXfwCP//8EMDSA1pNUZBdmd6STJVT0VKN1U0YnZLYlJ3AUgNOWdmRmVNQzBiQ2xOTkMzNjZnSWw2ZwRIDXlrX0Nwa3dnRGpYUkYzdWJkOUtXRnfwRAVID0NTaGFycFRleHRDb21wYXJlT3JkaW5hbAaHA5AHSFxVVEYtMTYgb3JkaW5hbCBjb21wYXJpc29uIGRlbGVnYXRlZCBkaXJlY3RseSB0byB0aGUgaW5zdGFsbGVkIC5ORVQgZnJhbWV3b3JrOyBzb3VyY2Utb3duZWQgcHJpbWl0aXZlLvAF8AZHCENMZWZ0CYcKigNIDUloTHRfNVIxb0U2ZHF6d2NzYk1nV2fwCPAJ/0cIRFJpZ2h0CYcLjQqKA0gNMGZtdnFsRkJtRWlxY1hHeUJDZFNOUfAI8An/8ApLCIwLQDIKjgNIDW9oX29hSl9QVjAyVVVROGl3S0pLZGfwCP//8EMDSB9vOXVEc1MwYXRrNnVEU1RnX2JaUWNBLiNFeHRlbnNpb25Db250ZW50AUgNN1pYYVg3c3pKak45bVUxQV9DRlVXZwSc8HwYUmVmZXJlbmNlRXh0ZW5zaW9uQ29udGVudAOb////",
+  "Elements": [
+    {
+      "Kind": "action",
+      "Name": "CSharpTextCompareOrdinal",
+      "Key": "i5FAvgzI2UOEJ7U4bvKbRw"
+    },
+    {
+      "Kind": "action",
+      "Name": "CSharpTextUtf16Length",
+      "Key": "PHSzaprlyUWfIwsTzBja0A"
+    }
+  ]
+}

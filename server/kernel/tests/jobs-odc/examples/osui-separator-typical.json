@@ -1,0 +1,28 @@
+{
+ "description": "Separator do OSUI configurado: espaco Large, cor neutra e um separador vertical entre dois textos ligados a variaveis.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "SeparatedSections", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Sections\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "LeftText", "as": "$vLeftText"},
+  {"op": "set", "target": "$vLeftText", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$vLeftText", "prop": "DefaultValue", "value": "\"Delivery\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "RightText", "as": "$vRightText"},
+  {"op": "set", "target": "$vRightText", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$vRightText", "prop": "DefaultValue", "value": "\"Pickup\""},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "Row", "as": "$row"},
+  {"op": "set", "target": "$row", "prop": "Style", "value": "\"display-flex\""},
+  {"op": "create", "parent": "$row", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "LeftText"},
+  {"op": "create", "parent": "$row", "type": "IMobileBlockInstanceWidget", "name": "Separator1", "source": "IMobileBlock:Separator", "as": "$sp"},
+  {"op": "set", "target": "$sp/IsVertical", "prop": "Value", "value": "True"},
+  {"op": "set", "target": "$sp/Space", "prop": "Value", "value": "Entities.Space.Large"},
+  {"op": "set", "target": "$sp/Color", "prop": "Value", "value": "Entities.Color.Neutral6"},
+  {"op": "create", "parent": "$row", "type": "IExpression", "as": "$expr2"},
+  {"op": "set", "target": "$expr2", "prop": "Value", "value": "RightText"}
+ ]
+}

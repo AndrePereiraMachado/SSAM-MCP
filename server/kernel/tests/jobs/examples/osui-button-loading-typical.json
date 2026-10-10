@@ -1,0 +1,19 @@
+{
+ "description": "ButtonLoading (OutSystemsUI, Utilities) tipico; inputs obrigatorios IsLoading ligados a variaveis da tela; o OnClick do Button de exemplo alterna IsLoading; eventos Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "IsLoadingValue", "as": "$vIsLoadingValue"},
+  {"op": "set", "target": "$vIsLoadingValue", "prop": "DataType", "value": "Boolean"},
+  {"op": "set", "target": "$vIsLoadingValue", "prop": "DefaultValue", "value": "False"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastButtonLoadingId", "as": "$vLastButtonLoadingId"},
+  {"op": "set", "target": "$vLastButtonLoadingId", "prop": "DataType", "value": "Text"},
+  {"op": "logic", "data": {"actions": [{"name": "ButtonLoadingDemoInitialized", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de Initialized", "inputs": [{"name": "ButtonLoadingId", "type": "Text"}],"steps": [{"assign": {"LastButtonLoadingId": "ButtonLoadingId"},"as": "KeepInitialized"}]}, {"name": "ButtonLoadingDemoOnClick", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Alterna o estado de carregamento do botao", "steps": [{"assign": {"IsLoadingValue": "not IsLoadingValue"},"as": "ToggleLoading"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ButtonLoadingDemo", "source": "IMobileBlock:ButtonLoading", "as": "$b"},
+  {"op": "set", "target": "$b/Button/#IButton/OnClick", "prop": "Destination", "value": "IScreenAction:ButtonLoadingDemoOnClick"},
+  {"op": "set", "target": "$b/IsLoading", "prop": "Value", "value": "IsLoadingValue"},
+  {"op": "set", "target": "$b/Initialized", "prop": "Handler", "value": "IScreenAction:ButtonLoadingDemoInitialized"},
+  {"op": "set", "target": "$b/Initialized/ButtonLoadingId", "prop": "Value", "value": "ButtonLoadingId"}
+ ]
+}

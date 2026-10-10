@@ -1,0 +1,27 @@
+{
+ "description": "Estado vazio com If: enquanto o aggregate busca mostra 'Loading', vazio mostra uma mensagem, e com dados mostra a List (If aninhado no ramo False).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "SalesOrder", "attributes": [{"name": "Code", "type": "Text", "length": 20, "mandatory": true}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "Orders", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetOrders", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:SalesOrder"}},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IIfWidget", "name": "IsLoading", "as": "$loading"},
+  {"op": "set", "target": "$loading", "prop": "Condition", "value": "not GetOrders.IsDataFetched", "_why": "IsDataFetched e falso enquanto a busca corre"},
+  {"op": "create", "parent": "$loading/TrueBranch", "type": "IExpression", "as": "$wait"},
+  {"op": "set", "target": "$wait", "prop": "Value", "value": "\"Loading...\""},
+  {"op": "create", "parent": "$loading/FalseBranch", "type": "IIfWidget", "name": "IsEmpty", "as": "$empty"},
+  {"op": "set", "target": "$empty", "prop": "Condition", "value": "GetOrders.List.Empty"},
+  {"op": "create", "parent": "$empty/TrueBranch", "type": "IExpression", "as": "$none"},
+  {"op": "set", "target": "$none", "prop": "Value", "value": "\"No orders yet\""},
+  {"op": "create", "parent": "$empty/FalseBranch", "type": "IList", "name": "OrderList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetOrders.List"},
+  {"op": "create", "parent": "$list", "type": "IExpression", "as": "$code"},
+  {"op": "set", "target": "$code", "prop": "Value", "value": "GetOrders.List.Current.SalesOrder.Code"},
+  {"op": "dump", "target": "$loading", "depth": 5}
+ ]
+}

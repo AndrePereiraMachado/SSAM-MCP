@@ -1,0 +1,14 @@
+{
+ "description": "Switch: um ISwitch ligado a uma variavel Boolean da tela.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "SwitchDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Notifications", "as": "$n"},
+  {"op": "set", "target": "$n", "prop": "DataType", "value": "Boolean"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "ISwitch", "name": "NotificationsSwitch", "as": "$sw"},
+  {"op": "set", "target": "$sw", "prop": "Variable", "value": "Notifications"}
+ ]
+}

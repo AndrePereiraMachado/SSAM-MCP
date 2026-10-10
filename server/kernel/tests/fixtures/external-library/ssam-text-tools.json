@@ -1,0 +1,31 @@
+{
+  "name": "SSAMTextTools",
+  "description": "Text helpers built by SSAM.",
+  "structures": [
+    {
+      "name": "WordCount",
+      "description": "A word and how often it appears.",
+      "attributes": [
+        { "name": "Word", "type": "Text", "mandatory": true, "length": 100 },
+        { "name": "Count", "type": "Integer" }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "name": "Reverse",
+      "description": "Reverses a text.",
+      "inputs": [{ "name": "Text", "type": "Text" }],
+      "outputs": [{ "name": "Result", "type": "Text" }],
+      "body": "Result = new string(Text.Reverse().ToArray());"
+    },
+    {
+      "name": "CountWords",
+      "inputs": [{ "name": "Text", "type": "Text", "description": "Words separated by spaces." }],
+      "outputs": [{ "name": "Words", "type": "WordCount List" }, { "name": "Total", "type": "Integer" }],
+      "body": "foreach (var group in Text.Split(' ', StringSplitOptions.RemoveEmptyEntries).GroupBy(w => w))\n    Words.Add(new WordCount { Word = group.Key, Count = group.Count() });\nTotal = Words.Sum(w => w.Count);"
+    }
+  ],
+  "packages": [{ "name": "Humanizer.Core", "version": "2.14.1" }],
+  "usings": ["System.Text"]
+}

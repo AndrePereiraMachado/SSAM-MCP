@@ -1,0 +1,12 @@
+{
+ "description": "ColumnChart do OutSystemsCharts: DataPointList (obrigatorio) com uma lista literal de DataPoint; os add-ons de eixo e legenda nascem com a instancia.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ColumnChartDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ColumnChart1", "source": "IMobileBlock:ColumnChart", "as": "$ch"},
+  {"op": "set", "target": "$ch/DataPointList", "prop": "Value", "value": "[{Label: \"Jan\", Value: 10}, {Label: \"Feb\", Value: 14}, {Label: \"Mar\", Value: 9}]"}
+ ]
+}

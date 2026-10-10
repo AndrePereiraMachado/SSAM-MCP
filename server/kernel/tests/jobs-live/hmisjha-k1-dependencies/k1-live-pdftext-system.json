@@ -1,0 +1,30 @@
+{
+  "description": "K1 PROOF ONLY, NEVER DELIVER (o deliver recusa esta pasta e esta marca antes de registrar a tarefa). K1 (Manage Dependencies headless), prova VIVA (leitura) + offline: acrescenta HMISPdfText.ExtractPdfText (com a structure PdfPageText) e a entidade User do (System) a uma copia do HMISJHA_CS publicado (v5578), ligados a assinaturas capturadas por `anvil signature` no SS4 (lease so leitura), e prova o uso numa action PRIVADA de prova, sem inputs, que nunca e entregue: chama ExtractPdfText e le so o registro do proprio usuario da sessao (GetUserId()); nao chama Login, nao recebe UserId e nao cria nada publico. O unico consumidor da action e um timer SEM agendamento (uma server action nao publica sem consumidor recebe UnusedUserAction, ServiceStudio.Model Flows.cs:8768-8776, e a regra N4 do gate conta todo aviso). Nunca e entregue: a escrita viva (L5) usa um job proprio sobre um modulo ZZ de teste, com --capture-producer e as palavras de autorizacao. Registro e comandos: docs/proofs/2026-09-26-o11-manage-dependencies.md.",
+  "base": "tests/fixtures/hmisjha/HMISJHA_CS-v5578.oml",
+  "expectValid": true,
+  "ops": [
+    { "op": "reference", "producer": "HMISPdfText", "elements": ["IServerActionSignature:ExtractPdfText"] },
+    { "op": "reference", "producer": "System", "elements": ["IEntitySignature:User"] },
+    { "op": "logic", "data": { "actions": [ {
+      "name": "ProbeK1PdfTextAndUser", "public": false,
+      "description": "K1 PROBE ONLY, NEVER DELIVER: private proof that the imported dependencies are usable. Calls HMISPdfText ExtractPdfText (typed by the imported PdfPageText structure) on an empty PDF and reads the signed-in user's own (System) User record by GetUserId(); it takes no input, signs nobody in and writes nothing.",
+      "outputs": [
+        { "name": "PageCount", "type": "Integer", "description": "Number of pages ExtractPdfText read." },
+        { "name": "Pages", "type": "PdfPageText List", "description": "Text of each page, typed by the PdfPageText structure imported with ExtractPdfText." },
+        { "name": "IsSessionUserActive", "type": "Boolean", "description": "Whether the signed-in user's own (System) User record is active; proves the User entity reference." }
+      ],
+      "steps": [
+        { "get": "User", "as": "GetSessionUser", "where": ["User.Id = GetUserId()"], "max": 1 },
+        { "call": "IServerActionSignature:ExtractPdfText", "as": "Extract", "args": { "PdfContent": "NullBinary()" } },
+        { "assign": { "PageCount": "Extract.PageCount", "Pages": "Extract.Pages", "IsSessionUserActive": "GetSessionUser.List.Current.User.Is_Active" }, "as": "Return probe results" }
+      ] } ] } },
+    { "op": "set", "target": "$ProbeK1PdfTextAndUser.GetSessionUser", "prop": "Description", "value": "Reads only the signed-in user's own (System) User record (Id = GetUserId()), at most one row." },
+    { "op": "create", "parent": "@espace", "type": "ITimer", "name": "ProbeK1PdfTextAndUserTimer", "as": "$probeTimer" },
+    { "op": "set", "target": "$probeTimer", "prop": "Action", "value": "IServerAction:ProbeK1PdfTextAndUser" },
+    { "op": "set", "target": "$probeTimer", "prop": "Description", "value": "K1 PROBE ONLY, NEVER DELIVER: no schedule, so it never runs by itself; it exists only as the consumer of the private probe action (a private action without one gets the UnusedUserAction warning)." },
+    { "op": "set", "target": "$probeTimer", "prop": "TimeoutInMinutes", "value": 1 },
+    { "op": "find", "name": "ExtractPdfText" },
+    { "op": "find", "name": "PdfPageText" },
+    { "op": "find", "name": "User", "type": "IEntitySignature" }
+  ]
+}

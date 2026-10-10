@@ -1,0 +1,675 @@
+{
+ "schemaVersion": "ssam-discovery-fragment/1",
+ "contract": "ssam-catalog-contribution/1",
+ "front": "B",
+ "title": "Screens and UI flows (Reactive/Mobile context): create, edit, rename, duplicate, delete; editing an existing screen",
+ "reviewedAt": "2026-09-23",
+ "synonyms": {},
+ "capabilities": [
+  {
+   "id": "ui.screen",
+   "supersedes": [
+    "ui.screen",
+    "ui.edit"
+   ],
+   "category": "ui",
+   "title": "Screens and UI flows: create a screen with its layout, edit an existing screen, rename, duplicate, delete",
+   "keywords": [
+    "screen",
+    "page",
+    "layout",
+    "new screen",
+    "screen title",
+    "ui flow",
+    "mainflow",
+    "edit screen",
+    "existing screen",
+    "delete screen",
+    "rename screen",
+    "duplicate screen",
+    "stylesheet"
+   ],
+   "summary": "A screen (`IMobileScreen`, Reactive and Mobile contexts) lives in a UI flow (`IMobileFlow:MainFlow`); it is born with its layout (`$scr/#IMobileBlockInstanceWidget`, bound with `set ... SourceBlock IMobileBlock:<Layout>`) whose placeholders (Title, MainContent or Content) receive the content. An existing screen is addressed by path (`IMobileScreen:<Name>/...`) and maintained with set (Title, Description, StyleSheet), link (Roles, RequiredScripts), rename, duplicate and delete after usages.",
+   "route": {
+    "kind": "job",
+    "operation": "raw verbs: create IMobileScreen under IMobileFlow:<Flow>; set $scr/#IMobileBlockInstanceWidget SourceBlock IMobileBlock:<Layout>; set/link/rename/duplicate/delete/usages by path IMobileScreen:<Name>[/<path>]"
+   },
+   "contract": [
+    "verbs.verbs.create",
+    "verbs.verbs.set",
+    "verbs.verbs.link",
+    "verbs.verbs.rename",
+    "verbs.verbs.duplicate",
+    "verbs.verbs.delete",
+    "verbs.verbs.usages",
+    "verbs.verbs.get",
+    "verbs.verbs.dump",
+    "verbs.references"
+   ],
+   "depends": [],
+   "alternatives": [
+    {
+     "id": "ui.html-visual",
+     "when": "the screen content is easier to write as an HTML fragment inside an existing screen"
+    },
+    {
+     "id": "ui.screen-spec",
+     "when": "an archetype (cards/table/detail/form/dashboard) fits and the module references the OutSystemsUI blocks it needs"
+    }
+   ],
+   "guidance": "Widgets, events, block instances and the actions that events call are separate capabilities (ui.widget, ui.input, ui.list, ui.dropdown, ui.event, ui.block-instance; the action body belongs to the logic capabilities). Read the existing screens, layouts and referenced blocks of the module before creating new ones (an --app capture lists them). Renaming a screen or block rewrites references by key; CSS classes, captions and hand-written deep links stay as text. Deleting a screen must first repoint its navigation consumers (usages) and, when it is the module DefaultScreen, set another DefaultScreen. The widget-to-event-to-action chain of a screen is: the widget event (ui.event) points at a screen or at a screen action (the action body is a logic capability).",
+   "example": {
+    "ops": [
+     "create",
+     "set",
+     "link"
+    ],
+    "max": 20
+   },
+   "elements": [
+    {
+     "role": "screen",
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.UI.Mobile.IMobileScreen",
+       "jobType": "IMobileScreen",
+       "address": "IMobileScreen:<Name>"
+      },
+      "o11": {
+       "native": "OutSystems.Model.UI.Mobile.IMobileScreen",
+       "jobType": "IMobileScreen",
+       "address": "IMobileScreen:<Name>"
+      }
+     }
+    },
+    {
+     "role": "ui flow",
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.UI.Mobile.IMobileFlow",
+       "jobType": "IMobileFlow",
+       "address": "IMobileFlow:<Name>"
+      },
+      "o11": {
+       "native": "OutSystems.Model.UI.Mobile.IMobileFlow",
+       "jobType": "IMobileFlow",
+       "address": "IMobileFlow:<Name>"
+      }
+     }
+    }
+   ],
+   "operations": {
+    "create": {
+     "route": "create {parent: IMobileFlow:<Flow>, type: IMobileScreen, name, as}; then set $scr/#IMobileBlockInstanceWidget SourceBlock IMobileBlock:<Layout>",
+     "preconditions": [
+      "the parent is a UI flow of the module (MainFlow)",
+      "a screen created headless becomes the module DefaultScreen when the module had none",
+      "the layout is a block instance born with the screen; bind it to a layout block of the module (ODC: LayoutTopMenu/LayoutBase are blocks of the module itself) and put widgets under its placeholders (Reactive: MainContent; Mobile: Content)"
+     ],
+     "roles": {
+      "screen": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-basic",
+         "screen-list"
+        ],
+        "scope": "screens in MainFlow with the layout bound and widgets under MainContent (screen-basic, screen-list)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-form-reactive",
+         "local-storage-mobile"
+        ],
+        "scope": "a Reactive screen (screen-form-reactive, reactive-ui fixture) and a Mobile app screen (local-storage-mobile, mobile-ui fixture, placeholder Content)"
+       }
+      },
+      "ui flow": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "switch-exception-handler",
+         "theme-script-resource"
+        ],
+        "scope": "a flow for an exception handler (switch-exception-handler); a flow with its own theme (theme-script-resource)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-theme-resource"
+        ],
+        "scope": "cat-b-theme-resource: create (op 11)"
+       }
+      }
+     }
+    },
+    "set": {
+     "route": "set {target: IMobileScreen:<Name>, prop: Title|Description|StyleSheet, value}; link {from: $scr, connector: Roles|RequiredScripts, to}",
+     "preconditions": [
+      "StyleSheet replaces the screen's own CSS: read it with get first to append",
+      "Title is an OutSystems expression (quoted text)"
+     ],
+     "roles": {
+      "screen": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-block-edit",
+         "security-settings"
+        ],
+        "scope": "Title, Description, StyleSheet of an inherited screen (screen-block-edit); link Roles (security-settings)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "rename-logic-propagation",
+         "rename-interface-propagation"
+        ],
+        "scope": "link RequiredScripts (rename-logic-propagation); StyleSheet (rename-interface-propagation)"
+       }
+      },
+      "ui flow": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "theme-script-resource"
+        ],
+        "scope": "Theme and Description of a flow created by the job"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-theme-resource"
+        ],
+        "scope": "cat-b-theme-resource: set Theme, Description (op 12)"
+       }
+      }
+     }
+    },
+    "read": {
+     "route": "get/dump by path (IMobileScreen:<Name>, IMobileFlow:<Name>); reader --kind MobileScreen | MobileFlow",
+     "preconditions": [],
+     "roles": {
+      "screen": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-block-edit",
+         "delete-block"
+        ],
+        "scope": "get and dump of an inherited screen (screen-block-edit, delete-block)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-form-reactive",
+         "security-config-reactive"
+        ],
+        "scope": "dump of the created screen (screen-form-reactive); get after linking roles (security-config-reactive)"
+       }
+      },
+      "ui flow": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "ui-flow-comment"
+        ],
+        "scope": "dump IMobileFlow:MainFlow depth 1"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-flow-comment-popover"
+        ],
+        "scope": "cat-b-flow-comment-popover: get/dump (ops 31-32)"
+       }
+      }
+     }
+    },
+    "usages": {
+     "route": "usages {target: IMobileScreen:<Name>}",
+     "preconditions": [
+      "consumers of a screen are navigation destinations (widget events, list items), the module DefaultScreen and the UI flow"
+     ],
+     "roles": {
+      "screen": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "delete-screen"
+        ],
+        "scope": "3 consumers of an inherited detail screen: a button OnClick, a list item OnClick and the ESpace DefaultScreen (empty path)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "rename-interface-propagation"
+        ],
+        "scope": "usages of the renamed screen"
+       }
+      }
+     }
+    },
+    "rename": {
+     "route": "rename {target: IMobileScreen:<Name>, name}",
+     "preconditions": [
+      "the new name must be free in the module"
+     ],
+     "roles": {
+      "screen": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "rename-interface-propagation"
+        ],
+        "scope": "consumers (navigation) kept by key"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "rename-interface-propagation"
+        ],
+        "scope": "consumers kept by key"
+       }
+      },
+      "ui flow": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "exception-lifecycle"
+        ],
+        "scope": "a UI flow that holds an exception handler"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-screen-replace-delete"
+        ],
+        "scope": "cat-b-screen-replace-delete: a UI flow created with a screen, renamed (op 43), read by the new name (op 44)"
+       }
+      }
+     }
+    },
+    "move": {
+     "route": "move {target, first|last|before|after} (only reorders inside the same parent)",
+     "preconditions": [
+      "move reorders inside the parent; `move {target, into}` changes the parent through the Studio's own move (new key, consumers rebound; a public element is refused)"
+     ],
+     "roles": {
+      "screen": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-screen-replace-delete"
+        ],
+        "scope": "cat-b-screen-replace-delete: x/y of a screen node on the flow canvas (op 27), read back (op 28)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-screen-replace-delete"
+        ],
+        "scope": "cat-b-screen-replace-delete: x/y of a screen node on the flow canvas (op 27), read back (op 28)"
+       }
+      }
+     }
+    },
+    "duplicate": {
+     "route": "duplicate {target: IMobileScreen:<Name>, as}",
+     "preconditions": [
+      "the copy takes a platform suffix; rename it afterwards"
+     ],
+     "roles": {
+      "screen": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "refactor-duplicate"
+        ],
+        "scope": "a whole screen with its widgets and screen action"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "refactor-duplicate"
+        ],
+        "scope": "a whole screen"
+       }
+      }
+     }
+    },
+    "replace": {
+     "route": "replace {from, to} (verb exists; not measured on screens)",
+     "preconditions": [],
+     "roles": {
+      "screen": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-screen-replace-delete"
+        ],
+        "scope": "cat-b-screen-replace-delete: the button and link OnClick of a screen without inputs repointed to another screen of the same contract (op 30: consumers 2, rewired 2, 0 left on the source; usages 2 -> 0, ops 29, 31)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-screen-replace-delete"
+        ],
+        "scope": "cat-b-screen-replace-delete: the button and link OnClick of a screen without inputs repointed to another screen of the same contract (op 30: consumers 2, rewired 2, 0 left on the source; usages 2 -> 0, ops 29, 31)"
+       }
+      }
+     }
+    },
+    "delete": {
+     "route": "usages {target} then delete {target} (no force)",
+     "preconditions": [
+      "refused while navigation consumers exist: repoint each consumer Destination first",
+      "when the screen is the module DefaultScreen, set another DefaultScreen on @espace first"
+     ],
+     "roles": {
+      "screen": {
+       "odc": {
+        "status": "conditional",
+        "proofs": [
+         "delete-screen"
+        ],
+        "negative": [
+         "delete-screen-in-use"
+        ],
+        "scope": "accepted after repointing the list item OnClick and moving DefaultScreen; refused with 3 consumers named"
+       },
+       "o11": {
+        "status": "conditional",
+        "proofs": [
+         "cat-b-screen-replace-delete"
+        ],
+        "scope": "cat-b-screen-replace-delete: after replace left 0 consumers, the old screen deleted without force (op 36, brokenConsumers 0); it was not the DefaultScreen"
+       }
+      }
+     }
+    }
+   },
+   "platforms": {
+    "odc": {
+     "proofs": [
+      "screen-basic",
+      "screen-form",
+      "screen-list",
+      "screen-block-edit",
+      "delete-screen",
+      "refactor-duplicate",
+      "rename-interface-propagation",
+      "switch-exception-handler",
+      "theme-script-resource",
+      "ui-flow-comment",
+      "exception-lifecycle",
+      "security-settings",
+      "delete-block",
+      "cat-b-screen-replace-delete"
+     ],
+     "negative": [
+      "delete-screen-in-use"
+     ],
+     "context": {
+      "kinds": [
+       "MobileScreen",
+       "MobileFlow"
+      ],
+      "signatures": [
+       "MobileScreen",
+       "MobileBlock"
+      ]
+     },
+     "limits": [
+      {
+       "text": "On ODC the layouts (LayoutTopMenu, LayoutBase) are blocks of the module itself; the ESpace is CrossDevice so the mobile vocabulary applies; a button's caption lives inside IContent (`$btn/#ITextWidget`).",
+       "origin": "kernel/docs/tasks/2026-09-17-ws1-diferencas.md; job:screen-basic"
+      },
+      {
+       "text": "StyleSheet is not watched by the data contract: read it back with get. Deleting a screen must handle navigation consumers and the module DefaultScreen (it appears with an empty path in the refusal).",
+       "origin": "job:screen-block-edit and job:delete-screen descriptions; kernel/docs/NAO-DA.md DefaultScreen"
+      },
+      {
+       "text": "Reordering or inserting sibling widgets can trip the strict merge equivalence gate on DisplayOrder (outcome uncertain: never retry, read the receipt).",
+       "origin": "docs/HANDOFF-AUDITORIA-USO-REAL-20260922.md:117 (quotes-delivery-06, audit 22/09)"
+      },
+      {
+       "text": "Traditional Web screens (IWebScreen) are not an authoring context on ODC: the kernel refuses the web context in a CrossDevice module (ScreenModel.CheckUIRuntime); ODC offers Reactive and Mobile apps only.",
+       "origin": "kernel/src/Anvil.Core/Kernel/ScreenModel.cs:300-305 (code, no negative job); platforms/odc/docs/HANDOFF.md:490"
+      }
+     ],
+     "differences": [
+      "the screen is CrossDevice (Reactive web); a Mobile app is a separate context not exercised by any ODC job",
+      "a button's caption is inside IContent (`$btn/#ITextWidget`)"
+     ]
+    },
+    "o11": {
+     "proofs": [
+      "screen-form-reactive",
+      "screen-reactive",
+      "refactor-move",
+      "refactor-duplicate",
+      "rename-interface-propagation",
+      "local-storage-mobile",
+      "security-config-reactive",
+      "client-js-reactive",
+      "rename-logic-propagation",
+      "cat-b-theme-resource",
+      "cat-b-flow-comment-popover",
+      "cat-b-screen-replace-delete"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileScreen",
+       "MobileFlow"
+      ],
+      "signatures": [
+       "MobileScreen",
+       "MobileBlock"
+      ]
+     },
+     "limits": [
+      {
+       "text": "The context is the module type, not the ss4/ss5 lane: Reactive (CrossDevice) and Mobile (phone app) modules use IMobileScreen; Traditional Web modules use IWebScreen (capability ui.traditional-screen). Phone vs Tablet is not distinguished by the kernel.",
+       "origin": "kernel/src/Anvil.Core/Adapters.SS11/AppFactory.cs:46-54; HeadlessSession.cs:200-214"
+      },
+      {
+       "text": "The main placeholder of the layout is `MainContent` in Reactive and `Content` in Mobile modules.",
+       "origin": "kernel/src/Anvil.Core/Kernel/ScreenExpander.cs:69; job:local-storage-mobile"
+      },
+      {
+       "text": "A navigation Destination must name a screen that already exists at that point of the job; the preflight refuses forward references with the op numbers.",
+       "origin": "jobs-negative/destination-before-screen"
+      }
+     ],
+     "differences": [
+      "a button's caption sits beside the button (not inside IContent)",
+      "Mobile modules (mobile-ui fixture) and Reactive modules share IMobileScreen; the Mobile layout placeholder is Content"
+     ]
+    }
+   }
+  },
+  {
+   "id": "ui.flow-comment",
+   "category": "ui",
+   "title": "Comments on a UI flow canvas",
+   "keywords": [
+    "flow comment",
+    "canvas comment",
+    "reminder",
+    "comment note"
+   ],
+   "summary": "A comment (`OutSystems.Model.UI.Mobile.IComment`) is a note on a UI flow canvas: Text, IsReminder (Verify then reports a Reminder) and its x/y position. It documents; it changes no behaviour.",
+   "route": {
+    "kind": "job",
+    "operation": "create {parent: IMobileFlow:<Flow>, type: OutSystems.Model.UI.Mobile.IComment}; set Text/IsReminder; move x/y"
+   },
+   "contract": [
+    "verbs.verbs.create",
+    "verbs.verbs.set",
+    "verbs.verbs.move"
+   ],
+   "depends": [],
+   "alternatives": [],
+   "guidance": null,
+   "example": {
+    "ops": [
+     "create",
+     "set",
+     "move"
+    ],
+    "max": 8
+   },
+   "elements": [
+    {
+     "role": "comment",
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.UI.Mobile.IComment",
+       "jobType": "OutSystems.Model.UI.Mobile.IComment",
+       "address": "IMobileFlow:<Flow>/IComment:<Name>"
+      },
+      "o11": {
+       "native": "OutSystems.Model.Logic.Nodes.ICommentNode",
+       "jobType": "OutSystems.Model.UI.Mobile.IComment",
+       "address": "IMobileFlow:<Flow>/<alias of the create>",
+       "note": "on O11 11.55.87 a comment created in a UI flow with type UI.Mobile.IComment answers as Logic.Nodes.ICommentNode (GetInterface; measured by cat-b-flow-comment-popover ops 0-8), a type owned by front A: the role is stated on that type and coordinated with A; it has no name, so Verify paths show it as CommentNode"
+      }
+     }
+    }
+   ],
+   "operations": {
+    "create": {
+     "route": "create {parent: IMobileFlow:<Flow>, type: OutSystems.Model.UI.Mobile.IComment, as} (qualified: the bare IComment also exists in UI.Web)",
+     "preconditions": [],
+     "roles": {
+      "comment": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "ui-flow-comment"
+        ],
+        "scope": "a canvas comment in MainFlow with Text and IsReminder (Verify reports a Reminder)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-flow-comment-popover"
+        ],
+        "scope": "cat-b-flow-comment-popover: create (ops 0, 3)"
+       }
+      }
+     }
+    },
+    "set": {
+     "route": "set {target: <comment alias>, prop: Text|IsReminder, value}",
+     "preconditions": [],
+     "roles": {
+      "comment": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "ui-flow-comment"
+        ],
+        "scope": "Text, IsReminder"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-flow-comment-popover"
+        ],
+        "scope": "cat-b-flow-comment-popover: set Text, IsReminder (ops 1, 4-5)"
+       }
+      }
+     }
+    },
+    "read": {
+     "route": "get/dump by path",
+     "preconditions": [],
+     "roles": {
+      "comment": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "ui-flow-comment"
+        ],
+        "scope": "dump of MainFlow shows the comment"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-flow-comment-popover"
+        ],
+        "scope": "cat-b-flow-comment-popover: get (ops 2, 6, 8)"
+       }
+      }
+     }
+    },
+    "move": {
+     "route": "move {target, x, y} (position on the flow canvas)",
+     "preconditions": [],
+     "roles": {
+      "comment": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "ui-flow-comment"
+        ],
+        "scope": "x/y position of the comment on the flow canvas"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-flow-comment-popover"
+        ],
+        "scope": "cat-b-flow-comment-popover: move x/y of the reminder comment (op 7), position read back (op 8)"
+       }
+      }
+     }
+    }
+   },
+   "platforms": {
+    "odc": {
+     "proofs": [
+      "ui-flow-comment"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileFlow"
+      ]
+     },
+     "limits": [
+      {
+       "text": "The bare type name IComment is ambiguous (UI.Mobile vs UI.Web vs logic comment nodes): jobs name OutSystems.Model.UI.Mobile.IComment in full.",
+       "origin": "job:ui-flow-comment; kernel/docs/NAO-DA.md \"Nomes de interface ambiguos\""
+      }
+     ],
+     "differences": []
+    },
+    "o11": {
+     "proofs": [
+      "cat-b-flow-comment-popover"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileFlow"
+      ]
+     },
+     "limits": [
+      {
+       "text": "No O11 suite job creates a flow comment.",
+       "origin": "kernel/tests/jobs (scan 2026-09-23)"
+      }
+     ],
+     "differences": []
+    }
+   }
+  }
+ ],
+ "unavailable": [],
+ "coverage": []
+}

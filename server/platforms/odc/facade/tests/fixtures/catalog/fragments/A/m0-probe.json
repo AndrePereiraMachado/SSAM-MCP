@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "ssam-discovery-fragment/1",
+  "contract": "ssam-catalog-contribution/1",
+  "front": "A",
+  "title": "M0 mechanism fixture (front A): composition and validation only, not a coverage claim",
+  "reviewedAt": "2026-09-23",
+  "synonyms": { "assign": ["assignment", "atribuicao", "atribuir"] },
+  "capabilities": [
+    {
+      "id": "logic.m0-probe-assign",
+      "category": "logic",
+      "title": "M0 probe: Assign node (fixture)",
+      "keywords": ["m0probeassign"],
+      "summary": "Fixture capability used by the catalog mechanism test; every role statement is undetermined on purpose.",
+      "route": { "kind": "job", "operation": "create IAssignNode + IAssignment (fixture)" },
+      "contract": ["logic.steps.node"],
+      "depends": [],
+      "alternatives": [],
+      "elements": [
+        { "role": "assign node", "platforms": {
+          "odc": { "native": "OutSystems.Model.Logic.Nodes.IAssignNode", "jobType": "IAssignNode", "address": "$action/<Label>" },
+          "o11": { "native": "OutSystems.Model.Logic.Nodes.IAssignNode", "jobType": "IAssignNode", "address": "$action/<Label>" } } },
+        { "role": "assignment", "child": true, "platforms": {
+          "odc": { "native": "OutSystems.Model.Logic.IAssignment", "jobType": "IAssignment", "address": "$assign/#IAssignment[n]" },
+          "o11": { "native": "OutSystems.Model.Logic.IAssignment", "jobType": "IAssignment", "address": "$assign/#IAssignment[n]" } } }
+      ],
+      "operations": {
+        "read": { "route": "get/dump (fixture)", "preconditions": [], "roles": {
+          "assign node": { "odc": { "status": "undetermined", "note": "fixture" }, "o11": { "status": "undetermined", "note": "fixture" } },
+          "assignment": { "odc": { "status": "undetermined", "note": "fixture" }, "o11": { "status": "undetermined", "note": "fixture" } } } }
+      },
+      "platforms": { "odc": { "proofs": [], "negative": [], "limits": [] }, "o11": { "proofs": [], "negative": [], "limits": [] } }
+    }
+  ],
+  "unavailable": [],
+  "coverage": [
+    { "type": "odc:OutSystems.Model.Data.IEntityDiagram", "status": "undetermined", "applicability": "undetermined", "reason": "M0 mechanism fixture" }
+  ]
+}

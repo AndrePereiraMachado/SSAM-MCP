@@ -1,0 +1,23 @@
+{
+ "description": "CRUD back-office, parte 3 de 5 (telas): cria ProductList e ProductEdit (input ProductId opcional) antes do conteudo, para que as navegacoes de um lado para o outro existam; as duas so para o role ProductManager (Roles declarado uma vez por tela).",
+ "base": "job:crud-02-logic",
+ "expectValid": true,
+ "expectedMessages": [
+  {"id": "UnusedElement", "element": "ProductEdit (MobileScreen) / ProductId (InputParameter)", "why": "O input e lido pelo aggregate da parte 4; no crud-all nao ha aviso."}
+ ],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductList", "as": "$list"},
+  {"op": "set", "target": "$list/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "set", "target": "$list", "prop": "Roles", "value": ["IRole:ProductManager"]},
+  {"op": "create", "parent": "$list/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$listTitle"},
+  {"op": "set", "target": "$listTitle", "prop": "Value", "value": "\"Products\""},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductEdit", "as": "$edit"},
+  {"op": "set", "target": "$edit/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "set", "target": "$edit", "prop": "Roles", "value": ["IRole:ProductManager"]},
+  {"op": "create", "parent": "$edit/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$editTitle"},
+  {"op": "set", "target": "$editTitle", "prop": "Value", "value": "\"Product\""},
+  {"op": "create", "parent": "$edit", "type": "IInputParameter", "name": "ProductId", "as": "$pid"},
+  {"op": "set", "target": "$pid", "prop": "DataType", "value": "Product Identifier"},
+  {"op": "set", "target": "$pid", "prop": "IsMandatory", "value": false}
+ ]
+}

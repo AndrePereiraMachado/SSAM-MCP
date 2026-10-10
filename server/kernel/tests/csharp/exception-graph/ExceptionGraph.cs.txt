@@ -1,0 +1,32 @@
+#nullable enable
+using System;
+using System.Collections.Generic;
+
+public sealed class FailureState
+{
+    public int Attempts;
+    public Exception? Error;
+    public readonly List<Exception> Errors = new List<Exception>();
+}
+
+public static class FailureRules
+{
+    public static FailureState Echo(FailureState state) => state;
+
+    public static void Reject(FailureState state, string parameter, int actual)
+    {
+        state.Attempts++;
+        var failure = new ArgumentOutOfRangeException(parameter, actual, "outside");
+        state.Error = failure;
+        state.Errors.Add(failure);
+        throw failure;
+    }
+
+    public static Exception Wrap(FailureState state)
+    {
+        var failure = new InvalidOperationException("wrapped", state.Error);
+        state.Errors.Add(failure);
+        state.Error = failure;
+        return failure;
+    }
+}

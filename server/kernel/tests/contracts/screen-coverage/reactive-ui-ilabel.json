@@ -1,0 +1,59 @@
+{
+  "fixture": "reactive-ui",
+  "features": [
+    "native-widget",
+    "mobile:ILabel"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Subject",
+            "type": "ILabel",
+            "properties": {
+              "TargetWidget": "IMobileScreen:Coverage/Editor",
+              "Style": "\"coverage\""
+            },
+            "children": [
+              {
+                "name": "Part2",
+                "type": "ITextWidget",
+                "properties": {
+                  "Text": "Name"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Editor",
+            "type": "IInput",
+            "properties": {
+              "Variable": "Value"
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value",
+            "type": "Text"
+          }
+        ]
+      }
+    ]
+  },
+  "mutation": {
+    "target": "IMobileScreen:Coverage/Subject",
+    "prop": "Style",
+    "value": "\"changed\""
+  }
+}

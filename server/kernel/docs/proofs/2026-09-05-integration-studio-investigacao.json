@@ -1,0 +1,351 @@
+{
+  "date": "2026-09-05",
+  "installation": "C:\\Program Files\\OutSystems\\Integration Studio",
+  "versionTxt": "11.14.25.0 (main @ 3038d13dd9d3a48221bf11b9e8ec903a0f342913)",
+  "assemblyVersion": "11.14.25.134",
+  "investigationDirectory": "C:\\Users\\andre\\AppData\\Local\\Anvil\\investigations\\integration-studio",
+  "inventory": [
+    {
+      "Name": "DevExpress.Data.dll",
+      "Bytes": 151552,
+      "FileVersion": "1.2.7.0",
+      "SHA256": "30EE7E5D74F65C969938C01E1A27B3CEA578A2357CDD9EE1856710BA7F56A7A7"
+    },
+    {
+      "Name": "DevExpress.Utils.dll",
+      "Bytes": 499712,
+      "FileVersion": "2.1.7.0",
+      "SHA256": "062A7B632FDAB17CFAC2FCE9F7917693CF7D177BC07DB1FF5558881DB0D4ACCD"
+    },
+    {
+      "Name": "DevExpress.XtraBars.dll",
+      "Bytes": 905216,
+      "FileVersion": "3.2.7.0",
+      "SHA256": "DD584E0363E18A387525487084690CEF4D9F72250FACE040C23A317393EE256A"
+    },
+    {
+      "Name": "DevExpress.XtraEditors.dll",
+      "Bytes": 704512,
+      "FileVersion": "2.1.7.0",
+      "SHA256": "1F8E98A243D0E74371AA8A17B83794EFC8ECE0DFF48C23BE93E362A6D48F5EA9"
+    },
+    {
+      "Name": "DevExpress.XtraGrid.dll",
+      "Bytes": 1040384,
+      "FileVersion": "2.4.7.0",
+      "SHA256": "F22D90F4942079D255B78A301506BEF1AA6BE6F4AFB6ED495EF6F22DB43B4DF9"
+    },
+    {
+      "Name": "ICSharpCode.SharpZipLib.dll",
+      "Bytes": 202752,
+      "FileVersion": "1.2.0.8",
+      "SHA256": "FCEE48F5D649DF09F1CE12054A7AD6FD10566327D398CD8D5D9B72DDA9233C8B"
+    },
+    {
+      "Name": "IntegrationStudio.exe",
+      "Bytes": 389120,
+      "FileVersion": "11.14.25.134",
+      "SHA256": "1E0144B77374CB13AA3A764AA18D18EAEDB41AED3E90A03FE9952F4482A5CDFE"
+    },
+    {
+      "Name": "ISDiagnostics.dll",
+      "Bytes": 61440,
+      "FileVersion": "1.0.0.0",
+      "SHA256": "320EE4779A41FC68EB2B1635C22548D16BF38C0D7FD2B326F5914CC027D12286"
+    },
+    {
+      "Name": "Microsoft.Bcl.AsyncInterfaces.dll",
+      "Bytes": 21064,
+      "FileVersion": "4.700.19.56404",
+      "SHA256": "ED5BC605F7F9FCC382183ABEF06C354DAD946ABB42A07631712077B2157D6BC9"
+    },
+    {
+      "Name": "Microsoft.IdentityModel.Abstractions.dll",
+      "Bytes": 18824,
+      "FileVersion": "6.32.0.40712",
+      "SHA256": "9267D2227CC77170C3AAB5AAA49974F1C8A273088483E19CCF32401900D712DA"
+    },
+    {
+      "Name": "Microsoft.IdentityModel.JsonWebTokens.dll",
+      "Bytes": 112520,
+      "FileVersion": "6.32.0.40712",
+      "SHA256": "6A209A54F0B17FEE8A0F501E29481A047A88A60A9BD6D91F2E30B89CA64C9425"
+    },
+    {
+      "Name": "Microsoft.IdentityModel.Logging.dll",
+      "Bytes": 37256,
+      "FileVersion": "6.32.0.40712",
+      "SHA256": "9B2CC247414458FF40030A600A73A96A2839CD1C0017FB2C8DD5EBD747551E80"
+    },
+    {
+      "Name": "Microsoft.IdentityModel.Tokens.dll",
+      "Bytes": 993672,
+      "FileVersion": "6.32.0.40712",
+      "SHA256": "F90BC4B188A6C51CA32D82FC3C6E6EB05EBD141CE9D51B365AF0CB4EDEACA3F3"
+    },
+    {
+      "Name": "Microsoft.Win32.Registry.dll",
+      "Bytes": 23112,
+      "FileVersion": "4.700.19.56404",
+      "SHA256": "619737E2AF8FB713085726631DD2E522FE130CAC1D388A59C38907A47D7AADEA"
+    },
+    {
+      "Name": "Mtadados.xif",
+      "Bytes": 587647,
+      "FileVersion": null,
+      "SHA256": "7ACDB01DBD5737940AFA0BDBC1C021D62B0AD138EB6A6385A1C61371D3644660"
+    },
+    {
+      "Name": "Newtonsoft.Json.dll",
+      "Bytes": 711952,
+      "FileVersion": "13.0.3.27908",
+      "SHA256": "E1E27AF7B07EEEDF5CE71A9255F0422816A6FC5849A483C6714E1B472044FA9D"
+    },
+    {
+      "Name": "OutSystems.C5.dll",
+      "Bytes": 270848,
+      "FileVersion": "11.12.1.060000",
+      "SHA256": "7ABF78119293879AD1E4C3D42925974D103E4B912E6DF9725F156E88D5BF0A74"
+    },
+    {
+      "Name": "OutSystems.CodeGeneration.dll",
+      "Bytes": 90112,
+      "FileVersion": "11.13.4.060000",
+      "SHA256": "876678FAC5BFAEF7C12937D26F92978EA55D570805FBB4245ED2B37597B54B5E"
+    },
+    {
+      "Name": "OutSystems.Communication.dll",
+      "Bytes": 456704,
+      "FileVersion": "11.5.0.0",
+      "SHA256": "8820DE8854D9E232BFDF59E2010480364735CDABA378EDE3F4A1A16D6660E524"
+    },
+    {
+      "Name": "OutSystems.FrameworkExtensions.dll",
+      "Bytes": 80896,
+      "FileVersion": "11.13.2.060000",
+      "SHA256": "A4B5A86EF8C335C7F4C022BBD822CFBE7AE105325CDE48876F3276E0CD8351D7"
+    },
+    {
+      "Name": "OutSystems.IntegrationStudio.Core.dll",
+      "Bytes": 659456,
+      "FileVersion": "11.14.25.134",
+      "SHA256": "88BA37F9F7B9203A5FBE48AD5790E7EB198AE10744436D5EE16AEEF44FE60DD5"
+    },
+    {
+      "Name": "OutSystems.IntegrationStudio.Interface.dll",
+      "Bytes": 1306624,
+      "FileVersion": "11.14.25.134",
+      "SHA256": "C3C380F901E51B2DFB4E3BBA41371DEE99CA65DDDBA5DAFE3768EA2DB64A7A13"
+    },
+    {
+      "Name": "OutSystems.IntegrationStudio.Logger.dll",
+      "Bytes": 8704,
+      "FileVersion": "11.5.0.0",
+      "SHA256": "404FCEA5D23E995B50A0FF6C35B2C12ADFB6778F10771495EE83479CC04133EF"
+    },
+    {
+      "Name": "OutSystems.MetaModel.dll",
+      "Bytes": 81408,
+      "FileVersion": "12.118.2.060000",
+      "SHA256": "DA636DB9F4EDA4A3BDC40CCFE5E877DBA540B7328BC8825A48321C9442CA5E16"
+    },
+    {
+      "Name": "OutSystems.Model.Implementation.Extensions.dll",
+      "Bytes": 69120,
+      "FileVersion": "12.118.2.060000",
+      "SHA256": "70D80C2006692D746F1B427F89E8D6BE0D9D936EAF3FD2E4AB4499742C957F6C"
+    },
+    {
+      "Name": "OutSystems.RuntimeCommon.dll",
+      "Bytes": 300032,
+      "FileVersion": "11.15.3.0000",
+      "SHA256": "17510530B6E5A7D92F8A9E4775D45ED2817EC8C100D14932E802AFC7709E6C38"
+    },
+    {
+      "Name": "OutSystems.Telemetry.dll",
+      "Bytes": 56832,
+      "FileVersion": "11.22.3.060000",
+      "SHA256": "87F62FB46E9D124773AAD5D4F1581FA0F16DBCD25DFFE730D6F4D459DA8864CA"
+    },
+    {
+      "Name": "OutSystems.Zip.dll",
+      "Bytes": 19456,
+      "FileVersion": "11.13.1.060000",
+      "SHA256": "51389124EB2B6265FDE0F6E8DFD114B0321CC1E4AF3EBF656F19D57F1F7F1E77"
+    },
+    {
+      "Name": "ParserIS.dll",
+      "Bytes": 167936,
+      "FileVersion": null,
+      "SHA256": "168D48493546322D064B7E2A89BB5DDD11181A3A3A2D11918DB637496CBEFA43"
+    },
+    {
+      "Name": "System.Buffers.dll",
+      "Bytes": 20856,
+      "FileVersion": "4.6.28619.01",
+      "SHA256": "ACCCCFBE45D9F08FFEED9916E37B33E98C65BE012CFFF6E7FA7B67210CE1FEFB"
+    },
+    {
+      "Name": "System.Diagnostics.DiagnosticSource.dll",
+      "Bytes": 66432,
+      "FileVersion": "4.700.20.21406",
+      "SHA256": "7A953C41AEBD1F3E5D7AA32AE20B6773D7481206B61CB6FB8AE03F7A86B55113"
+    },
+    {
+      "Name": "System.IdentityModel.Tokens.Jwt.dll",
+      "Bytes": 77728,
+      "FileVersion": "6.32.0.40712",
+      "SHA256": "A382C6037E69DB6DE6015C494359FB97C6FF569BD9BC40C7091FE4BE95F3B571"
+    },
+    {
+      "Name": "System.Memory.dll",
+      "Bytes": 141184,
+      "FileVersion": "4.6.28619.01",
+      "SHA256": "8E76318E8B06692ABF7DAB1169D27D15557F7F0A34D36AF6463EFF0FE21213C7"
+    },
+    {
+      "Name": "System.Numerics.Vectors.dll",
+      "Bytes": 115856,
+      "FileVersion": "4.6.26515.06",
+      "SHA256": "1D3EF8698281E7CF7371D1554AFEF5872B39F96C26DA772210A33DA041BA1183"
+    },
+    {
+      "Name": "System.Reactive.dll",
+      "Bytes": 1470416,
+      "FileVersion": "5.0.0.1",
+      "SHA256": "EA69AE3AF1CFFD5E895C79E8FBED7AB0885911DF63F187FF2069C6B8E2236FCE"
+    },
+    {
+      "Name": "System.Runtime.CompilerServices.Unsafe.dll",
+      "Bytes": 17000,
+      "FileVersion": "4.700.20.12001",
+      "SHA256": "F6EF966D019B1C406659CE18F3AB00C3C7C9334E4DADC0249BC6721CDB77EE9A"
+    },
+    {
+      "Name": "System.ServiceModel.Primitives.dll",
+      "Bytes": 29760,
+      "FileVersion": "4.6.26720.01",
+      "SHA256": "BF522F7D4C99A79AC9ABD8999087DD6CBD95029424181C37F70CBBF4FA7D3609"
+    },
+    {
+      "Name": "System.Text.Encodings.Web.dll",
+      "Bytes": 59768,
+      "FileVersion": "4.700.21.11602",
+      "SHA256": "09F7D7E7F98BE4C21C4DBA8C3BE7BF9516DBAE6DDDFB1B827188A9BD874C6724"
+    },
+    {
+      "Name": "System.Text.Json.dll",
+      "Bytes": 293248,
+      "FileVersion": "4.700.20.21406",
+      "SHA256": "D2608254043E5B19F6E8335569FC2DD72AE4CE11A3DF0D3F1425AC158DF93237"
+    },
+    {
+      "Name": "System.Threading.Tasks.Extensions.dll",
+      "Bytes": 25984,
+      "FileVersion": "4.6.28619.01",
+      "SHA256": "4F81FFD0DC7204DB75AFC35EA4291769B07C440592F28894260EEA76626A23C6"
+    },
+    {
+      "Name": "System.ValueTuple.dll",
+      "Bytes": 25232,
+      "FileVersion": "4.6.26515.06",
+      "SHA256": "E905D102585B22C6DF04F219AF5CBDBFA7BC165979E9788B62DF6DCC165E10F4"
+    },
+    {
+      "Name": "uninst.exe",
+      "Bytes": 407592,
+      "FileVersion": "11.14.25.134",
+      "SHA256": "C48E047AF58D9D82FDD027DC980D3017BE8B436DDF50C471C4658621D2D0F98F"
+    }
+  ],
+  "nativeProbe": {
+    "kind": "native offline model probe",
+    "networkCallsRequested": false,
+    "guiLaunched": false,
+    "stage": "roundtripped",
+    "name": "ZZISProbe",
+    "technologies": 0,
+    "reports": [],
+    "verified": true,
+    "undoRedo": {
+      "undoRestored": true,
+      "redoRestored": true,
+      "after": "native probe description"
+    },
+    "serializationReports": [],
+    "roundtrip": {
+      "descriptionPreserved": true,
+      "keyPreserved": true,
+      "name": "ZZISProbe",
+      "namePreserved": true,
+      "xmlBytes": 473
+    }
+  },
+  "nativeProbeLimits": [
+    "Blank model only; zero technologies and no plugins loaded",
+    "Serialization is native light XML, not a complete packed XIF roundtrip",
+    "No action implementation, C# compilation, upload, publication, consumer execution or live GUI merge proved"
+  ],
+  "installedXif": {
+    "file": "Mtadados.xif",
+    "formatObserved": "zlib-compressed XML",
+    "root": "Extension",
+    "children": {
+      "Resources": 16,
+      "Actions": 1,
+      "Structures": 0,
+      "Entities": 0,
+      "Technologies": 2
+    }
+  },
+  "interfaceBaseline": {
+    "currentSha256": "c3c380f901e51b2dfb4e3bba41371dee99ca65dddba5dafe3768ea2db64a7a13",
+    "originalSidecarSha256": "bc95fbad79a1873d81486256a751a2390a6a4e14241e950b38d1204c8741cd98",
+    "sameBytes": false,
+    "cause": "Not investigated; preserve both files and establish baseline before interface instrumentation"
+  },
+  "publicAssemblySurfaces": [
+    {
+      "assembly": "OutSystems.IntegrationStudio.Core, Version=11.14.25.134, Culture=neutral, PublicKeyToken=null",
+      "runtime": "v4.0.30319",
+      "exportedTypeCount": 345,
+      "inspectedTypes": [
+        "OutSystems.IntegrationStudio.Core.Common.Model.XIF.XML",
+        "OutSystems.IntegrationStudio.Core.Common.Model.Project.ProjectCommand",
+        "OutSystems.IntegrationStudio.Core.Common.Model.Project.Technology.TechnologyCommand",
+        "OutSystems.IntegrationStudio.Core.Common.Model.Project.Technology.Structure.StructureCommand",
+        "OutSystems.IntegrationStudio.Core.Common.Model.Project.Technology.Action.ActionCommand",
+        "OutSystems.IntegrationStudio.Core.Logic.Compiler.Compiler",
+        "OutSystems.IntegrationStudio.Core.Aggregator.IAggregator"
+      ]
+    },
+    {
+      "assembly": "OutSystems.Model.Implementation.Extensions, Version=12.0.0.0, Culture=neutral, PublicKeyToken=null",
+      "runtime": "v4.0.30319",
+      "exportedTypeCount": 15,
+      "inspectedTypes": []
+    },
+    {
+      "assembly": "IntegrationStudio, Version=11.14.25.134, Culture=neutral, PublicKeyToken=null",
+      "runtime": "v4.0.30319",
+      "exportedTypeCount": 3,
+      "inspectedTypes": []
+    }
+  ],
+  "remoteCapabilitiesInspectedOnly": [
+    "Handshake",
+    "ListExtensions",
+    "ListExtensionVersions",
+    "GenerateSourceCodeStubs",
+    "GetSourceCodeDependencies",
+    "Download",
+    "UploadNeeded",
+    "Upload",
+    "Publish",
+    "EntityIntrospectionGetServers",
+    "EntityIntrospectionGetDatabases",
+    "EntityIntrospectionGetTables"
+  ],
+  "installationUnchanged": true,
+  "ss4ss5Touched": false
+}

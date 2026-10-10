@@ -1,0 +1,34 @@
+{
+ "description": "Card clicavel: um Container numa List com o evento onclick (IEvent) ligado a uma screen action que recebe o Id da linha como argumento.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [{"name": "Name", "type": "Text", "length": 100, "mandatory": true}]}]}},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductCards", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "SelectedProductId", "as": "$sel"},
+  {"op": "set", "target": "$sel", "prop": "DataType", "value": "Product Identifier"},
+
+  {"op": "logic", "data": {"actions": [
+   {"name": "SelectProduct", "kind": "screen", "owner": "IMobileScreen:ProductCards",
+    "inputs": [{"name": "ProductId", "type": "Product Identifier"}],
+    "steps": [{"assign": {"SelectedProductId": "ProductId"}, "as": "Remember"}]}]}},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "ProductList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetProducts.List"},
+  {"op": "create", "parent": "$list", "type": "IContainer", "name": "ProductCard", "as": "$card"},
+  {"op": "create", "parent": "$card", "type": "IExpression", "as": "$name"},
+  {"op": "set", "target": "$name", "prop": "Value", "value": "GetProducts.List.Current.Product.Name"},
+
+  {"op": "create", "parent": "$card", "type": "IEvent", "as": "$click", "_why": "o Container nao tem OnClick proprio: o clique e um evento estendido (Events > onclick) criado no proprio widget"},
+  {"op": "set", "target": "$click", "prop": "Event", "value": "onclick"},
+  {"op": "set", "target": "$click", "prop": "Handler", "value": "IMobileScreen:ProductCards/SelectProduct"},
+  {"op": "set", "target": "$click/ProductId", "prop": "Value", "value": "GetProducts.List.Current.Product.Id", "_why": "o argumento do handler e enderecado pelo nome do input da screen action, como num OnClick de botao"},
+
+  {"op": "get", "target": "$click"}
+ ]
+}

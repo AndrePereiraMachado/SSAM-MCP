@@ -1,0 +1,14 @@
+{
+ "description": "POSITIVO L7 (OutSystems padroes): URL/esquema como valor de record e default de atributo de Static Entity e dominio fixo, o lugar que a regra manda; a ferramenta nao acusa.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"static": [
+   {"name": "NegApiRoute", "public": true, "description": "Rotas de API implementadas; dominio fixo com o esquema exigido de cada rota.",
+    "attributes": [{"name": "BaseUrlScheme", "type": "Text", "length": 20, "default": "\"https://\"",
+                    "description": "Esquema que a URL base do perfil precisa usar, para a chave nunca ir por HTTP."}],
+    "records": [{"name": "PrimaryRoute", "label": "Primary route", "order": 1, "BaseUrlScheme": "\"https://\""}]}
+  ]}}
+ ]
+}

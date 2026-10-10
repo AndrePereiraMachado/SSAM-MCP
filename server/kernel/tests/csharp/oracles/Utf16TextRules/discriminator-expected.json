@@ -1,0 +1,55 @@
+{
+  "sourceSha256": "933d61367b61eec0ad77321eb7c433af26c743c6d8d7e30df5e80f5c8d9c369f",
+  "oracleRuntime": ".NET 8.0.18",
+  "manualAnchorsPassed": true,
+  "cases": [
+    {
+      "id": "space-combining-mark/Measure",
+      "method": "Measure",
+      "result": 2,
+      "error": null
+    },
+    {
+      "id": "space-combining-mark/Describe",
+      "method": "Describe",
+      "result": "length=2;trim=[\u0301];start=[\u0301];end=[ \u0301];blank=no",
+      "error": null
+    },
+    {
+      "id": "space-combining-mark-word/Measure",
+      "method": "Measure",
+      "result": 4,
+      "error": null
+    },
+    {
+      "id": "space-combining-mark-word/Describe",
+      "method": "Describe",
+      "result": "length=4;trim=[\u0301x];start=[\u0301x ];end=[ \u0301x];blank=no",
+      "error": null
+    },
+    {
+      "id": "space-zwj/Measure",
+      "method": "Measure",
+      "result": 2,
+      "error": null
+    },
+    {
+      "id": "space-zwj/Describe",
+      "method": "Describe",
+      "result": "length=2;trim=[\u200D];start=[\u200D];end=[ \u200D];blank=no",
+      "error": null
+    },
+    {
+      "id": "space-variation-selector/Measure",
+      "method": "Measure",
+      "result": 2,
+      "error": null
+    },
+    {
+      "id": "space-variation-selector/Describe",
+      "method": "Describe",
+      "result": "length=2;trim=[\uFE0F];start=[\uFE0F];end=[ \uFE0F];blank=no",
+      "error": null
+    }
+  ]
+}

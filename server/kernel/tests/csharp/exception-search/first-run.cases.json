@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "scope": "Independent real-CLR source semantics only",
+  "firstRun": true,
+  "passed": 6,
+  "failed": 0,
+  "authoringFixesAfterFirstRun": [],
+  "sourcesAndExpectationsChangedAfterFreeze": false,
+  "sdkVersion": "10.0.301",
+  "observedTestHostRuntime": ".NET 8.0.18",
+  "targetFramework": "net8.0",
+  "useAppHost": false,
+  "reportedTestDurationSeconds": 3.8052,
+  "sourceCorpusSha256": "227d381e440e1cbd6516b080754ec4bd04427e695ca3cb452147cd272eafa126",
+  "expectationsSha256": "cee12b9456afa016e351638697fa5f1bf794bd294c19c283cecebb3c68df344b",
+  "freezeManifestSha256": "799d7728696f9850fd2dcc257ccedd57bc9f7832f95dfa42e19e51a1edd88ea2",
+  "testSourceSha256": "a06a84ad07a43df1804251a83e91ce3f9960cc8e0a099abdb8911fe587e44b49",
+  "actualResultsPath": ".local/exception-search-oracle/f90a79427e0c464b99b97262c69837e6/actual-results.json",
+  "actualResultsSha256": "6b7412baec092b12c1d578b0a757261b793e33e7f6fe72a760a2f6e3331fcbf2",
+  "trxPath": ".local/exception-search-source-tests/first-run/first-run.trx",
+  "trxSha256": "f58864f42e7e0bbaba2d0d2628317d2a3c8c562c9672a99ea7bf4068803b4406",
+  "cases": [
+    { "name": "caller-filter-before-callee-finally", "status": "passed" },
+    { "name": "filter-mutates-captured-caller-scalar", "status": "passed" },
+    { "name": "finally-replacement-restarts-outer-filter-search", "status": "passed" },
+    { "name": "throwing-filter-helper-is-false-with-effects", "status": "passed" },
+    { "name": "reassigned-catch-variable-bare-rethrow-keeps-original", "status": "passed" },
+    { "name": "recursive-same-region-selects-frame-and-cleanup-order", "status": "passed" }
+  ],
+  "unproved": [
+    "C# translator and native graph equivalence",
+    "ModelHost and SS4/SS5 execution",
+    "Studio merge and server execution",
+    "PDB source-position mapping"
+  ]
+}

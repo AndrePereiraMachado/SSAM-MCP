@@ -1,0 +1,8 @@
+<style>
+  :root { padding: 12px; }
+  .wf-booking-title { font-weight: 600; display: block; }
+</style>
+<div id="BookingPanel" class="wf-booking">
+  <span class="wf-booking-title">Pick a date</span>
+  <Block id="BookingDate" name="DatePicker" :DateFormat='"yyyy-MM-dd"' @OnSelected="DateChosen"></Block>
+</div>

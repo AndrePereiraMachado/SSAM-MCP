@@ -1,0 +1,14 @@
+{
+ "description": "ChatMessage do OSUI: o input obrigatorio MessageStatus (static entity do OSUI) e o texto no Content.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ChatMessageDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ChatMessage1", "source": "IMobileBlock:ChatMessage", "as": "$cm"},
+  {"op": "set", "target": "$cm/MessageStatus", "prop": "Value", "value": "Entities.MessageStatus.Sent"},
+  {"op": "create", "parent": "$cm/Content", "type": "ITextWidget", "as": "$text1"},
+  {"op": "set", "target": "$text1", "prop": "Text", "value": "Hello!"}
+ ]
+}

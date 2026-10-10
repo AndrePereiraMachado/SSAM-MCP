@@ -1,0 +1,73 @@
+{
+ "description": "Renomear DADOS e ler de volta o que ficou para tras. A entidade Contact vira Person e o atributo Email vira EmailAddress; uma variavel local tambem e renomeada. O que a plataforma reescreve sozinha (expressoes da tela, statement do SQL, DataType dos parametros, atributos do indice) e o que NAO acompanha (Description da entidade e do atributo, nome do indice IX_Contact_Email, literais de texto, nomes de aggregate/widgets/parametros que citam o nome antigo) sao lidos com get/dump DEPOIS do rename, no proprio job.",
+ "base": "job:screen-form-reactive",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "set", "target": "IServerEntity:Contact", "prop": "Public", "value": true, "_why": "1. texto que nao e modelo: descricao da entidade e do atributo citam o nome antigo"},
+  {"op": "set", "target": "IServerEntity:Contact", "prop": "Description", "value": "Agenda de contactos. O endereco vive em Contact.Email."},
+  {"op": "set", "target": "IServerEntity:Contact/Email", "prop": "Description", "value": "Email do Contact, mostrado no ecra ContactDetail."},
+  {"op": "set", "target": "IServerEntity:Contact/Email", "prop": "Label", "value": "Email do Contact"},
+
+  {"op": "create", "parent": "IServerEntity:Contact", "type": "EntityIndex", "name": "IX_Contact_Phone", "args": {"unique": false, "attributes": ["IServerEntity:Contact/Phone"]}, "_why": "2. o indice: a entidade e uma referencia (segue), o NOME do indice e texto (nao segue)"},
+
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "Contact_Report", "as": "$rep", "_why": "3. consumidores de logica: SQL sobre a entidade, literal de texto e variavel local"},
+  {"op": "set", "target": "$rep", "prop": "Public", "value": true},
+  {"op": "create", "parent": "$rep", "type": "IOutputParameter", "name": "Rows", "as": "$repRows"},
+  {"op": "set", "target": "$repRows", "prop": "DataType", "value": "Contact List"},
+  {"op": "create", "parent": "$rep", "type": "IOutputParameter", "name": "Label", "as": "$repLabel"},
+  {"op": "set", "target": "$repLabel", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$rep", "type": "ILocalVariable", "name": "ContactLabel", "as": "$var"},
+  {"op": "set", "target": "$var", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$rep", "type": "IStartNode", "as": "$r0"},
+  {"op": "create", "parent": "$rep", "type": "ISQLNode", "name": "ReadContacts", "as": "$sql"},
+  {"op": "set", "target": "$sql", "prop": "Statement", "value": "SELECT {Contact}.* FROM {Contact} WHERE {Contact}.[Email] <> @Empty"},
+  {"op": "create", "parent": "$sql", "type": "ISQLInputParameter", "name": "Empty", "as": "$sqlIn"},
+  {"op": "set", "target": "$sqlIn", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$sql", "type": "ISQLOutput", "name": "List", "args": {"entityOrStructure": "Contact"}, "as": "$sqlOut"},
+  {"op": "set", "target": "$sql/arg:Empty", "prop": "Value", "value": "\"\""},
+  {"op": "create", "parent": "$rep", "type": "IAssignNode", "as": "$asg"},
+  {"op": "set", "target": "$asg", "prop": "Label", "value": "SetOutputs"},
+  {"op": "create", "parent": "$asg", "type": "IAssignment", "as": "$a1"},
+  {"op": "set", "target": "$a1", "prop": "Variable", "value": "Rows"},
+  {"op": "set", "target": "$a1", "prop": "Value", "value": "ReadContacts.List"},
+  {"op": "create", "parent": "$asg", "type": "IAssignment", "as": "$a2"},
+  {"op": "set", "target": "$a2", "prop": "Variable", "value": "ContactLabel"},
+  {"op": "set", "target": "$a2", "prop": "Value", "value": "\"Contact sem Email\""},
+  {"op": "create", "parent": "$asg", "type": "IAssignment", "as": "$a3"},
+  {"op": "set", "target": "$a3", "prop": "Variable", "value": "Label"},
+  {"op": "set", "target": "$a3", "prop": "Value", "value": "ContactLabel"},
+  {"op": "create", "parent": "$rep", "type": "IEndNode", "as": "$r9"},
+  {"op": "link", "from": "$r0", "to": "$sql"},
+  {"op": "link", "from": "$sql", "to": "$asg"},
+  {"op": "link", "from": "$asg", "to": "$r9"},
+  {"op": "layout", "target": "$rep"},
+
+  {"op": "usages", "target": "IServerEntity:Contact", "max": 30, "_why": "4. quem usa a entidade ANTES do rename"},
+  {"op": "usages", "target": "IServerEntity:Contact/Email", "_why": "quem usa o atributo ANTES"},
+
+  {"op": "rename", "target": "IServerEntity:Contact", "name": "Person", "_why": "5. o rename da entidade"},
+
+  {"op": "get", "target": "IServerEntity:Person", "_why": "6. LER DE VOLTA: a Description ainda diz 'Contact.Email' -- descricao nao propaga"},
+  {"op": "get", "target": "EntityIndex:IX_Contact_Phone", "_why": "o indice mantem o nome antigo no NOME; a Entity seguiu por chave"},
+  {"op": "get", "target": "$sql", "_why": "o Statement do SQL foi regenerado pela plataforma: {Person}"},
+  {"op": "get", "target": "$repRows", "_why": "o DataType do output seguiu: Person List"},
+  {"op": "get", "target": "$a2", "_why": "o literal 'Contact sem Email' NAO mudou"},
+  {"op": "get", "target": "IServerAction:Contact_Save/Contact", "_why": "o parametro chamado Contact mantem o nome; so o DataType seguiu"},
+  {"op": "usages", "target": "IServerEntity:Person", "max": 30, "_why": "os mesmos consumidores, agora sob o nome novo"},
+
+  {"op": "rename", "target": "IServerEntity:Person/Email", "name": "EmailAddress", "_why": "7. o rename do atributo"},
+
+  {"op": "get", "target": "IServerEntity:Person/EmailAddress", "_why": "8. LER DE VOLTA: a Description e o Label do atributo ainda dizem 'Email do Contact'"},
+  {"op": "get", "target": "EntityIndex:IX_Contact_Phone"},
+  {"op": "get", "target": "$sql", "_why": "o WHERE passou a {Person}.[EmailAddress]"},
+  {"op": "usages", "target": "IServerEntity:Person/EmailAddress"},
+
+  {"op": "rename", "target": "$var", "name": "PersonLabel", "_why": "9. o rename da variavel local: a expressao que a le tem de ser reescrita"},
+  {"op": "get", "target": "$a3"},
+  {"op": "get", "target": "$a2", "_why": "o literal continua a dizer Contact e Email, depois dos tres renames"},
+
+  {"op": "dump", "target": "IMobileScreen:ContactDetail", "depth": 6, "_why": "10. a tela: as expressoes foram reescritas, mas o nome da tela, do aggregate GetContactById, do Form ContactForm e do Email_Input ficaram para tras"},
+  {"op": "dump", "target": "$rep", "depth": 4}
+ ]
+}

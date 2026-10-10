@@ -1,0 +1,75 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "native-widget",
+    "web:IWebBlockInstanceWidget"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Subject",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:ContractBlock",
+            "args": {
+              "Caption": "\"Original\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Content"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "ContractBlock",
+        "type": "IWebBlock",
+        "flow": "MainFlow",
+        "inputs": [
+          {
+            "name": "Caption",
+            "type": "Text",
+            "mandatory": false
+          }
+        ],
+        "widgets": [
+          {
+            "name": "BlockTitle",
+            "type": "IExpressionWidget",
+            "properties": {
+              "Value": "Caption"
+            }
+          },
+          {
+            "name": "Content",
+            "type": "IPlaceholderWidget",
+            "properties": {}
+          }
+        ]
+      }
+    ]
+  },
+  "mutation": {
+    "target": "IWebScreen:Coverage/Subject/Caption",
+    "prop": "Value",
+    "value": "\"Changed\""
+  }
+}

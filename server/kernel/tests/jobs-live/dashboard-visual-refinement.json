@@ -1,0 +1,9 @@
+{
+  "description": "Refine dashboard CSS on the existing screen after browser QA; preserve screen variables and chart initialization.",
+  "expectValid": true,
+  "expectedMessages": [],
+  "ops": [
+    { "op": "delete", "target": "IMobileScreen:Dashboard/DashboardCanvas" },
+    { "op": "html", "parent": "IMobileScreen:Dashboard", "file": "tests/html/visual/dashboard-charts.html" }
+  ]
+}

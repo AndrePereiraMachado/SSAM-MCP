@@ -1,0 +1,45 @@
+# ADR-018 — Frontend semântico C# para o contrato nativo
+
+Usar `Microsoft.CodeAnalysis.CSharp` 4.8.0, fixado, com a linguagem C# 12. O frontend usa símbolos e operações semânticas, sem emissão/carregamento de código autorado no produto. `Anvil.Authoring` contém somente metadados e tipos pequenos; não depende do Model API nem do Studio. `Anvil.CSharp` emite o contrato já consumido pelo núcleo; não introduz um executor de negócio alternativo.
+
+O NuGet declara MIT para os pacotes Roslyn e suas dependências resolvidas nesta etapa. A licença Roslyn e os notices integrais dos pacotes estão em `licenses/Roslyn-4.8.0.txt` e `licenses/csharp/`. `licenses/csharp/dependencies.json` registra pacote/versão, ativos de runtime e os hashes dos notices. O manifesto diferencia os arquivos de runtime dos analisadores de build; uma menção genérica dentro de notices não é usada para inferir que uma biblioteca está no executável.
+
+Versões resolvidas: CodeAnalysis.CSharp/Common 4.8.0, CodeAnalysis.Analyzers 3.3.4, Collections.Immutable/Reflection.Metadata 7.0.0 e Runtime.CompilerServices.Unsafe 6.0.0. Os notices acompanham output e publish. Conferir novamente o fecho no pacote final e sempre que a versão mudar. Nenhum binário OutSystems é incluído por essa dependência; as referências existentes do adaptador continuam com `Private=false`.
+
+Critério semântico: fonte e grafo estrutural não são oráculos um do outro. A prova separa execução da fonte C# em testes, inspeção nativa após Verify/save/reload, evolução de identidades e execução diferencial no servidor. Casos recusados permanecem lacunas; não contam como cobertura positiva.
+
+A primeira entrada contém Data e métodos estáticos tipados com controle estruturado. Efeitos persistidos, semântica de referências mutáveis, consultas, async e APIs .NET ainda exigem implementação. Uma conversão semântica ausente deve produzir um diagnóstico localizado, nunca ignorar o trecho ou emitir uma aproximação silenciosa.
+
+## Valores e controle de fluxo (2026-09-07)
+
+O valor de enum na lógica usa seu inteiro subjacente; a identidade da Static Entity pertence ao armazenamento. Misturar os dois impediria representar um cast C# para um código não declarado e tornaria comparações dependentes de AutoNumber. O codec de persistência converte membros declarados em FKs e valida a pertença ao catálogo; os predicados SQL consultam o código `AvValue`. Isso não acrescenta uma linguagem de bindings à fonte.
+
+Seleções e laços compartilham escopos de controle no backend: `break` escolhe o escopo mais próximo; `continue` escolhe o laço mais próximo. O frontend usa a análise de fluxo do Roslyn para decidir a alcançabilidade após um `switch`. O corpo de cada ramo é emitido uma vez; guards com efeitos usam um índice de seleção para preservar avaliação condicional e ordem. Conexões diferidas são resolvidas antes de ordenar os ramos pela sequência pública do Model API. A prova independente continua verificando ordem, expressões e destinos após recarga; não aceita uma permutação apenas porque o Verify não gera erro.
+
+## Composição relacional e evolução de auxiliares (2026-09-07)
+
+As queries usam relações com colunas identificadas, forma tipada de linha, ordenação e parâmetros. Rebinding de colunas acontece na árvore de expressões; não reescreve strings ou valores de parâmetros. Select, Join e GroupBy compõem a mesma representação; a materialização reaplica o codec de records e valores opcionais. SQL agrupa texto por collation binária e comprimento para distinguir maiúsculas e espaços finais; ordenação de texto continua sujeita à collation do banco, sem promessa universal de equivalência com culturas CLR.
+
+Auxiliares SQL privados têm identidade por esquema e uma descrição com sua assinatura gerada. A evolução remove um auxiliar obsoleto somente se a assinatura ainda corresponde, não há edição humana em seus campos e todos os consumidores pertencem às actions reconstruídas. A prova percorre wrappers implícitos de record/lista; não ignora consumidores de estruturas nomeadas ou actions preservadas. O delete ocorre após a reconstrução das actions e continua sujeito a Verify, recarga e comparação independente. Formatos legados conhecidos usam o mesmo critério de assinatura, sem uma lista de exceções por aplicação.
+
+O adaptador de prova substitui apenas as tabelas da consulta gerada por dados tipados de fixture. Não escreve o grafo de negócio, não altera filtros e preserva autenticação. A comparação usa as expectativas congeladas pelo autor frio, conserva JSON bruto e interpreta campos padrão omitidos pelo REST segundo o tipo nativo, nunca segundo o resultado esperado.
+
+## Fronteira de execução das consultas agrupadas (2026-09-07)
+
+As seis divergências da prova 4947 mostraram que AVG SQL não preserva a precisão e o arredondamento de decimal do CLR. A nova rota mantém leitura, predicados anteriores e identidade/ordem de grupos em SQL, transportando linhas tipadas. Count/Sum/Min/Max/Average são avaliados em ações nativas sobre cada grupo, na ordem das linhas. Where, Select, OrderBy/ThenBy, Skip/Take e os terminais posteriores operam sobre as sequências nativas. A implementação SQL anterior dos agregados foi removida; não há duas implementações concorrentes selecionadas por exemplo.
+
+Projeções anônimas intermediárias recebem estruturas privadas por esquema. A atribuição usa a nulidade declarada do símbolo canônico, não uma anotação refinada do nó de inicialização. A ordenação usa merge sort estável com chaves calculadas uma vez e buffers independentes, conservando efeitos/empates sem depender de aliasing de listas. A equivalência de ordenação de texto ainda precisa da prova HTTP desse build; Verify não prova collation.
+
+As operações decimais compartilham pequenas ações nativas, com parâmetros/resultado Decimal e uma única operação por corpo. O handler do próprio corpo converte o overflow nativo para a exceção declarada no contrato C#; divisão por zero é checada antes da chamada. Isso evita estimar overflow por limiares que também sofrem arredondamento perto dos limites do decimal. O handler não envolve consultas nem lógica de negócio. A aceitação dos quatro casos frios de overflow ainda depende da execução publicada.
+
+A exclusão explícita de consumidores agora remove tipos auxiliares intactos que ficaram órfãos na mesma transação. Tipos já órfãos antes do job, criados durante o job, editados pelo humano ou com consumidor remanescente são preservados. O critério de propriedade e a prova estrutural são os mesmos usados pelo planejador C#. Operações de leitura não disparam esse ciclo.
+
+Estado desta decisão: implementação e Verify/recarga locais concluídos; entrega/publicação e comparação diferencial em andamento. Fonte e oráculos independentes não foram adaptados à tradução. Persistência irrestrita de decimal em colunas da plataforma e operadores anteriores ao agrupamento que usam aritmética SQL continuam exigindo provas próprias.
+
+A prova de entrega do laboratório expôs uma busca quadrática: cada propriedade de dados conferida varria todos os descendentes do módulo, embora a declaração procurada pertencesse diretamente à raiz. A resolução agora percorre somente os filhos da raiz, conservando a conferência de propriedade, identidade e ambiguidade. Durante uma op de lógica, referências a actions não reconstruídas usam o mesmo índice temporário já usado para tipos estáveis; o índice termina com a op. Testes de renomeação, substituição e consumidores subsequentes cobrem a validade desse escopo. Nenhuma validação foi dispensada para reduzir o tempo.
+
+Prova publicada 4948: os seis erros anteriores de médias foram resolvidos; os quatro casos frios de overflow passaram com tipo mapeado e mensagem efetivamente lida do handler. O uso de SQL_VARIANT no adaptador preservou as entradas de escalas mistas desse corpus; não prova sua persistência em uma coluna Decimal da plataforma. A execução completa teve 472/480 acertos. O comparador textual nativo não preserva StringComparer.Ordinal: oito casos falharam em ordem/página, incluindo A/a e Unicode composto. Essa fronteira continua aberta; não alterar expectativas nem introduzir exceções por chave.
+
+Investigação de primitivas: o catálogo de expressões consultado não expõe uma comparação ordinal; os XIFs padrão Text e BinaryData do ambiente foram baixados somente para inspeção, fora do repositório do produto. Text não declara essa action; BinaryData.Compare devolve somente igualdade. Ainda não foi escolhida/adicionada uma biblioteca de runtime. Uma eventual primitiva tipada compartilhada exige decisão explícita de arquitetura, origem/compatibilidade e prova, mantendo o grafo de negócio nativo; não equivale a aceitar execução arbitrária da fonte C#.
+
+Atualização: a fronteira e a prova do protótipo estão em [ADR-019](ADR-019-typed-framework-primitives.md). A primitiva ordinal já foi publicada somente no laboratório e a importação por assinatura congelada foi implementada no núcleo. Isso ainda não integra a primitiva ao frontend nem define o pacote distribuível de runtime.

@@ -1,0 +1,13 @@
+{
+ "description": "Composto dos controles negativos de UI Reactive, para gerar UM OML e rodar o estagio oml uma vez (testes). Cada parte continua valida sozinha.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "jobs": [
+  "job:u1-visible",
+  "job:u4-inline-style",
+  "job:l5-js-node",
+  "job:s1-onready-server",
+  "job:s2-transitive-client-actions"
+ ]
+}

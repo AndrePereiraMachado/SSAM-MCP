@@ -1,0 +1,8 @@
+# Test PDFs are generated with LF-only text streams; line-ending conversion on checkout would break their xref offsets.
+*.pdf binary
+# Batch files run in cmd.exe, which needs CRLF whatever core.autocrlf the clone uses.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+docker-compose.yml text eol=lf
+.env.example text eol=lf

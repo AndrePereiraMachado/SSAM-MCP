@@ -1,0 +1,26 @@
+{
+ "description": "NEG D5/T3 (OutSystems padroes): aggregate dentro de foreach, uma consulta por cliente (N+1).",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [
+   {"name": "NegCustomer", "public": true, "description": "Cliente de teste do controle negativo D5.",
+    "attributes": [{"name": "Code", "type": "Text", "length": 20, "description": "Codigo que liga pedidos ao cliente no controle D5."}]},
+   {"name": "NegOrder", "public": true, "description": "Pedido de teste do controle negativo D5.",
+    "attributes": [{"name": "CustomerCode", "type": "Text", "length": 20, "description": "Codigo do cliente dono do pedido no controle D5."}]}
+  ]}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "CountOrdersPerCustomer", "kind": "server", "public": true,
+    "description": "Conta pedidos com um aggregate por cliente dentro do laco (violacao proposital da D5).",
+    "outputs": [{"name": "OrderTotal", "type": "Integer", "description": "Soma dos pedidos contados cliente a cliente."}],
+    "steps": [
+     {"get": "NegCustomer", "as": "GetCustomers", "max": 50},
+     {"foreach": "GetCustomers.List", "as": "EachCustomer", "do": [
+      {"get": "NegOrder", "as": "GetOrdersOfCustomer", "where": "NegOrder.CustomerCode = GetCustomers.List.Current.NegCustomer.Code", "max": 100},
+      {"assign": {"OrderTotal": "OrderTotal + GetOrdersOfCustomer.List.Length"}, "as": "Accumulate customer orders"}
+     ]}
+    ]}
+  ]}}
+ ]
+}

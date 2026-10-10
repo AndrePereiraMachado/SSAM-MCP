@@ -1,0 +1,15 @@
+{
+ "description": "A recusa do move de um elemento de topo para uma pasta de outro ramo da arvore: uma structure nao entra numa pasta de Server Actions. O setter nativo de Folder nao lanca (troca a pasta por nenhuma em silencio), por isso o verbo le de volta, desfaz e recusa nomeando o ramo de cada um. O caminho limpo (pasta do mesmo ramo, chave igual) esta em tests/jobs/refactor-reparent.json.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectError": [
+  "move into: IFolder 'RpActionsFolder' is a folder of the 'ServerActions' branch",
+  "IStructure 'RpShape' is listed under 'Structures'",
+  "A folder only holds elements of its own branch"
+ ],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IFolder", "name": "RpActionsFolder", "args": {"parentFolder": "ServerActions"}},
+  {"op": "spec", "data": {"structures": [{"name": "RpShape", "attributes": [{"name": "A", "type": "Text"}]}]}},
+  {"op": "move", "target": "IStructure:RpShape", "into": "IFolder:RpActionsFolder"}
+ ]
+}

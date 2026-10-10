@@ -1,0 +1,16 @@
+{
+ "description": "ODC: a RECUSA da imagem localizada. O locale nasce (IESpace.GetOrCreateLocale, `create ILocale` com args.culture) e a imagem tambem (binario em base64), mas IImage.CreateLocalizedImage e recusado pela propria plataforma: imagens localizadas so existem no runtime Traditional Web do O11 (o mesmo create passa em tests/jobs/image-localized.json e e recusado igual em Reactive e Mobile). Limite da plataforma, nao do kernel.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectError": [
+  "op #2 (create",
+  "Localized Image objects can't be children of Image objects"
+ ],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "ILocale", "args": {"culture": "PT_PT"}, "as": "$pt"},
+  {"op": "create", "parent": "@espace", "type": "IImage", "name": "WfCovLogo", "as": "$img",
+   "args": {"binary": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "originalPath": "wf-cov-logo.png"}},
+  {"op": "create", "parent": "$img", "type": "ILocalizedImage", "as": "$imgPt",
+   "args": {"locale": "$pt", "binary": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "originalPath": "wf-cov-logo-pt.png"}}
+ ]
+}

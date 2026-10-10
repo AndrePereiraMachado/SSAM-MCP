@@ -1,0 +1,50 @@
+{
+ "description": "Swipe actions com logica: a acao da direita apaga o contato da linha (server action com o Id) e a da esquerda marca como favorito; as duas recarregam a lista.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Contact", "attributes": [
+   {"name": "FullName", "type": "Text", "length": 100, "mandatory": true},
+   {"name": "IsFavorite", "type": "Boolean"}]}]}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "Contact_Delete", "kind": "server", "inputs": [{"name": "ContactId", "type": "Contact Identifier"}],
+    "steps": [{"delete": "Contact", "id": "ContactId", "as": "DeleteContact"}]},
+   {"name": "Contact_ToggleFavorite", "kind": "server", "inputs": [{"name": "ContactId", "type": "Contact Identifier"}],
+    "vars": [{"name": "Row", "type": "Contact"}],
+    "steps": [
+     {"get": "Contact", "as": "ReadContact", "where": "Contact.Id = ContactId", "max": 1},
+     {"assign": {"Row": "ReadContact.List.Current.Contact"}, "as": "TakeRow"},
+     {"assign": {"Row.IsFavorite": "not Row.IsFavorite"}, "as": "Toggle"},
+     {"update": "Contact", "record": "Row", "as": "SaveRow"}]}]}},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ManageContacts", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetContacts", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Contact"}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "RemoveContact", "kind": "screen", "owner": "IMobileScreen:ManageContacts", "inputs": [{"name": "ContactId", "type": "Contact Identifier"}],
+    "steps": [{"call": "Contact_Delete", "as": "Remove", "args": {"ContactId": "ContactId"}},
+              {"node": "IRefreshDataNode", "as": "Reload", "properties": {"DataSource": "IMobileScreen:ManageContacts/GetContacts"}}]},
+   {"name": "FavoriteContact", "kind": "screen", "owner": "IMobileScreen:ManageContacts", "inputs": [{"name": "ContactId", "type": "Contact Identifier"}],
+    "steps": [{"call": "Contact_ToggleFavorite", "as": "Toggle", "args": {"ContactId": "ContactId"}},
+              {"node": "IRefreshDataNode", "as": "Reload", "properties": {"DataSource": "IMobileScreen:ManageContacts/GetContacts"}}]}]}},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "ContactList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetContacts.List"},
+  {"op": "create", "parent": "$list", "type": "IListItem", "name": "ContactItem", "as": "$item"},
+  {"op": "create", "parent": "$item/Content", "type": "IExpression", "as": "$name"},
+  {"op": "set", "target": "$name", "prop": "Value", "value": "GetContacts.List.Current.Contact.FullName + If(GetContacts.List.Current.Contact.IsFavorite, \" *\", \"\")"},
+
+  {"op": "set", "target": "$item/RightActions/#IListItemAction/#ITextWidget", "prop": "Text", "value": "Delete", "_why": "a acao da direita ja nasce com o item"},
+  {"op": "set", "target": "$item/RightActions/#IListItemAction", "prop": "Style", "value": "\"background-red\""},
+  {"op": "set", "target": "$item/RightActions/#IListItemAction/OnClick", "prop": "Destination", "value": "IMobileScreen:ManageContacts/RemoveContact"},
+  {"op": "set", "target": "$item/RightActions/#IListItemAction/OnClick/ContactId", "prop": "Value", "value": "GetContacts.List.Current.Contact.Id"},
+
+  {"op": "create", "parent": "$item/LeftActions", "type": "IListItemAction", "name": "FavoriteAction", "as": "$fav", "_why": "a acao da esquerda e criada pelo job"},
+  {"op": "set", "target": "$fav/#ITextWidget", "prop": "Text", "value": "Favorite"},
+  {"op": "set", "target": "$fav/OnClick", "prop": "Destination", "value": "IMobileScreen:ManageContacts/FavoriteContact"},
+  {"op": "set", "target": "$fav/OnClick/ContactId", "prop": "Value", "value": "GetContacts.List.Current.Contact.Id"},
+  {"op": "dump", "target": "$item", "depth": 4}
+ ]
+}

@@ -1,0 +1,305 @@
+{
+  "description": "Refatora somente Game_SetPublishers: remove todos os vinculos antigos com um DELETE SQL em lote e preserva o ForEach para inserir os novos publicadores.",
+  "base": "job:virtual-game-store-actions",
+  "expectValid": true,
+  "ops": [
+    {
+      "op": "delete",
+      "target": "IServerAction:Game_SetPublishers",
+      "force": true
+    },
+    {
+      "op": "create",
+      "parent": "@espace",
+      "type": "IServerAction",
+      "name": "Game_SetPublishers",
+      "as": "$act"
+    },
+    {
+      "op": "set",
+      "target": "$act",
+      "prop": "Public",
+      "value": true
+    },
+    {
+      "op": "set",
+      "target": "$act",
+      "prop": "Description",
+      "value": "Substitui publicadoras relacionadas ao jogo com exclusao SQL em lote."
+    },
+    {
+      "op": "create",
+      "parent": "$act",
+      "type": "IInputParameter",
+      "name": "GameId",
+      "as": "$gameId"
+    },
+    {
+      "op": "set",
+      "target": "$gameId",
+      "prop": "DataType",
+      "value": "Game Identifier"
+    },
+    {
+      "op": "create",
+      "parent": "$act",
+      "type": "IInputParameter",
+      "name": "PublisherIds",
+      "as": "$publisherIds"
+    },
+    {
+      "op": "set",
+      "target": "$publisherIds",
+      "prop": "DataType",
+      "value": "Publisher Identifier List"
+    },
+    {
+      "op": "create",
+      "parent": "$act",
+      "type": "IOutputParameter",
+      "name": "Success",
+      "as": "$success"
+    },
+    {
+      "op": "set",
+      "target": "$success",
+      "prop": "DataType",
+      "value": "Boolean"
+    },
+    {
+      "op": "create",
+      "parent": "$act",
+      "type": "ILocalVariable",
+      "name": "R",
+      "as": "$record"
+    },
+    {
+      "op": "set",
+      "target": "$record",
+      "prop": "DataType",
+      "value": "GamePublisher"
+    },
+    {
+      "op": "create",
+      "parent": "$act",
+      "type": "IStartNode",
+      "name": "Start",
+      "as": "$start"
+    },
+    {
+      "op": "create",
+      "parent": "$act",
+      "type": "ISQLNode",
+      "name": "DeleteExistingPublishers",
+      "as": "$sql"
+    },
+    {
+      "op": "set",
+      "target": "$sql",
+      "prop": "Statement",
+      "value": "DELETE FROM {GamePublisher} WHERE {GamePublisher}.[GameId] = @GameId"
+    },
+    {
+      "op": "create",
+      "parent": "$sql",
+      "type": "ISQLInputParameter",
+      "name": "GameId",
+      "as": "$sql/GameId"
+    },
+    {
+      "op": "set",
+      "target": "$sql/GameId",
+      "prop": "DataType",
+      "value": "Game Identifier"
+    },
+    {
+      "op": "set",
+      "target": "$sql/arg:GameId",
+      "prop": "Value",
+      "value": "GameId"
+    },
+    {
+      "op": "create",
+      "parent": "$sql",
+      "type": "ISQLOutput",
+      "args": {
+        "entityOrStructure": "GamePublisher"
+      },
+      "name": "Rows",
+      "as": "$sql/Rows"
+    },
+    {
+      "op": "create",
+      "parent": "$act",
+      "type": "IForEachNode",
+      "name": "EachPublisher",
+      "as": "$each"
+    },
+    {
+      "op": "set",
+      "target": "$each",
+      "prop": "Label",
+      "value": "EachPublisher"
+    },
+    {
+      "op": "set",
+      "target": "$each",
+      "prop": "RecordList",
+      "value": "PublisherIds"
+    },
+    {
+      "op": "create",
+      "parent": "$act",
+      "type": "IAssignNode",
+      "name": "BuildPublisher",
+      "as": "$assign"
+    },
+    {
+      "op": "set",
+      "target": "$assign",
+      "prop": "Label",
+      "value": "BuildPublisher"
+    },
+    {
+      "op": "create",
+      "parent": "$assign",
+      "type": "IAssignment",
+      "as": "$assign/GameId"
+    },
+    {
+      "op": "set",
+      "target": "$assign/GameId",
+      "prop": "Variable",
+      "value": "R.GameId"
+    },
+    {
+      "op": "set",
+      "target": "$assign/GameId",
+      "prop": "Value",
+      "value": "GameId"
+    },
+    {
+      "op": "create",
+      "parent": "$assign",
+      "type": "IAssignment",
+      "as": "$assign/PublisherId"
+    },
+    {
+      "op": "set",
+      "target": "$assign/PublisherId",
+      "prop": "Variable",
+      "value": "R.PublisherId"
+    },
+    {
+      "op": "set",
+      "target": "$assign/PublisherId",
+      "prop": "Value",
+      "value": "PublisherIds.Current"
+    },
+    {
+      "op": "create",
+      "parent": "$act",
+      "type": "IExecuteServerActionNode",
+      "name": "CreateGamePublisher",
+      "as": "$create"
+    },
+    {
+      "op": "set",
+      "target": "$create",
+      "prop": "Action",
+      "value": "IEntityActionSignature:CreateGamePublisher"
+    },
+    {
+      "op": "set",
+      "target": "$create/Source",
+      "prop": "Value",
+      "value": "R"
+    },
+    {
+      "op": "create",
+      "parent": "$act",
+      "type": "IAssignNode",
+      "name": "SetOutput",
+      "as": "$out"
+    },
+    {
+      "op": "set",
+      "target": "$out",
+      "prop": "Label",
+      "value": "SetOutput"
+    },
+    {
+      "op": "create",
+      "parent": "$out",
+      "type": "IAssignment",
+      "as": "$out/Success"
+    },
+    {
+      "op": "set",
+      "target": "$out/Success",
+      "prop": "Variable",
+      "value": "Success"
+    },
+    {
+      "op": "set",
+      "target": "$out/Success",
+      "prop": "Value",
+      "value": "True"
+    },
+    {
+      "op": "create",
+      "parent": "$act",
+      "type": "IEndNode",
+      "name": "End",
+      "as": "$end"
+    },
+    {
+      "op": "link",
+      "from": "$start",
+      "to": "$sql"
+    },
+    {
+      "op": "link",
+      "from": "$sql",
+      "to": "$each"
+    },
+    {
+      "op": "link",
+      "from": "$each",
+      "connector": "CycleTarget",
+      "to": "$assign"
+    },
+    {
+      "op": "link",
+      "from": "$assign",
+      "to": "$create"
+    },
+    {
+      "op": "link",
+      "from": "$create",
+      "to": "$each"
+    },
+    {
+      "op": "link",
+      "from": "$each",
+      "to": "$out"
+    },
+    {
+      "op": "link",
+      "from": "$out",
+      "to": "$end"
+    },
+    {
+      "op": "layout",
+      "target": "$act"
+    },
+    {
+      "op": "find",
+      "name": "Game_SetPublishers"
+    },
+    {
+      "op": "find",
+      "name": "DeleteExistingPublishers"
+    }
+  ]
+}

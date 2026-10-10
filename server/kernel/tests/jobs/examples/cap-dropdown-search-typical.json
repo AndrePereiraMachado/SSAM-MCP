@@ -1,0 +1,37 @@
+{
+ "description": "DropdownSearch (OutSystemsUI) tipico: aggregate da static Priority, OnAfterFetch monta as opcoes (ForEach + ListAppend), OnChanged grava a escolha numa variavel Priority Identifier mostrada na tela.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "PriorityOptions", "as": "$opts"},
+  {"op": "set", "target": "$opts", "prop": "DataType", "value": "DropdownOption List"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "SelectedPriorityId", "as": "$sel"},
+  {"op": "set", "target": "$sel", "prop": "DataType", "value": "Priority Identifier"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetPriorityList", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IStaticEntity:Priority"}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "BuildPriorityOptions", "kind": "screen", "owner": "IMobileScreen:Showcase",
+    "description": "Converte os registros da static em opcoes do DropdownSearch",
+    "vars": [{"name": "Option", "type": "DropdownOption"}],
+    "steps": [
+     {"foreach": "GetPriorityList.List", "as": "EachPriority", "do": [
+      {"assign": {"Option.Value": "IntegerToText(GetPriorityList.List.Current.Priority.Id)", "Option.Label": "GetPriorityList.List.Current.Priority.Label"}, "as": "FillOption"},
+      {"call": "ListAppend", "as": "AppendOption", "args": {"List": "PriorityOptions", "Element": "Option"}}]}]},
+   {"name": "PriorityChanged", "kind": "screen", "owner": "IMobileScreen:Showcase",
+    "description": "Guarda a prioridade escolhida",
+    "inputs": [{"name": "SelectedOptionList", "type": "DropdownOption List"}],
+    "steps": [
+     {"if": "SelectedOptionList.Empty", "label": "NothingSelected?",
+      "then": [{"assign": {"SelectedPriorityId": "NullIdentifier()"}, "as": "ClearSelection"}],
+      "else": [{"assign": {"SelectedPriorityId": "IntegerToIdentifier(TextToInteger(SelectedOptionList.Current.Value))"}, "as": "KeepSelection"}]}]}]}},
+  {"op": "set", "target": "$agg/OnAfterFetch", "prop": "Destination", "value": "IScreenAction:BuildPriorityOptions"},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "PrioritySearch", "source": "IMobileBlock:DropdownSearch", "as": "$dd"},
+  {"op": "set", "target": "$dd/OptionsList", "prop": "Value", "value": "PriorityOptions"},
+  {"op": "set", "target": "$dd/Prompt", "prop": "Value", "value": "\"Choose a priority\""},
+  {"op": "set", "target": "$dd/OnChanged", "prop": "Handler", "value": "IScreenAction:PriorityChanged"},
+  {"op": "set", "target": "$dd/OnChanged/SelectedOptionList", "prop": "Value", "value": "SelectedOptionList"},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$shown"},
+  {"op": "set", "target": "$shown", "prop": "Value", "value": "\"Selected priority id: \" + IdentifierToInteger(SelectedPriorityId)"}
+ ]
+}

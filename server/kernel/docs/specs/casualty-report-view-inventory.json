@@ -1,0 +1,1316 @@
+{
+  "pairLabels": [
+    "Last name",
+    "First name",
+    "Middle",
+    "Suffix",
+    "EDIPI / DoD ID",
+    "SSN (last 4)",
+    "Date of birth",
+    "Gender",
+    "Service branch",
+    "Component",
+    "Rank",
+    "Personnel type",
+    "Military affiliation",
+    "Personnel category",
+    "Unit / UIC",
+    "Home of record",
+    "Duty station",
+    "Incident date",
+    "Country",
+    "Location",
+    "Incident city",
+    "Incident state / province",
+    "Incident type",
+    "Casualty status",
+    "Casualty category",
+    "Report category",
+    "Cause of death / injury",
+    "Latitude",
+    "Longitude",
+    "Grid (MGRS)",
+    "Over water",
+    "Body of water",
+    "Place of death",
+    "Time of death",
+    "Date of death (confirmed)",
+    "Death city",
+    "Death state / province",
+    "Death country",
+    "Multi-casualty incident",
+    "Incident name",
+    "Multi-casualty ID",
+    "Conflict",
+    "Operation",
+    "Line of duty status",
+    "LOD decision date",
+    "LOD decision authority",
+    "Investigation status",
+    "Investigation case #",
+    "Investigating agency",
+    "Official record locator",
+    "Record type",
+    "Records custodian",
+    "Sealed record",
+    "FOIA exemption code",
+    "Memorial designation",
+    "Designation date",
+    "Memorial authority",
+    "Wall of honor",
+    "Memorial grant amount",
+    "Memorial grant recipient",
+    "LOD board chair",
+    "LOD board members",
+    "LOD board convened date",
+    "LOD board findings",
+    "Investigating officer",
+    "Investigating officer rank",
+    "Investigating officer org",
+    "Witness count",
+    "Witness summary",
+    "Sworn statements collected",
+    "Sworn statement date",
+    "Initial treatment facility",
+    "Definitive treatment facility",
+    "Evacuation method",
+    "Evacuation destination",
+    "Evacuation date",
+    "MEDEVAC priority",
+    "Days to definitive care",
+    "Manner of death",
+    "Cause of death detail",
+    "Pronouncing authority",
+    "Pronouncement date",
+    "Pronouncement time",
+    "Remains recovered",
+    "Remains recovery date",
+    "Remains condition",
+    "Transport authority",
+    "Transport method",
+    "Port of entry",
+    "Final disposition date",
+    "Ashes disposition",
+    "Private cemetery name",
+    "Monument disposition",
+    "Monument inscription",
+    "SGLI payee name",
+    "SGLI payment status",
+    "Posthumous awards",
+    "Purple Heart awarded",
+    "Award recommendations",
+    "Classification level",
+    "Theater of operations",
+    "Operation name",
+    "Circumstances classified",
+    "Missing Persons Act invoked",
+    "Reporting organization UIC",
+    "Unit UIC at event",
+    "Organizational units to notify",
+    "Additional email addresses",
+    "Notification sending to",
+    "Notification summary",
+    "Decoration authority",
+    "Decoration citation",
+    "Report date",
+    "Report time",
+    "Progress report date",
+    "Progress report time",
+    "Original report number",
+    "AFMES jurisdiction",
+    "Known casualty date",
+    "Known casualty time",
+    "Mortuary status",
+    "Mortuary location",
+    "Escort authorized",
+    "Burial disposition",
+    "Burial flag provided",
+    "Government marker requested",
+    "Next of kin notified",
+    "Next of kin notified date",
+    "Commander notification date",
+    "Casualty assistance officer",
+    "Duty status",
+    "In support of other service",
+    "Death certificate number",
+    "Medical examiner",
+    "Autopsy status",
+    "Autopsy date",
+    "Identification method",
+    "Identification date",
+    "Injury/illness status",
+    "Died in medical facility",
+    "Medical facility",
+    "Facility city",
+    "Facility state",
+    "Facility country",
+    "Facility ZIP",
+    "Medical progress",
+    "Cause of death narrative",
+    "Additional remarks"
+  ],
+  "conditionalGroups": [
+    "Time, place & context",
+    "Line of duty & investigation",
+    "Records management",
+    "Memorial & recognition",
+    "LOD board & investigating officer",
+    "Witness & statements",
+    "Treatment & evacuation",
+    "Medical & death event",
+    "Mortuary & transport",
+    "Disposition (extended)",
+    "Awards & decorations",
+    "Administrative & classification",
+    "Reporting organization",
+    "Notification routing",
+    "Awards detail",
+    "Report timestamps",
+    "AFMES jurisdiction",
+    "Mortuary & burial disposition",
+    "Notification status",
+    "Duty status",
+    "Medical examiner & identification",
+    "Injury & hospital status",
+    "Cause of death narrative & remarks"
+  ],
+  "mapping": {
+    "referencedReportProperties": 165,
+    "mappedProperties": 157,
+    "mapping": {
+      "id": [
+        {
+          "entity": "CasualtyPerson",
+          "attribute": "LegacyId",
+          "existsInInspectedModel": true
+        },
+        {
+          "entity": "CasualtyReport",
+          "attribute": "LegacyId",
+          "existsInInspectedModel": true
+        }
+      ],
+      "edipi": [
+        {
+          "entity": "CasualtyPerson",
+          "attribute": "EDIPI",
+          "existsInInspectedModel": true
+        }
+      ],
+      "ssn_last4": [
+        {
+          "entity": "CasualtyPerson",
+          "attribute": "SSNLast4",
+          "existsInInspectedModel": true
+        }
+      ],
+      "first_name": [
+        {
+          "entity": "CasualtyPerson",
+          "attribute": "FirstName",
+          "existsInInspectedModel": true
+        }
+      ],
+      "middle_name": [
+        {
+          "entity": "CasualtyPerson",
+          "attribute": "MiddleName",
+          "existsInInspectedModel": true
+        }
+      ],
+      "last_name": [
+        {
+          "entity": "CasualtyPerson",
+          "attribute": "LastName",
+          "existsInInspectedModel": true
+        }
+      ],
+      "suffix": [
+        {
+          "entity": "CasualtyPerson",
+          "attribute": "Suffix",
+          "existsInInspectedModel": true
+        }
+      ],
+      "gender": [
+        {
+          "entity": "CasualtyPerson",
+          "attribute": "Gender",
+          "existsInInspectedModel": true
+        }
+      ],
+      "rank_code": [
+        {
+          "entity": "CasualtyPerson",
+          "attribute": "RankCode",
+          "existsInInspectedModel": true
+        }
+      ],
+      "rank_name": [
+        {
+          "entity": "CasualtyPerson",
+          "attribute": "RankName",
+          "existsInInspectedModel": true
+        }
+      ],
+      "service_branch": [
+        {
+          "entity": "CasualtyPerson",
+          "attribute": "ServiceBranch",
+          "existsInInspectedModel": true
+        }
+      ],
+      "component": [
+        {
+          "entity": "CasualtyPerson",
+          "attribute": "Component",
+          "existsInInspectedModel": true
+        }
+      ],
+      "home_of_record": [
+        {
+          "entity": "CasualtyPerson",
+          "attribute": "HomeOfRecord",
+          "existsInInspectedModel": true
+        }
+      ],
+      "duty_station": [
+        {
+          "entity": "CasualtyPerson",
+          "attribute": "DutyStation",
+          "existsInInspectedModel": true
+        }
+      ],
+      "personnel_type": [
+        {
+          "entity": "CasualtyPerson",
+          "attribute": "PersonnelType",
+          "existsInInspectedModel": true
+        }
+      ],
+      "report_number": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "ReportNumber",
+          "existsInInspectedModel": true
+        }
+      ],
+      "report_type": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "ReportType",
+          "existsInInspectedModel": true
+        }
+      ],
+      "status": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "Status",
+          "existsInInspectedModel": true
+        }
+      ],
+      "incident_date": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "LegacyIncidentDate",
+          "existsInInspectedModel": true
+        }
+      ],
+      "incident_country": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "IncidentCountry",
+          "existsInInspectedModel": true
+        }
+      ],
+      "incident_location": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "IncidentLocation",
+          "existsInInspectedModel": true
+        }
+      ],
+      "incident_type": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "IncidentType",
+          "existsInInspectedModel": true
+        }
+      ],
+      "incident_circumstance": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "IncidentNarrative",
+          "existsInInspectedModel": true
+        }
+      ],
+      "casualty_status": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "CasualtyStatus",
+          "existsInInspectedModel": true
+        }
+      ],
+      "cause_of_death": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "CauseOfDeath",
+          "existsInInspectedModel": true
+        }
+      ],
+      "injury_type": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "InjuryType",
+          "existsInInspectedModel": true
+        }
+      ],
+      "remarks": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "Remarks",
+          "existsInInspectedModel": true
+        }
+      ],
+      "submitted_at": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "SubmittedOn",
+          "existsInInspectedModel": true
+        }
+      ],
+      "approved_at": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "ApprovedAt",
+          "existsInInspectedModel": true
+        }
+      ],
+      "mortuary_status": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "MortuaryStatus",
+          "existsInInspectedModel": true
+        }
+      ],
+      "mortuary_location": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "MortuaryLocation",
+          "existsInInspectedModel": true
+        }
+      ],
+      "escort_authorized": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "EscortAuthorized",
+          "existsInInspectedModel": true
+        }
+      ],
+      "burial_disposition": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "BurialDisposition",
+          "existsInInspectedModel": true
+        }
+      ],
+      "burial_flag_provided": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "BurialFlagProvided",
+          "existsInInspectedModel": true
+        }
+      ],
+      "government_marker_requested": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "GovernmentMarkerRequested",
+          "existsInInspectedModel": true
+        }
+      ],
+      "death_certificate_number": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "DeathCertificateNumber",
+          "existsInInspectedModel": true
+        }
+      ],
+      "autopsy_status": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "AutopsyStatus",
+          "existsInInspectedModel": true
+        }
+      ],
+      "autopsy_date": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "AutopsyDate",
+          "existsInInspectedModel": true
+        }
+      ],
+      "identification_method": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "IdentificationMethod",
+          "existsInInspectedModel": true
+        }
+      ],
+      "identification_date": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "IdentificationDate",
+          "existsInInspectedModel": true
+        }
+      ],
+      "medical_examiner": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "MedicalExaminer",
+          "existsInInspectedModel": true
+        }
+      ],
+      "place_of_death": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "PlaceOfDeath",
+          "existsInInspectedModel": true
+        }
+      ],
+      "time_of_death": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "TimeOfDeath",
+          "existsInInspectedModel": true
+        }
+      ],
+      "next_of_kin_notified": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "NextOfKinNotified",
+          "existsInInspectedModel": true
+        }
+      ],
+      "next_of_kin_notified_date": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "NextOfKinNotifiedDate",
+          "existsInInspectedModel": true
+        }
+      ],
+      "casualty_assistance_officer": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "CasualtyAssistanceOfficer",
+          "existsInInspectedModel": true
+        }
+      ],
+      "commander_notification_date": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "CommanderNotificationDate",
+          "existsInInspectedModel": true
+        }
+      ],
+      "manner_of_death": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "MannerOfDeath",
+          "existsInInspectedModel": true
+        }
+      ],
+      "cause_of_death_detail": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "CauseOfDeathDetail",
+          "existsInInspectedModel": true
+        }
+      ],
+      "pronouncement_authority": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "PronouncementAuthority",
+          "existsInInspectedModel": true
+        }
+      ],
+      "pronouncement_date": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "PronouncementDate",
+          "existsInInspectedModel": true
+        }
+      ],
+      "pronouncement_time": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "PronouncementTime",
+          "existsInInspectedModel": true
+        }
+      ],
+      "remains_recovered": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "RemainsRecovered",
+          "existsInInspectedModel": true
+        }
+      ],
+      "remains_recovery_date": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "RemainsRecoveryDate",
+          "existsInInspectedModel": true
+        }
+      ],
+      "remains_condition": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "RemainsCondition",
+          "existsInInspectedModel": true
+        }
+      ],
+      "transport_authority": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "TransportAuthority",
+          "existsInInspectedModel": true
+        }
+      ],
+      "transport_method": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "TransportMethod",
+          "existsInInspectedModel": true
+        }
+      ],
+      "port_of_entry": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "PortOfEntry",
+          "existsInInspectedModel": true
+        }
+      ],
+      "final_disposition_date": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "FinalDispositionDate",
+          "existsInInspectedModel": true
+        }
+      ],
+      "posthumous_awards": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "PosthumousAwards",
+          "existsInInspectedModel": true
+        }
+      ],
+      "purple_heart_awarded": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "PurpleHeartAwarded",
+          "existsInInspectedModel": true
+        }
+      ],
+      "award_recommendations": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "AwardRecommendations",
+          "existsInInspectedModel": true
+        }
+      ],
+      "ashes_disposition": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "AshesDisposition",
+          "existsInInspectedModel": true
+        }
+      ],
+      "private_cemetery_name": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "PrivateCemeteryName",
+          "existsInInspectedModel": true
+        }
+      ],
+      "monument_disposition": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "MonumentDisposition",
+          "existsInInspectedModel": true
+        }
+      ],
+      "monument_inscription": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "MonumentInscription",
+          "existsInInspectedModel": true
+        }
+      ],
+      "sgli_payee_name": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "SgliPayeeName",
+          "existsInInspectedModel": true
+        }
+      ],
+      "sgli_payment_status": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "SgliPaymentStatus",
+          "existsInInspectedModel": true
+        }
+      ],
+      "classification_level": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "ClassificationLevel",
+          "existsInInspectedModel": true
+        }
+      ],
+      "theater_of_operations": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "TheaterOfOperations",
+          "existsInInspectedModel": true
+        }
+      ],
+      "operation_name": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "OperationName",
+          "existsInInspectedModel": true
+        }
+      ],
+      "unit_uic_at_event": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "UnitUicAtEvent",
+          "existsInInspectedModel": true
+        }
+      ],
+      "casualty_circumstance_classified": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "CasualtyCircumstance315b3c8",
+          "existsInInspectedModel": true
+        }
+      ],
+      "missing_persons_act_invoked": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "MissingPersonsActInvoked",
+          "existsInInspectedModel": true
+        }
+      ],
+      "event_date": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "EventDate",
+          "existsInInspectedModel": true
+        }
+      ],
+      "official_record_locator": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "OfficialRecordLocator",
+          "existsInInspectedModel": true
+        }
+      ],
+      "record_type": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "RecordType",
+          "existsInInspectedModel": true
+        }
+      ],
+      "records_custodian": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "RecordsCustodian",
+          "existsInInspectedModel": true
+        }
+      ],
+      "sealed_record_flag": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "SealedRecordFlag",
+          "existsInInspectedModel": true
+        }
+      ],
+      "foia_exemption_code": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "FoiaExemptionCode",
+          "existsInInspectedModel": true
+        }
+      ],
+      "memorial_designation": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "MemorialDesignation",
+          "existsInInspectedModel": true
+        }
+      ],
+      "memorial_designation_date": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "MemorialDesignationDate",
+          "existsInInspectedModel": true
+        }
+      ],
+      "memorial_authority": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "MemorialAuthority",
+          "existsInInspectedModel": true
+        }
+      ],
+      "wall_of_honor_flag": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "WallOfHonorFlag",
+          "existsInInspectedModel": true
+        }
+      ],
+      "memorial_grant_amount": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "MemorialGrantAmount",
+          "existsInInspectedModel": true
+        }
+      ],
+      "memorial_grant_recipient": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "MemorialGrantRecipient",
+          "existsInInspectedModel": true
+        }
+      ],
+      "lod_status": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "LodStatus",
+          "existsInInspectedModel": true
+        }
+      ],
+      "lod_decision_date": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "LodDecisionDate",
+          "existsInInspectedModel": true
+        }
+      ],
+      "lod_decision_authority": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "LodDecisionAuthority",
+          "existsInInspectedModel": true
+        }
+      ],
+      "investigation_status": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "InvestigationStatus",
+          "existsInInspectedModel": true
+        }
+      ],
+      "investigation_case_number": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "InvestigationCaseNumber",
+          "existsInInspectedModel": true
+        }
+      ],
+      "investigating_agency": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "InvestigatingAgency",
+          "existsInInspectedModel": true
+        }
+      ],
+      "lod_board_chair": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "LodBoardChair",
+          "existsInInspectedModel": true
+        }
+      ],
+      "lod_board_members": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "LodBoardMembers",
+          "existsInInspectedModel": true
+        }
+      ],
+      "lod_board_convened_date": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "LodBoardConvenedDate",
+          "existsInInspectedModel": true
+        }
+      ],
+      "lod_board_findings": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "LodBoardFindings",
+          "existsInInspectedModel": true
+        }
+      ],
+      "investigating_officer": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "InvestigatingOfficer",
+          "existsInInspectedModel": true
+        }
+      ],
+      "investigating_officer_rank": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "InvestigatingOfficerRank",
+          "existsInInspectedModel": true
+        }
+      ],
+      "investigating_officer_org": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "InvestigatingOfficerOrg",
+          "existsInInspectedModel": true
+        }
+      ],
+      "witness_count": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "WitnessCount",
+          "existsInInspectedModel": true
+        }
+      ],
+      "witness_summary": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "WitnessSummary",
+          "existsInInspectedModel": true
+        }
+      ],
+      "sworn_statements_collected": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "SwornStatementsCollected",
+          "existsInInspectedModel": true
+        }
+      ],
+      "sworn_statement_date": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "SwornStatementDate",
+          "existsInInspectedModel": true
+        }
+      ],
+      "treatment_facility_initial": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "TreatmentFacilityInitial",
+          "existsInInspectedModel": true
+        }
+      ],
+      "treatment_facility_definitive": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "TreatmentFacilityDefinitive",
+          "existsInInspectedModel": true
+        }
+      ],
+      "evacuation_method": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "EvacuationMethod",
+          "existsInInspectedModel": true
+        }
+      ],
+      "evacuation_destination": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "EvacuationDestination",
+          "existsInInspectedModel": true
+        }
+      ],
+      "evacuation_date": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "EvacuationDate",
+          "existsInInspectedModel": true
+        }
+      ],
+      "mecep_priority": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "MecepPriority",
+          "existsInInspectedModel": true
+        }
+      ],
+      "days_to_definitive_care": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "DaysToDefinitiveCare",
+          "existsInInspectedModel": true
+        }
+      ],
+      "incident_time": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "IncidentTime",
+          "existsInInspectedModel": true
+        }
+      ],
+      "over_water": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "OverWater",
+          "existsInInspectedModel": true
+        }
+      ],
+      "body_of_water": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "BodyOfWater",
+          "existsInInspectedModel": true
+        }
+      ],
+      "latitude": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "Latitude",
+          "existsInInspectedModel": true
+        }
+      ],
+      "longitude": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "Longitude",
+          "existsInInspectedModel": true
+        }
+      ],
+      "grid_reference": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "GridReference",
+          "existsInInspectedModel": true
+        }
+      ],
+      "multi_casualty_incident": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "MultiCasualtyIncident",
+          "existsInInspectedModel": true
+        }
+      ],
+      "multi_casualty_incident_name": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "MultiCasualtyIncidentName",
+          "existsInInspectedModel": true
+        }
+      ],
+      "afme_jurisdiction": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "AfmeJurisdiction",
+          "existsInInspectedModel": true
+        }
+      ],
+      "known_casualty_date": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "KnownCasualtyDate",
+          "existsInInspectedModel": true
+        }
+      ],
+      "known_casualty_time": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "KnownCasualtyTime",
+          "existsInInspectedModel": true
+        }
+      ],
+      "duty_status": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "DutyStatus",
+          "existsInInspectedModel": true
+        }
+      ],
+      "in_support_of_other_service": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "InSupportOfOtherService",
+          "existsInInspectedModel": true
+        }
+      ],
+      "report_date": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "ReportDate",
+          "existsInInspectedModel": true
+        }
+      ],
+      "report_time": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "ReportTime",
+          "existsInInspectedModel": true
+        }
+      ],
+      "injury_illness_status": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "InjuryIllnessStatus",
+          "existsInInspectedModel": true
+        }
+      ],
+      "hospital_name": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "HospitalName",
+          "existsInInspectedModel": true
+        }
+      ],
+      "medical_progress": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "MedicalProgress",
+          "existsInInspectedModel": true
+        }
+      ],
+      "original_casualty_report_number": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "OriginalCasualtyRepo2c338f2",
+          "existsInInspectedModel": true
+        }
+      ],
+      "died_in_medical_facility": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "DiedInMedicalFacility",
+          "existsInInspectedModel": true
+        }
+      ],
+      "progress_report_date": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "ProgressReportDate",
+          "existsInInspectedModel": true
+        }
+      ],
+      "progress_report_time": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "ProgressReportTime",
+          "existsInInspectedModel": true
+        }
+      ],
+      "casualty_category": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "CasualtyCategory",
+          "existsInInspectedModel": true
+        }
+      ],
+      "inflicting_force": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "InflictingForce",
+          "existsInInspectedModel": true
+        }
+      ],
+      "hospital_country": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "HospitalCountry",
+          "existsInInspectedModel": true
+        }
+      ],
+      "hospital_city": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "HospitalCity",
+          "existsInInspectedModel": true
+        }
+      ],
+      "hospital_state": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "HospitalState",
+          "existsInInspectedModel": true
+        }
+      ],
+      "hospital_zip": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "HospitalZip",
+          "existsInInspectedModel": true
+        }
+      ],
+      "cause_of_death_narrative": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "CauseOfDeathNarrative",
+          "existsInInspectedModel": true
+        }
+      ],
+      "additional_remarks": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "AdditionalRemarks",
+          "existsInInspectedModel": true
+        }
+      ],
+      "incident_state_province": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "IncidentStateProvince",
+          "existsInInspectedModel": true
+        }
+      ],
+      "incident_city": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "IncidentCity",
+          "existsInInspectedModel": true
+        }
+      ],
+      "organizational_units_to_notify": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "OrganizationalUnitsToNotify",
+          "existsInInspectedModel": true
+        }
+      ],
+      "additional_email_addresses": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "AdditionalEmailAddresses",
+          "existsInInspectedModel": true
+        }
+      ],
+      "notification_sending_to": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "NotificationSendingTo",
+          "existsInInspectedModel": true
+        }
+      ],
+      "notification_summary": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "NotificationSummary",
+          "existsInInspectedModel": true
+        }
+      ],
+      "decoration_authority": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "DecorationAuthority",
+          "existsInInspectedModel": true
+        }
+      ],
+      "decoration_citation": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "DecorationCitation",
+          "existsInInspectedModel": true
+        }
+      ],
+      "reporting_organization_uic": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "ReportingOrganizationUic",
+          "existsInInspectedModel": true
+        }
+      ],
+      "report_category": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "ReportCategory",
+          "existsInInspectedModel": true
+        }
+      ],
+      "death_city": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "DeathCity",
+          "existsInInspectedModel": true
+        }
+      ],
+      "death_state": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "DeathState",
+          "existsInInspectedModel": true
+        }
+      ],
+      "death_country": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "DeathCountry",
+          "existsInInspectedModel": true
+        }
+      ],
+      "other_information": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "OtherInformation",
+          "existsInInspectedModel": true
+        }
+      ],
+      "multi_casualty_id": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "MultiCasualtyId",
+          "existsInInspectedModel": true
+        }
+      ],
+      "conflict": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "Conflict",
+          "existsInInspectedModel": true
+        }
+      ],
+      "operation": [
+        {
+          "entity": "CasualtyReport",
+          "attribute": "Operation",
+          "existsInInspectedModel": true
+        }
+      ]
+    },
+    "unmappedProperties": [
+      "approver_name",
+      "date_of_birth",
+      "duplicate_of_report_number",
+      "military_affiliation_label",
+      "personnel_category_label",
+      "reporter_email",
+      "reporter_name",
+      "unit_uic"
+    ],
+    "tablesInInspectedModel": {
+      "CasualtyReport": true,
+      "CasualtyPerson": true,
+      "LegacyUser": true,
+      "DCIPSUserLink": false,
+      "EmailNotifications": true,
+      "CasualtyCase": true,
+      "NextOfKin": true,
+      "CasualtySecondaryData": true,
+      "FieldProvenance": true,
+      "AuditEntry": true,
+      "ReportStatus": true,
+      "ReportType": true,
+      "MilitaryAffiliation": true,
+      "PersonnelType": true
+    }
+  },
+  "sourceFile": "C:/Users/andre/Downloads/DCIPS.Master.Build.08.25-live/client/src/pages/CasualtyReportView.tsx",
+  "sourceSha256": "60907868bc79476c3b9aa339b5442159340428b58861255b1bfa594e9941111b",
+  "analysisOnly": true
+}

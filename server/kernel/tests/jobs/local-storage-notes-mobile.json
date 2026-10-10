@@ -1,0 +1,455 @@
+{
+ "description": "cold-f: Mobile local storage. Client entity Note (Title obrigatorio, CreatedOn) + client action Note_Add(Title) que grava com CreateOrUpdateNote e CreatedOn = CurrDateTime() + tela Notes (layout, aggregate local GetNotes, lista com Title, input ligado a NewTitle, botao Add -> screen action AddNote que chama Note_Add e recarrega o aggregate) + Accordion do OutSystems UI com AccordionItem Ajuda (escrito por uma LLM sem contexto na sessao fria F de 2026-09-04) (escrito por uma LLM sem contexto na sessao fria F, rodada 2, 2026-09-04)",
+ "base": "tests/fixtures/mobile-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IClientEntity",
+   "name": "Note",
+   "as": "$ce"
+  },
+  {
+   "op": "create",
+   "parent": "$ce",
+   "type": "IEntityAttribute",
+   "name": "Id",
+   "as": "$id"
+  },
+  {
+   "op": "set",
+   "target": "$id",
+   "prop": "DataType",
+   "value": "Long Integer"
+  },
+  {
+   "op": "set",
+   "target": "$id",
+   "prop": "IsAutoNumber",
+   "value": "No"
+  },
+  {
+   "op": "set",
+   "target": "$ce",
+   "prop": "IdentifierAttribute",
+   "value": "$id"
+  },
+  {
+   "op": "create",
+   "parent": "$ce",
+   "type": "IEntityAttribute",
+   "name": "Title",
+   "as": "$t"
+  },
+  {
+   "op": "set",
+   "target": "$t",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$t",
+   "prop": "IsMandatory",
+   "value": true
+  },
+  {
+   "op": "create",
+   "parent": "$ce",
+   "type": "IEntityAttribute",
+   "name": "CreatedOn",
+   "as": "$d"
+  },
+  {
+   "op": "set",
+   "target": "$d",
+   "prop": "DataType",
+   "value": "Date Time"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IClientAction",
+   "name": "Note_Add",
+   "as": "$ca"
+  },
+  {
+   "op": "create",
+   "parent": "$ca",
+   "type": "IInputParameter",
+   "name": "Title",
+   "as": "$in"
+  },
+  {
+   "op": "set",
+   "target": "$in",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$ca",
+   "type": "ILocalVariable",
+   "name": "N",
+   "as": "$lv"
+  },
+  {
+   "op": "set",
+   "target": "$lv",
+   "prop": "DataType",
+   "value": "Note"
+  },
+  {
+   "op": "create",
+   "parent": "$ca",
+   "type": "IStartNode",
+   "as": "$s0"
+  },
+  {
+   "op": "create",
+   "parent": "$ca",
+   "type": "IAssignNode",
+   "name": "Fill",
+   "as": "$as"
+  },
+  {
+   "op": "set",
+   "target": "$as",
+   "prop": "Label",
+   "value": "Fill"
+  },
+  {
+   "op": "create",
+   "parent": "$as",
+   "type": "IAssignment",
+   "as": "$a1"
+  },
+  {
+   "op": "set",
+   "target": "$a1",
+   "prop": "Variable",
+   "value": "N.Title"
+  },
+  {
+   "op": "set",
+   "target": "$a1",
+   "prop": "Value",
+   "value": "Title"
+  },
+  {
+   "op": "create",
+   "parent": "$as",
+   "type": "IAssignment",
+   "as": "$a2"
+  },
+  {
+   "op": "set",
+   "target": "$a2",
+   "prop": "Variable",
+   "value": "N.CreatedOn"
+  },
+  {
+   "op": "set",
+   "target": "$a2",
+   "prop": "Value",
+   "value": "CurrDateTime()"
+  },
+  {
+   "op": "create",
+   "parent": "$ca",
+   "type": "IExecuteClientActionNode",
+   "name": "CreateOrUpdateNote",
+   "as": "$cu"
+  },
+  {
+   "op": "set",
+   "target": "$cu",
+   "prop": "Action",
+   "value": "IEntityActionSignature:CreateOrUpdateNote"
+  },
+  {
+   "op": "set",
+   "target": "$cu/Source",
+   "prop": "Value",
+   "value": "N"
+  },
+  {
+   "op": "create",
+   "parent": "$ca",
+   "type": "IEndNode",
+   "as": "$s9"
+  },
+  {
+   "op": "link",
+   "from": "$s0",
+   "to": "$as"
+  },
+  {
+   "op": "link",
+   "from": "$as",
+   "to": "$cu"
+  },
+  {
+   "op": "link",
+   "from": "$cu",
+   "to": "$s9"
+  },
+  {
+   "op": "layout",
+   "target": "$ca"
+  },
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "Notes",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:Layout"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/Title",
+   "type": "IExpression",
+   "as": "$title"
+  },
+  {
+   "op": "set",
+   "target": "$title",
+   "prop": "Value",
+   "value": "\"Notes\""
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "ILocalVariable",
+   "name": "NewTitle",
+   "as": "$v"
+  },
+  {
+   "op": "set",
+   "target": "$v",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAggregate",
+   "name": "GetNotes",
+   "as": "$agg",
+   "args": {
+    "isClientSide": true
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "IClientEntity:Note"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/Content",
+   "type": "IInput",
+   "name": "NewTitleInput",
+   "as": "$inp"
+  },
+  {
+   "op": "set",
+   "target": "$inp",
+   "prop": "Variable",
+   "value": "NewTitle"
+  },
+  {
+   "op": "set",
+   "target": "$inp",
+   "prop": "Prompt",
+   "value": "\"New note title\""
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/Content",
+   "type": "IButton",
+   "name": "AddButton",
+   "as": "$btn"
+  },
+  {
+   "op": "set",
+   "target": "$btn/#ITextWidget",
+   "prop": "Text",
+   "value": "Add"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/Content",
+   "type": "IList",
+   "name": "NoteList",
+   "as": "$list"
+  },
+  {
+   "op": "set",
+   "target": "$list",
+   "prop": "Source",
+   "value": "GetNotes.List"
+  },
+  {
+   "op": "create",
+   "parent": "$list",
+   "type": "IExpression",
+   "as": "$ex"
+  },
+  {
+   "op": "set",
+   "target": "$ex",
+   "prop": "Value",
+   "value": "GetNotes.List.Current.Note.Title"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAction",
+   "name": "AddNote",
+   "as": "$act"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IStartNode",
+   "as": "$a0"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IExecuteClientActionNode",
+   "name": "Note_Add",
+   "as": "$call"
+  },
+  {
+   "op": "set",
+   "target": "$call",
+   "prop": "Action",
+   "value": "IClientAction:Note_Add"
+  },
+  {
+   "op": "set",
+   "target": "$call/Title",
+   "prop": "Value",
+   "value": "NewTitle"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IRefreshDataNode",
+   "name": "RefreshGetNotes",
+   "as": "$rf"
+  },
+  {
+   "op": "set",
+   "target": "$rf",
+   "prop": "DataSource",
+   "value": "$agg"
+  },
+  {
+   "op": "create",
+   "parent": "$act",
+   "type": "IEndNode",
+   "as": "$a9"
+  },
+  {
+   "op": "link",
+   "from": "$a0",
+   "to": "$call"
+  },
+  {
+   "op": "link",
+   "from": "$call",
+   "to": "$rf"
+  },
+  {
+   "op": "link",
+   "from": "$rf",
+   "to": "$a9"
+  },
+  {
+   "op": "layout",
+   "target": "$act"
+  },
+  {
+   "op": "set",
+   "target": "$btn/OnClick",
+   "prop": "Destination",
+   "value": "$act"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/Content",
+   "type": "IMobileBlockInstanceWidget",
+   "name": "Accordion1",
+   "as": "$acc",
+   "empty": true,
+   "source": "IMobileBlock:Accordion"
+  },
+  {
+   "op": "create",
+   "parent": "$acc/Content",
+   "type": "IMobileBlockInstanceWidget",
+   "name": "AccordionItem1",
+   "as": "$ai"
+  },
+  {
+   "op": "set",
+   "target": "$ai",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:AccordionItem"
+  },
+  {
+   "op": "create",
+   "parent": "$ai/Title",
+   "type": "IExpression",
+   "as": "$ait"
+  },
+  {
+   "op": "set",
+   "target": "$ait",
+   "prop": "Value",
+   "value": "\"Ajuda\""
+  },
+  {
+   "op": "create",
+   "parent": "$ai/Content",
+   "type": "IExpression",
+   "as": "$aic"
+  },
+  {
+   "op": "set",
+   "target": "$aic",
+   "prop": "Value",
+   "value": "\"Escreva um titulo e toque em Add para guardar a nota no dispositivo.\""
+  },
+  {
+   "op": "get",
+   "target": "$btn/OnClick"
+  },
+  {
+   "op": "get",
+   "target": "$rf"
+  },
+  {
+   "op": "get",
+   "target": "$call"
+  },
+  {
+   "op": "dump",
+   "target": "$scr",
+   "depth": 8
+  }
+ ]
+}

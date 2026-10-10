@@ -1,0 +1,7 @@
+{
+ "_leia": "runtime: runtimeTest sem runtimeEvidence -> exit 3.",
+ "stage": "runtime",
+ "mode": "integrador",
+ "fromReport": "runtime.report.json",
+ "exitCode": 3
+}

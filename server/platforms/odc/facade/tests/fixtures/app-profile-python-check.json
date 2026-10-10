@@ -1,0 +1,49 @@
+{
+  "configured": true,
+  "reviewPrepared": false,
+  "active": null,
+  "state": "awaiting-client-proof",
+  "projectConfiguration": "<T>\\app's project\\.codex\\config.toml",
+  "workspace": "<T>\\app's project",
+  "configuration": "<T>\\app's project\\.codex\\config.toml",
+  "configurationSha256": "<sha>",
+  "files": {
+    "controller": {
+      "path": "<T>\\anvil.dll",
+      "sha256": "<sha>"
+    },
+    "adapter": {
+      "path": "<KERNEL>\\scripts\\ssam_app.py",
+      "sha256": "<sha>"
+    },
+    "python": {
+      "path": "<PYTHON>",
+      "sha256": "<sha>"
+    }
+  },
+  "tools": [
+    "context",
+    "propose",
+    "continue",
+    "status"
+  ],
+  "capabilities": {
+    "existingModuleDelivery": true,
+    "createApplication": false,
+    "createModules": false
+  },
+  "changesDefaultProfile": false,
+  "requiresHookTrust": true,
+  "problems": [],
+  "next": [
+    "Open a NEW local task in the dedicated project; do not also select the ssam-app profile",
+    "Review project trust and the exact hooks in the client; generated files do not grant trust",
+    "A real UserPromptSubmit hook must supply task_id and the four MCP tools must be available",
+    "Call context with the captured id to verify the requested lane and environment"
+  ],
+  "limitations": [
+    "Static preflight does not prove MCP startup, trusted hooks, actual client capture or lane readiness",
+    "Opening Service Studio or loading the Hybrid skill does not activate the controlled session",
+    "Never ask the user to invent or locate a task_id; absent capture is an onboarding failure"
+  ]
+}

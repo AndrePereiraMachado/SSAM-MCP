@@ -1,0 +1,522 @@
+{
+  "schemaVersion": "ssam-discovery-fragment/1",
+  "contract": "ssam-catalog-contribution/1",
+  "front": "A",
+  "title": "Native flow nodes with closed properties: message, destination, download, JSON, Excel, JavaScript, refresh data, ajax refresh, send email, email attachment",
+  "reviewedAt": "2026-09-23",
+  "synonyms": {
+    "serialize": ["serializar", "serializacao", "gerar json", "converter para json"],
+    "deserialize": ["desserializar", "deserializar", "desserializacao", "parse json", "ler json"],
+    "export": ["exportar excel", "exportar para excel", "exportar lista para excel", "lista para excel", "exportar planilha", "gerar excel", "gerar planilha"],
+    "import": ["importar excel", "importar planilha", "ler excel", "ler planilha", "excel para lista", "converter excel em lista"],
+    "download": ["baixar arquivo", "baixar o arquivo", "fazer download", "download de arquivo"],
+    "refresh": ["recarregar dados", "recarregar os dados", "recarregar aggregate", "recarregar agregado", "refresh data"],
+    "attachment": ["anexo do e-mail", "anexo de email", "anexos do e-mail", "anexar arquivo ao e-mail", "anexar ao e-mail", "attach file node"],
+    "message": ["mostrar mensagem", "exibir mensagem", "mensagem de feedback", "mensagem de sucesso", "mensagem de aviso", "feedback message"],
+    "destination": [
+      "destination node", "navegar para destino", "redirecionar para destino", "navegar ao terminar a acao", "navegar ao final da acao",
+      "outra tela ao terminar a acao", "redirecionar ao terminar a acao", "navigate at the end of the action"
+    ],
+    "email": ["e-mail"]
+  },
+  "capabilities": [
+    {
+      "id": "logic.native-nodes",
+      "supersedes": ["logic.native-nodes"],
+      "category": "logic",
+      "title": "JSONSerialize, ExcelToRecordList, SendEmail, RefreshData",
+      "keywords": [
+        "native node", "message node", "feedback message", "show message", "success message", "warning message", "mostrar mensagem", "exibir mensagem",
+        "mensagem de feedback", "mensagem de sucesso", "mensagem de aviso", "destination node", "navegar para destino", "redirecionar para destino",
+        "navegar ao terminar a acao", "navegar ao final da acao", "outra tela ao terminar a acao", "redirecionar ao terminar a acao",
+        "navigate at the end of the action", "download node", "download file", "file download", "baixar arquivo", "fazer download", "json serialize",
+        "json deserialize", "serialize json", "deserialize json", "serializar json", "desserializar json", "serialize a record to json",
+        "serialize a list to json", "convert a record to json", "deserialize json into a record", "deserialize json into a list", "parse json into a record",
+        "serializar um registro em json", "converter registro para json", "excel export", "excel import", "exportar excel", "lista para excel", "importar excel",
+        "excel para lista", "gerar excel", "javascript node", "js node", "run javascript", "executar javascript", "refresh data", "recarregar dados",
+        "ajax refresh", "send email", "send email node", "enviar email", "enviar e-mail", "email attachment", "attach file node", "anexo do e-mail",
+        "anexar arquivo ao e-mail", "ao terminar a acao", "export a list to excel", "export to excel", "serializar uma estrutura em json",
+        "serialize a structure to json", "converter uma lista para json", "convert a list to json"
+      ],
+      "summary": "Message, destination, download, JSON, Excel, JavaScript, refresh data, send email: a `logic` node step names the type and its closed properties; raw create/set/link were exercised for message, JavaScript, refresh data and send email. Named nodes (JSON, Excel, JavaScript, send email) are addressed by name; message/destination/download/refresh by #Type[n].",
+      "route": {
+        "kind": "job",
+        "operation": "logic step {\"node\":\"<Type>\",\"as\":\"<Label>\",\"properties\":{...},\"args\":{...}} (JavaScript also inputs/outputs); or create <Action> <Type> + set + link"
+      },
+      "contract": ["logic.steps.node", "logic.nativeNodes", "verbs.verbs.create", "verbs.verbs.set", "verbs.verbs.link"],
+      "guidance": "Outputs: JSON serialize <as>.JSON, JSON deserialize <as>.Data, Excel export is the node name itself, Excel import <as> (a list). Destination/Download are terminal (no End after them). Node arguments and JavaScript parameters are logic.variable; the email definition is ui.email-popover.",
+      "example": { "ops": ["logic", "create", "set", "link", "get"], "max": 30 },
+      "depends": [],
+      "recommends": [
+        { "id": "ui.email-popover", "when": "the email definition the send email node points at does not exist yet or must change" },
+        { "id": "ui.screen", "when": "the destination screen, or the screen that owns the screen action, does not exist yet or must change" },
+        { "id": "logic.flow", "when": "placing the node in an existing flow (link predecessor/successor, layout)" },
+        { "id": "logic.variable", "when": "node arguments (destination, refresh, send email) or JavaScript inputs/outputs" },
+        { "id": "logic.server-action", "when": "JSON, Excel or send email (server-side nodes)" },
+        { "id": "logic.screen-action", "when": "message, destination, download or refresh data (screen-side nodes)" }
+      ],
+      "alternatives": [{ "id": "logic.data-action", "when": "refresh data targets a data action (Fetch OnDemand) instead of a screen aggregate" }],
+      "elements": [
+        {
+          "role": "message",
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.Logic.Nodes.IMessageNode",
+              "jobType": "IMessageNode",
+              "address": "<Action>/#IMessageNode[n] (create name discarded; Label from 'as')"
+            },
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.IMessageNode", "jobType": "IMessageNode", "address": "<Action>/#IMessageNode[n]" }
+          }
+        },
+        {
+          "role": "destination",
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.Logic.Nodes.IDestinationNode",
+              "jobType": "IDestinationNode",
+              "address": "<ScreenAction>/#IDestinationNode; args <node>/arg:<Input>"
+            },
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.IDestinationNode", "jobType": "IDestinationNode", "address": "<ScreenAction>/#IDestinationNode" }
+          }
+        },
+        {
+          "role": "download",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.Nodes.IDownloadNode", "jobType": "IDownloadNode", "address": "<ScreenAction>/#IDownloadNode" },
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.IDownloadNode", "jobType": "IDownloadNode", "address": "<ScreenAction>/#IDownloadNode" }
+          }
+        },
+        {
+          "role": "json serialize",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.Nodes.IJSONSerializeNode", "jobType": "IJSONSerializeNode", "address": "<Action>/<Name>" },
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.IJSONSerializeNode", "jobType": "IJSONSerializeNode", "address": "<Action>/<Name>" }
+          }
+        },
+        {
+          "role": "json deserialize",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.Nodes.IJSONDeserializeNode", "jobType": "IJSONDeserializeNode", "address": "<Action>/<Name>" },
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.IJSONDeserializeNode", "jobType": "IJSONDeserializeNode", "address": "<Action>/<Name>" }
+          }
+        },
+        {
+          "role": "excel export",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.Nodes.IRecordListToExcelNode", "jobType": "IRecordListToExcelNode", "address": "<Action>/<Name>" },
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.IRecordListToExcelNode", "jobType": "IRecordListToExcelNode", "address": "<Action>/<Name>" }
+          }
+        },
+        {
+          "role": "excel import",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.Nodes.IExcelToRecordListNode", "jobType": "IExcelToRecordListNode", "address": "<Action>/<Name>" },
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.IExcelToRecordListNode", "jobType": "IExcelToRecordListNode", "address": "<Action>/<Name>" }
+          }
+        },
+        {
+          "role": "javascript",
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.Logic.Nodes.IJavaScriptNode",
+              "jobType": "IJavaScriptNode",
+              "address": "<Action>/<Name>; params <node>/<Param>; args <node>/arg:<Param>"
+            },
+            "o11": {
+              "native": "OutSystems.Model.Logic.Nodes.IJavaScriptNode",
+              "jobType": "IJavaScriptNode",
+              "address": "<Action>/<Name>; params <node>/<Param>; args <node>/arg:<Param>"
+            }
+          }
+        },
+        {
+          "role": "data refresh",
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.Logic.Nodes.IRefreshDataNode",
+              "jobType": "IRefreshDataNode",
+              "address": "<ScreenAction>/<Name> or #IRefreshDataNode"
+            },
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.IRefreshDataNode", "jobType": "IRefreshDataNode", "address": "<ScreenAction>/<Name>" }
+          }
+        },
+        {
+          "role": "ajax refresh",
+          "platforms": {
+            "o11": { "native": "OutSystems.Model.Logic.Nodes.IAjaxRefreshNode", "jobType": "IAjaxRefreshNode", "address": "<WebScreenAction>/#IAjaxRefreshNode" }
+          }
+        },
+        {
+          "role": "send email",
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.Logic.Mobile.Nodes.ISendEmailNode",
+              "jobType": "ISendEmailNode",
+              "address": "<ServerAction>/<Name>; args <node>/<EmailInput>"
+            },
+            "o11": {
+              "native": "OutSystems.Model.Logic.Nodes.ISendEmailNode",
+              "jobType": "ISendEmailNode",
+              "address": "<ServerAction>/<Name>; args <node>/<EmailInput>"
+            }
+          }
+        },
+        {
+          "role": "email attachment",
+          "platforms": { "o11": { "native": "OutSystems.Model.Logic.Nodes.IAttachFileNode", "jobType": "IAttachFileNode", "address": "<email Preparation>/<Name>" } }
+        }
+      ],
+      "operations": {
+        "read": {
+          "route": "get <Action>/<Name> or <Action>/#<Type>[n]; dump the owning action",
+          "preconditions": [],
+          "roles": {
+            "message": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["exception-lifecycle", "logic-native-nodes"],
+                "scope": "get #IMessageNode of an inherited handler (Message before/after a fix); dump of a screen action"
+              },
+              "o11": { "status": "undetermined", "note": "no O11 suite job" }
+            },
+            "destination": {
+              "odc": { "status": "applicable", "proofs": ["logic-native-nodes"], "scope": "get #IDestinationNode: Destination, Transition" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job" }
+            },
+            "download": {
+              "odc": { "status": "applicable", "proofs": ["logic-native-nodes"], "scope": "get #IDownloadNode: FileContent, FileName, MimeType, SaveToDisk" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job" }
+            },
+            "json serialize": {
+              "odc": { "status": "applicable", "proofs": ["logic-native-nodes"], "scope": "get by the node name" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job" }
+            },
+            "json deserialize": {
+              "odc": { "status": "applicable", "proofs": ["logic-native-nodes"], "scope": "get by the node name" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job" }
+            },
+            "excel export": {
+              "odc": { "status": "applicable", "proofs": ["logic-native-nodes"], "scope": "get by the node name" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job" }
+            },
+            "excel import": {
+              "odc": { "status": "applicable", "proofs": ["logic-native-nodes"], "scope": "get by the node name" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job" }
+            },
+            "javascript": {
+              "odc": { "status": "applicable", "proofs": ["rename-logic-propagation"], "scope": "body read back after its parameters were renamed" },
+              "o11": { "status": "applicable", "proofs": ["rename-logic-propagation"], "scope": "body read back after its parameters were renamed" }
+            },
+            "data refresh": {
+              "odc": {
+                "status": "undetermined",
+                "note": "seen only inside a dump of the owning screen (job data-action), which is not counted as a read of this node; no get of the node"
+              },
+              "o11": { "status": "applicable", "proofs": ["screen-search-refresh-reactive", "local-storage-notes-mobile"], "scope": "get of the node" }
+            },
+            "ajax refresh": {
+              "odc": { "status": "not-applicable", "note": "Traditional Web node; ODC has no Traditional Web apps", "alternative": "role data refresh" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job" }
+            },
+            "send email": {
+              "odc": { "status": "applicable", "proofs": ["email-popover-metadata"], "scope": "get: Email and To read back" },
+              "o11": { "status": "undetermined", "note": "no O11 job reads it" }
+            },
+            "email attachment": {
+              "odc": { "status": "undetermined", "note": "no ODC role type: see coverage (IAttachFileNode)" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job" }
+            }
+          }
+        },
+        "create": {
+          "route": "compact `logic` node step (properties validated against the closed list) or raw create <Action> <Type> then link",
+          "preconditions": [
+            "every closed property is required unless it has a default; unknown properties are refused",
+            "Destination and Download are terminal: no End node after them",
+            "placement (ODC census): Message/Destination never in server actions, Download only in screen actions, Excel export only in server actions"
+          ],
+          "roles": {
+            "message": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["logic-native-nodes", "switch-exception-handler"],
+                "scope": "compact in a screen action (the four Type values); raw create in an On Exception flow"
+              },
+              "o11": { "status": "undetermined", "note": "no O11 suite job (C# contract tests only: client action)" }
+            },
+            "destination": {
+              "odc": { "status": "applicable", "proofs": ["logic-native-nodes"], "scope": "compact in a screen action, with an argument for the target's input" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job (C# contract tests only)" }
+            },
+            "download": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["logic-native-nodes"],
+                "scope": "compact in a screen action, binary from a called server action; MimeType required"
+              },
+              "o11": { "status": "undetermined", "note": "no O11 suite job; a C# contract test refuses it in a Reactive/Mobile client action" }
+            },
+            "json serialize": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["logic-native-nodes"],
+                "scope": "compact in a server action: record and list Data, both SerializeDefaultValues"
+              },
+              "o11": { "status": "undetermined", "note": "no O11 suite job (C# contract tests only)" }
+            },
+            "json deserialize": {
+              "odc": { "status": "applicable", "proofs": ["logic-native-nodes"], "scope": "compact in a server action: DataType a structure and '<X> List'" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job (C# contract tests only)" }
+            },
+            "excel export": {
+              "odc": { "status": "applicable", "proofs": ["logic-native-nodes"], "scope": "compact in a server action with AttributeSelection" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job (C# contract tests only)" }
+            },
+            "excel import": {
+              "odc": { "status": "applicable", "proofs": ["logic-native-nodes"], "scope": "compact in a server action, reading the export node" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job (C# contract tests only)" }
+            },
+            "javascript": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["client-storage", "rename-logic-propagation"],
+                "scope": "raw create in a client action, with node inputs/outputs"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["rename-logic-propagation", "client-js-reactive", "client-js-format-reactive"],
+                "scope": "raw create in a client action, with node inputs/outputs"
+              }
+            },
+            "data refresh": {
+              "odc": { "status": "applicable", "proofs": ["data-action"], "scope": "raw create in a screen action" },
+              "o11": { "status": "applicable", "proofs": ["screen-search-refresh-reactive", "local-storage-notes-mobile"], "scope": "raw create in a screen action" }
+            },
+            "ajax refresh": {
+              "odc": { "status": "not-applicable", "note": "Traditional Web node; ODC has no Traditional Web apps", "alternative": "role data refresh" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job (C# contract test only: Traditional Web screen action)" }
+            },
+            "send email": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["email-popover-metadata"],
+                "scope": "raw create ISendEmailNode in a server action (resolves to the Mobile send-email type)"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["email-traditional", "email-digest-foreach-traditional"],
+                "scope": "raw create in a server action, also inside a ForEach cycle"
+              }
+            },
+            "email attachment": {
+              "odc": { "status": "undetermined", "note": "no job; the ODC send-email type has its own Attachments setter (not measured)" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job (C# contract test only: email Preparation)" }
+            }
+          }
+        },
+        "set": {
+          "route": "set <node> <Property> (expression, enum, reference ITipo:Name, DataType); set <node>/arg:<Input> Value; link for connectors",
+          "preconditions": ["a reference property takes ITipo:Name (never an alias or @key) in the compact step"],
+          "roles": {
+            "message": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["switch-exception-handler", "exception-lifecycle", "logic-native-nodes"],
+                "scope": "Message (required expression), Type; fix of an inherited Message"
+              },
+              "o11": { "status": "undetermined", "note": "no O11 suite job" }
+            },
+            "destination": {
+              "odc": { "status": "applicable", "proofs": ["logic-native-nodes"], "scope": "Destination (a screen), Transition, one argument" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job" }
+            },
+            "download": {
+              "odc": { "status": "applicable", "proofs": ["logic-native-nodes"], "scope": "FileContent, FileName, MimeType, SaveToDisk" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job" }
+            },
+            "json serialize": {
+              "odc": { "status": "applicable", "proofs": ["logic-native-nodes"], "scope": "Data, DateFormat, SerializeDefaultValues" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job" }
+            },
+            "json deserialize": {
+              "odc": { "status": "applicable", "proofs": ["logic-native-nodes"], "scope": "JSONString, DataType, DateFormat" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job" }
+            },
+            "excel export": {
+              "odc": { "status": "applicable", "proofs": ["logic-native-nodes"], "scope": "RecordList, AttributeSelection" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job" }
+            },
+            "excel import": {
+              "odc": { "status": "applicable", "proofs": ["logic-native-nodes"], "scope": "FileContent, SheetName, DataType" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job" }
+            },
+            "javascript": {
+              "odc": { "status": "applicable", "proofs": ["client-storage", "rename-logic-propagation"], "scope": "JavaScript body, argument Value, links" },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["rename-logic-propagation", "client-js-reactive", "client-js-format-reactive"],
+                "scope": "JavaScript body, argument Value, links"
+              }
+            },
+            "data refresh": {
+              "odc": { "status": "applicable", "proofs": ["data-action"], "scope": "DataSource = a data action with Fetch OnDemand; links" },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["screen-search-refresh-reactive", "local-storage-notes-mobile"],
+                "scope": "DataSource = a screen aggregate; links"
+              }
+            },
+            "ajax refresh": {
+              "odc": { "status": "not-applicable", "note": "Traditional Web node; ODC has no Traditional Web apps", "alternative": "role data refresh" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job" }
+            },
+            "send email": {
+              "odc": { "status": "applicable", "proofs": ["email-popover-metadata"], "scope": "Email (the email definition), To, one argument per email input; links" },
+              "o11": { "status": "applicable", "proofs": ["email-traditional", "email-digest-foreach-traditional"], "scope": "Email, To, argument; links" }
+            },
+            "email attachment": { "odc": { "status": "undetermined", "note": "no job" }, "o11": { "status": "undetermined", "note": "no O11 suite job" } }
+          }
+        },
+        "move": {
+          "route": "move <node> {x, y}; layout re-lays a flow that has a Start",
+          "preconditions": [],
+          "roles": {
+            "message": {
+              "odc": { "status": "applicable", "proofs": ["switch-exception-handler"], "scope": "x/y inside an On Exception flow (no Start, no layout)" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job" }
+            }
+          }
+        },
+        "rename": {
+          "route": "set Label (message) or rename <node> (named nodes)",
+          "preconditions": [],
+          "roles": {
+            "message": {
+              "odc": { "status": "undetermined", "note": "no Name: the create name is discarded (job exception-lifecycle); relabel not exercised" },
+              "o11": { "status": "undetermined", "note": "no O11 suite job" }
+            },
+            "javascript": {
+              "odc": {
+                "status": "undetermined",
+                "note": "node rename not exercised; renaming its parameters rewrites $parameters.<Name> in the body (logic.variable)"
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "node rename not exercised; renaming its parameters rewrites $parameters.<Name> in the body (logic.variable)"
+              }
+            }
+          }
+        }
+      },
+      "platforms": {
+        "odc": {
+          "proofs": [
+            "logic-native-nodes", "switch-exception-handler", "exception-lifecycle", "client-storage", "rename-logic-propagation", "data-action",
+            "email-popover-metadata"
+          ],
+          "negative": [],
+          "context": { "kinds": ["ServerAction", "ClientAction", "MobileScreen"], "signatures": ["ServerAction", "ClientAction"] },
+          "limits": [
+            {
+              "text": "Message and Destination never live in server actions; Download only in screen actions; RecordListToExcel only in server actions (ODC census of 45 real modules).",
+              "origin": "job:logic-native-nodes description"
+            },
+            {
+              "text": "A Message node lives in a screen action, an On Exception handler or a system event; in a server action the create is refused (declared in a job comment, no negative job).",
+              "origin": "job:switch-exception-handler (op 47 _why: On Exception handler or system event, refused in a server action); job:logic-native-nodes (op 18: screen action)"
+            },
+            {
+              "text": "A Message node discards the create name (address #IMessageNode); its text is a literal and does not follow a rename.",
+              "origin": "job:exception-lifecycle (ops 5-7)"
+            },
+            {
+              "text": "The compact step creates OutSystems.Model.Logic.Nodes.<Type>; for send email on ODC the proven path is raw create ISendEmailNode (resolves to the Mobile type).",
+              "origin": "kernel/src/Anvil.Core/Kernel/LogicExpander.cs:604; job:email-popover-metadata"
+            },
+            {
+              "text": "Closed properties: all required unless defaulted; Refresh Data StartIndex must stay empty; only JavaScript declares inputs/outputs; args only on nodes with arguments.",
+              "origin": "kernel/src/Anvil.Core/Kernel/LogicNodes.cs:39-62"
+            }
+          ],
+          "differences": [
+            "send email is OutSystems.Model.Logic.Mobile.Nodes.ISendEmailNode", "refresh data proven against a data action",
+            "no ajax refresh (no Traditional Web); attach file undetermined (the Mobile send-email type has its own Attachments setter)"
+          ]
+        },
+        "o11": {
+          "proofs": [
+            "rename-logic-propagation", "client-js-reactive", "client-js-format-reactive", "screen-search-refresh-reactive", "local-storage-notes-mobile",
+            "email-traditional", "email-digest-foreach-traditional"
+          ],
+          "negative": [],
+          "context": { "kinds": ["ServerAction", "ClientAction", "MobileScreen", "WebScreen"], "signatures": ["ServerAction", "ClientAction"] },
+          "limits": [
+            {
+              "text": "Message, destination, download, JSON, Excel, ajax refresh and attach file have no O11 suite job; kernel C# contract tests (spec route) cover them, which is not a catalog proof.",
+              "origin": "kernel/tests/contracts/action-coverage/*.json (ActionCoverageTests.cs:14)"
+            },
+            {
+              "text": "Download is refused in a Reactive/Mobile client action; a Traditional Web screen action accepts it.",
+              "origin": "kernel/tests/contracts/action-coverage/reactive-ui-client-download.json, mobile-ui-client-download.json, traditional-ui-screen-download.json (ActionCoverageTests.cs:38-44)"
+            },
+            {
+              "text": "Ajax refresh (screen action) and attach file (email Preparation) are Traditional Web only.",
+              "origin": "kernel/tests/contracts/action-coverage/traditional-ui-screen-ajax-message.json, traditional-ui-email-attachment.json"
+            },
+            {
+              "text": "Closed properties: all required unless defaulted; Refresh Data StartIndex must stay empty; only JavaScript declares inputs/outputs; args only on nodes with arguments.",
+              "origin": "kernel/src/Anvil.Core/Kernel/LogicNodes.cs:39-62"
+            }
+          ],
+          "differences": [
+            "send email is OutSystems.Model.Logic.Nodes.ISendEmailNode (Traditional Web email)", "refresh data proven against a screen aggregate",
+            "only JavaScript, refresh data and send email have suite jobs"
+          ]
+        }
+      }
+    }
+  ],
+  "unavailable": [
+    {
+      "id": "ajax-refresh-node",
+      "lanes": ["odc"],
+      "keywords": ["ajax refresh", "ajax refresh node"],
+      "reason": "Ajax Refresh re-renders a widget or web block of a Traditional Web screen; ODC has no Traditional Web apps.",
+      "evidence": "platforms/odc/docs/FRICCAO-ROTASEGURA.md:215 (OS-APPS-40015: Traditional Web asset type not supported)",
+      "negative": { "odc": [] },
+      "alternative": "logic.native-nodes role data refresh (screen aggregate or data action)"
+    }
+  ],
+  "coverage": [
+    {
+      "type": "odc:OutSystems.Model.Logic.Nodes.ISendEmailNode",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "on ODC the create of ISendEmailNode in a server action resolves to Logic.Mobile.Nodes.ISendEmailNode (role send email); no job, reader or parent shows where this non-Mobile type (no Attachments setter) is accepted: needs a native probe",
+      "origin": "a-matrix.json lanes.odc (executed only on Logic.Mobile.Nodes.ISendEmailNode, job:email-popover-metadata); inventory kindBasis generic factory CreateNode<T>"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.Nodes.IAjaxRefreshNode",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "Traditional Web refresh of a widget or web block; ODC has no Traditional Web apps; reactive screens use Refresh Data",
+      "origin": "platforms/odc/docs/FRICCAO-ROTASEGURA.md:215 (OS-APPS-40015); api --op logic nativeNodes.IAjaxRefreshNode (WidgetOrWebBlock)",
+      "alternative": "logic.native-nodes role data refresh"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.Nodes.IAttachFileNode",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "on O11 it lives in a Traditional Web email Preparation; the ODC send-email type carries its own Attachments setter; no job or reader shows an ODC parent that accepts it",
+      "origin": "inventory ownMethods Logic.Mobile.Nodes.ISendEmailNode (SetAttachments); a-matrix.json lanes.odc (no evidence)"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.Nodes.IRecordListToExcelAttribute",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "outside the object roots: one entry of the Excel export node's AttributeSelection, not an element authored or addressed on its own; it is written only as that property's value (a list of attribute names that replaces the whole selection), which is the set of role excel export",
+      "origin": "api --op logic nativeNodes.IRecordListToExcelNode.properties.AttributeSelection (Kind strings); kernel/src/Anvil.Core/Kernel/Verbs.cs:466-475 (Remove/AddAttributeSelection); job:logic-native-nodes op 18 (two attribute names)",
+      "alternative": "logic.native-nodes role excel export (set AttributeSelection)"
+    }
+  ]
+}

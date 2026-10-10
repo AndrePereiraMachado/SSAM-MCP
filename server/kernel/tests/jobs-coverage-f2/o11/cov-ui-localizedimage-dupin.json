@@ -1,0 +1,55 @@
+{
+ "description": "Cobertura testada (fase 2): duplicate com parent (copy of IImage) de OutSystems.Model.UI.ILocalizedImage (o11) em espaceWeb. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ILocale",
+   "args": {
+    "culture": "PT_PT"
+   },
+   "as": "$loc"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IImage",
+   "name": "CovSImage",
+   "args": {
+    "binary": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    "originalPath": "cov-s.png"
+   },
+   "as": "$img"
+  },
+  {
+   "op": "create",
+   "parent": "$img",
+   "type": "ILocalizedImage",
+   "args": {
+    "locale": "$loc",
+    "binary": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    "originalPath": "cov-pt.png"
+   },
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IImage",
+   "name": "CovSImageMv",
+   "args": {
+    "binary": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    "originalPath": "cov-s.png"
+   },
+   "as": "$img_mv"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "parent": "$img_mv",
+   "as": "$b"
+  }
+ ]
+}

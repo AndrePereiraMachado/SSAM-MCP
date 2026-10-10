@@ -1,0 +1,19 @@
+{
+ "_leia": "Com --base-oml, achado do estagio job de um elemento que ja esta na base sai preexisting=true (so atribuicao; a severidade nao muda).",
+ "stage": "job",
+ "mode": "autor",
+ "module": "Domain_CS",
+ "jobs": [
+  "l6-json-text-param.json"
+ ],
+ "baseOml": "o-composite-service.oml",
+ "exitCode": 1,
+ "mustFind": [
+  {
+   "rule": "L6",
+   "severity": "erro",
+   "contains": "SummaryJson",
+   "preexisting": true
+  }
+ ]
+}

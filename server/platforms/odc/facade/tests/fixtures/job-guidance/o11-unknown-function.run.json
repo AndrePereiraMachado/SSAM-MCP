@@ -1,0 +1,22 @@
+{
+ "ok": false,
+ "lane": "o11",
+ "verb": "job",
+ "exitCode": 1,
+ "output": [
+  "result: <fixtures>\\o11-unknown-function.result.json",
+  "   data contract: 0 checks, accepted=True; dataSummary saved in result",
+  "== unknown-function.json: ok=True {'ops': 14, 'objects': 181, 'isValid': False, 'messages': 2, 'applyMs': 567}",
+  "   via process | 3533 ms de parede",
+  "   validation {'new': 2, 'fixed': 0, 'preexisting': 0, 'unexpected': 2, 'missingExpected': 0, 'ambiguous': 0, 'tolerated': 0} accepted= False",
+  "   timings {'loadMs': 533, 'verifyBeforeMs': 0, 'applyMs': 567, 'sessionApplyMs': 564, 'dataContractMs': 2, 'verifyAfterMs': 24, 'describeMs': 8, 'detailsMs': 32, 'saveMs': 152, 'releaseMs': 14, 'refactorProofMs': 0, 'totalMs': 1334}",
+  "    Error ExpressionUnknownFunction: Invalid Expression | Unknown function 'Right' in expression. @ Headless_CS (ESpace) / Text_Tail (ServerAction) / CalculaCauda (AssignNode) / Assignment",
+  "    Warning UnusedUserAction: Unused User Action | 'Text_Tail' action is never used in this module. Consider deleting it. @ Headless_CS (ESpace) / Text_Tail (ServerAction)",
+  "    Hint ExpressionUnknownFunction: Corrigir o nome da funcao {0} ou marcar a action como Function e adicionar a dependencia.",
+  "    Hint UnusedUserAction: Apagar a action nao usada ou passar a chama-la / marca-la Public.",
+  "    Hint UnknownFunction: 'Right(' nao existe (nem built-in, nem funcao deste modulo ou referenciada); parecidas: Substr, Length; catalogo: docs/functions.md ou `anvil functions --find Right` @ Headless_CS (ESpace) / Text_Tail (ServerAction) / CalculaCauda (AssignNode) / Assignment / Expression \"Right(Value, 1)\"",
+  "    Unexpected ExpressionUnknownFunction @ Headless_CS (ESpace) / Text_Tail (ServerAction) / CalculaCauda (AssignNode) / Assignment: corrija ou declare em expectedMessages com why.",
+  "    Unexpected UnusedUserAction @ Headless_CS (ESpace) / Text_Tail (ServerAction): corrija ou declare em expectedMessages com why."
+ ],
+ "laneFrom": "--lane"
+}

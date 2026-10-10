@@ -1,0 +1,85 @@
+{
+  "description": "Performance regression: shared record types and a forward-declared action call in one logic operation.",
+  "base": "blank-service.oml",
+  "expectValid": true,
+  "expectedMessages": [],
+  "ops": [
+    {
+      "op": "spec",
+      "data": {
+        "structures": [
+          {
+            "name": "AnvilPerfPayload",
+            "public": true,
+            "attributes": [
+              {
+                "name": "Value",
+                "type": "Text"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "logic",
+      "data": {
+        "actions": [
+          {
+            "name": "AnvilPerf_Forward",
+            "public": true,
+            "inputs": [
+              {
+                "name": "Payload",
+                "type": "AnvilPerfPayload"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Value",
+                "type": "Text"
+              }
+            ],
+            "steps": [
+              {
+                "call": "AnvilPerf_Echo",
+                "as": "Echo",
+                "args": {
+                  "Payload": "Payload"
+                }
+              },
+              {
+                "assign": {
+                  "Value": "Echo.Value"
+                }
+              }
+            ]
+          },
+          {
+            "name": "AnvilPerf_Echo",
+            "public": true,
+            "inputs": [
+              {
+                "name": "Payload",
+                "type": "AnvilPerfPayload"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Value",
+                "type": "Text"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "Value": "Payload.Value"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

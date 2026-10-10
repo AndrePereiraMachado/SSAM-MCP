@@ -1,0 +1,100 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "screen-download",
+    "screen"
+  ],
+  "contract": {
+    "logic": {
+      "actions": [
+        {
+          "name": "Coverage",
+          "kind": "screen",
+          "owner": "IWebScreen:CoverageScreen",
+          "inputs": [
+            {
+              "name": "File",
+              "type": "Binary Data",
+              "mandatory": false
+            }
+          ],
+          "steps": [
+            {
+              "node": "IDownloadNode",
+              "as": "Download",
+              "properties": {
+                "FileContent": "File",
+                "FileName": "\"proof.bin\"",
+                "MimeType": "\"application/octet-stream\"",
+                "SaveToDisk": true
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "setup": [
+    {
+      "op": "create",
+      "parent": "IWebFlow:MainFlow",
+      "type": "IWebScreen",
+      "name": "CoverageScreen"
+    },
+    {
+      "op": "create",
+      "parent": "IWebFlow:MainFlow",
+      "type": "IWebScreen",
+      "name": "CoverageTarget"
+    },
+    {
+      "op": "create",
+      "parent": "IWebScreen:CoverageScreen",
+      "type": "ILinkWidget",
+      "name": "Run"
+    },
+    {
+      "op": "create",
+      "parent": "IWebScreen:CoverageScreen/Run",
+      "type": "IExpressionWidget",
+      "name": "Caption"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:CoverageScreen/Run/Caption",
+      "prop": "Value",
+      "value": "\"Run proof\""
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:CoverageScreen/Run/OnClick",
+      "prop": "Method",
+      "value": "Ajax"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:CoverageTarget",
+      "prop": "IsFrequentDestination",
+      "value": true
+    }
+  ],
+  "bindings": [
+    {
+      "op": "set",
+      "target": "IWebScreen:CoverageScreen/Run/OnClick",
+      "prop": "Method",
+      "value": "Submit"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:CoverageScreen/Run/OnClick",
+      "prop": "Destination",
+      "value": "IWebScreen:CoverageScreen/Coverage"
+    }
+  ],
+  "mutation": {
+    "target": "IWebScreen:CoverageScreen/Coverage/#IDownloadNode",
+    "prop": "FileName",
+    "value": "\"changed.bin\""
+  }
+}

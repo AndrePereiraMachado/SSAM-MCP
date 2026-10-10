@@ -1,0 +1,15 @@
+{
+ "_leia": "Controle negativo P7: estagio job no modo autor; a ferramenta tem de dar exit 1 e acusar P7.",
+ "stage": "job",
+ "mode": "autor",
+ "module": "Domain_CS",
+ "exitCode": 1,
+ "mustFind": [
+  {
+   "rule": "P7",
+   "severity": "erro",
+   "stage": "job",
+   "contains": "ProtectedNegEntry"
+  }
+ ]
+}

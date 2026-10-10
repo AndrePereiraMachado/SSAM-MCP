@@ -1,0 +1,145 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "aggregate-sql-crud-transaction",
+    "server"
+  ],
+  "contract": {
+    "data": {
+      "structures": [
+        {
+          "name": "CoverageItem",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Number",
+              "type": "Integer"
+            },
+            {
+              "name": "Text",
+              "type": "Text"
+            }
+          ]
+        },
+        {
+          "name": "CoverageEnvelope",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Item",
+              "type": "CoverageItem"
+            },
+            {
+              "name": "Items",
+              "type": "CoverageItem List"
+            },
+            {
+              "name": "Numbers",
+              "type": "Integer List"
+            }
+          ]
+        }
+      ],
+      "entities": [
+        {
+          "name": "CoverageRow",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Value",
+              "type": "Integer"
+            }
+          ]
+        }
+      ]
+    },
+    "exceptions": [
+      {
+        "name": "CoverageFailure"
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "inputs": [
+            {
+              "name": "Row",
+              "type": "CoverageRow"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "Count",
+              "type": "Integer"
+            }
+          ],
+          "steps": [
+            {
+              "create": "CoverageRow",
+              "as": "Insert",
+              "record": "Row"
+            },
+            {
+              "update": "CoverageRow",
+              "as": "Update",
+              "record": "Row"
+            },
+            {
+              "save": "CoverageRow",
+              "as": "Upsert",
+              "record": "Row"
+            },
+            {
+              "get": "CoverageRow",
+              "as": "ReadRows",
+              "where": "CoverageRow.Id = Row.Id",
+              "sort": [
+                "CoverageRow.Value",
+                "Descending"
+              ],
+              "start": "0",
+              "max": "100"
+            },
+            {
+              "get": "CoverageRow",
+              "sql": true,
+              "as": "ReadSql",
+              "statement": "SELECT {CoverageRow}.* FROM {CoverageRow} WHERE {CoverageRow}.[Id] = @Id",
+              "params": {
+                "Id": {
+                  "type": "Long Integer",
+                  "value": "Row.Id"
+                }
+              }
+            },
+            {
+              "delete": "CoverageRow",
+              "as": "RemoveRow",
+              "id": "Row.Id"
+            },
+            {
+              "assign": {
+                "Count": "ReadRows.List.Length + ReadSql.List.Length"
+              }
+            },
+            {
+              "call": "CommitTransaction",
+              "as": "Commit"
+            }
+          ],
+          "name": "Coverage",
+          "kind": "server",
+          "public": true,
+          "access": {
+            "authenticated": true
+          }
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IServerAction:Coverage/ReadRows",
+    "prop": "MaxRecords",
+    "value": "1"
+  }
+}

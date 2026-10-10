@@ -1,0 +1,15 @@
+{
+ "_leia": "Estagio truechange depois do deliver: todo warning novo do TrueChange vivo e N4.",
+ "stage": "truechange",
+ "mode": "integrador",
+ "module": "Domain_CS",
+ "deliverResult": "n4-postdeliver.deliver-result.json",
+ "exitCode": 1,
+ "mustFind": [
+  {
+   "rule": "N4",
+   "severity": "erro",
+   "contains": "ReadLegacyQueue"
+  }
+ ]
+}

@@ -1,0 +1,25 @@
+{
+ "description": "TimePicker do OSUI: formato 24h, hora inicial e o OnSelected grava a hora e mostra a janela de retirada.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "PickupTime", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Pickup\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "PickedTime", "as": "$vPickedTime"},
+  {"op": "set", "target": "$vPickedTime", "prop": "DataType", "value": "Time"},
+  {"op": "set", "target": "$vPickedTime", "prop": "DefaultValue", "value": "#14:00:00#"},
+  {"op": "logic", "data": {"actions": [{"name": "TimePicked", "kind": "screen", "owner": "IMobileScreen:PickupTime", "inputs": [{"name": "SelectedTime", "type": "Time"}], "steps": [{"assign": {"PickedTime": "SelectedTime"}, "as": "Keep"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "TimePicker1", "source": "IMobileBlock:TimePicker", "as": "$tp"},
+  {"op": "set", "target": "$tp/Is24Hours", "prop": "Value", "value": "True"},
+  {"op": "set", "target": "$tp/InitialTime", "prop": "Value", "value": "PickedTime"},
+  {"op": "set", "target": "$tp/TimeFormat", "prop": "Value", "value": "\"H:i\""},
+  {"op": "set", "target": "$tp/Timepicker/#IInput", "prop": "Variable", "value": "PickedTime"},
+  {"op": "set", "target": "$tp/OnSelected", "prop": "Handler", "value": "IMobileScreen:PickupTime/TimePicked"},
+  {"op": "set", "target": "$tp/OnSelected/SelectedTime", "prop": "Value", "value": "SelectedTime"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "\"Pick up at \" + PickedTime"}
+ ]
+}

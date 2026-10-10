@@ -1,0 +1,9 @@
+using System.Globalization;
+
+public static class Rules
+{
+    public static string DateLabel(DateOnly value) => value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    public static string ClockLabel(TimeOnly value) => value.ToString("O", CultureInfo.InvariantCulture);
+    public static string OffsetLabel(DateTimeOffset value) => value.ToString("O", CultureInfo.InvariantCulture);
+    public static string EmptyLabel(DateOnly value) => value.ToString("''", CultureInfo.InvariantCulture);
+}

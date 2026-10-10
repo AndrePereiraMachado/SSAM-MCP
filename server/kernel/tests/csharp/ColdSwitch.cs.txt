@@ -1,0 +1,257 @@
+public enum RulePhase
+{
+    Draft = 0,
+    Review = 1,
+    Approved = 2,
+    Rejected = 3
+}
+
+public static class SwitchRules
+{
+    public static int SharedIntegerLabels(int value)
+    {
+        switch (value)
+        {
+            case -2:
+            case -1:
+                return value * 10;
+            case 0:
+                return 7;
+            case 1:
+            case 2:
+                return value + 20;
+            default:
+                return -value;
+        }
+    }
+
+    public static int StringLabels(string? value)
+    {
+        switch (value)
+        {
+            case null:
+                return -1;
+            case "":
+                return 0;
+            case "open":
+            case "OPEN":
+                return 3;
+            case "closed":
+                return 6;
+            default:
+                return 9;
+        }
+    }
+
+    public static int NullableEnumLabels(RulePhase? phase, int seed)
+    {
+        switch (phase)
+        {
+            case null:
+                return seed - 100;
+            case RulePhase.Draft:
+            case RulePhase.Review:
+                return seed + 10;
+            case RulePhase.Approved:
+                return seed * 2;
+            default:
+                return seed - 7;
+        }
+    }
+
+    public static int OnlyDefault(int value)
+    {
+        int result = 2;
+        switch (value++)
+        {
+            default:
+                result += value;
+                break;
+        }
+        return result * 100 + value;
+    }
+
+    public static int NoDefault(int value)
+    {
+        int result = 100;
+        switch (value)
+        {
+            case 0:
+                result += 3;
+                break;
+            case 2:
+                result += 7;
+                break;
+        }
+        return result + value;
+    }
+
+    public static int ForSwitchJumps(int limit)
+    {
+        int total = 0;
+        for (int i = 0; i < limit; i++)
+        {
+            switch (i % 5)
+            {
+                case 0:
+                    total += 10;
+                    break;
+                case 1:
+                    total += 100;
+                    continue;
+                case 2:
+                    if (i > 5)
+                        break;
+                    total += 20;
+                    break;
+                case 3:
+                    total += 30;
+                    break;
+                default:
+                    total += 40;
+                    break;
+            }
+            total += i;
+        }
+        return total;
+    }
+
+    public static int WhileSwitchJumps(int count)
+    {
+        int i = 0;
+        int total = 0;
+        while (i < count)
+        {
+            i++;
+            switch (i % 4)
+            {
+                case 0:
+                    total += 400;
+                    break;
+                case 1:
+                    total += 10;
+                    continue;
+                case 2:
+                    total += 20;
+                    break;
+                default:
+                    if (i > 4)
+                    {
+                        total += 70;
+                        break;
+                    }
+                    total += 30;
+                    break;
+            }
+            total += i;
+        }
+        return total;
+    }
+
+    public static int ForeachSwitchJumps(int[] values)
+    {
+        int result = 0;
+        foreach (int value in values)
+        {
+            switch (value)
+            {
+                case -1:
+                    continue;
+                case 0:
+                    result += 50;
+                    break;
+                case 1:
+                    result += 10;
+                    break;
+                default:
+                    if (value < 0)
+                        break;
+                    result += value * 2;
+                    break;
+            }
+            result += 1;
+        }
+        return result;
+    }
+
+    public static int LoopInsideSwitch(int selector, int limit)
+    {
+        int total = 1;
+        switch (selector)
+        {
+            case 0:
+                for (int i = 0; i < limit; i++)
+                {
+                    if (i == 3)
+                        break;
+                    if (i == 1)
+                        continue;
+                    total += i;
+                }
+                total += 100;
+                break;
+            case 1:
+                while (limit > 0)
+                {
+                    limit--;
+                    if (limit == 2)
+                        break;
+                    total += limit;
+                }
+                total += 200;
+                break;
+            default:
+                total += 900;
+                break;
+        }
+        return total + 1000;
+    }
+
+    public static int EarlyReturnSelector(int value, int loops)
+    {
+        int sum = 0;
+        for (int i = 0; i < loops; i++)
+        {
+            switch (value++)
+            {
+                case 0:
+                    sum += 10;
+                    break;
+                case 1:
+                    return sum * 100 + value;
+                case 2:
+                    continue;
+                case 3:
+                    sum += 30;
+                    break;
+                default:
+                    sum += value;
+                    break;
+            }
+            sum++;
+        }
+        return sum * 100 + value;
+    }
+
+    public static int ConstantSwitchExpression(int code)
+    {
+        return code switch
+        {
+            -1 => 7,
+            0 => 9,
+            5 => 11,
+            _ => 13
+        };
+    }
+
+    public static int NullableSwitchExpression(int? code)
+    {
+        return code switch
+        {
+            null => -7,
+            0 => 20,
+            4 => 40,
+            _ => 99
+        };
+    }
+}

@@ -1,0 +1,26 @@
+using System.Globalization;
+public sealed record DateParts(int Year,int Month,int Day,int DayOfYear);
+public static class Calendar
+{
+    public static DateOnly Make(int year,int month,int day)=>new(year,month,day);
+    public static DateOnly FromNumber(int day)=>DateOnly.FromDayNumber(day);
+    public static DateOnly Add(DateOnly date,int days)=>date.AddDays(days);
+    public static DateOnly First()=>DateOnly.MinValue;
+    public static DateOnly Last()=>DateOnly.MaxValue;
+    public static DateOnly Zero()=>default;
+    public static int Number(DateOnly date)=>date.DayNumber;
+    public static DateParts Parts(DateOnly date)=>new(date.Year,date.Month,date.Day,date.DayOfYear);
+    public static string Label(DateOnly date)=>date.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture);
+    public static string CustomLabel(DateOnly date)=>date.ToString("'Day:' d / MM / yyyy",CultureInfo.InvariantCulture);
+    public static bool Before(DateOnly? left,DateOnly? right)=>left<right;
+    public static bool Equal(DateOnly? left,DateOnly? right)=>left==right;
+    public static int Compare(DateOnly left,DateOnly right)=>left.CompareTo(right);
+    public static TimeOnly Clock(long ticks)=>new(ticks);
+    public static TimeOnly At(int hour,int minute,int second,int millisecond,int microsecond)=>new(hour,minute,second,millisecond,microsecond);
+    public static TimeOnly Shift(TimeOnly time,int minutes)=>time.AddMinutes(minutes);
+    public static TimeOnly Fraction(TimeOnly time)=>time.AddHours(0.00000001);
+    public static long LastTick()=>TimeOnly.MaxValue.Ticks;
+    public static bool Between(TimeOnly clock,TimeOnly start,TimeOnly end)=>clock.IsBetween(start,end);
+    public static bool SameClock(TimeOnly? left,TimeOnly? right)=>left==right;
+    public static int Nanosecond(TimeOnly time)=>time.Nanosecond;
+}

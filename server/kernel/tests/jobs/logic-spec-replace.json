@@ -1,0 +1,13 @@
+{
+ "description":"Reescreve uma action com consumidor real; a chave do Execute e os argumentos devem sobreviver.",
+ "base":"job:logic-call-order",
+ "expectValid":true,
+ "ops":[
+  {"op":"usages","target":"IServerAction:ReplaceTarget"},
+  {"op":"dump","target":"IServerAction:ReplaceCaller/Compute","depth":4},
+  {"op":"logic","data":{"actions":[{"name":"ReplaceTarget","replace":true,"inputs":[{"name":"Value","type":"Integer"}],"outputs":[{"name":"Result","type":"Integer"}],"steps":[{"assign":{"Result":"Value + 2"}}]}]}},
+  {"op":"usages","target":"IServerAction:ReplaceTarget"},
+  {"op":"dump","target":"IServerAction:ReplaceCaller/Compute","depth":4},
+  {"op":"find","name":"ReplaceTarget"}
+ ]
+}

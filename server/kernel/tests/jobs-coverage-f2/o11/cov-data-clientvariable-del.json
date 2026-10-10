@@ -1,0 +1,18 @@
+{
+ "description": "Cobertura testada (fase 2): del de OutSystems.Model.Data.IClientVariable (o11) em espaceUi. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IClientVariable",
+   "name": "CovAClientVariable",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

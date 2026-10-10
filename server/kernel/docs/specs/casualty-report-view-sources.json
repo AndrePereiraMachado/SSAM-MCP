@@ -1,0 +1,1184 @@
+{
+  "tables": [
+    {
+      "targetEntity": "CasualtyPerson",
+      "columns": [
+        {
+          "sourceColumn": "id",
+          "targetAttribute": "LegacyId",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "edipi",
+          "targetAttribute": "EDIPI",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "ssn_last4",
+          "targetAttribute": "SSNLast4",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "first_name",
+          "targetAttribute": "FirstName",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "middle_name",
+          "targetAttribute": "MiddleName",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "last_name",
+          "targetAttribute": "LastName",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "suffix",
+          "targetAttribute": "Suffix",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "gender",
+          "targetAttribute": "Gender",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "rank_code",
+          "targetAttribute": "RankCode",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "rank_name",
+          "targetAttribute": "RankName",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "service_branch",
+          "targetAttribute": "ServiceBranch",
+          "deliveredType": "ServiceBranch Identifier"
+        },
+        {
+          "sourceColumn": "component",
+          "targetAttribute": "Component",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "unit_org_id",
+          "targetAttribute": "UnitOrgId",
+          "deliveredType": "Organizations Identifier"
+        },
+        {
+          "sourceColumn": "home_of_record",
+          "targetAttribute": "HomeOfRecord",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "duty_station",
+          "targetAttribute": "DutyStation",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "created_at",
+          "targetAttribute": "CreatedOn",
+          "deliveredType": "Date Time"
+        },
+        {
+          "sourceColumn": "updated_at",
+          "targetAttribute": "UpdatedOn",
+          "deliveredType": "Date Time"
+        },
+        {
+          "sourceColumn": "ssn_full_enc",
+          "targetAttribute": "SsnFullEnc",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "date_of_birth_enc",
+          "targetAttribute": "DateOfBirthEncrypted",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "place_of_birth",
+          "targetAttribute": "PlaceOfBirth",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "citizenship",
+          "targetAttribute": "Citizenship",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "religion",
+          "targetAttribute": "Religion",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "race",
+          "targetAttribute": "Race",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "ethnicity",
+          "targetAttribute": "Ethnicity",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "marital_status",
+          "targetAttribute": "MaritalStatus",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "date_entered_service",
+          "targetAttribute": "DateEnteredService",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "source_separation",
+          "targetAttribute": "SourceSeparation",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "years_of_service",
+          "targetAttribute": "YearsOfService",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "foreign_decorations",
+          "targetAttribute": "ForeignDecorations",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "service_number",
+          "targetAttribute": "ServiceNumber",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "blood_type",
+          "targetAttribute": "BloodType",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "eye_color",
+          "targetAttribute": "EyeColor",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "hair_color",
+          "targetAttribute": "HairColor",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "height_inches",
+          "targetAttribute": "HeightInches",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "weight_lbs",
+          "targetAttribute": "WeightLbs",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "identifying_marks",
+          "targetAttribute": "IdentifyingMarks",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "aliases",
+          "targetAttribute": "Aliases",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "pay_grade",
+          "targetAttribute": "PayGrade",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "mos_afsc_navrate",
+          "targetAttribute": "MosAfscNavrate",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "security_clearance",
+          "targetAttribute": "SecurityClearance",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "projected_separation_date",
+          "targetAttribute": "ProjectedSeparationDate",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "sgli_election",
+          "targetAttribute": "SgliElection",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "sgli_beneficiary_on_file",
+          "targetAttribute": "SgliBeneficiaryOnFile",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "fsgli_election",
+          "targetAttribute": "FsgliElection",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "tsgli_eligible",
+          "targetAttribute": "TsgliEligible",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "spouse_name",
+          "targetAttribute": "SpouseName",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "spouse_dob",
+          "targetAttribute": "SpouseDob",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "number_dependents",
+          "targetAttribute": "NumberDependents",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "dependents_summary",
+          "targetAttribute": "DependentsSummary",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "awards_lifetime",
+          "targetAttribute": "AwardsLifetime",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "badges_qualifications",
+          "targetAttribute": "BadgesQualifications",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "unit_awards",
+          "targetAttribute": "UnitAwards",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "campaign_medals",
+          "targetAttribute": "CampaignMedals",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "service_stripes",
+          "targetAttribute": "ServiceStripes",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "overseas_service_bars",
+          "targetAttribute": "OverseasServiceBars",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "deployments_count",
+          "targetAttribute": "DeploymentsCount",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "combat_deployments_count",
+          "targetAttribute": "CombatDeploymentsCount",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "last_deployment_location",
+          "targetAttribute": "LastDeploymentLocation",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "last_deployment_start",
+          "targetAttribute": "LastDeploymentStart",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "last_deployment_end",
+          "targetAttribute": "LastDeploymentEnd",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "combat_zones_served",
+          "targetAttribute": "CombatZonesServed",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "personnel_type",
+          "targetAttribute": "PersonnelType",
+          "deliveredType": "PersonnelType Identifier"
+        },
+        {
+          "sourceColumn": "military_affiliation",
+          "targetAttribute": "MilitaryAffiliation",
+          "deliveredType": "MilitaryAffiliation Identifier"
+        },
+        {
+          "sourceColumn": "personnel_category",
+          "targetAttribute": "PersonnelCategory",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "primary_mos_afsc",
+          "targetAttribute": "PrimaryMosAfsc",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "uic_pas",
+          "targetAttribute": "UnitUIC",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "dependents_lived_with_member",
+          "targetAttribute": "DependentsLivedWithMember",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "household_size",
+          "targetAttribute": "HouseholdSize",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "service_period",
+          "targetAttribute": "ServicePeriod",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "weight_pounds",
+          "targetAttribute": "WeightPounds",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "retired_date",
+          "targetAttribute": "RetiredDate",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "separated_date",
+          "targetAttribute": "SeparatedDate",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "ret_sep_date_historical",
+          "targetAttribute": "RetSepDateHistorical",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "spouse_dob_enc",
+          "targetAttribute": "SpouseDobEnc",
+          "deliveredType": "Text"
+        }
+      ]
+    },
+    {
+      "targetEntity": "CasualtyReport",
+      "columns": [
+        {
+          "sourceColumn": "id",
+          "targetAttribute": "LegacyId",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "casualty_id",
+          "targetAttribute": "CasualtyPersonId",
+          "deliveredType": "CasualtyPerson Identifier"
+        },
+        {
+          "sourceColumn": "report_number",
+          "targetAttribute": "ReportNumber",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "report_type",
+          "targetAttribute": "ReportType",
+          "deliveredType": "ReportType Identifier"
+        },
+        {
+          "sourceColumn": "status",
+          "targetAttribute": "Status",
+          "deliveredType": "ReportStatus Identifier"
+        },
+        {
+          "sourceColumn": "workflow_stage",
+          "targetAttribute": "WorkflowStage",
+          "deliveredType": "WorkflowStage Identifier"
+        },
+        {
+          "sourceColumn": "incident_date",
+          "targetAttribute": "LegacyIncidentDate",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "incident_country",
+          "targetAttribute": "IncidentCountry",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "incident_location",
+          "targetAttribute": "IncidentLocation",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "incident_type",
+          "targetAttribute": "IncidentType",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "incident_circumstance",
+          "targetAttribute": "IncidentNarrative",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "casualty_status",
+          "targetAttribute": "CasualtyStatus",
+          "deliveredType": "CasualtyStatus Identifier"
+        },
+        {
+          "sourceColumn": "cause_of_death",
+          "targetAttribute": "CauseOfDeath",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "injury_type",
+          "targetAttribute": "InjuryType",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "remarks",
+          "targetAttribute": "Remarks",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "reporting_org_id",
+          "targetAttribute": "ReportingOrgId",
+          "deliveredType": "Organizations Identifier"
+        },
+        {
+          "sourceColumn": "reporting_cac_id",
+          "targetAttribute": "ReportingCACId",
+          "deliveredType": "CasualtyAssistanceCenter Identifier"
+        },
+        {
+          "sourceColumn": "reporter_user_id",
+          "targetAttribute": "LegacyReporterUserId",
+          "deliveredType": "LegacyUser Identifier"
+        },
+        {
+          "sourceColumn": "approver_user_id",
+          "targetAttribute": "ApproverUserId",
+          "deliveredType": "LegacyUser Identifier"
+        },
+        {
+          "sourceColumn": "submitted_at",
+          "targetAttribute": "SubmittedOn",
+          "deliveredType": "Date Time"
+        },
+        {
+          "sourceColumn": "approved_at",
+          "targetAttribute": "ApprovedAt",
+          "deliveredType": "Date Time"
+        },
+        {
+          "sourceColumn": "version",
+          "targetAttribute": "Version",
+          "deliveredType": "Long Integer"
+        },
+        {
+          "sourceColumn": "created_at",
+          "targetAttribute": "CreatedOn",
+          "deliveredType": "Date Time"
+        },
+        {
+          "sourceColumn": "updated_at",
+          "targetAttribute": "UpdatedOn",
+          "deliveredType": "Date Time"
+        },
+        {
+          "sourceColumn": "assigned_case_manager_id",
+          "targetAttribute": "AssignedCaseManagerId",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "duplicate_of_report_id",
+          "targetAttribute": "DuplicateOfReportId",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "mortuary_status",
+          "targetAttribute": "MortuaryStatus",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "mortuary_location",
+          "targetAttribute": "MortuaryLocation",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "escort_authorized",
+          "targetAttribute": "EscortAuthorized",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "burial_disposition",
+          "targetAttribute": "BurialDisposition",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "burial_flag_provided",
+          "targetAttribute": "BurialFlagProvided",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "government_marker_requested",
+          "targetAttribute": "GovernmentMarkerRequested",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "death_certificate_number",
+          "targetAttribute": "DeathCertificateNumber",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "afmes_case_number",
+          "targetAttribute": "AfmesCaseNumber",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "autopsy_status",
+          "targetAttribute": "AutopsyStatus",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "autopsy_date",
+          "targetAttribute": "AutopsyDate",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "identification_method",
+          "targetAttribute": "IdentificationMethod",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "identification_date",
+          "targetAttribute": "IdentificationDate",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "medical_examiner",
+          "targetAttribute": "MedicalExaminer",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "place_of_death",
+          "targetAttribute": "PlaceOfDeath",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "time_of_death",
+          "targetAttribute": "TimeOfDeath",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "next_of_kin_notified",
+          "targetAttribute": "NextOfKinNotified",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "next_of_kin_notified_date",
+          "targetAttribute": "NextOfKinNotifiedDate",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "casualty_assistance_officer",
+          "targetAttribute": "CasualtyAssistanceOfficer",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "commander_notification_date",
+          "targetAttribute": "CommanderNotificationDate",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "dpaa_case_number",
+          "targetAttribute": "DpaaCaseNumber",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "manner_of_death",
+          "targetAttribute": "MannerOfDeath",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "cause_of_death_detail",
+          "targetAttribute": "CauseOfDeathDetail",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "pronouncement_authority",
+          "targetAttribute": "PronouncementAuthority",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "pronouncement_date",
+          "targetAttribute": "PronouncementDate",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "pronouncement_time",
+          "targetAttribute": "PronouncementTime",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "remains_recovered",
+          "targetAttribute": "RemainsRecovered",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "remains_recovery_date",
+          "targetAttribute": "RemainsRecoveryDate",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "remains_condition",
+          "targetAttribute": "RemainsCondition",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "transport_authority",
+          "targetAttribute": "TransportAuthority",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "transport_method",
+          "targetAttribute": "TransportMethod",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "port_of_entry",
+          "targetAttribute": "PortOfEntry",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "final_disposition_date",
+          "targetAttribute": "FinalDispositionDate",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "posthumous_awards",
+          "targetAttribute": "PosthumousAwards",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "purple_heart_awarded",
+          "targetAttribute": "PurpleHeartAwarded",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "award_recommendations",
+          "targetAttribute": "AwardRecommendations",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "ashes_disposition",
+          "targetAttribute": "AshesDisposition",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "private_cemetery_name",
+          "targetAttribute": "PrivateCemeteryName",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "monument_disposition",
+          "targetAttribute": "MonumentDisposition",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "monument_inscription",
+          "targetAttribute": "MonumentInscription",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "sgli_payee_name",
+          "targetAttribute": "SgliPayeeName",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "sgli_payment_status",
+          "targetAttribute": "SgliPaymentStatus",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "classification_level",
+          "targetAttribute": "ClassificationLevel",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "theater_of_operations",
+          "targetAttribute": "TheaterOfOperations",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "operation_name",
+          "targetAttribute": "OperationName",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "unit_uic_at_event",
+          "targetAttribute": "UnitUicAtEvent",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "casualty_circumstance_classified",
+          "targetAttribute": "CasualtyCircumstance315b3c8",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "missing_persons_act_invoked",
+          "targetAttribute": "MissingPersonsActInvoked",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "event_date",
+          "targetAttribute": "EventDate",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "official_record_locator",
+          "targetAttribute": "OfficialRecordLocator",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "record_type",
+          "targetAttribute": "RecordType",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "records_custodian",
+          "targetAttribute": "RecordsCustodian",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "sealed_record_flag",
+          "targetAttribute": "SealedRecordFlag",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "foia_exemption_code",
+          "targetAttribute": "FoiaExemptionCode",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "memorial_designation",
+          "targetAttribute": "MemorialDesignation",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "memorial_designation_date",
+          "targetAttribute": "MemorialDesignationDate",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "memorial_authority",
+          "targetAttribute": "MemorialAuthority",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "wall_of_honor_flag",
+          "targetAttribute": "WallOfHonorFlag",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "memorial_grant_amount",
+          "targetAttribute": "MemorialGrantAmount",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "memorial_grant_recipient",
+          "targetAttribute": "MemorialGrantRecipient",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "lod_status",
+          "targetAttribute": "LodStatus",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "lod_decision_date",
+          "targetAttribute": "LodDecisionDate",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "lod_decision_authority",
+          "targetAttribute": "LodDecisionAuthority",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "investigation_status",
+          "targetAttribute": "InvestigationStatus",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "investigation_case_number",
+          "targetAttribute": "InvestigationCaseNumber",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "investigating_agency",
+          "targetAttribute": "InvestigatingAgency",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "lod_board_chair",
+          "targetAttribute": "LodBoardChair",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "lod_board_members",
+          "targetAttribute": "LodBoardMembers",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "lod_board_convened_date",
+          "targetAttribute": "LodBoardConvenedDate",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "lod_board_findings",
+          "targetAttribute": "LodBoardFindings",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "investigating_officer",
+          "targetAttribute": "InvestigatingOfficer",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "investigating_officer_rank",
+          "targetAttribute": "InvestigatingOfficerRank",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "investigating_officer_org",
+          "targetAttribute": "InvestigatingOfficerOrg",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "witness_count",
+          "targetAttribute": "WitnessCount",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "witness_summary",
+          "targetAttribute": "WitnessSummary",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "sworn_statements_collected",
+          "targetAttribute": "SwornStatementsCollected",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "sworn_statement_date",
+          "targetAttribute": "SwornStatementDate",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "treatment_facility_initial",
+          "targetAttribute": "TreatmentFacilityInitial",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "treatment_facility_definitive",
+          "targetAttribute": "TreatmentFacilityDefinitive",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "evacuation_method",
+          "targetAttribute": "EvacuationMethod",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "evacuation_destination",
+          "targetAttribute": "EvacuationDestination",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "evacuation_date",
+          "targetAttribute": "EvacuationDate",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "mecep_priority",
+          "targetAttribute": "MecepPriority",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "days_to_definitive_care",
+          "targetAttribute": "DaysToDefinitiveCare",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "incident_time",
+          "targetAttribute": "IncidentTime",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "over_water",
+          "targetAttribute": "OverWater",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "body_of_water",
+          "targetAttribute": "BodyOfWater",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "latitude",
+          "targetAttribute": "Latitude",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "longitude",
+          "targetAttribute": "Longitude",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "grid_reference",
+          "targetAttribute": "GridReference",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "multi_casualty_incident",
+          "targetAttribute": "MultiCasualtyIncident",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "multi_casualty_incident_name",
+          "targetAttribute": "MultiCasualtyIncidentName",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "afme_jurisdiction",
+          "targetAttribute": "AfmeJurisdiction",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "known_casualty_date",
+          "targetAttribute": "KnownCasualtyDate",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "known_casualty_time",
+          "targetAttribute": "KnownCasualtyTime",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "duty_status",
+          "targetAttribute": "DutyStatus",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "in_support_of_other_service",
+          "targetAttribute": "InSupportOfOtherService",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "report_date",
+          "targetAttribute": "ReportDate",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "report_time",
+          "targetAttribute": "ReportTime",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "injury_illness_status",
+          "targetAttribute": "InjuryIllnessStatus",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "hospital_name",
+          "targetAttribute": "HospitalName",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "medical_progress",
+          "targetAttribute": "MedicalProgress",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "original_casualty_report_number",
+          "targetAttribute": "OriginalCasualtyRepo2c338f2",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "died_in_medical_facility",
+          "targetAttribute": "DiedInMedicalFacility",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "progress_report_date",
+          "targetAttribute": "ProgressReportDate",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "progress_report_time",
+          "targetAttribute": "ProgressReportTime",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "casualty_type",
+          "targetAttribute": "CasualtyTypeId",
+          "deliveredType": "CasualtyType Identifier"
+        },
+        {
+          "sourceColumn": "casualty_category",
+          "targetAttribute": "CasualtyCategory",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "inflicting_force",
+          "targetAttribute": "InflictingForce",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "hospital_country",
+          "targetAttribute": "HospitalCountry",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "hospital_city",
+          "targetAttribute": "HospitalCity",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "hospital_state",
+          "targetAttribute": "HospitalState",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "hospital_zip",
+          "targetAttribute": "HospitalZip",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "cause_of_death_narrative",
+          "targetAttribute": "CauseOfDeathNarrative",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "additional_remarks",
+          "targetAttribute": "AdditionalRemarks",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "incident_state_province",
+          "targetAttribute": "IncidentStateProvince",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "incident_city",
+          "targetAttribute": "IncidentCity",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "organizational_units_to_notify",
+          "targetAttribute": "OrganizationalUnitsToNotify",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "additional_email_addresses",
+          "targetAttribute": "AdditionalEmailAddresses",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "notification_sending_to",
+          "targetAttribute": "NotificationSendingTo",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "notification_summary",
+          "targetAttribute": "NotificationSummary",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "decoration_authority",
+          "targetAttribute": "DecorationAuthority",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "decoration_citation",
+          "targetAttribute": "DecorationCitation",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "reporting_organization_uic",
+          "targetAttribute": "ReportingOrganizationUic",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "report_category",
+          "targetAttribute": "ReportCategory",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "death_city",
+          "targetAttribute": "DeathCity",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "death_state",
+          "targetAttribute": "DeathState",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "death_country",
+          "targetAttribute": "DeathCountry",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "other_information",
+          "targetAttribute": "OtherInformation",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "multi_casualty_id",
+          "targetAttribute": "MultiCasualtyId",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "conflict",
+          "targetAttribute": "Conflict",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "operation",
+          "targetAttribute": "Operation",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "casualty_status_canonical",
+          "targetAttribute": "CasualtyStatusCanonical",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "incident_time_zone",
+          "targetAttribute": "IncidentTimeZone",
+          "deliveredType": "Text"
+        },
+        {
+          "sourceColumn": "incident_group_id",
+          "targetAttribute": "IncidentGroupId",
+          "deliveredType": "Text"
+        }
+      ]
+    }
+  ]
+}

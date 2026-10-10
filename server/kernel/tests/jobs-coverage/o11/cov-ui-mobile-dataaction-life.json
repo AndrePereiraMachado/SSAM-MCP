@@ -1,0 +1,116 @@
+{
+ "description": "Cobertura testada (fase 1, medir): life de OutSystems.Model.UI.Mobile.IDataAction (o11) em mobileBlock. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedAction",
+   "element": "Headless_UI (ESpace) / MainFlow (MobileFlow) / CovSBlock (MobileBlock) / CovRDataAction (DataAction)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  },
+  {
+   "id": "UnusedAction",
+   "element": "Headless_UI (ESpace) / MainFlow (MobileFlow) / CovSBlock (MobileBlock) / CovRDataAction2 (DataAction)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileBlock",
+   "name": "CovSBlock",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IDataAction",
+   "name": "CovADataAction",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IStartNode",
+   "as": "$a_s"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IEndNode",
+   "as": "$a_e"
+  },
+  {
+   "op": "link",
+   "from": "$a_s",
+   "to": "$a_e"
+  },
+  {
+   "op": "set",
+   "target": "$a/Out1",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IAssignNode",
+   "as": "$a_as"
+  },
+  {
+   "op": "set",
+   "target": "$a_as",
+   "prop": "Label",
+   "value": "CovSAssign"
+  },
+  {
+   "op": "create",
+   "parent": "$a_as",
+   "type": "IAssignment",
+   "as": "$a_g"
+  },
+  {
+   "op": "set",
+   "target": "$a_g",
+   "prop": "Variable",
+   "value": "Out1"
+  },
+  {
+   "op": "set",
+   "target": "$a_g",
+   "prop": "Value",
+   "value": "\"x\""
+  },
+  {
+   "op": "link",
+   "from": "$a_s",
+   "to": "$a_as"
+  },
+  {
+   "op": "link",
+   "from": "$a_as",
+   "to": "$a_e"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRDataAction"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  }
+ ]
+}

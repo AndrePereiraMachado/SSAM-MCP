@@ -1,0 +1,71 @@
+{
+ "description": "ODC (cobertura T): REST consumido com ESTRUTURA DENTRO DE ESTRUTURA, que a faixa ODC nunca tinha provado. Espelha tests/jobs/rest-query-nested.json: um GET ao frankfurter.app cuja resposta e {amount, base, date, rates:{USD}} - ou seja, um atributo da structure de resposta e ele proprio uma structure. A regra e a mesma das duas faixas: cria-se a structure FILHA primeiro e depois usa-se o NOME dela como DataType do atributo do pai; o kernel resolve o nome para o tipo record. A query string nao tem op proprio - vai escrita no URLPath (/latest?from={from}&to={to}) e cada {param} pede um IRestActionInput em UrlPlacement. No fim uma server action partilhavel chama o metodo e le DOIS niveis de profundidade numa unica expressao (GetLatest.Response.Rates.USD), que e a prova de que o aninhamento existe mesmo no modelo e nao so no JSON. UMA diferenca de plataforma apareceu e esta medida no _why do usages: no ODC essa expressao conta como consumidora da structure aninhada (real=3), na faixa O11 nao conta (real=2).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfNstFx_GetUsdRate (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IRestClient", "name": "WfNstFxApi", "as": "$api"},
+  {"op": "set", "target": "$api", "prop": "BaseURL", "value": "https://api.frankfurter.app"},
+
+  {"op": "create", "parent": "$api", "type": "IRestStructure", "name": "WfNstRates", "as": "$rates", "_why": "a structure FILHA nasce primeiro: o DataType do atributo do pai e resolvido por NOME, logo o nome tem de ja existir quando o pai for escrito"},
+  {"op": "create", "parent": "$rates", "type": "IRestStructureAttribute", "name": "USD", "as": "$usd"},
+  {"op": "set", "target": "$usd", "prop": "DataType", "value": "Decimal"},
+  {"op": "set", "target": "$usd", "prop": "NameInJSON", "value": "USD"},
+
+  {"op": "create", "parent": "$api", "type": "IRestStructure", "name": "WfNstGetLatestResponse", "as": "$st"},
+  {"op": "create", "parent": "$st", "type": "IRestStructureAttribute", "name": "Amount", "as": "$a1"},
+  {"op": "set", "target": "$a1", "prop": "DataType", "value": "Decimal"},
+  {"op": "set", "target": "$a1", "prop": "NameInJSON", "value": "amount", "_why": "NameInJSON e independente do nome do atributo: o JSON vem em minusculas e o modelo fica com o nome OutSystems"},
+  {"op": "create", "parent": "$st", "type": "IRestStructureAttribute", "name": "Base", "as": "$a2"},
+  {"op": "set", "target": "$a2", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$a2", "prop": "NameInJSON", "value": "base"},
+  {"op": "create", "parent": "$st", "type": "IRestStructureAttribute", "name": "Date", "as": "$a3"},
+  {"op": "set", "target": "$a3", "prop": "DataType", "value": "Date"},
+  {"op": "set", "target": "$a3", "prop": "NameInJSON", "value": "date"},
+  {"op": "create", "parent": "$st", "type": "IRestStructureAttribute", "name": "Rates", "as": "$a4"},
+  {"op": "set", "target": "$a4", "prop": "DataType", "value": "WfNstRates", "_why": "AQUI e o ponto do job: o DataType nao e um tipo primitivo, e o NOME da IRestStructure criada acima - structure dentro de structure"},
+  {"op": "set", "target": "$a4", "prop": "NameInJSON", "value": "rates"},
+
+  {"op": "create", "parent": "$api", "type": "IRestAction", "name": "WfNstGetLatest", "as": "$m"},
+  {"op": "set", "target": "$m", "prop": "HTTPMethod", "value": "GET"},
+  {"op": "set", "target": "$m", "prop": "URLPath", "value": "/latest?from={from}&to={to}", "_why": "a query string NAO tem op proprio: vai escrita no URLPath e cada {param} pede um input em UrlPlacement"},
+  {"op": "set", "target": "$m", "prop": "ResponseFormat", "value": "JSON"},
+  {"op": "create", "parent": "$m", "type": "IRestActionInput", "name": "from", "as": "$in1"},
+  {"op": "set", "target": "$in1", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$in1", "prop": "InputPlacement", "value": "UrlPlacement"},
+  {"op": "create", "parent": "$m", "type": "IRestActionInput", "name": "to", "as": "$in2"},
+  {"op": "set", "target": "$in2", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$in2", "prop": "InputPlacement", "value": "UrlPlacement"},
+  {"op": "create", "parent": "$m", "type": "IRestActionOutput", "name": "Response", "as": "$out"},
+  {"op": "set", "target": "$out", "prop": "DataType", "value": "WfNstGetLatestResponse"},
+  {"op": "set", "target": "$out", "prop": "OutputPlacement", "value": "BodyPlacement"},
+
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfNstFx_GetUsdRate", "as": "$act"},
+  {"op": "create", "parent": "$act", "type": "IOutputParameter", "name": "Rate", "as": "$pout"},
+  {"op": "set", "target": "$pout", "prop": "DataType", "value": "Decimal"},
+
+  {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$start"},
+  {"op": "create", "parent": "$act", "type": "IExecuteServerActionNode", "name": "GetLatest", "as": "$call"},
+  {"op": "set", "target": "$call", "prop": "Action", "value": "IRestAction:WfNstGetLatest", "_why": "um metodo REST consumido chama-se como qualquer server action; o NOME DO NO (GetLatest) e que serve de prefixo na expressao, nao o nome do metodo"},
+  {"op": "set", "target": "$call/from", "prop": "Value", "value": "\"EUR\"", "_why": "literal de texto num argumento leva aspas por dentro do JSON: a propriedade e expressao OutSystems, nao texto"},
+  {"op": "set", "target": "$call/to", "prop": "Value", "value": "\"USD\""},
+
+  {"op": "create", "parent": "$act", "type": "IAssignNode", "as": "$assign"},
+  {"op": "set", "target": "$assign", "prop": "Label", "value": "SetRate"},
+  {"op": "create", "parent": "$assign", "type": "IAssignment", "as": "$as1"},
+  {"op": "set", "target": "$as1", "prop": "Variable", "value": "Rate"},
+  {"op": "set", "target": "$as1", "prop": "Value", "value": "GetLatest.Response.Rates.USD", "_why": "PROVA do aninhamento: tres saltos numa so expressao - saida do no, atributo record da structure de resposta e atributo da structure filha"},
+
+  {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$end"},
+  {"op": "link", "from": "$start", "to": "$call"},
+  {"op": "link", "from": "$call", "to": "$assign"},
+  {"op": "link", "from": "$assign", "to": "$end"},
+  {"op": "layout", "target": "$act"},
+
+  {"op": "get", "target": "$m", "_why": "prova o URLPath com a query string e o HTTPMethod"},
+  {"op": "get", "target": "$a4", "_why": "prova o atributo aninhado: DataType e a structure WfNstRates, nao um primitivo"},
+  {"op": "dump", "target": "$api", "depth": 4, "_why": "prova as DUAS structures lado a lado dentro do mesmo IRestClient: o aninhamento nao e uma structure dentro da arvore da outra - sao irmas, e o que as liga e o DataType do atributo. Por isso o dump do pai sozinho nunca mostraria o USD"},
+  {"op": "usages", "target": "IRestStructure:WfNstRates", "_why": "DIFERENCA DE PLATAFORMA, medida: no ODC a structura filha tem real=3 - o IRestStructureAttribute do pai, o IAttribute do 'WfNstRates Record' (a IAnonymousStructure que a plataforma cria sozinha, igual nas duas faixas) E a propria ITextBasedExpression 'GetLatest.Response.Rates.USD'; o mesmo job na faixa O11 da real=2, porque la a expressao que atravessa o segundo nivel NAO conta como consumidora da structure. Consequencia pratica: um delete da structure aninhada e recusado no ODC por causa da expressao e nao seria recusado por ela no SS11"},
+  {"op": "dump", "target": "$act", "depth": 3, "_why": "prova o fluxo que le os dois niveis e devolve o Rate"}
+ ]
+}

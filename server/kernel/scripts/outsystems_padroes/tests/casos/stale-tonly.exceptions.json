@@ -1,0 +1,64 @@
+{
+ "schema": "outsystems-padroes-excecoes/1",
+ "planStage": "I1",
+ "module": "Integration_CS",
+ "_fixture": "Copia congelada FICTICIA (aprovador autoteste so via configOverride) com excecoes de D3 e L6 cujos elementos so aparecem nos estagios J/O.",
+ "exceptions": [
+  {
+   "id": "EX-T-D3",
+   "rule": "D3",
+   "module": "Integration_CS",
+   "element": {
+    "objectKey": null,
+    "path": [
+     [
+      "ServerAction",
+      "HashTextSha256"
+     ],
+     [
+      "SQLNode",
+      "ReadSha256"
+     ]
+    ]
+   },
+   "match": "suffix",
+   "reason": "fixture",
+   "evidence": "autoteste",
+   "status": "aprovada",
+   "approval": {
+    "by": "autoteste",
+    "at": "2026-09-25T00:00:00Z",
+    "message": "fixture do autoteste"
+   },
+   "expires": null
+  },
+  {
+   "id": "EX-T-L6",
+   "rule": "L6",
+   "module": "Integration_CS",
+   "element": {
+    "objectKey": null,
+    "path": [
+     [
+      "ServerAction",
+      "ParseProviderResponse"
+     ],
+     [
+      "JSONDeserializeNode",
+      "DecodeResponse"
+     ]
+    ]
+   },
+   "match": "suffix",
+   "reason": "fixture",
+   "evidence": "autoteste",
+   "status": "aprovada",
+   "approval": {
+    "by": "autoteste",
+    "at": "2026-09-25T00:00:00Z",
+    "message": "fixture do autoteste"
+   },
+   "expires": null
+  }
+ ]
+}

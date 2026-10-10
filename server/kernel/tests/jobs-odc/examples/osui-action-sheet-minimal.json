@@ -1,0 +1,14 @@
+{
+ "description": "ActionSheet do OSUI: o input obrigatorio IsOpen ligado a uma variavel Boolean.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ActionSheetDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "IsSheetOpen", "as": "$vIsSheetOpen"},
+  {"op": "set", "target": "$vIsSheetOpen", "prop": "DataType", "value": "Boolean"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ActionSheet1", "source": "IMobileBlock:ActionSheet", "as": "$as"},
+  {"op": "set", "target": "$as/IsOpen", "prop": "Value", "value": "IsSheetOpen"}
+ ]
+}

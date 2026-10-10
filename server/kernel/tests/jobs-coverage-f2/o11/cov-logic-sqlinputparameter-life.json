@@ -1,0 +1,126 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.Logic.ISQLInputParameter (o11) em sqlNode. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedElement",
+   "element": "Headless_CS (ESpace) / CovSFlow (ServerAction) / CovSQuerySql (SQLNode) / CovRSQLInputParameter (SQLInputParameter)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "structures": [
+     {
+      "name": "CovSStructure",
+      "attributes": [
+       {
+        "name": "Title",
+        "type": "Text"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "CovSFlow",
+   "as": "$fp"
+  },
+  {
+   "op": "set",
+   "target": "$fp",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "ISQLNode",
+   "name": "CovSQuerySql",
+   "as": "$p"
+  },
+  {
+   "op": "set",
+   "target": "$p",
+   "prop": "Statement",
+   "value": "SELECT 1"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "ISQLOutput",
+   "name": "List",
+   "args": {
+    "entityOrStructure": "$CovSStructure"
+   }
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$p"
+  },
+  {
+   "op": "link",
+   "from": "$p",
+   "to": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "ISQLInputParameter",
+   "name": "CovASQLInputParameter",
+   "as": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$p/arg:CovASQLInputParameter",
+   "prop": "Value",
+   "value": "\"x\""
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRSQLInputParameter"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "first": true
+  }
+ ]
+}

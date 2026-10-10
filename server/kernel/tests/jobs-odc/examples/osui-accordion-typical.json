@@ -1,0 +1,29 @@
+{
+ "description": "Accordion do OSUI: perguntas frequentes vindas de uma entidade, um AccordionItem por linha de uma List, MultipleItems ligado e OnToggle contando as aberturas.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "FaqEntry", "attributes": [{"name": "Question", "type": "Text", "length": 200, "mandatory": true}, {"name": "Answer", "type": "Text", "length": 2000}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "Faq", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"FAQ\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetFaq", "as": "$GetFaq"},
+  {"op": "create", "parent": "$GetFaq", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:FaqEntry"}},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "OpenedCount", "as": "$vOpenedCount"},
+  {"op": "set", "target": "$vOpenedCount", "prop": "DataType", "value": "Integer"},
+  {"op": "logic", "data": {"actions": [{"name": "ItemToggled", "kind": "screen", "owner": "IMobileScreen:Faq", "inputs": [{"name": "IsExpanded", "type": "Boolean"}], "steps": [{"if": "IsExpanded", "as": "Opened", "then": [{"assign": {"OpenedCount": "OpenedCount + 1"}, "as": "Count"}]}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Accordion1", "source": "IMobileBlock:Accordion", "empty": true, "as": "$acc"},
+  {"op": "set", "target": "$acc/MultipleItems", "prop": "Value", "value": "True"},
+  {"op": "create", "parent": "$acc/Content", "type": "IList", "name": "FaqList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetFaq.List"},
+  {"op": "create", "parent": "$list", "type": "IMobileBlockInstanceWidget", "name": "FaqItem", "source": "IMobileBlock:AccordionItem", "as": "$item"},
+  {"op": "set", "target": "$item/OnToggle", "prop": "Handler", "value": "IMobileScreen:Faq/ItemToggled"},
+  {"op": "set", "target": "$item/OnToggle/IsExpanded", "prop": "Value", "value": "IsExpanded"},
+  {"op": "create", "parent": "$item/Title", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "GetFaq.List.Current.FaqEntry.Question"},
+  {"op": "create", "parent": "$item/Content", "type": "IExpression", "as": "$expr2"},
+  {"op": "set", "target": "$expr2", "prop": "Value", "value": "GetFaq.List.Current.FaqEntry.Answer"}
+ ]
+}

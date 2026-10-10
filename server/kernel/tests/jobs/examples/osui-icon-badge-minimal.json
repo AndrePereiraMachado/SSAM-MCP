@@ -1,0 +1,10 @@
+{
+ "description": "IconBadge (OutSystemsUI, Numbers) minimo: instancia como o Studio cria ao arrastar o bloco; inputs obrigatorios Number com valores simples.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "IconBadgeDemo", "source": "IMobileBlock:IconBadge", "as": "$b"},
+  {"op": "set", "target": "$b/Number", "prop": "Value", "value": "3"}
+ ]
+}

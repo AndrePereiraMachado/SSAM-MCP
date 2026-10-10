@@ -1,0 +1,42 @@
+{
+ "description": "ODC (cobertura T): TEMA, SCRIPT e RECURSO, tres tipos que nunca tinham passado pela faixa ODC. Espelha o IScript de tests/jobs/client-js-reactive.json (Script do modulo exigido pela tela em RequiredScripts) e acrescenta o tema (IMobileTheme com BaseTheme e CSS de autor) e o recurso (IResource). Um UI Flow proprio recebe o tema para nao mexer no MainFlow do InsuranceApp, e a tela desse flow exige o script. A imagem de modulo (IImage) NAO entra: ver a seccao de bloqueios do relatorio da frente T.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "ITheme", "name": "WfCovTheme", "as": "$theme", "_why": "ITheme resolve para o concreto IMobileTheme (IESpace.CreateMobileTheme); o InsuranceApp e CrossDevice"},
+  {"op": "set", "target": "$theme", "prop": "Description", "value": "Cobertura T: tema proprio, derivado do tema do modulo"},
+  {"op": "set", "target": "$theme", "prop": "BaseTheme", "value": "IMobileTheme:InsuranceApp"},
+  {"op": "set", "target": "$theme", "prop": "StyleSheet", "value": ".wf-cov-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; background: #eef; }"},
+
+  {"op": "create", "parent": "@espace", "type": "IScript", "name": "WfCovFormatting", "as": "$script"},
+  {"op": "set", "target": "$script", "prop": "Description", "value": "Cobertura T: helpers de formatacao do lado do cliente"},
+  {"op": "set", "target": "$script", "prop": "JavaScript", "value": "window.WfCovFormatting = { badge: function (s) { return String(s || \"\").toUpperCase(); } };"},
+
+  {"op": "create", "parent": "@espace", "type": "IResource", "name": "WfCovAuditTemplate", "as": "$resource"},
+  {"op": "set", "target": "$resource", "prop": "Description", "value": "Cobertura T: recurso do modulo, entregue com a app"},
+  {"op": "set", "target": "$resource", "prop": "DeployAction", "value": "CopyToApplicationDir", "_why": "o enum DeployAction de IResource so tem Ignore e CopyToApplicationDir, nas DUAS faixas (o de quatro valores e o de OutSystems.Model.Extensions, que descreve modulos de extensao)"},
+  {"op": "set", "target": "$resource", "prop": "TargetDirectory", "value": "templates"},
+
+  {"op": "create", "parent": "@espace", "type": "IMobileFlow", "name": "WfCovThemeFlow", "as": "$flow"},
+  {"op": "set", "target": "$flow", "prop": "Theme", "value": "$theme", "_why": "o tema liga-se ao UI Flow, nao a tela; assim o MainFlow do InsuranceApp fica intacto"},
+  {"op": "set", "target": "$flow", "prop": "Description", "value": "Cobertura T: flow proprio so para provar o tema"},
+
+  {"op": "create", "parent": "$flow", "type": "IMobileScreen", "name": "WfCovBadgeScreen", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "link", "from": "$scr", "connector": "RequiredScripts", "to": "$script", "_why": "o Script do modulo exigido pela tela, igual ao job do SS11"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Badge\""},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "BadgeBox", "as": "$box"},
+  {"op": "set", "target": "$box", "prop": "Style", "value": "\"wf-cov-badge\"", "_why": "a classe vem do CSS do tema criado acima; no Reactive/Mobile a lista de classes e a propriedade-expressao Style, nao StyleClasses"},
+  {"op": "create", "parent": "$box", "type": "IExpression", "as": "$text"},
+  {"op": "set", "target": "$text", "prop": "Value", "value": "\"Covered by lane T\""},
+
+  {"op": "get", "target": "$theme", "_why": "prova BaseTheme e onde o ODC guardou o CSS de autor (StyleSheet x UserStyleSheet)"},
+  {"op": "get", "target": "$script", "_why": "prova o JavaScript do Script do modulo"},
+  {"op": "get", "target": "$resource", "_why": "prova DeployAction e TargetDirectory do recurso"},
+  {"op": "get", "target": "$flow", "_why": "prova que o Theme do flow e o tema novo"},
+  {"op": "usages", "target": "$script", "_why": "prova o RequiredScripts da tela como consumidor do Script"},
+  {"op": "usages", "target": "$theme", "_why": "prova o flow como consumidor do tema"}
+ ]
+}

@@ -1,0 +1,28 @@
+{
+ "description": "AccordionItem (OutSystemsUI, Content) tipico; dentro de um Accordion vazio (placeholder Content); placeholders Title, CustomIcon, Content com dados do aggregate de tarefas; eventos OnToggle, Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastAccordionItemId", "as": "$vLastAccordionItemId"},
+  {"op": "set", "target": "$vLastAccordionItemId", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastIsExpanded", "as": "$vLastIsExpanded"},
+  {"op": "set", "target": "$vLastIsExpanded", "prop": "DataType", "value": "Boolean"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetShowcaseTasks", "as": "$tasks"},
+  {"op": "create", "parent": "$tasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "logic", "data": {"actions": [{"name": "AccordionItemDemoOnToggle", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de OnToggle", "inputs": [{"name": "AccordionItemId", "type": "Text"}, {"name": "IsExpanded", "type": "Boolean"}],"steps": [{"assign": {"LastAccordionItemId": "AccordionItemId", "LastIsExpanded": "IsExpanded"},"as": "KeepOnToggle"}]}, {"name": "AccordionItemDemoInitialized", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de Initialized", "inputs": [{"name": "AccordionItemId", "type": "Text"}],"steps": [{"assign": {"LastAccordionItemId": "AccordionItemId"},"as": "KeepInitialized"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "AccordionDemo", "source": "IMobileBlock:Accordion", "empty": true,"as": "$parent"},
+  {"op": "create", "parent": "$parent/Content", "type": "IMobileBlockInstanceWidget", "name": "AccordionItemDemo", "source": "IMobileBlock:AccordionItem", "as": "$b"},
+  {"op": "set", "target": "$b/OnToggle", "prop": "Handler", "value": "IScreenAction:AccordionItemDemoOnToggle"},
+  {"op": "set", "target": "$b/OnToggle/AccordionItemId", "prop": "Value", "value": "AccordionItemId"},
+  {"op": "set", "target": "$b/OnToggle/IsExpanded", "prop": "Value", "value": "IsExpanded"},
+  {"op": "set", "target": "$b/Initialized", "prop": "Handler", "value": "IScreenAction:AccordionItemDemoInitialized"},
+  {"op": "set", "target": "$b/Initialized/AccordionItemId", "prop": "Value", "value": "AccordionItemId"},
+  {"op": "create", "parent": "$b/Title", "type": "IExpression", "as": "$ph1"},
+  {"op": "set", "target": "$ph1", "prop": "Value", "value": "\"Tasks\""},
+  {"op": "create", "parent": "$b/CustomIcon", "type": "IExpression", "as": "$ph2"},
+  {"op": "set", "target": "$ph2", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/Content", "type": "IExpression", "as": "$ph3"},
+  {"op": "set", "target": "$ph3", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""}
+ ]
+}

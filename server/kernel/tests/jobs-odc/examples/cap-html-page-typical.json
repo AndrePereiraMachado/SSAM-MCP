@@ -1,0 +1,30 @@
+{
+ "description": "Pagina inteira por HTML com dados: a op html le Product por um aggregate, mostra uma tabela com campos por linha, uma busca por nome e um link por linha que navega para o detalhe com o Id.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [
+   {"name": "Name", "type": "Text", "length": 100, "mandatory": true},
+   {"name": "Price", "type": "Currency"}]}]}},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductDetail", "as": "$detail", "_why": "a tela de destino existe antes da pagina que navega para ela"},
+  {"op": "set", "target": "$detail/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$detail", "type": "IInputParameter", "name": "ProductId", "as": "$pid"},
+  {"op": "set", "target": "$pid", "prop": "DataType", "value": "Product Identifier"},
+  {"op": "create", "parent": "$detail/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$dTitle"},
+  {"op": "set", "target": "$dTitle", "prop": "Value", "value": "If(ProductId = NullIdentifier(), \"Product\", \"Product details\")"},
+
+  {"op": "html", "data": {
+   "screen": "PriceList", "title": "Price list",
+   "sources": [{"entity": "Product", "as": "GetProducts", "sort": [["Product.Name", "Ascending"]], "max": 50}],
+   "search": {"key": "search", "field": "Name", "label": "Search by name"},
+   "html": "<div class=\"price-list\"><input type=\"search\" placeholder=\"Search\" data-av=\"search\"><table data-av=\"rows\"><thead><tr><th>Product</th><th>Price</th><th></th></tr></thead><tbody><tr><td data-av=\"row.name\">Name</td><td data-av=\"row.price\">0</td><td><a href=\"#\" data-av=\"row.open\">Open</a></td></tr></tbody></table></div>",
+   "css": ".price-list{display:flex;flex-direction:column;gap:12px}",
+   "bindings": {
+    "rows": {"kind": "list", "source": "GetProducts"},
+    "row.name": {"kind": "field", "field": "Name"},
+    "row.price": {"kind": "text", "value": "FormatCurrency(GetProducts.List.Current.Product.Price, \"$\", 2, \".\", \",\")"},
+    "row.open": {"kind": "navigate", "destination": "ProductDetail", "args": {"ProductId": "GetProducts.List.Current.Product.Id"}}}}}
+ ]
+}

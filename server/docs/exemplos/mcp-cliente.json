@@ -1,0 +1,1 @@
+{"mcpServers":{"ssam":{"type":"http","url":"http://127.0.0.1:7300/mcp","headers":{"Authorization":"Bearer ${SSAM_TOKEN}"}}}}

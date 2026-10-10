@@ -1,0 +1,41 @@
+{
+ "description": "Static entity com registros num Dropdown: spec cria ExpenseCategory (Travel, Meals, Office) e Expense com FK; a tela le a static por aggregate ordenado, liga o Dropdown ao campo FK de um record local e usa Entities.ExpenseCategory.Travel no OnInitialize e numa expressao.",
+ "base": "reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {
+   "static": [{"name": "ExpenseCategory", "records": [
+    {"name": "Travel", "label": "Travel", "order": 1},
+    {"name": "Meals", "label": "Meals", "order": 2},
+    {"name": "Office", "label": "Office supplies", "order": 3}]}],
+   "entities": [{"name": "Expense", "attributes": [
+    {"name": "Description", "type": "Text", "mandatory": true, "length": 200},
+    {"name": "Amount", "type": "Currency"},
+    {"name": "CategoryId", "type": "ExpenseCategory Identifier", "mandatory": true}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ExpenseNew", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"New expense\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "NewExpense", "as": "$vExp"},
+  {"op": "set", "target": "$vExp", "prop": "DataType", "value": "Expense"},
+  {"op": "logic", "data": {"actions": [
+   {"name": "InitExpense", "kind": "screen", "owner": "IMobileScreen:ExpenseNew", "description": "Categoria inicial vinda de um registro da static",
+    "steps": [{"assign": {"NewExpense.CategoryId": "Entities.ExpenseCategory.Travel"}, "as": "DefaultCategory"}]}]}},
+  {"op": "set", "target": "$scr/OnInitialize", "prop": "Destination", "value": "IScreenAction:InitExpense"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetCategoryOptions", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IStaticEntity:ExpenseCategory"}},
+  {"op": "create", "parent": "$agg", "type": "ISort", "as": "$sort"},
+  {"op": "set", "target": "$sort", "prop": "Attribute", "value": "ExpenseCategory.Order"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IInput", "name": "DescriptionInput", "as": "$inDesc"},
+  {"op": "set", "target": "$inDesc", "prop": "Variable", "value": "NewExpense.Description"},
+  {"op": "set", "target": "$inDesc", "prop": "Prompt", "value": "\"Description\""},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IDropdown", "name": "CategoryDropdown", "as": "$dd"},
+  {"op": "set", "target": "$dd", "prop": "List", "value": "GetCategoryOptions.List"},
+  {"op": "set", "target": "$dd", "prop": "Values", "value": "ExpenseCategory.Id"},
+  {"op": "set", "target": "$dd", "prop": "Labels", "value": "ExpenseCategory.Label"},
+  {"op": "set", "target": "$dd", "prop": "Variable", "value": "NewExpense.CategoryId"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$note"},
+  {"op": "set", "target": "$note", "prop": "Value", "value": "If(NewExpense.CategoryId = Entities.ExpenseCategory.Travel, \"Travel needs a receipt\", \"\")"}
+ ]
+}

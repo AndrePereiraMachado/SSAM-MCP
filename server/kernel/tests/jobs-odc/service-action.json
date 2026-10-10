@@ -1,0 +1,218 @@
+{
+ "description": "ODC: SERVICE ACTION. Espelha tests/jobs/service-action.json e tests/jobs/service-action-update.json e responde a pergunta que os dois jobs da faixa O11 deixam por responder: quem chama uma service action? ESTE JOB FOI REESCRITO PARA SER UMA PROVA E NAO UMA NARRATIVA. Um conferidor apanhou-o a criar objectos e a contar a historia em get/dump/usages -- leituras que o Anvil imprime no resultado mas que NENHUM gate le. Cada afirmacao abaixo diz agora QUAL o gate que a mata se ela for falsa, e as que nenhum gate consegue matar estao nomeadas como tal, sem fingir prova. Os gates disponiveis sao tres: (a) resolucao de caminho -- um get sobre um caminho que nao existe faz o op falhar e o job devolve ok=False; (b) o contrato de dados, que desde hoje vigia tambem elementos NOMEADOS DE TOPO e a IServiceAction e um deles, logo Description/Public/Shareable escritos aqui sao relidos no fim e uma divergencia da 'Data property mismatch'; (c) o contrato de mensagens, com expectedMessages: uma mensagem nova nao declarada da unexpected, e uma declarada que nao aparece da missingExpected. O NUCLEO DO JOB e uma experiencia com controlo, e nao uma frase: WfSvcOrder_ControlNoConsumer e uma SERVER action privada sem consumidor e o seu UnusedUserAction esta declarado -- se o ODC deixasse de o dar, o job reprova por missingExpected; as duas SERVICE actions estao igualmente a zero consumidores (usages=0) e expectedMessages nao tem entrada nenhuma para elas -- se alguma delas recebesse UnusedUserAction, o job reprova por unexpected. Os dois lados do contraste sao fatais, medidos na mesma corrida e na mesma base. E o contraste que explica o resto: o consumidor de uma service action e REMOTO (chega como ReferenceServiceAPIMethod, que o Anvil le como IServiceActionSignature), por isso 'sem consumidor local' nao e 'sem uso'. O proprio produto diz isso no nascimento: uma IServiceAction nasce com UM filho, um ICommentNode escrito pela OutSystems ('Service Actions run logic in a loosely coupled manner: - In a separate transaction. - Remotely in the producer context. - Changes are immediately available to all consumers upon publishing.'); esse nascimento e agora gate (a) num lado -- get em $svc/#ICommentNode -- e continua a ser a delecao de um filho que tem de existir no outro. A chamada LOCAL nao existe e isso foi MEDIDO, nao suposto: um IExecuteServerActionNode com Action a apontar para uma IServiceAction e recusado pelo Model API do ODC com 'A OutSystems.Model.Logic.IServiceAction cannot be used as the value for the OutSystems.Model.Logic.Nodes.IExecuteServerActionNode.Action property in a OutSystems.Model.Logic.IServerAction'. Essa recusa NAO cabe dentro deste ficheiro: um job verde nao pode conter um op que falha, e o unico sitio onde ela vira prova e um job de tests/jobs-odc-negative com expectError, que este job nao cria. Fica registada aqui como medicao com a mensagem exacta, nao como prova da suite. A chamada que EXISTE e a de dentro para fora e essa e gate duplo: a service action publica delega em WfSvcOrder_Summarize, server action PRIVADA com aggregate (join a static entity), if e assign -- se o set do Action nao assentasse, o Verify cairia E o Summarize deixaria a WfSvcOrder_Summarize a zero consumidores, o que lhe daria UnusedUserAction nao declarado. Duas metades como na faixa O11: WfSvcOrder_GetSummary pelos verbos crus, WfSvcOrder_MarkPaid pela linguagem compacta com kind 'service' -- e que isso da mesmo um ServiceAPIMethod tambem e gate (a), porque tres ops deste job enderecam-na por 'IServiceAction:WfSvcOrder_MarkPaid' e esse caminho nao resolveria sobre uma server action. TERCEIRO ACTO (editar e apagar o que ja esta pronto e ligado): a descricao trocada e relida pelo gate (b); o input que sobrou e apagado e isso e gate (c), porque deixa-lo la da 'Input Parameter RequestedBy is never used in Service Action WfSvcOrder_GetSummary' (UnusedElement, medido); a saida renomeada e gate (a) nos DOIS sentidos -- o get de $svc/OrderSummary so resolve se o rename assentou, e o get de $sum/Summary so resolve se o rename NAO arrastou a saida homonima da server action, que e a licao de que o rename segue a chave e nao o texto. E a propriedade que o SS11 nao tem: Shareable. Public e Shareable andam AGARRADOS, e aqui esta o LIMITE HONESTO deste job: o contrato de dados sabe comparar o que o job ESCREVEU, nao sabe afirmar um valor que o job NAO escreveu. Os quatro estados do par em WfSvcOrder_GetSummary continuam a ser leituras sem gate, e a razao esta na aritmetica do proprio contrato: se o job terminasse num estado produzido pelo arrasto, o contrato reprovava-o como divergencia da ultima escrita -- ou seja, com os verbos de hoje o acoplamento so se consegue exibir como FALHA, nunca como prova verde. O que este job consegue prender e outra coisa, e prende-a: WfSvcOrder_MarkPaid fica PRIVADA no fim, de proposito. O estado de nascimento e Public=True/Shareable=True, portanto um job que acabe nesse estado nao distingue 'escrevi' de 'nunca toquei'; acabando em Public=False o gate (b) passa a exigir que a escrita tenha assentado num valor que o nascimento nao dava. Para o acoplamento faltar deixar de ser narrativa falta um verbo ao kernel, nomeado no fim deste job.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedUserAction",
+   "element": "InsuranceApp (ESpace) / WfSvcOrder_ControlNoConsumer (ServerAction)",
+   "why": "E o CONTROLO da experiencia deste job, e nao codigo morto por descuido: uma server action privada a zero consumidores TEM de receber UnusedUserAction no ODC, e as duas service actions a zero consumidores NAO podem receber nada. Declarar esta e deixar as outras por declarar torna o contraste fatal dos dois lados -- sem ela, a frase 'a service action nao leva UnusedUserAction' era uma afirmacao sobre uma mensagem que ninguem obrigou a existir noutro sitio."
+  }
+ ],
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "static": [
+     {
+      "name": "WfSvcOrderStatus",
+      "description": "Estado da encomenda; a service action devolve o Label dele como texto, para o consumidor remoto nao precisar da entidade",
+      "records": [
+       {"name": "Open", "label": "Open"},
+       {"name": "Paid", "label": "Paid"},
+       {"name": "Cancelled", "label": "Cancelled"}
+      ]
+     }
+    ],
+    "entities": [
+     {
+      "name": "WfSvcOrder",
+      "public": true,
+      "description": "A encomenda que as duas service actions leem e escrevem",
+      "attributes": [
+       {"name": "Customer", "type": "Text", "mandatory": true, "length": 100},
+       {"name": "Total", "type": "Currency"},
+       {"name": "StatusId", "type": "WfSvcOrderStatus Identifier", "default": "Entities.WfSvcOrderStatus.Open"}
+      ]
+     }
+    ],
+    "structures": [
+     {
+      "name": "WfSvcSummary",
+      "public": true,
+      "description": "O contrato que atravessa para fora: texto e numeros, sem identificadores da entidade. E por isto que uma service action devolve uma structure e nao a entidade -- o consumidor remoto nao fica preso ao modelo de dados do produtor",
+      "attributes": [
+       {"name": "Customer", "type": "Text"},
+       {"name": "Total", "type": "Currency"},
+       {"name": "Status", "type": "Text"}
+      ]
+     }
+    ]
+   }
+  },
+
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfSvcOrder_Summarize", "as": "$sum", "_why": "PRIMEIRO a logica interna, numa server action PRIVADA. E o par que a plataforma pede: a service action e a porta publica e fica fina; quem sabe ler a base e esta. O aggregate com join a static entity e o mesmo de tests/jobs/service-action.json"},
+  {"op": "create", "parent": "$sum", "type": "IInputParameter", "name": "OrderId", "as": "$sumIn"},
+  {"op": "set", "target": "$sumIn", "prop": "DataType", "value": "WfSvcOrder Identifier"},
+  {"op": "create", "parent": "$sum", "type": "IOutputParameter", "name": "Summary", "as": "$sumOut"},
+  {"op": "set", "target": "$sumOut", "prop": "DataType", "value": "WfSvcSummary"},
+  {"op": "create", "parent": "$sum", "type": "IOutputParameter", "name": "Found", "as": "$sumFound"},
+  {"op": "set", "target": "$sumFound", "prop": "DataType", "value": "Boolean"},
+
+  {"op": "create", "parent": "$sum", "type": "IStartNode", "as": "$m0"},
+  {"op": "create", "parent": "$sum", "type": "IAggregateNode", "name": "GetOrder", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "$WfSvcOrder"}, "as": "$srcO"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "$WfSvcOrderStatus"}, "as": "$srcS", "_why": "a segunda fonte e a STATIC entity: e dela que sai o Label, o texto que o contrato promete"},
+  {"op": "create", "parent": "$agg", "type": "IJoin", "as": "$join"},
+  {"op": "set", "target": "$join", "prop": "LeftSource", "value": "$srcO"},
+  {"op": "set", "target": "$join", "prop": "RightSource", "value": "$srcS"},
+  {"op": "set", "target": "$join", "prop": "JoinType", "value": "Inner"},
+  {"op": "set", "target": "$join", "prop": "Condition", "value": "WfSvcOrder.StatusId = WfSvcOrderStatus.Id"},
+  {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "WfSvcOrder.Id = OrderId"}, "_why": "cita o parametro da action: nasce um IImplicitParameter dentro do aggregate"},
+
+  {"op": "create", "parent": "$sum", "type": "IIfNode", "name": "Exists", "as": "$mIf"},
+  {"op": "set", "target": "$mIf", "prop": "Label", "value": "Exists"},
+  {"op": "set", "target": "$mIf", "prop": "Condition", "value": "not GetOrder.List.Empty"},
+
+  {"op": "create", "parent": "$sum", "type": "IAssignNode", "as": "$mAs"},
+  {"op": "set", "target": "$mAs", "prop": "Label", "value": "FillSummary"},
+  {"op": "create", "parent": "$mAs", "type": "IAssignment", "as": "$mA1"},
+  {"op": "set", "target": "$mA1", "prop": "Variable", "value": "Summary.Customer"},
+  {"op": "set", "target": "$mA1", "prop": "Value", "value": "GetOrder.List.Current.WfSvcOrder.Customer", "_why": "DENTRO da logica a linha do aggregate vem com o wrapper da entidade (.Current.WfSvcOrder.X), porque um aggregate pode juntar varias fontes -- e o que este junta"},
+  {"op": "create", "parent": "$mAs", "type": "IAssignment", "as": "$mA2"},
+  {"op": "set", "target": "$mA2", "prop": "Variable", "value": "Summary.Total"},
+  {"op": "set", "target": "$mA2", "prop": "Value", "value": "GetOrder.List.Current.WfSvcOrder.Total"},
+  {"op": "create", "parent": "$mAs", "type": "IAssignment", "as": "$mA3"},
+  {"op": "set", "target": "$mA3", "prop": "Variable", "value": "Summary.Status"},
+  {"op": "set", "target": "$mA3", "prop": "Value", "value": "GetOrder.List.Current.WfSvcOrderStatus.Label", "_why": "o outro lado do join: o Label da static entity vira o texto do contrato"},
+  {"op": "create", "parent": "$mAs", "type": "IAssignment", "as": "$mA4"},
+  {"op": "set", "target": "$mA4", "prop": "Variable", "value": "Found"},
+  {"op": "set", "target": "$mA4", "prop": "Value", "value": "True"},
+
+  {"op": "create", "parent": "$sum", "type": "IEndNode", "as": "$m9"},
+  {"op": "link", "from": "$m0", "to": "$agg"},
+  {"op": "link", "from": "$agg", "to": "$mIf"},
+  {"op": "link", "from": "$mIf", "connector": "TrueTarget", "to": "$mAs"},
+  {"op": "link", "from": "$mIf", "connector": "FalseTarget", "to": "$m9"},
+  {"op": "link", "from": "$mAs", "to": "$m9"},
+  {"op": "layout", "target": "$sum"},
+
+  {"op": "create", "parent": "@espace", "type": "IServiceAction", "name": "WfSvcOrder_GetSummary", "as": "$svc", "_why": "O ARTEFATO QUE FALTAVA. Nasce em @espace como uma server action, mas na coleccao ServiceActions e com o descriptor ServiceStudio.Model.Flows+ServiceAPIMethod"},
+  {"op": "get", "target": "$svc/#ICommentNode", "_why": "O NASCIMENTO, e agora um GATE e nao uma leitura: uma service action nao nasce vazia nem com Start/End (o IRestServiceAction nasce com terminais, esta nao), nasce com UM ICommentNode escrito pela OutSystems. Este get enderessa esse filho pelo tipo; se a plataforma deixasse de o criar, o caminho nao resolvia e o job devolvia ok=False. O dump a seguir e que e a leitura, e serve para o texto ficar no resultado: 'In a separate transaction', 'Remotely in the producer context'. O TEXTO em si nao tem gate -- ver a nota de kernel no fim do job"},
+  {"op": "dump", "target": "$svc", "depth": 2, "_why": "o mesmo nascimento visto de cima, para o resultado guardar o unico filho e o texto que a OutSystems la poe"},
+  {"op": "get", "target": "$svc", "_why": "o outro lado do nascimento: Public=True e Shareable=True JA vem ligados (uma IServerAction nasce privada), CollectionDescriptor=ServiceActions e Nodes=1 -- o tal comentario"},
+  {"op": "set", "target": "$svc", "prop": "Description", "value": "Resumo de uma encomenda para consumidores remotos"},
+
+  {"op": "create", "parent": "$svc", "type": "IInputParameter", "name": "OrderId", "as": "$svcIn"},
+  {"op": "set", "target": "$svcIn", "prop": "DataType", "value": "WfSvcOrder Identifier"},
+  {"op": "create", "parent": "$svc", "type": "IInputParameter", "name": "RequestedBy", "as": "$svcSpare", "_why": "este entra agora e SAI no terceiro acto: e o input que sobrou de um contrato, o caso que a faixa ODC nunca tinha apagado"},
+  {"op": "set", "target": "$svcSpare", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$svc", "type": "IOutputParameter", "name": "Summary", "as": "$svcOut"},
+  {"op": "set", "target": "$svcOut", "prop": "DataType", "value": "WfSvcSummary"},
+
+  {"op": "create", "parent": "@espace", "type": "IUserException", "name": "WfSvcOrderNotFound", "as": "$exc", "_why": "a excecao que atravessa para o consumidor remoto. DIFERENCA DE PLATAFORMA registada: no ODC a IUserException nao tem Description -- so CreatedBy, LastModifiedBy, LastModifiedDate e Name sao escritaveis"},
+
+  {"op": "create", "parent": "$svc", "type": "IStartNode", "as": "$v0"},
+  {"op": "create", "parent": "$svc", "type": "IExecuteServerActionNode", "name": "Summarize", "as": "$call", "_why": "A CHAMADA QUE EXISTE: de dentro de uma service action para uma server action. O inverso -- um IExecuteServerActionNode a apontar para a IServiceAction -- e recusado pelo Model API nas duas faixas, e e por isso que nenhuma action deste job chama WfSvcOrder_GetSummary"},
+  {"op": "set", "target": "$call", "prop": "Action", "value": "$sum"},
+  {"op": "set", "target": "$call/OrderId", "prop": "Value", "value": "OrderId"},
+
+  {"op": "create", "parent": "$svc", "type": "IIfNode", "name": "Found", "as": "$vIf"},
+  {"op": "set", "target": "$vIf", "prop": "Label", "value": "Found"},
+  {"op": "set", "target": "$vIf", "prop": "Condition", "value": "Summarize.Found", "_why": "le a saida do no pelo NOME do no, nao pelo nome da action"},
+
+  {"op": "create", "parent": "$svc", "type": "IAssignNode", "as": "$vAs"},
+  {"op": "set", "target": "$vAs", "prop": "Label", "value": "SetSummary"},
+  {"op": "create", "parent": "$vAs", "type": "IAssignment", "as": "$vA1"},
+  {"op": "set", "target": "$vA1", "prop": "Variable", "value": "Summary"},
+  {"op": "set", "target": "$vA1", "prop": "Value", "value": "Summarize.Summary"},
+
+  {"op": "create", "parent": "$svc", "type": "IRaiseExceptionNode", "name": "RaiseNotFound", "as": "$raise"},
+  {"op": "set", "target": "$raise", "prop": "Exception", "value": "$exc"},
+  {"op": "set", "target": "$raise", "prop": "ExceptionMessage", "value": "\"Order not found\""},
+
+  {"op": "create", "parent": "$svc", "type": "IEndNode", "as": "$v9"},
+  {"op": "link", "from": "$v0", "to": "$call"},
+  {"op": "link", "from": "$call", "to": "$vIf"},
+  {"op": "link", "from": "$vIf", "connector": "TrueTarget", "to": "$vAs"},
+  {"op": "link", "from": "$vIf", "connector": "FalseTarget", "to": "$raise"},
+  {"op": "link", "from": "$vAs", "to": "$v9"},
+  {"op": "layout", "target": "$svc"},
+
+  {
+   "op": "logic",
+   "data": {
+    "actions": [
+     {
+      "name": "WfSvcOrder_MarkPaid",
+      "kind": "service",
+      "description": "Marca a encomenda como paga; Success=True se a encomenda existe",
+      "inputs": [{"name": "OrderId", "type": "WfSvcOrder Identifier"}],
+      "outputs": [{"name": "Success", "type": "Boolean"}],
+      "vars": [{"name": "Ord", "type": "WfSvcOrder"}],
+      "steps": [
+       {"get": "WfSvcOrder", "as": "GetOrder", "where": "WfSvcOrder.Id = OrderId", "max": 1},
+       {"if": "GetOrder.List.Empty", "as": "Missing",
+        "then": [{"assign": {"Success": "False"}, "as": "NotFound"}],
+        "else": [
+         {"assign": {"Ord": "GetOrder.List.Current.WfSvcOrder", "Ord.StatusId": "Entities.WfSvcOrderStatus.Paid", "Success": "True"}, "as": "MarkPaid"},
+         {"save": "WfSvcOrder", "record": "Ord", "as": "SaveOrder"}
+        ]}
+      ]
+     }
+    ]
+   }
+  },
+  {"op": "get", "target": "IServiceAction:WfSvcOrder_MarkPaid", "_why": "a metade compacta: kind 'service' na linguagem de logica da mesmo um ServiceAPIMethod -- Descriptor e CollectionDescriptor=ServiceActions iguais aos da metade escrita a mao, e Public/Shareable tambem nascem ligados. O get e leitura, mas a afirmacao TEM gate: este e o primeiro de tres ops que enderecam a action por 'IServiceAction:WfSvcOrder_MarkPaid', e esse caminho nao resolveria se kind 'service' tivesse dado uma IServerAction"},
+
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfSvcOrder_ControlNoConsumer", "as": "$ctrl", "_why": "O CONTROLO DA EXPERIENCIA. Nao e codigo a mais: e a metade que faltava para a afirmacao central do job poder ser falsificada. Server action PRIVADA (o create nasce privado, nenhum set de Public aqui) e sem um unico consumidor, exactamente a condicao em que as duas service actions deste job tambem estao. O UnusedUserAction dela esta declarado em expectedMessages, logo se o ODC deixasse de avisar sobre server actions sem uso o job reprovava por missingExpected -- e so porque esse lado e obrigatorio e que o silencio do OUTRO lado (as service actions, sem entrada nenhuma) significa alguma coisa"},
+  {"op": "create", "parent": "$ctrl", "type": "IInputParameter", "name": "StatusId", "as": "$ctrlIn"},
+  {"op": "set", "target": "$ctrlIn", "prop": "DataType", "value": "WfSvcOrderStatus Identifier"},
+  {"op": "create", "parent": "$ctrl", "type": "IOutputParameter", "name": "Label", "as": "$ctrlOut"},
+  {"op": "set", "target": "$ctrlOut", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$ctrl", "type": "IStartNode", "as": "$k0"},
+  {"op": "create", "parent": "$ctrl", "type": "IAssignNode", "as": "$kAs"},
+  {"op": "set", "target": "$kAs", "prop": "Label", "value": "DescribeStatus"},
+  {"op": "create", "parent": "$kAs", "type": "IAssignment", "as": "$kA1"},
+  {"op": "set", "target": "$kA1", "prop": "Variable", "value": "Label"},
+  {"op": "set", "target": "$kA1", "prop": "Value", "value": "If(StatusId = Entities.WfSvcOrderStatus.Paid, \"Paid\", \"Not paid\")", "_why": "o input e mesmo consumido: um input a mais traria UnusedElement e trocava a mensagem que o controlo existe para provar"},
+  {"op": "create", "parent": "$ctrl", "type": "IEndNode", "as": "$k9"},
+  {"op": "link", "from": "$k0", "to": "$kAs"},
+  {"op": "link", "from": "$kAs", "to": "$k9"},
+  {"op": "layout", "target": "$ctrl"},
+
+  {"op": "usages", "target": "$sum", "_why": "TERCEIRO ACTO comeca com a linha de base: a server action interna tem exactamente um consumidor, o no Summarize la dentro da service action. E por ter consumidor que ela nao leva UnusedUserAction -- e isto tem gate: se o set do Action do Summarize nao tivesse assentado, ela ficava a zero e o UnusedUserAction dela nao esta declarado"},
+  {"op": "usages", "target": "$ctrl", "_why": "e o controlo, na mesma corrida e na mesma base, a zero consumidores: a diferenca entre ele e as duas service actions e so o TIPO, e e por isso que a mensagem que ele recebe e as que elas nao recebem podem ser comparadas"},
+  {"op": "usages", "target": "$svc", "_why": "a service action tem ZERO e mesmo assim nao ha mensagem nova nenhuma sobre ela. O numero deste usages nao e gate (nenhum verbo do Anvil afere um numero); o gate e o contrato de mensagens: com o controlo a obrigar o UnusedUserAction a existir para server actions sem uso, o silencio sobre esta so pode vir de o ODC nao o dar a service actions -- porque o consumidor delas e remoto por definicao. E a prova estrutural do que o comment node do nascimento diz por palavras"},
+  {"op": "usages", "target": "IServiceAction:WfSvcOrder_MarkPaid", "_why": "a outra tambem a zero, e tambem sem aviso: nao e um acaso da que foi escrita a mao"},
+
+  {"op": "set", "target": "$svc", "prop": "Description", "value": "Resumo de uma encomenda para consumidores remotos (contrato v2: sem RequestedBy)", "_why": "EDICAO 1: trocar texto num objecto que ja existe, ja esta ligado e ja foi lido. Nao e configuracao no nascimento -- e o trabalho que a matriz de cobertura dizia faltar"},
+
+  {"op": "set", "target": "$svc", "prop": "Public", "value": false},
+  {"op": "get", "target": "$svc", "_why": "EDICAO 2, e a surpresa: por Public a False e o SHAREABLE cai junto. Sao a mesma decisao vista de dois lados -- uma service action fechada deixa de ser partilhavel"},
+  {"op": "set", "target": "$svc", "prop": "Public", "value": true},
+  {"op": "set", "target": "$svc", "prop": "Shareable", "value": false},
+  {"op": "get", "target": "$svc", "_why": "e ao contrario tambem: pos-se Public=True na linha de cima, mas Shareable=False volta a arrastar Public para False. Shareable nao existe no SS11; e a propriedade do ODC que decide se o artefato atravessa para outra app"},
+  {"op": "set", "target": "$svc", "prop": "Shareable", "value": true},
+  {"op": "get", "target": "$svc", "_why": "e a restauracao: um unico set repoe os dois a True. Quatro gets, quatro estados do par -- e os quatro sao LEITURA, nao prova, o que este job diz em vez de esconder. A razao nao e preguica, e aritmetica do contrato de dados: ele compara no fim a ULTIMA escrita de cada propriedade com o que la esta. Se o job acabasse num estado produzido pelo arrasto (por exemplo terminar em 'set Shareable false' e deixar o Public cair sozinho), o contrato lia Public=False contra a ultima escrita True e dava 'Data property mismatch' -- ou seja, com os verbos de hoje o acoplamento so aparece como FALHA de um job correcto, nunca como prova de um job verde. Falta um verbo ao kernel; esta nomeado no ultimo op deste ficheiro"},
+
+  {"op": "delete", "target": "$svcSpare", "_why": "DELECAO 1: o input que sobrou do contrato sai de uma action ja construida. brokenConsumers=0 e por isso passa sem force -- ninguem o lia. E tem gate (c), medido nesta base: deixa-lo la da 'Warning UnusedElement: Input Parameter RequestedBy is never used in Service Action WfSvcOrder_GetSummary'; como expectedMessages nao o declara, uma delecao que nao assentasse reprovaria o job por unexpected"},
+  {"op": "rename", "target": "$svcOut", "name": "OrderSummary", "_why": "EDICAO 3, a que vale: renomear a SAIDA de uma service action ja escrita. O resultado traz consumers e expressionsRewritten, e quem foi reescrito foi o corpo dela propria"},
+  {"op": "get", "target": "$svc/OrderSummary", "_why": "GATE do rename, primeiro sentido: a saida passa a ser enderecavel pelo nome NOVO dentro da service action. Se o rename nao tivesse assentado este caminho nao resolvia e o job devolvia ok=False. Repare-se na ordem exigida pelo contrato de dados: renomear ANTES, escrever valores e expressoes DEPOIS -- aqui nao se escreve nada a seguir, so se le"},
+  {"op": "get", "target": "$sum/Summary", "_why": "GATE do rename, segundo sentido, e e o que ensina: a server action interna TEM uma saida com o mesmo nome antigo, 'Summary'. Se o rename fosse busca-e-substituicao por texto, esta saida tinha ido atras e este caminho deixava de resolver. Resolve, logo o rename seguiu a chave e nao o texto"},
+  {"op": "get", "target": "$vA1", "_why": "o mesmo por dentro: este assignment tinha 'Summary' dos DOIS lados. O Variable era a saida da service action e passou a OrderSummary sozinho; o Value continua Summarize.Summary porque esse Summary e a saida da SERVER action. O detalhe fica visivel aqui, mas quem o prende sao os dois gets acima e o Verify (uma expressao partida daria erro novo e isValid=False)"},
+
+  {"op": "dump", "target": "IServiceAction:WfSvcOrder_MarkPaid", "depth": 2, "_why": "a outra service action tambem nasceu com o ICommentNode da OutSystems, mesmo criada pela linguagem compacta"},
+  {"op": "delete", "target": "IServiceAction:WfSvcOrder_MarkPaid/#ICommentNode", "_why": "DELECAO 2: apagar o filho que a PLATAFORMA poe no nascimento. Fica so numa das duas para o dump final mostrar as duas formas lado a lado"},
+
+  {"op": "set", "target": "IServiceAction:WfSvcOrder_MarkPaid", "prop": "Public", "value": false, "_why": "A UNICA ESCRITA DO PAR QUE O CONTRATO CONSEGUE PRENDER, e fica assim de proposito ate ao fim do job. O nascimento de uma IServiceAction e Public=True/Shareable=True; um job que acabe nesse estado nao distingue 'escrevi True' de 'nunca toquei', e era esse o vazio que o conferidor apanhou nos quatro gets de cima. Acabando aqui em Public=False, o contrato de dados passa a exigir no fim um valor que o nascimento nao dava -- se o set nao assentasse, saia 'Data property mismatch' com expected false e actual true"},
+  {"op": "get", "target": "IServiceAction:WfSvcOrder_MarkPaid", "_why": "e a leitura mostra o arrasto tambem aqui: Shareable caiu para False sem ninguem lhe escrever. Este numero e leitura, nao gate; o Public=False ao lado dele e que e gate"},
+  {"op": "usages", "target": "IServiceAction:WfSvcOrder_MarkPaid", "_why": "e continua a zero consumidores JA PRIVADA -- e mesmo assim sem UnusedUserAction, enquanto o WfSvcOrder_ControlNoConsumer, privado e a zero na mesma corrida, tem de o receber. E a forma mais apertada do contraste: mesma visibilidade, mesmo numero de consumidores, tipos diferentes, mensagens diferentes"},
+
+  {"op": "get", "target": "$svc", "_why": "leitura final da service action editada: Description v2, Public e Shareable a True outra vez, InputParameters de volta a 1"},
+  {"op": "dump", "target": "$svc", "depth": 3, "_why": "o fluxo inteiro lido de volta: o comentario do nascimento que ficou, o Summarize a chamar a server action privada, o If sobre a saida do no, o assign para a saida renomeada e o raise da excecao de usuario"},
+  {"op": "dump", "target": "IServiceAction:WfSvcOrder_MarkPaid", "depth": 3, "_why": "e a compacta sem o comentario, com o get/if/assign/save que a linguagem gerou"},
+  {"op": "usages", "target": "$exc", "_why": "a excecao de usuario e levantada no ramo False do If"},
+  {"op": "find", "name": "WfSvcOrder_GetSummary", "_why": "FECHO, e a conta do que ficou por provar. Tres afirmacoes deste job continuam sem gate e nenhuma delas se resolve escrevendo mais ops: (1) o TEXTO do ICommentNode do nascimento -- a existencia tem gate, as palavras nao; (2) os quatro estados do par Public/Shareable em WfSvcOrder_GetSummary; (3) os numeros dos usages. As tres sao da mesma familia: sao valores que o job LE e nao ESCREVE, e o kernel so sabe aferir o que foi escrito (DataAssertions.RememberValue guarda a ultima escrita por chave e CheckDataContract compara-a no fim; os verbos sao create/set/link/move/reference/usages/rename/duplicate/delete/get/find/replace/layout/spec/logic/screen/html/dump, e nenhum deles afere). MUDANCA DE KERNEL PEDIDA, a mais pequena que resolve as tres: um verbo de leitura aferida, {\"op\":\"expect\",\"target\":\"<ref>\",\"prop\":\"<Propriedade>\",\"value\":<esperado>}, que leia a propriedade como o get ja le e acrescente a divergencia a mesma lista de dataContract.differences, saindo com a mesma linha 'Data property mismatch: ...' que ja existe em JobRunner.cs. Com ele, 'Shareable=False arrasta Public para False' passa a ser um op que reprova o job se o ODC mudar de ideias, em vez de uma frase num _why. Enquanto esse verbo nao existir, a regra desta faixa e a que este ficheiro segue: uma afirmacao sem gate diz que nao tem gate. E a quarta afirmacao, a recusa da chamada local, nao cabe num job verde de todo -- o sitio dela e um tests/jobs-odc-negative com expectError sobre 'A OutSystems.Model.Logic.IServiceAction cannot be used as the value for the OutSystems.Model.Logic.Nodes.IExecuteServerActionNode.Action property in a OutSystems.Model.Logic.IServerAction', que este job nao cria porque so pode mexer em si proprio"}
+ ]
+}

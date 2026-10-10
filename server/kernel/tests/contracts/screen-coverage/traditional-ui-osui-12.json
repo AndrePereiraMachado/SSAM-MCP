@@ -1,0 +1,239 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "OutSystemsUI",
+    "OutSystemsUIWeb:LightBoxImage",
+    "OutSystemsUIWeb:LoadOnVisible",
+    "OutSystemsUIWeb:LoginForm",
+    "OutSystemsUIWeb:Modal",
+    "OutSystemsUIWeb:MoveOnDevice"
+  ],
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "tests/fixtures/outsystems-ui-web.oml",
+      "elements": [
+        "IWebBlock:LightBoxImage",
+        "IWebBlock:LoadOnVisible",
+        "IWebBlock:LoginForm",
+        "IWebBlock:Modal",
+        "IWebBlock:MoveOnDevice"
+      ]
+    }
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Ui55_LightBoxImage",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:LightBoxImage",
+            "args": {},
+            "slots": {
+              "Thumbnail": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui56_LoadOnVisible",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:LoadOnVisible",
+            "args": {},
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui57_LoginForm",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:LoginForm",
+            "args": {},
+            "slots": {
+              "Login": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Container"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui58_Modal",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:Modal",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Footer": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Title": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "Icon": [
+                {
+                  "name": "Part5",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui59_MoveOnDevice",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:MoveOnDevice",
+            "args": {},
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      }
+    ]
+  },
+  "mutations": [
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui55_LightBoxImage/Part1/Thumbnail/Part2",
+      "prop": "Text",
+      "value": "Changed",
+      "element": "LightBoxImage"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui56_LoadOnVisible/Part1/Content/Part2",
+      "prop": "Text",
+      "value": "Changed",
+      "element": "LoadOnVisible"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui57_LoginForm/Part1/Login/Part2",
+      "prop": "Text",
+      "value": "Changed",
+      "element": "LoginForm"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui58_Modal/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Modal"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui59_MoveOnDevice/Part1/Content/Part2",
+      "prop": "Text",
+      "value": "Changed",
+      "element": "MoveOnDevice"
+    }
+  ]
+}

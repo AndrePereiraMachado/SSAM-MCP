@@ -1,0 +1,26 @@
+{
+ "description": "Card do OSUI por linha de uma List: UsePadding desligado, foto externa e nome/preco do produto no Content.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [{"name": "Name", "type": "Text", "length": 100, "mandatory": true}, {"name": "Price", "type": "Currency"}, {"name": "ImageUrl", "type": "Text", "length": 500}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductCards", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Products\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$GetProducts"},
+  {"op": "create", "parent": "$GetProducts", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "ProductList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetProducts.List"},
+  {"op": "create", "parent": "$list", "type": "IMobileBlockInstanceWidget", "name": "ProductCard", "source": "IMobileBlock:Card", "as": "$card"},
+  {"op": "set", "target": "$card/UsePadding", "prop": "Value", "value": "False"},
+  {"op": "create", "parent": "$card/Content", "type": "IImage", "name": "Photo", "as": "$img"},
+  {"op": "set", "target": "$img", "prop": "Type", "value": "External"},
+  {"op": "set", "target": "$img", "prop": "Url", "value": "GetProducts.List.Current.Product.ImageUrl"},
+  {"op": "create", "parent": "$card/Content", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "GetProducts.List.Current.Product.Name"},
+  {"op": "create", "parent": "$card/Content", "type": "IExpression", "as": "$expr2"},
+  {"op": "set", "target": "$expr2", "prop": "Value", "value": "FormatCurrency(GetProducts.List.Current.Product.Price, \"$\", 2, \".\", \",\")"}
+ ]
+}

@@ -1,0 +1,195 @@
+{
+  "fixture": "mobile-ui",
+  "features": [
+    "list-operations",
+    "server"
+  ],
+  "contract": {
+    "data": {
+      "structures": [
+        {
+          "name": "CoverageItem",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Number",
+              "type": "Integer"
+            },
+            {
+              "name": "Text",
+              "type": "Text"
+            }
+          ]
+        },
+        {
+          "name": "CoverageEnvelope",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Item",
+              "type": "CoverageItem"
+            },
+            {
+              "name": "Items",
+              "type": "CoverageItem List"
+            },
+            {
+              "name": "Numbers",
+              "type": "Integer List"
+            }
+          ]
+        }
+      ],
+      "entities": [
+        {
+          "name": "CoverageRow",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Value",
+              "type": "Integer"
+            }
+          ]
+        }
+      ]
+    },
+    "exceptions": [
+      {
+        "name": "CoverageFailure"
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "inputs": [
+            {
+              "name": "Value",
+              "type": "CoverageItem"
+            },
+            {
+              "name": "Values",
+              "type": "CoverageItem List"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "Result",
+              "type": "CoverageItem List"
+            }
+          ],
+          "steps": [
+            {
+              "assign": {
+                "Result": "Values"
+              }
+            },
+            {
+              "call": "ListAppend",
+              "as": "Append",
+              "args": {
+                "List": "Result",
+                "Element": "Value"
+              }
+            },
+            {
+              "call": "ListInsert",
+              "as": "Insert",
+              "args": {
+                "List": "Result",
+                "Position": "0",
+                "Element": "Value"
+              }
+            },
+            {
+              "call": "ListRemove",
+              "as": "Remove",
+              "args": {
+                "List": "Result",
+                "Position": "0"
+              }
+            },
+            {
+              "call": "ListClear",
+              "as": "Clear",
+              "args": {
+                "List": "Result"
+              }
+            },
+            {
+              "call": "ListAppendAll",
+              "as": "AppendAll",
+              "args": {
+                "List": "Result",
+                "SourceList": "Values"
+              }
+            },
+            {
+              "call": "ListSort",
+              "as": "Sort",
+              "args": {
+                "List": "Result",
+                "By": "Result.Current.Number",
+                "Ascending": "True"
+              }
+            },
+            {
+              "call": "ListFilter",
+              "as": "Filter",
+              "args": {
+                "SourceList": "Result",
+                "Condition": "Result.Current.Number >= 0"
+              }
+            },
+            {
+              "call": "ListDuplicate",
+              "as": "Copy",
+              "args": {
+                "SourceList": "Filter.FilteredList"
+              }
+            },
+            {
+              "call": "ListAll",
+              "as": "All",
+              "args": {
+                "List": "Copy.DuplicatedList",
+                "Condition": "Copy.DuplicatedList.Current.Number >= 0"
+              }
+            },
+            {
+              "call": "ListAny",
+              "as": "Any",
+              "args": {
+                "List": "Copy.DuplicatedList",
+                "Condition": "Copy.DuplicatedList.Current.Number > 0"
+              }
+            },
+            {
+              "call": "ListIndexOf",
+              "as": "Find",
+              "args": {
+                "List": "Copy.DuplicatedList",
+                "Condition": "Copy.DuplicatedList.Current.Number = Value.Number"
+              }
+            },
+            {
+              "assign": {
+                "Result": "Copy.DuplicatedList"
+              }
+            }
+          ],
+          "name": "Coverage",
+          "kind": "server",
+          "public": true,
+          "access": {
+            "authenticated": true
+          }
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IServerAction:Coverage/Insert/arg:Position",
+    "prop": "Value",
+    "value": "1"
+  }
+}

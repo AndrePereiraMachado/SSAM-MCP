@@ -1,0 +1,23 @@
+{
+ "description": "Columns6 (OutSystemsUI, Adaptive) tipico; placeholders Column1, Column2, Column3, Column4, Column5, Column6 com dados do aggregate de tarefas.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetShowcaseTasks", "as": "$tasks"},
+  {"op": "create", "parent": "$tasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Columns6Demo", "source": "IMobileBlock:Columns6", "as": "$b"},
+  {"op": "create", "parent": "$b/Column1", "type": "IExpression", "as": "$ph1"},
+  {"op": "set", "target": "$ph1", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/Column2", "type": "IExpression", "as": "$ph2"},
+  {"op": "set", "target": "$ph2", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/Column3", "type": "IExpression", "as": "$ph3"},
+  {"op": "set", "target": "$ph3", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/Column4", "type": "IExpression", "as": "$ph4"},
+  {"op": "set", "target": "$ph4", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/Column5", "type": "IExpression", "as": "$ph5"},
+  {"op": "set", "target": "$ph5", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/Column6", "type": "IExpression", "as": "$ph6"},
+  {"op": "set", "target": "$ph6", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""}
+ ]
+}

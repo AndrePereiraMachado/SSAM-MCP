@@ -1,0 +1,98 @@
+{
+ "description": "Cobertura testada (fase 2): move into (copy of ISOAPService) de OutSystems.Model.Logic.Integrations.SOAP.ISOAPServiceAction (odc) em soapService. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISOAPService",
+   "name": "CovSSOAPService",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "ISOAPServiceAction",
+   "name": "CovSOp",
+   "as": "$sop"
+  },
+  {
+   "op": "create",
+   "parent": "$sop",
+   "type": "IStartNode",
+   "as": "$sop_s"
+  },
+  {
+   "op": "create",
+   "parent": "$sop",
+   "type": "IEndNode",
+   "as": "$sop_e"
+  },
+  {
+   "op": "link",
+   "from": "$sop_s",
+   "to": "$sop_e"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "ISOAPServiceAction",
+   "name": "CovASOAPServiceAction",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IStartNode",
+   "as": "$a_s"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IEndNode",
+   "as": "$a_e"
+  },
+  {
+   "op": "link",
+   "from": "$a_s",
+   "to": "$a_e"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISOAPService",
+   "name": "CovSSOAPServiceMv",
+   "as": "$p_mv"
+  },
+  {
+   "op": "create",
+   "parent": "$p_mv",
+   "type": "ISOAPServiceAction",
+   "name": "CovSOpMv",
+   "as": "$sop_mv"
+  },
+  {
+   "op": "create",
+   "parent": "$sop_mv",
+   "type": "IStartNode",
+   "as": "$sop_s_mv"
+  },
+  {
+   "op": "create",
+   "parent": "$sop_mv",
+   "type": "IEndNode",
+   "as": "$sop_e_mv"
+  },
+  {
+   "op": "link",
+   "from": "$sop_s_mv",
+   "to": "$sop_e_mv"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "into": "$p_mv"
+  }
+ ]
+}

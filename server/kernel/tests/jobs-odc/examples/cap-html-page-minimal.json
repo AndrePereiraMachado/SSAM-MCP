@@ -1,0 +1,13 @@
+{
+ "description": "Pagina inteira por HTML (op html com data): uma tela About nasce de um fragmento estatico com titulo, paragrafo e CSS proprio, sem bindings.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "html", "data": {
+   "screen": "About", "title": "About",
+   "html": "<section class=\"about\"><h1>About the store</h1><p>Books, games and music since 2026.</p></section>",
+   "css": ".about{padding:24px}.about h1{margin-bottom:8px}",
+   "bindings": {}}}
+ ]
+}

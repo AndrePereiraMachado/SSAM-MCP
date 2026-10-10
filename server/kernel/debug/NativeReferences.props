@@ -1,0 +1,27 @@
+<Project>
+  <!-- Installed SDK only; never copy or redistribute vendor assemblies. -->
+  <ItemGroup>
+    <Reference Include="$(StudioDir)/OutSystems.Model.dll" Private="false" Condition="Exists('$(StudioDir)/OutSystems.Model.dll')" />
+    <Reference Include="$(StudioDir)/OutSystems.Model.V1.dll" Private="false" />
+    <Reference Include="$(StudioDir)/OutSystems.RuntimeCommon.dll" Private="false" />
+    <Reference Include="$(StudioDir)/OutSystems.DebuggerClient.dll" Private="false" />
+    <Reference Include="$(StudioDir)/OutSystems.ModuleServices.dll" Private="false" />
+    <Reference Include="$(StudioDir)/OutSystems.ServiceStudio.PluginAPI.dll" Private="false" Condition="Exists('$(StudioDir)/OutSystems.ServiceStudio.PluginAPI.dll')" />
+    <Reference Include="$(StudioDir)/ServiceStudio.PluginAPI.dll" Private="false" Condition="Exists('$(StudioDir)/ServiceStudio.PluginAPI.dll')" />
+    <Reference Include="$(StudioDir)/ServiceStudio.Common.dll" Private="false" />
+    <Reference Include="System.Diagnostics.DiagnosticSource" Condition="Exists('$(StudioDir)/System.Diagnostics.DiagnosticSource.dll')">
+      <HintPath>$(StudioDir)/System.Diagnostics.DiagnosticSource.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="$(StudioDir)/ServiceStudio.ServerCommunications.API.dll" Private="false" />
+    <Reference Include="$(StudioDir)/Microsoft.AspNetCore.SignalR.Client.dll" Private="false" />
+    <Reference Include="$(StudioDir)/Microsoft.AspNetCore.SignalR.Client.Core.dll" Private="false" />
+    <Reference Include="$(StudioDir)/Microsoft.AspNetCore.SignalR.Common.dll" Private="false" />
+    <Reference Include="$(StudioDir)/Microsoft.AspNetCore.Http.Connections.Common.dll" Private="false" />
+    <Reference Include="$(StudioDir)/Microsoft.AspNetCore.Http.Connections.Client.dll" Private="false" />
+    <Reference Include="$(StudioDir)/Microsoft.AspNetCore.SignalR.Protocols.NewtonsoftJson.dll" Private="false" />
+    <Reference Include="$(StudioDir)/Newtonsoft.Json.dll" Private="false" />
+    <Reference Include="$(StudioDir)/Microsoft.Extensions.DependencyInjection.Abstractions.dll" Private="false" />
+    <Compile Include="../shared/*.cs" />
+  </ItemGroup>
+</Project>

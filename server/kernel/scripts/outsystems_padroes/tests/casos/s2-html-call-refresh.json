@@ -1,0 +1,40 @@
+{
+ "description": "NEG S2 (OutSystems padroes): op html de pagina com 2 sources e binding call; o compilador gera a call e um Refresh por fonte (HtmlExpander.cs:702-711). So estagio J.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [
+   {"name": "NegTicket", "public": true, "description": "Chamado de teste do controle negativo S2 da op html.",
+    "attributes": [
+     {"name": "Title", "type": "Text", "length": 100, "description": "Titulo mostrado nas listas do controle."},
+     {"name": "IsClosed", "type": "Boolean", "description": "Marca chamados encerrados pelo botao da pagina."}]}
+  ]}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "CloseTicket", "kind": "server", "public": true,
+    "description": "Fecha o chamado escolhido; alvo do binding call do controle S2.",
+    "inputs": [{"name": "TicketId", "type": "NegTicket Identifier", "description": "Chamado que o usuario quer fechar."}],
+    "vars": [{"name": "Ticket", "type": "NegTicket", "description": "Registro lido e marcado como fechado."}],
+    "steps": [
+     {"get": "NegTicket", "as": "GetTicket", "where": "NegTicket.Id = TicketId", "max": 1},
+     {"assign": {"Ticket": "GetTicket.List.Current.NegTicket", "Ticket.IsClosed": "True"}, "as": "Mark the ticket closed"},
+     {"update": "NegTicket", "record": "Ticket", "as": "UpdateTicket"}
+    ]}
+  ]}},
+  {"op": "html", "data": {
+   "screen": "NegTicketBoard", "title": "Tickets",
+   "html": "<div class=\"board\"><ul data-av=\"open\"><li><span data-av=\"open.title\"></span><button data-av=\"open.close\">Close</button></li></ul><ul data-av=\"closed\"><li><span data-av=\"closed.title\"></span></li></ul></div>",
+   "sources": [
+    {"entity": "NegTicket", "as": "GetOpenTickets", "where": "not NegTicket.IsClosed", "max": 50},
+    {"entity": "NegTicket", "as": "GetClosedTickets", "where": "NegTicket.IsClosed", "max": 50}
+   ],
+   "bindings": {
+    "open": {"kind": "list", "source": "GetOpenTickets"},
+    "open.title": {"kind": "field", "field": "Title"},
+    "open.close": {"kind": "call", "action": "CloseTicket", "args": {"TicketId": "GetOpenTickets.List.Current.NegTicket.Id"}},
+    "closed": {"kind": "list", "source": "GetClosedTickets"},
+    "closed.title": {"kind": "field", "field": "Title"}
+   }
+  }}
+ ]
+}

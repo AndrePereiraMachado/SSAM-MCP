@@ -1,0 +1,444 @@
+{
+  "screen": "Dashboard",
+  "title": "Visão geral",
+  "vars": [
+    {
+      "name": "DashboardStartDate",
+      "type": "Date Time",
+      "default": "NullDate()"
+    },
+    {
+      "name": "DashboardEndDate",
+      "type": "Date Time",
+      "default": "NullDate()"
+    }
+  ],
+  "sources": [
+    {
+      "action": "GetDashboardMetricsForPeriod",
+      "as": "LoadDashboard",
+      "args": {
+        "StartDate": "DashboardStartDate",
+        "EndDate": "DashboardEndDate"
+      },
+      "state": true
+    },
+    {
+      "action": "GetIncidentsNearDue",
+      "as": "LoadNearDue",
+      "args": {
+        "StartDate": "DashboardStartDate",
+        "EndDate": "DashboardEndDate"
+      },
+      "state": true,
+      "paging": {
+        "offset": "NearDueOffset",
+        "size": 10,
+        "total": "Total"
+      }
+    },
+    {
+      "action": "GetIncidentList",
+      "as": "LoadMine",
+      "args": {
+        "Search": "\"\"",
+        "StatusId": "NullIdentifier()",
+        "PriorityId": "NullIdentifier()",
+        "AssigneeId": "GetUserId()",
+        "OnlyMine": "False",
+        "OnlyOverdue": "False",
+        "StartDate": "DashboardStartDate",
+        "EndDate": "DashboardEndDate",
+        "OnlyOpen": "True"
+      },
+      "state": true,
+      "paging": {
+        "offset": "MineOffset",
+        "size": 10,
+        "total": "Total"
+      }
+    },
+    {
+      "action": "GetIncidentList",
+      "as": "LoadRecent",
+      "args": {
+        "Search": "SearchText",
+        "StatusId": "NullIdentifier()",
+        "PriorityId": "Filter_PriorityId",
+        "AssigneeId": "NullIdentifier()",
+        "OnlyMine": "False",
+        "OnlyOverdue": "False",
+        "StartDate": "DashboardStartDate",
+        "EndDate": "DashboardEndDate"
+      },
+      "state": true,
+      "paging": {
+        "offset": "RecentOffset",
+        "size": 20,
+        "total": "Total"
+      }
+    }
+  ],
+  "search": {
+    "key": "search",
+    "label": "Título do chamado"
+  },
+  "filters": [
+    {
+      "key": "filter.priority",
+      "from": "IncidentPriority",
+      "variable": "Filter_PriorityId",
+      "label": "Todas as prioridades"
+    }
+  ],
+  "derived": [
+    {
+      "name": "StatusMax",
+      "type": "Integer",
+      "source": "LoadDashboard",
+      "output": "IncidentsByStatus",
+      "max": "Total"
+    }
+  ],
+  "scripts": [
+    {
+      "name": "SlaCountdown",
+      "inputs": [
+        {
+          "name": "Due",
+          "type": "Date Time"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Text",
+          "type": "Text"
+        }
+      ],
+      "code": "var due = $parameters.Due instanceof Date ? $parameters.Due : new Date($parameters.Due); var minutes = Math.round((due.getTime() - Date.now()) / 60000); $parameters.Text = minutes < 0 ? \"vencido há \" + (-minutes) + \" min\" : \"vence em \" + minutes + \" min\";"
+    }
+  ],
+  "bindings": {
+    "nav.incidents": {
+      "kind": "navigate",
+      "destination": "IncidentList"
+    },
+    "refresh": {
+      "kind": "refresh"
+    },
+    "new": {
+      "kind": "navigate",
+      "destination": "IncidentCreate"
+    },
+    "period.start": {
+      "kind": "date",
+      "variable": "DashboardStartDate",
+      "format": "DD/MM/YYYY"
+    },
+    "period.end": {
+      "kind": "date",
+      "variable": "DashboardEndDate",
+      "format": "DD/MM/YYYY"
+    },
+    "metric.open": {
+      "kind": "text",
+      "value": "LoadDashboard.TotalOpen"
+    },
+    "metric.mine": {
+      "kind": "text",
+      "value": "IntegerToText(LoadDashboard.MyOpenIncidents) + \" atribuídos a você\""
+    },
+    "open.open": {
+      "kind": "navigate",
+      "destination": "IncidentList",
+      "args": {
+        "StartDate": "DashboardStartDate",
+        "EndDate": "DashboardEndDate",
+        "OnlyOpen": "True"
+      }
+    },
+    "metric.overdue": {
+      "kind": "text",
+      "value": "LoadDashboard.TotalOverdue"
+    },
+    "open.overdue": {
+      "kind": "navigate",
+      "destination": "IncidentList",
+      "args": {
+        "OnlyOverdue": "True",
+        "StartDate": "DashboardStartDate",
+        "EndDate": "DashboardEndDate"
+      }
+    },
+    "metric.critical": {
+      "kind": "text",
+      "value": "LoadDashboard.TotalCritical"
+    },
+    "open.critical": {
+      "kind": "navigate",
+      "destination": "IncidentList",
+      "args": {
+        "PriorityId": "Entities.IncidentPriority.Critical",
+        "StartDate": "DashboardStartDate",
+        "EndDate": "DashboardEndDate",
+        "OnlyOpen": "True"
+      }
+    },
+    "metric.resolved": {
+      "kind": "text",
+      "value": "LoadDashboard.TotalResolvedToday"
+    },
+    "open.resolved": {
+      "kind": "navigate",
+      "destination": "IncidentList",
+      "args": {
+        "StatusId": "Entities.IncidentStatus.Resolved",
+        "OnlyResolvedToday": "True"
+      }
+    },
+    "status.bars": {
+      "kind": "list",
+      "source": "LoadDashboard",
+      "output": "IncidentsByStatus"
+    },
+    "status.label": {
+      "kind": "field",
+      "field": "Label"
+    },
+    "status.fill": {
+      "kind": "style",
+      "value": "\"width:\" + If(StatusMax = 0, \"0\", DecimalToText(LoadDashboard.IncidentsByStatus.Current.Total * 100 / StatusMax)) + \"%\""
+    },
+    "status.total": {
+      "kind": "field",
+      "field": "Total"
+    },
+    "priority.caption": {
+      "kind": "text",
+      "value": "IntegerToText(LoadDashboard.TotalOpen) + \" abertos\""
+    },
+    "priority.items": {
+      "kind": "list",
+      "source": "LoadDashboard",
+      "output": "IncidentsByPriority"
+    },
+    "priority.dot": {
+      "kind": "style",
+      "value": "\"background-color:\" + If(LoadDashboard.IncidentsByPriority.Current.PriorityId = Entities.IncidentPriority.Critical, \"#d87171\", If(LoadDashboard.IncidentsByPriority.Current.PriorityId = Entities.IncidentPriority.High, \"#e7ab62\", If(LoadDashboard.IncidentsByPriority.Current.PriorityId = Entities.IncidentPriority.Medium, \"#7189e8\", \"#6dad93\")))"
+    },
+    "priority.label": {
+      "kind": "field",
+      "field": "Label"
+    },
+    "priority.total": {
+      "kind": "field",
+      "field": "Total"
+    },
+    "notice": {
+      "kind": "text",
+      "value": "If(LoadNearDue.IsDataFetched and LoadNearDue.FetchSucceeded, LongIntegerToText(LoadNearDue.Total) + \" incidentes vencem nos próximos 30 minutos.\", \"\")"
+    },
+    "recent": {
+      "kind": "list",
+      "source": "LoadRecent",
+      "output": "Incidents"
+    },
+    "recent.title": {
+      "kind": "field",
+      "field": "Title"
+    },
+    "recent.code": {
+      "kind": "text",
+      "value": "\"INC-\" + LongIntegerToText(LoadRecent.Incidents.Current.Id)"
+    },
+    "recent.priority": {
+      "kind": "text",
+      "value": "If(LoadRecent.Incidents.Current.PriorityId = Entities.IncidentPriority.Critical, \"Crítica\", If(LoadRecent.Incidents.Current.PriorityId = Entities.IncidentPriority.High, \"Alta\", If(LoadRecent.Incidents.Current.PriorityId = Entities.IncidentPriority.Medium, \"Média\", \"Baixa\")))"
+    },
+    "recent.status": {
+      "kind": "text",
+      "value": "If(LoadRecent.Incidents.Current.StatusId = Entities.IncidentStatus.Resolved, \"Resolvido\", If(LoadRecent.Incidents.Current.StatusId = Entities.IncidentStatus.InProgress, \"Em andamento\", If(LoadRecent.Incidents.Current.StatusId = Entities.IncidentStatus.InAnalysis, \"Em análise\", If(LoadRecent.Incidents.Current.StatusId = Entities.IncidentStatus.Reopened, \"Reaberto\", \"Novo\"))))"
+    },
+    "recent.owner": {
+      "kind": "text",
+      "value": "If(LoadRecent.Incidents.Current.AssigneeId = NullIdentifier(), \"Não atribuído\", \"Usuário #\" + LongIntegerToText(LoadRecent.Incidents.Current.AssigneeId))"
+    },
+    "recent.empty": {
+      "kind": "visible",
+      "condition": "LoadRecent.Incidents.Empty"
+    },
+    "recent.count": {
+      "kind": "text",
+      "value": "IntegerToText(LoadRecent.Total) + \" incidentes\""
+    },
+    "neardue": {
+      "kind": "list",
+      "source": "LoadNearDue",
+      "output": "Incidents"
+    },
+    "neardue.title": {
+      "kind": "field",
+      "field": "Title"
+    },
+    "neardue.sla": {
+      "kind": "text",
+      "value": "SlaCountdown(LoadNearDue.Incidents.Current.SlaDueAt)"
+    },
+    "neardue.status": {
+      "kind": "text",
+      "value": "If(LoadNearDue.Incidents.Current.StatusId = Entities.IncidentStatus.InProgress, \"Em andamento\", If(LoadNearDue.Incidents.Current.StatusId = Entities.IncidentStatus.InAnalysis, \"Em análise\", If(LoadNearDue.Incidents.Current.StatusId = Entities.IncidentStatus.Reopened, \"Reaberto\", \"Novo\")))"
+    },
+    "neardue.empty": {
+      "kind": "visible",
+      "condition": "LoadNearDue.Incidents.Empty"
+    },
+    "mine": {
+      "kind": "list",
+      "source": "LoadMine",
+      "output": "Incidents"
+    },
+    "mine.title": {
+      "kind": "field",
+      "field": "Title"
+    },
+    "mine.sla": {
+      "kind": "field",
+      "field": "SlaDueAt"
+    },
+    "mine.status": {
+      "kind": "text",
+      "value": "If(LoadMine.Incidents.Current.StatusId = Entities.IncidentStatus.InProgress, \"Em andamento\", If(LoadMine.Incidents.Current.StatusId = Entities.IncidentStatus.InAnalysis, \"Em análise\", If(LoadMine.Incidents.Current.StatusId = Entities.IncidentStatus.Reopened, \"Reaberto\", \"Novo\")))"
+    },
+    "mine.empty": {
+      "kind": "visible",
+      "condition": "LoadMine.Incidents.Empty"
+    },
+    "dashboard.loading": {
+      "kind": "visible",
+      "condition": "not LoadDashboard.IsDataFetched"
+    },
+    "dashboard.error": {
+      "kind": "visible",
+      "condition": "LoadDashboard.IsDataFetched and not LoadDashboard.FetchSucceeded"
+    },
+    "dashboard.ready": {
+      "kind": "visible",
+      "condition": "LoadDashboard.IsDataFetched and LoadDashboard.FetchSucceeded"
+    },
+    "dashboard.retry": {
+      "kind": "refresh",
+      "sources": [
+        "LoadDashboard"
+      ]
+    },
+    "recent.loading": {
+      "kind": "visible",
+      "condition": "not LoadRecent.IsDataFetched"
+    },
+    "recent.error": {
+      "kind": "visible",
+      "condition": "LoadRecent.IsDataFetched and not LoadRecent.FetchSucceeded"
+    },
+    "recent.ready": {
+      "kind": "visible",
+      "condition": "LoadRecent.IsDataFetched and LoadRecent.FetchSucceeded"
+    },
+    "recent.retry": {
+      "kind": "refresh",
+      "sources": [
+        "LoadRecent"
+      ]
+    },
+    "mine.loading": {
+      "kind": "visible",
+      "condition": "not LoadMine.IsDataFetched"
+    },
+    "mine.error": {
+      "kind": "visible",
+      "condition": "LoadMine.IsDataFetched and not LoadMine.FetchSucceeded"
+    },
+    "mine.ready": {
+      "kind": "visible",
+      "condition": "LoadMine.IsDataFetched and LoadMine.FetchSucceeded"
+    },
+    "mine.retry": {
+      "kind": "refresh",
+      "sources": [
+        "LoadMine"
+      ]
+    },
+    "neardue.loading": {
+      "kind": "visible",
+      "condition": "not LoadNearDue.IsDataFetched"
+    },
+    "neardue.error": {
+      "kind": "visible",
+      "condition": "LoadNearDue.IsDataFetched and not LoadNearDue.FetchSucceeded"
+    },
+    "neardue.ready": {
+      "kind": "visible",
+      "condition": "LoadNearDue.IsDataFetched and LoadNearDue.FetchSucceeded"
+    },
+    "neardue.retry": {
+      "kind": "refresh",
+      "sources": [
+        "LoadNearDue"
+      ]
+    },
+    "recent.previous": {
+      "kind": "page",
+      "source": "LoadRecent",
+      "direction": "previous"
+    },
+    "recent.next": {
+      "kind": "page",
+      "source": "LoadRecent",
+      "direction": "next"
+    },
+    "recent.page": {
+      "kind": "text",
+      "value": "If(LoadRecent.Total = 0, \"0\", IntegerToText(RecentOffset + 1)) + \"–\" + IntegerToText(RecentOffset + LoadRecent.Incidents.Length) + \" de \" + IntegerToText(LoadRecent.Total)"
+    },
+    "mine.previous": {
+      "kind": "page",
+      "source": "LoadMine",
+      "direction": "previous"
+    },
+    "mine.next": {
+      "kind": "page",
+      "source": "LoadMine",
+      "direction": "next"
+    },
+    "mine.page": {
+      "kind": "text",
+      "value": "If(LoadMine.Total = 0, \"0\", IntegerToText(MineOffset + 1)) + \"–\" + IntegerToText(MineOffset + LoadMine.Incidents.Length) + \" de \" + IntegerToText(LoadMine.Total)"
+    },
+    "neardue.previous": {
+      "kind": "page",
+      "source": "LoadNearDue",
+      "direction": "previous"
+    },
+    "neardue.next": {
+      "kind": "page",
+      "source": "LoadNearDue",
+      "direction": "next"
+    },
+    "neardue.page": {
+      "kind": "text",
+      "value": "If(LoadNearDue.Total = 0, \"0\", IntegerToText(NearDueOffset + 1)) + \"–\" + IntegerToText(NearDueOffset + LoadNearDue.Incidents.Length) + \" de \" + LongIntegerToText(LoadNearDue.Total)"
+    },
+    "account": {
+      "kind": "block",
+      "block": "UserInfo"
+    },
+    "access.required": {
+      "kind": "visible",
+      "condition": "GetUserId() = NullIdentifier()"
+    },
+    "access.authenticated": {
+      "kind": "visible",
+      "condition": "GetUserId() <> NullIdentifier()"
+    }
+  },
+  "layout": "blank"
+}

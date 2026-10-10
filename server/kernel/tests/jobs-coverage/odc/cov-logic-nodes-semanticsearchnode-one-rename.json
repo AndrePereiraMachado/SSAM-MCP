@@ -1,0 +1,91 @@
+{
+ "description": "Cobertura testada (fase 1, medir): one de OutSystems.Model.Logic.Nodes.ISemanticSearchNode (odc) em serverFlowEntity. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "entities": [
+     {
+      "name": "CovSEntity",
+      "attributes": [
+       {
+        "name": "Title",
+        "type": "Text",
+        "length": 50
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "CovSFlow",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "ISemanticSearchNode",
+   "name": "CovASemanticSearchNode",
+   "as": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$CovSEntity.Title/AsSearchable",
+   "prop": "IsSearchable",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Source",
+   "value": "$CovSEntity"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "SearchQuery",
+   "value": "\"cov\""
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$a"
+  },
+  {
+   "op": "link",
+   "from": "$a",
+   "connector": "Target",
+   "to": "$fe"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRSemanticSearchNode"
+  }
+ ],
+ "expectedMessages": [
+  {
+   "id": "UnusedUserAction",
+   "element": "WrightFlood (ESpace) / CovSFlow (ServerAction)",
+   "why": "ODC: um app nao expoe server action publica (o kernel recusa, como o Studio ao vivo); a action fica privada e sem consumidor neste job de cobertura"
+  }
+ ]
+}

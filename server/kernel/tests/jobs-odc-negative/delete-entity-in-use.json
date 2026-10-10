@@ -1,0 +1,21 @@
+{
+ "description": "ODC: a RECUSA do delete de uma ENTIDADE de servidor com consumidores. WfCovProject e citada pela FK WfCovTask.ProjectId, que se liga ao tipo identificador (filho da entidade): o delete olha os consumidores dos filhos e nomeia a FK. Antes so o registo anonimo `WfCovProject Record` recusava o delete e escondia a FK; ele ja nao conta enquanto ninguem o usar. O usages direto continua sem a FK (use scope:subtree). Lote de dados, fase 3; cobertura testada, fase 2.",
+ "base": "job:data-full-model",
+ "expectValid": true,
+ "expectError": [
+  "delete: refused",
+  "IServerEntity 'WfCovProject' is used by 1 consumer(s)",
+  "IServerEntity:WfCovTask/IEntityAttribute:ProjectId",
+  "pass \"force\": true to break them"
+ ],
+ "ops": [
+  {
+   "op": "usages",
+   "target": "IServerEntity:WfCovProject"
+  },
+  {
+   "op": "delete",
+   "target": "IServerEntity:WfCovProject"
+  }
+ ]
+}

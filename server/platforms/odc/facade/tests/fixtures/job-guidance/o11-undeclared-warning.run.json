@@ -1,0 +1,19 @@
+{
+ "ok": false,
+ "lane": "o11",
+ "verb": "job",
+ "exitCode": 1,
+ "output": [
+  "result: <fixtures>\\o11-undeclared-warning.result.json",
+  "   data contract: 0 checks, accepted=True; dataSummary saved in result",
+  "== undeclared-warning.json: ok=True {'ops': 1, 'objects': 174, 'isValid': True, 'messages': 1, 'applyMs': 355}",
+  "   via process | 3277 ms de parede",
+  "   validation {'new': 1, 'fixed': 0, 'preexisting': 0, 'unexpected': 1, 'missingExpected': 0, 'ambiguous': 0, 'tolerated': 0} accepted= False",
+  "   timings {'loadMs': 553, 'verifyBeforeMs': 1, 'applyMs': 355, 'sessionApplyMs': 353, 'dataContractMs': 2, 'verifyAfterMs': 22, 'describeMs': 9, 'detailsMs': 10, 'saveMs': 134, 'releaseMs': 13, 'refactorProofMs': 0, 'totalMs': 1100}",
+  "   logic declarations {'actions': 1, 'publicActions': 0, 'helpers': 1}",
+  "    Warning UnusedUserAction: Unused User Action | 'UnusedWarningProbe' action is never used in this module. Consider deleting it. @ Headless_CS (ESpace) / UnusedWarningProbe (ServerAction)",
+  "    Hint UnusedUserAction: Apagar a action nao usada ou passar a chama-la / marca-la Public.",
+  "    Unexpected UnusedUserAction @ Headless_CS (ESpace) / UnusedWarningProbe (ServerAction): corrija ou declare em expectedMessages com why."
+ ],
+ "laneFrom": "--lane"
+}

@@ -1,0 +1,329 @@
+{
+  "fixture": "mobile-ui",
+  "features": [
+    "OutSystemsUI",
+    "OutSystemsUI:OverflowMenu",
+    "OutSystemsUI:Pagination",
+    "OutSystemsUI:ProgressBar",
+    "OutSystemsUI:ProgressCircle",
+    "OutSystemsUI:RangeSlider"
+  ],
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "tests/fixtures/outsystems-ui.oml",
+      "elements": [
+        "IMobileBlock:OverflowMenu",
+        "IMobileBlock:Pagination",
+        "IMobileBlock:ProgressBar",
+        "IMobileBlock:ProgressCircle",
+        "IMobileBlock:RangeSlider"
+      ]
+    }
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Ui55_OverflowMenu",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:OverflowMenu",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Menu": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "AdvancedHtml"
+                  }
+                }
+              ],
+              "TriggerContent": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Icon"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui56_Pagination",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part2",
+            "type": "IExpression",
+            "properties": {
+              "Value": "LastEvent"
+            }
+          },
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:Pagination",
+            "args": {
+              "StartIndex": "1",
+              "MaxRecords": "1",
+              "TotalCount": "1",
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Previous": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Icon"
+                  }
+                }
+              ],
+              "Next": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Icon"
+                  }
+                }
+              ]
+            },
+            "events": {
+              "OnNavigate": {
+                "destination": "IMobileScreen:Ui56_Pagination/Ui56_Pagination_Event1",
+                "args": {
+                  "NewStartIndex": "NewStartIndex"
+                }
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "LastEvent",
+            "type": "Text"
+          }
+        ]
+      },
+      {
+        "name": "Ui57_ProgressBar",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:ProgressBar",
+            "args": {
+              "Progress": "1",
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui58_ProgressCircle",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:ProgressCircle",
+            "args": {
+              "Progress": "1",
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Expression"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui59_RangeSlider",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part2",
+            "type": "IExpression",
+            "properties": {
+              "Value": "LastEvent"
+            }
+          },
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:RangeSlider",
+            "args": {
+              "MinValue": "1",
+              "MaxValue": "1",
+              "StartingValue": "1",
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {},
+            "events": {
+              "OnValueChange": {
+                "destination": "IMobileScreen:Ui59_RangeSlider/Ui59_RangeSlider_Event2",
+                "args": {
+                  "RangeSliderId": "RangeSliderId",
+                  "Value": "Value"
+                }
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "LastEvent",
+            "type": "Text"
+          }
+        ]
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "name": "Ui56_Pagination_Event1",
+          "kind": "screen",
+          "owner": "IMobileScreen:Ui56_Pagination",
+          "inputs": [
+            {
+              "name": "NewStartIndex",
+              "type": "Integer",
+              "mandatory": false
+            }
+          ],
+          "steps": [
+            {
+              "assign": {
+                "LastEvent": "IntegerToText(NewStartIndex)"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ui59_RangeSlider_Event2",
+          "kind": "screen",
+          "owner": "IMobileScreen:Ui59_RangeSlider",
+          "inputs": [
+            {
+              "name": "RangeSliderId",
+              "type": "Text",
+              "mandatory": true
+            },
+            {
+              "name": "Value",
+              "type": "Decimal",
+              "mandatory": true
+            }
+          ],
+          "steps": [
+            {
+              "assign": {
+                "LastEvent": "RangeSliderId"
+              }
+            },
+            {
+              "assign": {
+                "LastEvent": "DecimalToText(Value)"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "mutations": [
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui55_OverflowMenu/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "OverflowMenu"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui56_Pagination/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Pagination"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui57_ProgressBar/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "ProgressBar"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui58_ProgressCircle/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "ProgressCircle"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui59_RangeSlider/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "RangeSlider"
+    }
+  ]
+}

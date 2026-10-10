@@ -1,0 +1,10 @@
+{
+ "description": "A RECUSA de RENOMEAR um indice para um nome com mais de 28 caracteres: as duas plataformas truncam o nome em silencio (medido em 2026-09-23: 'IX_Contact_Email_Name_Status30' ficava 'IX_Contact_Email_Name_Status'). No `create` o kernel escreve o nome que o Studio guarda e relata em nameTruncations (D2, atritos 3); no `rename` o nome e escolha explicita do autor e o kernel recusa com o nome que a plataforma usaria.",
+ "base": "job:spec-data",
+ "expectValid": true,
+ "expectError": ["EntityIndex name 'IX_Contact_Email_Name_Status30' has 30 characters", "truncates index names to 28", "IX_Contact_Email_Name_Status"],
+ "ops": [
+  {"op": "create", "parent": "IServerEntity:Contact", "type": "EntityIndex", "name": "IX_Contact_EmailOnly", "args": {"unique": false, "attributes": ["IServerEntity:Contact/Email"]}},
+  {"op": "rename", "target": "EntityIndex:IX_Contact_EmailOnly", "name": "IX_Contact_Email_Name_Status30"}
+ ]
+}

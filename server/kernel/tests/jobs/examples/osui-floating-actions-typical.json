@@ -1,0 +1,13 @@
+{
+ "description": "FloatingActions (OutSystemsUI, Interaction) tipico; eventos OnToggle tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "OnToggleCount", "as": "$vOnToggleCount"},
+  {"op": "set", "target": "$vOnToggleCount", "prop": "DataType", "value": "Integer"},
+  {"op": "logic", "data": {"actions": [{"name": "FloatingActionsDemoOnToggle", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Conta as vezes que OnToggle disparou", "inputs": [],"steps": [{"assign": {"OnToggleCount": "OnToggleCount + 1"},"as": "KeepOnToggle"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "FloatingActionsDemo", "source": "IMobileBlock:FloatingActions", "as": "$b"},
+  {"op": "set", "target": "$b/OnToggle", "prop": "Handler", "value": "IScreenAction:FloatingActionsDemoOnToggle"}
+ ]
+}

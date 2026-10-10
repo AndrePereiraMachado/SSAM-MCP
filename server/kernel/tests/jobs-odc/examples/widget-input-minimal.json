@@ -1,0 +1,15 @@
+{
+ "description": "Input: um IInput ligado a uma variavel Text da tela, com texto de ajuda em Prompt.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "InputDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "City", "as": "$city"},
+  {"op": "set", "target": "$city", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IInput", "name": "CityInput", "as": "$in"},
+  {"op": "set", "target": "$in", "prop": "Variable", "value": "City", "_why": "sem Variable o Verify da RequiredPropertyValue"},
+  {"op": "set", "target": "$in", "prop": "Prompt", "value": "\"Type your city\""}
+ ]
+}

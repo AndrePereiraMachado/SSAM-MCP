@@ -1,0 +1,17 @@
+{
+ "description": "NEG L3 (OutSystems padroes): dois If() aninhados no valor de um unico assign.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "logic", "data": {"actions": [
+   {"name": "ClassifyPriority", "kind": "server", "public": true,
+    "description": "Classifica a prioridade com If aninhado num so assign (violacao proposital da L3).",
+    "inputs": [{"name": "Score", "type": "Integer", "description": "Pontuacao usada para escolher o rotulo de prioridade."}],
+    "outputs": [{"name": "PriorityText", "type": "Text", "description": "Rotulo de prioridade devolvido ao chamador."}],
+    "steps": [
+     {"assign": {"PriorityText": "If(Score > 1, \"High\", If(Score > 0, \"Medium\", \"Low\"))"}, "as": "Classify the score"}
+    ]}
+  ]}}
+ ]
+}

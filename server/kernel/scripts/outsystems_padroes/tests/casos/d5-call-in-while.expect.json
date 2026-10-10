@@ -1,0 +1,15 @@
+{
+ "_leia": "Controle negativo D5: estagio job no modo autor; a ferramenta tem de dar exit 1 e acusar D5.",
+ "stage": "job",
+ "mode": "autor",
+ "module": "Domain_CS",
+ "exitCode": 1,
+ "mustFind": [
+  {
+   "rule": "D5",
+   "severity": "erro",
+   "stage": "job",
+   "contains": "CheckMoreBatches"
+  }
+ ]
+}

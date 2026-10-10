@@ -1,0 +1,401 @@
+{
+  "schemaVersion": "ssam-discovery-fragment/1",
+  "contract": "ssam-catalog-contribution/1",
+  "front": "C",
+  "title": "Timers: create, schedule, edit, rename, delete (ODC) and create with Action/Description (O11); the ODC schedule tree is derived",
+  "reviewedAt": "2026-09-23",
+  "synonyms": {
+    "timer": [
+      "timers",
+      "agendador",
+      "agendamento",
+      "tarefa agendada",
+      "scheduled job",
+      "cron job"
+    ]
+  },
+  "capabilities": [
+    {
+      "id": "timer.schedule",
+      "supersedes": [
+        "logic.timer"
+      ],
+      "category": "integration",
+      "title": "Timers (scheduled server actions): create, point at an action, schedule, edit, rename, delete",
+      "keywords": [
+        "timer",
+        "scheduled",
+        "cron",
+        "background job",
+        "batch",
+        "schedule",
+        "cronschedule",
+        "wake up",
+        "nightly"
+      ],
+      "summary": "ITimer under the module with Action = IServerAction:<Name> and Description; TimeoutInMinutes and Priority exist on both lanes. ODC also has CronSchedule (five fields) and a derived child ScheduleConfiguration (ISchedule with typed ScheduleItems) rebuilt when the timer's CronSchedule or Schedule changes; O11 has the Schedule text instead, as the Service Studio writes it: \"Every 60 minutes\", \"Every day at 00:00\", \"Every Monday at 00:05\" (pacote-laneE-timer-schedule). No O11 job writes TimeoutInMinutes or Priority.",
+      "route": {
+        "kind": "job",
+        "operation": "create ITimer @espace; set Action IServerAction:<Name>; set Description; O11: set Schedule \"Every 60 minutes\" | \"Every day at 00:00\" | \"Every Monday at 00:05\"; ODC: set CronSchedule \"m h dom mon dow\" (or Schedule), TimeoutInMinutes, Priority; deliver with o11_deliver / studio_deliver"
+      },
+      "contract": [
+        "verbs.verbs.create",
+        "verbs.verbs.set",
+        "verbs.verbs.rename",
+        "verbs.verbs.delete",
+        "verbs.verbs.usages",
+        "verbs.references"
+      ],
+      "guidance": "The scheduled logic is a server action (front A): create it first or point at an existing one (set Action IServerAction:<Name>). ODC: a timer counts as a consumer of its action, so deleting the timer leaves the action without consumers (UnusedUserAction, declared in timer-lifecycle); on O11 usages is not proven. ODC: change the schedule through the PARENT (CronSchedule or Schedule on the timer); the schedule values in ScheduleConfiguration and its items are derived and read-only, while ScheduleConfiguration.WhenPublished and the items' Interval are writable but untested. Read the tree by path ITimer:<T>/ScheduleConfiguration/#IMinute, #IHour, #IDayOfWeek; the item count depends on the route (CronSchedule builds five items including Any placeholders, Schedule \"07:45\" builds two), so never infer the schedule from the count. A six-field cron is not accepted on ODC. O11: the schedule is the Schedule text (\"Every 60 minutes\", \"Every day at 00:00\", \"Every Monday at 00:05\"), read back by get.",
+      "example": {
+        "ops": [
+          "create",
+          "set"
+        ],
+        "max": 10
+      },
+      "elements": [
+        {
+          "role": "timer",
+          "platforms": {
+            "odc": {
+              "native": "OutSystems.Model.Processes.ITimer",
+              "jobType": "ITimer",
+              "address": "ITimer:<Timer>"
+            },
+            "o11": {
+              "native": "OutSystems.Model.Processes.ITimer",
+              "jobType": "ITimer",
+              "address": "ITimer:<Timer>"
+            }
+          }
+        }
+      ],
+      "operations": {
+        "read": {
+          "route": "get/dump ITimer:<Timer>; ODC schedule tree by path ITimer:<Timer>/ScheduleConfiguration/#IMinute|#IHour|#IDayOfWeek",
+          "preconditions": [],
+          "roles": {
+            "timer": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "timer-action",
+                  "timer-lifecycle"
+                ],
+                "scope": "Action, Description, CronSchedule, Schedule, TimeoutInMinutes and the derived ScheduleConfiguration read back before and after each change"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "pacote-laneE-timer-schedule",
+                  "email-digest-foreach-traditional"
+                ],
+                "scope": "get after create and set (Action, Description, Schedule)"
+              }
+            }
+          }
+        },
+        "usages": {
+          "route": "usages {target}",
+          "preconditions": [
+            "the timer is a consumer of its action (usages on the action lists it)"
+          ],
+          "roles": {
+            "timer": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "timer-lifecycle"
+                ]
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "no O11 job runs usages on a timer"
+              }
+            }
+          }
+        },
+        "create": {
+          "route": "create ITimer under @espace",
+          "preconditions": [
+            "the action to schedule exists (or is created in the same job)"
+          ],
+          "roles": {
+            "timer": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "timer-action"
+                ]
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "pacote-laneE-timer-schedule",
+                  "email-digest-foreach-traditional",
+                  "process-expense-traditional",
+                  "process-human-traditional",
+                  "tickets-06-sla"
+                ]
+              }
+            }
+          }
+        },
+        "set": {
+          "route": "set {target, prop, value}",
+          "preconditions": [
+            "ODC: CronSchedule has FIVE fields (minute hour day-of-month month day-of-week)",
+            "ODC: the schedule tree is rebuilt from the parent; its schedule values are read-only (Interval/WhenPublished writable, untested)"
+          ],
+          "roles": {
+            "timer": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "timer-action",
+                  "timer-lifecycle"
+                ],
+                "scope": "Action, Description, CronSchedule, Schedule (\"07:45\"), TimeoutInMinutes, Priority; edited on a timer another job created"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "pacote-laneE-timer-schedule",
+                  "email-digest-foreach-traditional",
+                  "process-expense-traditional",
+                  "process-human-traditional",
+                  "tickets-06-sla"
+                ],
+                "scope": "Action, Description and Schedule (\"Every 60 minutes\", \"Every day at 00:00\", read back by get in pacote-laneE-timer-schedule)"
+              }
+            }
+          }
+        },
+        "rename": {
+          "route": "rename {target, name}",
+          "preconditions": [],
+          "roles": {
+            "timer": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "timer-lifecycle"
+                ]
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "no O11 job renames a timer"
+              }
+            }
+          }
+        },
+        "delete": {
+          "route": "delete {target}",
+          "preconditions": [
+            "the action the timer woke loses its consumer: expect UnusedUserAction unless something else calls it"
+          ],
+          "roles": {
+            "timer": {
+              "odc": {
+                "status": "applicable",
+                "proofs": [
+                  "timer-lifecycle"
+                ],
+                "scope": "deleted after rename; find ITimer confirms it is gone; UnusedUserAction declared"
+              },
+              "o11": {
+                "status": "undetermined",
+                "note": "no O11 job deletes a timer"
+              }
+            }
+          }
+        }
+      },
+      "platforms": {
+        "odc": {
+          "proofs": [
+            "timer-action",
+            "timer-lifecycle"
+          ],
+          "negative": [],
+          "context": {
+            "kinds": [
+              "Timer",
+              "ServerAction"
+            ]
+          },
+          "limits": [
+            {
+              "text": "CronSchedule takes five fields; a six-field cron is refused.",
+              "origin": "kernel/docs/NAO-DA.md 'CronSchedule de ITimer' (CONFIRMADO); tests/jobs-odc/timer-action.json _why"
+            },
+            {
+              "text": "The schedule values of ScheduleConfiguration (ISchedule) and its ScheduleItems are derived and read-only (census); only the parent's CronSchedule/Schedule changes the schedule. ISchedule.WhenPublished and IScheduleItem.Interval are writable but untested.",
+              "origin": "tests/jobs-odc/timer-lifecycle.json description"
+            }
+          ],
+          "differences": [
+            {
+              "text": "Only ODC timers have CronSchedule and the derived ScheduleConfiguration tree; O11 ITimer has the Schedule string. TimeoutInMinutes and Priority exist on both lanes (writable in the O11 catalog), but no O11 job writes them.",
+              "origin": "kernel/catalog/model-api-11.55.69.json ITimer (writable: Action, Description, Priority, Schedule, TimeoutInMinutes); tests/jobs-odc/timer-action.json description"
+            }
+          ]
+        },
+        "o11": {
+          "proofs": [
+            "pacote-laneE-timer-schedule",
+            "email-digest-foreach-traditional",
+            "process-expense-traditional",
+            "process-human-traditional",
+            "tickets-06-sla"
+          ],
+          "negative": [],
+          "context": {
+            "kinds": [
+              "Timer",
+              "ServerAction"
+            ]
+          },
+          "limits": [
+            {
+              "text": "Only create + Action/Description/Schedule are proven on O11; TimeoutInMinutes, Priority, rename, delete and usages are undetermined on this lane.",
+              "origin": "kernel/tests/jobs (pacote-laneE-timer-schedule, tickets-06-sla, email-digest-foreach-traditional, process-*-traditional)"
+            }
+          ],
+          "differences": [
+            {
+              "text": "The O11 schedule is the Schedule text (\"Every 60 minutes\", \"Every day at 00:00\"); CronSchedule and the ScheduleConfiguration tree do not exist on O11.",
+              "origin": "kernel/catalog/model-api-11.55.69.json ITimer"
+            }
+          ]
+        }
+      },
+      "depends": [
+        {
+          "id": "logic.server-action",
+          "unless": "the server action to schedule already exists (set Action IServerAction:<Name>)"
+        }
+      ],
+      "alternatives": []
+    }
+  ],
+  "unavailable": [],
+  "coverage": [
+    {
+      "type": "odc:OutSystems.Model.Processes.ISchedule",
+      "status": "excluded",
+      "applicability": "applicable",
+      "reason": "child ScheduleConfiguration of ITimer, derived by the platform from the parent timer's CronSchedule/Schedule; its schedule values are read-only (census) and the proven way to change the schedule is the parent; WhenPublished and the methods AtOrOn/Every/FromCronExpression/Reset/Create* exist but are untested, so it is not an element a family operation creates or edits here",
+      "origin": "tests/jobs-odc/timer-lifecycle.json description and ops (get .../ScheduleConfiguration)",
+      "capability": "timer.schedule",
+      "operations": {
+        "read": {
+          "status": "applicable",
+          "note": "get ITimer:<T>/ScheduleConfiguration (timer-lifecycle)"
+        },
+        "create": {
+          "status": "not-applicable",
+          "note": "comes with the timer; change the parent's CronSchedule/Schedule"
+        },
+        "set": {
+          "status": "undetermined",
+          "note": "WhenPublished is writable, untested"
+        }
+      }
+    },
+    {
+      "type": "odc:OutSystems.Model.Processes.IScheduleItem",
+      "status": "excluded",
+      "applicability": "applicable",
+      "reason": "base interface of the typed schedule items (IMinute, IHour, IDayOfWeek...): counted through them, not an additional element",
+      "origin": "inventory kindClass rule (base-interface); docs/evidence/descoberta-cobertura-fase1/inventory.json"
+    },
+    {
+      "type": "odc:OutSystems.Model.Processes.IMinute",
+      "status": "excluded",
+      "applicability": "applicable",
+      "reason": "schedule item derived by the platform from the parent timer's CronSchedule/Schedule; its schedule values are read-only (census) and the proven way to change the schedule is the parent; Interval is writable and the factory ISchedule.Create* exists, both untested; observed after CronSchedule and Schedule changes (timer-lifecycle get .../#IMinute)",
+      "origin": "tests/jobs-odc/timer-lifecycle.json (get .../ScheduleConfiguration/#IMinute before and after CronSchedule changes)",
+      "capability": "timer.schedule",
+      "operations": {
+        "read": {
+          "status": "applicable",
+          "note": "get ITimer:<T>/ScheduleConfiguration/#IMinute (timer-lifecycle)"
+        },
+        "set": {
+          "status": "undetermined",
+          "note": "Interval writable, untested; change the schedule through the parent"
+        }
+      }
+    },
+    {
+      "type": "odc:OutSystems.Model.Processes.IHour",
+      "status": "excluded",
+      "applicability": "applicable",
+      "reason": "schedule item derived by the platform from the parent timer's CronSchedule/Schedule; its schedule values are read-only (census) and the proven way to change the schedule is the parent; Interval is writable and the factory ISchedule.Create* exists, both untested; observed (timer-lifecycle get .../#IHour)",
+      "origin": "tests/jobs-odc/timer-lifecycle.json (get .../ScheduleConfiguration/#IHour)",
+      "capability": "timer.schedule",
+      "operations": {
+        "read": {
+          "status": "applicable",
+          "note": "get ITimer:<T>/ScheduleConfiguration/#IHour (timer-lifecycle)"
+        },
+        "set": {
+          "status": "undetermined",
+          "note": "Interval writable, untested; change the schedule through the parent"
+        }
+      }
+    },
+    {
+      "type": "odc:OutSystems.Model.Processes.IDayOfWeek",
+      "status": "excluded",
+      "applicability": "applicable",
+      "reason": "schedule item derived by the platform from the parent timer's CronSchedule/Schedule; its schedule values are read-only (census) and the proven way to change the schedule is the parent; Interval is writable and the factory ISchedule.Create* exists, both untested; observed (timer-lifecycle get .../#IDayOfWeek)",
+      "origin": "tests/jobs-odc/timer-lifecycle.json (get .../ScheduleConfiguration/#IDayOfWeek)",
+      "capability": "timer.schedule",
+      "operations": {
+        "read": {
+          "status": "applicable",
+          "note": "get ITimer:<T>/ScheduleConfiguration/#IDayOfWeek (timer-lifecycle)"
+        },
+        "set": {
+          "status": "undetermined",
+          "note": "Interval writable, untested; change the schedule through the parent"
+        }
+      }
+    },
+    {
+      "type": "odc:OutSystems.Model.Processes.IDayOfMonth",
+      "status": "excluded",
+      "applicability": "applicable",
+      "reason": "schedule item derived by the platform from the parent timer's CronSchedule/Schedule; its schedule values are read-only (census) and the proven way to change the schedule is the parent; observed as an Any placeholder in the dump after a CronSchedule change (timer-lifecycle op 9); the factory ISchedule.Create* exists, untested",
+      "origin": "tests/jobs-odc/timer-lifecycle.json ops 2 and 9 (_why) and description",
+      "capability": "timer.schedule"
+    },
+    {
+      "type": "odc:OutSystems.Model.Processes.IMonth",
+      "status": "excluded",
+      "applicability": "applicable",
+      "reason": "schedule item derived by the platform from the parent timer's CronSchedule/Schedule; its schedule values are read-only (census) and the proven way to change the schedule is the parent; observed as an Any placeholder in the dump after a CronSchedule change (timer-lifecycle op 9); the factory ISchedule.Create* exists, untested",
+      "origin": "tests/jobs-odc/timer-lifecycle.json ops 2 and 9 (_why) and description",
+      "capability": "timer.schedule"
+    },
+    {
+      "type": "odc:OutSystems.Model.Processes.ITimeOfDay",
+      "status": "excluded",
+      "applicability": "applicable",
+      "reason": "schedule item of the same derived tree; never observed in a job (the Schedule \"07:45\" form builds IMinute and IHour only); the factory ISchedule.Create* exists, untested",
+      "origin": "tests/jobs-odc/timer-lifecycle.json op 12 (_why) and description",
+      "capability": "timer.schedule"
+    },
+    {
+      "type": "odc:OutSystems.Model.Processes.IWeekOfMonth",
+      "status": "excluded",
+      "applicability": "applicable",
+      "reason": "schedule item of the same derived tree; never observed in a job; the factory ISchedule.Create* exists, untested",
+      "origin": "tests/jobs-odc/timer-lifecycle.json description",
+      "capability": "timer.schedule"
+    }
+  ]
+}

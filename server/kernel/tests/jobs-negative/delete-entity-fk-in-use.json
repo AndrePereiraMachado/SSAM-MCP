@@ -1,0 +1,17 @@
+{
+ "description": "A RECUSA do delete de uma entidade citada por uma FK: DelFkChild.ParentId e do tipo 'DelFkParent Identifier', que e um FILHO da entidade (o usages direto nao o ve). O delete olha os consumidores de tudo o que esta dentro do alvo e nomeia a FK. Antes so o registo anonimo `DelFkParent Record` recusava este delete (escondendo a FK); ele deixou de contar sozinho, e esta e a guarda que o substitui. Cobertura testada, fase 2.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectError": [
+  "delete: refused, IServerEntity 'DelFkParent' is used by 1 consumer(s)",
+  "IServerEntity:DelFkChild/IEntityAttribute:ParentId",
+  "pass \"force\": true to break them"
+ ],
+ "ops": [
+  {"op": "spec", "data": {"entities": [
+    {"name": "DelFkParent", "attributes": [{"name": "Title", "type": "Text"}]},
+    {"name": "DelFkChild", "attributes": [{"name": "ParentId", "type": "DelFkParent Identifier"}]}]}},
+  {"op": "usages", "target": "$DelFkParent", "_why": "direto: so o registo anonimo (derived true); a FK liga-se ao tipo identificador"},
+  {"op": "delete", "target": "$DelFkParent"}
+ ]
+}

@@ -1,0 +1,21 @@
+{
+ "description": "Base dos exemplos O11: tela vazia Showcase (LayoutTopMenu) e dados de apoio (static Priority e entidade Task). Os exemplos minimal e typical de widgets partem daqui com base job:ex-base.",
+ "base": "reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {
+   "static": [{"name": "Priority", "records": [{"name": "Low"}, {"name": "Medium"}, {"name": "High"}]}],
+   "entities": [{"name": "Task", "description": "Tarefa de exemplo", "attributes": [
+    {"name": "Title", "type": "Text", "mandatory": true, "length": 100},
+    {"name": "Notes", "type": "Text", "length": 500},
+    {"name": "DueDate", "type": "Date"},
+    {"name": "Done", "type": "Boolean"},
+    {"name": "Estimate", "type": "Decimal"},
+    {"name": "PriorityId", "type": "Priority Identifier"}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "Showcase", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Showcase\""}
+ ]
+}

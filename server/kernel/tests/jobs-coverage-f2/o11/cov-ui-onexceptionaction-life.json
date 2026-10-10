@@ -1,0 +1,52 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.UI.IOnExceptionAction (o11) em mobileFlow. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IOnExceptionAction",
+   "name": "CovAOnExceptionAction",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IExceptionHandlerNode",
+   "as": "$aeh"
+  },
+  {
+   "op": "set",
+   "target": "$aeh",
+   "prop": "Exception",
+   "value": "ISystemException:All Exceptions"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IEndNode",
+   "as": "$aee"
+  },
+  {
+   "op": "link",
+   "from": "$aeh",
+   "to": "$aee"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovROnExceptionAction"
+  }
+ ]
+}

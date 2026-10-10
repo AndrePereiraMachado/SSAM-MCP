@@ -1,0 +1,17 @@
+{
+ "description": "TimePicker (OutSystemsUI, Interaction) minimo: instancia como o Studio cria ao arrastar o bloco; evento obrigatorio OnSelected ligado a uma screen action vazia; o Input de exemplo do placeholder Timepicker ligado a uma variavel Time.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "PickedTime", "as": "$vPickedTime"},
+  {"op": "set", "target": "$vPickedTime", "prop": "DataType", "value": "Time"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAction", "name": "TimePickerDemoOnSelected", "as": "$hTimePickerDemoOnSelected"},
+  {"op": "create", "parent": "$hTimePickerDemoOnSelected", "type": "IStartNode", "as": "$hTimePickerDemoOnSelectedS"},
+  {"op": "create", "parent": "$hTimePickerDemoOnSelected", "type": "IEndNode", "as": "$hTimePickerDemoOnSelectedE"},
+  {"op": "link", "from": "$hTimePickerDemoOnSelectedS", "to": "$hTimePickerDemoOnSelectedE"},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "TimePickerDemo", "source": "IMobileBlock:TimePicker", "as": "$b"},
+  {"op": "set", "target": "$b/Timepicker/#IInput", "prop": "Variable", "value": "PickedTime"},
+  {"op": "set", "target": "$b/OnSelected", "prop": "Handler", "value": "IScreenAction:TimePickerDemoOnSelected"}
+ ]
+}

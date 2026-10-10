@@ -1,0 +1,9 @@
+{
+ "description": "InlineSVG (OutSystemsUI, Utilities) minimo: instancia como o Studio cria ao arrastar o bloco.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "InlineSVGDemo", "source": "IMobileBlock:InlineSVG", "as": "$b"}
+ ]
+}

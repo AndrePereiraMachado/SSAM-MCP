@@ -1,0 +1,20 @@
+{
+ "description": "Dropdown nativo: Variable, List do aggregate e Values/Labels lidos pelo nome da entidade da linha.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"static": [{"name": "ShirtSize", "records": [{"name": "Small"}, {"name": "Large"}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "DropdownDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "SizeId", "as": "$size"},
+  {"op": "set", "target": "$size", "prop": "DataType", "value": "ShirtSize Identifier"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetSizes", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IStaticEntity:ShirtSize"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IDropdown", "name": "SizeDropdown", "as": "$dd"},
+  {"op": "set", "target": "$dd", "prop": "Variable", "value": "SizeId"},
+  {"op": "set", "target": "$dd", "prop": "List", "value": "GetSizes.List"},
+  {"op": "set", "target": "$dd", "prop": "Values", "value": "ShirtSize.Id"},
+  {"op": "set", "target": "$dd", "prop": "Labels", "value": "ShirtSize.Label"}
+ ]
+}

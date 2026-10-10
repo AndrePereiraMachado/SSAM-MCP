@@ -1,0 +1,12 @@
+{
+ "description": "Rating do OSUI: o input obrigatorio RatingValue.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "RatingDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Rating1", "source": "IMobileBlock:Rating", "as": "$rt"},
+  {"op": "set", "target": "$rt/RatingValue", "prop": "Value", "value": "4"}
+ ]
+}

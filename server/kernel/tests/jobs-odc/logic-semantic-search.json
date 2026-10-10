@@ -1,0 +1,22 @@
+{
+ "description": "ODC: um no Semantic Search completo (cobertura testada, fase 2). SearchAttributes e uma colecao so de leitura que a plataforma muda por AddSearchableAttributes/RemoveSearchableAttributes; sem caminho pelos verbos o no ficava sempre com o erro SemanticSearch_RequiredSearchAttributes. O `set SearchAttributes` recebe a lista inteira, como Roles: cada item e o `AsSearchable` de um atributo marcado IsSearchable. O segundo set troca a lista (Remove + Add) e o get final le de volta.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / SemDoc_Find (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "SemDoc", "attributes": [{"name": "Title", "type": "Text", "length": 50}, {"name": "Body", "type": "Text", "length": 500}]}]}},
+  {"op": "set", "target": "$SemDoc.Title/AsSearchable", "prop": "IsSearchable", "value": true},
+  {"op": "set", "target": "$SemDoc.Body/AsSearchable", "prop": "IsSearchable", "value": true},
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "SemDoc_Find", "as": "$act"},
+  {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$s"},
+  {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$e"},
+  {"op": "create", "parent": "$act", "type": "ISemanticSearchNode", "name": "FindDocs", "as": "$find"},
+  {"op": "set", "target": "$find", "prop": "Source", "value": "$SemDoc"},
+  {"op": "set", "target": "$find", "prop": "SearchQuery", "value": "\"flood insurance\""},
+  {"op": "set", "target": "$find", "prop": "SearchAttributes", "value": ["$SemDoc.Title/AsSearchable", "$SemDoc.Body/AsSearchable"]},
+  {"op": "set", "target": "$find", "prop": "SearchAttributes", "value": ["$SemDoc.Body/AsSearchable"], "_why": "troca a lista: Title sai (RemoveSearchableAttributes), Body fica"},
+  {"op": "link", "from": "$s", "to": "$find"},
+  {"op": "link", "from": "$find", "connector": "Target", "to": "$e"},
+  {"op": "get", "target": "$find", "_why": "SearchAttributes: 1"}
+ ]
+}

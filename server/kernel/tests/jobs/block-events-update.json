@@ -1,0 +1,36 @@
+{
+ "description": "Mudanca de CONTRATO de um evento de bloco ja consumido, sobre job:block-events-reactive: OnRate ganha o parametro RatedAt e passa a obrigatorio (IsMandatory true). Prova o que acontece com quem ja consumia: a instancia da tela mantem a MESMA chave de handler, o argumento novo nasce vazio no consumidor (o get do IEventHandler mostra Arguments 3) e tem de ser preenchido dos dois lados - no produtor (o ITriggerNode) e no consumidor (o input novo do handler) - senao o Verify recusa com RequiredPropertyValue_Value; obrigatorio nao quebra quem ja tinha handler ligado.",
+ "base": "job:block-events-reactive",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "usages", "target": "IBlockEvent:OnRate", "_why": "estado antes: o trigger do bloco e o handler da tela"},
+  {"op": "get", "target": "IBlockEvent:OnRate", "_why": "contrato antigo: 2 parametros, IsMandatory ausente"},
+
+  {"op": "create", "parent": "IBlockEvent:OnRate", "type": "IInputParameter", "name": "RatedAt", "as": "$evRatedAt", "_why": "1. acrescentar parametro ao contrato"},
+  {"op": "set", "target": "$evRatedAt", "prop": "DataType", "value": "Date Time"},
+  {"op": "set", "target": "IBlockEvent:OnRate", "prop": "IsMandatory", "value": true, "_why": "2. tornar o evento obrigatorio para quem instancia o bloco"},
+
+  {"op": "get", "target": "IMobileBlock:RatingPicker/Rate/RaiseOnRate", "_why": "o produtor ja ve 3 argumentos; o novo esta por preencher"},
+  {"op": "get", "target": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent/RatingPicker1/#IEventHandler", "_why": "o consumidor mantem a chave do handler e passa a ter 3 argumentos, o novo vazio"},
+
+  {"op": "set", "target": "IMobileBlock:RatingPicker/Rate/RaiseOnRate/RatedAt", "prop": "Value", "value": "CurrDateTime()", "_why": "3. migrar o produtor: quem dispara passa a mandar o valor novo"},
+
+  {"op": "create", "parent": "IMobileScreen:RatingDemo", "type": "ILocalVariable", "name": "LastRatedAt", "as": "$vRatedAt", "_why": "4. migrar o consumidor: o handler recebe e usa o parametro novo"},
+  {"op": "set", "target": "$vRatedAt", "prop": "DataType", "value": "Date Time"},
+  {"op": "create", "parent": "IScreenAction:RatingPicker1_OnRate", "type": "IInputParameter", "name": "RatedAt", "as": "$hRatedAt"},
+  {"op": "set", "target": "$hRatedAt", "prop": "DataType", "value": "Date Time"},
+  {"op": "create", "parent": "IScreenAction:RatingPicker1_OnRate/#IAssignNode", "type": "IAssignment", "as": "$hA3"},
+  {"op": "set", "target": "$hA3", "prop": "Variable", "value": "LastRatedAt"},
+  {"op": "set", "target": "$hA3", "prop": "Value", "value": "RatedAt"},
+  {"op": "set", "target": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent/RatingPicker1/OnRate/RatedAt", "prop": "Value", "value": "RatedAt", "_why": "o argumento do handler, no escopo do evento"},
+
+  {"op": "create", "parent": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$echoAt", "_why": "5. a tela usa o dado novo, senao o parametro fica sem uso"},
+  {"op": "set", "target": "$echoAt", "prop": "Value", "value": "\"Quando: \" + DateTimeToText(LastRatedAt)"},
+
+  {"op": "get", "target": "IBlockEvent:OnRate", "_why": "contrato novo: 3 parametros e IsMandatory True"},
+  {"op": "get", "target": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent/RatingPicker1/#IEventHandler", "_why": "depois da migracao: a MESMA chave de handler, agora com os 3 argumentos preenchidos"},
+  {"op": "usages", "target": "IBlockEvent:OnRate", "_why": "estado depois: os mesmos dois consumidores, nenhum perdido"},
+  {"op": "dump", "target": "IMobileScreen:RatingDemo", "depth": 7}
+ ]
+}

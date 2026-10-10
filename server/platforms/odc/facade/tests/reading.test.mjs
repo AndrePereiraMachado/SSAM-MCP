@@ -1,0 +1,85 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { Client } from '@modelcontextprotocol/client';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import { inspect, root } from '../lib.mjs';
+import { anvilRoot } from '../workspace.mjs';
+
+const fixture = path.join(anvilRoot, 'tests/fixtures/odc/insurance-reactive-r8.oml');
+test('ODC reading pages real model objects and resolves exact identities without changing the file',
+  { skip: !fs.existsSync(fixture), timeout: 180000 }, async () => {
+    const hash = () => createHash('sha256').update(fs.readFileSync(fixture)).digest('hex').toUpperCase();
+    const original = hash();
+    const client = new Client({ name: 'reading-test', version: '1' });
+    let first, graph;
+    try {
+      await client.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'facade/mcp.mjs')], stderr: 'pipe' }));
+      const reply = await client.callTool({ name: 'studio_inspect', arguments: { target: fixture, kind: 'MobileScreen', max: 2, properties: 'Name' } });
+      assert.equal(reply.isError, undefined);
+      first = reply.structuredContent;
+      const batch = await client.callTool({ name: 'studio_inspect', arguments: { target: fixture, path: '/',
+        select: first.entries.map(e => e.reference), depth: 1, expectedSourceSha256: original } });
+      assert.equal(batch.isError, undefined);
+      assert.equal(batch.structuredContent.schema, 'ssam-reading-batch/1');
+      assert.equal(batch.structuredContent.complete, true);
+      assert.deepEqual(batch.structuredContent.entries.map(e => e.data.tree.key), first.entries.map(e => e.key));
+      const usages = await client.callTool({ name: 'studio_inspect', arguments: { target: fixture, path: '/', usages: true, includeInternal: true, max: 1 } });
+      assert.equal(usages.isError, undefined);
+      const envelope = usages.structuredContent;
+      assert.equal(envelope.ok, true);
+      graph = JSON.parse(fs.readFileSync(envelope.out, 'utf8'));
+    } finally { await client.close(); }
+    assert.equal(first.ok, true, JSON.stringify(first));
+    assert.equal(first.sourceSha256, original);
+    assert.equal(first.entries.length, 2);
+    assert.ok(first.count > 2);
+    assert.equal(first.nextOffset, 2);
+    assert.equal(first.omitted, first.count - 2);
+    assert.equal(graph.schema, 'ssam-usages/1');
+    assert.equal(graph.complete, true);
+    assert.equal(graph.scope, 'subtree');
+    assert.ok(graph.count > 100);
+    assert.equal(graph.returned, 1);
+    assert.equal(graph.nextOffset, 1);
+    assert.ok(graph.entries[0].consumer.reference.startsWith('@'));
+    assert.ok(graph.entries[0].target.reference.startsWith('@'));
+    const nextGraphReply = await inspect({ target: fixture, path: '/', usages: true, includeInternal: true, max: 1, offset: 1 });
+    const nextGraph = JSON.parse(fs.readFileSync(nextGraphReply.out, 'utf8'));
+    assert.equal(nextGraph.count, graph.count);
+    assert.notDeepEqual(nextGraph.entries[0], graph.entries[0]);
+    const firstEvidence = fs.readFileSync(first.out, 'utf8');
+    const second = await inspect({ target: fixture, kind: 'IMobileScreen', max: 2, offset: 2, properties: 'Name' });
+    assert.equal(second.count, first.count);
+    assert.equal(second.offset, 2);
+    assert.ok(second.entries.every(e => first.entries.every(f => e.key !== f.key)));
+    assert.notEqual(first.out, second.out);
+    assert.equal(fs.readFileSync(first.out, 'utf8'), firstEvidence);
+    const entry = first.entries[0];
+    const byPath = await inspect({ target: fixture, path: entry.path, depth: 0, properties: 'Name' });
+    const byKey = await inspect({ target: fixture, path: entry.reference, depth: 0, properties: 'Name' });
+    assert.equal(byPath.tree.key, entry.key);
+    assert.equal(byKey.tree.key, entry.key);
+    assert.equal(byKey.tree.modelName, entry.modelName);
+    assert.equal(byKey.tree.childrenOmitted, byKey.tree.childrenTotal);
+    assert.equal(hash(), original);
+    const typo = await inspect({ target: fixture, kind: 'MobileScreeen', max: 1 });
+    assert.equal(typo.count, 0);
+    assert.equal(typo.kindObserved, false);
+    assert.equal(typo.notices.length, 1);
+    const projection = await inspect({ target: fixture, depth: 0, properties: 'DefinitelyMissing' });
+    assert.equal(projection.schema, 'ssam-reading/1');
+    assert.deepEqual(projection.tree.propertiesMissing, ['DefinitelyMissing']);
+    assert.equal(projection.flows, undefined, 'a requested projection must not silently return the old module map');
+    // Independent pre-existing map: check all screens, not only the two pages above.
+    const mapReply = await inspect({ target: fixture });
+    const map = JSON.parse(fs.readFileSync(mapReply.out, 'utf8'));
+    const allScreens = await inspect({ target: fixture, kind: 'MobileScreen', max: 500, properties: 'Name' });
+    assert.equal(allScreens.truncated, false);
+    assert.deepEqual(allScreens.entries.map(e => e.name).sort(), map.flows.flatMap(f => f.screens).sort());
+    const invalid = await inspect({ target: fixture, max: -1 });
+    assert.equal(invalid.ok, false);
+    assert.match(invalid.error, /--max must/);
+  });

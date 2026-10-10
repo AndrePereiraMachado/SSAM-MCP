@@ -1,0 +1,22 @@
+{
+  "description": "Campos de dominio necessarios para que todos os inputs das actions da loja tenham destino persistido.",
+  "base": "job:virtual-game-store-actions",
+  "expectValid": true,
+  "ops": [
+    { "op": "create", "parent": "IServerEntity:Game", "type": "IEntityAttribute", "name": "ArchiveReason", "as": "$gameReason" },
+    { "op": "set", "target": "$gameReason", "prop": "DataType", "value": "Text" },
+    { "op": "set", "target": "$gameReason", "prop": "Length", "value": 500 },
+    { "op": "create", "parent": "IServerEntity:GameEdition", "type": "IEntityAttribute", "name": "CountryCode", "as": "$editionCountry" },
+    { "op": "set", "target": "$editionCountry", "prop": "DataType", "value": "Text" },
+    { "op": "set", "target": "$editionCountry", "prop": "Length", "value": 5 },
+    { "op": "create", "parent": "IServerEntity:GameReview", "type": "IEntityAttribute", "name": "ModerationNote", "as": "$reviewModeration" },
+    { "op": "set", "target": "$reviewModeration", "prop": "DataType", "value": "Text" },
+    { "op": "set", "target": "$reviewModeration", "prop": "Length", "value": 1000 },
+    { "op": "create", "parent": "IServerEntity:Order", "type": "IEntityAttribute", "name": "CancellationReason", "as": "$orderCancellation" },
+    { "op": "set", "target": "$orderCancellation", "prop": "DataType", "value": "Text" },
+    { "op": "set", "target": "$orderCancellation", "prop": "Length", "value": 1000 },
+    { "op": "create", "parent": "IServerEntity:Refund", "type": "IEntityAttribute", "name": "ApprovalNote", "as": "$refundApproval" },
+    { "op": "set", "target": "$refundApproval", "prop": "DataType", "value": "Text" },
+    { "op": "set", "target": "$refundApproval", "prop": "Length", "value": 1000 }
+  ]
+}

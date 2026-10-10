@@ -1,0 +1,19 @@
+{
+ "description": "WS4 T7 (ODC): o mesmo job html-visual-list sobre o InsuranceApp do tenant pessoal: uma lista sobre um aggregate que ja existe na tela; {{ Row.User.Name }} vira a expressao nativa.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "UserBoard", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Users\""},
+
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetUsers", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IEntitySignature:User"}},
+
+  {"op": "html", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "file": "tests/html/visual/list.html"},
+
+  {"op": "dump", "target": "$scr", "depth": 9}
+ ]
+}

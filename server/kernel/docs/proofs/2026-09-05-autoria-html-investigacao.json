@@ -1,0 +1,161 @@
+{
+  "date": "2026-09-05",
+  "task": "Investigacao focada de autoria HTML/CSS/JS para SSAM Hybrid",
+  "scope": "Read-only inspection of published runtime and local browser prototype; no compiler installation or app delivery",
+  "referenceAuthoredInOneInitialPass": true,
+  "nativeInputRendering": {
+    "rootTag": "span",
+    "rootClass": "input-text",
+    "callbackDelegates": true
+  },
+  "nativeFormPreventsDefault": true,
+  "inputGeometry": {
+    "baseline": {
+      "width": 930,
+      "height": 44,
+      "borderRadius": "7px",
+      "padding": "10px 12px"
+    },
+    "naive": {
+      "width": 189,
+      "height": 27,
+      "borderRadius": "0px",
+      "padding": "1px 2px"
+    },
+    "adapted": {
+      "width": 930,
+      "height": 44,
+      "borderRadius": "7px",
+      "padding": "10px 12px"
+    }
+  },
+  "referenceChecks": {
+    "search": true,
+    "emptyState": true,
+    "localFormSubmit": true,
+    "nativeWrapperBreaksDirectChildCss": true,
+    "adapterRestoresMeasuredInput": true
+  },
+  "mobile": {
+    "columns": "174px 174px",
+    "overflow": false
+  },
+  "notProved": [
+    "Arbitrary CSS preservation",
+    "Arbitrary JavaScript translation",
+    "Native OutSystems model binding by the prototype",
+    "Generated OML conversion or delivery",
+    "Figma import"
+  ],
+  "artifacts": {
+    "authoring-probe.cjs": {
+      "bytes": 4882,
+      "sha256": "6374e39483bc2f44ed32ab30ddc46ab5398dcc216c3fce61e2c6083546714713"
+    },
+    "authoring-probe.json": {
+      "bytes": 1753,
+      "sha256": "de8b343573e8f1873fd47c24adace87286203354cbb39018d3709801373c18e4"
+    },
+    "Debugger.js": {
+      "bytes": 46629,
+      "sha256": "fbd404ee52499b2a466ceaedf33c1bbbb7c96d588068321111500154b3b4e992"
+    },
+    "Incidents_UI.appDefinition.js": {
+      "bytes": 706,
+      "sha256": "d6569f448f36db4bdecf3d8970aca25d5de180a2d0afe8805846a5296e95a834"
+    },
+    "Incidents_UI.controller.js": {
+      "bytes": 61286,
+      "sha256": "4ecf8ac850537481b3ab8643692ed9d84c9d1a19d3d2f143adf8fe6aaca35261"
+    },
+    "Incidents_UI.index.js": {
+      "bytes": 1152,
+      "sha256": "53909b24a4ec01690d47d18470489160522e3ca94d26792ffac9faf76c1d7eb3"
+    },
+    "Incidents_UI.MainFlow.Dashboard.mvc.js": {
+      "bytes": 93554,
+      "sha256": "df1a259ee1b15712ec13ff8de9414cd58a2c7d0385371d37edbf6e04a05ec424"
+    },
+    "inspect-live.cjs": {
+      "bytes": 1298,
+      "sha256": "ddd18f9c810d7ec8a60e3bb70d111d0ca345659746fd2127eab929afba6f44a5"
+    },
+    "live-dom.json": {
+      "bytes": 20721,
+      "sha256": "6049eb2f7d2fb2609abd095247a834ad0fe8fba33715a1657e580062891cb917"
+    },
+    "native-render-fragments.json": {
+      "bytes": 792,
+      "sha256": "e5e0b0930a3fc95f3e1b5e20f7b90f3bfb5f71dcbc21c5e4762485bef135e53b"
+    },
+    "OutSystems.js": {
+      "bytes": 638707,
+      "sha256": "2334c87bd9c4fd029498318d684e2ac4137eebdeba6fcb44c4af72d61dc22e15"
+    },
+    "OutSystemsManifestLoader.js": {
+      "bytes": 2201,
+      "sha256": "901a7c07a93b18d14945cffc96704933b55095e4c86d97df605eef9b681d9669"
+    },
+    "OutSystemsReactView.js": {
+      "bytes": 300177,
+      "sha256": "1e925b07da4ec7a39e9318e21a1f247554948b668c962db2dedfa688eacf4774"
+    },
+    "OutSystemsReactWidgets.js": {
+      "bytes": 88956,
+      "sha256": "82aa3f532a78089e996731f2c31d2b4d41fea377388aa5e1bd75bdbcab2a6fe0"
+    },
+    "OutSystemsSettings.js": {
+      "bytes": 1911,
+      "sha256": "cd7a707c5a02a1da3f260d38ada7039fd6be3aaadd002fae4ba092476b8bb858"
+    },
+    "OutSystemsUI.controller.js": {
+      "bytes": 2388329,
+      "sha256": "b21e9919ff684b46d013b9cd8da6d0943a1e77a0bd32dbf9f983db9374159c9a"
+    },
+    "published-login.png": {
+      "bytes": 35549,
+      "sha256": "b385cc0949a23a793d8b6cb744c2aca34ffd5955480604e4cb370cddba90d063"
+    },
+    "published-shell.html": {
+      "bytes": 2383,
+      "sha256": "d4c08aa00bf07493959251f2354afdeab5060c3a53ac11c700ec881e9b20586c"
+    },
+    "reference-desktop.png": {
+      "bytes": 73207,
+      "sha256": "809d79f73e6d72d8136b5e3ea95a8fd0dcca7007d7dd1462d567b890b4e022b2"
+    },
+    "reference-mobile.png": {
+      "bytes": 72762,
+      "sha256": "41863a4ae29a0f38eb75239fc3373e87c7436c798912c2860cd3de81c9c914a4"
+    },
+    "reference.html": {
+      "bytes": 11281,
+      "sha256": "23aa169a73a719c04810d56f32eb9a90a98154ac3b84211387342bee4def7d7b"
+    },
+    "widget-AdvancedHtml.js": {
+      "bytes": 577,
+      "sha256": "527819edd05df52d9dc7799e92d6bca1cae5d6a6755ba2b97f07b344064de797"
+    },
+    "widget-Container.js": {
+      "bytes": 1946,
+      "sha256": "341fb1342ed81b3aa1341f2ee02b06806ed4b5b099cbe94202ebc4ddbdd5f7a7"
+    },
+    "widget-Dropdown.js": {
+      "bytes": 616,
+      "sha256": "74ce1dac8c9711a1d123056511af0af4df38f7bdf99938d24a82fe61a6292145"
+    },
+    "widget-Form.js": {
+      "bytes": 839,
+      "sha256": "8453dabe6de8070ca497b81fdf80e5d8bc7c55311ed9a647ca8d34bc66280b29"
+    },
+    "widget-Input.js": {
+      "bytes": 5799,
+      "sha256": "ea2175ab7679cc49f705e80c42627f900bda01681a2185d77b9e039a3aa7085e"
+    },
+    "widget-TextArea.js": {
+      "bytes": 2393,
+      "sha256": "fc23c09fafbfa0da93106dd9cc48e8f7115c55ed733b89949b3733441c29f4c2"
+    }
+  },
+  "prototypeMethod": "Native Input/Form render methods were called with test doubles. CSS probe reproduced the observed Input wrapper around the existing local HTML input; this did not instantiate a complete OutSystems widget or compile an OML."
+}

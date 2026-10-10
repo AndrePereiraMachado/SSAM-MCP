@@ -1,0 +1,39 @@
+{
+ "description": "Cobertura testada (fase 2): del de OutSystems.Model.Data.IRecord (o11) em staticEntity. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "static": [
+     {
+      "name": "CovSStatic",
+      "records": [
+       {
+        "name": "One",
+        "label": "One"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$CovSStatic",
+   "type": "IRecord",
+   "as": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a/Id",
+   "prop": "Value",
+   "value": "2"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

@@ -1,0 +1,19 @@
+{
+ "description": "A RECUSA do op html quando um <a> contem outro controlo (<button>): os filhos de <a>/<button> viram widgets filhos do Link/Button, mas um Link/Button dentro de outro nao e compilado. O compilador diz o elemento, a posicao, o <a> de fora e o que fazer, em vez de achatar o conteudo em texto. O caso valido (card com div, icone e bindings dentro do link) e tests/jobs/html-if-links-reactive.json.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectError": [
+  "line 1 col 83 <button> (kind refresh) cannot be compiled inside <a> (line 1 col 20 <a>)",
+  "a Link/Button cannot contain another Link/Button",
+  "make the outer element a <div> and keep one control"
+ ],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Card", "public": true, "attributes": [{"name": "Title", "type": "Text"}]}]}},
+  {"op": "html", "data": {
+   "screen": "Cards", "title": "Cards", "layout": "blank",
+   "sources": [{"entity": "Card", "as": "GetCards", "max": 20}],
+   "html": "<div class=\"cards\"><a href=\"#\" class=\"card-link\" data-av=\"open\"><span>Abrir</span><button data-av=\"reload\">Atualizar</button></a></div>",
+   "bindings": {"open": {"kind": "refresh"}, "reload": {"kind": "refresh"}}
+  }}
+ ]
+}

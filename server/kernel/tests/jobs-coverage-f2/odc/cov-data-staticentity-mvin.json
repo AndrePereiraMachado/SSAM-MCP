@@ -1,0 +1,73 @@
+{
+ "description": "Cobertura testada (fase 2): move into (folder:ServerEntities) de OutSystems.Model.Data.IStaticEntity (odc) em espace. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IStaticEntity",
+   "name": "CovAStaticEntity",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IEntityAttribute",
+   "name": "Id",
+   "as": "$sid"
+  },
+  {
+   "op": "set",
+   "target": "$sid",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "set",
+   "target": "$sid",
+   "prop": "IsAutoNumber",
+   "value": "No"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "IdentifierAttribute",
+   "value": "$sid"
+  },
+  {
+   "op": "create",
+   "parent": "$a",
+   "type": "IEntityAttribute",
+   "name": "Label",
+   "as": "$slb"
+  },
+  {
+   "op": "set",
+   "target": "$slb",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "LabelAttribute",
+   "value": "$slb"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IFolder",
+   "name": "CovSMvFolder",
+   "args": {
+    "parentFolder": "ServerEntities"
+   },
+   "as": "$mvp"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "into": "$mvp"
+  }
+ ]
+}

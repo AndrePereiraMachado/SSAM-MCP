@@ -1,0 +1,1468 @@
+{
+  "schemaVersion": "ssam-discovery-fragment/1",
+  "contract": "ssam-catalog-contribution/1",
+  "front": "A",
+  "title": "Actions by context (server, service, client, screen, data action, preparation) and their typed variables (inputs, outputs, locals, call arguments)",
+  "reviewedAt": "2026-09-23",
+  "synonyms": {
+    "actions": ["acao", "acoes"],
+    "serveraction": ["acao de servidor", "acoes de servidor"],
+    "serviceaction": ["acao de servico", "acoes de servico"],
+    "clientaction": ["acao de cliente", "acoes de cliente"],
+    "screenaction": ["acao de tela", "acoes de tela", "acao da tela"],
+    "dataaction": ["acao de dados", "acoes de dados"],
+    "input parameter": ["parametro de entrada", "parametros de entrada", "input parameters"],
+    "output parameter": ["parametro de saida", "parametros de saida", "output parameters"],
+    "action parameter": ["parametro da acao", "parametros da acao", "action parameters"],
+    "local variable": ["variavel local", "variaveis locais", "local variables"],
+    "input": ["parametro de entrada", "parametros de entrada"],
+    "output": ["parametro de saida", "parametros de saida"],
+    "parameter": ["parametro de entrada", "parametros de entrada", "parametro de saida", "parametros de saida", "parametro da acao", "parametros da acao"],
+    "variable": [
+      "variavel local", "variaveis locais", "variaveis da acao", "variaveis tipadas", "variaveis de tipos diferentes", "variaveis de varios tipos",
+      "variaveis de tipos distintos", "variaveis de tipos variados", "action variables", "variables of the action", "typed variables",
+      "variables of different types", "variables of several types", "variables of different data types", "variables of various types",
+      "variables of mixed types"
+    ],
+    "argument": ["argumento", "argumentos", "arguments"],
+    "preparation": ["preparacao da tela", "preparacao de uma tela", "screen preparation", "web screen preparation"]
+  },
+  "capabilities": [
+    {
+      "id": "logic.server-action",
+      "supersedes": ["logic.server-action"],
+      "category": "logic",
+      "title": "ServerAction (IServerAction)",
+      "keywords": [
+        "serveraction", "server action", "acao de servidor", "acoes de servidor", "business rule", "regra de negocio", "server logic", "logica de servidor",
+        "server action wrapper"
+      ],
+      "summary": "Declare a server action with `logic` (kind server: signature, locals and steps; Start/End, links and layout generated) or raw verbs under @espace; maintain it by `IServerAction:<Name>`: usages before delete, replace to repoint callers by key, rename keeps callers bound by key.",
+      "route": {
+        "kind": "job",
+        "operation": "{\"op\":\"logic\",\"data\":{\"actions\":[{\"name\":\"X\",\"kind\":\"server\",\"inputs\":[],\"steps\":[...]}]}} creates; maintain by IServerAction:<Name> (get/usages/set/rename/replace/duplicate/delete)"
+      },
+      "contract": [
+        "logic.action", "logic.actionKinds", "logic.parameter", "logic.rules", "verbs.verbs.rename", "verbs.verbs.replace", "verbs.verbs.delete",
+        "verbs.verbs.usages", "verbs.references"
+      ],
+      "guidance": "A screen saves through a server action wrapper (CreateOrUpdate inside it), never by calling the entity action directly. Do not name an aggregate `Get<Entity>s`: a filter renames it and expressions break. Replace needs the same signature. The action's typed inventory (inputs, outputs, locals) is logic.variable; flow nodes are logic.flow.",
+      "example": { "ops": ["logic"], "max": 1 },
+      "depends": [],
+      "recommends": [{ "id": "logic.variable", "when": "the action's parameters or locals change" }],
+      "alternatives": [{ "id": "logic.service-action", "when": "the caller is another app (remote, loosely coupled)" }],
+      "elements": [
+        {
+          "role": "server action",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.IServerAction", "jobType": "IServerAction", "address": "IServerAction:<Name>" },
+            "o11": { "native": "OutSystems.Model.Logic.IServerAction", "jobType": "IServerAction", "address": "IServerAction:<Name>" }
+          }
+        }
+      ],
+      "operations": {
+        "read": {
+          "route": "get/dump IServerAction:<Name> (dump lists parameters, locals and nodes)",
+          "preconditions": [],
+          "roles": {
+            "server action": {
+              "odc": { "status": "applicable", "proofs": ["action-edit-lifecycle", "refactor-inherited"] },
+              "o11": { "status": "applicable", "proofs": ["smoke-data-logic", "rename-data-propagation"] }
+            }
+          }
+        },
+        "usages": {
+          "route": "usages IServerAction:<Name>",
+          "preconditions": ["callers are execute-action nodes in other actions or screen actions"],
+          "roles": {
+            "server action": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["action-edit-lifecycle", "refactor-inherited", "delete-logic-consumers", "cat-a-reset-typed-values"],
+                "scope": "an inherited action with one real caller inside a foreach; two callers (server action and screen action); a new action whose only consumer is the call inserted into an If branch"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["delete-logic-consumers", "refactor-replace-action", "cat-a-reset-typed-values"],
+                "scope": "two callers (server action and screen action) listed before replace and delete; a new action whose only consumer is the call inserted into an If branch"
+              }
+            }
+          }
+        },
+        "create": {
+          "route": "logic kind server (compact) or create @espace IServerAction + parameters + nodes (raw)",
+          "preconditions": [
+            "compact: closed keys; declared inputs/vars must be used and outputs assigned", "an existing name is refused unless replace:true",
+            "a private action without consumer raises an unused-action warning: declare it in expectedMessages"
+          ],
+          "roles": {
+            "server action": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["logic-action", "logic-steps", "delete-logic-consumers", "cat-a-reset-typed-values", "cat-a-list-clear"],
+                "scope": "compact logic (get/assign/if; 16 typed outputs, locals and two Assigns; a ListClear call) and raw verbs"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["consume-reference-static", "smoke-data-logic", "delete-data-consumers", "cat-a-reset-typed-values"],
+                "negative": ["logic-duplicate-action"],
+                "scope": "compact logic (public action with an output; 16 typed outputs, locals and two Assigns) and raw verbs"
+              }
+            }
+          }
+        },
+        "set": {
+          "route": "set IServerAction:<Name> Description | Public",
+          "preconditions": [],
+          "roles": {
+            "server action": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["action-edit-lifecycle", "delete-logic-consumers"],
+                "scope": "Description rewritten on an inherited action after rename; Public"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["producer-public", "smoke-data-logic", "delete-logic-consumers", "cat-a-reset-typed-values"],
+                "scope": "Public; Description"
+              }
+            }
+          }
+        },
+        "rename": {
+          "route": "rename IServerAction:<Name>",
+          "preconditions": ["the new name must be free in the module"],
+          "roles": {
+            "server action": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["action-edit-lifecycle", "refactor-inherited", "rename-logic-propagation"],
+                "scope": "renamed with real callers: the call stays bound by key and the ObjectKey is unchanged; the caller node's name follows only when it was the automatic name (equal to the action's); a node the author renamed keeps its name. No proof reads a server action output back after the rename"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["rename-logic-propagation", "refactor-usages"],
+                "scope": "the call stays bound by key; a caller node with the automatic name (equal to the action's) is renamed with it. A node the author renamed, and <Node>.<Output> expressions of a server action, were not measured on O11"
+              }
+            }
+          }
+        },
+        "replace": {
+          "route": "replace {from: IServerAction:<Old>, to: <New>}",
+          "preconditions": ["same signature", "consumers keep their key; the old action ends with 0 consumers"],
+          "roles": {
+            "server action": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["refactor-replace-action", "delete-logic-consumers", "refactor-inherited"],
+                "scope": "one and two callers (server action and screen action) repointed"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["refactor-replace-action", "delete-logic-consumers"],
+                "scope": "one and two callers repointed"
+              }
+            }
+          }
+        },
+        "duplicate": {
+          "route": "duplicate IServerAction:<Name>",
+          "preconditions": ["the copy takes the platform suffix and has no consumers; rename it afterwards"],
+          "roles": {
+            "server action": {
+              "odc": { "status": "applicable", "proofs": ["refactor-inherited"], "scope": "copy of an inherited action: suffix 2, Description copied, 0 consumers" },
+              "o11": { "status": "undetermined", "note": "no O11 job duplicates a server action" }
+            }
+          }
+        },
+        "move": {
+          "route": "move reorders ordered sequences only",
+          "preconditions": [],
+          "roles": {
+            "server action": {
+              "odc": { "status": "undetermined", "note": "module-level element; not measured (the kernel refuses a move where the parent keeps no ordered sequence)" },
+              "o11": { "status": "undetermined", "note": "module-level element; not measured" }
+            }
+          }
+        },
+        "delete": {
+          "route": "usages, replace the callers, then delete IServerAction:<Name>",
+          "preconditions": ["refused while callers exist (the message names each caller path); force breaks them"],
+          "roles": {
+            "server action": {
+              "odc": {
+                "status": "conditional",
+                "proofs": ["delete-logic-consumers", "refactor-replace-action", "refactor-inherited"],
+                "negative": ["delete-logic-in-use"],
+                "scope": "after replace (0 consumers): accepted without force, brokenConsumers 0; with 2 callers: refused"
+              },
+              "o11": {
+                "status": "conditional",
+                "proofs": ["delete-data-consumers", "delete-logic-consumers"],
+                "negative": ["delete-action-in-use"],
+                "scope": "after its only caller node was removed or repointed: accepted without force; with 2 callers: refused"
+              }
+            }
+          }
+        }
+      },
+      "platforms": {
+        "odc": {
+          "proofs": [
+            "logic-action", "logic-steps", "action-edit-lifecycle", "refactor-inherited", "refactor-replace-action", "delete-logic-consumers",
+            "rename-logic-propagation", "cat-a-reset-typed-values", "cat-a-list-clear"
+          ],
+          "negative": ["delete-logic-in-use"],
+          "context": { "kinds": ["ServerAction"], "signatures": ["ServerAction"] },
+          "limits": [
+            {
+              "text": "A private server action without consumer gets the warning UnusedUserAction (declare it in expectedMessages).",
+              "origin": "job:logic-action description"
+            },
+            {
+              "text": "Compact steps while/switch/break/continue/return/handlers/comments and query joins have no ODC suite job (compact query columns: see logic.aggregate).",
+              "origin": "kernel/tests/jobs-odc (no job uses those keys)"
+            }
+          ],
+          "differences": ["a public action only exposes public (shareable) types"]
+        },
+        "o11": {
+          "proofs": [
+            "consume-reference-static", "smoke-data-logic", "producer-public", "delete-data-consumers", "rename-logic-propagation", "refactor-usages",
+            "delete-logic-consumers", "refactor-replace-action", "logic-spec-replace", "cat-a-reset-typed-values"
+          ],
+          "negative": ["delete-action-in-use", "logic-duplicate-action"],
+          "context": { "kinds": ["ServerAction"], "signatures": ["ServerAction"] },
+          "limits": [
+            {
+              "text": "Unused private action: a Verify warning, returned as non-blocking. Unknown compact key: refused before touching the model.",
+              "origin": "job:undeclared-warning (MessageExpectationTests); job:logic-unknown-key (LogicSpecTests)"
+            },
+            {
+              "text": "Rewriting a whole body: `logic` with replace:true keeps the caller's node key and arguments.",
+              "origin": "job:logic-spec-replace (O11)"
+            }
+          ],
+          "differences": []
+        }
+      }
+    },
+    {
+      "id": "logic.service-action",
+      "supersedes": ["logic.service-action"],
+      "category": "logic",
+      "title": "ServiceAction (IServiceAction)",
+      "keywords": ["serviceaction", "service action", "acao de servico", "acoes de servico", "remote logic", "logica remota", "loosely coupled"],
+      "summary": "`logic` kind service (or create @espace IServiceAction) is the remote entry of a module's logic: its callers are remote, so usages inside the module are normally 0; it typically delegates to a private helper action.",
+      "route": {
+        "kind": "job",
+        "operation": "{\"op\":\"logic\",\"data\":{\"actions\":[{\"kind\":\"service\",...}]}} or create @espace IServiceAction; set Description/Public on IServiceAction:<Name>"
+      },
+      "contract": ["logic.action", "logic.actionKinds", "logic.parameter", "verbs.verbs.set"],
+      "guidance": "Local callers use a server action; the service action is the remote entry. Consuming it from another app is front C (reference.*).",
+      "example": { "ops": ["logic"], "max": 1 },
+      "depends": [],
+      "recommends": [{ "id": "logic.variable", "when": "the service contract (inputs/outputs) changes" }],
+      "alternatives": [{ "id": "logic.server-action", "when": "the caller is in the same module" }],
+      "elements": [
+        {
+          "role": "service action",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.IServiceAction", "jobType": "IServiceAction", "address": "IServiceAction:<Name>" },
+            "o11": { "native": "OutSystems.Model.Logic.IServiceAction", "jobType": "IServiceAction", "address": "IServiceAction:<Name>" }
+          }
+        }
+      ],
+      "operations": {
+        "read": {
+          "route": "get/dump IServiceAction:<Name>",
+          "preconditions": [],
+          "roles": {
+            "service action": {
+              "odc": { "status": "applicable", "proofs": ["service-action"], "scope": "born with a platform comment node and Public/Shareable True" },
+              "o11": { "status": "applicable", "proofs": ["service-action-update"], "scope": "dump of the flow" }
+            }
+          }
+        },
+        "usages": {
+          "route": "usages IServiceAction:<Name>",
+          "preconditions": ["consumers are remote: local usages 0 is expected"],
+          "roles": {
+            "service action": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["service-action"],
+                "scope": "0 local consumers and no unused-action warning (a private server action with 0 gets one)"
+              },
+              "o11": { "status": "undetermined", "note": "not measured on O11" }
+            }
+          }
+        },
+        "create": {
+          "route": "logic kind service, or create @espace IServiceAction + parameters + nodes",
+          "preconditions": [],
+          "roles": {
+            "service action": {
+              "odc": { "status": "applicable", "proofs": ["service-action"], "scope": "raw verbs and compact logic kind service in the same job" },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["service-action", "service-action-update", "logic-spec-services"],
+                "scope": "raw verbs and compact logic"
+              }
+            }
+          }
+        },
+        "set": {
+          "route": "set IServiceAction:<Name> Description | Public | Shareable",
+          "preconditions": ["ODC: Public and Shareable move together"],
+          "roles": {
+            "service action": {
+              "odc": { "status": "applicable", "proofs": ["service-action"], "scope": "Description; Public False drags Shareable False and back" },
+              "o11": { "status": "applicable", "proofs": ["service-action", "service-action-update"], "scope": "Description" }
+            }
+          }
+        },
+        "rename": {
+          "route": "rename IServiceAction:<Name>",
+          "preconditions": [],
+          "roles": {
+            "service action": {
+              "odc": { "status": "undetermined", "note": "only an output of a service action was renamed (logic.variable)" },
+              "o11": { "status": "undetermined", "note": "not measured" }
+            }
+          }
+        },
+        "delete": {
+          "route": "delete IServiceAction:<Name>",
+          "preconditions": [],
+          "roles": {
+            "service action": {
+              "odc": { "status": "undetermined", "note": "not measured; remote consumers are not visible to usages" },
+              "o11": { "status": "undetermined", "note": "not measured" }
+            }
+          }
+        }
+      },
+      "platforms": {
+        "odc": {
+          "proofs": ["service-action"],
+          "negative": [],
+          "context": { "kinds": ["ServiceAction"], "signatures": ["ServiceAction"] },
+          "limits": [
+            {
+              "text": "A local IExecuteServerActionNode cannot point at a service action (Model API refuses); a service action delegates to a private server action. Public and Shareable move together.",
+              "origin": "job:service-action description"
+            }
+          ],
+          "differences": ["born Public and Shareable, with a platform comment node"]
+        },
+        "o11": {
+          "proofs": ["service-action", "service-action-update", "logic-spec-services"],
+          "negative": [],
+          "context": { "kinds": ["ServiceAction"], "signatures": ["ServiceAction"] },
+          "limits": [
+            {
+              "text": "Local usages, rename and delete of a service action are not measured on O11; its remote consumers are front C (reference.*).",
+              "origin": "jobs service-action, service-action-update, logic-spec-services (no usages/rename/delete op)"
+            }
+          ],
+          "differences": []
+        }
+      }
+    },
+    {
+      "id": "logic.client-action",
+      "supersedes": ["logic.client-action"],
+      "category": "logic",
+      "title": "ClientAction (IClientAction)",
+      "keywords": ["clientaction", "client action", "acao de cliente", "acoes de cliente", "client side logic", "logica no cliente", "client function", "funcao de cliente"],
+      "summary": "IClientAction under @espace built with raw verbs (signature, nodes, often a JavaScript node); called by IExecuteClientActionNode; `Function` makes it usable in expressions.",
+      "route": { "kind": "job", "operation": "create @espace IClientAction; parameters; nodes; set Function; IExecuteClientActionNode in the caller" },
+      "contract": ["logic.actionKinds", "verbs.verbs.create", "verbs.verbs.set", "verbs.verbs.rename", "logic.nativeNodes.IJavaScriptNode"],
+      "guidance": "Prefer native nodes and data actions; use JavaScript only where the request needs the browser.",
+      "example": { "ops": ["create", "set", "link"], "max": 20 },
+      "depends": [],
+      "recommends": [{ "id": "logic.variable", "when": "the client action's parameters change" }],
+      "alternatives": [{ "id": "logic.server-action", "when": "the logic must run on the server (database, security)" }],
+      "elements": [
+        {
+          "role": "client action",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.Logic.IClientAction", "jobType": "IClientAction", "address": "IClientAction:<Name>" },
+            "o11": { "native": "OutSystems.Model.Logic.IClientAction", "jobType": "IClientAction", "address": "IClientAction:<Name>" }
+          }
+        }
+      ],
+      "operations": {
+        "read": {
+          "route": "get/dump IClientAction:<Name>",
+          "preconditions": [],
+          "roles": {
+            "client action": {
+              "odc": { "status": "applicable", "proofs": ["action-edit-lifecycle", "client-storage"] },
+              "o11": { "status": "applicable", "proofs": ["rename-logic-propagation"] }
+            }
+          }
+        },
+        "usages": {
+          "route": "usages IClientAction:<Name>",
+          "preconditions": [],
+          "roles": {
+            "client action": {
+              "odc": { "status": "applicable", "proofs": ["action-edit-lifecycle", "client-storage"], "scope": "the calling node inside a screen action" },
+              "o11": { "status": "applicable", "proofs": ["rename-logic-propagation"] }
+            }
+          }
+        },
+        "create": {
+          "route": "create @espace IClientAction (raw verbs)",
+          "preconditions": ["compact logic kind client is accepted by the compiler, but the proofs use raw verbs"],
+          "roles": {
+            "client action": {
+              "odc": { "status": "applicable", "proofs": ["client-storage", "rename-logic-propagation"] },
+              "o11": { "status": "applicable", "proofs": ["rename-logic-propagation", "client-js-reactive"] }
+            }
+          }
+        },
+        "set": {
+          "route": "set IClientAction:<Name> Description | Function",
+          "preconditions": [],
+          "roles": {
+            "client action": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["action-edit-lifecycle", "rename-logic-propagation"],
+                "scope": "Description on an existing client action with a caller; Function True"
+              },
+              "o11": { "status": "applicable", "proofs": ["rename-logic-propagation"], "scope": "Function True" }
+            }
+          }
+        },
+        "rename": {
+          "route": "rename IClientAction:<Name>",
+          "preconditions": ["read the caller expressions back on O11"],
+          "roles": {
+            "client action": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["action-edit-lifecycle", "rename-logic-propagation"],
+                "scope": "the call stays bound by key; a caller node with the automatic name (equal to the action's) is renamed with it (a node the author renamed was not measured for client actions); expressions that read <Node>.<Output> of that caller are rewritten"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["rename-logic-propagation"],
+                "scope": "the call stays bound by key; a caller node with the automatic name is renamed with it, but expressions that read <Node>.<Output> keep the old name (fix by hand)"
+              }
+            }
+          }
+        },
+        "replace": {
+          "route": "replace {from, to}",
+          "preconditions": [],
+          "roles": {
+            "client action": { "odc": { "status": "undetermined", "note": "not measured for client actions" }, "o11": { "status": "undetermined", "note": "not measured" } }
+          }
+        },
+        "delete": {
+          "route": "delete IClientAction:<Name>",
+          "preconditions": [],
+          "roles": {
+            "client action": {
+              "odc": { "status": "undetermined", "note": "not measured for client actions" },
+              "o11": {
+                "status": "undetermined",
+                "note": "html-dashboard-update deletes and re-creates only the html expansion's own generated script action; no job deletes an authored client action or checks its consumers"
+              }
+            }
+          }
+        }
+      },
+      "platforms": {
+        "odc": {
+          "proofs": ["client-storage", "rename-logic-propagation", "action-edit-lifecycle"],
+          "negative": [],
+          "context": { "kinds": ["ClientAction"], "signatures": ["ClientAction"] },
+          "limits": [
+            {
+              "text": "The compact `logic` kind client is accepted by the compiler but proven on ODC only through raw verbs; a JavaScript parameter Description is not allowed by the native API.",
+              "origin": "legacy logic.client-action (ODC jobs; audit T3)"
+            }
+          ],
+          "differences": ["renaming a client action rewrites the expressions that read <Node>.<Output> of its caller"]
+        },
+        "o11": {
+          "proofs": ["rename-logic-propagation", "client-js-reactive", "local-storage-mobile"],
+          "negative": [],
+          "context": { "kinds": ["ClientAction"], "signatures": ["ClientAction"] },
+          "limits": [
+            {
+              "text": "After renaming a client action or its output, expressions that read <Node>.<Output> keep the old name and the Verify reports them: rewrite them with set.",
+              "origin": "job:rename-logic-propagation (O11) ops 82-88"
+            }
+          ],
+          "differences": ["renaming a client action does not rewrite the expressions that read <Node>.<Output> of its caller"]
+        }
+      }
+    },
+    {
+      "id": "logic.screen-action",
+      "supersedes": ["logic.screen-action"],
+      "category": "logic",
+      "title": "ScreenAction (IScreenAction)",
+      "keywords": ["screenaction", "screen action", "acao de tela", "acoes de tela", "web screen action", "screen logic", "logica da tela"],
+      "summary": "A screen action lives in its screen (`create IScreenAction` under the screen, or `logic` kind screen with `owner`); address it by the screen path. Its binding to the UI is front B (ui.*); here are the action's own operations.",
+      "route": {
+        "kind": "job",
+        "operation": "create IScreenAction under IMobileScreen:<Screen> (or logic kind screen + owner); rename/replace/duplicate/delete by path"
+      },
+      "contract": ["logic.owners", "logic.actionKinds", "verbs.verbs.create", "verbs.verbs.rename", "verbs.verbs.replace", "verbs.verbs.duplicate", "verbs.verbs.delete"],
+      "guidance": "Reactive/Mobile screen actions return nothing: put returned values in a client action. A screen submits through a server action wrapper (logic.server-action).",
+      "example": { "ops": ["create", "set", "link", "layout"], "max": 16 },
+      "depends": [],
+      "recommends": [
+        { "id": "logic.server-action", "when": "the screen action saves or reads server data" },
+        { "id": "ui.screen", "when": "the screen that owns the action does not exist yet or must change" }
+      ],
+      "alternatives": [{ "id": "logic.client-action", "when": "the logic is reused by several screens or must return values" }],
+      "elements": [
+        {
+          "role": "screen action",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.UI.Mobile.IScreenAction", "jobType": "IScreenAction", "address": "IMobileScreen:<Screen>/<Action>" },
+            "o11": { "native": "OutSystems.Model.UI.Mobile.IScreenAction", "jobType": "IScreenAction", "address": "IMobileScreen:<Screen>/<Action>" }
+          }
+        },
+        {
+          "role": "web screen action",
+          "platforms": { "o11": { "native": "OutSystems.Model.UI.Web.IScreenAction", "jobType": "IScreenAction", "address": "IWebScreen:<Screen>/<Action>" } }
+        }
+      ],
+      "operations": {
+        "read": {
+          "route": "get/dump the screen action by path",
+          "preconditions": [],
+          "roles": {
+            "screen action": {
+              "odc": { "status": "applicable", "proofs": ["platform-events-lifecycle", "refactor-duplicate"] },
+              "o11": { "status": "applicable", "proofs": ["refactor-duplicate"] }
+            },
+            "web screen action": {
+              "odc": { "status": "not-applicable", "note": "ODC has no Traditional Web screens", "alternative": "role screen action (IMobileScreen)" },
+              "o11": { "status": "undetermined", "note": "not measured on O11 (only create is measured)" }
+            }
+          }
+        },
+        "usages": {
+          "route": "usages on the screen action",
+          "preconditions": ["consumers are events/buttons (Destination/Handler) and calls"],
+          "roles": {
+            "screen action": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["platform-events-lifecycle", "refactor-duplicate"],
+                "scope": "two extended events as consumers; a button OnClick"
+              },
+              "o11": { "status": "applicable", "proofs": ["refactor-duplicate"], "scope": "a button OnClick stays on the original after duplicate" }
+            },
+            "web screen action": {
+              "odc": { "status": "not-applicable", "note": "ODC has no Traditional Web screens", "alternative": "role screen action (IMobileScreen)" },
+              "o11": { "status": "undetermined", "note": "not measured on O11 (only create is measured)" }
+            }
+          }
+        },
+        "create": {
+          "route": "create <screen> IScreenAction, or logic kind screen with owner",
+          "preconditions": ["compact logic refuses outputs on a Reactive/Mobile screen action"],
+          "roles": {
+            "screen action": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["screen-basic", "screen-form", "platform-events-lifecycle", "logic-native-nodes"],
+                "scope": "raw verbs; compact logic kind screen"
+              },
+              "o11": { "status": "applicable", "proofs": ["screen-form-reactive", "refactor-duplicate"], "scope": "raw verbs" }
+            },
+            "web screen action": {
+              "odc": { "status": "not-applicable", "note": "ODC has no Traditional Web screens", "alternative": "role screen action (IMobileScreen)" },
+              "o11": { "status": "applicable", "proofs": ["screen-crud-traditional"], "scope": "Traditional web screen action called by a button" }
+            }
+          }
+        },
+        "set": {
+          "route": "set <screen action> Description",
+          "preconditions": [],
+          "roles": {
+            "screen action": {
+              "odc": { "status": "applicable", "proofs": ["platform-events-lifecycle"], "scope": "Description of an inherited screen action" },
+              "o11": { "status": "undetermined", "note": "not measured" }
+            },
+            "web screen action": {
+              "odc": { "status": "not-applicable", "note": "ODC has no Traditional Web screens", "alternative": "role screen action (IMobileScreen)" },
+              "o11": { "status": "undetermined", "note": "not measured on O11 (only create is measured)" }
+            }
+          }
+        },
+        "rename": {
+          "route": "rename <screen action>",
+          "preconditions": [],
+          "roles": {
+            "screen action": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["platform-events-lifecycle", "rename-logic-propagation"],
+                "scope": "handler/Destination follows by key; the button caption does not"
+              },
+              "o11": { "status": "applicable", "proofs": ["rename-logic-propagation"], "scope": "Destination follows by key; the button caption does not" }
+            },
+            "web screen action": {
+              "odc": { "status": "not-applicable", "note": "ODC has no Traditional Web screens", "alternative": "role screen action (IMobileScreen)" },
+              "o11": { "status": "undetermined", "note": "not measured on O11 (only create is measured)" }
+            }
+          }
+        },
+        "replace": {
+          "route": "replace {from, to} between two screen actions of the screen",
+          "preconditions": [],
+          "roles": {
+            "screen action": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["platform-events-lifecycle"],
+                "scope": "an extended event Handler repointed; the old action ends with 0 consumers"
+              },
+              "o11": { "status": "undetermined", "note": "not measured" }
+            },
+            "web screen action": {
+              "odc": { "status": "not-applicable", "note": "ODC has no Traditional Web screens", "alternative": "role screen action (IMobileScreen)" },
+              "o11": { "status": "undetermined", "note": "not measured on O11 (only create is measured)" }
+            }
+          }
+        },
+        "duplicate": {
+          "route": "duplicate <screen action>",
+          "preconditions": ["the copy has no consumers (UnusedAction warning): declare it or use it"],
+          "roles": {
+            "screen action": {
+              "odc": { "status": "applicable", "proofs": ["refactor-duplicate"], "scope": "copy with its nodes, suffix 2, 0 consumers" },
+              "o11": { "status": "applicable", "proofs": ["refactor-duplicate"], "scope": "copy with its nodes, suffix 2, 0 consumers" }
+            },
+            "web screen action": {
+              "odc": { "status": "not-applicable", "note": "ODC has no Traditional Web screens", "alternative": "role screen action (IMobileScreen)" },
+              "o11": { "status": "undetermined", "note": "not measured on O11 (only create is measured)" }
+            }
+          }
+        },
+        "move": {
+          "route": "move is refused: a screen keeps no ordered sequence of screen actions",
+          "preconditions": [],
+          "roles": {
+            "screen action": {
+              "odc": { "status": "undetermined", "note": "not measured on ODC" },
+              "o11": { "status": "not-applicable", "negative": ["move-not-a-sequence"], "note": "the screen lists its actions itself; there is no order to change" }
+            },
+            "web screen action": {
+              "odc": { "status": "not-applicable", "note": "ODC has no Traditional Web screens", "alternative": "role screen action (IMobileScreen)" },
+              "o11": { "status": "undetermined", "note": "not measured on O11 (the refusal job covers a Reactive screen action only)" }
+            }
+          }
+        },
+        "delete": {
+          "route": "usages, repoint or remove the consumers, then delete",
+          "preconditions": ["delete after the consumers left (usages 0)"],
+          "roles": {
+            "screen action": {
+              "odc": {
+                "status": "conditional",
+                "proofs": ["platform-events-lifecycle"],
+                "scope": "after replace (0 consumers): accepted without force, brokenConsumers 0"
+              },
+              "o11": { "status": "conditional", "proofs": ["block-events-delete-reactive"], "scope": "an event handler left without consumers deleted" }
+            },
+            "web screen action": {
+              "odc": { "status": "not-applicable", "note": "ODC has no Traditional Web screens", "alternative": "role screen action (IMobileScreen)" },
+              "o11": { "status": "undetermined", "note": "not measured on O11 (only create is measured)" }
+            }
+          }
+        }
+      },
+      "platforms": {
+        "odc": {
+          "proofs": ["screen-basic", "screen-form", "platform-events-lifecycle", "refactor-duplicate", "rename-logic-propagation", "logic-native-nodes"],
+          "negative": [],
+          "context": { "kinds": ["MobileScreen"], "signatures": ["MobileScreen"] },
+          "limits": [
+            {
+              "text": "Reactive/Mobile screen actions cannot declare outputs. Button/link clicks and screen lifecycle events use Destination; block instance events use Handler.",
+              "origin": "kernel/src/Anvil.Core/Kernel/LogicExpander.cs:260; legacy logic.screen-action (kernel/AGENTS.md 3.1/3.3)"
+            }
+          ],
+          "differences": ["no Traditional Web screen actions"]
+        },
+        "o11": {
+          "proofs": ["screen-form-reactive", "refactor-duplicate", "rename-logic-propagation", "block-events-delete-reactive", "screen-crud-traditional"],
+          "negative": ["move-not-a-sequence"],
+          "context": { "kinds": ["MobileScreen", "WebScreen"], "signatures": ["MobileScreen"] },
+          "limits": [
+            {
+              "text": "Reactive/Mobile screen actions cannot declare outputs (compact logic refuses them).",
+              "origin": "kernel/src/Anvil.Core/Kernel/LogicExpander.cs:260"
+            },
+            {
+              "text": "move on a screen action is refused: the screen keeps no ordered sequence of actions.",
+              "origin": "jobs-negative/move-not-a-sequence; kernel/src/Anvil.Core/Kernel/Verbs.cs:571"
+            }
+          ],
+          "differences": ["Traditional Web screens (IWebScreen) have their own screen actions (role web screen action)"]
+        }
+      }
+    },
+    {
+      "id": "logic.data-action",
+      "supersedes": ["logic.data-action"],
+      "category": "logic",
+      "title": "DataAction (IDataAction)",
+      "keywords": [
+        "dataaction", "data action", "acao de dados", "acoes de dados", "fetch by logic", "buscar dados por logica", "fetch on demand", "fetch at start",
+        "on after fetch"
+      ],
+      "summary": "IDataAction created under its owner: replace the sample Out1 by the real typed result, set Fetch AtStart|OnDemand and OnAfterFetch; readers use `<DataAction>.<Result>`; Refresh Data reloads it.",
+      "route": {
+        "kind": "job",
+        "operation": "create IDataAction under IMobileScreen:<Screen>; delete <da>/Out1; create IOutputParameter; flow nodes; set Fetch; set <da>/OnAfterFetch Destination"
+      },
+      "contract": ["logic.actionKinds", "logic.action", "logic.nativeNodes.IRefreshDataNode", "verbs.verbs.create"],
+      "guidance": "Idiomatic: initial plain query by screen aggregate (logic.aggregate); external/computed data by data action + Refresh Data; submit through a screen action calling a server action.",
+      "example": { "ops": ["create", "set", "link", "delete"], "max": 30 },
+      "depends": [],
+      "recommends": [
+        { "id": "logic.variable", "when": "the data action output type changes" },
+        { "id": "ui.screen", "when": "the screen that owns the data action does not exist yet, or a widget must read its output" }
+      ],
+      "alternatives": [],
+      "elements": [
+        {
+          "role": "data action",
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.UI.Mobile.IDataAction", "jobType": "IDataAction", "address": "IMobileScreen:<Screen>/<DataAction>" },
+            "o11": { "native": "OutSystems.Model.UI.Mobile.IDataAction", "jobType": "IDataAction", "address": "IMobileScreen:<Screen>/<DataAction>" }
+          }
+        }
+      ],
+      "operations": {
+        "read": {
+          "route": "get/dump the data action",
+          "preconditions": [],
+          "roles": {
+            "data action": {
+              "odc": { "status": "applicable", "proofs": ["data-action"], "scope": "Fetch AtStart vs OnDemand read back; OnAfterFetch always exists" },
+              "o11": { "status": "undetermined", "note": "not measured" }
+            }
+          }
+        },
+        "usages": {
+          "route": "usages on the data action",
+          "preconditions": [],
+          "roles": {
+            "data action": {
+              "odc": { "status": "applicable", "proofs": ["data-action"], "scope": "list Source, an expression and the Refresh Data node" },
+              "o11": { "status": "undetermined", "note": "not measured" }
+            }
+          }
+        },
+        "create": {
+          "route": "create <screen> IDataAction; delete <da>/Out1; create IOutputParameter",
+          "preconditions": ["the sample output Out1 must be removed or typed (InvalidDataAction otherwise)"],
+          "roles": {
+            "data action": {
+              "odc": { "status": "applicable", "proofs": ["data-action"], "scope": "structure list and entity list outputs, two screens" },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["data-action-reactive", "data-action-entity-list-reactive"],
+                "scope": "structure list output read by a list; entity list output"
+              }
+            }
+          }
+        },
+        "set": {
+          "route": "set <da> Fetch AtStart|OnDemand; set <da>/OnAfterFetch Destination <screen action>",
+          "preconditions": [],
+          "roles": {
+            "data action": {
+              "odc": { "status": "applicable", "proofs": ["data-action"], "scope": "Fetch both values; OnAfterFetch to a screen action" },
+              "o11": { "status": "undetermined", "note": "Fetch not written by any O11 job" }
+            }
+          }
+        },
+        "rename": {
+          "route": "rename <da>",
+          "preconditions": [],
+          "roles": { "data action": { "odc": { "status": "undetermined", "note": "not measured" }, "o11": { "status": "undetermined", "note": "not measured" } } }
+        },
+        "delete": {
+          "route": "delete <da>",
+          "preconditions": [],
+          "roles": { "data action": { "odc": { "status": "undetermined", "note": "not measured" }, "o11": { "status": "undetermined", "note": "not measured" } } }
+        }
+      },
+      "platforms": {
+        "odc": {
+          "proofs": ["data-action"],
+          "negative": [],
+          "context": { "kinds": ["MobileScreen", "DataAction"], "signatures": ["DataAction"] },
+          "limits": [
+            {
+              "text": "A Data Action cannot declare input parameters: IDataAction creates output parameters, local variables and nodes, but has no CreateInputParameter. Read screen state inside the action and reload it with Refresh Data.",
+              "origin": "Model API contract of OutSystems.Model.UI.Mobile.IDataAction (docs/evidence/catalogo-abrangente/inventario-reconciliado/native/odc-1.7.25.10778/OutSystems.Model.V1.json: CreateOutputParameter, CreateLocalVariable, CreateNode; no CreateInputParameter); api --op native --type OutSystems.Model.UI.Mobile.IDataAction"
+            },
+            {
+              "text": "The compact `logic` kind data (with `fetch`) is accepted by the compiler; the ODC proof uses raw verbs.",
+              "origin": "legacy logic.data-action (index: job data-action)"
+            }
+          ],
+          "differences": ["Fetch is an IDataAction property (AtStart|OnDemand)"]
+        },
+        "o11": {
+          "proofs": ["data-action-reactive", "data-action-entity-list-reactive"],
+          "negative": [],
+          "context": { "kinds": ["MobileScreen", "DataAction"], "signatures": ["DataAction"] },
+          "limits": [
+            {
+              "text": "A Data Action cannot declare input parameters: IDataAction creates output parameters, local variables and nodes, but has no CreateInputParameter.",
+              "origin": "Model API contract of OutSystems.Model.UI.Mobile.IDataAction (docs/evidence/catalogo-abrangente/inventario-reconciliado/native/o11-11.55.87/model-api-11.55.87.json: Creates CreateOutputParameter, CreateLocalVariable, CreateNode; no CreateInputParameter)"
+            }
+          ],
+          "differences": []
+        }
+      }
+    },
+    {
+      "id": "logic.preparation",
+      "lanes": ["o11"],
+      "category": "logic",
+      "title": "ScreenPreparation (IPreparation)",
+      "keywords": [
+        "screen preparation", "web screen preparation", "preparation of a traditional web screen", "preparacao da tela", "preparacao de uma tela tradicional",
+        "preparacao da tela web"
+      ],
+      "summary": "O11 Traditional Web only: a web screen has one IPreparation (create <web screen> IPreparation, or `logic` kind preparation with owner) holding aggregates and assigns that feed the screen.",
+      "route": { "kind": "job", "operation": "create IPreparation under IWebScreen:<Screen> (unnamed, one per screen), then nodes; or logic kind preparation + owner" },
+      "contract": ["logic.owners", "logic.actionKinds", "verbs.verbs.create"],
+      "guidance": "Reactive/Mobile screens have no preparation: use a screen aggregate or a data action (logic.data-action).",
+      "example": { "ops": ["create", "set", "link"], "max": 20 },
+      "depends": [],
+      "recommends": [{ "id": "ui.screen", "when": "the Traditional Web screen that owns the preparation does not exist yet or must change" }],
+      "alternatives": [{ "id": "logic.data-action", "when": "the screen is Reactive/Mobile" }],
+      "elements": [
+        {
+          "role": "preparation",
+          "platforms": { "o11": { "native": "OutSystems.Model.UI.Web.IPreparation", "jobType": "IPreparation", "address": "IWebScreen:<Screen>/#IPreparation" } }
+        }
+      ],
+      "operations": {
+        "create": {
+          "route": "create <web screen> IPreparation",
+          "preconditions": ["one preparation per web screen"],
+          "roles": {
+            "preparation": {
+              "o11": {
+                "status": "applicable",
+                "proofs": ["screen-crud-traditional"],
+                "scope": "list and detail web screens, each with an aggregate in the preparation"
+              }
+            }
+          }
+        },
+        "read": {
+          "route": "get/dump the preparation",
+          "preconditions": [],
+          "roles": { "preparation": { "o11": { "status": "undetermined", "note": "not measured" } } }
+        },
+        "delete": { "route": "delete the preparation", "preconditions": [], "roles": { "preparation": { "o11": { "status": "undetermined", "note": "not measured" } } } }
+      },
+      "platforms": {
+        "o11": {
+          "proofs": ["screen-crud-traditional"],
+          "negative": [],
+          "context": { "kinds": ["WebScreen"], "signatures": [] },
+          "limits": [{ "text": "One job creates preparations; read, edit and delete are not measured.", "origin": "job:screen-crud-traditional" }],
+          "differences": ["ODC has no Traditional Web screens, so no preparation"]
+        }
+      }
+    },
+    {
+      "id": "logic.variable",
+      "category": "logic",
+      "title": "IInputParameter, IOutputParameter, ILocalVariable, IArgument",
+      "keywords": [
+        "input parameter", "parametro de entrada", "output parameter", "parametro de saida", "action parameter", "parametro da acao", "local variable",
+        "variavel local", "call argument", "argumento da chamada", "typed variables", "variaveis tipadas", "parameter data type", "tipo do parametro",
+        "reset typed variables", "variaveis de tipos", "variaveis de tipos diferentes", "variaveis de varios tipos", "variables of different types", "variables of several types",
+        "variables of different data types"
+      ],
+      "summary": "Read an action's typed inventory with get/dump of the action (parameters and local variables with DataType); declare them in `logic` (inputs/outputs/vars: name, type, mandatory, default) or create IInputParameter/IOutputParameter/ILocalVariable; then set DataType/IsMandatory/DefaultValue/Description, move, rename, delete by path; a call argument is `<callNode>/arg:<Param>`. Reset typed variables: assign each variable its type's neutral value; skip the excluded.",
+      "route": {
+        "kind": "job",
+        "operation": "create IInputParameter|IOutputParameter|ILocalVariable in <action> + set DataType; set/move/rename/delete <action>/<Name>; <callNode>/arg:<Param>"
+      },
+      "contract": [
+        "logic.parameter", "logic.rules", "verbs.verbs.create", "verbs.verbs.set", "verbs.verbs.move", "verbs.verbs.rename", "verbs.verbs.delete",
+        "verbs.references"
+      ],
+      "guidance": "Types: basic (Text, Integer, Long Integer, Decimal, Boolean, Date Time...), `<Entity> Identifier`, `<Entity>` (record), `<Structure>`, `<X> List`. Adding an input to an action with callers creates an empty argument in every caller: make it optional with a DefaultValue, or fill each argument. Check usages before changing a DataType or deleting.",
+      "example": { "ops": ["create", "set"], "max": 12 },
+      "depends": [],
+      "recommends": [{ "id": "logic.server-action", "when": "the variables belong to a server action" }],
+      "alternatives": [],
+      "elements": [
+        {
+          "role": "input parameter",
+          "child": true,
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.IInputParameter", "jobType": "IInputParameter", "address": "<Action>/<Param> (e.g. IServerAction:<Action>/<Param>)" },
+            "o11": { "native": "OutSystems.Model.IInputParameter", "jobType": "IInputParameter", "address": "<Action>/<Param> (e.g. IServerAction:<Action>/<Param>)" }
+          }
+        },
+        {
+          "role": "output parameter",
+          "child": true,
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.IOutputParameter", "jobType": "IOutputParameter", "address": "<Action>/<Param>" },
+            "o11": { "native": "OutSystems.Model.IOutputParameter", "jobType": "IOutputParameter", "address": "<Action>/<Param>" }
+          }
+        },
+        {
+          "role": "local variable",
+          "child": true,
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.ILocalVariable", "jobType": "ILocalVariable", "address": "<Action or Screen>/<Var>" },
+            "o11": { "native": "OutSystems.Model.ILocalVariable", "jobType": "ILocalVariable", "address": "<Action or Screen>/<Var>" }
+          }
+        },
+        {
+          "role": "argument",
+          "child": true,
+          "platforms": {
+            "odc": { "native": "OutSystems.Model.IArgument", "jobType": "IArgument", "address": "<Action>/<callNode>/arg:<Param>" },
+            "o11": { "native": "OutSystems.Model.IArgument", "jobType": "IArgument", "address": "<Action>/<callNode>/arg:<Param>" }
+          }
+        }
+      ],
+      "operations": {
+        "read": {
+          "route": "get the variable by path; get/dump of the action lists all of them with DataType",
+          "preconditions": [],
+          "roles": {
+            "input parameter": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["action-edit-lifecycle"],
+                "scope": "type, IndexInParent and Referrers of an input added to an action with callers"
+              },
+              "o11": { "status": "applicable", "proofs": ["rename-data-propagation"], "scope": "DataType followed an entity rename" }
+            },
+            "output parameter": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["data-action", "service-action", "cat-a-reset-typed-values"],
+                "scope": "structure/entity list outputs; the typed inventory of an action (dump) and one output by name (get)"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["rename-data-propagation", "cat-a-reset-typed-values"],
+                "scope": "DataType <Entity> List followed the entity rename; the typed inventory of an action (dump) and one output by name (get)"
+              }
+            },
+            "local variable": {
+              "odc": { "status": "applicable", "proofs": ["rename-interface-propagation"], "scope": "a screen variable and its DefaultValue" },
+              "o11": { "status": "applicable", "proofs": ["rename-interface-propagation"], "scope": "a screen variable" }
+            },
+            "argument": {
+              "odc": { "status": "applicable", "proofs": ["action-edit-lifecycle"], "scope": "Value and Parameter key by <callNode>/arg:<Param>" },
+              "o11": {
+                "status": "undetermined",
+                "note": "rename-interface-propagation gets an IArgument of a block instance ($inst/Heading), not of a call node: no O11 job reads <callNode>/arg:<Param>"
+              }
+            }
+          }
+        },
+        "usages": {
+          "route": "usages <action>/<Name>",
+          "preconditions": [],
+          "roles": {
+            "input parameter": {
+              "odc": { "status": "applicable", "proofs": ["action-edit-lifecycle"], "scope": "the caller's argument holds the input" },
+              "o11": { "status": "undetermined", "note": "not measured" }
+            },
+            "local variable": {
+              "odc": { "status": "applicable", "proofs": ["delete-block"], "scope": "screen variables read by arguments and expressions" },
+              "o11": { "status": "undetermined", "note": "not measured" }
+            }
+          }
+        },
+        "create": {
+          "route": "logic inputs/outputs/vars (name, type, mandatory, default), or create <action> IInputParameter|IOutputParameter|ILocalVariable + set DataType",
+          "preconditions": [
+            "compact: declared inputs/vars must be used, outputs assigned",
+            "a mandatory input added to an action with callers leaves each caller argument empty"
+          ],
+          "roles": {
+            "input parameter": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["action-edit-lifecycle", "logic-steps", "cat-a-reset-typed-values"],
+                "scope": "added to an inherited action with a real caller; compact inputs"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["smoke-data-logic", "producer-public", "cat-a-reset-typed-values"],
+                "scope": "raw verbs and compact inputs; an input never used is the preflight note LOGIC_UNUSED, never a refusal (C18)"
+              }
+            },
+            "output parameter": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["logic-action", "data-action", "cat-a-reset-typed-values"],
+                "scope": "compact outputs of 14 data types: Text, Integer, Long Integer, Decimal, Boolean, Date, Date Time, Time, Currency, <Entity> Identifier, record, structure, Text List, <Entity> List"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["smoke-data-logic", "consume-reference-static", "cat-a-reset-typed-values"],
+                "scope": "compact outputs of 14 data types: Text, Integer, Long Integer, Decimal, Boolean, Date, Date Time, Time, Currency, <Entity> Identifier, record, structure, Text List, <Entity> List"
+              }
+            },
+            "local variable": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["logic-steps", "refactor-move", "cat-a-reset-typed-values"],
+                "scope": "compact vars typed by a record, a structure and lists"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["smoke-data-logic", "refactor-move", "cat-a-reset-typed-values"],
+                "scope": "an entity record local; compact vars typed by a record, a structure and lists; a var never used is the preflight note LOGIC_UNUSED, never a refusal (C18)"
+              }
+            },
+            "argument": {
+              "odc": {
+                "status": "undetermined",
+                "note": "not created directly: the platform creates it when the callee gains an input",
+                "observed": {
+                  "behaviour": "adding an input to a called action created an empty argument in each caller (Arguments 1 -> 2 on untouched callers)",
+                  "integrity": "not-verified",
+                  "missing": ["a direct create of an argument"],
+                  "caution": "fill or accept the empty argument; it is not written by any op",
+                  "proofs": ["action-edit-lifecycle"]
+                }
+              },
+              "o11": { "status": "undetermined", "note": "not measured" }
+            }
+          }
+        },
+        "set": {
+          "route": "set <action>/<Name> DataType | IsMandatory | DefaultValue | Description; set <callNode>/arg:<Param> Value",
+          "preconditions": ["changing a DataType under expressions that read it breaks the Verify: check usages first"],
+          "roles": {
+            "input parameter": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["action-edit-lifecycle"],
+                "scope": "DataType, IsMandatory false, DefaultValue, Description on an action with callers"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["smoke-data-logic", "tickets-02-helpers"],
+                "scope": "DataType (Identifier, Currency); IsMandatory"
+              }
+            },
+            "output parameter": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["data-action", "service-action", "cat-a-reset-typed-values"],
+                "scope": "DataType <Structure> List / <Entity> List; DataType of 14 types (basic, Identifier, record, structure, lists)"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["smoke-data-logic", "cat-a-reset-typed-values"],
+                "scope": "DataType of 14 types (basic, Identifier, record, structure, lists)"
+              }
+            },
+            "local variable": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["refactor-move", "rename-interface-propagation", "cat-a-reset-typed-values"],
+                "scope": "DataType (also record, structure, lists); DefaultValue"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["smoke-data-logic", "refactor-move", "cat-a-reset-typed-values"],
+                "scope": "DataType (basic, entity record, structure, lists)"
+              }
+            },
+            "argument": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["action-edit-lifecycle", "delete-logic-consumers", "cat-a-reset-typed-values"],
+                "scope": "Value of an argument the platform created, and of new calls (also one inserted into an If branch)"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["delete-data-consumers", "smoke-data-logic", "cat-a-reset-typed-values"],
+                "scope": "Value of a server action call (also one inserted into an If branch) and of an entity action call"
+              }
+            }
+          }
+        },
+        "rename": {
+          "route": "rename <owner>/<Name>",
+          "preconditions": ["read back the expressions that read the old name"],
+          "roles": {
+            "input parameter": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["rename-logic-propagation", "rename-interface-propagation"],
+                "scope": "a JavaScript node input ($parameters rewritten) and a block input (instance argument follows). No job renames an action's input parameter"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["rename-logic-propagation"],
+                "scope": "a JavaScript node input ($parameters rewritten). No job renames an action's input parameter"
+              }
+            },
+            "output parameter": {
+              "odc": {
+                "status": "applicable",
+                "proofs": ["rename-logic-propagation", "service-action"],
+                "scope": "a client action output (expressions that read <Node>.<Output> of its caller rewritten) and a service action output"
+              },
+              "o11": {
+                "status": "applicable",
+                "proofs": ["rename-logic-propagation"],
+                "scope": "a client action output renamed; expressions that read <Node>.<Output> of its caller keep the old name"
+              }
+            },
+            "local variable": {
+              "odc": { "status": "applicable", "proofs": ["rename-logic-propagation", "rename-data-propagation"], "scope": "every expression that reads it rewritten" },
+              "o11": { "status": "applicable", "proofs": ["rename-logic-propagation", "rename-data-propagation"], "scope": "every expression that reads it rewritten" }
+            }
+          }
+        },
+        "move": {
+          "route": "move <action>/<Name> first|last|before|after",
+          "preconditions": ["input order is the order callers see"],
+          "roles": {
+            "input parameter": {
+              "odc": { "status": "applicable", "proofs": ["refactor-move"], "scope": "screen action inputs reordered" },
+              "o11": { "status": "applicable", "proofs": ["refactor-move"], "scope": "screen action inputs reordered" }
+            },
+            "local variable": {
+              "odc": { "status": "applicable", "proofs": ["refactor-move"], "scope": "screen variables reordered" },
+              "o11": { "status": "applicable", "proofs": ["refactor-move"], "scope": "screen variables reordered" }
+            }
+          }
+        },
+        "delete": {
+          "route": "usages, then delete <action>/<Name>",
+          "preconditions": ["refused while consumers exist (a caller argument counts); force breaks them"],
+          "roles": {
+            "input parameter": {
+              "odc": {
+                "status": "conditional",
+                "proofs": ["service-action", "action-edit-lifecycle"],
+                "scope": "without consumers: accepted without force; with a caller argument: needs force",
+                "observed": {
+                  "behaviour": "forced delete: an empty caller argument disappears with the input; an argument holding an author value survives as an orphan (Warning UnusedArgument)",
+                  "integrity": "not-verified",
+                  "missing": ["cleanup of the orphan argument", "effect on publication"],
+                  "caution": "delete or rewrite the orphan argument by hand",
+                  "proofs": ["action-edit-lifecycle"]
+                }
+              },
+              "o11": { "status": "undetermined", "note": "not measured" }
+            },
+            "output parameter": {
+              "odc": { "status": "applicable", "proofs": ["data-action"], "scope": "the sample output a new data action is born with" },
+              "o11": { "status": "applicable", "proofs": ["data-action-reactive"], "scope": "the sample output a new data action is born with" }
+            },
+            "local variable": {
+              "odc": { "status": "conditional", "proofs": ["delete-block"], "scope": "screen variables deleted once usages is 0" },
+              "o11": { "status": "undetermined", "note": "not measured" }
+            },
+            "argument": {
+              "odc": { "status": "undetermined", "note": "no direct delete measured; see the input parameter delete" },
+              "o11": { "status": "undetermined", "note": "not measured" }
+            }
+          }
+        }
+      },
+      "platforms": {
+        "odc": {
+          "proofs": [
+            "action-edit-lifecycle", "logic-steps", "logic-action", "data-action", "service-action", "refactor-move", "rename-logic-propagation",
+            "rename-interface-propagation", "rename-data-propagation", "delete-block", "delete-logic-consumers", "cat-a-reset-typed-values"
+          ],
+          "negative": [],
+          "context": { "kinds": ["ServerAction", "ClientAction", "MobileScreen"], "signatures": ["ServerAction", "ClientAction"] },
+          "limits": [
+            {
+              "text": "Reset values the Verify accepts (headless, not runtime): Text \"\", numbers 0, Boolean False, Date/Date Time NullDate(), Time #00:00:00#, Identifier NullIdentifier(), record/structure/list a never-assigned local of the type.",
+              "origin": "job:cat-a-reset-typed-values (Assign ResetExceptKept)"
+            },
+            {
+              "text": "A new input creates an empty argument in every caller; a filled argument survives the input's deletion as an orphan (UnusedArgument warning).",
+              "origin": "job:action-edit-lifecycle description"
+            }
+          ],
+          "differences": []
+        },
+        "o11": {
+          "proofs": [
+            "smoke-data-logic", "producer-public", "consume-reference-static", "refactor-move", "rename-logic-propagation", "rename-data-propagation",
+            "delete-data-consumers", "rename-interface-propagation", "data-action-reactive", "tickets-02-helpers", "cat-a-reset-typed-values"
+          ],
+          "context": { "kinds": ["ServerAction", "ClientAction", "MobileScreen"], "signatures": ["ServerAction", "ClientAction"] },
+          "limits": [
+            {
+              "text": "Reset values the Verify accepts (headless, not runtime): Text \"\", numbers 0, Boolean False, Date/Date Time NullDate(), Time #00:00:00#, Identifier NullIdentifier(), record/structure/list a never-assigned local of the type.",
+              "origin": "job:cat-a-reset-typed-values (Assign ResetExceptKept)"
+            },
+            {
+              "text": "Inputs and vars declared and never used are accepted (C18): the preflight returns the note LOGIC_UNUSED and the Verify warning is non-blocking (A03); literal text is not a use.",
+              "origin": "kernel/tests/jobs-negative/logic-unused-input.json (O11, accepted since C18)"
+            }
+          ],
+          "differences": []
+        }
+      }
+    }
+  ],
+  "unavailable": [
+    {
+      "id": "web-preparation",
+      "lanes": ["odc"],
+      "keywords": ["screen preparation", "preparacao da tela", "traditional web preparation", "preparation of a traditional web screen", "web screen action"],
+      "reason": "ODC has no Traditional Web screens, so there is no Preparation and no web screen action; logic.preparation exists on O11 only.",
+      "evidence": "platforms/odc/docs/FRICCAO-ROTASEGURA.md:215 (OS-APPS-40015: Traditional Web asset type not supported); platforms/odc/docs/HANDOFF.md:490",
+      "negative": { "odc": [] },
+      "alternative": "logic.data-action or a screen aggregate for screen data; logic.screen-action (role screen action) for screen logic"
+    },
+    {
+      "id": "data-action-inputs",
+      "supersedes": ["data-action-inputs"],
+      "keywords": [
+        "data action input", "data action parameter", "input parameter of a data action", "parametro da data action", "parametro de entrada da data action",
+        "parametro de entrada da acao de dados"
+      ],
+      "reason": "A Data Action cannot declare input parameters: the Model API of IDataAction creates output parameters, local variables and nodes, and has no CreateInputParameter (same contract on ODC and O11).",
+      "evidence": "Model API contract of OutSystems.Model.UI.Mobile.IDataAction: docs/evidence/catalogo-abrangente/inventario-reconciliado/native/odc-1.7.25.10778/OutSystems.Model.V1.json and native/o11-11.55.87/model-api-11.55.87.json (no CreateInputParameter); declared, no refusal job",
+      "negative": { "odc": [], "o11": [] },
+      "alternative": "logic.data-action: read screen variables inside the data action and reload it with Refresh Data"
+    }
+  ],
+  "coverage": [
+    {
+      "type": "odc:OutSystems.Model.Logic.IAction",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface; its concrete implementers (server, service, client, screen, data action) are accounted",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.IAction",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface; its concrete implementers are accounted",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "o11:OutSystems.Model.IParameter",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "base interface of input/output parameters (roles of logic.variable)",
+      "origin": "inventory kindClass base-interface"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.IActionSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read/called in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.IClientActionSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read/called in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.IServerActionSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read/called in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.IServiceActionSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: the remote consumer's view of a service action; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature; job:service-action description"
+    },
+    {
+      "type": "odc:OutSystems.Model.Signatures.IActionSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read/called in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Signatures.IServiceActionSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature of a service action in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.IArgumentSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature of an argument in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.IInputParameterSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature of an input in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.IOutputParameterSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature of an output in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Signatures.IInputParameterSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature of an input in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Signatures.IOutputParameterSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature of an output in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.IFlowSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature of a flow in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.IFlowNodeSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature of a flow node in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.IActionSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read/called in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.IClientActionSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read/called in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.IServerActionSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature: read/called in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.Logic.IServiceActionSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature of a service action in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.IArgumentSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature of an argument in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.IInputParameterSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature of an input in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.IOutputParameterSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature of an output in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.IParameterSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature (base of parameter signatures) in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.IFlowSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature of a flow in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "o11:OutSystems.Model.IFlowNodeSignature",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "referenced signature of a flow node in the consumer; import is front C (reference.*)",
+      "origin": "inventory kindClass referenced-signature"
+    },
+    {
+      "type": "odc:OutSystems.Model.Logic.Aggregates.IImplicitParameter",
+      "status": "undetermined",
+      "applicability": "undetermined",
+      "reason": "unknown whether it is authored or generated by aggregates (no job, no reader evidence); needs a native read of an aggregate with parameters",
+      "origin": "inventory kindClass undetermined"
+    },
+    {
+      "type": "odc:OutSystems.Model.UI.Web.IScreenAction",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "Traditional Web screens are not supported in ODC; the type exists only in the Model API metadata. ODC screen actions are role screen action (UI.Mobile.IScreenAction) of logic.screen-action",
+      "origin": "platforms/odc/docs/FRICCAO-ROTASEGURA.md:215 (OS-APPS-40015 Traditional Web not supported); platforms/odc/docs/HANDOFF.md:490",
+      "alternative": "logic.screen-action role screen action"
+    },
+    {
+      "type": "odc:OutSystems.Model.UI.Web.IPreparation",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "a preparation belongs to a Traditional Web screen, which ODC does not support; logic.preparation is O11 only",
+      "origin": "platforms/odc/docs/FRICCAO-ROTASEGURA.md:215 (OS-APPS-40015 Traditional Web not supported); platforms/odc/docs/HANDOFF.md:490",
+      "alternative": "logic.data-action or a screen aggregate"
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+ "description": "Cobertura testada (fase 2): life de ServiceStudio.Plugin.RESTService.IRestServiceAction (o11) em restService. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IRestService",
+   "name": "CovSRest",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IRestServiceAction",
+   "name": "CovARestServiceAction",
+   "as": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "HTTPMethod",
+   "value": "GET"
+  },
+  {
+   "op": "link",
+   "from": "$a/#IStartNode",
+   "to": "$a/#IEndNode"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRRestServiceAction"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  }
+ ]
+}

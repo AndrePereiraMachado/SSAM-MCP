@@ -1,0 +1,12 @@
+{
+ "description": "ODC: a RECUSA do rename de um atributo de structure para um nome que ja existe na mesma structure (Postcode -> Zone). O Studio sufixaria em silencio; o kernel recusa com o nome que o Studio usaria. O caminho limpo esta em tests/jobs-odc/structure-lifecycle.json.",
+ "base": "job:structure-nested",
+ "expectValid": true,
+ "expectError": [
+  "rename: 'Zone' clashes with an existing name in that scope",
+  "pick another name"
+ ],
+ "ops": [
+  {"op": "rename", "target": "IStructure:WfCovAddress/Postcode", "name": "Zone"}
+ ]
+}

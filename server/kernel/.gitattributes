@@ -1,0 +1,19 @@
+# Fim de linha: o que e conteudo aferido por hash nunca pode mudar no checkout.
+#
+# Os testes do tradutor de C# fixam o SHA-256 do CONTEUDO das fixtures (SourceProgram.Hash e o
+# SourceSha256 do NativeTemporalGraphTests). Com `core.autocrlf=true`, que e o padrao do Git no
+# Windows, o indice guarda LF e o checkout entrega CRLF: o hash deixa de bater e tres testes ficam
+# vermelhos por causa do fim de linha, nao do codigo. Medido em 2026-09-17: forcar LF no conteudo
+# reproduz exatamente o hash fixado (f1f77027... para TemporalSchedule, 642fdac6... para
+# ExceptionValues, 705a01e3... para InstanceMethods). Por isso estas fixtures ficam sempre em LF,
+# em qualquer maquina.
+tests/csharp/** text eol=lf
+
+# These frozen JSON oracles were hashed with their original CRLF (one has mixed endings).
+# Preserve their exact bytes; normalizing them invalidates the independent integrity checks.
+tests/csharp/oracles/Utf16TextRules/*.json -text !eol whitespace=cr-at-eol
+tests/csharp/oracles/ColdReferenceJournal/expected.json -text !eol whitespace=cr-at-eol
+
+# OML e binario. Uma conversao de fim de linha dentro de um OML corrompe o modulo em silencio, e o
+# Git so trata como binario por heuristica de conteudo: aqui fica explicito.
+*.oml binary

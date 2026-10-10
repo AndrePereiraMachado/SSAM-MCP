@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Offline tests of the ODC builder's manifest step (PrepareManifest.cs): the kernel-receipt fast path (C02 B1), the
+    model comparison of the root (C09) and the names it reads. The sources are compiled here as the builder compiles them;
+    the ODC Studio installation answers the model at run time (ModuleInitializer below), as the builder's own Main does.
+    Without the ODC Studio installed, the model tests return without asserting.
+    Run: dotnet test platforms\odc\studio\builder\tests\Builder.Tests.csproj
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <OdcInstall Condition="'$(OdcInstall)' == ''">$(ProgramFiles)\OutSystems\ODC Studio\ODC Studio</OdcInstall>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="$(OdcInstall)\OutSystems.Model.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.Model.V1.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.Model.Versioning.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.Model.Implementation.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.Model.Concurrency.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.Communication.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.MetaModel.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.Model.DependencyProviders.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.ModelAPILoader.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.FrameworkExtensions.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.RuntimeCommon.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\ServiceStudio.Framework.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\ServiceStudio.Common.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.ServiceStudio.PluginAPI.dll" Private="false" />
+    <Reference Include="$(OdcInstall)\OutSystems.ServiceStudio.Observability.dll" Private="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="*.cs" />
+    <Compile Include="..\PrepareManifest.cs" Link="builder\PrepareManifest.cs" />
+    <Compile Include="..\..\shared\Journal.cs" Link="shared\Journal.cs" />
+    <Compile Include="..\..\shared\Manifest.cs" Link="shared\Manifest.cs" />
+    <Compile Include="..\..\shared\ModelPath.cs" Link="shared\ModelPath.cs" />
+    <Compile Include="..\..\shared\NameSuggestions.cs" Link="shared\NameSuggestions.cs" />
+    <Compile Include="..\..\..\..\..\kernel\src\Anvil.Core\Kernel\CandidateReceipt.cs" Link="shared\CandidateReceipt.cs" />
+    <Compile Include="..\..\..\..\..\kernel\src\Anvil.Core\Kernel\SecurityWarnings.cs" Link="shared\SecurityWarnings.cs" />
+    <Compile Include="..\..\..\..\..\kernel\src\Anvil.Core.Odc\Adapters.ODC\OdcModelPlugins.cs" Link="shared\OdcModelPlugins.cs" />
+  </ItemGroup>
+</Project>

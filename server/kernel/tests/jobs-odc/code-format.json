@@ -1,0 +1,57 @@
+{
+ "description": "ODC: a indentacao do codigo escrito como texto (pedido do dono, 2026-10-09), espelho de tests/jobs/code-format-reactive.json. CSS do autor do tema InsuranceApp (tema com CSS do Theme Editor: o texto formatado cai na metade do autor), SQL de um no SQL (op logic com sql:true), JavaScript de um no JavaScript e de um Script chegam numa linha so e ficam em varias linhas; o SQL com 'x'AND colado e escrito como veio, com FORMAT_SKIPPED. Valores aferidos em Anvil.Tests.Odc.CodeFormatOdcTests.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "set", "target": "IMobileTheme:InsuranceApp", "prop": "StyleSheet",
+   "value": "/* code-format */.cf-card{display:flex;align-items:center;padding:8px 16px;border:1px solid #d0d7de;border-radius:6px}.cf-card .cf-title,.cf-card .cf-sub{font-weight:600;color:#1f2328}@media (max-width:768px){.cf-card{padding:4px}}"},
+
+  {"op": "spec", "data": {"entities": [{"name": "CfItem", "attributes": [{"name": "Name", "type": "Text", "length": 50}, {"name": "Quantity", "type": "Integer"}]}]}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "CfItems_Search", "inputs": [{"name": "Minimum", "type": "Integer"}], "outputs": [{"name": "Items", "type": "CfItem List"}], "steps": [
+    {"get": "CfItem", "sql": true, "as": "ReadCfItems",
+     "statement": "SELECT {CfItem}.[Id], {CfItem}.[Name], {CfItem}.[Quantity] FROM {CfItem} WHERE {CfItem}.[Quantity] >= @Minimum AND {CfItem}.[Name] <> 'select from where' ORDER BY {CfItem}.[Name]",
+     "params": {"Minimum": {"type": "Integer", "value": "Minimum"}}, "max": 50},
+    {"assign": {"Items": "ReadCfItems.List"}}]},
+   {"name": "CfItems_Coded", "outputs": [{"name": "Items", "type": "CfItem List"}], "steps": [
+    {"get": "CfItem", "sql": true, "as": "ReadCoded",
+     "statement": "SELECT {CfItem}.[Id], {CfItem}.[Name], {CfItem}.[Quantity] FROM {CfItem} WHERE {CfItem}.[Name] = 'x'AND {CfItem}.[Quantity] > 0 ORDER BY {CfItem}.[Name]",
+     "max": 50},
+    {"assign": {"Items": "ReadCoded.List"}}]}
+  ]}},
+
+  {"op": "create", "parent": "@espace", "type": "IClientAction", "name": "CfFormat", "as": "$ca"},
+  {"op": "create", "parent": "$ca", "type": "IOutputParameter", "name": "Out", "as": "$caOut"},
+  {"op": "set", "target": "$caOut", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$ca", "type": "IStartNode", "as": "$c0"},
+  {"op": "create", "parent": "$ca", "type": "IJavaScriptNode", "name": "FormatJS", "as": "$js"},
+  {"op": "create", "parent": "$js", "type": "IInputParameter", "name": "In", "as": "$jsIn"},
+  {"op": "set", "target": "$jsIn", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$js", "type": "IOutputParameter", "name": "Out", "as": "$jsOut"},
+  {"op": "set", "target": "$jsOut", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$js", "prop": "JavaScript",
+   "value": "function fmt(v){var re=/[;{}]/g;var s=`a;${v.split('').join(\"{\")}b`;if(v.length>2){return s.replace(re,'-');}else{return /* keep; */ s}}$parameters.Out=fmt($parameters.In);"},
+  {"op": "set", "target": "$js/arg:In", "prop": "Value", "value": "\"abc\""},
+  {"op": "create", "parent": "$ca", "type": "IAssignNode", "name": "SetOut", "as": "$as"},
+  {"op": "set", "target": "$as", "prop": "Label", "value": "SetOut"},
+  {"op": "create", "parent": "$as", "type": "IAssignment", "as": "$a1"},
+  {"op": "set", "target": "$a1", "prop": "Variable", "value": "Out"},
+  {"op": "set", "target": "$a1", "prop": "Value", "value": "FormatJS.Out"},
+  {"op": "create", "parent": "$ca", "type": "IEndNode", "as": "$c9"},
+  {"op": "link", "from": "$c0", "to": "$js"},
+  {"op": "link", "from": "$js", "to": "$as"},
+  {"op": "link", "from": "$as", "to": "$c9"},
+  {"op": "layout", "target": "$ca"},
+
+  {"op": "create", "parent": "@espace", "type": "IScript", "name": "CfHelpers", "as": "$script"},
+  {"op": "set", "target": "$script", "prop": "JavaScript",
+   "value": "window.CfHelpers = { badge: function (s) { return String(s || \"\").trim().toUpperCase(); }, slug: function (s) { return String(s || \"\").trim().toLowerCase(); } };"},
+
+  {"op": "get", "target": "IMobileTheme:InsuranceApp", "_why": "o CSS do autor (UserStyleSheet) em varias linhas"},
+  {"op": "get", "target": "IServerAction:CfItems_Search/ReadCfItems", "_why": "o Statement em varias linhas"},
+  {"op": "get", "target": "IServerAction:CfItems_Coded/ReadCoded", "_why": "o Statement que a prova recusou: escrito como veio"},
+  {"op": "get", "target": "$js", "_why": "o JavaScript do no em varias linhas"},
+  {"op": "get", "target": "$script", "_why": "o JavaScript do Script em varias linhas"}
+ ]
+}

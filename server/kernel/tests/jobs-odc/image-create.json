@@ -1,0 +1,17 @@
+{
+ "description": "ODC: imagem de modulo criada pelos verbos. O conteudo (Byte[] binary de IESpace.CreateImage) vai nos args como texto base64, um PNG de 1x1; antes o verbo nao tinha conversao para Byte[] ('Invalid cast from System.String to System.Byte[]') e sem o arg a plataforma recusava ('Image binary cannot be null'). O get le de volta Width/Height 1 e OriginalFormat Png. O locale (IESpace.GetOrCreateLocale, o unico factory dele) tambem nasce pelo create, e um segundo create da mesma cultura devolve a MESMA chave. A imagem localizada (ILocalizedImage) nao existe no ODC: tests/jobs-odc-negative/localized-image-reactive.json.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "ILocale", "args": {"culture": "PT_PT"}, "as": "$pt"},
+  {"op": "create", "parent": "@espace", "type": "ILocale", "args": {"culture": "PT_PT"}, "as": "$ptAgain", "_why": "GetOrCreate: a mesma chave de $pt"},
+  {"op": "get", "target": "$pt", "_why": "Culture PT_PT"},
+  {"op": "create", "parent": "@espace", "type": "IImage", "name": "WfCovLogo", "as": "$img",
+   "args": {"binary": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "originalPath": "wf-cov-logo.png"}},
+  {"op": "get", "target": "$img", "_why": "Width 1, Height 1, OriginalFormat Png, ImageContent com os 70 bytes"},
+  {"op": "set", "target": "$img", "prop": "Description", "value": "Logo de prova (1x1)"},
+  {"op": "rename", "target": "$img", "name": "WfCovBrandLogo"},
+  {"op": "duplicate", "target": "$img", "as": "$copy"},
+  {"op": "get", "target": "$copy"}
+ ]
+}

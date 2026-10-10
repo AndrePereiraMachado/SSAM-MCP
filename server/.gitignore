@@ -1,0 +1,17 @@
+.local/
+**/bin/
+**/obj/
+**/node_modules/
+**/__pycache__/
+**/TestResults/
+*.user
+*.credentials.json
+# Valores desta maquina (tenant ODC, host O11), escritos por scripts/setup-dev.ps1.
+/.ssam-local.json
+
+# Docker compose secrets (copy of .env.example).
+/.env
+
+# The official Studio installers dropped for the image build (docker/installers/README.md); never committed.
+/docker/installers/*
+!/docker/installers/README.md

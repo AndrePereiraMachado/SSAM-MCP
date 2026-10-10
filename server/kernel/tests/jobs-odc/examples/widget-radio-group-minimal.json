@@ -1,0 +1,25 @@
+{
+ "description": "Radio Group: o grupo liga a variavel, os tres RadioButton de exemplo saem e dois radios com Value e texto entram no Content do grupo.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "RadioDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Shipping", "as": "$ship"},
+  {"op": "set", "target": "$ship", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IRadioGroup", "name": "ShippingRadioGroup", "as": "$rg"},
+  {"op": "set", "target": "$rg", "prop": "Variable", "value": "Shipping"},
+  {"op": "delete", "target": "$rg/Content/RadioButton1", "_why": "o grupo nasce com RadioButton1..3 sem Value (erro no Verify)"},
+  {"op": "delete", "target": "$rg/Content/RadioButton2"},
+  {"op": "delete", "target": "$rg/Content/RadioButton3"},
+  {"op": "create", "parent": "$rg/Content", "type": "IRadioButton", "name": "StandardRadio", "as": "$r1"},
+  {"op": "set", "target": "$r1", "prop": "Value", "value": "\"standard\""},
+  {"op": "create", "parent": "$r1/Content", "type": "IExpression", "as": "$r1Text"},
+  {"op": "set", "target": "$r1Text", "prop": "Value", "value": "\"Standard\""},
+  {"op": "create", "parent": "$rg/Content", "type": "IRadioButton", "name": "ExpressRadio", "as": "$r2"},
+  {"op": "set", "target": "$r2", "prop": "Value", "value": "\"express\""},
+  {"op": "create", "parent": "$r2/Content", "type": "IExpression", "as": "$r2Text"},
+  {"op": "set", "target": "$r2Text", "prop": "Value", "value": "\"Express\""}
+ ]
+}

@@ -1,0 +1,35 @@
+using System.Collections.Concurrent;
+using Anvil.Reading;
+using OutSystems.Model;
+
+namespace Anvil.Core;
+
+// One adapter, compiled against both O11 and ODC. The ODC builder uses its descriptor adapter instead.
+public sealed class KernelModelReader : ModelReader<IObjectSignature>
+{
+    protected override IEnumerable<IObjectSignature> Children(IObjectSignature node) => node.Children.OfType<IObjectSignature>();
+    protected override IObjectSignature? Parent(IObjectSignature node) => node.Parent as IObjectSignature;
+    protected override string Key(IObjectSignature node) => node.ObjectKey?.ToString() ?? "";
+    protected override string Kind(IObjectSignature node) => ModelHost.Kind(node.GetInterface()?.Name ?? node.GetType().Name);
+    protected override string Name(IObjectSignature node) => ModelHost.Prop(node, "Name")?.ToString() ?? "";
+    protected override string? Label(IObjectSignature node) => ModelHost.Prop(node, "Label")?.ToString();
+    // ModelSession.Implements as a set: EntityIndexes.TypeName plus every interface Name and FullName, per concrete type.
+    private static readonly ConcurrentDictionary<Type, IReadOnlySet<string>> KindNameSets = new();
+    protected override IReadOnlySet<string> KindNames(IObjectSignature node) => KindNameSets.GetOrAdd(node.GetType(), _ =>
+        node.GetType().GetInterfaces().SelectMany(i => new[] { i.Name, i.FullName }).Append(EntityIndexes.TypeName(node))
+            .OfType<string>().ToHashSet(StringComparer.Ordinal));
+    protected override string? Expression(object value) => value is IExpression expression ? expression.Text : null;
+    protected override IEnumerable<IObjectSignature> Referrers(IObjectSignature node) =>
+        node is ServiceStudio.Model.AbstractObject model ? model.Referers.OfType<IObjectSignature>()
+            : throw new InvalidOperationException("Native referrers unavailable for " + Kind(node));
+    protected override IEnumerable<(string Name, Func<object?> Read)> Properties(IObjectSignature node) =>
+        Readable(node.GetType()).Select(p => (p.Name, (Func<object?>)(() => p.GetValue(node))));
+    // One entry per name, so the property Properties lists under a name is fixed per concrete type.
+    private static readonly ConcurrentDictionary<(Type Type, string Name), System.Reflection.PropertyInfo?> NamedProperties = new();
+    protected override Func<object?>? FindProperty(IObjectSignature node, string name) =>
+        NamedProperties.GetOrAdd((node.GetType(), name), key => Readable(key.Type).FirstOrDefault(p => p.Name == key.Name)) is { } property
+            ? () => property.GetValue(node) : null;
+    private static IEnumerable<System.Reflection.PropertyInfo> Readable(Type type) =>
+        ModelApiMetadata.Properties(type).Where(p => p.GetIndexParameters().Length == 0)
+            .GroupBy(p => p.Name).Select(g => g.OrderByDescending(p => p.CanWrite).First());
+}

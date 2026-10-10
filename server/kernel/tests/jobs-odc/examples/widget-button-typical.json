@@ -1,0 +1,33 @@
+{
+ "description": "Button com logica: classe btn-primary, Enabled ligado a uma variavel e OnClick numa screen action que chama a server action com o texto digitado e mostra uma mensagem.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Feedback", "attributes": [{"name": "Comment", "type": "Text", "length": 500, "mandatory": true}]}]}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "Feedback_Send", "kind": "server", "inputs": [{"name": "Comment", "type": "Text"}],
+    "vars": [{"name": "Row", "type": "Feedback"}],
+    "steps": [{"assign": {"Row.Comment": "Comment"}, "as": "Fill"}, {"create": "Feedback", "record": "Row", "as": "Insert"}]}]}},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "FeedbackForm", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Comment", "as": "$comment"},
+  {"op": "set", "target": "$comment", "prop": "DataType", "value": "Text"},
+  {"op": "logic", "data": {"actions": [
+   {"name": "SendFeedback", "kind": "screen", "owner": "IMobileScreen:FeedbackForm",
+    "steps": [
+     {"call": "Feedback_Send", "as": "Send", "args": {"Comment": "Comment"}},
+     {"assign": {"Comment": "\"\""}, "as": "ClearComment"},
+     {"node": "IMessageNode", "as": "Thanks", "properties": {"Message": "\"Thank you!\"", "Type": "Success"}}]}]}},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IInput", "name": "CommentInput", "as": "$in"},
+  {"op": "set", "target": "$in", "prop": "Variable", "value": "Comment"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IButton", "name": "SendButton", "as": "$btn"},
+  {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "Send"},
+  {"op": "set", "target": "$btn", "prop": "Style", "value": "\"btn btn-primary\""},
+  {"op": "set", "target": "$btn", "prop": "Enabled", "value": "Trim(Comment) <> \"\"", "_why": "Enabled e expressao: o botao so liga com texto"},
+  {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "IMobileScreen:FeedbackForm/SendFeedback"},
+  {"op": "get", "target": "$btn"}
+ ]
+}

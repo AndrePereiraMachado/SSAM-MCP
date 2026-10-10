@@ -1,0 +1,117 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "native-widget",
+    "web:ICellWidget"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Table",
+            "type": "ITableRecordsWidget",
+            "properties": {
+              "SourceRecordList": "Rows"
+            },
+            "slots": {
+              "HeaderRow": [
+                {
+                  "name": "Part4",
+                  "type": "ICellWidget",
+                  "properties": {},
+                  "children": [
+                    {
+                      "name": "Part3",
+                      "type": "ITextWidget",
+                      "properties": {
+                        "Text": "Name"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "DataRow": [
+                {
+                  "name": "Subject",
+                  "type": "ICellWidget",
+                  "properties": {
+                    "StyleClasses": "coverage"
+                  },
+                  "children": [
+                    {
+                      "name": "Part2",
+                      "type": "ITextWidget",
+                      "properties": {
+                        "Text": "Content"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "Submit",
+            "type": "IButtonWidget",
+            "properties": {
+              "Label": "\"Submit\""
+            },
+            "events": {
+              "OnClick": {
+                "destination": "IWebScreen:Coverage/Handle1"
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Rows",
+            "type": "ScreenRow List"
+          }
+        ]
+      }
+    ],
+    "data": {
+      "structures": [
+        {
+          "name": "ScreenRow",
+          "attributes": [
+            {
+              "name": "Name",
+              "type": "Text"
+            },
+            {
+              "name": "Value",
+              "type": "Integer"
+            }
+          ]
+        }
+      ]
+    },
+    "logic": {
+      "actions": [
+        {
+          "name": "Handle1",
+          "kind": "screen",
+          "owner": "IWebScreen:Coverage",
+          "steps": []
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IWebScreen:Coverage/Table/DataRow/Subject",
+    "prop": "StyleClasses",
+    "value": "changed"
+  }
+}

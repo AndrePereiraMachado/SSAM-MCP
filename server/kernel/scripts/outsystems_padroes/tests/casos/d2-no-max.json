@@ -1,0 +1,21 @@
+{
+ "description": "NEG D2 (OutSystems padroes): get sem max (aggregate sem Max Records).",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [
+   {"name": "NegCode", "public": true, "description": "Catalogo de codigos lido sem limite pelo controle negativo D2.",
+    "attributes": [{"name": "Value", "type": "Text", "length": 20, "description": "Valor do codigo mostrado na lista do controle."}]}
+  ]}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "CountAllCodes", "kind": "server", "public": true,
+    "description": "Le a tabela inteira sem Max Records so para contar (violacao proposital da D2).",
+    "outputs": [{"name": "CodeCount", "type": "Integer", "description": "Quantidade de codigos carregados sem limite."}],
+    "steps": [
+     {"get": "NegCode", "as": "GetAllCodes"},
+     {"assign": {"CodeCount": "GetAllCodes.List.Length"}, "as": "Count the loaded codes"}
+    ]}
+  ]}}
+ ]
+}

@@ -1,0 +1,1036 @@
+{
+  "description": "Astra1_CS: modelo de dados da simulacao HorseTinder; 11 entidades, 7 catalogos, referencias protegidas e indices. Sem actions, dados de cavalos ou publicacao.",
+  "base": "tests/fixtures/blank-service.oml",
+  "expectValid": true,
+  "expectedMessages": [],
+  "ops": [
+    {
+      "op": "spec",
+      "data": {
+        "static": [
+          {
+            "name": "HorseSex",
+            "public": true,
+            "description": "Sexo do personagem; Gelding continua elegivel na simulacao.",
+            "records": [
+              {
+                "name": "Stallion",
+                "label": "Stallion",
+                "order": 1
+              },
+              {
+                "name": "Mare",
+                "label": "Mare",
+                "order": 2
+              },
+              {
+                "name": "Gelding",
+                "label": "Gelding",
+                "order": 3
+              }
+            ]
+          },
+          {
+            "name": "HorseBreed",
+            "public": true,
+            "description": "Racas da referencia e cruzamento do personagem Hayden.",
+            "records": [
+              {
+                "name": "Hanoverian",
+                "label": "Hanoverian",
+                "order": 1
+              },
+              {
+                "name": "Friesian",
+                "label": "Friesian",
+                "order": 2
+              },
+              {
+                "name": "QuarterHorse",
+                "label": "Quarter Horse",
+                "order": 3
+              },
+              {
+                "name": "Thoroughbred",
+                "label": "Thoroughbred",
+                "order": 4
+              },
+              {
+                "name": "SelleFrancais",
+                "label": "Selle Français",
+                "order": 5
+              },
+              {
+                "name": "WelshPony",
+                "label": "Welsh Pony",
+                "order": 6
+              },
+              {
+                "name": "Arabian",
+                "label": "Arabian",
+                "order": 7
+              },
+              {
+                "name": "HanoverianCrossTB",
+                "label": "Hanoverian × TB",
+                "order": 8
+              }
+            ]
+          },
+          {
+            "name": "HorseDiscipline",
+            "public": true,
+            "description": "Modalidades disponiveis nos filtros.",
+            "records": [
+              {
+                "name": "Dressage",
+                "label": "Dressage",
+                "order": 1
+              },
+              {
+                "name": "ShowJumping",
+                "label": "Show Jumping",
+                "order": 2
+              },
+              {
+                "name": "Eventing",
+                "label": "Eventing",
+                "order": 3
+              },
+              {
+                "name": "Reining",
+                "label": "Reining",
+                "order": 4
+              },
+              {
+                "name": "Trail",
+                "label": "Trail",
+                "order": 5
+              },
+              {
+                "name": "WesternPleasure",
+                "label": "Western Pleasure",
+                "order": 6
+              }
+            ]
+          },
+          {
+            "name": "HorseCoatColor",
+            "public": true,
+            "description": "Pelagens presentes nos personagens da referencia.",
+            "records": [
+              {
+                "name": "Bay",
+                "label": "Bay",
+                "order": 1
+              },
+              {
+                "name": "Black",
+                "label": "Black",
+                "order": 2
+              },
+              {
+                "name": "Chestnut",
+                "label": "Chestnut",
+                "order": 3
+              },
+              {
+                "name": "Grey",
+                "label": "Grey",
+                "order": 4
+              },
+              {
+                "name": "Piebald",
+                "label": "Piebald",
+                "order": 5
+              },
+              {
+                "name": "DarkBay",
+                "label": "Dark Bay",
+                "order": 6
+              }
+            ]
+          },
+          {
+            "name": "SwipeDecisionType",
+            "public": true,
+            "description": "Decisao do usuario sobre um candidato.",
+            "records": [
+              {
+                "name": "Like",
+                "label": "Like",
+                "order": 1
+              },
+              {
+                "name": "Pass",
+                "label": "Pass",
+                "order": 2
+              }
+            ]
+          },
+          {
+            "name": "MatchStatus",
+            "public": true,
+            "description": "Estado persistido do match simulado.",
+            "records": [
+              {
+                "name": "Active",
+                "label": "Active",
+                "order": 1
+              },
+              {
+                "name": "Closed",
+                "label": "Closed",
+                "order": 2
+              }
+            ]
+          },
+          {
+            "name": "MessageSenderType",
+            "public": true,
+            "description": "Distingue mensagem humana de resposta automatica.",
+            "records": [
+              {
+                "name": "User",
+                "label": "User",
+                "order": 1
+              },
+              {
+                "name": "SimulatedHorse",
+                "label": "Simulated horse",
+                "order": 2
+              }
+            ]
+          }
+        ],
+        "entities": [
+          {
+            "name": "Horse",
+            "public": false,
+            "readOnly": true,
+            "description": "Personagem ficticio do catalogo Astra1. Escritas apenas pelo nucleo; sem dados de autenticacao.",
+            "idType": "Long Integer",
+            "updateBehavior": "Optimized",
+            "attributes": [
+              {
+                "name": "SeedCode",
+                "type": "Text",
+                "mandatory": true,
+                "length": 50
+              },
+              {
+                "name": "Name",
+                "type": "Text",
+                "mandatory": true,
+                "length": 100
+              },
+              {
+                "name": "Tagline",
+                "type": "Text",
+                "mandatory": false,
+                "length": 200
+              },
+              {
+                "name": "Bio",
+                "type": "Text",
+                "mandatory": false,
+                "length": 2000
+              },
+              {
+                "name": "BreedId",
+                "type": "HorseBreed Identifier",
+                "mandatory": true,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "SexId",
+                "type": "HorseSex Identifier",
+                "mandatory": true,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "DisciplineId",
+                "type": "HorseDiscipline Identifier",
+                "mandatory": false,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "CoatColorId",
+                "type": "HorseCoatColor Identifier",
+                "mandatory": false,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "AgeYears",
+                "type": "Integer",
+                "mandatory": true,
+                "default": "0",
+                "description": "Idade declarada em anos completos; nao inferir uma data de nascimento."
+              },
+              {
+                "name": "HeightInInches",
+                "type": "Integer",
+                "mandatory": true,
+                "default": "0",
+                "description": "Altura em polegadas inteiras: 66 representa 16.2 hh."
+              },
+              {
+                "name": "Temperament",
+                "type": "Text",
+                "mandatory": false,
+                "length": 80
+              },
+              {
+                "name": "City",
+                "type": "Text",
+                "mandatory": false,
+                "length": 100
+              },
+              {
+                "name": "Region",
+                "type": "Text",
+                "mandatory": false,
+                "length": 60
+              },
+              {
+                "name": "IsVaccinated",
+                "type": "Boolean",
+                "mandatory": true,
+                "default": "False"
+              },
+              {
+                "name": "IsStudbookVerified",
+                "type": "Boolean",
+                "mandatory": true,
+                "default": "False"
+              },
+              {
+                "name": "IsOTTB",
+                "type": "Boolean",
+                "mandatory": true,
+                "default": "False"
+              },
+              {
+                "name": "FoalCount",
+                "type": "Integer",
+                "mandatory": true,
+                "default": "0"
+              },
+              {
+                "name": "RibbonCount",
+                "type": "Integer",
+                "mandatory": true,
+                "default": "0"
+              },
+              {
+                "name": "IsDemo",
+                "type": "Boolean",
+                "mandatory": true,
+                "default": "True"
+              },
+              {
+                "name": "IsActive",
+                "type": "Boolean",
+                "mandatory": true,
+                "default": "True"
+              },
+              {
+                "name": "DisplayOrder",
+                "type": "Integer",
+                "mandatory": true,
+                "default": "0"
+              },
+              {
+                "name": "CreatedOn",
+                "type": "Date Time",
+                "mandatory": true,
+                "default": "CurrDateTime()",
+                "description": "Instante UTC; preenchido no servidor."
+              },
+              {
+                "name": "UpdatedOn",
+                "type": "Date Time",
+                "mandatory": true,
+                "default": "CurrDateTime()",
+                "description": "Instante UTC; preenchido no servidor."
+              }
+            ],
+            "indexes": [
+              {
+                "name": "UX_Horse_SeedCode",
+                "attributes": [
+                  "SeedCode"
+                ],
+                "unique": true
+              },
+              {
+                "name": "IX_Horse_ActiveOrder",
+                "attributes": [
+                  "IsActive",
+                  "DisplayOrder"
+                ],
+                "unique": false
+              },
+              {
+                "name": "IX_Horse_Breed",
+                "attributes": [
+                  "BreedId"
+                ],
+                "unique": false
+              },
+              {
+                "name": "IX_Horse_Sex",
+                "attributes": [
+                  "SexId"
+                ],
+                "unique": false
+              },
+              {
+                "name": "IX_Horse_Discipline",
+                "attributes": [
+                  "DisciplineId"
+                ],
+                "unique": false
+              }
+            ]
+          },
+          {
+            "name": "HorsePhoto",
+            "public": false,
+            "readOnly": true,
+            "description": "Imagem e proveniencia; carregar o binario separadamente das listas de candidatos.",
+            "idType": "Long Integer",
+            "updateBehavior": "Optimized",
+            "attributes": [
+              {
+                "name": "HorseId",
+                "type": "Horse Identifier",
+                "mandatory": true,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "Image",
+                "type": "Binary Data",
+                "mandatory": true
+              },
+              {
+                "name": "MimeType",
+                "type": "Text",
+                "mandatory": true,
+                "length": 100
+              },
+              {
+                "name": "AltText",
+                "type": "Text",
+                "mandatory": true,
+                "length": 200
+              },
+              {
+                "name": "SourcePageUrl",
+                "type": "Text",
+                "mandatory": true,
+                "length": 2000
+              },
+              {
+                "name": "Author",
+                "type": "Text",
+                "mandatory": false,
+                "length": 200
+              },
+              {
+                "name": "License",
+                "type": "Text",
+                "mandatory": true,
+                "length": 200
+              },
+              {
+                "name": "LicenseUrl",
+                "type": "Text",
+                "mandatory": false,
+                "length": 2000
+              },
+              {
+                "name": "SortOrder",
+                "type": "Integer",
+                "mandatory": true,
+                "default": "1"
+              }
+            ],
+            "indexes": [
+              {
+                "name": "UX_Photo_HorseOrder",
+                "attributes": [
+                  "HorseId",
+                  "SortOrder"
+                ],
+                "unique": true
+              }
+            ]
+          },
+          {
+            "name": "HorseQuirk",
+            "public": false,
+            "readOnly": true,
+            "description": "Peculiaridades comicas ordenadas do personagem.",
+            "idType": "Long Integer",
+            "updateBehavior": "Optimized",
+            "attributes": [
+              {
+                "name": "HorseId",
+                "type": "Horse Identifier",
+                "mandatory": true,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "Label",
+                "type": "Text",
+                "mandatory": true,
+                "length": 100
+              },
+              {
+                "name": "SortOrder",
+                "type": "Integer",
+                "mandatory": true,
+                "default": "1"
+              }
+            ],
+            "indexes": [
+              {
+                "name": "UX_Quirk_HorseOrder",
+                "attributes": [
+                  "HorseId",
+                  "SortOrder"
+                ],
+                "unique": true
+              }
+            ]
+          },
+          {
+            "name": "DemoProfile",
+            "public": false,
+            "readOnly": true,
+            "description": "Isola a simulacao por User nativo. A identidade deve ser resolvida no servidor.",
+            "idType": "Long Integer",
+            "updateBehavior": "Optimized",
+            "attributes": [
+              {
+                "name": "UserId",
+                "type": "User Identifier",
+                "mandatory": true,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "ActorHorseId",
+                "type": "Horse Identifier",
+                "mandatory": true,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "CreatedOn",
+                "type": "Date Time",
+                "mandatory": true,
+                "default": "CurrDateTime()",
+                "description": "Instante UTC; preenchido no servidor."
+              }
+            ],
+            "indexes": [
+              {
+                "name": "UX_DemoProfile_User",
+                "attributes": [
+                  "UserId"
+                ],
+                "unique": true
+              },
+              {
+                "name": "IX_DemoProfile_Horse",
+                "attributes": [
+                  "ActorHorseId"
+                ],
+                "unique": false
+              }
+            ]
+          },
+          {
+            "name": "DiscoveryPreference",
+            "public": false,
+            "readOnly": true,
+            "description": "Filtros persistidos por simulacao; FK vazia significa Any.",
+            "idType": "Long Integer",
+            "updateBehavior": "Optimized",
+            "attributes": [
+              {
+                "name": "DemoProfileId",
+                "type": "DemoProfile Identifier",
+                "mandatory": true,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "SexId",
+                "type": "HorseSex Identifier",
+                "mandatory": false,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "BreedId",
+                "type": "HorseBreed Identifier",
+                "mandatory": false,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "DisciplineId",
+                "type": "HorseDiscipline Identifier",
+                "mandatory": false,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "AgeMin",
+                "type": "Integer",
+                "mandatory": true,
+                "default": "3"
+              },
+              {
+                "name": "AgeMax",
+                "type": "Integer",
+                "mandatory": true,
+                "default": "20"
+              },
+              {
+                "name": "HeightMinInches",
+                "type": "Integer",
+                "mandatory": true,
+                "default": "52"
+              },
+              {
+                "name": "HeightMaxInches",
+                "type": "Integer",
+                "mandatory": true,
+                "default": "70"
+              },
+              {
+                "name": "StudbookOnly",
+                "type": "Boolean",
+                "mandatory": true,
+                "default": "False"
+              },
+              {
+                "name": "UpdatedOn",
+                "type": "Date Time",
+                "mandatory": true,
+                "default": "CurrDateTime()",
+                "description": "Instante UTC; preenchido no servidor."
+              }
+            ],
+            "indexes": [
+              {
+                "name": "UX_Preference_Profile",
+                "attributes": [
+                  "DemoProfileId"
+                ],
+                "unique": true
+              }
+            ]
+          },
+          {
+            "name": "DiscoveryRound",
+            "public": false,
+            "readOnly": true,
+            "description": "Rodada de descoberta; reiniciar nao elimina matches ou mensagens.",
+            "idType": "Long Integer",
+            "updateBehavior": "Optimized",
+            "attributes": [
+              {
+                "name": "DemoProfileId",
+                "type": "DemoProfile Identifier",
+                "mandatory": true,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "StartedOn",
+                "type": "Date Time",
+                "mandatory": true,
+                "default": "CurrDateTime()",
+                "description": "Instante UTC; preenchido no servidor."
+              },
+              {
+                "name": "ClosedOn",
+                "type": "Date Time",
+                "mandatory": false,
+                "default": "NullDate()",
+                "description": "NullDate indica que o evento ainda nao ocorreu."
+              }
+            ],
+            "indexes": [
+              {
+                "name": "IX_Round_ProfileStart",
+                "attributes": [
+                  "DemoProfileId",
+                  "StartedOn"
+                ],
+                "unique": false
+              }
+            ]
+          },
+          {
+            "name": "SwipeDecision",
+            "public": false,
+            "readOnly": true,
+            "description": "Historico de curtidas e passes com resultado congelado do sorteio no servidor.",
+            "idType": "Long Integer",
+            "updateBehavior": "Optimized",
+            "attributes": [
+              {
+                "name": "RoundId",
+                "type": "DiscoveryRound Identifier",
+                "mandatory": true,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "DemoProfileId",
+                "type": "DemoProfile Identifier",
+                "mandatory": true,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "TargetHorseId",
+                "type": "Horse Identifier",
+                "mandatory": true,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "DecisionTypeId",
+                "type": "SwipeDecisionType Identifier",
+                "mandatory": true,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "RequestId",
+                "type": "Text",
+                "mandatory": true,
+                "length": 36
+              },
+              {
+                "name": "MatchChanceUsed",
+                "type": "Integer",
+                "mandatory": true,
+                "default": "0",
+                "description": "Percentual 0 a 100 registrado no momento da curtida."
+              },
+              {
+                "name": "HasDraw",
+                "type": "Boolean",
+                "mandatory": true,
+                "default": "False",
+                "description": "True quando DrawValue foi sorteado; False para Pass. Zero e um resultado valido."
+              },
+              {
+                "name": "DrawValue",
+                "type": "Integer",
+                "mandatory": true,
+                "default": "0",
+                "description": "Numero sorteado de 0 a 99, significativo apenas quando HasDraw=True."
+              },
+              {
+                "name": "IsMatch",
+                "type": "Boolean",
+                "mandatory": true,
+                "default": "False"
+              },
+              {
+                "name": "CreatedOn",
+                "type": "Date Time",
+                "mandatory": true,
+                "default": "CurrDateTime()",
+                "description": "Instante UTC; preenchido no servidor."
+              },
+              {
+                "name": "UndoneOn",
+                "type": "Date Time",
+                "mandatory": false,
+                "default": "NullDate()",
+                "description": "NullDate indica que o evento ainda nao ocorreu."
+              }
+            ],
+            "indexes": [
+              {
+                "name": "UX_Decision_Request",
+                "attributes": [
+                  "DemoProfileId",
+                  "RequestId"
+                ],
+                "unique": true
+              },
+              {
+                "name": "IX_Decision_RoundTime",
+                "attributes": [
+                  "RoundId",
+                  "CreatedOn"
+                ],
+                "unique": false
+              },
+              {
+                "name": "IX_Decision_ProfileTarget",
+                "attributes": [
+                  "DemoProfileId",
+                  "TargetHorseId",
+                  "CreatedOn"
+                ],
+                "unique": false
+              }
+            ]
+          },
+          {
+            "name": "HorseMatch",
+            "public": false,
+            "readOnly": true,
+            "description": "Match da simulacao, exclusivo por perfil e candidato. Pode ser reaberto pela regra futura.",
+            "idType": "Long Integer",
+            "updateBehavior": "Optimized",
+            "attributes": [
+              {
+                "name": "DemoProfileId",
+                "type": "DemoProfile Identifier",
+                "mandatory": true,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "TargetHorseId",
+                "type": "Horse Identifier",
+                "mandatory": true,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "CreatedFromDecisionId",
+                "type": "SwipeDecision Identifier",
+                "mandatory": true,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "CreatedOn",
+                "type": "Date Time",
+                "mandatory": true,
+                "default": "CurrDateTime()",
+                "description": "Instante UTC; preenchido no servidor."
+              },
+              {
+                "name": "ClosedOn",
+                "type": "Date Time",
+                "mandatory": false,
+                "default": "NullDate()",
+                "description": "NullDate indica que o evento ainda nao ocorreu."
+              },
+              {
+                "name": "MatchStatusId",
+                "type": "MatchStatus Identifier",
+                "mandatory": true,
+                "deleteRule": "Protect"
+              }
+            ],
+            "indexes": [
+              {
+                "name": "UX_Match_ProfileTarget",
+                "attributes": [
+                  "DemoProfileId",
+                  "TargetHorseId"
+                ],
+                "unique": true
+              },
+              {
+                "name": "IX_Match_ProfileStatus",
+                "attributes": [
+                  "DemoProfileId",
+                  "MatchStatusId",
+                  "CreatedOn"
+                ],
+                "unique": false
+              },
+              {
+                "name": "UX_Match_Decision",
+                "attributes": [
+                  "CreatedFromDecisionId"
+                ],
+                "unique": true
+              }
+            ]
+          },
+          {
+            "name": "Message",
+            "public": false,
+            "readOnly": true,
+            "description": "Historico do chat simulado. Envio e resposta sao gravados juntos por action nativa futura.",
+            "idType": "Long Integer",
+            "updateBehavior": "Optimized",
+            "attributes": [
+              {
+                "name": "HorseMatchId",
+                "type": "HorseMatch Identifier",
+                "mandatory": true,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "SenderTypeId",
+                "type": "MessageSenderType Identifier",
+                "mandatory": true,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "Body",
+                "type": "Text",
+                "mandatory": true,
+                "length": 2000
+              },
+              {
+                "name": "ClientRequestId",
+                "type": "Text",
+                "mandatory": true,
+                "length": 36,
+                "description": "Chave obrigatoria; a resposta automatica reutiliza a chave da mensagem humana com SenderType diferente."
+              },
+              {
+                "name": "InReplyToMessageId",
+                "type": "Message Identifier",
+                "mandatory": false,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "CreatedOn",
+                "type": "Date Time",
+                "mandatory": true,
+                "default": "CurrDateTime()",
+                "description": "Instante UTC; preenchido no servidor."
+              }
+            ],
+            "indexes": [
+              {
+                "name": "UX_Message_RequestSender",
+                "attributes": [
+                  "HorseMatchId",
+                  "ClientRequestId",
+                  "SenderTypeId"
+                ],
+                "unique": true
+              },
+              {
+                "name": "IX_Message_Chronological",
+                "attributes": [
+                  "HorseMatchId",
+                  "CreatedOn"
+                ],
+                "unique": false
+              },
+              {
+                "name": "IX_Message_Reply",
+                "attributes": [
+                  "InReplyToMessageId"
+                ],
+                "unique": false
+              }
+            ]
+          },
+          {
+            "name": "DemoDistance",
+            "public": false,
+            "readOnly": true,
+            "description": "Distancia ficticia em milhas entre personagens; nao e geolocalizacao real.",
+            "idType": "Long Integer",
+            "updateBehavior": "Optimized",
+            "attributes": [
+              {
+                "name": "ActorHorseId",
+                "type": "Horse Identifier",
+                "mandatory": true,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "TargetHorseId",
+                "type": "Horse Identifier",
+                "mandatory": true,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "Miles",
+                "type": "Decimal",
+                "mandatory": true,
+                "default": "0"
+              }
+            ],
+            "indexes": [
+              {
+                "name": "UX_Distance_Pair",
+                "attributes": [
+                  "ActorHorseId",
+                  "TargetHorseId"
+                ],
+                "unique": true
+              }
+            ]
+          },
+          {
+            "name": "OperationReceipt",
+            "public": false,
+            "readOnly": true,
+            "description": "Recibo de comandos para reenvio seguro de swipe, undo, restart e chat. Nao armazenar segredos.",
+            "idType": "Long Integer",
+            "updateBehavior": "Optimized",
+            "attributes": [
+              {
+                "name": "DemoProfileId",
+                "type": "DemoProfile Identifier",
+                "mandatory": true,
+                "deleteRule": "Protect"
+              },
+              {
+                "name": "RequestId",
+                "type": "Text",
+                "mandatory": true,
+                "length": 36
+              },
+              {
+                "name": "Kind",
+                "type": "Text",
+                "mandatory": true,
+                "length": 32
+              },
+              {
+                "name": "PayloadHash",
+                "type": "Text",
+                "mandatory": true,
+                "length": 64
+              },
+              {
+                "name": "ResultJson",
+                "type": "Text",
+                "mandatory": true,
+                "length": 16000
+              },
+              {
+                "name": "CreatedOn",
+                "type": "Date Time",
+                "mandatory": true,
+                "default": "CurrDateTime()",
+                "description": "Instante UTC; preenchido no servidor."
+              }
+            ],
+            "indexes": [
+              {
+                "name": "UX_Receipt_Request",
+                "attributes": [
+                  "DemoProfileId",
+                  "RequestId"
+                ],
+                "unique": true
+              },
+              {
+                "name": "IX_Receipt_ProfileDate",
+                "attributes": [
+                  "DemoProfileId",
+                  "CreatedOn"
+                ],
+                "unique": false
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

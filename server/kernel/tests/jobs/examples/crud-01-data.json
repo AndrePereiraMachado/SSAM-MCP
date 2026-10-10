@@ -1,0 +1,25 @@
+{
+ "description": "CRUD back-office, parte 1 de 5 (dados): static ProductCategory, entidade Product com indice unico no Code, role ProductManager e as excecoes do dominio. As partes seguintes usam base job:crud-0N; crud-all junta tudo numa transacao.",
+ "base": "reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {
+   "static": [{"name": "ProductCategory", "records": [
+    {"name": "Hardware", "order": 1},
+    {"name": "Software", "order": 2},
+    {"name": "Services", "order": 3}]}],
+   "entities": [{"name": "Product", "description": "Produto do catalogo interno", "attributes": [
+    {"name": "Code", "type": "Text", "mandatory": true, "length": 20},
+    {"name": "Name", "type": "Text", "mandatory": true, "length": 100},
+    {"name": "CategoryId", "type": "ProductCategory Identifier", "mandatory": true},
+    {"name": "Price", "type": "Currency"},
+    {"name": "Stock", "type": "Integer"},
+    {"name": "Active", "type": "Boolean", "default": "True"}],
+    "indexes": [{"name": "IX_ProductCode", "attributes": ["Code"], "unique": true}]}]}},
+  {"op": "create", "parent": "@espace", "type": "IRole", "name": "ProductManager", "as": "$role"},
+  {"op": "set", "target": "$role", "prop": "Description", "value": "Mantem o catalogo de produtos"},
+  {"op": "create", "parent": "@espace", "type": "IUserException", "name": "ProductInvalid", "as": "$excInvalid"},
+  {"op": "create", "parent": "@espace", "type": "IUserException", "name": "ProductAccessDenied", "as": "$excDenied"}
+ ]
+}

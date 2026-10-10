@@ -1,0 +1,16 @@
+{
+ "description": "duplicate com `parent` (faixa O11, web tradicional): a Preparation e a UNICA do seu bloco, por isso colar no mesmo pai falha sempre ('Object should be null' da plataforma; o kernel recusa antes, tests/jobs-negative/duplicate-single-slot.json). Com `parent` a copia nativa vai para OUTRO bloco que ainda nao tem Preparation, com o Start e o End dentro. O `get` por $bloco/#IPreparation so resolve se a copia ficou no bloco de destino.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {"op": "create", "parent": "IWebFlow:MainFlow", "type": "IWebBlock", "name": "DupPrepFrom", "as": "$from"},
+  {"op": "create", "parent": "$from", "type": "IPreparation", "as": "$prep"},
+  {"op": "create", "parent": "$prep", "type": "IStartNode", "as": "$start"},
+  {"op": "create", "parent": "$prep", "type": "IEndNode", "as": "$end"},
+  {"op": "link", "from": "$start", "to": "$end"},
+  {"op": "create", "parent": "IWebFlow:MainFlow", "type": "IWebBlock", "name": "DupPrepInto", "as": "$into"},
+  {"op": "duplicate", "target": "$prep", "parent": "$into", "as": "$copy", "_why": "a copia nasce no bloco $into, nao no $from"},
+  {"op": "get", "target": "$into/#IPreparation", "_why": "prova o destino: falha se o bloco nao tiver a Preparation copiada"},
+  {"op": "get", "target": "$from/#IPreparation", "_why": "o original continua no bloco de origem"}
+ ]
+}

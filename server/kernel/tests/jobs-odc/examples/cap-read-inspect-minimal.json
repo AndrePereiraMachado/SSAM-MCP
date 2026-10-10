@@ -1,0 +1,9 @@
+{
+ "description": "Leitura do modulo dentro de um job: find lista as telas do app pelo tipo, sem mudar nada.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "find", "type": "IMobileScreen", "max": 50}
+ ]
+}

@@ -1,0 +1,39 @@
+{
+ "description": "Processo (BPT) EDITADO e uma atividade APAGADA, sobre job:process-human-traditional (que so criava). Editar: muda a expressao Detail do processo e as condicoes da atividade humana Review (DueDate, AllowSkip, Instructions) e acrescenta a atividade automatica NotifyOwner (com fluxo proprio que chama Contacts_Cleanup) entre Review e End, recortando o conector que ja existia. Apagar: Review tem consumidor real (o conector que vem do Start; o usages mostra-o), por isso o delete so passa depois de remover esse consumidor - e o processo fica Start -> NotifyOwner -> End, valido. A recusa do delete com consumidor esta colada no relatorio (ela aborta o job, por isso nao cabe aqui).",
+ "base": "job:process-human-traditional",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "dump", "target": "IProcess:ApproveContact", "depth": 3, "_why": "estado inicial: Start -> Review -> End"},
+
+  {"op": "set", "target": "IProcess:ApproveContact", "prop": "Detail", "value": "\"Aprovar contacto \" + ContactId + \" (revisao 2)\"", "_why": "1. editar: a expressao Detail que ja existia"},
+  {"op": "set", "target": "IProcess:ApproveContact/Review", "prop": "Instructions", "value": "Conferir morada e telefone antes de aprovar"},
+  {"op": "set", "target": "IProcess:ApproveContact/Review", "prop": "DueDate", "value": "AddDays(CurrDateTime(), 2)", "_why": "2. editar: condicao de prazo da atividade humana"},
+  {"op": "set", "target": "IProcess:ApproveContact/Review", "prop": "AllowSkip", "value": true},
+
+  {"op": "create", "parent": "IProcess:ApproveContact", "type": "IAutomaticActivityNode", "name": "NotifyOwner", "as": "$auto", "_why": "3. editar: acrescentar atividade"},
+  {"op": "set", "target": "$auto", "prop": "Label", "value": "NotifyOwner"},
+  {"op": "create", "parent": "$auto", "type": "IExecuteServerActionNode", "name": "Cleanup", "as": "$aCall", "_why": "a atividade automatica ja NASCE com Start -> End proprios: so se acrescenta o passo no meio"},
+  {"op": "set", "target": "$aCall", "prop": "Action", "value": "IServerAction:Contacts_Cleanup"},
+  {"op": "delete", "target": "$auto/#IStartNode/#IActionConnector"},
+  {"op": "link", "from": "$auto/#IStartNode", "to": "$aCall"},
+  {"op": "link", "from": "$aCall", "to": "$auto/#IEndNode"},
+
+  {"op": "delete", "target": "IProcess:ApproveContact/Review/#IActionConnector", "_why": "4. recortar o conector Review -> End para meter a atividade nova no meio"},
+  {"op": "link", "from": "IProcess:ApproveContact/Review", "to": "$auto"},
+  {"op": "link", "from": "$auto", "to": "IProcess:ApproveContact/#IEndNode"},
+  {"op": "layout", "target": "IProcess:ApproveContact"},
+  {"op": "dump", "target": "IProcess:ApproveContact", "depth": 3, "_why": "depois da edicao: Start -> Review -> NotifyOwner -> End"},
+
+  {"op": "usages", "target": "IProcess:ApproveContact/Review", "_why": "5. apagar: a atividade tem consumidor real, o conector que vem do Start"},
+  {"op": "delete", "target": "IProcess:ApproveContact/#IStartNode/#IActionConnector", "_why": "remover o consumidor, na ordem certa"},
+  {"op": "usages", "target": "IProcess:ApproveContact/Review", "_why": "agora sem consumidores"},
+  {"op": "delete", "target": "IProcess:ApproveContact/Review", "_why": "sem consumidores, o delete nao precisa de force"},
+  {"op": "link", "from": "IProcess:ApproveContact/#IStartNode", "to": "$auto", "_why": "o processo volta a ter fluxo completo"},
+  {"op": "layout", "target": "IProcess:ApproveContact"},
+
+  {"op": "find", "name": "Review", "_why": "a atividade humana deixou de existir"},
+  {"op": "get", "target": "IProcess:ApproveContact"},
+  {"op": "dump", "target": "IProcess:ApproveContact", "depth": 3, "_why": "estado final: Start -> NotifyOwner -> End"}
+ ]
+}

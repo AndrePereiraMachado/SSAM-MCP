@@ -1,0 +1,71 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.BusinessProcesses.Nodes.IStartNode (odc) em ctxWorkflowForStart. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/blank-workflow.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IBusinessProcess",
+   "name": "CovSWorkflow",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "OutSystems.Model.BusinessProcesses.Nodes.IStartNode",
+   "name": "CovAStartNode",
+   "as": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "TriggerMode",
+   "value": "Schedule"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Frequency",
+   "value": "Daily"
+  },
+  {
+   "op": "set",
+   "target": "$a/ScheduleConfiguration",
+   "prop": "CronExpression",
+   "value": "0 6 * * *"
+  },
+  {
+   "op": "link",
+   "from": "$a",
+   "to": "$fe"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRStartNode"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "x": 600,
+   "y": 400
+  }
+ ]
+}

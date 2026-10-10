@@ -1,0 +1,19 @@
+{
+ "description": "ODC: o ciclo de um item de agenda ITimeOfDay de um timer (create, get, set, duplicate, move) com o Interval que a plataforma usa nele: Any. A hora de um ITimeOfDay e o seu Hour/Minute (o Schedule do timer escreve-os); o Studio nunca lhe muda o Interval. Com AtOrOn/Every/Between o item fica sem Values e a ordenacao que o Schedule refaz a cada filho criado ou alterado (SortScheduleItemsComparer) caia em NullReferenceException assim que havia dois, sem indice de op (o achado da fase 1). O kernel agora recusa esse set com a explicacao: tests/jobs-odc-negative/timeofday-interval-atoron.json.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfCovNightlyAction", "as": "$action"},
+  {"op": "create", "parent": "$action", "type": "IStartNode", "as": "$start"},
+  {"op": "create", "parent": "$action", "type": "IEndNode", "as": "$end"},
+  {"op": "link", "from": "$start", "to": "$end"},
+  {"op": "create", "parent": "@espace", "type": "ITimer", "name": "WfCovNightly", "as": "$timer"},
+  {"op": "set", "target": "$timer", "prop": "Action", "value": "$action"},
+  {"op": "create", "parent": "$timer/ScheduleConfiguration", "type": "ITimeOfDay", "as": "$time"},
+  {"op": "get", "target": "$time", "_why": "Interval Any"},
+  {"op": "set", "target": "$time", "prop": "Interval", "value": "Any"},
+  {"op": "duplicate", "target": "$time", "as": "$copy", "_why": "dois itens Any: a ordenacao do Schedule compara-os sem tocar em Values"},
+  {"op": "move", "target": "$copy", "first": true},
+  {"op": "get", "target": "$timer/ScheduleConfiguration"}
+ ]
+}

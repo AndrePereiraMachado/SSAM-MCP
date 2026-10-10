@@ -1,0 +1,124 @@
+{
+ "description": "Cobertura testada (fase 2): life de OutSystems.Model.Logic.Nodes.IExecuteServerActionNode (o11) em serverFlow. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "CovSFlow",
+   "as": "$p"
+  },
+  {
+   "op": "set",
+   "target": "$p",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IExecuteServerActionNode",
+   "name": "CovAExecuteServerActionNode",
+   "as": "$a"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "CovSCallee",
+   "as": "$callee"
+  },
+  {
+   "op": "set",
+   "target": "$callee",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "create",
+   "parent": "$callee",
+   "type": "IStartNode",
+   "as": "$cs"
+  },
+  {
+   "op": "create",
+   "parent": "$callee",
+   "type": "IEndNode",
+   "as": "$ce"
+  },
+  {
+   "op": "link",
+   "from": "$cs",
+   "to": "$ce"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Action",
+   "value": "$callee"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$a"
+  },
+  {
+   "op": "link",
+   "from": "$a",
+   "connector": "Target",
+   "to": "$fe"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "AnimationEffect",
+   "value": "Highlight"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRExecuteServerActionNode"
+  },
+  {
+   "op": "duplicate",
+   "target": "$a",
+   "as": "$b"
+  },
+  {
+   "op": "link",
+   "from": "$a",
+   "connector": "Target",
+   "to": "$b"
+  },
+  {
+   "op": "link",
+   "from": "$b",
+   "connector": "Target",
+   "to": "$fe"
+  },
+  {
+   "op": "move",
+   "target": "$a",
+   "x": 600,
+   "y": 400
+  }
+ ]
+}

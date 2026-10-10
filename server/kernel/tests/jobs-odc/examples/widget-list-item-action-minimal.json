@@ -1,0 +1,20 @@
+{
+ "description": "Swipe action: o List Item ja nasce com uma IListItemAction em RightActions; ela ganha legenda e um OnClick que abre outra tela.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Contact", "attributes": [{"name": "FullName", "type": "Text", "length": 100, "mandatory": true}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "SwipeContacts", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetContacts", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Contact"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "ContactList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetContacts.List"},
+  {"op": "create", "parent": "$list", "type": "IListItem", "name": "ContactItem", "as": "$item"},
+  {"op": "create", "parent": "$item/Content", "type": "IExpression", "as": "$name"},
+  {"op": "set", "target": "$name", "prop": "Value", "value": "GetContacts.List.Current.Contact.FullName"},
+  {"op": "set", "target": "$item/RightActions/#IListItemAction/#ITextWidget", "prop": "Text", "value": "Profile"},
+  {"op": "set", "target": "$item/RightActions/#IListItemAction/OnClick", "prop": "Destination", "value": "IMobileScreen:UserProfile", "_why": "a swipe action de exemplo so precisa de destino para ficar valida"}
+ ]
+}

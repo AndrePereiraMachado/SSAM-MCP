@@ -1,0 +1,91 @@
+﻿{
+ "description": "ODC (cobertura T): ROLE, EXCECAO DE USUARIO, SETTING e VARIAVEL DE CLIENTE, quatro tipos que nunca tinham passado pela faixa ODC. Espelha tests/jobs/security-config-reactive.json. ATENCAO AO NOME: o que o SS11 chama Site Property o produto ODC chama SETTING; a API publica manteve o nome antigo (OutSystems.Model.Data.ISiteProperty, IESpace.CreateSiteProperty), por isso o job cria ISiteProperty mas o vocabulario e Setting. Aqui as duas Settings sao LIDAS por uma server action (no ODC uma Setting so se le: gravar dentro de uma action e erro, ver o relatorio da frente T), uma delas e secreta, a variavel de cliente e lida e gravada pela tela, e a tela e restrita ao role.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IRole", "name": "WfCovAuditor", "as": "$role"},
+  {"op": "set", "target": "$role", "prop": "Description", "value": "Cobertura T: ve a tela de auditoria"},
+
+  {"op": "create", "parent": "@espace", "type": "ISiteProperty", "name": "WfCovMaxRows", "as": "$setting"},
+  {"op": "set", "target": "$setting", "prop": "DataType", "value": "Integer"},
+  {"op": "set", "target": "$setting", "prop": "DefaultValue", "value": "100"},
+  {"op": "set", "target": "$setting", "prop": "Description", "value": "Cobertura T: Setting (Site Property na API) lida pela logica de auditoria"},
+
+  {"op": "create", "parent": "@espace", "type": "ISiteProperty", "name": "WfCovAuditToken", "as": "$secret"},
+  {"op": "set", "target": "$secret", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$secret", "prop": "IsSecret", "value": true, "_why": "Setting secreta: o valor nao viaja no OML nem aparece no Studio; e o ModelFeature_SitePropertiesSupportsSecrets do ODC"},
+  {"op": "set", "target": "$secret", "prop": "Description", "value": "Cobertura T: Setting secreta"},
+
+  {"op": "create", "parent": "@espace", "type": "IClientVariable", "name": "WfCovLastFilter", "as": "$clientvar"},
+  {"op": "set", "target": "$clientvar", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$clientvar", "prop": "Description", "value": "Cobertura T: ultimo filtro escrito na tela, sobrevive a navegacao"},
+
+  {"op": "create", "parent": "@espace", "type": "IUserException", "name": "WfCovNotAllowed", "as": "$exception"},
+
+  {
+   "op": "logic",
+   "data": {
+    "actions": [
+     {
+      "name": "WfCovAudit_Check",
+      "kind": "server",
+      "description": "Cobertura T: le as duas Settings e levanta a excecao de usuario quando o pedido passa do limite",
+      "inputs": [
+       {"name": "Rows", "type": "Integer"},
+       {"name": "Token", "type": "Text"}
+      ],
+      "outputs": [{"name": "Allowed", "type": "Boolean"}],
+      "steps": [
+       {"if": "Rows > Settings.WfCovMaxRows", "then": [{"raise": "WfCovNotAllowed", "message": "\"Too many rows requested: the WfCovMaxRows setting allows \" + IntegerToText(Settings.WfCovMaxRows)"}]},
+       {"if": "Token <> Settings.WfCovAuditToken", "then": [{"raise": "WfCovNotAllowed", "message": "\"Wrong audit token\""}]},
+       {"assign": {"Allowed": "True"}, "as": "SetAllowed"}
+      ]
+     }
+    ]
+   }
+  },
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfCovAuditScreen", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "link", "from": "$scr", "connector": "Roles", "to": "$role", "_why": "e assim que a tela fica restrita ao role, igual ao job do SS11"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Audit\""},
+
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Filter", "as": "$filter"},
+  {"op": "set", "target": "$filter", "prop": "DataType", "value": "Text"},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "AuditBox", "as": "$box"},
+  {"op": "create", "parent": "$box", "type": "IExpression", "as": "$last"},
+  {"op": "set", "target": "$last", "prop": "Value", "value": "\"Last filter: \" + Client.WfCovLastFilter", "_why": "le a variavel de cliente numa expressao da tela"},
+  {"op": "create", "parent": "$box", "type": "IInput", "name": "FilterInput", "as": "$input"},
+  {"op": "set", "target": "$input", "prop": "Variable", "value": "Filter"},
+  {"op": "create", "parent": "$box", "type": "IButton", "name": "ApplyButton", "as": "$btn"},
+  {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "Apply"},
+
+  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "ApplyFilter", "as": "$act"},
+  {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$n0"},
+  {"op": "create", "parent": "$act", "type": "IAssignNode", "as": "$remember"},
+  {"op": "set", "target": "$remember", "prop": "Label", "value": "RememberFilter"},
+  {"op": "create", "parent": "$remember", "type": "IAssignment", "as": "$assign1"},
+  {"op": "set", "target": "$assign1", "prop": "Variable", "value": "Client.WfCovLastFilter", "_why": "grava a variavel de cliente: e isto que uma Setting NAO deixa fazer no ODC"},
+  {"op": "set", "target": "$assign1", "prop": "Value", "value": "Filter"},
+  {"op": "create", "parent": "$act", "type": "IExecuteServerActionNode", "name": "CheckAudit", "as": "$call"},
+  {"op": "set", "target": "$call", "prop": "Action", "value": "IServerAction:WfCovAudit_Check"},
+  {"op": "set", "target": "$call/Rows", "prop": "Value", "value": "Length(Filter)"},
+  {"op": "set", "target": "$call/Token", "prop": "Value", "value": "Filter"},
+  {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$n9"},
+  {"op": "link", "from": "$n0", "to": "$remember"},
+  {"op": "link", "from": "$remember", "to": "$call"},
+  {"op": "link", "from": "$call", "to": "$n9"},
+  {"op": "layout", "target": "$act"},
+  {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$act"},
+
+  {"op": "get", "target": "$setting", "_why": "prova DataType e DefaultValue da Setting"},
+  {"op": "get", "target": "$secret", "_why": "prova IsSecret na Setting secreta"},
+  {"op": "get", "target": "$scr", "_why": "prova que a tela ficou com Roles preenchido"},
+  {"op": "usages", "target": "$exception", "_why": "prova que a excecao de usuario e levantada nos dois ramos"},
+  {"op": "usages", "target": "$clientvar", "_why": "prova a variavel de cliente lida na expressao e gravada no Assign"}
+ ]
+}
+

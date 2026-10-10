@@ -1,0 +1,595 @@
+{
+  "fixture": "blank-service",
+  "features": [
+    "types-and-nested-call",
+    "service"
+  ],
+  "contract": {
+    "data": {
+      "structures": [
+        {
+          "name": "CoverageItem",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Number",
+              "type": "Integer"
+            },
+            {
+              "name": "Text",
+              "type": "Text"
+            }
+          ]
+        },
+        {
+          "name": "CoverageEnvelope",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Item",
+              "type": "CoverageItem"
+            },
+            {
+              "name": "Items",
+              "type": "CoverageItem List"
+            },
+            {
+              "name": "Numbers",
+              "type": "Integer List"
+            }
+          ]
+        }
+      ],
+      "entities": [
+        {
+          "name": "CoverageRow",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Value",
+              "type": "Integer"
+            }
+          ]
+        }
+      ]
+    },
+    "exceptions": [
+      {
+        "name": "CoverageFailure"
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "name": "Echo",
+          "kind": "server",
+          "inputs": [
+            {
+              "name": "Input0",
+              "type": "Boolean"
+            },
+            {
+              "name": "Input1",
+              "type": "Integer"
+            },
+            {
+              "name": "Input2",
+              "type": "Long Integer"
+            },
+            {
+              "name": "Input3",
+              "type": "Decimal"
+            },
+            {
+              "name": "Input4",
+              "type": "Currency"
+            },
+            {
+              "name": "Input5",
+              "type": "Text"
+            },
+            {
+              "name": "Input6",
+              "type": "Email"
+            },
+            {
+              "name": "Input7",
+              "type": "Phone Number"
+            },
+            {
+              "name": "Input8",
+              "type": "Date"
+            },
+            {
+              "name": "Input9",
+              "type": "Time"
+            },
+            {
+              "name": "Input10",
+              "type": "Date Time"
+            },
+            {
+              "name": "Input11",
+              "type": "Binary Data"
+            },
+            {
+              "name": "Input12",
+              "type": "User Identifier"
+            },
+            {
+              "name": "Input13",
+              "type": "CoverageRow Identifier"
+            },
+            {
+              "name": "Input14",
+              "type": "CoverageRow"
+            },
+            {
+              "name": "Input15",
+              "type": "CoverageRow List"
+            },
+            {
+              "name": "Input16",
+              "type": "Integer List"
+            },
+            {
+              "name": "Input17",
+              "type": "CoverageItem"
+            },
+            {
+              "name": "Input18",
+              "type": "CoverageItem List"
+            },
+            {
+              "name": "Input19",
+              "type": "CoverageEnvelope"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "Output0",
+              "type": "Boolean"
+            },
+            {
+              "name": "Output1",
+              "type": "Integer"
+            },
+            {
+              "name": "Output2",
+              "type": "Long Integer"
+            },
+            {
+              "name": "Output3",
+              "type": "Decimal"
+            },
+            {
+              "name": "Output4",
+              "type": "Currency"
+            },
+            {
+              "name": "Output5",
+              "type": "Text"
+            },
+            {
+              "name": "Output6",
+              "type": "Email"
+            },
+            {
+              "name": "Output7",
+              "type": "Phone Number"
+            },
+            {
+              "name": "Output8",
+              "type": "Date"
+            },
+            {
+              "name": "Output9",
+              "type": "Time"
+            },
+            {
+              "name": "Output10",
+              "type": "Date Time"
+            },
+            {
+              "name": "Output11",
+              "type": "Binary Data"
+            },
+            {
+              "name": "Output12",
+              "type": "User Identifier"
+            },
+            {
+              "name": "Output13",
+              "type": "CoverageRow Identifier"
+            },
+            {
+              "name": "Output14",
+              "type": "CoverageRow"
+            },
+            {
+              "name": "Output15",
+              "type": "CoverageRow List"
+            },
+            {
+              "name": "Output16",
+              "type": "Integer List"
+            },
+            {
+              "name": "Output17",
+              "type": "CoverageItem"
+            },
+            {
+              "name": "Output18",
+              "type": "CoverageItem List"
+            },
+            {
+              "name": "Output19",
+              "type": "CoverageEnvelope"
+            }
+          ],
+          "vars": [
+            {
+              "name": "Local0",
+              "type": "Boolean"
+            },
+            {
+              "name": "Local1",
+              "type": "Integer"
+            },
+            {
+              "name": "Local2",
+              "type": "Long Integer"
+            },
+            {
+              "name": "Local3",
+              "type": "Decimal"
+            },
+            {
+              "name": "Local4",
+              "type": "Currency"
+            },
+            {
+              "name": "Local5",
+              "type": "Text"
+            },
+            {
+              "name": "Local6",
+              "type": "Email"
+            },
+            {
+              "name": "Local7",
+              "type": "Phone Number"
+            },
+            {
+              "name": "Local8",
+              "type": "Date"
+            },
+            {
+              "name": "Local9",
+              "type": "Time"
+            },
+            {
+              "name": "Local10",
+              "type": "Date Time"
+            },
+            {
+              "name": "Local11",
+              "type": "Binary Data"
+            },
+            {
+              "name": "Local12",
+              "type": "User Identifier"
+            },
+            {
+              "name": "Local13",
+              "type": "CoverageRow Identifier"
+            },
+            {
+              "name": "Local14",
+              "type": "CoverageRow"
+            },
+            {
+              "name": "Local15",
+              "type": "CoverageRow List"
+            },
+            {
+              "name": "Local16",
+              "type": "Integer List"
+            },
+            {
+              "name": "Local17",
+              "type": "CoverageItem"
+            },
+            {
+              "name": "Local18",
+              "type": "CoverageItem List"
+            },
+            {
+              "name": "Local19",
+              "type": "CoverageEnvelope"
+            }
+          ],
+          "steps": [
+            {
+              "assign": {
+                "Local0": "Input0",
+                "Local1": "Input1",
+                "Local2": "Input2",
+                "Local3": "Input3",
+                "Local4": "Input4",
+                "Local5": "Input5",
+                "Local6": "Input6",
+                "Local7": "Input7",
+                "Local8": "Input8",
+                "Local9": "Input9",
+                "Local10": "Input10",
+                "Local11": "Input11",
+                "Local12": "Input12",
+                "Local13": "Input13",
+                "Local14": "Input14",
+                "Local15": "Input15",
+                "Local16": "Input16",
+                "Local17": "Input17",
+                "Local18": "Input18",
+                "Local19": "Input19"
+              }
+            },
+            {
+              "assign": {
+                "Output0": "Local0",
+                "Output1": "Local1",
+                "Output2": "Local2",
+                "Output3": "Local3",
+                "Output4": "Local4",
+                "Output5": "Local5",
+                "Output6": "Local6",
+                "Output7": "Local7",
+                "Output8": "Local8",
+                "Output9": "Local9",
+                "Output10": "Local10",
+                "Output11": "Local11",
+                "Output12": "Local12",
+                "Output13": "Local13",
+                "Output14": "Local14",
+                "Output15": "Local15",
+                "Output16": "Local16",
+                "Output17": "Local17",
+                "Output18": "Local18",
+                "Output19": "Local19"
+              }
+            }
+          ]
+        },
+        {
+          "inputs": [
+            {
+              "name": "Input0",
+              "type": "Boolean"
+            },
+            {
+              "name": "Input1",
+              "type": "Integer"
+            },
+            {
+              "name": "Input2",
+              "type": "Long Integer"
+            },
+            {
+              "name": "Input3",
+              "type": "Decimal"
+            },
+            {
+              "name": "Input4",
+              "type": "Currency"
+            },
+            {
+              "name": "Input5",
+              "type": "Text"
+            },
+            {
+              "name": "Input6",
+              "type": "Email"
+            },
+            {
+              "name": "Input7",
+              "type": "Phone Number"
+            },
+            {
+              "name": "Input8",
+              "type": "Date"
+            },
+            {
+              "name": "Input9",
+              "type": "Time"
+            },
+            {
+              "name": "Input10",
+              "type": "Date Time"
+            },
+            {
+              "name": "Input11",
+              "type": "Binary Data"
+            },
+            {
+              "name": "Input12",
+              "type": "User Identifier"
+            },
+            {
+              "name": "Input13",
+              "type": "CoverageRow Identifier"
+            },
+            {
+              "name": "Input14",
+              "type": "CoverageRow"
+            },
+            {
+              "name": "Input15",
+              "type": "CoverageRow List"
+            },
+            {
+              "name": "Input16",
+              "type": "Integer List"
+            },
+            {
+              "name": "Input17",
+              "type": "CoverageItem"
+            },
+            {
+              "name": "Input18",
+              "type": "CoverageItem List"
+            },
+            {
+              "name": "Input19",
+              "type": "CoverageEnvelope"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "Output0",
+              "type": "Boolean"
+            },
+            {
+              "name": "Output1",
+              "type": "Integer"
+            },
+            {
+              "name": "Output2",
+              "type": "Long Integer"
+            },
+            {
+              "name": "Output3",
+              "type": "Decimal"
+            },
+            {
+              "name": "Output4",
+              "type": "Currency"
+            },
+            {
+              "name": "Output5",
+              "type": "Text"
+            },
+            {
+              "name": "Output6",
+              "type": "Email"
+            },
+            {
+              "name": "Output7",
+              "type": "Phone Number"
+            },
+            {
+              "name": "Output8",
+              "type": "Date"
+            },
+            {
+              "name": "Output9",
+              "type": "Time"
+            },
+            {
+              "name": "Output10",
+              "type": "Date Time"
+            },
+            {
+              "name": "Output11",
+              "type": "Binary Data"
+            },
+            {
+              "name": "Output12",
+              "type": "User Identifier"
+            },
+            {
+              "name": "Output13",
+              "type": "CoverageRow Identifier"
+            },
+            {
+              "name": "Output14",
+              "type": "CoverageRow"
+            },
+            {
+              "name": "Output15",
+              "type": "CoverageRow List"
+            },
+            {
+              "name": "Output16",
+              "type": "Integer List"
+            },
+            {
+              "name": "Output17",
+              "type": "CoverageItem"
+            },
+            {
+              "name": "Output18",
+              "type": "CoverageItem List"
+            },
+            {
+              "name": "Output19",
+              "type": "CoverageEnvelope"
+            }
+          ],
+          "steps": [
+            {
+              "call": "Echo",
+              "as": "Nested",
+              "args": {
+                "Input0": "Input0",
+                "Input1": "Input1",
+                "Input2": "Input2",
+                "Input3": "Input3",
+                "Input4": "Input4",
+                "Input5": "Input5",
+                "Input6": "Input6",
+                "Input7": "Input7",
+                "Input8": "Input8",
+                "Input9": "Input9",
+                "Input10": "Input10",
+                "Input11": "Input11",
+                "Input12": "Input12",
+                "Input13": "Input13",
+                "Input14": "Input14",
+                "Input15": "Input15",
+                "Input16": "Input16",
+                "Input17": "Input17",
+                "Input18": "Input18",
+                "Input19": "Input19"
+              }
+            },
+            {
+              "assign": {
+                "Output0": "Nested.Output0",
+                "Output1": "Nested.Output1",
+                "Output2": "Nested.Output2",
+                "Output3": "Nested.Output3",
+                "Output4": "Nested.Output4",
+                "Output5": "Nested.Output5",
+                "Output6": "Nested.Output6",
+                "Output7": "Nested.Output7",
+                "Output8": "Nested.Output8",
+                "Output9": "Nested.Output9",
+                "Output10": "Nested.Output10",
+                "Output11": "Nested.Output11",
+                "Output12": "Nested.Output12",
+                "Output13": "Nested.Output13",
+                "Output14": "Nested.Output14",
+                "Output15": "Nested.Output15",
+                "Output16": "Nested.Output16",
+                "Output17": "Nested.Output17",
+                "Output18": "Nested.Output18",
+                "Output19": "Nested.Output19"
+              }
+            }
+          ],
+          "name": "Coverage",
+          "kind": "service",
+          "public": true,
+          "access": {
+            "authenticated": true
+          }
+        }
+      ]
+    }
+  },
+  "mutation": {
+    "target": "IServiceAction:Coverage/#IAssignNode/#IAssignment[2]",
+    "prop": "Value",
+    "value": "Nested.Output1 + 1"
+  }
+}

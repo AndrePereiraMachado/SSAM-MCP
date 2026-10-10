@@ -1,0 +1,67 @@
+{
+ "description": "Cobertura testada (fase 2): life de ServiceStudio.Plugin.RESTService.IRestServiceAuthenticationFlowInput (o11) em restServiceAuth. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedElement",
+   "element": "Headless_CS (ESpace) / CovSRest (RestService) / OnAuthentication (RestServiceAuthenticationFlow) / CovRRestServiceAuthenticationFlowInput (RestServiceAuthenticationFlowInput)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IRestService",
+   "name": "CovSRest",
+   "as": "$svc"
+  },
+  {
+   "op": "create",
+   "parent": "$svc",
+   "type": "IRestServiceAction",
+   "name": "CovSMethod",
+   "as": "$sm"
+  },
+  {
+   "op": "set",
+   "target": "$sm",
+   "prop": "HTTPMethod",
+   "value": "GET"
+  },
+  {
+   "op": "link",
+   "from": "$sm/#IStartNode",
+   "to": "$sm/#IEndNode"
+  },
+  {
+   "op": "set",
+   "target": "$svc",
+   "prop": "Authentication",
+   "value": "Custom"
+  },
+  {
+   "op": "create",
+   "parent": "$svc/OnAuthentication",
+   "type": "IRestServiceAuthenticationFlowInput",
+   "name": "CovARestServiceAuthenticationFlowInput",
+   "as": "$a"
+  },
+  {
+   "op": "get",
+   "target": "$a"
+  },
+  {
+   "op": "set",
+   "target": "$a",
+   "prop": "Description",
+   "value": "Cobertura fase 1"
+  },
+  {
+   "op": "rename",
+   "target": "$a",
+   "name": "CovRRestServiceAuthenticationFlowInput"
+  }
+ ]
+}

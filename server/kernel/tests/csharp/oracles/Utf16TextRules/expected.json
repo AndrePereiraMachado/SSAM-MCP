@@ -1,0 +1,283 @@
+{
+  "formatVersion": 1,
+  "sourceSha256": "933d61367b61eec0ad77321eb7c433af26c743c6d8d7e30df5e80f5c8d9c369f",
+  "oracleRuntime": ".NET 8.0.18",
+  "cases": [
+    {
+      "id": "null/Measure",
+      "method": "Measure",
+      "result": -1,
+      "error": null
+    },
+    {
+      "id": "null/Describe",
+      "method": "Describe",
+      "result": "null;blank=yes",
+      "error": null
+    },
+    {
+      "id": "empty/Measure",
+      "method": "Measure",
+      "result": 0,
+      "error": null
+    },
+    {
+      "id": "empty/Describe",
+      "method": "Describe",
+      "result": "length=0;trim=[];start=[];end=[];blank=yes",
+      "error": null
+    },
+    {
+      "id": "ascii/Measure",
+      "method": "Measure",
+      "result": 3,
+      "error": null
+    },
+    {
+      "id": "ascii/Describe",
+      "method": "Describe",
+      "result": "length=3;trim=[abc];start=[abc];end=[abc];blank=no",
+      "error": null
+    },
+    {
+      "id": "trailing-space/Measure",
+      "method": "Measure",
+      "result": 2,
+      "error": null
+    },
+    {
+      "id": "trailing-space/Describe",
+      "method": "Describe",
+      "result": "length=2;trim=[a];start=[a ];end=[a];blank=no",
+      "error": null
+    },
+    {
+      "id": "bmp-accent/Measure",
+      "method": "Measure",
+      "result": 1,
+      "error": null
+    },
+    {
+      "id": "bmp-accent/Describe",
+      "method": "Describe",
+      "result": "length=1;trim=[\u00E9];start=[\u00E9];end=[\u00E9];blank=no",
+      "error": null
+    },
+    {
+      "id": "bmp-cjk/Measure",
+      "method": "Measure",
+      "result": 2,
+      "error": null
+    },
+    {
+      "id": "bmp-cjk/Describe",
+      "method": "Describe",
+      "result": "length=2;trim=[\u6F22\u5B57];start=[\u6F22\u5B57];end=[\u6F22\u5B57];blank=no",
+      "error": null
+    },
+    {
+      "id": "combining/Measure",
+      "method": "Measure",
+      "result": 2,
+      "error": null
+    },
+    {
+      "id": "combining/Describe",
+      "method": "Describe",
+      "result": "length=2;trim=[e\u0301];start=[e\u0301];end=[e\u0301];blank=no",
+      "error": null
+    },
+    {
+      "id": "supplementary/Measure",
+      "method": "Measure",
+      "result": 2,
+      "error": null
+    },
+    {
+      "id": "supplementary/Describe",
+      "method": "Describe",
+      "result": "length=2;trim=[\uD83D\uDE00];start=[\uD83D\uDE00];end=[\uD83D\uDE00];blank=no",
+      "error": null
+    },
+    {
+      "id": "cold-shape-independent/Measure",
+      "method": "Measure",
+      "result": 3,
+      "error": null
+    },
+    {
+      "id": "cold-shape-independent/Describe",
+      "method": "Describe",
+      "result": "length=3;trim=[\u00E9\uD83D\uDE00];start=[\u00E9\uD83D\uDE00];end=[\u00E9\uD83D\uDE00];blank=no",
+      "error": null
+    },
+    {
+      "id": "zwj-profession/Measure",
+      "method": "Measure",
+      "result": 5,
+      "error": null
+    },
+    {
+      "id": "zwj-profession/Describe",
+      "method": "Describe",
+      "result": "length=5;trim=[\uD83D\uDC69\u200D\uD83D\uDCBB];start=[\uD83D\uDC69\u200D\uD83D\uDCBB];end=[\uD83D\uDC69\u200D\uD83D\uDCBB];blank=no",
+      "error": null
+    },
+    {
+      "id": "zwj-family/Measure",
+      "method": "Measure",
+      "result": 11,
+      "error": null
+    },
+    {
+      "id": "zwj-family/Describe",
+      "method": "Describe",
+      "result": "length=11;trim=[\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66];start=[\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66];end=[\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66];blank=no",
+      "error": null
+    },
+    {
+      "id": "flag/Measure",
+      "method": "Measure",
+      "result": 4,
+      "error": null
+    },
+    {
+      "id": "flag/Describe",
+      "method": "Describe",
+      "result": "length=4;trim=[\uD83C\uDDE7\uD83C\uDDF7];start=[\uD83C\uDDE7\uD83C\uDDF7];end=[\uD83C\uDDE7\uD83C\uDDF7];blank=no",
+      "error": null
+    },
+    {
+      "id": "variation-selector/Measure",
+      "method": "Measure",
+      "result": 2,
+      "error": null
+    },
+    {
+      "id": "variation-selector/Describe",
+      "method": "Describe",
+      "result": "length=2;trim=[\u2764\uFE0F];start=[\u2764\uFE0F];end=[\u2764\uFE0F];blank=no",
+      "error": null
+    },
+    {
+      "id": "nul/Measure",
+      "method": "Measure",
+      "result": 2,
+      "error": null
+    },
+    {
+      "id": "nul/Describe",
+      "method": "Describe",
+      "result": "length=2;trim=[\u0000x];start=[\u0000x];end=[\u0000x];blank=no",
+      "error": null
+    },
+    {
+      "id": "crlf/Measure",
+      "method": "Measure",
+      "result": 2,
+      "error": null
+    },
+    {
+      "id": "crlf/Describe",
+      "method": "Describe",
+      "result": "length=2;trim=[];start=[];end=[];blank=yes",
+      "error": null
+    },
+    {
+      "id": "unicode-whitespace-only/Measure",
+      "method": "Measure",
+      "result": 2,
+      "error": null
+    },
+    {
+      "id": "unicode-whitespace-only/Describe",
+      "method": "Describe",
+      "result": "length=2;trim=[];start=[];end=[];blank=yes",
+      "error": null
+    },
+    {
+      "id": "unicode-whitespace-bmp/Measure",
+      "method": "Measure",
+      "result": 3,
+      "error": null
+    },
+    {
+      "id": "unicode-whitespace-bmp/Describe",
+      "method": "Describe",
+      "result": "length=3;trim=[\u00E9];start=[\u00E9\u2028];end=[\u00A0\u00E9];blank=no",
+      "error": null
+    },
+    {
+      "id": "spaces-supplementary/Measure",
+      "method": "Measure",
+      "result": 4,
+      "error": null
+    },
+    {
+      "id": "spaces-supplementary/Describe",
+      "method": "Describe",
+      "result": "length=4;trim=[\uD83D\uDE00];start=[\uD83D\uDE00 ];end=[ \uD83D\uDE00];blank=no",
+      "error": null
+    },
+    {
+      "id": "spaces-combining/Measure",
+      "method": "Measure",
+      "result": 4,
+      "error": null
+    },
+    {
+      "id": "spaces-combining/Describe",
+      "method": "Describe",
+      "result": "length=4;trim=[e\u0301];start=[e\u0301 ];end=[ e\u0301];blank=no",
+      "error": null
+    },
+    {
+      "id": "spaces-zwj/Measure",
+      "method": "Measure",
+      "result": 7,
+      "error": null
+    },
+    {
+      "id": "spaces-zwj/Describe",
+      "method": "Describe",
+      "result": "length=7;trim=[\uD83D\uDC69\u200D\uD83D\uDCBB];start=[\uD83D\uDC69\u200D\uD83D\uDCBB ];end=[ \uD83D\uDC69\u200D\uD83D\uDCBB];blank=no",
+      "error": null
+    },
+    {
+      "id": "zero-width-space-not-whitespace/Measure",
+      "method": "Measure",
+      "result": 1,
+      "error": null
+    },
+    {
+      "id": "zero-width-space-not-whitespace/Describe",
+      "method": "Describe",
+      "result": "length=1;trim=[\u200B];start=[\u200B];end=[\u200B];blank=no",
+      "error": null
+    },
+    {
+      "id": "bom-not-whitespace/Measure",
+      "method": "Measure",
+      "result": 1,
+      "error": null
+    },
+    {
+      "id": "bom-not-whitespace/Describe",
+      "method": "Describe",
+      "result": "length=1;trim=[\uFEFF];start=[\uFEFF];end=[\uFEFF];blank=no",
+      "error": null
+    },
+    {
+      "id": "unicode-whitespace-supplementary/Measure",
+      "method": "Measure",
+      "result": 4,
+      "error": null
+    },
+    {
+      "id": "unicode-whitespace-supplementary/Describe",
+      "method": "Describe",
+      "result": "length=4;trim=[\uD83D\uDE00];start=[\uD83D\uDE00\u2028];end=[\u00A0\uD83D\uDE00];blank=no",
+      "error": null
+    }
+  ]
+}

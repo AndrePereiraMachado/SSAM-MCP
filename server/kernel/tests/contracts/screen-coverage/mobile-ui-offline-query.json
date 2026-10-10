@@ -1,0 +1,64 @@
+{
+  "fixture": "mobile-ui",
+  "features": [
+    "screen-query",
+    "client-entity",
+    "offline-list"
+  ],
+  "contract": {
+    "data": {
+      "clientEntities": [
+        {
+          "name": "OfflineNote",
+          "attributes": [
+            {
+              "name": "Title",
+              "type": "Text"
+            }
+          ]
+        }
+      ]
+    },
+    "screens": [
+      {
+        "name": "Offline",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "queries": [
+          {
+            "get": "OfflineNote",
+            "as": "ReadOffline",
+            "client": true,
+            "max": 20
+          }
+        ],
+        "widgets": [
+          {
+            "name": "Rows",
+            "type": "IList",
+            "properties": {
+              "Source": "ReadOffline.List"
+            },
+            "children": [
+              {
+                "name": "Title",
+                "type": "IExpression",
+                "properties": {
+                  "Value": "ReadOffline.List.Current.OfflineNote.Title"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "mutation": {
+    "target": "IMobileScreen:Offline/ReadOffline",
+    "prop": "MaxRecords",
+    "value": "10"
+  }
+}

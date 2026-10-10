@@ -1,0 +1,17 @@
+{
+ "description": "DropdownSearch (OutSystemsUI) minimo: instancia com a lista de opcoes ligada a uma variavel DropdownOption List e o evento obrigatorio OnChanged ligado a uma screen action.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "PriorityOptions", "as": "$opts"},
+  {"op": "set", "target": "$opts", "prop": "DataType", "value": "DropdownOption List"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAction", "name": "PriorityChanged", "as": "$h"},
+  {"op": "create", "parent": "$h", "type": "IStartNode", "as": "$h0"},
+  {"op": "create", "parent": "$h", "type": "IEndNode", "as": "$h9"},
+  {"op": "link", "from": "$h0", "to": "$h9"},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "PrioritySearch", "source": "IMobileBlock:DropdownSearch", "as": "$dd"},
+  {"op": "set", "target": "$dd/OptionsList", "prop": "Value", "value": "PriorityOptions"},
+  {"op": "set", "target": "$dd/OnChanged", "prop": "Handler", "value": "$h"}
+ ]
+}

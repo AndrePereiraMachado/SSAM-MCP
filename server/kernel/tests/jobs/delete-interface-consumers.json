@@ -1,0 +1,33 @@
+{
+ "description": "Apagar INTERFACE com consumidores reais: (a) um Label cujo TargetWidget e o Input Email_Input, e (b) um bloco proprio ContactCard INSTANCIADO na tela ContactDetail. Nos dois casos o consumidor sai primeiro e so entao o widget e o bloco sao apagados sem force. A recusa esta em tests/jobs-negative/delete-block-in-use.json.",
+ "base": "job:screen-form-reactive",
+ "expectValid": true,
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "ContactCard", "as": "$blk", "_why": "(1) bloco proprio, com contrato: um parametro de entrada"},
+  {"op": "create", "parent": "$blk", "type": "IInputParameter", "name": "Title", "as": "$blkIn"},
+  {"op": "set", "target": "$blkIn", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$blk", "type": "IExpression", "name": "TitleText", "as": "$blkExp"},
+  {"op": "set", "target": "$blkExp", "prop": "Value", "value": "Title"},
+
+  {"op": "create", "parent": "IMobileScreen:ContactDetail/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ContactCardInstance", "as": "$inst", "_why": "(2) a INSTANCIA do bloco na tela: e ela que consome o bloco"},
+  {"op": "set", "target": "$inst", "prop": "SourceBlock", "value": "$blk"},
+  {"op": "set", "target": "$inst/Title", "prop": "Value", "value": "GetContactById.List.Current.Contact.Name"},
+
+  {"op": "create", "parent": "IMobileScreen:ContactDetail/#IMobileBlockInstanceWidget/MainContent/ContactForm", "type": "ILabel", "name": "EmailLabel", "as": "$lbl", "_why": "(3) consumidor de WIDGET: o Label aponta para o Input pela propriedade TargetWidget"},
+  {"op": "set", "target": "$lbl", "prop": "TargetWidget", "value": "IMobileScreen:ContactDetail/#IMobileBlockInstanceWidget/MainContent/ContactForm/Email_Input"},
+  {"op": "set", "target": "$lbl/#ITextWidget", "prop": "Text", "value": "Email"},
+
+  {"op": "usages", "target": "$blk", "_why": "(4) o bloco tem 1 consumidor real: a instancia na tela"},
+  {"op": "usages", "target": "IMobileScreen:ContactDetail/#IMobileBlockInstanceWidget/MainContent/ContactForm/Email_Input", "_why": "(4) o Input tem 1 consumidor real: o CustomProperty TargetWidget do Label"},
+
+  {"op": "delete", "target": "$lbl", "_why": "(5a) o consumidor do widget sai primeiro"},
+  {"op": "delete", "target": "IMobileScreen:ContactDetail/#IMobileBlockInstanceWidget/MainContent/ContactForm/Email_Input", "_why": "(5b) agora o Input sai sem force"},
+
+  {"op": "delete", "target": "$inst", "_why": "(6a) a instancia sai antes do bloco"},
+  {"op": "delete", "target": "$blk", "_why": "(6b) sem instancias, o bloco sai sem force: brokenConsumers=0"},
+
+  {"op": "usages", "target": "IServerEntity:Contact/Email", "_why": "(7) o Input tinha o unico uso real de Contact.Email; agora so restam usos derivados"},
+  {"op": "find", "name": "ContactCard", "_why": "(7) o bloco nao existe mais: lista vazia"},
+  {"op": "dump", "target": "IMobileScreen:ContactDetail", "depth": 6}
+ ]
+}

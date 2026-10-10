@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Anvil.StartupHook: carrega o Anvil.Bridge no Service Studio normal (a instalacao que recebe o retorno do SSO)
+    pelo mecanismo documentado DOTNET_STARTUP_HOOKS, so no processo que scripts/open_studio_hook.ps1 inicia.
+    Nao altera nenhum arquivo da instalacao e nao tem referencia ao Studio: tudo por reflexao, depois que o app sobe.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+</Project>

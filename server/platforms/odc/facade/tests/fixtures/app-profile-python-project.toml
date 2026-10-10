@@ -1,0 +1,70 @@
+# Managed by SSAM Hybrid: restricted app profile
+approval_policy = "never"
+web_search = "disabled"
+default_permissions = "ssam-app"
+
+[permissions.ssam-app]
+description = "SSAM app: only controlled task tools; no maintenance or direct writes"
+extends = ":read-only"
+[permissions.ssam-app.filesystem]
+"<T>/local/Anvil/authority" = "deny"
+"<T>/codex" = "deny"
+"<KERNEL>" = "deny"
+[permissions.ssam-app.network]
+enabled = false
+
+[windows]
+sandbox = "elevated"
+
+[features]
+shell_tool = false
+unified_exec = false
+apps = false
+plugins = false
+remote_plugin = false
+multi_agent = false
+browser_use = false
+browser_use_external = false
+browser_use_full_cdp_access = false
+computer_use = false
+code_mode_host = false
+workspace_dependencies = false
+hooks = true
+[features.code_mode]
+enabled = false
+
+[mcp_servers."some_other_tool"]
+enabled = false
+
+[mcp_servers."odd name.with dot"]
+enabled = false
+
+[mcp_servers."back/slash"]
+enabled = false
+
+[mcp_servers."123"]
+enabled = false
+
+[mcp_servers.ssam_hybrid]
+command = "<PYTHON>"
+args = ["-B", "<KERNEL>/scripts/ssam_app.py", "--cli", "<T>/anvil.dll", "--workspace", "<T>/app's project"]
+enabled = true
+required = true
+tool_timeout_sec = 600
+enabled_tools = ["context", "propose", "continue", "status"]
+
+[[hooks.UserPromptSubmit]]
+[[hooks.UserPromptSubmit.hooks]]
+type = "command"
+command = "powershell.exe -NoProfile -NonInteractive -EncodedCommand {[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); & '<PYTHON>' -B '<KERNEL>\scripts\ssam_app.py' --cli '<T>\anvil.dll' --workspace '<T>\app''s project' --hook; exit $LASTEXITCODE}"
+timeout = 30
+
+[[hooks.PreToolUse]]
+matcher = ".*"
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "powershell.exe -NoProfile -NonInteractive -EncodedCommand {[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); & '<PYTHON>' -B '<KERNEL>\scripts\ssam_app.py' --cli '<T>\anvil.dll' --workspace '<T>\app''s project' --hook; exit $LASTEXITCODE}"
+timeout = 30
+
+# Review and trust these hooks through /hooks before using the app tools.
+# Without a host capture and one-use hook grant, the MCP server refuses execution.

@@ -1,0 +1,2459 @@
+{
+  "mobile:IMobileBlock": {
+    "type": "OutSystems.Model.UI.Mobile.IMobileBlock",
+    "context": "mobile",
+    "root": true,
+    "named": true,
+    "attributes": false,
+    "properties": {
+      "HorizontalPosition": {
+        "kind": "integer",
+        "nullable": false
+      },
+      "IsDisabled": {
+        "kind": "boolean"
+      },
+      "VerticalPosition": {
+        "kind": "integer",
+        "nullable": false
+      },
+      "CreatedBy": {
+        "kind": "text"
+      },
+      "Description": {
+        "kind": "text"
+      },
+      "JavaScript": {
+        "kind": "text"
+      },
+      "LastMergedBy": {
+        "kind": "text"
+      },
+      "LastModifiedBy": {
+        "kind": "text"
+      },
+      "Public": {
+        "kind": "boolean"
+      },
+      "StyleSheet": {
+        "kind": "text"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {
+      "OnDestroy": "OutSystems.Model.UI.Mobile.Events.IUILifeCycleEvent",
+      "OnInitialize": "OutSystems.Model.UI.Mobile.Events.IUILifeCycleEvent",
+      "OnParametersChanged": "OutSystems.Model.UI.Mobile.Events.IUILifeCycleEvent",
+      "OnReady": "OutSystems.Model.UI.Mobile.Events.IUILifeCycleEvent",
+      "OnRender": "OutSystems.Model.UI.Mobile.Events.IUILifeCycleEvent"
+    }
+  },
+  "mobile:IMobileScreen": {
+    "type": "OutSystems.Model.UI.Mobile.IMobileScreen",
+    "context": "mobile",
+    "root": true,
+    "named": true,
+    "attributes": false,
+    "properties": {
+      "HorizontalPosition": {
+        "kind": "integer",
+        "nullable": false
+      },
+      "IsDisabled": {
+        "kind": "boolean"
+      },
+      "VerticalPosition": {
+        "kind": "integer",
+        "nullable": false
+      },
+      "CreatedBy": {
+        "kind": "text"
+      },
+      "Description": {
+        "kind": "text"
+      },
+      "LastMergedBy": {
+        "kind": "text"
+      },
+      "LastModifiedBy": {
+        "kind": "text"
+      },
+      "Public": {
+        "kind": "boolean"
+      },
+      "StyleSheet": {
+        "kind": "text"
+      },
+      "PageName": {
+        "kind": "text"
+      },
+      "URLStructure": {
+        "kind": "enum",
+        "values": [
+          "QueryString",
+          "Path"
+        ]
+      },
+      "CustomURL": {
+        "kind": "boolean"
+      },
+      "Title": {
+        "kind": "expression"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {
+      "OnDestroy": "OutSystems.Model.UI.Mobile.Events.IUILifeCycleEvent",
+      "OnInitialize": "OutSystems.Model.UI.Mobile.Events.IUILifeCycleEvent",
+      "OnReady": "OutSystems.Model.UI.Mobile.Events.IUILifeCycleEvent",
+      "OnRender": "OutSystems.Model.UI.Mobile.Events.IUILifeCycleEvent"
+    }
+  },
+  "mobile:IIfWidget": {
+    "type": "OutSystems.Model.UI.Mobile.Widgets.IIfWidget",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": false,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Condition": {
+        "kind": "expression"
+      },
+      "DesignMode": {
+        "kind": "enum",
+        "values": [
+          "ShowAll",
+          "ShowTrueOrPreview",
+          "ShowFalse"
+        ]
+      },
+      "Animate": {
+        "kind": "boolean"
+      }
+    },
+    "children": false,
+    "slots": {
+      "FalseBranch": "OutSystems.Model.UI.Mobile.Widgets.IIfBranchWidget",
+      "TrueBranch": "OutSystems.Model.UI.Mobile.Widgets.IIfBranchWidget"
+    },
+    "events": {}
+  },
+  "mobile:IMobileBlockInstanceWidget": {
+    "type": "OutSystems.Model.UI.Mobile.Widgets.IMobileBlockInstanceWidget",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": false,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "DesignMode": {
+        "kind": "enum",
+        "values": [
+          "ShowAll",
+          "ShowTrueOrPreview",
+          "ShowFalse"
+        ]
+      }
+    },
+    "children": false,
+    "slots": {},
+    "events": {}
+  },
+  "mobile:IPlaceholderWidget": {
+    "type": "OutSystems.Model.UI.Mobile.Widgets.IPlaceholderWidget",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Align": {
+        "kind": "enum",
+        "values": [
+          "Null",
+          "Left",
+          "Center",
+          "Right"
+        ]
+      },
+      "Description": {
+        "kind": "text"
+      },
+      "EffectiveMarginLeft": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "Auto_0",
+          "Auto_Gutter",
+          "UserDefinedCols",
+          "UserDefinedColsWithGutter"
+        ]
+      },
+      "EffectiveWidth": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "FillParent",
+          "InlineBlock",
+          "UserDefinedCols"
+        ]
+      },
+      "Height": {
+        "kind": "text"
+      },
+      "MarginLeft": {
+        "kind": "text"
+      },
+      "MarginTop": {
+        "kind": "text"
+      },
+      "StyleClasses": {
+        "kind": "expression"
+      },
+      "Width": {
+        "kind": "text"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {}
+  },
+  "mobile:ITextWidget": {
+    "type": "OutSystems.Model.UI.Mobile.Widgets.ITextWidget",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "StyleClasses": {
+        "kind": "expression"
+      },
+      "Text": {
+        "kind": "text"
+      }
+    },
+    "children": false,
+    "slots": {},
+    "events": {}
+  },
+  "web:IWebBlock": {
+    "type": "OutSystems.Model.UI.Web.IWebBlock",
+    "context": "web",
+    "root": true,
+    "named": true,
+    "attributes": false,
+    "properties": {
+      "HorizontalPosition": {
+        "kind": "integer",
+        "nullable": false
+      },
+      "IsDisabled": {
+        "kind": "boolean"
+      },
+      "VerticalPosition": {
+        "kind": "integer",
+        "nullable": false
+      },
+      "CreatedBy": {
+        "kind": "text"
+      },
+      "Description": {
+        "kind": "text"
+      },
+      "JavaScript": {
+        "kind": "text"
+      },
+      "LastMergedBy": {
+        "kind": "text"
+      },
+      "LastModifiedBy": {
+        "kind": "text"
+      },
+      "Public": {
+        "kind": "boolean"
+      },
+      "StyleSheet": {
+        "kind": "text"
+      },
+      "CacheInMinutes": {
+        "kind": "integer",
+        "nullable": true
+      },
+      "HasValidationBehavior": {
+        "kind": "boolean"
+      },
+      "IncludeRuntimeJavaScript": {
+        "kind": "boolean"
+      },
+      "IsNotAjaxSelfRefreshable": {
+        "kind": "boolean"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {}
+  },
+  "web:IWebScreen": {
+    "type": "OutSystems.Model.UI.Web.IWebScreen",
+    "context": "web",
+    "root": true,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "HorizontalPosition": {
+        "kind": "integer",
+        "nullable": false
+      },
+      "IsDisabled": {
+        "kind": "boolean"
+      },
+      "VerticalPosition": {
+        "kind": "integer",
+        "nullable": false
+      },
+      "CreatedBy": {
+        "kind": "text"
+      },
+      "Description": {
+        "kind": "text"
+      },
+      "LastMergedBy": {
+        "kind": "text"
+      },
+      "LastModifiedBy": {
+        "kind": "text"
+      },
+      "Public": {
+        "kind": "boolean"
+      },
+      "StyleSheet": {
+        "kind": "text"
+      },
+      "HTTPSecurity": {
+        "kind": "enum",
+        "values": [
+          "Inherited",
+          "None",
+          "SSL",
+          "SSLWithClientCertificates"
+        ]
+      },
+      "CacheInMinutes": {
+        "kind": "integer",
+        "nullable": true
+      },
+      "IntegratedAuthentication": {
+        "kind": "enum",
+        "values": [
+          "Inherited",
+          "No",
+          "Yes"
+        ]
+      },
+      "IsFrequentDestination": {
+        "kind": "boolean"
+      },
+      "JavaScript": {
+        "kind": "text"
+      },
+      "Title": {
+        "kind": "expression"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {}
+  },
+  "web:IButtonWidget": {
+    "type": "OutSystems.Model.UI.Web.Widgets.IButtonWidget",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "EffectiveMarginLeft": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "Auto_0",
+          "Auto_Gutter",
+          "UserDefinedCols",
+          "UserDefinedColsWithGutter"
+        ]
+      },
+      "EffectiveWidth": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "FillParent",
+          "InlineBlock",
+          "UserDefinedCols"
+        ]
+      },
+      "Example": {
+        "kind": "text"
+      },
+      "Height": {
+        "kind": "text"
+      },
+      "IsDefault": {
+        "kind": "boolean"
+      },
+      "Label": {
+        "kind": "expression"
+      },
+      "MarginLeft": {
+        "kind": "text"
+      },
+      "MarginTop": {
+        "kind": "text"
+      },
+      "StyleClasses": {
+        "kind": "text"
+      },
+      "Visible": {
+        "kind": "expression"
+      },
+      "Width": {
+        "kind": "text"
+      },
+      "Enabled": {
+        "kind": "expression"
+      },
+      "ValidationParent": {
+        "kind": "reference",
+        "type": "OutSystems.Model.IObject"
+      }
+    },
+    "children": false,
+    "slots": {},
+    "events": {
+      "OnClick": "OutSystems.Model.UI.Web.Events.IBuiltinEvent"
+    }
+  },
+  "web:ICellWidget": {
+    "type": "OutSystems.Model.UI.Web.Widgets.ICellWidget",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "ColumnSpan": {
+        "kind": "integer",
+        "nullable": true
+      },
+      "Height": {
+        "kind": "text"
+      },
+      "StyleClasses": {
+        "kind": "text"
+      },
+      "VerticalAlignment": {
+        "kind": "enum",
+        "values": [
+          "Null",
+          "Top",
+          "Middle",
+          "Bottom"
+        ]
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {}
+  },
+  "web:ICheckBoxWidget": {
+    "type": "OutSystems.Model.UI.Web.Widgets.ICheckBoxWidget",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "EffectiveMarginLeft": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "Auto_0",
+          "Auto_Gutter",
+          "UserDefinedCols",
+          "UserDefinedColsWithGutter"
+        ]
+      },
+      "EffectiveWidth": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "FillParent",
+          "InlineBlock",
+          "UserDefinedCols"
+        ]
+      },
+      "MarginLeft": {
+        "kind": "text"
+      },
+      "MarginTop": {
+        "kind": "text"
+      },
+      "StyleClasses": {
+        "kind": "text"
+      },
+      "Visible": {
+        "kind": "expression"
+      },
+      "Width": {
+        "kind": "text"
+      },
+      "Enabled": {
+        "kind": "expression"
+      },
+      "ValidationParent": {
+        "kind": "reference",
+        "type": "OutSystems.Model.IObject"
+      },
+      "Variable": {
+        "kind": "expression"
+      }
+    },
+    "children": false,
+    "slots": {},
+    "events": {
+      "OnChange": "OutSystems.Model.UI.Web.Events.IOnChange"
+    }
+  },
+  "web:IComboBoxWidget": {
+    "type": "OutSystems.Model.UI.Web.Widgets.IComboBoxWidget",
+    "context": "web",
+    "root": false,
+    "named": false,
+    "attributes": false,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "IsMandatory": {
+        "kind": "expression"
+      },
+      "SourceAttribute": {
+        "kind": "reference",
+        "type": "OutSystems.Model.Data.IEntityAttributeSignature"
+      },
+      "SourceEntity": {
+        "kind": "reference",
+        "type": "OutSystems.Model.Data.IServerEntitySignature"
+      },
+      "Variable": {
+        "kind": "expression"
+      }
+    },
+    "children": false,
+    "slots": {},
+    "events": {}
+  },
+  "web:IContainerWidget": {
+    "type": "OutSystems.Model.UI.Web.Widgets.IContainerWidget",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Align": {
+        "kind": "enum",
+        "values": [
+          "Null",
+          "Left",
+          "Center",
+          "Right"
+        ]
+      },
+      "Display": {
+        "kind": "expression"
+      },
+      "EffectiveMarginLeft": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "Auto_0",
+          "Auto_Gutter",
+          "UserDefinedCols",
+          "UserDefinedColsWithGutter"
+        ]
+      },
+      "EffectiveWidth": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "FillParent",
+          "InlineBlock",
+          "UserDefinedCols"
+        ]
+      },
+      "Height": {
+        "kind": "text"
+      },
+      "MarginLeft": {
+        "kind": "text"
+      },
+      "MarginTop": {
+        "kind": "text"
+      },
+      "StyleClasses": {
+        "kind": "text"
+      },
+      "Width": {
+        "kind": "text"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {
+      "OnClick": "OutSystems.Model.UI.Web.Events.IOnClick"
+    }
+  },
+  "web:IEditRecordWidget": {
+    "type": "OutSystems.Model.UI.Web.Widgets.IEditRecordWidget",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "CellHeight": {
+        "kind": "text"
+      },
+      "CellSpacing": {
+        "kind": "integer",
+        "nullable": true
+      },
+      "DisplayColumns": {
+        "kind": "enum",
+        "values": [
+          "One",
+          "Two"
+        ]
+      },
+      "EffectiveCaptionWidth": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "FillParent",
+          "InlineBlock",
+          "UserDefinedCols"
+        ]
+      },
+      "EffectiveMarginLeft": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "Auto_0",
+          "Auto_Gutter",
+          "UserDefinedCols",
+          "UserDefinedColsWithGutter"
+        ]
+      },
+      "EffectiveValueWidth": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "FillParent",
+          "InlineBlock",
+          "UserDefinedCols"
+        ]
+      },
+      "EffectiveWidth": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "FillParent",
+          "InlineBlock",
+          "UserDefinedCols"
+        ]
+      },
+      "LabelStyle": {
+        "kind": "text"
+      },
+      "LabelWidth": {
+        "kind": "text"
+      },
+      "MarginLeft": {
+        "kind": "text"
+      },
+      "MarginTop": {
+        "kind": "text"
+      },
+      "StyleClasses": {
+        "kind": "text"
+      },
+      "ValueStyle": {
+        "kind": "text"
+      },
+      "VaueWidth": {
+        "kind": "text"
+      },
+      "Width": {
+        "kind": "text"
+      },
+      "RecordDefinition": {
+        "kind": "reference",
+        "type": "OutSystems.Model.Types.IRecordTypeSignature"
+      },
+      "SourceRecord": {
+        "kind": "expression"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {}
+  },
+  "web:IExpressionWidget": {
+    "type": "OutSystems.Model.UI.Web.Widgets.IExpressionWidget",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Example": {
+        "kind": "text"
+      },
+      "StyleClasses": {
+        "kind": "text"
+      },
+      "Value": {
+        "kind": "expression"
+      },
+      "EscapeContent": {
+        "kind": "boolean"
+      }
+    },
+    "children": false,
+    "slots": {},
+    "events": {}
+  },
+  "web:IIfWidget": {
+    "type": "OutSystems.Model.UI.Web.Widgets.IIfWidget",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": false,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "DesignMode": {
+        "kind": "enum",
+        "values": [
+          "ShowAll",
+          "ShowTrueOrPreview",
+          "ShowFalse"
+        ]
+      },
+      "Condition": {
+        "kind": "expression"
+      }
+    },
+    "children": false,
+    "slots": {
+      "FalseBranch": "OutSystems.Model.UI.Web.Widgets.IIfBranchWidget",
+      "TrueBranch": "OutSystems.Model.UI.Web.Widgets.IIfBranchWidget"
+    },
+    "events": {}
+  },
+  "web:IInputFilenameWidget": {
+    "type": "OutSystems.Model.UI.Web.Widgets.IInputFilenameWidget",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "EffectiveMarginLeft": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "Auto_0",
+          "Auto_Gutter",
+          "UserDefinedCols",
+          "UserDefinedColsWithGutter"
+        ]
+      },
+      "EffectiveWidth": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "FillParent",
+          "InlineBlock",
+          "UserDefinedCols"
+        ]
+      },
+      "MarginLeft": {
+        "kind": "text"
+      },
+      "MarginTop": {
+        "kind": "text"
+      },
+      "StyleClasses": {
+        "kind": "text"
+      },
+      "Visible": {
+        "kind": "expression"
+      },
+      "Width": {
+        "kind": "text"
+      },
+      "Enabled": {
+        "kind": "expression"
+      },
+      "ValidationParent": {
+        "kind": "reference",
+        "type": "OutSystems.Model.IObject"
+      }
+    },
+    "children": false,
+    "slots": {},
+    "events": {}
+  },
+  "web:IInputPasswordWidget": {
+    "type": "OutSystems.Model.UI.Web.Widgets.IInputPasswordWidget",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "EffectiveMarginLeft": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "Auto_0",
+          "Auto_Gutter",
+          "UserDefinedCols",
+          "UserDefinedColsWithGutter"
+        ]
+      },
+      "EffectiveWidth": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "FillParent",
+          "InlineBlock",
+          "UserDefinedCols"
+        ]
+      },
+      "Mandatory": {
+        "kind": "expression"
+      },
+      "MarginLeft": {
+        "kind": "text"
+      },
+      "MarginTop": {
+        "kind": "text"
+      },
+      "StyleClasses": {
+        "kind": "text"
+      },
+      "Visible": {
+        "kind": "expression"
+      },
+      "Width": {
+        "kind": "text"
+      },
+      "Enabled": {
+        "kind": "expression"
+      },
+      "MaxLength": {
+        "kind": "integer",
+        "nullable": true
+      },
+      "PasswordType": {
+        "kind": "enum",
+        "values": [
+          "Text",
+          "Numeric"
+        ]
+      },
+      "ValidationParent": {
+        "kind": "reference",
+        "type": "OutSystems.Model.IObject"
+      },
+      "Variable": {
+        "kind": "expression"
+      }
+    },
+    "children": false,
+    "slots": {},
+    "events": {
+      "OnChange": "OutSystems.Model.UI.Web.Events.IOnChange"
+    }
+  },
+  "web:IInputWidget": {
+    "type": "OutSystems.Model.UI.Web.Widgets.IInputWidget",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "EffectiveMarginLeft": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "Auto_0",
+          "Auto_Gutter",
+          "UserDefinedCols",
+          "UserDefinedColsWithGutter"
+        ]
+      },
+      "EffectiveWidth": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "FillParent",
+          "InlineBlock",
+          "UserDefinedCols"
+        ]
+      },
+      "Mandatory": {
+        "kind": "expression"
+      },
+      "MarginLeft": {
+        "kind": "text"
+      },
+      "MarginTop": {
+        "kind": "text"
+      },
+      "Prompt": {
+        "kind": "expression"
+      },
+      "StyleClasses": {
+        "kind": "text"
+      },
+      "TextLines": {
+        "kind": "integer",
+        "nullable": true
+      },
+      "Visible": {
+        "kind": "expression"
+      },
+      "Width": {
+        "kind": "text"
+      },
+      "Enabled": {
+        "kind": "expression"
+      },
+      "MaxLength": {
+        "kind": "integer",
+        "nullable": true
+      },
+      "NullValue": {
+        "kind": "expression"
+      },
+      "Type": {
+        "kind": "enum",
+        "values": [
+          "Text",
+          "Number",
+          "Email",
+          "Search"
+        ]
+      },
+      "ValidationParent": {
+        "kind": "reference",
+        "type": "OutSystems.Model.IObject"
+      },
+      "Variable": {
+        "kind": "expression"
+      }
+    },
+    "children": false,
+    "slots": {},
+    "events": {
+      "OnChange": "OutSystems.Model.UI.Web.Events.IOnChange"
+    }
+  },
+  "web:ILinkWidget": {
+    "type": "OutSystems.Model.UI.Web.Widgets.ILinkWidget",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "IsDefault": {
+        "kind": "boolean"
+      },
+      "StyleClasses": {
+        "kind": "text"
+      },
+      "Visible": {
+        "kind": "expression"
+      },
+      "Enabled": {
+        "kind": "expression"
+      },
+      "Title": {
+        "kind": "expression"
+      },
+      "ValidationParent": {
+        "kind": "reference",
+        "type": "OutSystems.Model.IObject"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {
+      "OnClick": "OutSystems.Model.UI.Web.Events.ILinkOnClick"
+    }
+  },
+  "web:IListRecordsWidget": {
+    "type": "OutSystems.Model.UI.Web.Widgets.IListRecordsWidget",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "DesignMode": {
+        "kind": "enum",
+        "values": [
+          "ShowAll",
+          "ShowTrueOrPreview",
+          "ShowFalse"
+        ]
+      },
+      "LineCount": {
+        "kind": "expression"
+      },
+      "LineSeparator": {
+        "kind": "enum",
+        "values": [
+          "NewLine",
+          "None",
+          "Bullets"
+        ]
+      },
+      "StyleClasses": {
+        "kind": "text"
+      },
+      "EmptyMessage": {
+        "kind": "expression"
+      },
+      "EmptyMessageStyle": {
+        "kind": "text"
+      },
+      "SourceRecordList": {
+        "kind": "expression"
+      },
+      "StartIndex": {
+        "kind": "expression"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {}
+  },
+  "web:IPlaceholderWidget": {
+    "type": "OutSystems.Model.UI.Web.Widgets.IPlaceholderWidget",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Align": {
+        "kind": "enum",
+        "values": [
+          "Null",
+          "Left",
+          "Center",
+          "Right"
+        ]
+      },
+      "Description": {
+        "kind": "text"
+      },
+      "EffectiveMarginLeft": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "Auto_0",
+          "Auto_Gutter",
+          "UserDefinedCols",
+          "UserDefinedColsWithGutter"
+        ]
+      },
+      "EffectiveWidth": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "FillParent",
+          "InlineBlock",
+          "UserDefinedCols"
+        ]
+      },
+      "Height": {
+        "kind": "text"
+      },
+      "MarginLeft": {
+        "kind": "text"
+      },
+      "MarginTop": {
+        "kind": "text"
+      },
+      "StyleClasses": {
+        "kind": "text"
+      },
+      "Width": {
+        "kind": "text"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {}
+  },
+  "web:IRadioButtonWidget": {
+    "type": "OutSystems.Model.UI.Web.Widgets.IRadioButtonWidget",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "EffectiveMarginLeft": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "Auto_0",
+          "Auto_Gutter",
+          "UserDefinedCols",
+          "UserDefinedColsWithGutter"
+        ]
+      },
+      "EffectiveWidth": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "FillParent",
+          "InlineBlock",
+          "UserDefinedCols"
+        ]
+      },
+      "MarginLeft": {
+        "kind": "text"
+      },
+      "MarginTop": {
+        "kind": "text"
+      },
+      "StyleClasses": {
+        "kind": "text"
+      },
+      "Visible": {
+        "kind": "expression"
+      },
+      "Width": {
+        "kind": "text"
+      },
+      "Enabled": {
+        "kind": "expression"
+      },
+      "ValidationParent": {
+        "kind": "reference",
+        "type": "OutSystems.Model.IObject"
+      },
+      "Value": {
+        "kind": "expression"
+      },
+      "Variable": {
+        "kind": "expression"
+      }
+    },
+    "children": false,
+    "slots": {},
+    "events": {
+      "OnChange": "OutSystems.Model.UI.Web.Events.IOnChange"
+    }
+  },
+  "web:IRowWidget": {
+    "type": "OutSystems.Model.UI.Web.Widgets.IRowWidget",
+    "context": "web",
+    "root": false,
+    "named": false,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {}
+  },
+  "web:IShowRecordWidget": {
+    "type": "OutSystems.Model.UI.Web.Widgets.IShowRecordWidget",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "CellHeight": {
+        "kind": "text"
+      },
+      "CellSpacing": {
+        "kind": "integer",
+        "nullable": true
+      },
+      "DisplayColumns": {
+        "kind": "enum",
+        "values": [
+          "One",
+          "Two"
+        ]
+      },
+      "EffectiveCaptionWidth": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "FillParent",
+          "InlineBlock",
+          "UserDefinedCols"
+        ]
+      },
+      "EffectiveMarginLeft": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "Auto_0",
+          "Auto_Gutter",
+          "UserDefinedCols",
+          "UserDefinedColsWithGutter"
+        ]
+      },
+      "EffectiveValueWidth": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "FillParent",
+          "InlineBlock",
+          "UserDefinedCols"
+        ]
+      },
+      "EffectiveWidth": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "FillParent",
+          "InlineBlock",
+          "UserDefinedCols"
+        ]
+      },
+      "LabelStyle": {
+        "kind": "text"
+      },
+      "LabelWidth": {
+        "kind": "text"
+      },
+      "MarginLeft": {
+        "kind": "text"
+      },
+      "MarginTop": {
+        "kind": "text"
+      },
+      "StyleClasses": {
+        "kind": "text"
+      },
+      "ValueStyle": {
+        "kind": "text"
+      },
+      "VaueWidth": {
+        "kind": "text"
+      },
+      "Width": {
+        "kind": "text"
+      },
+      "SourceRecord": {
+        "kind": "expression"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {}
+  },
+  "web:ITableRecordsWidget": {
+    "type": "OutSystems.Model.UI.Web.Widgets.ITableRecordsWidget",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "CellHeight": {
+        "kind": "text"
+      },
+      "CellSpacing": {
+        "kind": "integer",
+        "nullable": true
+      },
+      "DesignMode": {
+        "kind": "enum",
+        "values": [
+          "ShowAll",
+          "ShowTrueOrPreview",
+          "ShowFalse"
+        ]
+      },
+      "EffectiveMarginLeft": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "Auto_0",
+          "Auto_Gutter",
+          "UserDefinedCols",
+          "UserDefinedColsWithGutter"
+        ]
+      },
+      "EffectiveWidth": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "FillParent",
+          "InlineBlock",
+          "UserDefinedCols"
+        ]
+      },
+      "EvenLineStyle": {
+        "kind": "text"
+      },
+      "HeaderStyle": {
+        "kind": "text"
+      },
+      "LineCount": {
+        "kind": "expression"
+      },
+      "MarginLeft": {
+        "kind": "text"
+      },
+      "MarginTop": {
+        "kind": "text"
+      },
+      "OddLineStyle": {
+        "kind": "text"
+      },
+      "ShowHeader": {
+        "kind": "boolean"
+      },
+      "StyleClasses": {
+        "kind": "text"
+      },
+      "Width": {
+        "kind": "text"
+      },
+      "EmptyMessage": {
+        "kind": "expression"
+      },
+      "SourceRecordList": {
+        "kind": "expression"
+      },
+      "StartIndex": {
+        "kind": "expression"
+      }
+    },
+    "children": false,
+    "slots": {
+      "DataRow": "OutSystems.Model.UI.Web.Widgets.IRowWidget",
+      "HeaderRow": "OutSystems.Model.UI.Web.Widgets.IRowWidget"
+    },
+    "events": {}
+  },
+  "web:ITableWidget": {
+    "type": "OutSystems.Model.UI.Web.Widgets.ITableWidget",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Align": {
+        "kind": "enum",
+        "values": [
+          "Null",
+          "Left",
+          "Center",
+          "Right"
+        ]
+      },
+      "CellHeight": {
+        "kind": "text"
+      },
+      "CellSpacing": {
+        "kind": "integer",
+        "nullable": true
+      },
+      "EffectiveMarginLeft": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "Auto_0",
+          "Auto_Gutter",
+          "UserDefinedCols",
+          "UserDefinedColsWithGutter"
+        ]
+      },
+      "EffectiveWidth": {
+        "kind": "enum",
+        "values": [
+          "UserDefined",
+          "FillParent",
+          "InlineBlock",
+          "UserDefinedCols"
+        ]
+      },
+      "Height": {
+        "kind": "text"
+      },
+      "MarginLeft": {
+        "kind": "text"
+      },
+      "MarginTop": {
+        "kind": "text"
+      },
+      "StyleClasses": {
+        "kind": "text"
+      },
+      "Width": {
+        "kind": "text"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {}
+  },
+  "web:ITextWidget": {
+    "type": "OutSystems.Model.UI.Web.Widgets.ITextWidget",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "StyleClasses": {
+        "kind": "text"
+      },
+      "Text": {
+        "kind": "text"
+      }
+    },
+    "children": false,
+    "slots": {},
+    "events": {}
+  },
+  "web:IWebBlockInstanceWidget": {
+    "type": "OutSystems.Model.UI.Web.Widgets.IWebBlockInstanceWidget",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": false,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "DesignMode": {
+        "kind": "enum",
+        "values": [
+          "ShowAll",
+          "ShowTrueOrPreview",
+          "ShowFalse"
+        ]
+      },
+      "ValidationParent": {
+        "kind": "reference",
+        "type": "OutSystems.Model.IObject"
+      }
+    },
+    "children": false,
+    "slots": {},
+    "events": {
+      "OnNotify": "OutSystems.Model.UI.Web.Events.IOnNotify"
+    }
+  },
+  "mobile:IAdvancedHtml": {
+    "type": "ServiceStudio.Plugin.NRWidgets.IAdvancedHtml",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Tag": {
+        "kind": "text"
+      }
+    },
+    "children": false,
+    "slots": {
+      "Content": "OutSystems.Model.UI.Mobile.IContent"
+    },
+    "events": {}
+  },
+  "mobile:IButton": {
+    "type": "ServiceStudio.Plugin.NRWidgets.IButton",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "ConfirmationMessage": {
+        "kind": "expression"
+      },
+      "Enabled": {
+        "kind": "expression"
+      },
+      "IsDefault": {
+        "kind": "boolean"
+      },
+      "Style": {
+        "kind": "expression"
+      },
+      "Visible": {
+        "kind": "expression"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {
+      "OnClick": "OutSystems.Model.UI.Mobile.Events.IBuiltinEvent"
+    }
+  },
+  "mobile:IButtonGroup": {
+    "type": "ServiceStudio.Plugin.NRWidgets.IButtonGroup",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Enabled": {
+        "kind": "expression"
+      },
+      "Mandatory": {
+        "kind": "expression"
+      },
+      "Style": {
+        "kind": "expression"
+      },
+      "Variable": {
+        "kind": "expression"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {
+      "OnChange": "OutSystems.Model.UI.Mobile.Events.IBuiltinEvent"
+    }
+  },
+  "mobile:IButtonGroupItem": {
+    "type": "ServiceStudio.Plugin.NRWidgets.IButtonGroupItem",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Enabled": {
+        "kind": "expression"
+      },
+      "Style": {
+        "kind": "expression"
+      },
+      "Value": {
+        "kind": "expression"
+      },
+      "Visible": {
+        "kind": "expression"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {}
+  },
+  "mobile:ICheckbox": {
+    "type": "ServiceStudio.Plugin.NRWidgets.ICheckbox",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Enabled": {
+        "kind": "expression"
+      },
+      "Style": {
+        "kind": "expression"
+      },
+      "Variable": {
+        "kind": "expression"
+      }
+    },
+    "children": false,
+    "slots": {},
+    "events": {
+      "OnChange": "OutSystems.Model.UI.Mobile.Events.IBuiltinEvent"
+    }
+  },
+  "mobile:IContainer": {
+    "type": "ServiceStudio.Plugin.NRWidgets.IContainer",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Align": {
+        "kind": "enum",
+        "values": [
+          "Default",
+          "Left",
+          "Center",
+          "Right"
+        ]
+      },
+      "Animate": {
+        "kind": "boolean"
+      },
+      "Style": {
+        "kind": "expression"
+      },
+      "VisibleWasExpression": {
+        "kind": "boolean"
+      },
+      "Visible": {
+        "kind": "expression"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {}
+  },
+  "mobile:IDropdown": {
+    "type": "ServiceStudio.Plugin.NRWidgets.IDropdown",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "DropdownMode": {
+        "kind": "enum",
+        "values": [
+          "Text",
+          "Custom"
+        ]
+      },
+      "EmptyValue": {
+        "kind": "expression"
+      },
+      "Enabled": {
+        "kind": "expression"
+      },
+      "Labels": {
+        "kind": "expression"
+      },
+      "List": {
+        "kind": "expression"
+      },
+      "Mandatory": {
+        "kind": "expression"
+      },
+      "Style": {
+        "kind": "expression"
+      },
+      "Values": {
+        "kind": "expression"
+      },
+      "Variable": {
+        "kind": "expression"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {
+      "OnChange": "OutSystems.Model.UI.Mobile.Events.IBuiltinEvent"
+    }
+  },
+  "mobile:IExpression": {
+    "type": "ServiceStudio.Plugin.NRWidgets.IExpression",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Example": {
+        "kind": "text"
+      },
+      "Style": {
+        "kind": "expression"
+      },
+      "Value": {
+        "kind": "expression"
+      },
+      "Width": {
+        "kind": "text"
+      }
+    },
+    "children": false,
+    "slots": {},
+    "events": {}
+  },
+  "mobile:IForm": {
+    "type": "ServiceStudio.Plugin.NRWidgets.IForm",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Style": {
+        "kind": "expression"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {}
+  },
+  "mobile:IHeaderCell": {
+    "type": "ServiceStudio.Plugin.NRWidgets.IHeaderCell",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "SortAttribute": {
+        "kind": "expression"
+      },
+      "Source": {
+        "kind": "expression"
+      },
+      "Style": {
+        "kind": "expression"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {}
+  },
+  "mobile:IIcon": {
+    "type": "ServiceStudio.Plugin.NRWidgets.IIcon",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Icon": {
+        "kind": "text"
+      },
+      "IconSize": {
+        "kind": "enum",
+        "values": [
+          "FontSize",
+          "Twotimes",
+          "Threetimes",
+          "Fourtimes"
+        ]
+      },
+      "Style": {
+        "kind": "expression"
+      },
+      "Visible": {
+        "kind": "expression"
+      }
+    },
+    "children": false,
+    "slots": {},
+    "events": {}
+  },
+  "mobile:IImage": {
+    "type": "ServiceStudio.Plugin.NRWidgets.IImage",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "DefaultImage": {
+        "kind": "reference",
+        "type": "OutSystems.Model.UI.IImageSignature"
+      },
+      "Image": {
+        "kind": "reference",
+        "type": "OutSystems.Model.UI.IImageSignature"
+      },
+      "ImageContent": {
+        "kind": "expression"
+      },
+      "Style": {
+        "kind": "expression"
+      },
+      "Type": {
+        "kind": "enum",
+        "values": [
+          "Static",
+          "External",
+          "Binary"
+        ]
+      },
+      "Url": {
+        "kind": "expression"
+      }
+    },
+    "children": false,
+    "slots": {},
+    "events": {}
+  },
+  "mobile:IInput": {
+    "type": "ServiceStudio.Plugin.NRWidgets.IInput",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Enabled": {
+        "kind": "expression"
+      },
+      "InputType": {
+        "kind": "enum",
+        "values": [
+          "Text",
+          "Password",
+          "Number",
+          "Time",
+          "Date",
+          "Datetime",
+          "Phone",
+          "Email",
+          "Search"
+        ]
+      },
+      "Mandatory": {
+        "kind": "expression"
+      },
+      "MaxLength": {
+        "kind": "integer",
+        "nullable": true
+      },
+      "Prompt": {
+        "kind": "expression"
+      },
+      "Style": {
+        "kind": "expression"
+      },
+      "Variable": {
+        "kind": "expression"
+      }
+    },
+    "children": false,
+    "slots": {},
+    "events": {
+      "OnChange": "OutSystems.Model.UI.Mobile.Events.IBuiltinEvent"
+    }
+  },
+  "mobile:ILabel": {
+    "type": "ServiceStudio.Plugin.NRWidgets.ILabel",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Style": {
+        "kind": "expression"
+      },
+      "TargetWidget": {
+        "kind": "reference",
+        "type": "OutSystems.Model.UI.IWidgetSignature"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {}
+  },
+  "mobile:ILink": {
+    "type": "ServiceStudio.Plugin.NRWidgets.ILink",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "ConfirmationMessage": {
+        "kind": "expression"
+      },
+      "Enabled": {
+        "kind": "expression"
+      },
+      "Style": {
+        "kind": "expression"
+      },
+      "Visible": {
+        "kind": "expression"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {
+      "OnClick": "OutSystems.Model.UI.Mobile.Events.IBuiltinEvent"
+    }
+  },
+  "mobile:IList": {
+    "type": "ServiceStudio.Plugin.NRWidgets.IList",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "AnimateItems": {
+        "kind": "boolean"
+      },
+      "ExpandedInWebEditor": {
+        "kind": "boolean"
+      },
+      "Mode": {
+        "kind": "enum",
+        "values": [
+          "Default",
+          "Custom"
+        ]
+      },
+      "Source": {
+        "kind": "expression"
+      },
+      "Style": {
+        "kind": "expression"
+      },
+      "Tag": {
+        "kind": "text"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {
+      "OnScrollEnding": "OutSystems.Model.UI.Mobile.Events.IBuiltinEvent"
+    }
+  },
+  "mobile:IListItem": {
+    "type": "ServiceStudio.Plugin.NRWidgets.IListItem",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "ExpandedInWebEditor": {
+        "kind": "boolean"
+      },
+      "Style": {
+        "kind": "expression"
+      },
+      "TriggerActionOnFullSwipeLeft": {
+        "kind": "boolean"
+      },
+      "TriggerActionOnFullSwipeRight": {
+        "kind": "boolean"
+      }
+    },
+    "children": false,
+    "slots": {
+      "Content": "OutSystems.Model.UI.Mobile.IContent",
+      "LeftActions": "OutSystems.Model.UI.Mobile.IContent",
+      "RightActions": "OutSystems.Model.UI.Mobile.IContent"
+    },
+    "events": {
+      "OnClick": "OutSystems.Model.UI.Mobile.Events.IBuiltinEvent"
+    }
+  },
+  "mobile:IListItemAction": {
+    "type": "ServiceStudio.Plugin.NRWidgets.IListItemAction",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Style": {
+        "kind": "expression"
+      },
+      "Visible": {
+        "kind": "expression"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {
+      "OnClick": "OutSystems.Model.UI.Mobile.Events.IBuiltinEvent"
+    }
+  },
+  "mobile:IPopover": {
+    "type": "ServiceStudio.Plugin.NRWidgets.IPopover",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "ExpandedInWebEditor": {
+        "kind": "boolean"
+      },
+      "PopoverWidth": {
+        "kind": "integer",
+        "nullable": true
+      },
+      "Style": {
+        "kind": "expression"
+      }
+    },
+    "children": false,
+    "slots": {
+      "BottomContent": "OutSystems.Model.UI.Mobile.IContent",
+      "TopContent": "OutSystems.Model.UI.Mobile.IContent"
+    },
+    "events": {}
+  },
+  "mobile:IPopup": {
+    "type": "ServiceStudio.Plugin.NRWidgets.IPopup",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "ExpandedInWebEditor": {
+        "kind": "boolean"
+      },
+      "ShowPopup": {
+        "kind": "expression"
+      },
+      "Style": {
+        "kind": "expression"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {}
+  },
+  "mobile:IRadioButton": {
+    "type": "ServiceStudio.Plugin.NRWidgets.IRadioButton",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Enabled": {
+        "kind": "expression"
+      },
+      "Style": {
+        "kind": "expression"
+      },
+      "Value": {
+        "kind": "expression"
+      },
+      "Visible": {
+        "kind": "expression"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {}
+  },
+  "mobile:IRadioGroup": {
+    "type": "ServiceStudio.Plugin.NRWidgets.IRadioGroup",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Enabled": {
+        "kind": "expression"
+      },
+      "Mandatory": {
+        "kind": "expression"
+      },
+      "Style": {
+        "kind": "expression"
+      },
+      "Variable": {
+        "kind": "expression"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {
+      "OnChange": "OutSystems.Model.UI.Mobile.Events.IBuiltinEvent"
+    }
+  },
+  "mobile:IRowCell": {
+    "type": "ServiceStudio.Plugin.NRWidgets.IRowCell",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Style": {
+        "kind": "expression"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {}
+  },
+  "mobile:ISwitch": {
+    "type": "ServiceStudio.Plugin.NRWidgets.ISwitch",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Enabled": {
+        "kind": "expression"
+      },
+      "Style": {
+        "kind": "expression"
+      },
+      "Variable": {
+        "kind": "expression"
+      }
+    },
+    "children": false,
+    "slots": {},
+    "events": {
+      "OnChange": "OutSystems.Model.UI.Mobile.Events.IBuiltinEvent"
+    }
+  },
+  "mobile:ITableRecords": {
+    "type": "ServiceStudio.Plugin.NRWidgets.ITableRecords",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "ExpandedInWebEditor": {
+        "kind": "boolean"
+      },
+      "ShowHeader": {
+        "kind": "boolean"
+      },
+      "Source": {
+        "kind": "expression"
+      },
+      "Style": {
+        "kind": "expression"
+      },
+      "StyleHeader": {
+        "kind": "expression"
+      },
+      "StyleRow": {
+        "kind": "expression"
+      }
+    },
+    "children": false,
+    "slots": {
+      "HeaderRow": "OutSystems.Model.UI.Mobile.IContent",
+      "Row": "OutSystems.Model.UI.Mobile.IContent"
+    },
+    "events": {
+      "OnSort": "OutSystems.Model.UI.Mobile.Events.IBuiltinEvent"
+    }
+  },
+  "mobile:ITextArea": {
+    "type": "ServiceStudio.Plugin.NRWidgets.ITextArea",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Enabled": {
+        "kind": "expression"
+      },
+      "Mandatory": {
+        "kind": "expression"
+      },
+      "MaxLength": {
+        "kind": "integer",
+        "nullable": true
+      },
+      "Prompt": {
+        "kind": "expression"
+      },
+      "Style": {
+        "kind": "expression"
+      },
+      "TextLines": {
+        "kind": "integer",
+        "nullable": true
+      },
+      "Variable": {
+        "kind": "expression"
+      }
+    },
+    "children": false,
+    "slots": {},
+    "events": {
+      "OnChange": "OutSystems.Model.UI.Mobile.Events.IBuiltinEvent"
+    }
+  },
+  "mobile:IUpload": {
+    "type": "ServiceStudio.Plugin.NRWidgets.IUpload",
+    "context": "mobile",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "Accept": {
+        "kind": "enum",
+        "values": [
+          "Image",
+          "Video",
+          "Any"
+        ]
+      },
+      "FileContent": {
+        "kind": "expression"
+      },
+      "FileName": {
+        "kind": "expression"
+      },
+      "Mandatory": {
+        "kind": "expression"
+      },
+      "Style": {
+        "kind": "expression"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {
+      "OnChange": "OutSystems.Model.UI.Mobile.Events.IBuiltinEvent"
+    }
+  },
+  "web:IEditableTable": {
+    "type": "ServiceStudio.Plugin.Widgets.IEditableTable",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "AddRecordMessage": {
+        "kind": "expression"
+      },
+      "DeleteConfirmationMessage": {
+        "kind": "expression"
+      },
+      "IsEditable": {
+        "kind": "expression"
+      },
+      "LineCount": {
+        "kind": "expression"
+      },
+      "ShowHeader": {
+        "kind": "boolean"
+      },
+      "SourceRecordList": {
+        "kind": "expression"
+      }
+    },
+    "children": false,
+    "slots": {
+      "HeaderRow": "OutSystems.Model.UI.Web.IContent",
+      "Row": "OutSystems.Model.UI.Web.IContent"
+    },
+    "events": {
+      "OnRowDelete": "OutSystems.Model.UI.Web.Events.IBuiltinEvent",
+      "OnRowSave": "OutSystems.Model.UI.Web.Events.IBuiltinEvent"
+    }
+  },
+  "web:IEditableTableCell": {
+    "type": "ServiceStudio.Plugin.Widgets.IEditableTableCell",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {}
+  },
+  "web:IForm": {
+    "type": "ServiceStudio.Plugin.Widgets.IForm",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "IsEditable": {
+        "kind": "expression"
+      },
+      "LabelsPosition": {
+        "kind": "enum",
+        "values": [
+          "Top",
+          "Left",
+          "Right"
+        ]
+      },
+      "SourceRecord": {
+        "kind": "expression"
+      }
+    },
+    "children": true,
+    "slots": {},
+    "events": {}
+  },
+  "web:ILabel": {
+    "type": "ServiceStudio.Plugin.Widgets.ILabel",
+    "context": "web",
+    "root": false,
+    "named": true,
+    "attributes": true,
+    "properties": {
+      "CustomStyle": {
+        "kind": "text"
+      },
+      "TargetWidget": {
+        "kind": "reference",
+        "type": "OutSystems.Model.UI.IWidgetSignature"
+      },
+      "Text": {
+        "kind": "text"
+      },
+      "Value": {
+        "kind": "expression"
+      }
+    },
+    "children": false,
+    "slots": {},
+    "events": {}
+  }
+}

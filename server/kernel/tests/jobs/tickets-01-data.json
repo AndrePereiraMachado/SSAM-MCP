@@ -1,0 +1,919 @@
+{
+ "description": "Tickets: data model (14 entidades, 6 static), structures, site properties, exceptions e roles do app de tickets (warnings: site properties ainda sem uso e sugestoes de UpdateBehavior)",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedElement",
+   "element": "Headless_CS (ESpace) / AutoCloseDays (SiteProperty)",
+   "why": "Configuracao criada na etapa de dados; sera consumida pelas etapas posteriores do app de tickets."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "Headless_CS (ESpace) / BlockedExtensions (SiteProperty)",
+   "why": "Configuracao criada na etapa de dados; sera consumida pelas etapas posteriores do app de tickets."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "Headless_CS (ESpace) / DefaultFirstResponseMinutes (SiteProperty)",
+   "why": "Configuracao criada na etapa de dados; sera consumida pelas etapas posteriores do app de tickets."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "Headless_CS (ESpace) / DefaultResolutionMinutes (SiteProperty)",
+   "why": "Configuracao criada na etapa de dados; sera consumida pelas etapas posteriores do app de tickets."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "Headless_CS (ESpace) / MaxAttachmentMB (SiteProperty)",
+   "why": "Configuracao criada na etapa de dados; sera consumida pelas etapas posteriores do app de tickets."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "Headless_CS (ESpace) / ReminderDays (SiteProperty)",
+   "why": "Configuracao criada na etapa de dados; sera consumida pelas etapas posteriores do app de tickets."
+  }
+ ],
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "static": [
+     {
+      "name": "TicketStatus",
+      "records": [
+       {
+        "name": "New"
+       },
+       {
+        "name": "Open"
+       },
+       {
+        "name": "Pending"
+       },
+       {
+        "name": "Resolved"
+       },
+       {
+        "name": "Closed"
+       },
+       {
+        "name": "Cancelled"
+       }
+      ]
+     },
+     {
+      "name": "TicketPriority",
+      "records": [
+       {
+        "name": "Low"
+       },
+       {
+        "name": "Medium"
+       },
+       {
+        "name": "High"
+       },
+       {
+        "name": "Urgent"
+       }
+      ]
+     },
+     {
+      "name": "TicketType",
+      "records": [
+       {
+        "name": "Incident"
+       },
+       {
+        "name": "Request"
+       },
+       {
+        "name": "Question"
+       },
+       {
+        "name": "Problem"
+       }
+      ]
+     },
+     {
+      "name": "TicketChannel",
+      "records": [
+       {
+        "name": "Portal"
+       },
+       {
+        "name": "Email"
+       },
+       {
+        "name": "Phone"
+       },
+       {
+        "name": "Chat"
+       },
+       {
+        "name": "API"
+       }
+      ]
+     },
+     {
+      "name": "TicketEventType",
+      "records": [
+       {
+        "name": "Created"
+       },
+       {
+        "name": "Updated"
+       },
+       {
+        "name": "StatusChanged"
+       },
+       {
+        "name": "Assigned"
+       },
+       {
+        "name": "PriorityChanged"
+       },
+       {
+        "name": "CommentAdded"
+       },
+       {
+        "name": "AttachmentAdded"
+       },
+       {
+        "name": "Escalated"
+       },
+       {
+        "name": "Reopened"
+       },
+       {
+        "name": "Merged"
+       }
+      ]
+     },
+     {
+      "name": "SlaTarget",
+      "records": [
+       {
+        "name": "FirstResponse"
+       },
+       {
+        "name": "Resolution"
+       }
+      ]
+     }
+    ],
+    "entities": [
+     {
+      "name": "Team",
+      "public": true,
+      "attributes": [
+       {
+        "name": "Name",
+        "type": "Text",
+        "mandatory": true,
+        "length": 100
+       },
+       {
+        "name": "Description",
+        "type": "Text",
+        "length": 500
+       },
+       {
+        "name": "Email",
+        "type": "Email"
+       },
+       {
+        "name": "IsActive",
+        "type": "Boolean",
+        "default": "True"
+       },
+       {
+        "name": "ManagerId",
+        "type": "User Identifier"
+       }
+      ]
+     },
+     {
+      "name": "TeamMember",
+      "public": true,
+      "attributes": [
+       {
+        "name": "TeamId",
+        "type": "Team Identifier",
+        "mandatory": true
+       },
+       {
+        "name": "UserId",
+        "type": "User Identifier",
+        "mandatory": true
+       },
+       {
+        "name": "IsLead",
+        "type": "Boolean"
+       },
+       {
+        "name": "JoinedOn",
+        "type": "Date Time"
+       }
+      ]
+     },
+     {
+      "name": "Category",
+      "public": true,
+      "attributes": [
+       {
+        "name": "Name",
+        "type": "Text",
+        "mandatory": true,
+        "length": 100
+       },
+       {
+        "name": "ParentCategoryId",
+        "type": "Category Identifier"
+       },
+       {
+        "name": "DefaultTeamId",
+        "type": "Team Identifier"
+       },
+       {
+        "name": "DefaultPriorityId",
+        "type": "TicketPriority Identifier"
+       },
+       {
+        "name": "IsActive",
+        "type": "Boolean",
+        "default": "True"
+       }
+      ]
+     },
+     {
+      "name": "SlaPolicy",
+      "public": true,
+      "attributes": [
+       {
+        "name": "Name",
+        "type": "Text",
+        "length": 100
+       },
+       {
+        "name": "PriorityId",
+        "type": "TicketPriority Identifier",
+        "mandatory": true
+       },
+       {
+        "name": "TargetId",
+        "type": "SlaTarget Identifier",
+        "mandatory": true
+       },
+       {
+        "name": "Minutes",
+        "type": "Integer",
+        "mandatory": true
+       },
+       {
+        "name": "BusinessHoursOnly",
+        "type": "Boolean"
+       },
+       {
+        "name": "IsActive",
+        "type": "Boolean",
+        "default": "True"
+       }
+      ]
+     },
+     {
+      "name": "Ticket",
+      "public": true,
+      "attributes": [
+       {
+        "name": "Number",
+        "type": "Text",
+        "mandatory": true,
+        "length": 20
+       },
+       {
+        "name": "Subject",
+        "type": "Text",
+        "mandatory": true,
+        "length": 200
+       },
+       {
+        "name": "Description",
+        "type": "Text",
+        "length": 2000
+       },
+       {
+        "name": "StatusId",
+        "type": "TicketStatus Identifier",
+        "mandatory": true,
+        "default": "Entities.TicketStatus.New"
+       },
+       {
+        "name": "PriorityId",
+        "type": "TicketPriority Identifier",
+        "mandatory": true,
+        "default": "Entities.TicketPriority.Medium"
+       },
+       {
+        "name": "TypeId",
+        "type": "TicketType Identifier",
+        "mandatory": true
+       },
+       {
+        "name": "ChannelId",
+        "type": "TicketChannel Identifier"
+       },
+       {
+        "name": "CategoryId",
+        "type": "Category Identifier"
+       },
+       {
+        "name": "TeamId",
+        "type": "Team Identifier"
+       },
+       {
+        "name": "AssigneeId",
+        "type": "User Identifier"
+       },
+       {
+        "name": "RequesterId",
+        "type": "User Identifier",
+        "mandatory": true
+       },
+       {
+        "name": "CreatedOn",
+        "type": "Date Time",
+        "mandatory": true
+       },
+       {
+        "name": "CreatedBy",
+        "type": "User Identifier"
+       },
+       {
+        "name": "UpdatedOn",
+        "type": "Date Time"
+       },
+       {
+        "name": "FirstResponseDueOn",
+        "type": "Date Time"
+       },
+       {
+        "name": "ResolutionDueOn",
+        "type": "Date Time"
+       },
+       {
+        "name": "FirstRespondedOn",
+        "type": "Date Time"
+       },
+       {
+        "name": "ResolvedOn",
+        "type": "Date Time"
+       },
+       {
+        "name": "ClosedOn",
+        "type": "Date Time"
+       },
+       {
+        "name": "IsEscalated",
+        "type": "Boolean"
+       },
+       {
+        "name": "SatisfactionScore",
+        "type": "Integer"
+       },
+       {
+        "name": "ParentTicketId",
+        "type": "Ticket Identifier"
+       }
+      ]
+     },
+     {
+      "name": "TicketComment",
+      "public": true,
+      "attributes": [
+       {
+        "name": "TicketId",
+        "type": "Ticket Identifier",
+        "mandatory": true
+       },
+       {
+        "name": "AuthorId",
+        "type": "User Identifier",
+        "mandatory": true
+       },
+       {
+        "name": "Body",
+        "type": "Text",
+        "mandatory": true,
+        "length": 4000
+       },
+       {
+        "name": "IsInternal",
+        "type": "Boolean"
+       },
+       {
+        "name": "CreatedOn",
+        "type": "Date Time"
+       },
+       {
+        "name": "EditedOn",
+        "type": "Date Time"
+       }
+      ]
+     },
+     {
+      "name": "TicketAttachment",
+      "public": true,
+      "attributes": [
+       {
+        "name": "TicketId",
+        "type": "Ticket Identifier",
+        "mandatory": true
+       },
+       {
+        "name": "CommentId",
+        "type": "TicketComment Identifier"
+       },
+       {
+        "name": "FileName",
+        "type": "Text",
+        "length": 255
+       },
+       {
+        "name": "MimeType",
+        "type": "Text",
+        "length": 100
+       },
+       {
+        "name": "SizeBytes",
+        "type": "Long Integer"
+       },
+       {
+        "name": "Content",
+        "type": "Binary Data"
+       },
+       {
+        "name": "UploadedById",
+        "type": "User Identifier"
+       },
+       {
+        "name": "UploadedOn",
+        "type": "Date Time"
+       }
+      ]
+     },
+     {
+      "name": "TicketEvent",
+      "public": true,
+      "attributes": [
+       {
+        "name": "TicketId",
+        "type": "Ticket Identifier",
+        "mandatory": true
+       },
+       {
+        "name": "EventTypeId",
+        "type": "TicketEventType Identifier",
+        "mandatory": true
+       },
+       {
+        "name": "ActorId",
+        "type": "User Identifier"
+       },
+       {
+        "name": "OccurredOn",
+        "type": "Date Time",
+        "mandatory": true
+       },
+       {
+        "name": "FromValue",
+        "type": "Text",
+        "length": 200
+       },
+       {
+        "name": "ToValue",
+        "type": "Text",
+        "length": 200
+       },
+       {
+        "name": "Note",
+        "type": "Text",
+        "length": 500
+       }
+      ]
+     },
+     {
+      "name": "TicketWatcher",
+      "public": true,
+      "attributes": [
+       {
+        "name": "TicketId",
+        "type": "Ticket Identifier",
+        "mandatory": true
+       },
+       {
+        "name": "UserId",
+        "type": "User Identifier",
+        "mandatory": true
+       },
+       {
+        "name": "AddedOn",
+        "type": "Date Time"
+       }
+      ]
+     },
+     {
+      "name": "Tag",
+      "public": true,
+      "attributes": [
+       {
+        "name": "Name",
+        "type": "Text",
+        "mandatory": true,
+        "length": 50
+       },
+       {
+        "name": "Color",
+        "type": "Text",
+        "length": 20
+       },
+       {
+        "name": "IsActive",
+        "type": "Boolean",
+        "default": "True"
+       }
+      ]
+     },
+     {
+      "name": "TicketTag",
+      "public": true,
+      "attributes": [
+       {
+        "name": "TicketId",
+        "type": "Ticket Identifier",
+        "mandatory": true
+       },
+       {
+        "name": "TagId",
+        "type": "Tag Identifier",
+        "mandatory": true
+       }
+      ]
+     },
+     {
+      "name": "CannedResponse",
+      "public": true,
+      "attributes": [
+       {
+        "name": "Title",
+        "type": "Text",
+        "mandatory": true,
+        "length": 100
+       },
+       {
+        "name": "Body",
+        "type": "Text",
+        "length": 4000
+       },
+       {
+        "name": "TeamId",
+        "type": "Team Identifier"
+       },
+       {
+        "name": "IsActive",
+        "type": "Boolean",
+        "default": "True"
+       }
+      ]
+     },
+     {
+      "name": "Notification",
+      "public": true,
+      "attributes": [
+       {
+        "name": "UserId",
+        "type": "User Identifier",
+        "mandatory": true
+       },
+       {
+        "name": "TicketId",
+        "type": "Ticket Identifier"
+       },
+       {
+        "name": "Title",
+        "type": "Text",
+        "length": 200
+       },
+       {
+        "name": "Body",
+        "type": "Text",
+        "length": 1000
+       },
+       {
+        "name": "CreatedOn",
+        "type": "Date Time"
+       },
+       {
+        "name": "ReadOn",
+        "type": "Date Time"
+       },
+       {
+        "name": "SentOn",
+        "type": "Date Time"
+       },
+       {
+        "name": "ChannelId",
+        "type": "TicketChannel Identifier"
+       }
+      ]
+     },
+     {
+      "name": "TicketSlaBreach",
+      "public": true,
+      "attributes": [
+       {
+        "name": "TicketId",
+        "type": "Ticket Identifier",
+        "mandatory": true
+       },
+       {
+        "name": "TargetId",
+        "type": "SlaTarget Identifier",
+        "mandatory": true
+       },
+       {
+        "name": "DueOn",
+        "type": "Date Time"
+       },
+       {
+        "name": "BreachedOn",
+        "type": "Date Time"
+       },
+       {
+        "name": "NotifiedOn",
+        "type": "Date Time"
+       }
+      ]
+     }
+    ],
+    "structures": [
+     {
+      "name": "TimelineItem",
+      "public": true,
+      "attributes": [
+       {
+        "name": "Kind",
+        "type": "Text"
+       },
+       {
+        "name": "OccurredOn",
+        "type": "Date Time"
+       },
+       {
+        "name": "ActorId",
+        "type": "User Identifier"
+       },
+       {
+        "name": "Text",
+        "type": "Text"
+       },
+       {
+        "name": "IsInternal",
+        "type": "Boolean"
+       }
+      ]
+     },
+     {
+      "name": "DashboardMetrics",
+      "public": true,
+      "attributes": [
+       {
+        "name": "OpenCount",
+        "type": "Long Integer"
+       },
+       {
+        "name": "PendingCount",
+        "type": "Long Integer"
+       },
+       {
+        "name": "ResolvedCount",
+        "type": "Long Integer"
+       },
+       {
+        "name": "ClosedCount",
+        "type": "Long Integer"
+       },
+       {
+        "name": "UrgentCount",
+        "type": "Long Integer"
+       },
+       {
+        "name": "SlaBreaches",
+        "type": "Long Integer"
+       },
+       {
+        "name": "AvgFirstResponseMinutes",
+        "type": "Decimal"
+       },
+       {
+        "name": "AvgResolutionMinutes",
+        "type": "Decimal"
+       },
+       {
+        "name": "Backlog",
+        "type": "Long Integer"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Ticket",
+   "prop": "UpdateBehavior",
+   "value": "Optimized"
+  },
+  {
+   "op": "set",
+   "target": "$CannedResponse",
+   "prop": "UpdateBehavior",
+   "value": "Optimized"
+  },
+  {
+   "op": "set",
+   "target": "$Notification",
+   "prop": "UpdateBehavior",
+   "value": "Optimized"
+  },
+  {
+   "op": "set",
+   "target": "$TicketAttachment",
+   "prop": "UpdateBehavior",
+   "value": "Optimized"
+  },
+  {
+   "op": "set",
+   "target": "$TicketComment",
+   "prop": "UpdateBehavior",
+   "value": "Optimized"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISiteProperty",
+   "name": "MaxAttachmentMB",
+   "as": "$sp_MaxAttachmentMB"
+  },
+  {
+   "op": "set",
+   "target": "$sp_MaxAttachmentMB",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "set",
+   "target": "$sp_MaxAttachmentMB",
+   "prop": "DefaultValue",
+   "value": "10"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISiteProperty",
+   "name": "BlockedExtensions",
+   "as": "$sp_BlockedExtensions"
+  },
+  {
+   "op": "set",
+   "target": "$sp_BlockedExtensions",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$sp_BlockedExtensions",
+   "prop": "DefaultValue",
+   "value": "\".exe,.bat,.cmd,.js\""
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISiteProperty",
+   "name": "AutoCloseDays",
+   "as": "$sp_AutoCloseDays"
+  },
+  {
+   "op": "set",
+   "target": "$sp_AutoCloseDays",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "set",
+   "target": "$sp_AutoCloseDays",
+   "prop": "DefaultValue",
+   "value": "7"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISiteProperty",
+   "name": "ReminderDays",
+   "as": "$sp_ReminderDays"
+  },
+  {
+   "op": "set",
+   "target": "$sp_ReminderDays",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "set",
+   "target": "$sp_ReminderDays",
+   "prop": "DefaultValue",
+   "value": "3"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISiteProperty",
+   "name": "DefaultFirstResponseMinutes",
+   "as": "$sp_DefaultFirstResponseMinutes"
+  },
+  {
+   "op": "set",
+   "target": "$sp_DefaultFirstResponseMinutes",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "set",
+   "target": "$sp_DefaultFirstResponseMinutes",
+   "prop": "DefaultValue",
+   "value": "480"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISiteProperty",
+   "name": "DefaultResolutionMinutes",
+   "as": "$sp_DefaultResolutionMinutes"
+  },
+  {
+   "op": "set",
+   "target": "$sp_DefaultResolutionMinutes",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "set",
+   "target": "$sp_DefaultResolutionMinutes",
+   "prop": "DefaultValue",
+   "value": "2880"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IUserException",
+   "name": "NotFound",
+   "as": "$ex_NotFound"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IUserException",
+   "name": "NotAllowed",
+   "as": "$ex_NotAllowed"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IUserException",
+   "name": "InvalidTransition",
+   "as": "$ex_InvalidTransition"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IUserException",
+   "name": "ValidationFailed",
+   "as": "$ex_ValidationFailed"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IRole",
+   "name": "Agent",
+   "as": "$role_Agent"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IRole",
+   "name": "Manager",
+   "as": "$role_Manager"
+  }
+ ]
+}

@@ -1,0 +1,9 @@
+{
+ "description": "Columns5 (OutSystemsUI, Adaptive) minimo: instancia como o Studio cria ao arrastar o bloco.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Columns5Demo", "source": "IMobileBlock:Columns5", "as": "$b"}
+ ]
+}

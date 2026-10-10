@@ -1,0 +1,25 @@
+{
+ "description": "OverflowMenu (OutSystemsUI, Navigation) tipico; criado vazio e preenchido com conteudo proprio; placeholders Menu, TriggerContent com dados do aggregate de tarefas; eventos OnMenuToggle, Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastOverflowMenuId", "as": "$vLastOverflowMenuId"},
+  {"op": "set", "target": "$vLastOverflowMenuId", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastIsOpen", "as": "$vLastIsOpen"},
+  {"op": "set", "target": "$vLastIsOpen", "prop": "DataType", "value": "Boolean"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetShowcaseTasks", "as": "$tasks"},
+  {"op": "create", "parent": "$tasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "logic", "data": {"actions": [{"name": "OverflowMenuDemoOnMenuToggle", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de OnMenuToggle", "inputs": [{"name": "OverflowMenuId", "type": "Text"}, {"name": "IsOpen", "type": "Boolean"}],"steps": [{"assign": {"LastOverflowMenuId": "OverflowMenuId", "LastIsOpen": "IsOpen"},"as": "KeepOnMenuToggle"}]}, {"name": "OverflowMenuDemoInitialized", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de Initialized", "inputs": [{"name": "OverflowMenuId", "type": "Text"}],"steps": [{"assign": {"LastOverflowMenuId": "OverflowMenuId"},"as": "KeepInitialized"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "OverflowMenuDemo", "source": "IMobileBlock:OverflowMenu", "empty": true,"as": "$b"},
+  {"op": "set", "target": "$b/OnMenuToggle", "prop": "Handler", "value": "IScreenAction:OverflowMenuDemoOnMenuToggle"},
+  {"op": "set", "target": "$b/OnMenuToggle/OverflowMenuId", "prop": "Value", "value": "OverflowMenuId"},
+  {"op": "set", "target": "$b/OnMenuToggle/IsOpen", "prop": "Value", "value": "IsOpen"},
+  {"op": "set", "target": "$b/Initialized", "prop": "Handler", "value": "IScreenAction:OverflowMenuDemoInitialized"},
+  {"op": "set", "target": "$b/Initialized/OverflowMenuId", "prop": "Value", "value": "OverflowMenuId"},
+  {"op": "create", "parent": "$b/Menu", "type": "IExpression", "as": "$ph1"},
+  {"op": "set", "target": "$ph1", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/TriggerContent", "type": "IExpression", "as": "$ph2"},
+  {"op": "set", "target": "$ph2", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""}
+ ]
+}

@@ -1,0 +1,147 @@
+using Anvil.Authoring;
+
+namespace ColdGroupAuthoring;
+
+[Entity]
+public sealed record LedgerEntry
+{
+    public Id<LedgerEntry> Id { get; init; }
+    public int TenantId { get; init; }
+    public bool Posted { get; init; }
+    public int? CostCenter { get; init; }
+    public string? Market { get; init; }
+    public string? Category { get; init; }
+    public decimal Amount { get; init; }
+    public decimal? Fee { get; init; }
+}
+
+public sealed record CapturedLabelTotals(
+    string? Label,
+    int EntryCount,
+    int CreditCount,
+    decimal AmountSum,
+    decimal AmountMin,
+    decimal AmountMax,
+    decimal AmountAverage,
+    Id<LedgerEntry> FirstEntryId,
+    Id<LedgerEntry> LastEntryId);
+
+public sealed record CostCenterTotals(
+    int? CostCenter,
+    int EntryCount,
+    int PricedFeeCount,
+    decimal AmountSum,
+    decimal AmountMin,
+    decimal AmountMax,
+    decimal AmountAverage,
+    decimal? FeeSum,
+    decimal? FeeMin,
+    decimal? FeeMax,
+    decimal? FeeAverage);
+
+public sealed record MarketCategoryTotals(
+    string? Market,
+    string? Category,
+    int EntryCount,
+    int CreditCount,
+    decimal AmountSum,
+    decimal AmountMin,
+    decimal AmountMax,
+    decimal AmountAverage,
+    Id<LedgerEntry> FirstEntryId,
+    Id<LedgerEntry> LastEntryId);
+
+public static class LedgerReports
+{
+    [ServerAction]
+    public static List<CapturedLabelTotals> ByCapturedLabel(
+        IDataSession data,
+        int tenantId,
+        decimal minimumAmount,
+        string? reportLabel,
+        int skip,
+        int take)
+    {
+        return data.Query<LedgerEntry>()
+            .Where(entry => entry.TenantId == tenantId && entry.Posted && entry.Amount >= minimumAmount)
+            .GroupBy(entry => reportLabel)
+            .Select(group => new CapturedLabelTotals(
+                group.Key,
+                group.Count(),
+                group.Count(entry => entry.Amount < 0m),
+                group.Sum(entry => entry.Amount),
+                group.Min(entry => entry.Amount),
+                group.Max(entry => entry.Amount),
+                group.Average(entry => entry.Amount),
+                group.Min(entry => entry.Id),
+                group.Max(entry => entry.Id)))
+            .OrderBy(group => group.Label, StringComparer.Ordinal)
+            .Skip(skip)
+            .Take(take)
+            .ToList();
+    }
+
+    [ServerAction]
+    public static List<CostCenterTotals> ByCostCenter(
+        IDataSession data,
+        int tenantId,
+        decimal minimumAmount,
+        int minimumEntries,
+        int skip,
+        int take)
+    {
+        return data.Query<LedgerEntry>()
+            .Where(entry => entry.TenantId == tenantId && entry.Posted && entry.Amount >= minimumAmount)
+            .GroupBy(entry => entry.CostCenter)
+            .Where(group => group.Count() >= minimumEntries)
+            .Select(group => new CostCenterTotals(
+                group.Key,
+                group.Count(),
+                group.Count(entry => entry.Fee.HasValue),
+                group.Sum(entry => entry.Amount),
+                group.Min(entry => entry.Amount),
+                group.Max(entry => entry.Amount),
+                group.Average(entry => entry.Amount),
+                group.Sum(entry => entry.Fee),
+                group.Min(entry => entry.Fee),
+                group.Max(entry => entry.Fee),
+                group.Average(entry => entry.Fee)))
+            .OrderByDescending(group => group.AmountSum)
+            .ThenBy(group => group.CostCenter)
+            .Skip(skip)
+            .Take(take)
+            .ToList();
+    }
+
+    [ServerAction]
+    public static List<MarketCategoryTotals> ByMarketCategory(
+        IDataSession data,
+        int tenantId,
+        decimal minimumAmount,
+        int minimumEntries,
+        int skip,
+        int take)
+    {
+        return data.Query<LedgerEntry>()
+            .Where(entry => entry.TenantId == tenantId && entry.Posted && entry.Amount >= minimumAmount)
+            .GroupBy(entry => new { entry.Market, entry.Category })
+            .Where(group => group.Count() >= minimumEntries)
+            .Select(group => new MarketCategoryTotals(
+                group.Key.Market,
+                group.Key.Category,
+                group.Count(),
+                group.Count(entry => entry.Amount < 0m),
+                group.Sum(entry => entry.Amount),
+                group.Min(entry => entry.Amount),
+                group.Max(entry => entry.Amount),
+                group.Average(entry => entry.Amount),
+                group.Min(entry => entry.Id),
+                group.Max(entry => entry.Id)))
+            .OrderByDescending(group => group.AmountSum)
+            .ThenBy(group => group.Market, StringComparer.Ordinal)
+            .ThenBy(group => group.Category, StringComparer.Ordinal)
+            .Skip(skip)
+            .Take(take)
+            .ToList();
+    }
+}

@@ -1,0 +1,12 @@
+{
+ "description": "InputWithIcon (OutSystemsUI, Interaction) minimo: instancia como o Studio cria ao arrastar o bloco; o Input de exemplo do placeholder Input ligado a uma variavel Text.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "PickedText", "as": "$vPickedText"},
+  {"op": "set", "target": "$vPickedText", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "InputWithIconDemo", "source": "IMobileBlock:InputWithIcon", "as": "$b"},
+  {"op": "set", "target": "$b/Input/#IInput", "prop": "Variable", "value": "PickedText"}
+ ]
+}

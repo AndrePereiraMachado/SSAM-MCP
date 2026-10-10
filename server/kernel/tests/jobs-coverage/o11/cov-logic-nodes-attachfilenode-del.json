@@ -1,0 +1,66 @@
+{
+ "description": "Cobertura testada (fase 1, medir): del de OutSystems.Model.Logic.Nodes.IAttachFileNode (o11) em lgEmailPreparation. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IWebFlow:Emails",
+   "type": "IWebEmail",
+   "name": "CovSEmail",
+   "as": "$em"
+  },
+  {
+   "op": "set",
+   "target": "$em",
+   "prop": "Subject",
+   "value": "\"Cov\""
+  },
+  {
+   "op": "create",
+   "parent": "$em",
+   "type": "IExpressionWidget",
+   "as": "$emb"
+  },
+  {
+   "op": "set",
+   "target": "$emb",
+   "prop": "Value",
+   "value": "\"Cov\""
+  },
+  {
+   "op": "create",
+   "parent": "$em",
+   "type": "IPreparation",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IAttachFileNode",
+   "name": "CovAAttachFileNode",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

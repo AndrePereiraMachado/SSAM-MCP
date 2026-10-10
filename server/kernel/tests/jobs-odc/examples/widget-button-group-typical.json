@@ -1,0 +1,38 @@
+{
+ "description": "Button Group que filtra: os itens valem registros de uma static entity, o terceiro item de exemplo sai, e o OnChange faz Refresh Data da lista filtrada pela escolha.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {
+   "static": [{"name": "TicketState", "records": [{"name": "Open"}, {"name": "Closed"}]}],
+   "entities": [{"name": "Ticket", "attributes": [
+    {"name": "Subject", "type": "Text", "length": 100, "mandatory": true},
+    {"name": "StateId", "type": "TicketState Identifier", "mandatory": true}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "Tickets", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "StateFilter", "as": "$state"},
+  {"op": "set", "target": "$state", "prop": "DataType", "value": "TicketState Identifier"},
+  {"op": "set", "target": "$state", "prop": "DefaultValue", "value": "Entities.TicketState.Open"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "LoadTickets", "as": "$agg", "_why": "nome fora do padrao Get<Entidade>s: o padrao e renomeado sozinho quando ganha filtro"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Ticket"}},
+  {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "Ticket.StateId = StateFilter"}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "StateChanged", "kind": "screen", "owner": "IMobileScreen:Tickets",
+    "steps": [{"node": "IRefreshDataNode", "as": "ReloadTickets", "properties": {"DataSource": "IMobileScreen:Tickets/LoadTickets"}}]}]}},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IButtonGroup", "name": "StateButtonGroup", "as": "$bg"},
+  {"op": "set", "target": "$bg", "prop": "Variable", "value": "StateFilter"},
+  {"op": "set", "target": "$bg/OnChange", "prop": "Destination", "value": "IMobileScreen:Tickets/StateChanged"},
+  {"op": "delete", "target": "$bg/Content/ButtonGroupItem3", "_why": "so dois estados: o terceiro item de exemplo sai"},
+  {"op": "set", "target": "$bg/Content/ButtonGroupItem1", "prop": "Value", "value": "Entities.TicketState.Open"},
+  {"op": "set", "target": "$bg/Content/ButtonGroupItem1/#ITextWidget", "prop": "Text", "value": "Open"},
+  {"op": "set", "target": "$bg/Content/ButtonGroupItem2", "prop": "Value", "value": "Entities.TicketState.Closed"},
+  {"op": "set", "target": "$bg/Content/ButtonGroupItem2/#ITextWidget", "prop": "Text", "value": "Closed"},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "TicketList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "LoadTickets.List"},
+  {"op": "create", "parent": "$list", "type": "IExpression", "as": "$subject"},
+  {"op": "set", "target": "$subject", "prop": "Value", "value": "LoadTickets.List.Current.Ticket.Subject"}
+ ]
+}

@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "ssam-discovery-fragment/1",
+  "contract": "ssam-catalog-contribution/1",
+  "front": "B",
+  "title": "M0 mechanism fixture (front B): composition and validation only, not a coverage claim",
+  "reviewedAt": "2026-09-23",
+  "capabilities": [
+    {
+      "id": "ui.m0-probe-button",
+      "category": "ui",
+      "title": "M0 probe: Button widget (fixture)",
+      "keywords": ["m0probebutton"],
+      "summary": "Fixture capability used by the catalog mechanism test; the OnClick handler body is A's (requires).",
+      "route": { "kind": "job", "operation": "create IButton (fixture)" },
+      "contract": ["verbs.verbs.create", "verbs.verbs.set"],
+      "depends": [],
+      "recommends": [{ "id": "logic.m0-probe-assign", "when": "the handler assigns variables" }],
+      "requires": [
+        { "id": "logic.m0-probe-assign", "provider": "A", "why": "handler body (resolves in the fixture set)" },
+        { "id": "logic.m0-probe-missing", "provider": "A", "why": "a contract A has not delivered yet (stays pending)" }
+      ],
+      "alternatives": [],
+      "elements": [
+        { "role": "button", "platforms": {
+          "odc": { "native": "ServiceStudio.Plugin.NRWidgets.IButton", "jobType": "IButton", "address": "IMobileScreen:<Screen>/<Button>" },
+          "o11": { "native": "ServiceStudio.Plugin.NRWidgets.IButton", "jobType": "IButton", "address": "IWebScreen:<Screen>/<Button>" } } }
+      ],
+      "operations": {
+        "read": { "route": "get/dump (fixture)", "preconditions": [], "roles": {
+          "button": { "odc": { "status": "undetermined", "note": "fixture" }, "o11": { "status": "undetermined", "note": "fixture" } } } }
+      },
+      "platforms": { "odc": { "proofs": [], "negative": [], "limits": [] }, "o11": { "proofs": [], "negative": [], "limits": [] } }
+    }
+  ],
+  "unavailable": [
+    { "id": "ui.m0-probe-unavailable", "lanes": ["odc"], "keywords": ["m0probeunavailable"], "reason": "fixture refusal (declared, not measured)", "evidence": "M0 mechanism fixture", "alternative": null }
+  ],
+  "coverage": []
+}

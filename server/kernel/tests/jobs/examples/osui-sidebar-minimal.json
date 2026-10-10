@@ -1,0 +1,9 @@
+{
+ "description": "Sidebar (OutSystemsUI, Interaction) minimo: instancia como o Studio cria ao arrastar o bloco.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "SidebarDemo", "source": "IMobileBlock:Sidebar", "as": "$b"}
+ ]
+}

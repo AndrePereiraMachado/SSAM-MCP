@@ -1,0 +1,13 @@
+<Project>
+  <!--
+    The hash of the kernel DLL is the identity of every stamped proof (anvil-job-provenance/2). By default the SDK asks
+    git for the commit and embeds it (AssemblyInformationalVersion "1.0.0+<sha>", and Source Link in the PDB whose id the
+    DLL carries), so any commit, even of a document, changed the DLL and turned every stamp historical at the next build
+    (catalog campaign INT-T2-001, decision D-T2-2). The kernel identity is its source, not the commit.
+  -->
+  <PropertyGroup>
+    <EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>
+    <EnableSourceLink>false</EnableSourceLink>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+</Project>

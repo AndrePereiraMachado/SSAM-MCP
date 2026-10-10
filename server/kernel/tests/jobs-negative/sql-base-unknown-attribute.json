@@ -1,0 +1,8 @@
+{
+ "description": "SQL preflight contra a base: [Nome] nao e atributo da entidade Product da base. Recusado com op, linha, motivo e a lista dos atributos existentes.",
+ "base": "job:sql-input-output",
+ "expectError": ["op #0 (SQL IServerAction:Product_Search/SearchProducts, line 1): [Nome] is not an attribute of {Product}; attributes: Id, Name, Price"],
+ "ops": [
+  {"op": "set", "target": "IServerAction:Product_Search/SearchProducts", "prop": "Statement", "value": "SELECT {Product}.[Id], {Product}.[Nome], {Product}.[Price] FROM {Product}\nWHERE {Product}.[Price] >= @MinPrice"}
+ ]
+}

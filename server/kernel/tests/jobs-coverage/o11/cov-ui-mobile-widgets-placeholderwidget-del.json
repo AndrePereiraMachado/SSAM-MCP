@@ -1,0 +1,25 @@
+{
+ "description": "Cobertura testada (fase 1, medir): del de OutSystems.Model.UI.Mobile.Widgets.IPlaceholderWidget (o11) em mobileBlock. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileBlock",
+   "name": "CovSBlock",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "OutSystems.Model.UI.Mobile.Widgets.IPlaceholderWidget",
+   "name": "CovAPlaceholderWidget",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

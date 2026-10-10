@@ -1,0 +1,546 @@
+{
+  "date": "2026-09-07",
+  "scope": "Published MassCasualty page versus local legacy; Chrome UI interactions, own synthetic request replay, independent persistence reads; no app changes or publication",
+  "urls": {
+    "native": "https://ec2-32-192-52-218.compute-1.amazonaws.com/DCIPS_Migration_PoC_UI/MassCasualty",
+    "legacy": "http://localhost:5173/casualty-report/bulk"
+  },
+  "fixtures": "TRN-MC-E2E-0907; EDIPI 990907101..990907104",
+  "parsing": {
+    "legacy": {
+      "empty": {
+        "submit": [
+          {
+            "text": "Submit 0 casualty reports",
+            "disabled": true
+          }
+        ],
+        "tables": []
+      },
+      "missingHeader": {
+        "submit": [
+          {
+            "text": "Submit 0 casualty reports",
+            "disabled": true
+          }
+        ],
+        "tables": []
+      },
+      "headerOnly": {
+        "submit": [
+          {
+            "text": "Submit 0 casualty reports",
+            "disabled": true
+          }
+        ],
+        "tables": []
+      },
+      "mixed": {
+        "submit": [
+          {
+            "text": "Submit 1 casualty report",
+            "disabled": false
+          }
+        ],
+        "tables": [
+          "#Last, FirstBranchEDIPIRankErrors1TRN-MC-E2E, TestARMYâ€”â€” 2Missing, â€”ARMYâ€”â€” first_name is empty"
+        ]
+      },
+      "caseWhitespace": {
+        "submit": [
+          {
+            "text": "Submit 1 casualty report",
+            "disabled": false
+          }
+        ],
+        "tables": [
+          "#Last, FirstBranchEDIPIRankErrors1TRN-MC-E2E, TestARMYâ€”â€” "
+        ]
+      },
+      "quoted": {
+        "submit": [
+          {
+            "text": "Submit 1 casualty report",
+            "disabled": false
+          }
+        ],
+        "tables": [
+          "#Last, FirstBranchEDIPIRankErrors1TRN-MC-E2E \"quoted\", Test,OneARMYâ€”â€” "
+        ]
+      },
+      "unknown": {
+        "submit": [
+          {
+            "text": "Submit 1 casualty report",
+            "disabled": false
+          }
+        ],
+        "tables": [
+          "#Last, FirstBranchEDIPIRankErrors1TRN-MC-E2E, TestARMYâ€”â€” "
+        ]
+      },
+      "invalidBranch": {
+        "submit": [
+          {
+            "text": "Submit 1 casualty report",
+            "disabled": false
+          }
+        ],
+        "tables": [
+          "#Last, FirstBranchEDIPIRankErrors1TRN-MC-E2E, TestBOGUSâ€”â€” "
+        ]
+      },
+      "rows200": {
+        "submit": [
+          {
+            "text": "Submit 200 casualty reports",
+            "disabled": false
+          }
+        ],
+        "tables": "200/201 rows exercised in browser"
+      },
+      "rows201": {
+        "submit": [
+          {
+            "text": "Submit 201 casualty reports",
+            "disabled": true
+          }
+        ],
+        "tables": "200/201 rows exercised in browser"
+      },
+      "multiline": {
+        "submit": [
+          {
+            "text": "Submit 1 casualty report",
+            "disabled": false
+          }
+        ],
+        "tables": [
+          "#Last, FirstBranchEDIPIRankErrors1TRN-MC-E2E, TestARMYâ€”â€” 2â€”, line2â€”â€”â€” last_name is empty; service_branch is empty"
+        ]
+      },
+      "upload": {
+        "submit": [
+          {
+            "text": "Submit 1 casualty report",
+            "disabled": false
+          }
+        ],
+        "tables": [
+          "#Last, FirstBranchEDIPIRankErrors1TRN-MC-E2E, UploadUSMCâ€”â€” "
+        ]
+      },
+      "download": {
+        "filename": "mass-casualty-template.csv",
+        "sha256": "613c735c3237275e3bdb5882923fdc681a6d749a8f3fed9d6b0ef938e2efe0f3"
+      }
+    },
+    "native": {
+      "empty": {
+        "submit": [
+          {
+            "text": "Submit 0 casualty reports",
+            "disabled": true
+          }
+        ],
+        "tables": []
+      },
+      "missingHeader": {
+        "submit": [
+          {
+            "text": "Submit 0 casualty reports",
+            "disabled": true
+          }
+        ],
+        "tables": []
+      },
+      "headerOnly": {
+        "submit": [
+          {
+            "text": "Submit 0 casualty reports",
+            "disabled": true
+          }
+        ],
+        "tables": []
+      },
+      "mixed": {
+        "submit": [
+          {
+            "text": "Submit 1 casualty report",
+            "disabled": false
+          }
+        ],
+        "tables": [
+          "#Last, FirstBranchEDIPIRankErrors1TRN-MC-E2E, TestARMYâ€”â€” 2Missing, â€”ARMYâ€”â€” first_name is empty\r\n"
+        ]
+      },
+      "caseWhitespace": {
+        "submit": [
+          {
+            "text": "Submit 1 casualty report",
+            "disabled": false
+          }
+        ],
+        "tables": [
+          "#Last, FirstBranchEDIPIRankErrors1TRN-MC-E2E, TestARMYâ€”â€” "
+        ]
+      },
+      "quoted": {
+        "submit": [
+          {
+            "text": "Submit 1 casualty report",
+            "disabled": false
+          }
+        ],
+        "tables": [
+          "#Last, FirstBranchEDIPIRankErrors1TRN-MC-E2E \"quoted\", Test,OneARMYâ€”â€” "
+        ]
+      },
+      "unknown": {
+        "submit": [
+          {
+            "text": "Submit 1 casualty report",
+            "disabled": false
+          }
+        ],
+        "tables": [
+          "#Last, FirstBranchEDIPIRankErrors1TRN-MC-E2E, TestARMYâ€”â€” "
+        ]
+      },
+      "invalidBranch": {
+        "submit": [
+          {
+            "text": "Submit 1 casualty report",
+            "disabled": false
+          }
+        ],
+        "tables": [
+          "#Last, FirstBranchEDIPIRankErrors1TRN-MC-E2E, TestBOGUSâ€”â€” "
+        ]
+      },
+      "rows200": {
+        "submit": [
+          {
+            "text": "Submit 200 casualty reports",
+            "disabled": false
+          }
+        ],
+        "tables": "200/201 rows exercised in browser"
+      },
+      "rows201": {
+        "submit": [
+          {
+            "text": "Submit 201 casualty reports",
+            "disabled": true
+          }
+        ],
+        "tables": "200/201 rows exercised in browser"
+      },
+      "multiline": {
+        "submit": [
+          {
+            "text": "Submit 1 casualty report",
+            "disabled": false
+          }
+        ],
+        "tables": [
+          "#Last, FirstBranchEDIPIRankErrors1TRN-MC-E2E, TestARMYâ€”â€” 2â€”, line2â€”â€”â€” last_name is empty\r\nservice_branch is empty\r\n"
+        ]
+      },
+      "upload": {
+        "submit": [
+          {
+            "text": "Submit 1 casualty report",
+            "disabled": false
+          }
+        ],
+        "tables": [
+          "#Last, FirstBranchEDIPIRankErrors1TRN-MC-E2E, UploadUSMCâ€”â€” "
+        ]
+      },
+      "download": {
+        "filename": "mass-casualty-template.csv",
+        "sha256": "613c735c3237275e3bdb5882923fdc681a6d749a8f3fed9d6b0ef938e2efe0f3"
+      }
+    }
+  },
+  "persistence": {
+    "native": {
+      "CasualtyReport": {
+        "beforeCount": 47,
+        "afterCount": 50,
+        "newIds": [
+          "48",
+          "49",
+          "50"
+        ],
+        "allPreviousRowsUnchanged": true,
+        "newReports": [
+          {
+            "_id": "48",
+            "ReportNumber": "CR-2026-00048",
+            "Status": "1",
+            "IncidentGroupId": "incgrp_3e96be885eb3268f84da4f8100efb987",
+            "IncidentDate": "2026-09-01T00:00:00",
+            "IncidentTypeText": "Training simulation",
+            "IncidentType": "",
+            "MultiCasualtyIncident": "",
+            "LegacyIncidentDate": ""
+          },
+          {
+            "_id": "49",
+            "ReportNumber": "CR-2026-00049",
+            "Status": "1",
+            "IncidentGroupId": "incgrp_3e96be885eb3268f84da4f8100efb987",
+            "IncidentDate": "2026-09-01T00:00:00",
+            "IncidentTypeText": "Training simulation",
+            "IncidentType": "",
+            "MultiCasualtyIncident": "",
+            "LegacyIncidentDate": ""
+          },
+          {
+            "_id": "50",
+            "ReportNumber": "CR-2026-00050",
+            "Status": "1",
+            "IncidentGroupId": "incgrp_374019ac0f3858bea7c47f91c0db018b",
+            "IncidentDate": "2026-09-01T00:00:00",
+            "IncidentTypeText": "Training simulation",
+            "IncidentType": "",
+            "MultiCasualtyIncident": "",
+            "LegacyIncidentDate": ""
+          }
+        ]
+      },
+      "CasualtyPerson": {
+        "beforeCount": 34,
+        "afterCount": 37,
+        "newIds": [
+          "58",
+          "59",
+          "60"
+        ],
+        "allPreviousRowsUnchanged": true
+      }
+    },
+    "legacy": {
+      "casualty_reports": {
+        "beforeCount": 30,
+        "afterCount": 33,
+        "newIds": [
+          "cr_mtqo3geh6pf057",
+          "cr_mtqo3geicjflvh",
+          "cr_mtqo4qnbfpq8ef"
+        ],
+        "allPreviousRowsUnchanged": true,
+        "newReports": [
+          {
+            "id": "cr_mtqo3geh6pf057",
+            "report_number": "CR-2026-00026",
+            "status": "draft",
+            "incident_group_id": "incgrp_mtqo3gefbq0nzk",
+            "incident_date": "2026-09-01",
+            "incident_type": "Training simulation"
+          },
+          {
+            "id": "cr_mtqo3geicjflvh",
+            "report_number": "CR-2026-00027",
+            "status": "draft",
+            "incident_group_id": "incgrp_mtqo3gefbq0nzk",
+            "incident_date": "2026-09-01",
+            "incident_type": "Training simulation"
+          },
+          {
+            "id": "cr_mtqo4qnbfpq8ef",
+            "report_number": "CR-2026-00028",
+            "status": "draft",
+            "incident_group_id": "incgrp_mtqo4qnasz1lum",
+            "incident_date": "2026-09-01",
+            "incident_type": "Training simulation"
+          }
+        ]
+      },
+      "casualties": {
+        "beforeCount": 30,
+        "afterCount": 33,
+        "newIds": [
+          "cas_mtqo3gegum8bwo",
+          "cas_mtqo3gei0vw44h",
+          "cas_mtqo4qnalrzesk"
+        ],
+        "allPreviousRowsUnchanged": true
+      }
+    }
+  },
+  "writes": {
+    "native": {
+      "rapidTwoClicksRequestCount": 1,
+      "validSubmissionResponse": {
+        "versionInfo": {
+          "hasModuleVersionChanged": false,
+          "hasApiVersionChanged": false
+        },
+        "data": {
+          "Result": {
+            "IncidentGroupId": "incgrp_3e96be885eb3268f84da4f8100efb987",
+            "Count": 2,
+            "Created": {
+              "List": [
+                {
+                  "CasualtyPersonId": "58",
+                  "ReportId": "48",
+                  "ReportNumber": "CR-2026-00048",
+                  "ReportTypeCode": "initial",
+                  "Name": "Training, TRN-MC-E2E-A",
+                  "SourceRowNumber": 1
+                },
+                {
+                  "CasualtyPersonId": "59",
+                  "ReportId": "49",
+                  "ReportNumber": "CR-2026-00049",
+                  "ReportTypeCode": "initial",
+                  "Name": "Training, TRN-MC-E2E-B",
+                  "SourceRowNumber": 2
+                }
+              ]
+            },
+            "Errors": {
+              "List": [],
+              "EmptyListItem": {
+                "Index": 0,
+                "SourceRowNumber": 0,
+                "Error": "",
+                "ExistingCaseId": "0",
+                "ExistingCaseNumber": "",
+                "MatchedOn": ""
+              }
+            }
+          }
+        }
+      },
+      "sameRequestReplay": {
+        "status": 200,
+        "body": "{\"versionInfo\":{\"hasModuleVersionChanged\":false,\"hasApiVersionChanged\":false},\"data\":{\"Result\":{\"IncidentGroupId\":\"incgrp_3e96be885eb3268f84da4f8100efb987\",\"Count\":2,\"Created\":{\"List\":[{\"CasualtyPersonId\":\"58\",\"ReportId\":\"48\",\"ReportNumber\":\"CR-2026-00048\",\"ReportTypeCode\":\"initial\",\"Name\":\"Training, TRN-MC-E2E-A\",\"SourceRowNumber\":1},{\"CasualtyPersonId\":\"59\",\"ReportId\":\"49\",\"ReportNumber\":\"CR-2026-00049\",\"ReportTypeCode\":\"initial\",\"Name\":\"Training, TRN-MC-E2E-B\",\"SourceRowNumber\":2}]},\"Errors\":{\"List\":[],\"EmptyListItem\":{\"Index\":0,\"SourceRowNumber\":0,\"Error\":\"\",\"ExistingCaseId\":\"0\",\"ExistingCaseNumber\":\"\",\"MatchedOn\":\"\"}}}}}"
+      },
+      "dropLoadedCsv": false,
+      "clearCsvEmpty": true,
+      "clearPreservedLocation": "TRN-MC-E2E-0907 synthetic range",
+      "futureDateResponse": [
+        {
+          "versionInfo": {
+            "hasModuleVersionChanged": false,
+            "hasApiVersionChanged": false
+          },
+          "data": {},
+          "exception": {
+            "name": "UserException",
+            "specificType": "UserException",
+            "message": "Death date (2099-01-01) cannot be in the future."
+          }
+        }
+      ]
+    },
+    "legacy": {
+      "rapidTwoClicksRequestCount": 1,
+      "validSubmissionResponse": {
+        "incident_group_id": "incgrp_mtqo3gefbq0nzk",
+        "count": 2,
+        "created": [
+          {
+            "casualty_id": "cas_mtqo3gegum8bwo",
+            "report_id": "cr_mtqo3geh6pf057",
+            "report_number": "CR-2026-00026",
+            "report_type": "initial",
+            "name": "Training, TRN-MC-E2E-A"
+          },
+          {
+            "casualty_id": "cas_mtqo3gei0vw44h",
+            "report_id": "cr_mtqo3geicjflvh",
+            "report_number": "CR-2026-00027",
+            "report_type": "initial",
+            "name": "Training, TRN-MC-E2E-B"
+          }
+        ],
+        "errors": []
+      },
+      "sameRequestReplay": {
+        "status": 200,
+        "body": "{\"incident_group_id\":\"incgrp_mtqo4qnasz1lum\",\"count\":1,\"created\":[{\"casualty_id\":\"cas_mtqo4qnalrzesk\",\"report_id\":\"cr_mtqo4qnbfpq8ef\",\"report_number\":\"CR-2026-00028\",\"report_type\":\"initial\",\"name\":\"Training, TRN-MC-E2E-C\"}],\"errors\":[{\"index\":1,\"error\":\"gender exceeds max length 2\"}]}"
+      },
+      "dropLoadedCsv": true,
+      "clearCsvEmpty": true,
+      "clearPreservedLocation": "TRN-MC-E2E-0907 synthetic range",
+      "futureDateResponse": [
+        {
+          "error": "Death date (2099-01-01) cannot be in the future."
+        }
+      ]
+    }
+  },
+  "evidence": {
+    "matrix-browser.json": {
+      "localPath": "C:\\Users\\andre\\Anvil\\.local\\mass-casualty-e2e\\matrix-browser.json",
+      "sha256": "c69526fafc6c8d9be35e3228b492ca65a36cdd49791827ccd495540e882cb555"
+    },
+    "submit-browser.json": {
+      "localPath": "C:\\Users\\andre\\Anvil\\.local\\mass-casualty-e2e\\submit-browser.json",
+      "sha256": "5a9c9d57d33ea181c8797902320287158114fd4c77afb6e34ed892a14147a65f"
+    },
+    "valid-submit-browser.json": {
+      "localPath": "C:\\Users\\andre\\Anvil\\.local\\mass-casualty-e2e\\valid-submit-browser.json",
+      "sha256": "6f5eabdec5cdaf3b37bb82e4d8470ddfb1f4a3a70306ac18db0e38a313ba6877"
+    },
+    "extra-browser.json": {
+      "localPath": "C:\\Users\\andre\\Anvil\\.local\\mass-casualty-e2e\\extra-browser.json",
+      "sha256": "0429c4c09876a47def386fd5f89a1c6c71cf9d6be29f6a65dc703f6191599e43"
+    },
+    "visual-browser.json": {
+      "localPath": "C:\\Users\\andre\\Anvil\\.local\\mass-casualty-e2e\\visual-browser.json",
+      "sha256": "0ca2e46494d9c616e8299f1c479739abc180dece957338213db8de0f886c9570"
+    },
+    "final-checks-browser.json": {
+      "localPath": "C:\\Users\\andre\\Anvil\\.local\\mass-casualty-e2e\\final-checks-browser.json",
+      "sha256": "a99f5c535217862b1b68a555bdda9a81db26ca1744bafd3014fdf7d1a7a8f6ec"
+    },
+    "native-before.json": {
+      "localPath": "C:\\Users\\andre\\Anvil\\.local\\mass-casualty-e2e\\native-before.json",
+      "sha256": "10f3714dfe9a736b08b7e9b30f3f8943a3f7c1fba3b7d9e34bf1ce50d1c7bd80"
+    },
+    "native-final.json": {
+      "localPath": "C:\\Users\\andre\\Anvil\\.local\\mass-casualty-e2e\\native-final.json",
+      "sha256": "5bd5c5347408f463a24dfa021ba61c9297c9efbb0bc855921d5a13dc2b169477"
+    },
+    "legacy-before.json": {
+      "localPath": "C:\\Users\\andre\\Anvil\\.local\\mass-casualty-e2e\\legacy-before.json",
+      "sha256": "7d154e94eec7a758c649e26a775ef6fd18d5fcacc9985e29accf15498f38dd43"
+    },
+    "legacy-final.json": {
+      "localPath": "C:\\Users\\andre\\Anvil\\.local\\mass-casualty-e2e\\legacy-final.json",
+      "sha256": "21aa5a08694e39bbcbc978a53cf2d6de55e678883a321aa0a50ce7c4dd58f03b"
+    },
+    "csdump-consumer-result.json": {
+      "localPath": "C:\\Users\\andre\\Anvil\\.local\\mass-casualty-e2e\\csdump-consumer-result.json",
+      "sha256": "df20eb378167130c25bb855b08e8675ddefbfcc35ea2afc6556c7e3a656c739a"
+    }
+  },
+  "persistedFieldComparisons": {
+    "matchedPersonFields": 26,
+    "nativeReportDateCountryTypeStatusInjuryRemarks": true,
+    "dobEnvelopePresence": true,
+    "note": "DOB is simulated demo-v1 for this authorized PoC; no production-security claim or decrypt round-trip."
+  },
+  "limitations": [
+    "200/201 tested in frontend only, not 200 database inserts",
+    "No induced transactional SQL failure or multi-user concurrency test",
+    "No end-to-end approval of the created drafts",
+    "Anonymous browser-context attempt inconclusive due certificate/navigation; no successful auth coverage claim",
+    "DOB demo envelope storage checked, decrypt round-trip not exercised",
+    "Native mixed-result response capture interrupted in test harness; final persistence independently proves only valid C row created and D absent"
+  ],
+  "consumerReview": {
+    "action": "Approval_GetContext",
+    "node": "ReadDetails",
+    "statement": "SELECT r.[Id],r.[IncidentCountry],r.[IncidentType],r.[InflictingForce],r.[IncidentTime],r.[IncidentTimeZone],r.[IncidentNarrative],r.[CauseOfDeath],r.[InjuryType],r.[Latitude],r.[Longitude],r.[GridReference],r.[OverWater],r.[BodyOfWater],r.[MultiCasualtyIncident],r.[MultiCasualtyIncidentName],COALESCE(pt.[Label],''),COALESCE(ma.[Label],''),r.[ReportingCACId],COALESCE(r.[LegacyReporterUserId],(SELECT lk.[LegacyUserId] FROM {DCIPSUserLink} lk WHERE lk.[UserId]=r.[ReporterUserId] AND lk.[Enabled]=1)),r.[Remarks]\nFROM {CasualtyReport} r JOIN {CasualtyPerson} p ON p.[Id]=r.[CasualtyPersonId]\nLEFT JOIN {PersonnelType} pt ON pt.[Id]=p.[PersonnelType]\nLEFT JOIN {MilitaryAffiliation} ma ON ma.[Id]=p.[MilitaryAffiliation]\nWHERE r.[Id]=@ReportId AND (@IsAdmin = 1 OR r.[LegacyReporterUserId] = @ActorId OR EXISTS\n (SELECT 1 FROM {DCIPSUserLink} authorLink WHERE authorLink.[LegacyUserId]=@ActorId AND authorLink.[Enabled]=1 AND authorLink.[UserId]=r.[ReporterUserId]) OR\n (@ActorCAC <> '' AND EXISTS (SELECT 1 FROM {CasualtyAssistanceCenter} ac\n WHERE ac.[Id] = r.[ReportingCACId] AND ac.[LegacyId] = @ActorCAC)))",
+    "source": "C:\\Users\\andre\\Anvil\\.local\\mass-casualty-e2e\\csget-consumer-result.json",
+    "sha256": "f3f5fa366eb900d0051fefd9174c8e8a0d1649a87713b7469ac9bd1ab4566c4f"
+  }
+}

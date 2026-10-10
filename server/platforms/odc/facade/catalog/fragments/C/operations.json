@@ -1,0 +1,729 @@
+{
+  "schemaVersion": "ssam-discovery-fragment/1",
+  "contract": "ssam-catalog-contribution/1",
+  "front": "C",
+  "title": "Operations around the model: discovery, capture reading, proof and delivery (job and C# feature), authorization and publication, development data, reference refresh, Studio session, ODC Portal APIs, debugger, environment checks and the common diagnostic taxonomy; contracts of the existing public entries only (nothing here executes, logs in, publishes or writes external data)",
+  "reviewedAt": "2026-09-23",
+  "synonyms": {
+    "deliver": [
+      "entregar",
+      "entrega",
+      "aplicar no modulo",
+      "apply to the open module",
+      "merge"
+    ],
+    "troubleshoot": [
+      "diagnosticar",
+      "diagnostico",
+      "diagnóstico",
+      "depurar falha",
+      "why did it fail",
+      "por que falhou"
+    ],
+    "debugger": [
+      "depurador",
+      "breakpoint",
+      "debug"
+    ],
+    "portal": [
+      "odc portal",
+      "portal api",
+      "deployments",
+      "api do portal"
+    ],
+    "reconcile": [
+      "reconciliar",
+      "reconciliacao",
+      "reconciliação",
+      "conferir o recibo"
+    ],
+    "uncertain": [
+      "incerto",
+      "incerta",
+      "resultado incerto",
+      "timeout no merge"
+    ],
+    "refused": [
+      "recusado",
+      "recusada",
+      "recusa"
+    ],
+    "refresh references": [
+      "atualizar referencias",
+      "atualizar as referencias",
+      "atualizar dependencias",
+      "atualizar as dependencias",
+      "referencias desatualizadas",
+      "produtor alterado",
+      "produtor mudou",
+      "refresh das referencias"
+    ]
+  },
+  "capabilities": [
+    {
+      "id": "read.discover",
+      "category": "read",
+      "title": "Contextual discovery: from an intent to the capabilities, contracts, examples, evidence and gaps of the lane",
+      "keywords": [
+        "discover",
+        "catalog",
+        "which capability",
+        "how do i",
+        "contract of",
+        "expand",
+        "coverage of the lane"
+      ],
+      "summary": "`ssam discover \"<intent>\" --lane <odc|o11> [--app <capture.oml>] [--budget <bytes>]` answers once, within a hard byte budget, with the matching capabilities (exact public operation, role and operation statements with evidence per lane), contract slices, example excerpts, bindings, dependencies, unavailable entries and the exact continuation; `--expand <id>:operations+native+contract+example+evidence` returns what the budget omitted; `--detail <id>` opens one capability. Read-only; it never executes, delivers or validates natively.",
+      "route": {
+        "kind": "reader",
+        "operation": "ssam discover \"<intent>\" --lane <odc|o11> [--app <capture.oml>] [--budget N]; --expand <id>:<parts>; MCP ssam_discover {intent, lane, app?, expand?, detail?, type?, limit?, budgetBytes?}"
+      },
+      "contract": [],
+      "guidance": "Name the element and the operation in the intent (e.g. 'rename the Email attribute of Contact'); read `focus`, `operations.<op>.roles.<role>.<lane>` (status + evidence) and `unavailable` before acting. `--app` takes a capture (.oml) only in isolated work; a module NAME talks to the live Studio. A status is declared by the catalog; the evidence (proven-current / proven-historical / declared-not-proven) is computed from the stamped results of this machine. Declared refusals (unavailable) are kept under any budget; a reduced answer names every reduced section with its exact --expand.",
+      "platforms": {
+        "odc": {
+          "proofs": [],
+          "negative": [],
+          "limits": []
+        },
+        "o11": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "The O11 index serves only the capabilities of the shared catalog; nothing is inherited from the ODC descriptor.",
+              "origin": "docs/DESCOBERTA-CONTEXTUAL.md 2.4"
+            }
+          ]
+        }
+      },
+      "depends": [],
+      "alternatives": []
+    },
+    {
+      "id": "read.inspect",
+      "supersedes": [
+        "read.inspect"
+      ],
+      "category": "read",
+      "title": "Read an application capture: map, elements, properties, usages",
+      "keywords": [
+        "inspect",
+        "read",
+        "capture",
+        "snapshot",
+        "map",
+        "who uses",
+        "usages",
+        "impact",
+        "properties",
+        "expressions",
+        "existing elements"
+      ],
+      "summary": "Start with the module map: `ssam map` / MCP `ssam_map` answers from the module index of the capture (one file per capture sha256, kept across sessions) with every element, its @key, kind, role, parent and path, paged and filtered by kind, name, prefix, role or parent. Then the read-only reader over the same capture (.oml, reused by sha256) or, on ODC, an open module by name: kind/name/text queries with paging, a path or @key subtree with depth, usages for consumers, select for up to 32 paths in one call, a budget for the inline size (the full JSON is always written to `out`). Identities (keys, paths) are bound to the capture's sourceSha256; pass expectedSourceSha256 to refuse a changed capture.",
+      "route": {
+        "kind": "reader",
+        "operation": "both, first: ssam map [--lane odc|o11] <capture.oml|Module> [--kind K] [--name N] [--prefix P] [--role R] [--parent @key] [--offset N] [--max N] [--budget B] [--detail] / MCP ssam_map {lane, target, kind?, name?, prefix?, role?, parent?, key?, offset?, max?, budgetBytes?, includeDetail?, expectedSourceSha256?}; ODC: odc inspect <capture.oml> [Kind:Name/...|@key] [--kind K] [--name N] [--text T] [--usages] [--select p ...] [--budget N] / MCP studio_inspect {target, path?, kind?, name?, text?, select?, usages?, depth?, max?, budget?, expectedSourceSha256?}; O11: ssam inspect --lane o11 --oml <capture.oml> [--kind K] [--name N] [--text T] [--path P|@key] [--select ...] [--depth N] [--max N]; both: ssam discover --app <capture.oml>"
+      },
+      "contract": [],
+      "guidance": "To read an application, start with ssam map / ssam_map; then inspect subtrees, properties and usages by @key with the expected sha256 (the map's continuations carry both). ok=true means the query ran, not that the answer is complete: check notices, kindObserved, searchComplete and omissions. Kinds are interface names without the leading I (MobileScreen, ServerAction...). Reuse the same capture between pages; after any Studio change take a new capture (keys are not valid across captures). A module name as target snapshots the live module first (ODC); in isolated work use .oml captures only.",
+      "platforms": {
+        "odc": {
+          "proofs": ["examples/cap-read-inspect-minimal", "examples/cap-read-inspect-typical"],
+          "negative": [],
+          "limits": [
+            {
+              "text": "Schema limits: select <= 32, depth <= 12, max <= 500, budget 2000..200000; above the budget the answer carries navigation.target and the hash instead of the body.",
+              "origin": "platforms/odc/facade/mcp.mjs:62 (studio_inspect schema); platforms/odc/facade/reader-client.mjs:184-186"
+            },
+            {
+              "text": "The reader needs the local Anvil authority key (bridge.key) and may build the builder once; each inspect writes a journal line with the capture file and its sourceSha256.",
+              "origin": "platforms/odc/facade/reader-client.mjs:128-129; platforms/odc/facade/lib.mjs:31-37, 152-157, 278, 285"
+            },
+            {
+              "text": "The module map covers the reader-visible elements (names, kinds, roles, parents, data types of parameters, attributes and variables), not text search, property values, usages or other modules; a missing index is built once by the lane reader (index ensure) and a stale or corrupt one is never served.",
+              "origin": "platforms/odc/facade/module-map.mjs (moduleMap, loadIndex); docs/LEITURA-RAPIDA.md (Mapa do módulo)"
+            }
+          ]
+        },
+        "o11": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "O11 reads go through the kernel reader of the lane (kernel-reading.mjs) and journal in .local/reading/operations.jsonl; captures only (no live-module target).",
+              "origin": "platforms/odc/facade/kernel-reading.mjs:10-52; platforms/odc/facade/lanes.mjs:116-121"
+            },
+            {
+              "text": "The module map covers the reader-visible elements (names, kinds, roles, parents, data types of parameters, attributes and variables), not text search, property values, usages or other modules; a missing index is built once by the lane reader (index ensure) and a stale or corrupt one is never served.",
+              "origin": "platforms/odc/facade/module-map.mjs (moduleMap, loadIndex); docs/LEITURA-RAPIDA.md (Mapa do módulo)"
+            }
+          ]
+        }
+      },
+      "depends": [],
+      "alternatives": []
+    },
+    {
+      "id": "deliver.job",
+      "supersedes": [
+        "deliver.job"
+      ],
+      "category": "delivery",
+      "title": "Deliver a job to the open module directly (a fixture proof only when asked), with receipts and reconciliation",
+      "keywords": [
+        "deliver",
+        "job",
+        "prove",
+        "fixture",
+        "merge",
+        "candidate",
+        "preview",
+        "check base",
+        "receipt",
+        "apply to module"
+      ],
+      "summary": "Deliver directly, no proof or preview first. Delivery, ODC: `studio_deliver {feature, module, job, owners, changes}` captures the open module as it is now, applies the job privately on that capture, writes the manifest (a change against the capture, read element by element; NO_CHANGE when there is none), then check-base, preview and merge (strictlyEqual), refusing before any change; it never publishes; `until` stops earlier (snapshot|build|check-base|preview) only when the person asks to review. Proof, only when the person asks: `ssam job --lane <odc|o11> <job.json>` applies the job headless on the declared base (Verify + expected messages) and delivers nothing (MCP ssam_job / o11_job). Delivery, O11: `o11_deliver {module, job, checks, authorize}` (merge in Service Studio; publishing is `o11_publish {module, authorize}` with the user's words), or the O11 session tools context/propose/continue/status. The steps are also public one by one: studio_manifest {base, candidate, output, feature, owners, changes} (needs the base capture identity <base>.oml.json; refuses a changed hash, a missing host/developerId, an old capture, a foreign author), then studio_check_base / studio_preview / studio_merge {manifest}.",
+      "route": {
+        "kind": "delivery",
+        "operation": "ODC: odc deliver <feature> --job <job.json> --module <M> --owners '[\"Owner\"]' --changes '[\"Change\"]' / MCP studio_deliver; O11: ssam deliver --lane o11 --module <M> --job <job> --checks <names> / MCP o11_deliver; proof only when asked: ssam job --lane <lane> <job.json>; step by step: studio_manifest {base, candidate, output, feature, owners, changes} -> studio_check_base {manifest} -> studio_preview {manifest} -> studio_merge {manifest}"
+      },
+      "contract": [],
+      "guidance": "Headless proof is not delivery evidence; a merge receipt with merged=true and strictlyEqual=true is. Refusal vocabulary of the ODC bridge (gate): base_drift (take a new snapshot and rebuild), candidate_validation (fix the job), equivalence (a merge is pending in the Studio: never repeat), known_losses (outcome incomplete: merged except the named defaults or delete rules; the continuation delivers the repair job, never the original again), authorship / provider_state / pending_match / scope / key_not_found (read the gate text), studio_busy (dismiss the dialog by caption), retry_refused (a started merge exists), uncertain (the native operation was handed off: read receipt.json / last-error.json / the journal and reconcile; NEVER retry). A job with expectValid:false is never deliverable. When the change cannot be written as a job (new module, producer dependency, reparenting, pattern widgets from a reference), ODC has the C# feature route (deliver.feature).",
+      "platforms": {
+        "odc": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "studio_deliver requires module, owners and changes with a job, and forbids producer/tenant with a job; the kernel CLI must report flowLayoutEngine anvil-d4d8ece or delivery refuses; an existing output directory is refused (one directory per attempt).",
+              "origin": "platforms/odc/facade/lib.mjs:202-207; platforms/odc/facade/kernel-delivery.mjs:32-34, 44-46, 52"
+            },
+            {
+              "text": "Uncertain outcome: the job path marks `uncertain` when merged&&strictlyEqual is missing or the merge threw; the merge writes merge-started.json and refuses a repeat (retry_refused); a HandedOff native call or a 15-minute timeout is `uncertain` (merge-late line). Reconcile by receipt, never by repeating.",
+              "origin": "platforms/odc/facade/kernel-delivery.mjs:96-109; platforms/odc/studio/bridge/StartupHook.cs:1076-1079, 106-121"
+            },
+            {
+              "text": "Both delivery paths answer `uncertain` when the Studio step throws during the merge (the result may have been applied: reconcile by receipt and journal, never retry); a throw before the merge is a plain failure with nothing merged. The deliver-job journal line keeps outcome, gate, failed stage and evidence directory.",
+              "origin": "platforms/odc/facade/lib.mjs:208-215 (guardDeliveryStep), 246; platforms/odc/facade/kernel-delivery.mjs:110, 119, 127-129 (request C-009, 42d33e8)"
+            }
+          ]
+        },
+        "o11": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "The O11 lane merges and stops; publishing is a separate call, `o11_publish {module, authorize}`, with the user's own words (TrueChange errors come back and nothing is published). The O11 session tools keep a `reconcile` state when the write outcome is unknown; propose asks the user to accept the contract by elicitation, in the same process.",
+              "origin": "platforms/odc/facade/lanes.mjs:65-70; kernel/src/Anvil.Core/Delivery/AppSessions.cs:23,122,181; platforms/odc/facade/ssam.mjs:123-128"
+            }
+          ]
+        }
+      },
+      "depends": [],
+      "alternatives": []
+    },
+    {
+      "id": "deliver.feature",
+      "supersedes": [
+        "deliver.feature"
+      ],
+      "lanes": [
+        "odc"
+      ],
+      "category": "delivery",
+      "title": "C# feature route (Authoring primitives) for what jobs cannot express",
+      "keywords": [
+        "feature",
+        "c#",
+        "builder",
+        "authoring",
+        "new module",
+        "producer",
+        "dependency",
+        "reparent",
+        "pattern widget",
+        "copy from producer",
+        "add dependency"
+      ],
+      "summary": "An IFeature in platforms/odc/studio/builder/features using the Authoring/AuthoringData/AuthoringUi/AuthoringMisc/AuthoringRest primitives; `odc build list` shows the registered features; `odc build <feature> <base.oml> <sha> <dir> [--producer <oml>] --smoke` proves headless (a new directory; any new warning is refused); `odc deliver <feature>` runs the same gates as jobs. Required for: a new module (builder new + studio_create with createAuthorization), AddDependency with --producer, reparenting (IModelServices.MoveObject), widgets from a reference WidgetDefinition, native Copy of producer nodes.",
+      "route": {
+        "kind": "feature",
+        "operation": "write features/<Name>.cs, dotnet build studio/builder, odc build list, odc build <feature> <base.oml> <sha> <dir> --smoke, odc deliver <feature> --until preview / MCP studio_build, studio_deliver"
+      },
+      "contract": [],
+      "guidance": "Model API reference for C#: platforms/odc/docs/model-api/INDEX.md (reflection; the ODC Studio version is recorded there). Creating a new module asset (studio_create) writes revision 1 on the tenant without deploying and requires the user's own createAuthorization words; a create-started marker refuses a repeat; reconcile an uncertain create with studio_assets.",
+      "platforms": {
+        "odc": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "Live-merged proofs of the feature route are receipts in platforms/odc/lab/<dir>/evidence of the operational checkout; they are not part of this index.",
+              "origin": "platforms/odc/docs/HANDOFF.md 3.5/4"
+            },
+            {
+              "text": "The builder refuses any new warning; Data Actions take no inputs; the native Button Group cannot be authored.",
+              "origin": "platforms/odc/docs/HANDOFF.md 4; platforms/odc/studio/shared/AuthoringUi.cs comments"
+            }
+          ]
+        }
+      },
+      "depends": [],
+      "alternatives": [
+        {
+          "id": "deliver.job",
+          "when": "a job can express the change: jobs are proven on the fixture and need no C# compile"
+        }
+      ]
+    },
+    {
+      "id": "deliver.publish",
+      "supersedes": [
+        "deliver.publish"
+      ],
+      "lanes": [
+        "odc"
+      ],
+      "category": "delivery",
+      "title": "Authorize and publish (the user's own words), with the publish receipt and reconciliation",
+      "keywords": [
+        "publish",
+        "authorize",
+        "authorization",
+        "deploy",
+        "release",
+        "go live"
+      ],
+      "summary": "After a merge receipt (or a create receipt), `odc studio authorize <manifest> publish \"<the user's own words>\"` records the authorization in the manifest and `odc studio publish <manifest> --wait` publishes natively, compares the open model with the receipt and downloads the published revision (publish-receipt.json: state, revision, sha256, matchesOpenModule, strictlyEqual). Publication is never automatic and never retried after an uncertain result.",
+      "route": {
+        "kind": "delivery",
+        "operation": "studio_authorize {manifest, kind:\"publish\", text:\"<user words>\"} then studio_publish {manifest, wait:true, minutes?}"
+      },
+      "contract": [],
+      "guidance": "The text must be the user's own words, quoted, not a paraphrase (the bridge only checks it is not empty; the MCP schema requires at least 8 characters). A merge receipt outcome `MergeAndPublish` is a native label and does not mean a publication happened (publishInvoked says). A publish-started.json marker refuses any repeat ('never republish'); an uncertain publish is reconciled with studio_command publish-status (publish-status.json), studio_wait published <M> and studio_latest, never by publishing again. The same studio_authorize with kind \"create\" records the createAuthorization of a new module asset (deliver.feature).",
+      "platforms": {
+        "odc": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "studio_publish requires publishAuthorization, a receipt with ok and merged or created, the open model equal to the receipt hash (or the MatchTree for a created module), no native errors and the expected revision when declared.",
+              "origin": "platforms/odc/studio/bridge/StartupHook.cs:1187-1224"
+            },
+            {
+              "text": "studio_authorize needs the live Studio (the command goes through the bridge).",
+              "origin": "platforms/odc/studio/bridge/StartupHook.cs:251-262"
+            },
+            {
+              "text": "studio_publish accepts minutes up to 30, but the bridge stops waiting on `publish --wait` after 20 minutes and answers uncertain (studio_busy): reconcile, never republish.",
+              "origin": "platforms/odc/facade/mcp.mjs:67; platforms/odc/studio/bridge/StartupHook.cs:94, 110-111"
+            }
+          ]
+        }
+      },
+      "depends": [
+        {
+          "id": "deliver.job",
+          "unless": "the merge or create receipt came from the feature route (deliver.feature): publication needs a receipt, whichever route produced it"
+        }
+      ],
+      "alternatives": []
+    },
+    {
+      "id": "data.records",
+      "supersedes": [
+        "data.records"
+      ],
+      "category": "data",
+      "title": "Read or write records of the development database (not a model change)",
+      "keywords": [
+        "records",
+        "rows",
+        "seed",
+        "insert",
+        "update record",
+        "delete record",
+        "view data",
+        "edit data",
+        "populate"
+      ],
+      "summary": "ODC: the Studio's own data service (View/Edit data) on an entity of the open module: studio_data {module, entity, limit?, offset?, fields?} reads; studio_data_insert|update|delete write only with the user's authorization words. O11: o11_data, Edit Data through the Service Studio connected on the O11 lane with its own login (SSO included; host only checks its environment); writes declare an authorization and an operationId.",
+      "route": {
+        "kind": "data",
+        "operation": "ODC: odc studio data <Module> <Entity> [--limit N]; data-insert|data-update --records-file <journal/data/requests/x.json> --authorize \"<words>\"; data-delete --ids ... --authorize / MCP studio_data*; O11: MCP o11_data {request}"
+      },
+      "contract": [],
+      "guidance": "Business data is not model data: a catalog task never writes records by itself. Corporate tenants only on explicit instruction. Receipts: journal/data/<ts>-<Entity>-<op>.json (ODC).",
+      "platforms": {
+        "odc": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "Reading is proven live; inserts/updates/deletes have no receipt in the repository (HANDOFF 'P sem prova').",
+              "origin": "platforms/odc/docs/HANDOFF.md 4 and rule 3"
+            },
+            {
+              "text": "Known gap: ODC data writes have no start marker nor operationId: a partial write (some records failed) throws after writing and is journaled gate_refused, another native exception is native_error, and only a 3-minute timeout becomes uncertain, so an interrupted write cannot be reconciled by receipt.",
+              "origin": "platforms/odc/studio/bridge/DataCommands.cs:78-103 (partial failure :93, :101-102); platforms/odc/studio/shared/Journal.cs:30-31"
+            }
+          ]
+        },
+        "o11": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "O11 writes are reconciled by receipt: the request needs the user's authorization words and a stable UUID operationId; a receipt is written `pending` before the call and `completed` after; the same operationId with another request is refused, a `pending` receipt refuses any new request until reconciled, and a `completed` one is replayed instead of writing again.",
+              "origin": "kernel/src/Anvil.Core/Adapters.SS11/DataReceipt.cs:13-41; platforms/odc/facade/ssam.mjs:87-105"
+            }
+          ]
+        }
+      },
+      "depends": [],
+      "alternatives": []
+    },
+    {
+      "id": "ops.references-refresh",
+      "lanes": [
+        "odc"
+      ],
+      "category": "operations",
+      "title": "Refresh the references of an open module in the live Studio, with the refresh receipt",
+      "keywords": [
+        "refresh references",
+        "update references",
+        "outdated references",
+        "refresh dependencies",
+        "producer changed",
+        "atualizar referencias",
+        "referencias desatualizadas"
+      ],
+      "summary": "studio_refresh_references {module, producer?} (CLI `odc studio refresh-references <M> [--producer <Lib|key>]`) refreshes the references of the open module in the live Studio, optionally of one producer; the receipt journal/refresh-<M>-<stamp>.json|.txt records mode, changed, sha256Before/After, dependenciesBefore/After, refreshedReferences and differencesOutsideReferences.",
+      "route": {
+        "kind": "operations",
+        "operation": "studio_refresh_references {module, producer?}"
+      },
+      "contract": [],
+      "guidance": "This is a Studio write on the open module (not headless). It refuses with a modal dialog open, a pending merge, a logged-out session, or a producer the module does not reference. Read the receipt before any further step; after a refresh take a new snapshot before delivering (the base changed).",
+      "platforms": {
+        "odc": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "Known gap: no start marker, no repeat guard and no HandedOff marking: a refusal after the mutation (the final requirement check runs after the receipt is written) is journaled gate_refused and a native exception native_error, never uncertain; only a 5-minute timeout is uncertain. Reconcile with the receipt and a new snapshot, never by repeating blindly.",
+              "origin": "platforms/odc/studio/bridge/StartupHook.cs:289-353 (receipt :350, requirement :351); platforms/odc/studio/shared/Journal.cs:31"
+            }
+          ]
+        }
+      },
+      "depends": [],
+      "alternatives": []
+    },
+    {
+      "id": "ops.studio-session",
+      "lanes": [
+        "odc"
+      ],
+      "category": "operations",
+      "title": "Studio session operations: status, attach, wait, open/close, dialogs, snapshot/latest, assets, consumers, create asset",
+      "keywords": [
+        "studio status",
+        "attach",
+        "open module",
+        "close module",
+        "wait idle",
+        "dialog",
+        "dismiss dialog",
+        "snapshot",
+        "latest revision",
+        "assets",
+        "consumers of a module",
+        "which modules consume"
+      ],
+      "summary": "studio_status / studio_doctor read; studio_attach loads the bridge DLL into the running Studio; studio_open {module, localOml?} / studio_close {module, duplicates?, discard?} change the open modules; studio_wait {condition: idle|no-dialogs|published|open, timeoutSeconds} blocks at most 20 minutes in the bridge (the schema accepts 1800 s; beyond 20 minutes the answer is uncertain/studio_busy); studio_dismiss_dialog {caption, action} clicks a dialog button; studio_snapshot {module} writes snapshots/<M>-<sha>.oml(+.json identity); studio_latest downloads the server revision; studio_assets lists assets of the tenant; studio_consumers lists the modules that consume one; studio_command passes any bridge command through (its own gates still apply).",
+      "route": {
+        "kind": "operations",
+        "operation": "odc studio <status|attach|open|close|wait|dismiss-dialog|snapshot|latest|assets|consumers> ... / MCP studio_*"
+      },
+      "contract": [],
+      "guidance": "These act on the user's running ODC Studio and tenant session: never use them for isolated catalog work. A snapshot is idempotent by hash (never overwritten) and is the identity every read and delivery binds to. studio_close with discard keeps a -discarded snapshot first. studio_open trims the module name at the first space (a module name with spaces is not opened by name). The annotations readOnlyHint on snapshot/latest/assets/consumers/inspect/check_base/preview hide that they write local files.",
+      "platforms": {
+        "odc": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "studio_open with an unconfirmed result answers 'do not retry blindly'; studio_open splits the name at the first space.",
+              "origin": "platforms/odc/studio/bridge/StartupHook.cs:909, 1011"
+            },
+            {
+              "text": "Module resolution cascades: open modules, the tenant catalog section, any section, snapshots/*.json, then ObjectKey.Parse; there is no explicit not-found answer; an asset name is not a module name.",
+              "origin": "platforms/odc/studio/bridge/StartupHook.cs:853-878; platforms/odc/docs/ENTREGA-AGORA.md:44-46"
+            },
+            {
+              "text": "studio_consumers writes snapshots/<M>-consumers.json although annotated read-only; the bridge answers any command still running after its timeout (merge 15, publish --wait 20, wait 20 minutes) as uncertain/studio_busy and does not cancel it.",
+              "origin": "platforms/odc/studio/bridge/StartupHook.cs:94, 110-111, 438"
+            }
+          ]
+        }
+      },
+      "depends": [],
+      "alternatives": []
+    },
+    {
+      "id": "ops.portal",
+      "lanes": [
+        "odc"
+      ],
+      "category": "operations",
+      "title": "Portal public APIs: operation catalog, read calls (deployments, build feedback, environments), write policy",
+      "keywords": [
+        "portal",
+        "odc portal",
+        "portal api",
+        "deployments",
+        "environments",
+        "build feedback",
+        "list apis",
+        "describe operation",
+        "odc_read"
+      ],
+      "summary": "odc_status, odc_list_apis, odc_search_operations {apiId?, search?, readOnly?}, odc_describe_operation {operationId} and odc_portal_capabilities/odc_describe_capability are local catalog reads; odc_read {operationId, path?, query?} calls a read operation of the tenant with the API Client credential of the vault (deployments _Filter/_Get/_GetMessages, build feedback, environments). odc_write is registered only with an exact allowlist policy per tenant (none today).",
+      "route": {
+        "kind": "portal",
+        "operation": "odc portal status|apis|search <t>|describe <id>|read <id> [--query] [--path] [--tenant] / MCP odc_*"
+      },
+      "contract": [],
+      "guidance": "Discovering an operation in the catalog is not an authenticated integration nor a write authorization. Reads retry once on 401 and never on 429; local quota 100/min per API (10/min for environment-configurations-api-v1). Errors are coded (INPUT_INVALID, OPERATION_NOT_FOUND, AUTH_NOT_CONFIGURED, API_UNAUTHORIZED, API_FORBIDDEN, WRITE_BLOCKED, LOCAL_RATE_LIMIT, NETWORK_ERROR...) with location and retrySafety. Runtime logs and traces are not served by the facade (odc_portal_read exists only in the ODC3 host).",
+      "platforms": {
+        "odc": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "odc_write is not registered while every tenant has policyFile=null; its MCP schema has no authorization field (the CLI requires --authorize); no reconciliation tool exists for a write.",
+              "origin": "platforms/odc/portal/runtime/config.mjs:13-41 (ODC_POLICY_FILE); platforms/odc/tenants.json:13,19,32 (policyFile null); platforms/odc/portal/runtime/server.mjs:89-92; platforms/odc/facade/tests/mcp.test.mjs:25"
+            },
+            {
+              "text": "The MCP odc_read writes no journal line (the CLI does); monitoring answers carry liveVerified:false.",
+              "origin": "platforms/odc/portal/runtime/bridge.mjs:28-38, 58-110; platforms/odc/facade/lib.mjs:337-345"
+            }
+          ]
+        }
+      },
+      "depends": [],
+      "alternatives": []
+    },
+    {
+      "id": "ops.debugger",
+      "category": "operations",
+      "title": "Headless debugger: breakpoints on exact node keys, variables, stepping, with receipt and lock",
+      "keywords": [
+        "debugger",
+        "breakpoint",
+        "debug",
+        "step over",
+        "step into",
+        "variables",
+        "inspect variables at runtime",
+        "watch"
+      ],
+      "summary": "ssam_debug {op: start|watch|status|stop|variables|continue|step-over|step-into|step-out, lane, module, moduleKey, runtimeUrl, nodeKeys[1..20 without trace; 1..200 with trace or watch], trace, tenant (ODC), o11Auth (O11 native SSO), seconds, pauseSeconds, autoContinue, paths, frame, depth, threadId, eventId}: one session per target, manifest/receipt under .local/debugger/<sessionId>, a lock per target; status and stop answer from the receipt. watch traces external use and never invokes; sign-in only in a native English window, secrets never in arguments.",
+      "route": {
+        "kind": "operations",
+        "operation": "ssam debug <op> ... / MCP ssam_debug; runner: ssam debug run|release|status|authorize|reconcile --request <json-file> / MCP ssam_debug_run (ODC default, explicit lane=o11 for O11; O11 also has prepare); ODC invocation: ssam debug invoke prepare|run|status|forget --request <json-file> / MCP ssam_debug_invoke"
+      },
+      "contract": [],
+      "guidance": "A breakpoint pauses real requests of the runtime: use exact node keys (the action key is not the node key) and short windows. MCP start accepts 1-20 nodeKeys without trace, or 1-200 with the trace object; the direct debugger CLI has no trace flag. A start or execution with an uncertain outcome keeps the lock (debug_command_uncertain): reconcile with status/stop by receipt, never start again blindly. On ODC the runtimeUrl must belong to the tenant's environments. Developer debugger authorization and app-user login are separate; connection does not invoke an action or prove its user/roles. trace.requireFunctionKey filters actions, not another user's request executing the same action. ODC continuation ssam_debug_run op=run needs tenant, module, action and inputs or scenarios; op=authorize records the user's words per tenant before wrapper creation, publication or removal. ODC continuation ssam_debug_invoke op=prepare needs origin, snapshot, expectedSourceSha256, actionKey and a private requestFile or existing sourcePlanId for a path without browser bootstrap; op=run needs planId, stable operationId, authorization and debug or sessionId. Its inputs belong to the existing caller, not an arbitrary server action. Uncertain calls are never resent. The separate Node client proofs are experimental and are not a generic client/screen runner.",
+      "platforms": {
+        "odc": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "Debugger needs the private API Client and tenant. App-user login uses its own private session and currently supports built-in Cognito in us-east-1; other providers/challenges are refused. A real DEV login to a client app read four role claims; the original Node client runtime matched GetUserId and returned true for the app's own role and Administrator checks, both false anonymously. Propagation between called actions/modules and the server wrapper identity still need live proof; this experiment is not a generic client runner. ssam_debug_run uses the published Development revision and a REST wrapper; native bearer identity on that REST path and ServiceAction execution remain unproved. ssam_debug_invoke uses an existing ODC screenservices entry and an observed native envelope, with no app edit/publication; authenticated invocation and target stack evidence still need live proof. Libraries and client/screen actions are not covered by the server runner.",
+              "origin": "platforms/odc/facade/debug-runtime.mjs; platforms/odc/facade/debug-app-user-odc.mjs; platforms/odc/facade/debug-run.mjs; platforms/odc/facade/debug-invoke.mjs; docs/DEBUGGER-HEADLESS.md"
+            }
+          ]
+        },
+        "o11": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "Native SSO uses o11Auth {applicationKey,publishedVersionId,publishedProof:{path,sha256}} and the selected connected Studio, with a fresh exact host/module/app/version inventory. Runtime entry and target currently must be the same module. The debug bearer and native username/server-call ID token travel only over the private pipe and worker stdin; uncertain exchange retains receipts and lock. Legacy mode instead uses a private developer credentials reference or configured environment. Real SOAP start and stop passed. ssam debug run --lane o11 now has execution=rest-wrapper (default; operational candidate/import still needs native and live qualification) and execution=native-entry, with nativeEntry {sourceContract:{path,sha256}}. The initial native-entry contract accepts one existing zero-input Refresh, trace=none and Boolean outputs; prepare verifies original published assets before the secure English login window opens. A real official-command Headless_UI5811 run passed original login, Refresh, DataAction and ServiceAction with seven true checks: caller/service UserId present and equal, Registered true on both sides, flow entered and service returned. Credentials/references were released and the owned lock removed, without browser or publication. This proves response-based diagnostic propagation; private client-to-server UID equality, named business-role guards, internal server/service frames and request isolation remain unproved. The new request-ownership transport/session integration passed offline fixtures only; real production and ODC ownership modes are refused. This is not a generic client/screen executor.",
+              "origin": "platforms/odc/facade/debug.mjs; platforms/odc/facade/debug-o11-auth.mjs; platforms/odc/facade/debug-runtime.mjs; platforms/odc/facade/debug-o11-run.mjs; platforms/odc/facade/debug-o11-native-entry.mjs; kernel/debug/o11/SoapTransport.cs; kernel/debug/shared/DebugRequestOwnership.cs; docs/DEBUGGER-HEADLESS.md"
+            }
+          ]
+        }
+      },
+      "depends": [],
+      "alternatives": []
+    },
+    {
+      "id": "ops.environment",
+      "category": "operations",
+      "title": "Environment checks: doctor of both lanes, URL builder, configured tenants",
+      "keywords": [
+        "doctor",
+        "health check",
+        "environment check",
+        "app url",
+        "screen url",
+        "link to the app",
+        "tenants",
+        "which tenant"
+      ],
+      "summary": "ssam_doctor {lane?} reports both lanes (processes, lanes.py, odc doctor without live); on ODC studio_doctor {live?} adds a GET /environments per tenant when live; ssam_app_url {app, screen?, environment?, tenant?, stage?} builds the application or screen URL (publicationVerified:false, browserVerified:false); hybrid_tenants lists the configured tenants and the vault status.",
+      "route": {
+        "kind": "operations",
+        "operation": "ssam doctor [--lane]; ssam app <App> [Screen] --lane odc; odc portal tenants / MCP ssam_doctor, ssam_app_url, hybrid_tenants, studio_doctor"
+      },
+      "contract": [],
+      "guidance": "A URL is built, not verified: it does not prove the app is published or opens. doctor exits with code 2 when a check fails; read checks[].hint.",
+      "platforms": {
+        "odc": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "ssam_app_url refuses an ambiguous session; without environment/tenant it reads the live Studio session.",
+              "origin": "platforms/odc/facade/app-urls.mjs:23-41, 93-105"
+            }
+          ]
+        },
+        "o11": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "On O11 only ssam_doctor applies; app URLs and tenants are ODC tools.",
+              "origin": "platforms/odc/facade/ssam.mjs:37-68, 191-198"
+            }
+          ]
+        }
+      },
+      "depends": [],
+      "alternatives": []
+    },
+    {
+      "id": "diagnostic.troubleshoot",
+      "category": "diagnostic",
+      "title": "Diagnose a failure: common outcome/gate taxonomy, Verify messages, locating the element, proven cause vs hypothesis, reconciliation of uncertain writes",
+      "keywords": [
+        "troubleshoot",
+        "diagnose",
+        "diagnostic",
+        "refused",
+        "refusal",
+        "uncertain",
+        "gate",
+        "base drift",
+        "verify message",
+        "validation message",
+        "reconcile",
+        "receipt",
+        "failed job"
+      ],
+      "summary": "Outcomes: ok | gate_refused | native_error | uncertain (the native operation was already handed off). ODC bridge gates: base_drift, equivalence, known_losses, authorship, provider_state, pending_match, studio_busy, key_not_found, scope, candidate_validation, retry_refused, none. Kernel Verify (job results): validation.{new, fixed, preexisting, unexpected, missingExpected, ambiguous, tolerated}, accepted, isValid, each message with {id, type, key, path, detail} where key = [msgId, objectKey, [props], [messageParameters]] and path = 'Module (ESpace) / X (ServerAction) / ...'. Portal errors are coded (OdcError {code, message, location, issues, status, retryAfterSeconds, retrySafety}); the debugger and friction records carry their own codes.",
+      "route": {
+        "kind": "diagnostic",
+        "operation": "read the answer's outcome/gate/validation; locate with ssam discover --app <capture> --expand element:<Kind:Name|@key> or studio_inspect <capture> <path>; reconcile uncertain writes by their receipts (receipt.json, last-error.json, publish-status.json, refresh-*.json, journal/operations.jsonl); the Verify message key is built in kernel/src/Anvil.Core/Kernel/ModelHost.cs:215-216"
+      },
+      "contract": [],
+      "guidance": "Hints distinguish a proven cause from a hypothesis: the native Verify message, a gate refusal and a coded Portal error are facts; the gate classification of the bridge is a substring heuristic (unmatched = none) and friction codes are regex classifications: say so when relying on them. A key locates an element only inside the capture it came from (sourceSha256); after reopening or changing the module, locate again by Kind:Name. When the platform gives no location, say that the location is absent and return the best evidence (message text, module path) without inventing precision. Never 'fix' by changing target or environment, repeating an uncertain merge/publish/create/refresh/data write, or disabling validation: an uncertain write is reconciled by receipt, then decided by the user.",
+      "platforms": {
+        "odc": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "Bridge refusals carry no structured location (the hint is in the text); key_not_found is missing from the README refusal tables.",
+              "origin": "platforms/odc/studio/shared/Journal.cs:28-48; platforms/odc/README.md:183-192"
+            },
+            {
+              "text": "ModelPath answers suggestions (the name exists in another kind, similar names) or the candidate list when ambiguous.",
+              "origin": "platforms/odc/studio/shared/ModelPath.cs:18-19, 47-67"
+            }
+          ]
+        },
+        "o11": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "The O11 session tools keep `reconcile` when the write state is unknown; job results use the same Verify validation categories as ODC.",
+              "origin": "kernel/src/Anvil.Core/Delivery/AppSessions.cs:23,122,181; kernel/AGENTS.md:143-155"
+            }
+          ]
+        }
+      },
+      "depends": [],
+      "alternatives": []
+    }
+  ],
+  "unavailable": [
+    {
+      "id": "deliver.publish-o11",
+      "lanes": [
+        "o11"
+      ],
+      "keywords": [
+        "publish",
+        "deploy",
+        "go live",
+        "release",
+        "publicar"
+      ],
+      "reason": "The O11 delivery never publishes: it merges into Service Studio; publishing is `o11_publish {module, authorize}` with the user's own words (`ssam publish --lane o11` has no CLI verb).",
+      "evidence": "platforms/odc/facade/lanes.mjs:65-70 (declared refusal of the facade; no negative job)",
+      "negative": {
+        "o11": []
+      },
+      "alternative": "deliver.job (merge with ssam deliver --lane o11), then publish in Service Studio by the user"
+    },
+    {
+      "id": "ops.references-refresh-o11",
+      "lanes": [
+        "o11"
+      ],
+      "keywords": [
+        "refresh references",
+        "update references",
+        "outdated references",
+        "refresh dependencies"
+      ],
+      "reason": "No public (ssam/MCP) route refreshes outdated references on O11: the kernel CLI `anvil refresh-refs --module --out [--publish]` exists without a test and outside the facade; the Service Studio bridge only detects referencesOutdated.",
+      "evidence": "kernel/src/Anvil.Cli/Program.cs refresh-refs; kernel/src/Anvil.Core/Adapters.SS11/ReferenceRefresher.cs:56-118; kernel/src/Anvil.Bridge/OpenHandler.cs:113-123",
+      "negative": {
+        "o11": []
+      },
+      "alternative": "refresh references in Service Studio (user), then take a new capture; new references headless: reference.producer-import"
+    },
+    {
+      "id": "ops.portal-o11",
+      "lanes": [
+        "o11"
+      ],
+      "keywords": [
+        "portal",
+        "portal api",
+        "deployments",
+        "deployment",
+        "lifetime",
+        "environments",
+        "build feedback"
+      ],
+      "reason": "The O11 lane has no platform-API route: the ODC Portal APIs (odc_*) serve only the ODC lane, and no LifeTime or deployment API tool exists for O11 in the facade.",
+      "evidence": "platforms/odc/facade/ssam.mjs:91-200 (O11 tools: session proxy, o11_data, o11_job, ssam_job, ssam_doctor; plus ssam_debug) ; platforms/odc/portal (ODC Portal only)",
+      "negative": {
+        "o11": []
+      },
+      "alternative": "deployments and environments of O11 are handled by the user in LifeTime / Service Studio; this catalog has no route for them"
+    }
+  ],
+  "coverage": []
+}

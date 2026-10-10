@@ -1,0 +1,473 @@
+{
+  "fixture": "mobile-ui",
+  "features": [
+    "OutSystemsUI",
+    "OutSystemsUI:DropdownSearch",
+    "OutSystemsUI:DropdownServerSide",
+    "OutSystemsUI:DropdownServerSideItem",
+    "OutSystemsUI:DropdownTags",
+    "OutSystemsUI:FlipContent"
+  ],
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "tests/fixtures/outsystems-ui.oml",
+      "elements": [
+        "IMobileBlock:DropdownSearch",
+        "IMobileBlock:DropdownServerSide",
+        "IMobileBlock:DropdownServerSideItem",
+        "IMobileBlock:DropdownTags",
+        "IMobileBlock:FlipContent"
+      ]
+    }
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Ui35_DropdownSearch",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part2",
+            "type": "IExpression",
+            "properties": {
+              "Value": "LastEvent"
+            }
+          },
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:DropdownSearch",
+            "args": {
+              "OptionsList": "Value1",
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {},
+            "events": {
+              "OnChanged": {
+                "destination": "IMobileScreen:Ui35_DropdownSearch/Ui35_DropdownSearch_Event1",
+                "args": {
+                  "DropdownSearchId": "DropdownSearchId",
+                  "SelectedOptionList": "SelectedOptionList"
+                }
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value1",
+            "type": "DropdownOption List"
+          },
+          {
+            "name": "LastEvent",
+            "type": "Text"
+          }
+        ]
+      },
+      {
+        "name": "Ui36_DropdownServerSide",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:DropdownServerSide",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "BalloonContent": [
+                {
+                  "name": "Part3",
+                  "type": "IList",
+                  "properties": {
+                    "Source": "Value1"
+                  },
+                  "children": [
+                    {
+                      "name": "Part2",
+                      "type": "ITextWidget",
+                      "properties": {
+                        "Text": "Component content"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "IsEmpty"
+                  }
+                }
+              ],
+              "BalloonFooter": [
+                {
+                  "name": "Part5",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "BalloonSearchInput": [
+                {
+                  "name": "Part6",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Label"
+                  }
+                },
+                {
+                  "name": "Part7",
+                  "type": "IInput",
+                  "properties": {
+                    "Variable": "Value2"
+                  }
+                }
+              ],
+              "BalloonSearchInputIcon": [
+                {
+                  "name": "Part8",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "ClearSearchLink"
+                  }
+                }
+              ],
+              "SelectedValues": [
+                {
+                  "name": "Part9",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "HasSelectedValues"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value1",
+            "type": "Text List"
+          },
+          {
+            "name": "Value2",
+            "type": "Text"
+          }
+        ]
+      },
+      {
+        "name": "Ui37_DropdownServerSideItem",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part2",
+            "type": "IExpression",
+            "properties": {
+              "Value": "LastEvent"
+            }
+          },
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:DropdownServerSideItem",
+            "args": {
+              "ItemId": "\"Coverage\"",
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "DropdownItemContent": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Expression"
+                  }
+                }
+              ]
+            },
+            "events": {
+              "OnSelected": {
+                "destination": "IMobileScreen:Ui37_DropdownServerSideItem/Ui37_DropdownServerSideItem_Event2",
+                "args": {
+                  "DropdownServerSideItemId": "DropdownServerSideItemId",
+                  "ItemOptionId": "ItemOptionId",
+                  "DropdownServerSideId": "DropdownServerSideId"
+                }
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "LastEvent",
+            "type": "Text"
+          }
+        ]
+      },
+      {
+        "name": "Ui38_DropdownTags",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part2",
+            "type": "IExpression",
+            "properties": {
+              "Value": "LastEvent"
+            }
+          },
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:DropdownTags",
+            "args": {
+              "OptionsList": "Value1",
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {},
+            "events": {
+              "OnChanged": {
+                "destination": "IMobileScreen:Ui38_DropdownTags/Ui38_DropdownTags_Event3",
+                "args": {
+                  "DropdownTagsId": "DropdownTagsId",
+                  "SelectedOptionList": "SelectedOptionList"
+                }
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value1",
+            "type": "DropdownOption List"
+          },
+          {
+            "name": "LastEvent",
+            "type": "Text"
+          }
+        ]
+      },
+      {
+        "name": "Ui39_FlipContent",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IMobileBlockInstanceWidget",
+            "properties": {},
+            "source": "IMobileBlock:FlipContent",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "CardFront": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ],
+              "CardBack": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "name": "Ui35_DropdownSearch_Event1",
+          "kind": "screen",
+          "owner": "IMobileScreen:Ui35_DropdownSearch",
+          "inputs": [
+            {
+              "name": "DropdownSearchId",
+              "type": "Text",
+              "mandatory": true
+            },
+            {
+              "name": "SelectedOptionList",
+              "type": "DropdownOption List",
+              "mandatory": true
+            }
+          ],
+          "steps": [
+            {
+              "assign": {
+                "LastEvent": "DropdownSearchId"
+              }
+            },
+            {
+              "node": "IJSONSerializeNode",
+              "as": "Serialized2",
+              "properties": {
+                "Data": "SelectedOptionList",
+                "DateFormat": "ISO",
+                "SerializeDefaultValues": true,
+                "Description": ""
+              }
+            },
+            {
+              "assign": {
+                "LastEvent": "Serialized2.JSON"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ui37_DropdownServerSideItem_Event2",
+          "kind": "screen",
+          "owner": "IMobileScreen:Ui37_DropdownServerSideItem",
+          "inputs": [
+            {
+              "name": "DropdownServerSideItemId",
+              "type": "Text",
+              "mandatory": true
+            },
+            {
+              "name": "ItemOptionId",
+              "type": "Text",
+              "mandatory": true
+            },
+            {
+              "name": "DropdownServerSideId",
+              "type": "Text",
+              "mandatory": false
+            }
+          ],
+          "steps": [
+            {
+              "assign": {
+                "LastEvent": "DropdownServerSideItemId"
+              }
+            },
+            {
+              "assign": {
+                "LastEvent": "ItemOptionId"
+              }
+            },
+            {
+              "assign": {
+                "LastEvent": "DropdownServerSideId"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ui38_DropdownTags_Event3",
+          "kind": "screen",
+          "owner": "IMobileScreen:Ui38_DropdownTags",
+          "inputs": [
+            {
+              "name": "DropdownTagsId",
+              "type": "Text",
+              "mandatory": true
+            },
+            {
+              "name": "SelectedOptionList",
+              "type": "DropdownOption List",
+              "mandatory": true
+            }
+          ],
+          "steps": [
+            {
+              "assign": {
+                "LastEvent": "DropdownTagsId"
+              }
+            },
+            {
+              "node": "IJSONSerializeNode",
+              "as": "Serialized2",
+              "properties": {
+                "Data": "SelectedOptionList",
+                "DateFormat": "ISO",
+                "SerializeDefaultValues": true,
+                "Description": ""
+              }
+            },
+            {
+              "assign": {
+                "LastEvent": "Serialized2.JSON"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "mutations": [
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui35_DropdownSearch/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "DropdownSearch"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui36_DropdownServerSide/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "DropdownServerSide"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui37_DropdownServerSideItem/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "DropdownServerSideItem"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui38_DropdownTags/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "DropdownTags"
+    },
+    {
+      "op": "set",
+      "target": "IMobileScreen:Ui39_FlipContent/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "FlipContent"
+    }
+  ]
+}

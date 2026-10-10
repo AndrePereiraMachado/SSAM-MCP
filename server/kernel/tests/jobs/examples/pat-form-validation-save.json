@@ -1,0 +1,67 @@
+{
+ "description": "Formulario com validacao e gravacao: server action Customer_Save (create ou update conforme o Id, record recebido inteiro) com validacao no servidor; tela com Form, Inputs obrigatorios, validacao propria no cliente (Valid/ValidationMessage) e chamada so com Form.Valid, passando o record como expressao.",
+ "base": "reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Customer", "attributes": [
+   {"name": "Name", "type": "Text", "mandatory": true, "length": 100},
+   {"name": "Email", "type": "Email", "mandatory": true},
+   {"name": "Phone", "type": "Phone Number"},
+   {"name": "Active", "type": "Boolean", "default": "True"}]}]}},
+  {"op": "create", "parent": "@espace", "type": "IUserException", "name": "InvalidCustomer", "as": "$exc"},
+  {"op": "logic", "data": {"actions": [
+   {"name": "Customer_Save", "kind": "server", "description": "Cria ou atualiza o cliente recebido; recusa nome vazio",
+    "inputs": [{"name": "Customer", "type": "Customer"}],
+    "outputs": [{"name": "CustomerId", "type": "Customer Identifier"}],
+    "steps": [
+     {"if": "Trim(Customer.Name) = \"\"", "label": "NameEmpty?", "then": [{"raise": "InvalidCustomer", "message": "\"Name is required\""}]},
+     {"if": "Customer.Id = NullIdentifier()", "label": "IsNew?",
+      "then": [{"create": "Customer", "record": "Customer", "as": "CreateCustomer"}, {"assign": {"CustomerId": "CreateCustomer.Id"}, "as": "NewId"}],
+      "else": [{"update": "Customer", "record": "Customer", "as": "UpdateCustomer"}, {"assign": {"CustomerId": "Customer.Id"}, "as": "SameId"}]}]}]}},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CustomerEdit", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Customer\""},
+  {"op": "create", "parent": "$scr", "type": "IInputParameter", "name": "CustomerId", "as": "$pid"},
+  {"op": "set", "target": "$pid", "prop": "DataType", "value": "Customer Identifier"},
+  {"op": "set", "target": "$pid", "prop": "IsMandatory", "value": false},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetCustomerById", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Customer"}},
+  {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "Customer.Id = CustomerId"}},
+  {"op": "set", "target": "$agg", "prop": "MaxRecords", "value": "1"},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IForm", "name": "CustomerForm", "as": "$form"},
+  {"op": "create", "parent": "$form", "type": "ILabel", "name": "NameLabel", "as": "$lName"},
+  {"op": "create", "parent": "$lName", "type": "IExpression", "as": "$lNameT"},
+  {"op": "set", "target": "$lNameT", "prop": "Value", "value": "\"Name\""},
+  {"op": "create", "parent": "$form", "type": "IInput", "name": "Name_Input", "as": "$inName"},
+  {"op": "set", "target": "$inName", "prop": "Variable", "value": "GetCustomerById.List.Current.Customer.Name"},
+  {"op": "set", "target": "$inName", "prop": "Mandatory", "value": "True"},
+  {"op": "set", "target": "$lName", "prop": "TargetWidget", "value": "$inName"},
+  {"op": "create", "parent": "$form", "type": "ILabel", "name": "EmailLabel", "as": "$lEmail"},
+  {"op": "create", "parent": "$lEmail", "type": "IExpression", "as": "$lEmailT"},
+  {"op": "set", "target": "$lEmailT", "prop": "Value", "value": "\"Email\""},
+  {"op": "create", "parent": "$form", "type": "IInput", "name": "Email_Input", "as": "$inEmail"},
+  {"op": "set", "target": "$inEmail", "prop": "Variable", "value": "GetCustomerById.List.Current.Customer.Email"},
+  {"op": "set", "target": "$inEmail", "prop": "InputType", "value": "Email"},
+  {"op": "set", "target": "$inEmail", "prop": "Mandatory", "value": "True"},
+  {"op": "set", "target": "$lEmail", "prop": "TargetWidget", "value": "$inEmail"},
+  {"op": "create", "parent": "$form", "type": "ICheckbox", "name": "Active_Checkbox", "as": "$chkActive"},
+  {"op": "set", "target": "$chkActive", "prop": "Variable", "value": "GetCustomerById.List.Current.Customer.Active"},
+
+  {"op": "logic", "data": {"actions": [
+   {"name": "SaveOnClick", "kind": "screen", "owner": "IMobileScreen:CustomerEdit", "description": "Valida no cliente e grava so com o Form valido",
+    "steps": [
+     {"if": "Length(Trim(GetCustomerById.List.Current.Customer.Name)) < 3", "label": "NameTooShort?",
+      "then": [{"assign": {"Name_Input.Valid": "False", "Name_Input.ValidationMessage": "\"Use at least 3 letters\""}, "as": "MarkNameInvalid"}]},
+     {"if": "CustomerForm.Valid", "label": "FormValid?",
+      "then": [
+       {"call": "Customer_Save", "as": "SaveCustomer", "args": {"Customer": "GetCustomerById.List.Current.Customer"}},
+       {"node": "IMessageNode", "as": "SavedMessage", "properties": {"Message": "\"Customer saved\"", "Type": "Success"}}]}]}]}},
+  {"op": "create", "parent": "$form", "type": "IButton", "name": "SaveButton", "as": "$btn"},
+  {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "Save"},
+  {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "IScreenAction:SaveOnClick"}
+ ]
+}

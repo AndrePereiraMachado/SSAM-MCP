@@ -1,0 +1,109 @@
+{
+ "description": "Sessao fria H: refatoracao sobre screen-form-reactive. usages de Contact e Email; rename Email->EmailAddress e Contact_Save->Contact_Upsert; delete seguro de Phone (widget primeiro, atributo depois); novo atributo IsActive (Boolean, default True) + Switch na tela ContactDetail; get/dump para confirmar tela e action validas (escrito por uma LLM sem contexto na sessao fria H, rodada 2, 2026-09-04)",
+ "base": "job:screen-form-reactive",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "usages",
+   "target": "IServerEntity:Contact",
+   "_why": "(1) quem usa a entidade Contact, antes"
+  },
+  {
+   "op": "usages",
+   "target": "IServerEntity:Contact/Email",
+   "_why": "(1) quem usa o atributo Email, antes"
+  },
+  {
+   "op": "rename",
+   "target": "IServerEntity:Contact/Email",
+   "name": "EmailAddress"
+  },
+  {
+   "op": "usages",
+   "target": "IServerEntity:Contact/EmailAddress",
+   "_why": "(2) confirmar que os usos seguiram o rename"
+  },
+  {
+   "op": "rename",
+   "target": "IServerAction:Contact_Save",
+   "name": "Contact_Upsert"
+  },
+  {
+   "op": "get",
+   "target": "IScreenAction:Save/Contact_Upsert",
+   "_why": "(2) o Execute da screen action aponta para a action renomeada"
+  },
+  {
+   "op": "usages",
+   "target": "IServerEntity:Contact/Phone",
+   "_why": "(3) ver quem usa Phone antes de apagar"
+  },
+  {
+   "op": "delete",
+   "target": "IMobileScreen:ContactDetail/#IMobileBlockInstanceWidget/MainContent/ContactForm/Phone_Input",
+   "_why": "(3) primeiro o consumidor (input da tela), depois o atributo"
+  },
+  {
+   "op": "delete",
+   "target": "IServerEntity:Contact/Phone"
+  },
+  {
+   "op": "create",
+   "parent": "IServerEntity:Contact",
+   "type": "IEntityAttribute",
+   "name": "IsActive",
+   "as": "$isActive"
+  },
+  {
+   "op": "set",
+   "target": "$isActive",
+   "prop": "DataType",
+   "value": "Boolean"
+  },
+  {
+   "op": "set",
+   "target": "$isActive",
+   "prop": "DefaultValue",
+   "value": "True"
+  },
+  {
+   "op": "create",
+   "parent": "IMobileScreen:ContactDetail/#IMobileBlockInstanceWidget/MainContent/ContactForm",
+   "type": "ISwitch",
+   "name": "IsActive_Switch",
+   "as": "$sw"
+  },
+  {
+   "op": "set",
+   "target": "$sw",
+   "prop": "Variable",
+   "value": "GetContactById.List.Current.Contact.IsActive"
+  },
+  {
+   "op": "usages",
+   "target": "IServerEntity:Contact",
+   "_why": "(1)/(5) quem usa a entidade Contact, depois"
+  },
+  {
+   "op": "usages",
+   "target": "IServerEntity:Contact/IsActive"
+  },
+  {
+   "op": "get",
+   "target": "$isActive"
+  },
+  {
+   "op": "get",
+   "target": "$sw"
+  },
+  {
+   "op": "get",
+   "target": "IServerAction:Contact_Upsert"
+  },
+  {
+   "op": "dump",
+   "target": "IMobileScreen:ContactDetail",
+   "depth": 6
+  }
+ ]
+}

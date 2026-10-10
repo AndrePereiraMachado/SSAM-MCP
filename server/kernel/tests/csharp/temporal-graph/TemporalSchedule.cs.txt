@@ -1,0 +1,89 @@
+#nullable enable
+using System;
+using System.Collections.Generic;
+
+public readonly record struct ScheduleSnapshot(
+    DateOnly Day,
+    TimeOnly Opening,
+    TimeSpan Duration,
+    DateTime RecordedAt,
+    DateTimeOffset StartsAt,
+    DateOnly? BackupDay,
+    TimeOnly? OverrideOpening,
+    TimeSpan? OverrideDuration,
+    DateTime? ReviewedAt,
+    DateTimeOffset? FallbackStart);
+
+public sealed class ScheduleState
+{
+    public DateOnly Day;
+    public TimeOnly Opening;
+    public TimeSpan Duration;
+    public DateTime RecordedAt;
+    public DateTimeOffset StartsAt;
+    public DateOnly? BackupDay;
+    public TimeOnly? OverrideOpening;
+    public TimeSpan? OverrideDuration;
+    public DateTime? ReviewedAt;
+    public DateTimeOffset? FallbackStart;
+    public int Revisions;
+    public readonly List<DateOnly> Days = new();
+    public readonly List<TimeOnly> Openings = new();
+    public readonly List<TimeSpan> Durations = new();
+    public readonly List<DateTime> Recordings = new();
+    public readonly List<DateTimeOffset> Starts = new();
+    public DateOnly[] DaySlots = new DateOnly[1];
+    public TimeOnly[] OpeningSlots = new TimeOnly[1];
+    public TimeSpan[] DurationSlots = new TimeSpan[1];
+    public DateTime[] RecordingSlots = new DateTime[1];
+    public DateTimeOffset[] StartSlots = new DateTimeOffset[1];
+}
+
+public static class ScheduleRules
+{
+    public static ScheduleState Record(ScheduleState state, ScheduleSnapshot value)
+    {
+        state.Day = value.Day;
+        state.Opening = value.Opening;
+        state.Duration = value.Duration;
+        state.RecordedAt = value.RecordedAt;
+        state.StartsAt = value.StartsAt;
+        state.BackupDay = value.BackupDay;
+        state.OverrideOpening = value.OverrideOpening;
+        state.OverrideDuration = value.OverrideDuration;
+        state.ReviewedAt = value.ReviewedAt;
+        state.FallbackStart = value.FallbackStart;
+        state.Days.Add(value.Day);
+        state.Openings.Add(value.Opening);
+        state.Durations.Add(value.Duration);
+        state.Recordings.Add(value.RecordedAt);
+        state.Starts.Add(value.StartsAt);
+        state.DaySlots[0] = value.Day;
+        state.OpeningSlots[0] = value.Opening;
+        state.DurationSlots[0] = value.Duration;
+        state.RecordingSlots[0] = value.RecordedAt;
+        state.StartSlots[0] = value.StartsAt;
+        state.Revisions++;
+        return state;
+    }
+
+    public static ScheduleState ClearOverrides(ScheduleState state)
+    {
+        state.BackupDay = null;
+        state.OverrideOpening = null;
+        state.OverrideDuration = null;
+        state.ReviewedAt = null;
+        state.FallbackStart = null;
+        return state;
+    }
+
+    public static ScheduleSnapshot Snapshot(ScheduleState state) => new(
+        state.Day, state.Opening, state.Duration, state.RecordedAt, state.StartsAt,
+        state.BackupDay, state.OverrideOpening, state.OverrideDuration, state.ReviewedAt, state.FallbackStart);
+
+    public static TimeSpan Elapsed(DateTimeOffset first, DateTimeOffset last) => last - first;
+
+    public static DateTime? ChooseReview(DateTime? primary, DateTime? fallback) => primary ?? fallback;
+
+    public static DateTime[] RecordingPair(DateTime first, DateTime second) => new[] { first, second };
+}

@@ -1,0 +1,49 @@
+{
+  "fixture": "reactive-ui",
+  "features": [
+    "native-widget",
+    "mobile:IUpload"
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Coverage",
+        "type": "IMobileScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "properties": {
+          "Title": "\"Coverage\""
+        },
+        "widgets": [
+          {
+            "name": "Subject",
+            "type": "IUpload",
+            "properties": {
+              "FileContent": "Content",
+              "FileName": "Filename",
+              "Accept": "Any",
+              "Style": "\"coverage\""
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Content",
+            "type": "Binary Data"
+          },
+          {
+            "name": "Filename",
+            "type": "Text"
+          }
+        ]
+      }
+    ]
+  },
+  "mutation": {
+    "target": "IMobileScreen:Coverage/Subject",
+    "prop": "Style",
+    "value": "\"changed\""
+  }
+}

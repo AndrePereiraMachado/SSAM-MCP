@@ -1,0 +1,89 @@
+<Project>
+  <!--
+    Compiling against ANY Service Studio installation, whatever its version or folder.
+
+    A Studio may carry its own copy of a .NET framework assembly at a higher version than the targeting pack (11.55.91
+    ships System.Diagnostics.DiagnosticSource, System.Text.Json and others at 10.0 on the net8 runtime). Its DLLs then
+    reference that version and the compiler refuses them against the pack's older one (CS1705). The .NET host resolves the
+    same conflict at run time by taking the higher of the two, so the build does the same: for every framework reference
+    that the Studio folder carries at a HIGHER assembly version, it compiles against the Studio's file (never copied).
+    Equal or lower versions are left alone, so a Studio without such copies builds byte for byte as before and the kernel
+    stamps (kernelSha256) stay valid. It covers every build against a Studio folder: the CLI, the hook bridge
+    (open_studio_hook.ps1), the runtime bridge of ssam connect and the tests.
+
+    Folder: $(SSDir) for the O11 projects; another project opts in with $(AnvilStudioDir). A build against another
+    Studio passes -p:SSDir=<folder>, which every project of the build sees. Off switch for diagnosis only:
+    -p:AnvilStudioFramework=false.
+
+    The folder itself is not tied to one machine either: when the configured $(SSDir) (the project default, or an
+    environment variable) is not a Service Studio folder, the build uses the Service Studio registered in Windows
+    (Uninstall "OutSystems Service Studio 11", InstallLocation), then the default install folder. An explicit
+    -p:SSDir=<folder> always wins. Properties are evaluated before items, so the HintPaths follow this choice.
+  -->
+  <PropertyGroup Condition="'$(SSDir)' != '' and !Exists('$(SSDir)\ServiceStudio.Framework.dll')">
+    <AnvilRegisteredStudio>$([MSBuild]::GetRegistryValueFromView('HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\OutSystems Service Studio 11', 'InstallLocation', null, RegistryView.Registry64, RegistryView.Registry32))</AnvilRegisteredStudio>
+    <AnvilRegisteredStudio Condition="'$(AnvilRegisteredStudio)' == ''">$([MSBuild]::GetRegistryValueFromView('HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\OutSystems Service Studio 11', 'InstallLocation', null, RegistryView.Registry64, RegistryView.Registry32))</AnvilRegisteredStudio>
+    <SSDir Condition="'$(AnvilRegisteredStudio)' != '' and Exists('$(AnvilRegisteredStudio)\Service Studio\ServiceStudio.Framework.dll')">$([System.IO.Path]::Combine('$(AnvilRegisteredStudio)', 'Service Studio'))</SSDir>
+    <SSDir Condition="!Exists('$(SSDir)\ServiceStudio.Framework.dll') and Exists('$(ProgramFiles)\OutSystems\Service Studio 11\Service Studio\ServiceStudio.Framework.dll')">$(ProgramFiles)\OutSystems\Service Studio 11\Service Studio</SSDir>
+  </PropertyGroup>
+  <PropertyGroup>
+    <AnvilStudioDir Condition="'$(AnvilStudioDir)' == ''">$(SSDir)</AnvilStudioDir>
+  </PropertyGroup>
+
+  <UsingTask TaskName="AnvilStudioFrameworkOverrides" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <References ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <StudioDir ParameterType="System.String" Required="true" />
+      <Replaced ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
+      <Replacements ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.Collections.Generic" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Reflection" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        var replaced = new List<ITaskItem>();
+        var replacements = new List<ITaskItem>();
+        // Every project of the build that knows the Studio folder applies it, also the ones that only consume a project
+        // compiled against it (the CLI over Anvil.Core): one framework version per build graph.
+        foreach (var reference in References)
+        {
+            if (string.IsNullOrEmpty(reference.GetMetadata("FrameworkReferenceName"))) continue;
+            var local = Path.Combine(StudioDir, Path.GetFileName(reference.ItemSpec));
+            if (!File.Exists(reference.ItemSpec) || !File.Exists(local)) continue;
+            Version framework, studio;
+            try
+            {
+                framework = AssemblyName.GetAssemblyName(reference.ItemSpec).Version;
+                studio = AssemblyName.GetAssemblyName(local).Version;
+            }
+            catch (Exception) { continue; }
+            if (studio == null || framework == null || studio <= framework) continue;
+            // a plain reference by HintPath: the pack's metadata (its AssemblyVersion among them) would make
+            // ResolveAssemblyReference take the Studio file for the pack version and warn MSB3277
+            var item = new TaskItem(Path.GetFileNameWithoutExtension(local));
+            item.SetMetadata("HintPath", local);
+            item.SetMetadata("Private", "false");
+            item.SetMetadata("AnvilStudioFramework", framework.ToString());
+            replaced.Add(reference);
+            replacements.Add(item);
+            Log.LogMessage(MessageImportance.High, "anvil: " + Path.GetFileNameWithoutExtension(local) + " " + studio + " from the Studio folder (targeting pack " + framework + ")");
+        }
+        Replaced = replaced.ToArray();
+        Replacements = replacements.ToArray();
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="AnvilStudioFramework" AfterTargets="ResolveTargetingPackAssets"
+          Condition="'$(AnvilStudioFramework)' != 'false' and '$(AnvilStudioDir)' != '' and Exists('$(AnvilStudioDir)')">
+    <AnvilStudioFrameworkOverrides References="@(Reference)" StudioDir="$(AnvilStudioDir)">
+      <Output TaskParameter="Replaced" ItemName="_AnvilFrameworkReplaced" />
+      <Output TaskParameter="Replacements" ItemName="_AnvilFrameworkReplacements" />
+    </AnvilStudioFrameworkOverrides>
+    <ItemGroup>
+      <Reference Remove="@(_AnvilFrameworkReplaced)" />
+      <Reference Include="@(_AnvilFrameworkReplacements)" />
+    </ItemGroup>
+  </Target>
+</Project>

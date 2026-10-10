@@ -1,0 +1,6 @@
+<div id="RatingBoard" class="wf-board">
+  <span class="wf-board-title">Como correu?</span>
+  <Block id="StayPicker" name="WfRatingPicker" :Caption='"Como foi a estadia?"' @OnRate="WfStayRated"></Block>
+  <Block id="CleaningPicker" name="WfRatingPicker" :Caption='"E a limpeza do quarto?"' @OnRate="WfCleaningRated"></Block>
+  <span class="wf-board-echo">{{ "Estadia: " + IntegerToText(StayRating) + " (" + StayComment + ") | Limpeza: " + IntegerToText(CleaningRating) + " (" + CleaningComment + ")" }}</span>
+</div>

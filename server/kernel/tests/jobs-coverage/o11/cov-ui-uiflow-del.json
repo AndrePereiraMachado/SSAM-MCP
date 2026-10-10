@@ -1,0 +1,18 @@
+{
+ "description": "Cobertura testada (fase 1, medir): del de OutSystems.Model.UI.IUIFlow (o11) em espaceUi. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IUIFlow",
+   "name": "CovAUIFlow",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

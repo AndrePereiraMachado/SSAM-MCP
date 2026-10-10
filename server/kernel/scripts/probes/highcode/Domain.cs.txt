@@ -1,0 +1,22 @@
+#nullable enable
+using System;
+[AttributeUsage(AttributeTargets.Class)] public sealed class EntityAttribute : Attribute { }
+[AttributeUsage(AttributeTargets.Enum)] public sealed class StaticEntityAttribute : Attribute { }
+[AttributeUsage(AttributeTargets.Property)] public sealed class LengthAttribute(int length) : Attribute { public int Length => length; }
+public readonly record struct Id<T>(long Value);
+[Entity] public sealed class Incident {
+    public Id<Incident> Id { get; set; }
+    [Length(120)] public string Title { get; set; } = "";
+    public DateTime? ResolvedAt { get; set; }
+    public IncidentPriority Priority { get; set; }
+}
+[StaticEntity] public enum IncidentPriority { Low = 10, Medium = 20, High = 30, Critical = 40 }
+public static class Rules {
+    public static int SlaMinutes(IncidentPriority priority) => priority switch {
+        IncidentPriority.Low => 4320, IncidentPriority.Medium => 1440,
+        IncidentPriority.High => 480, IncidentPriority.Critical => 120,
+        _ => throw new ArgumentOutOfRangeException(nameof(priority))
+    };
+    public static int Half(int count) => count / 2;
+    public static decimal DecimalHalf(int count) => count / 2m;
+}

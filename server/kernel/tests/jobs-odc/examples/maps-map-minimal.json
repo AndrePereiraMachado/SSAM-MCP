@@ -1,0 +1,11 @@
+{
+ "description": "Map do OutSystemsMaps (Google): a instancia do mapa; a chave de API vem de um Setting no app real, nunca escrita no modelo.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "MapDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Map1", "source": "IMobileBlock:Map", "as": "$map"}
+ ]
+}

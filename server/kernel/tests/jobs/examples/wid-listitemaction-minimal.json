@@ -1,0 +1,22 @@
+{
+ "description": "ListItemAction minimo: o ListItem ja nasce com uma acao de deslizar em RightActions; basta dar-lhe texto e um OnClick (aqui uma screen action vazia). Para remover a acao: delete $item/RightActions/#IListItemAction.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetSwipeTasks", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAction", "name": "ArchiveOnSwipe", "as": "$act"},
+  {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$a0"},
+  {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$a9"},
+  {"op": "link", "from": "$a0", "to": "$a9"},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "SwipeList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetSwipeTasks.List"},
+  {"op": "create", "parent": "$list", "type": "IListItem", "name": "SwipeItem", "as": "$li"},
+  {"op": "create", "parent": "$li/Content", "type": "IExpression", "as": "$liT"},
+  {"op": "set", "target": "$liT", "prop": "Value", "value": "GetSwipeTasks.List.Current.Task.Title"},
+  {"op": "create", "parent": "$li/RightActions/#IListItemAction", "type": "IExpression", "as": "$actT"},
+  {"op": "set", "target": "$actT", "prop": "Value", "value": "\"Archive\""},
+  {"op": "set", "target": "$li/RightActions/#IListItemAction/OnClick", "prop": "Destination", "value": "IScreenAction:ArchiveOnSwipe"}
+ ]
+}

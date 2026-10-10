@@ -1,0 +1,11 @@
+{
+ "description": "ColumnsMediumLeft do OSUI: a instancia do bloco de colunas no MainContent, com os placeholders vazios.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ColumnsMediumLeftDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ColumnsMediumLeft1", "source": "IMobileBlock:ColumnsMediumLeft", "as": "$cols"}
+ ]
+}

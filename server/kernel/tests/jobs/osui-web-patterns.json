@@ -1,0 +1,103 @@
+{
+ "description": "Tela Traditional Web com padroes do OutSystemsUIWeb (Columns2, Card, Accordion/AccordionItem) montada com a referencia gerada em docs/ui/OutSystemsUIWeb",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IWebFlow:MainFlow",
+   "type": "IWebScreen",
+   "name": "PatternsWeb",
+   "as": "$scr"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IWebBlockInstanceWidget/Title",
+   "type": "IExpressionWidget",
+   "as": "$title"
+  },
+  {
+   "op": "set",
+   "target": "$title",
+   "prop": "Value",
+   "value": "\"Patterns Web\""
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IWebBlockInstanceWidget/MainContent",
+   "type": "IWebBlockInstanceWidget",
+   "name": "Columns2_1",
+   "source": "IWebBlock:Columns2",
+   "empty": true,
+   "as": "$cols"
+  },
+  {
+   "op": "create",
+   "parent": "$cols/Column1",
+   "type": "IWebBlockInstanceWidget",
+   "name": "Card1",
+   "source": "IWebBlock:Card",
+   "empty": true,
+   "as": "$card"
+  },
+  {
+   "op": "create",
+   "parent": "$card/Content",
+   "type": "IExpressionWidget",
+   "as": "$cardt"
+  },
+  {
+   "op": "set",
+   "target": "$cardt",
+   "prop": "Value",
+   "value": "\"Conteudo do cartao\""
+  },
+  {
+   "op": "create",
+   "parent": "$cols/Column2",
+   "type": "IWebBlockInstanceWidget",
+   "name": "Accordion1",
+   "source": "IWebBlock:Accordion",
+   "empty": true,
+   "as": "$acc"
+  },
+  {
+   "op": "create",
+   "parent": "$acc/Content",
+   "type": "IWebBlockInstanceWidget",
+   "name": "AccordionItem1",
+   "source": "IWebBlock:AccordionItem",
+   "empty": true,
+   "as": "$a1"
+  },
+  {
+   "op": "create",
+   "parent": "$a1/Title",
+   "type": "IExpressionWidget",
+   "as": "$a1t"
+  },
+  {
+   "op": "set",
+   "target": "$a1t",
+   "prop": "Value",
+   "value": "\"Como reservar?\""
+  },
+  {
+   "op": "create",
+   "parent": "$a1/Content",
+   "type": "IExpressionWidget",
+   "as": "$a1c"
+  },
+  {
+   "op": "set",
+   "target": "$a1c",
+   "prop": "Value",
+   "value": "\"Escolha as datas e confirme.\""
+  },
+  {
+   "op": "dump",
+   "target": "$scr",
+   "depth": 8
+  }
+ ]
+}

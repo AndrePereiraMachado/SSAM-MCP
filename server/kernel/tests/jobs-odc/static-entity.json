@@ -1,0 +1,67 @@
+{
+ "description": "ODC: ENTIDADE ESTATICA COM REGISTOS escrita op a op (espelha tests/jobs/static-entity.json). O censo conta IStaticEntityRecord em 26 dos 44 modulos reais e a faixa ODC so a criava por dentro da op spec: aqui ela nasce pelos verbos crus, que e o caminho quando se quer um atributo alem do trio Id/Label/Order. A convencao (que a API nao diz) e Id Integer SEM AutoNumber (o ODC Studio recusa ao vivo 'StaticEntity Auto Number') + IdentifierAttribute e um Id escrito em cada registo, Label Text + LabelAttribute, Order Integer + OrderByAttribute - repare que o Id de uma static entity e Integer, ao contrario do Long Integer de uma IServerEntity. Cada registo cria-se com type IRecord e o objeto que nasce e um IStaticEntityRecord; o valor de cada coluna escreve-se em $registo/<Atributo> prop Value e no ODC quem o guarda e um IRecordAttributeValue - o MESMO tipo que serve de valor do registo de exemplo de uma entidade normal (ver delete-attribute-no-consumers.json), por isso ele conta como uso derivado e nao trava um delete. A segunda metade do job prova para que servem os registos: uma entidade normal com FK para a static entity e default Entities.WfClaimStage.Received.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IStaticEntity", "name": "WfClaimStage", "as": "$s"},
+  {"op": "set", "target": "$s", "prop": "Description", "value": "Etapas de um processo de sinistro, em ordem"},
+
+  {"op": "create", "parent": "$s", "type": "IEntityAttribute", "name": "Id", "as": "$id"},
+  {"op": "set", "target": "$id", "prop": "DataType", "value": "Integer", "_why": "static entity tem Id Integer; a IServerEntity do ODC e que tem Long Integer (contraste na WfClaimFile, la em baixo)"},
+  {"op": "set", "target": "$id", "prop": "IsAutoNumber", "value": "No", "_why": "static entity NUNCA tem Id AutoNumber: o ODC Studio recusa ao vivo com 'The app uses StaticEntity Auto Number, which is not supported on this version' (o Verify headless nao apanha). Cada registo recebe o seu Id abaixo"},
+  {"op": "set", "target": "$s", "prop": "IdentifierAttribute", "value": "$id", "_why": "sem identificador a entidade nao passa no Verify; e e este atributo que gera o IIdentifierType 'WfClaimStage Identifier' usado mais abaixo"},
+
+  {"op": "create", "parent": "$s", "type": "IEntityAttribute", "name": "Label", "as": "$label"},
+  {"op": "set", "target": "$label", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$label", "prop": "Length", "value": 50},
+  {"op": "set", "target": "$s", "prop": "LabelAttribute", "value": "$label", "_why": "e o Label que a plataforma mostra quando o registo aparece numa tela ou num dropdown"},
+
+  {"op": "create", "parent": "$s", "type": "IEntityAttribute", "name": "Order", "as": "$order"},
+  {"op": "set", "target": "$order", "prop": "DataType", "value": "Integer"},
+  {"op": "set", "target": "$s", "prop": "OrderByAttribute", "value": "$order", "_why": "define a ordem em que os registos saem, independente do Id; o dump la em baixo NAO sai por esta ordem, porque a arvore do modelo nao e a ordem de leitura"},
+
+  {"op": "create", "parent": "$s", "type": "IEntityAttribute", "name": "IsFinal", "as": "$final"},
+  {"op": "set", "target": "$final", "prop": "DataType", "value": "Boolean", "_why": "o atributo ALEM do trio: e por ele que a static entity deixa de ser so um rotulo e passa a guardar dados por registo. E a razao para escrever este job op a op em vez de uma linha de spec"},
+  {"op": "set", "target": "$final", "prop": "Description", "value": "Marca as etapas que fecham o sinistro"},
+
+  {"op": "create", "parent": "$s", "type": "IRecord", "name": "Received", "as": "$r1", "_why": "DIFERENCA DE PLATAFORMA: o type do create e IRecord nas duas faixas, mas o objeto que volta no dump e IRecord na O11 e IStaticEntityRecord no ODC - e este ultimo o nome que o censo conta. Ele ja nasce com um IRecordAttributeValue por atributo, vazio, a espera do Value"},
+  {"op": "set", "target": "$r1/Id", "prop": "Value", "value": "1", "_why": "sem AutoNumber o Id de cada registo e escrito pelo job, como os outros valores"},
+  {"op": "set", "target": "$r1/Label", "prop": "Value", "value": "\"Received\"", "_why": "$registo/<Atributo> chega ao valor daquela coluna naquele registo; o Value e expressao, por isso o texto leva as aspas do OutSystems dentro das aspas do JSON"},
+  {"op": "set", "target": "$r1/Order", "prop": "Value", "value": "1"},
+  {"op": "set", "target": "$r1/IsFinal", "prop": "Value", "value": "False"},
+
+  {"op": "create", "parent": "$s", "type": "IRecord", "name": "UnderReview", "as": "$r2"},
+  {"op": "set", "target": "$r2/Id", "prop": "Value", "value": "2"},
+  {"op": "set", "target": "$r2/Label", "prop": "Value", "value": "\"Under review\"", "_why": "o Label nao tem de ser igual ao nome do registo: o nome e identificador de codigo (Entities.WfClaimStage.UnderReview), o Label e o que o utilizador le"},
+  {"op": "set", "target": "$r2/Order", "prop": "Value", "value": "2"},
+  {"op": "set", "target": "$r2/IsFinal", "prop": "Value", "value": "False"},
+
+  {"op": "create", "parent": "$s", "type": "IRecord", "name": "Closed", "as": "$r3"},
+  {"op": "set", "target": "$r3/Id", "prop": "Value", "value": "3"},
+  {"op": "set", "target": "$r3/Label", "prop": "Value", "value": "\"Closed\""},
+  {"op": "set", "target": "$r3/Order", "prop": "Value", "value": "3"},
+  {"op": "set", "target": "$r3/IsFinal", "prop": "Value", "value": "True", "_why": "o unico registo com IsFinal a True: o valor por registo e o que distingue esta static entity de uma lista de rotulos"},
+
+  {"op": "create", "parent": "@espace", "type": "IServerEntity", "name": "WfClaimFile", "as": "$e", "_why": "a segunda metade: uma entidade normal que CONSOME a static entity. Sem consumidor, uma static entity passa o Verify na mesma (nao apanha UnusedElement, ao contrario de uma structure), mas o que os 26 modulos reais fazem e isto"},
+  {"op": "set", "target": "$e", "prop": "Description", "value": "Sinistro em curso, com a etapa em que esta"},
+  {"op": "create", "parent": "$e", "type": "IEntityAttribute", "name": "Id", "as": "$eid"},
+  {"op": "set", "target": "$eid", "prop": "DataType", "value": "Long Integer", "_why": "o contraste prometido: entidade normal tem Id Long Integer, static entity tem Integer"},
+  {"op": "set", "target": "$eid", "prop": "IsAutoNumber", "value": "Yes"},
+  {"op": "set", "target": "$e", "prop": "IdentifierAttribute", "value": "$eid"},
+  {"op": "create", "parent": "$e", "type": "IEntityAttribute", "name": "Reference", "as": "$ref"},
+  {"op": "set", "target": "$ref", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$ref", "prop": "Length", "value": 20},
+  {"op": "create", "parent": "$e", "type": "IEntityAttribute", "name": "StageId", "as": "$stage"},
+  {"op": "set", "target": "$stage", "prop": "DataType", "value": "WfClaimStage Identifier", "_why": "a FK escreve-se pelo NOME do tipo identificador que a static entity gerou sozinha ao receber o IdentifierAttribute"},
+  {"op": "set", "target": "$stage", "prop": "IsMandatory", "value": true},
+  {"op": "set", "target": "$stage", "prop": "DefaultValue", "value": "Entities.WfClaimStage.Received", "_why": "Entities.<Static>.<Registo> e a unica forma de citar um registo numa expressao, e vale em qualquer propriedade-expressao (default, filtro de aggregate, condicao de If). No ODC a propriedade-expressao e escrita por ExpressionDefinition.Parse, que e quem liga este texto ao IStaticEntityRecord criado acima - por isso o registo passa a ter um consumidor REAL"},
+
+  {"op": "get", "target": "$s", "_why": "le de volta a entidade: EntityKind Static, Records 3, Attributes 4 e Identifier/Label/OrderBy a apontar para os atributos criados aqui"},
+  {"op": "get", "target": "$r3/IsFinal", "_why": "prova o valor por registo: o objeto e um IRecordAttributeValue com Attribute = IsFinal e Value = True"},
+  {"op": "get", "target": "$stage", "_why": "prova o default: o texto volta como Entities.WfClaimStage.Received, ja religado ao registo"},
+  {"op": "dump", "target": "$s", "depth": 3, "_why": "prova a arvore inteira: 4 IEntityAttribute, 3 IStaticEntityRecord com um IRecordAttributeValue por atributo (o do Id com o valor escrito pelo job), cada valor guardado num ITextBasedExpression (na O11 o mesmo lugar aparece como IExpression), e ainda o GetWfClaimStage e o 'WfClaimStage Identifier' que a plataforma gera sozinha. Os registos NAO saem por ordem de criacao: quem manda na ordem de leitura e o OrderByAttribute, nao a arvore"},
+  {"op": "usages", "target": "$r1", "_why": "prova que o registo Received e consumido pelo default da WfClaimFile.StageId: um registo de static entity e um objeto do modelo como outro qualquer, com consumidores e com recusa de delete"},
+  {"op": "find", "name": "WfClaimStage"}
+ ]
+}

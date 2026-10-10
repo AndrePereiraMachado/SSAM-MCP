@@ -1,0 +1,196 @@
+{
+  "schemaVersion": "ssam-discovery-fragment/1",
+  "contract": "ssam-catalog-contribution/1",
+  "front": "C",
+  "title": "Module references (producer/consumer): headless import of public producer elements on O11 (reference verb), addressing of imported elements, and the ODC situation (the public signature captured from the consumer session is imported by the delivery; no offline producer import)",
+  "reviewedAt": "2026-10-05",
+  "synonyms": {
+    "reference": [
+      "references",
+      "referencia",
+      "referência",
+      "referencias",
+      "dependency",
+      "dependencies",
+      "dependencia",
+      "manage dependencies",
+      "producer",
+      "produtor",
+      "consumer module"
+    ]
+  },
+  "capabilities": [
+    {
+      "id": "reference.producer-import",
+      "lanes": [
+        "o11"
+      ],
+      "category": "reference",
+      "title": "Reference public elements of a producer module (O11, headless): add the dependency, then use the imported elements",
+      "keywords": [
+        "reference",
+        "producer",
+        "import public elements",
+        "add dependency",
+        "manage dependencies",
+        "consume library",
+        "public entity",
+        "public action"
+      ],
+      "summary": "`reference {producer, elements, as}` imports public elements (`Tipo:Nome` list) of a producer module into the open module through IESpace.RefreshDependencies; the producer is a job (`job:<name>`), a fixture, or a module bound on the command line (--producer Name=<oml>). Imported elements are then addressed like local ones: `Tipo:Nome` falls back to the `<Tipo>Signature` interface (IServerAction:X resolves IActionSignature/IServerActionSignature), `Tipo:@producerKey/elementKey` binds by original key, and `IReference:<Producer>/<Flow>/<Block>` names a native block import.",
+      "route": {
+        "kind": "job",
+        "operation": "{\"op\":\"reference\",\"producer\":\"job:<producer-job>\"|\"<fixture.oml>\",\"elements\":[\"IServerEntity:<E>\",\"IServerAction:<A>\"],\"as\":\"$ref\"}; then use the elements (e.g. set <call> Action IActionSignature:<A>); deliver with o11_deliver (it validates and refuses before any change)"
+      },
+      "contract": [
+        "verbs.verbs.reference",
+        "verbs.references",
+        "verbs.verbs.find"
+      ],
+      "guidance": "Every referenced element must be Public and shareable in the producer (a private static entity is refused with a producer-side correction). Aliases live only inside one job. A frozen .avsig extension snapshot is accepted only on O11 and only before any edit in the job. Hidden (indirect) references are unhidden when a block instance binds SourceBlock (hidden-reference-block). There is no verb to remove a dependency (RemoveUnusedDependencies exists in the API, unused). Updating outdated references on O11 has no public (ssam/MCP) route: the kernel CLI `anvil refresh-refs` exists without a test, and the Service Studio bridge only detects referencesOutdated.",
+      "example": {
+        "ops": [
+          "reference",
+          "find",
+          "create",
+          "set"
+        ],
+        "max": 8
+      },
+      "elements": [
+        {
+          "role": "module reference",
+          "platforms": {
+            "o11": {
+              "native": "OutSystems.Model.IReference",
+              "jobType": "IReference",
+              "address": "$alias of the reference op, or find {type:IReference}"
+            }
+          }
+        }
+      ],
+      "operations": {
+        "read": {
+          "route": "find {type:\"IReference\"}",
+          "preconditions": [],
+          "roles": {
+            "module reference": {
+              "o11": {
+                "status": "applicable",
+                "proofs": [
+                  "consume-reference",
+                  "consume-reference-screens"
+                ],
+                "verbs": [
+                  "find"
+                ]
+              }
+            }
+          }
+        },
+        "create": {
+          "route": "reference {producer, elements, as}",
+          "preconditions": [
+            "the producer resolves (job:<name> in the lane suite folder or tests/jobs, a fixture under tests/fixtures, or --producer Name=<oml>)",
+            "each element is Public and IShareable in the producer"
+          ],
+          "roles": {
+            "module reference": {
+              "o11": {
+                "status": "conditional",
+                "verbs": [
+                  "reference"
+                ],
+                "proofs": [
+                  "consume-reference",
+                  "consume-reference-screens",
+                  "consume-reference-static"
+                ],
+                "scope": "entity, server action and static entity imported and then used (aggregate, call node, expression over a named record)",
+                "note": "conditional: only public shareable producer elements; the private-element refusal is asserted by CurrentHintTests (jobs-negative/reference-static-not-public.json has no expectError, so the negative suite does not run it)"
+              }
+            }
+          }
+        },
+        "delete": {
+          "route": "none (no remove-dependency verb)",
+          "preconditions": [],
+          "roles": {
+            "module reference": {
+              "o11": {
+                "status": "undetermined",
+                "note": "no verb or job removes a dependency; the API method RemoveUnusedDependencies is unused by the kernel"
+              }
+            }
+          }
+        }
+      },
+      "platforms": {
+        "o11": {
+          "proofs": [
+            "consume-reference",
+            "consume-reference-screens",
+            "consume-reference-static",
+            "hidden-reference-block"
+          ],
+          "negative": [],
+          "context": {
+            "kinds": [
+              "Reference"
+            ]
+          },
+          "limits": [
+            {
+              "text": "Producer jobs are resolved by lane folder: a job: producer outside the suite folders or tests/jobs is not found; aliases are local to one job.",
+              "origin": "kernel/docs/NAO-DA.md (job: producer by lane; local aliases); JobRunner.cs producer resolution"
+            },
+            {
+              "text": "No public route updates outdated references on O11 (kernel CLI `anvil refresh-refs` only, untested; the bridge only detects referencesOutdated).",
+              "origin": "kernel/src/Anvil.Cli/Program.cs refresh-refs; kernel/src/Anvil.Bridge/OpenHandler.cs referencesOutdated"
+            },
+            {
+              "text": "hidden-reference-block proves that binding SourceBlock unhides an indirect reference; it does not run the reference verb. The producer jobs (producer-public, producer-static-public) are bases of the consumers, not proofs of the import.",
+              "origin": "kernel/tests/jobs/hidden-reference-block.json description; kernel/tests/jobs/consume-reference*.json (reference producer job:...)"
+            }
+          ],
+          "differences": [
+            {
+              "text": "On ODC the reference op of a studio_deliver job imports the public signature the delivery captures from the consumer session (modules, libraries and External Libraries, see reference.external-library-odc); a producer .oml or job:<name> is not imported offline (see reference.import-headless-odc).",
+              "origin": "kernel/src/Anvil.Core.Odc/Adapters.ODC/OdcRuntime.cs:75-76 and OdcReferenceImporter.cs; platforms/odc/facade/kernel-delivery.mjs (reference-snapshot before the build); kernel/tests/Anvil.Tests.Odc/OdcDependencyTests.cs"
+            }
+          ]
+        }
+      },
+      "depends": [],
+      "alternatives": []
+    }
+  ],
+  "unavailable": [
+    {
+      "id": "reference.import-headless-odc",
+      "supersedes": [
+        "reference-import-headless"
+      ],
+      "lanes": [
+        "odc"
+      ],
+      "keywords": [
+        "reference",
+        "referencia",
+        "producer",
+        "import public elements",
+        "add dependency",
+        "consume library",
+        "biblioteca",
+        "manage dependencies"
+      ],
+      "reason": "What stays unavailable on ODC is the OFFLINE import: a producer given as a .oml, a fixture or job:<name> (the O11 form) is not imported by the ODC kernel. The import of a public producer itself exists: the reference op of a studio_deliver job imports the public signature the delivery captures from the consumer session (bridge reference-snapshot, OdcReferenceImporter through IESpace.AddDependency), for modules, libraries and External Libraries (reference.external-library-odc).",
+      "evidence": "kernel/src/Anvil.Core.Odc/Adapters.ODC/OdcRuntime.cs:75-76 (signature import through OdcReferenceImporter); kernel/src/Anvil.Core.Odc/Adapters.ODC/OdcReferenceImporter.cs (only the version 2 public signature, no producer .oml); kernel/tests/Anvil.Tests.Odc/OdcDependencyTests.cs (import proven offline from a captured signature)",
+      "negative": {
+        "odc": []
+      },
+      "alternative": "studio_deliver with the reference op naming the producer (the delivery captures its signature from the consumer session); for an External Library see reference.external-library-odc; to update an existing reference, studio_refresh_references {module, producer?} (ops.references-refresh)"
+    }
+  ],
+  "coverage": []
+}

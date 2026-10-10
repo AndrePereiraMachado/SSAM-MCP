@@ -1,0 +1,6 @@
+{
+ "description":"Nome de action existente sem replace e recusado, sem sufixo automatico.",
+ "base":"job:logic-call-order",
+ "expectError":["action 'ReplaceTarget' already exists","replace"],
+ "ops":[{"op":"logic","data":{"actions":[{"name":"ReplaceTarget","inputs":[{"name":"Value","type":"Integer"}],"outputs":[{"name":"Result","type":"Integer"}],"steps":[{"assign":{"Result":"Value + 2"}}]}]}}]
+}

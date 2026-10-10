@@ -1,0 +1,22 @@
+{
+ "description": "ButtonLoading do OSUI: IsLoading liga durante a chamada ao servidor (True antes, False depois) e mostra a legenda durante o carregamento.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "AuditLine", "attributes": [{"name": "Note", "type": "Text", "length": 200, "mandatory": true}]}]}},
+  {"op": "logic", "data": {"actions": [{"name": "Audit_Write", "kind": "server", "inputs": [{"name": "Note", "type": "Text"}], "vars": [{"name": "Row", "type": "AuditLine"}], "steps": [{"assign": {"Row.Note": "Note"}, "as": "Fill"}, {"create": "AuditLine", "record": "Row", "as": "Insert"}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "SaveWithSpinner", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Save\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "IsSaving", "as": "$vIsSaving"},
+  {"op": "set", "target": "$vIsSaving", "prop": "DataType", "value": "Boolean"},
+  {"op": "logic", "data": {"actions": [{"name": "Save", "kind": "screen", "owner": "IMobileScreen:SaveWithSpinner", "steps": [{"assign": {"IsSaving": "True"}, "as": "StartSpinner"}, {"call": "Audit_Write", "as": "Write", "args": {"Note": "\"saved\""}}, {"assign": {"IsSaving": "False"}, "as": "StopSpinner"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ButtonLoading1", "source": "IMobileBlock:ButtonLoading", "as": "$bl"},
+  {"op": "set", "target": "$bl/IsLoading", "prop": "Value", "value": "IsSaving"},
+  {"op": "set", "target": "$bl/ShowLabelOnLoading", "prop": "Value", "value": "True"},
+  {"op": "set", "target": "$bl/Button/#IButton/#ITextWidget", "prop": "Text", "value": "Save"},
+  {"op": "set", "target": "$bl/Button/#IButton/OnClick", "prop": "Destination", "value": "IMobileScreen:SaveWithSpinner/Save"}
+ ]
+}

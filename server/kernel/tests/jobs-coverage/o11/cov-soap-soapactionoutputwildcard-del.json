@@ -1,0 +1,32 @@
+{
+ "description": "Cobertura testada (fase 1, medir): del de ServiceStudio.Plugin.SOAP.ISOAPActionOutputWildcard (o11) em soapAction. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISOAPClient",
+   "name": "CovSSoap",
+   "as": "$c"
+  },
+  {
+   "op": "create",
+   "parent": "$c",
+   "type": "ISOAPAction",
+   "name": "CovSOp",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "ISOAPActionOutputWildcard",
+   "name": "CovASOAPActionOutputWildcard",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

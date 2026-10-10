@@ -1,0 +1,15 @@
+{
+ "description": "ODC: a RECUSA do delete de um atributo de structure lido por uma expressao. A expressao herdada do Assign SetHeader diz 'Holder + \" - \" + Quote.Address.Zone'; sem force o delete de WfCovAddress/Zone e recusado e a mensagem nomeia o consumidor. O caminho limpo (apagar um atributo sem consumidores) esta em tests/jobs-odc/structure-refactor.json.",
+ "base": "job:structure-nested",
+ "expectValid": true,
+ "expectError": [
+  "delete: refused",
+  "IStructureAttribute 'Zone' is used by 1 consumer(s)",
+  "IServerAction:WfCovQuote_Build",
+  "pass \"force\": true to break them"
+ ],
+ "ops": [
+  {"op": "usages", "target": "IStructure:WfCovAddress/Zone", "max": 20},
+  {"op": "delete", "target": "IStructure:WfCovAddress/Zone"}
+ ]
+}

@@ -1,0 +1,53 @@
+{
+ "description": "Table com ordenacao e link por linha: o OnSort guarda a coluna clicada, a coluna Nome tem um Link para o detalhe com o Id, e Preco formatado.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [
+   {"name": "Name", "type": "Text", "length": 100, "mandatory": true},
+   {"name": "Price", "type": "Currency"}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductDetail", "as": "$detail"},
+  {"op": "set", "target": "$detail/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$detail", "type": "IInputParameter", "name": "ProductId", "as": "$pid"},
+  {"op": "set", "target": "$pid", "prop": "DataType", "value": "Product Identifier"},
+  {"op": "create", "parent": "$detail/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$dTitle"},
+  {"op": "set", "target": "$dTitle", "prop": "Value", "value": "If(ProductId = NullIdentifier(), \"Product\", \"Product details\")"},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "PriceTable", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "SortedBy", "as": "$sorted"},
+  {"op": "set", "target": "$sorted", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "SortChanged", "kind": "screen", "owner": "IMobileScreen:PriceTable", "inputs": [{"name": "Column", "type": "Text"}],
+    "steps": [{"assign": {"SortedBy": "Column"}, "as": "RememberColumn"}]}]}},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "ITableRecords", "name": "ProductTable", "as": "$tbl"},
+  {"op": "set", "target": "$tbl", "prop": "Source", "value": "GetProducts.List"},
+  {"op": "set", "target": "$tbl/OnSort", "prop": "Destination", "value": "IMobileScreen:PriceTable/SortChanged", "_why": "o OnSort da tabela tem o parametro ClickedColumn"},
+  {"op": "set", "target": "$tbl/OnSort/Column", "prop": "Value", "value": "ClickedColumn", "_why": "o argumento Column do handler recebe o parametro ClickedColumn do evento"},
+
+  {"op": "create", "parent": "$tbl/HeaderRow", "type": "IHeaderCell", "name": "NameHeader", "as": "$h1"},
+  {"op": "create", "parent": "$h1/Content", "type": "IExpression", "as": "$h1Text"},
+  {"op": "set", "target": "$h1Text", "prop": "Value", "value": "\"Product\""},
+  {"op": "create", "parent": "$tbl/Row", "type": "IRowCell", "name": "NameCell", "as": "$c1"},
+  {"op": "create", "parent": "$c1/Content", "type": "ILink", "name": "OpenProduct", "as": "$lnk"},
+  {"op": "delete", "target": "$lnk/#ITextWidget"},
+  {"op": "create", "parent": "$lnk", "type": "IExpression", "as": "$lnkText"},
+  {"op": "set", "target": "$lnkText", "prop": "Value", "value": "GetProducts.List.Current.Product.Name"},
+  {"op": "set", "target": "$lnk/OnClick", "prop": "Destination", "value": "IMobileScreen:ProductDetail"},
+  {"op": "set", "target": "$lnk/OnClick/ProductId", "prop": "Value", "value": "GetProducts.List.Current.Product.Id"},
+
+  {"op": "create", "parent": "$tbl/HeaderRow", "type": "IHeaderCell", "name": "PriceHeader", "as": "$h2"},
+  {"op": "create", "parent": "$h2/Content", "type": "IExpression", "as": "$h2Text"},
+  {"op": "set", "target": "$h2Text", "prop": "Value", "value": "\"Price\""},
+  {"op": "create", "parent": "$tbl/Row", "type": "IRowCell", "name": "PriceCell", "as": "$c2"},
+  {"op": "create", "parent": "$c2/Content", "type": "IExpression", "as": "$c2Text"},
+  {"op": "set", "target": "$c2Text", "prop": "Value", "value": "FormatCurrency(GetProducts.List.Current.Product.Price, \"$\", 2, \".\", \",\")"},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$sortInfo"},
+  {"op": "set", "target": "$sortInfo", "prop": "Value", "value": "If(SortedBy = \"\", \"\", \"Sorted by \" + SortedBy)"}
+ ]
+}

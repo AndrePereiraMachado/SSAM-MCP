@@ -1,0 +1,861 @@
+{
+ "source": "kernel/scripts/ssam_app.py (Python reference, generated once for parity)",
+ "schemas": [
+  {
+   "name": "context",
+   "description": "Read the host-captured request, accepted module contract and supported schema for this task.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "task_id": {
+      "type": "string",
+      "description": "Task id supplied by the trusted UserPromptSubmit hook."
+     }
+    },
+    "required": [
+     "task_id"
+    ],
+    "additionalProperties": false
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "propose",
+   "description": "Record the complete initial module contract from the user request. Later requirement changes need user acceptance; this does not deliver or publish.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "task_id": {
+      "type": "string",
+      "description": "Task id supplied by the trusted UserPromptSubmit hook."
+     },
+     "csharpSource": {
+      "oneOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "object",
+        "properties": {
+         "files": {
+          "type": "object",
+          "additionalProperties": {
+           "type": "string"
+          }
+         }
+        },
+        "required": [
+         "files"
+        ],
+        "additionalProperties": false
+       }
+      ],
+      "description": "Authored C# source text or files, compiled semantically into the same native module contract. Data declarations and typed static server/service methods use ordinary C# expressions, calls and structured control flow. Public methods require authentication; Authorize declares roles. Unsupported constructs report source diagnostics. IDataSession translates typed CRUD and basic LINQ queries. Paging, joins/projections, mutable reference effects, async and general .NET APIs remain incomplete. No jobs, graphs or native bindings are supplied by the author."
+     },
+     "module": {
+      "type": "string"
+     },
+     "lane": {
+      "type": "string",
+      "enum": [
+       "ss4",
+       "ss5"
+      ]
+     },
+     "environment": {
+      "type": "string"
+     },
+     "uiSource": {
+      "oneOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "object",
+        "properties": {
+         "entry": {
+          "type": "string"
+         },
+         "files": {
+          "type": "object",
+          "additionalProperties": {
+           "type": "string"
+          }
+         }
+        },
+        "required": [
+         "entry",
+         "files"
+        ],
+        "additionalProperties": false
+       }
+      ],
+      "description": "HTML/CSS/JS source, or a bundle of authored files with an entry path. Relative component imports are resolved and frozen by the Hybrid; no binding manifest."
+     },
+     "data": {
+      "type": "object"
+     },
+     "logic": {
+      "type": "object"
+     },
+     "roles": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      }
+     },
+     "exceptions": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      }
+     },
+     "expectedMessages": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      }
+     }
+    },
+    "required": [
+     "task_id",
+     "module",
+     "lane",
+     "environment"
+    ],
+    "additionalProperties": false
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "continue",
+   "description": "Advance or resume the accepted task. Hybrid chooses snapshot, compilation, merge or reconciliation and preserves its original requirements.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "task_id": {
+      "type": "string",
+      "description": "Task id supplied by the trusted UserPromptSubmit hook."
+     }
+    },
+    "required": [
+     "task_id"
+    ],
+    "additionalProperties": false
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "status",
+   "description": "Read the original task's delivery facts and content proof. This does not create or merge anything.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "task_id": {
+      "type": "string",
+      "description": "Task id supplied by the trusted UserPromptSubmit hook."
+     }
+    },
+    "required": [
+     "task_id"
+    ],
+    "additionalProperties": false
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  }
+ ],
+ "review": {
+  "proposal": {
+   "module": "Pedidos",
+   "lane": "ss5",
+   "environment": "fixture.test",
+   "data": {
+    "entities": [
+     {
+      "name": "Pedido",
+      "attributes": [
+       {
+        "name": "Descrição",
+        "type": "Text",
+        "length": 50
+       }
+      ]
+     }
+    ]
+   },
+   "logic": {},
+   "roles": [],
+   "expectedMessages": [
+    {
+     "text": "ação \"inválida\"",
+     "level": "warning"
+    }
+   ]
+  },
+  "message": "SSAM Hybrid — confira esta alteração do contrato do módulo já fixado. A aceitação fixa este conteúdo, módulo, ambiente e faixa; correções técnicas posteriores não mudam esses requisitos. Este contrato cobre dados e o fluxo declarado das actions; não comprova sozinho toda a intenção de negócio.\n\n{\n  \"module\": \"Pedidos\",\n  \"lane\": \"ss5\",\n  \"environment\": \"fixture.test\",\n  \"data\": {\n    \"entities\": [\n      {\n        \"name\": \"Pedido\",\n        \"attributes\": [\n          {\n            \"name\": \"Descrição\",\n            \"type\": \"Text\",\n            \"length\": 50\n          }\n        ]\n      }\n    ]\n  },\n  \"logic\": {},\n  \"roles\": [],\n  \"expectedMessages\": [\n    {\n      \"text\": \"ação \\\"inválida\\\"\",\n      \"level\": \"warning\"\n    }\n  ]\n}"
+ },
+ "hostInput": {
+  "payload": {
+   "trustedWorkspace": "forged",
+   "session_id": "sessão",
+   "prompt": "Crie — já \"x\"\n"
+  },
+  "workspace": "C:\\ws",
+  "withWorkspace": "{\"session_id\": \"sess\\u00e3o\", \"prompt\": \"Crie \\u2014 j\\u00e1 \\\"x\\\"\\n\\u007f\", \"trustedWorkspace\": \"C:\\\\ws\"}",
+  "withoutWorkspace": "{\"session_id\": \"sess\\u00e3o\", \"prompt\": \"Crie \\u2014 j\\u00e1 \\\"x\\\"\\n\\u007f\"}"
+ },
+ "hooks": [
+  {
+   "name": "capture in scope",
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "session_id": "s",
+    "turn_id": "t",
+    "cwd": "{WS_SUB}",
+    "prompt": "Crie a entidade Pedido com Descrição"
+   },
+   "workspace": true,
+   "replies": {
+    "capture": {
+     "captured": true,
+     "taskId": "host-task"
+    }
+   },
+   "exitCode": 0,
+   "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\", \"additionalContext\": \"Controlled SSAM Hybrid app task: host-task. Use only the ssam_hybrid tools with this task_id. The host retains the user request; unsupported scope is a blocker, not permission for maintenance.\"}}\n",
+   "stderr": "",
+   "calls": [
+    {
+     "action": "capture",
+     "payload": {
+      "hook_event_name": "UserPromptSubmit",
+      "session_id": "s",
+      "turn_id": "t",
+      "cwd": "{WS_SUB}",
+      "prompt": "Crie a entidade Pedido com Descrição"
+     },
+     "workspace": true
+    }
+   ]
+  },
+  {
+   "name": "capture without workspace",
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "session_id": "s",
+    "turn_id": "t",
+    "cwd": "{PARENT}",
+    "prompt": "x"
+   },
+   "workspace": false,
+   "replies": {
+    "capture": {
+     "captured": true,
+     "taskId": "t2"
+    }
+   },
+   "exitCode": 0,
+   "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\", \"additionalContext\": \"Controlled SSAM Hybrid app task: t2. Use only the ssam_hybrid tools with this task_id. The host retains the user request; unsupported scope is a blocker, not permission for maintenance.\"}}\n",
+   "stderr": "",
+   "calls": [
+    {
+     "action": "capture",
+     "payload": {
+      "hook_event_name": "UserPromptSubmit",
+      "session_id": "s",
+      "turn_id": "t",
+      "cwd": "{PARENT}",
+      "prompt": "x"
+     },
+     "workspace": false
+    }
+   ]
+  },
+  {
+   "name": "capture refused by host",
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "session_id": "s",
+    "turn_id": "t",
+    "cwd": "{WS}",
+    "prompt": "x"
+   },
+   "workspace": true,
+   "replies": {
+    "capture": {
+     "captured": false
+    }
+   },
+   "exitCode": 0,
+   "stdout": "",
+   "stderr": "",
+   "calls": [
+    {
+     "action": "capture",
+     "payload": {
+      "hook_event_name": "UserPromptSubmit",
+      "session_id": "s",
+      "turn_id": "t",
+      "cwd": "{WS}",
+      "prompt": "x"
+     },
+     "workspace": true
+    }
+   ]
+  },
+  {
+   "name": "outside prompt",
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "session_id": "s",
+    "turn_id": "t",
+    "cwd": "{PARENT}",
+    "prompt": "Private"
+   },
+   "workspace": true,
+   "replies": {
+    "capture": {
+     "captured": false,
+     "inScope": false
+    }
+   },
+   "exitCode": 0,
+   "stdout": "",
+   "stderr": "",
+   "calls": [
+    {
+     "action": "capture",
+     "payload": {
+      "hook_event_name": "UserPromptSubmit",
+      "session_id": "s",
+      "turn_id": "t",
+      "cwd": "{PARENT}"
+     },
+     "workspace": true
+    }
+   ]
+  },
+  {
+   "name": "guard allowed",
+   "event": {
+    "hook_event_name": "PreToolUse",
+    "session_id": "s",
+    "turn_id": "t",
+    "cwd": "{WS}",
+    "tool_name": "mcp__ssam_hybrid__propose",
+    "tool_input": {
+     "task_id": "k"
+    }
+   },
+   "workspace": true,
+   "replies": {
+    "guard": {
+     "allowed": true,
+     "inScope": true,
+     "reason": null
+    }
+   },
+   "exitCode": 0,
+   "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"permissionDecisionReason\": \"Exact Hybrid task call authorized\"}}\n",
+   "stderr": "",
+   "calls": [
+    {
+     "action": "guard",
+     "payload": {
+      "hook_event_name": "PreToolUse",
+      "session_id": "s",
+      "turn_id": "t",
+      "cwd": "{WS}",
+      "tool_name": "mcp__ssam_hybrid__propose",
+      "tool_input": {
+       "task_id": "k"
+      }
+     },
+     "workspace": true
+    }
+   ]
+  },
+  {
+   "name": "guard denied with reason",
+   "event": {
+    "hook_event_name": "PreToolUse",
+    "session_id": "s",
+    "turn_id": "t",
+    "cwd": "{WS}",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "dir"
+    }
+   },
+   "workspace": true,
+   "replies": {
+    "guard": {
+     "allowed": false,
+     "inScope": true,
+     "reason": "Sessão sem permissão — só ferramentas da tarefa"
+    }
+   },
+   "exitCode": 0,
+   "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Sess\\u00e3o sem permiss\\u00e3o \\u2014 s\\u00f3 ferramentas da tarefa\"}}\n",
+   "stderr": "",
+   "calls": [
+    {
+     "action": "guard",
+     "payload": {
+      "hook_event_name": "PreToolUse",
+      "session_id": "s",
+      "turn_id": "t",
+      "cwd": "{WS}",
+      "tool_name": "Bash",
+      "tool_input": {
+       "command": "dir"
+      }
+     },
+     "workspace": true
+    }
+   ]
+  },
+  {
+   "name": "guard without workspace",
+   "event": {
+    "hook_event_name": "PreToolUse",
+    "session_id": "s",
+    "tool_name": "Bash"
+   },
+   "workspace": false,
+   "replies": {
+    "guard": {
+     "allowed": false,
+     "inScope": false,
+     "reason": "no"
+    }
+   },
+   "exitCode": 0,
+   "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"no\"}}\n",
+   "stderr": "",
+   "calls": [
+    {
+     "action": "guard",
+     "payload": {
+      "hook_event_name": "PreToolUse",
+      "session_id": "s",
+      "tool_name": "Bash"
+     },
+     "workspace": false
+    }
+   ]
+  },
+  {
+   "name": "outside maintenance tool",
+   "event": {
+    "hook_event_name": "PreToolUse",
+    "session_id": "s",
+    "turn_id": "t",
+    "cwd": "{PARENT}",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "private"
+    }
+   },
+   "workspace": true,
+   "replies": {
+    "guard": {
+     "allowed": false,
+     "inScope": false
+    }
+   },
+   "exitCode": 0,
+   "stdout": "",
+   "stderr": "",
+   "calls": [
+    {
+     "action": "guard",
+     "payload": {
+      "hook_event_name": "PreToolUse",
+      "session_id": "s",
+      "turn_id": "t",
+      "cwd": "{PARENT}",
+      "tool_name": "Bash"
+     },
+     "workspace": true
+    }
+   ]
+  },
+  {
+   "name": "outside hybrid tool",
+   "event": {
+    "hook_event_name": "PreToolUse",
+    "session_id": "s",
+    "turn_id": "t",
+    "cwd": "{PARENT}",
+    "tool_name": "mcp__ssam_hybrid__context",
+    "tool_input": {
+     "task_id": "task"
+    }
+   },
+   "workspace": true,
+   "replies": {
+    "guard": {
+     "allowed": false,
+     "inScope": false
+    }
+   },
+   "exitCode": 0,
+   "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Exact Hybrid task call authorized\"}}\n",
+   "stderr": "",
+   "calls": [
+    {
+     "action": "guard",
+     "payload": {
+      "hook_event_name": "PreToolUse",
+      "session_id": "s",
+      "turn_id": "t",
+      "cwd": "{PARENT}",
+      "tool_name": "mcp__ssam_hybrid__context"
+     },
+     "workspace": true
+    }
+   ]
+  },
+  {
+   "name": "relative cwd is outside",
+   "event": {
+    "hook_event_name": "PreToolUse",
+    "session_id": "s",
+    "turn_id": "t",
+    "cwd": "relative\\dir",
+    "tool_name": "mcp__ssam_hybrid__status",
+    "tool_input": {
+     "task_id": "k"
+    }
+   },
+   "workspace": true,
+   "replies": {
+    "guard": {
+     "allowed": true,
+     "inScope": true
+    }
+   },
+   "exitCode": 0,
+   "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Exact Hybrid task call authorized\"}}\n",
+   "stderr": "",
+   "calls": [
+    {
+     "action": "guard",
+     "payload": {
+      "hook_event_name": "PreToolUse",
+      "session_id": "s",
+      "turn_id": "t",
+      "cwd": "relative\\dir",
+      "tool_name": "mcp__ssam_hybrid__status"
+     },
+     "workspace": true
+    }
+   ]
+  },
+  {
+   "name": "missing cwd folder is outside",
+   "event": {
+    "hook_event_name": "PreToolUse",
+    "session_id": "s",
+    "turn_id": "t",
+    "cwd": "{WS}\\missing",
+    "tool_name": "mcp__ssam_hybrid__status",
+    "tool_input": {
+     "task_id": "k"
+    }
+   },
+   "workspace": true,
+   "replies": {
+    "guard": {
+     "allowed": true,
+     "inScope": true
+    }
+   },
+   "exitCode": 0,
+   "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Exact Hybrid task call authorized\"}}\n",
+   "stderr": "",
+   "calls": [
+    {
+     "action": "guard",
+     "payload": {
+      "hook_event_name": "PreToolUse",
+      "session_id": "s",
+      "turn_id": "t",
+      "cwd": "{WS}\\missing",
+      "tool_name": "mcp__ssam_hybrid__status"
+     },
+     "workspace": true
+    }
+   ]
+  },
+  {
+   "name": "guard host error",
+   "event": {
+    "hook_event_name": "PreToolUse",
+    "session_id": "s",
+    "turn_id": "t",
+    "cwd": "{WS}",
+    "tool_name": "Bash"
+   },
+   "workspace": true,
+   "replies": {
+    "guard": "offline"
+   },
+   "exitCode": 0,
+   "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Controlled app policy unavailable: offline\"}}\n",
+   "stderr": "",
+   "calls": [
+    {
+     "action": "guard",
+     "payload": {
+      "hook_event_name": "PreToolUse",
+      "session_id": "s",
+      "turn_id": "t",
+      "cwd": "{WS}",
+      "tool_name": "Bash"
+     },
+     "workspace": true
+    }
+   ]
+  },
+  {
+   "name": "capture host error",
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "session_id": "s",
+    "turn_id": "t",
+    "cwd": "{WS}",
+    "prompt": "x"
+   },
+   "workspace": true,
+   "replies": {
+    "capture": "offline"
+   },
+   "exitCode": 2,
+   "stdout": "",
+   "stderr": "SSAM could not capture the original user request: offline\n",
+   "calls": [
+    {
+     "action": "capture",
+     "payload": {
+      "hook_event_name": "UserPromptSubmit",
+      "session_id": "s",
+      "turn_id": "t",
+      "cwd": "{WS}",
+      "prompt": "x"
+     },
+     "workspace": true
+    }
+   ]
+  },
+  {
+   "name": "outside capture error",
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "cwd": "{PARENT}",
+    "tool_name": "Bash",
+    "prompt": "private"
+   },
+   "workspace": true,
+   "replies": {
+    "capture": "offline"
+   },
+   "exitCode": 0,
+   "stdout": "",
+   "stderr": "",
+   "calls": [
+    {
+     "action": "capture",
+     "payload": {
+      "hook_event_name": "UserPromptSubmit",
+      "cwd": "{PARENT}",
+      "tool_name": "Bash"
+     },
+     "workspace": true
+    }
+   ]
+  },
+  {
+   "name": "outside guard error",
+   "event": {
+    "hook_event_name": "PreToolUse",
+    "cwd": "{PARENT}",
+    "tool_name": "Bash",
+    "prompt": "private"
+   },
+   "workspace": true,
+   "replies": {
+    "guard": "offline"
+   },
+   "exitCode": 0,
+   "stdout": "",
+   "stderr": "",
+   "calls": [
+    {
+     "action": "guard",
+     "payload": {
+      "hook_event_name": "PreToolUse",
+      "cwd": "{PARENT}",
+      "tool_name": "Bash"
+     },
+     "workspace": true
+    }
+   ]
+  },
+  {
+   "name": "outside hybrid guard error",
+   "event": {
+    "hook_event_name": "PreToolUse",
+    "cwd": "{PARENT}",
+    "tool_name": "mcp__ssam_hybrid__continue"
+   },
+   "workspace": true,
+   "replies": {
+    "guard": "offline"
+   },
+   "exitCode": 0,
+   "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Controlled app policy unavailable: offline\"}}\n",
+   "stderr": "",
+   "calls": [
+    {
+     "action": "guard",
+     "payload": {
+      "hook_event_name": "PreToolUse",
+      "cwd": "{PARENT}",
+      "tool_name": "mcp__ssam_hybrid__continue"
+     },
+     "workspace": true
+    }
+   ]
+  },
+  {
+   "name": "pre tool use without anything",
+   "event": {
+    "hook_event_name": "PreToolUse"
+   },
+   "workspace": false,
+   "replies": {
+    "guard": "offline"
+   },
+   "exitCode": 0,
+   "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Controlled app policy unavailable: offline\"}}\n",
+   "stderr": "",
+   "calls": [
+    {
+     "action": "guard",
+     "payload": {
+      "hook_event_name": "PreToolUse"
+     },
+     "workspace": false
+    }
+   ]
+  },
+  {
+   "name": "unsupported event",
+   "event": {
+    "hook_event_name": "Stop",
+    "session_id": "s"
+   },
+   "workspace": false,
+   "replies": {},
+   "exitCode": 2,
+   "stdout": "",
+   "stderr": "SSAM could not capture the original user request: Unsupported SSAM hook event\n",
+   "calls": []
+  },
+  {
+   "name": "guard reply without allowed",
+   "event": {
+    "hook_event_name": "PreToolUse",
+    "session_id": "s",
+    "tool_name": "Bash"
+   },
+   "workspace": false,
+   "replies": {
+    "guard": {
+     "inScope": true
+    }
+   },
+   "exitCode": 0,
+   "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Controlled app policy unavailable: 'allowed'\"}}\n",
+   "stderr": "",
+   "calls": [
+    {
+     "action": "guard",
+     "payload": {
+      "hook_event_name": "PreToolUse",
+      "session_id": "s",
+      "tool_name": "Bash"
+     },
+     "workspace": false
+    }
+   ]
+  },
+  {
+   "name": "capture reply without taskId",
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "session_id": "s",
+    "turn_id": "t",
+    "prompt": "x"
+   },
+   "workspace": false,
+   "replies": {
+    "capture": {
+     "captured": true
+    }
+   },
+   "exitCode": 2,
+   "stdout": "",
+   "stderr": "SSAM could not capture the original user request: 'taskId'\n",
+   "calls": [
+    {
+     "action": "capture",
+     "payload": {
+      "hook_event_name": "UserPromptSubmit",
+      "session_id": "s",
+      "turn_id": "t",
+      "prompt": "x"
+     },
+     "workspace": false
+    }
+   ]
+  },
+  {
+   "name": "non-string cwd",
+   "event": {
+    "hook_event_name": "PreToolUse",
+    "session_id": "s",
+    "cwd": null,
+    "tool_name": "Bash"
+   },
+   "workspace": true,
+   "replies": {
+    "guard": {
+     "allowed": true
+    }
+   },
+   "exitCode": 0,
+   "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Controlled app policy unavailable: argument should be a str or an os.PathLike object where __fspath__ returns a str, not 'NoneType'\"}}\n",
+   "stderr": "",
+   "calls": []
+  }
+ ]
+}

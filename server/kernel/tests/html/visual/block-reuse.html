@@ -1,0 +1,8 @@
+<div id="WfCovSummaryBoard" class="wf-reuse-board">
+  <span class="wf-reuse-title">Total da apolice</span>
+  <Block id="WfCovTotalTag" name="WfCovPriceTag" :Label='"Total a pagar"' :Amount="TotalDue" :Currency='"USD"' :Emphasis="True">
+    <slot name="Footnote">
+      <span class="wf-reuse-note">{{ "cambio: " + Quote }}</span>
+    </slot>
+  </Block>
+</div>

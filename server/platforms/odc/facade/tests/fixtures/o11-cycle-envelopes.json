@@ -1,0 +1,66 @@
+{
+  "_about": "Envelopes of `anvil deliver` in the shapes of kernel/src/Anvil.Cli/Program.cs Envelope() and Anvil.Core/Delivery/Delivery.cs Run(): data is the task state (taskId, delivered, writeState, stage, error, apply, validation, failures).",
+  "delivered": {
+    "ok": true, "command": "deliver", "elapsedMs": 41234,
+    "data": {
+      "taskId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0", "module": "Orders", "delivered": true, "everDelivered": true,
+      "writeState": "applied", "stage": "complete", "unchanged": false, "hasAppliedWrites": true,
+      "merge": { "merged": true, "result": "merged" },
+      "validation": { "newErrors": 0, "new": [], "fixed": [], "preexisting": [] },
+      "apply": { "isValid": true, "accepted": true, "validation": { "new": [] }, "policyMessages": [] },
+      "checks": [{ "query": "SaveOrder", "count": 1 }], "failures": [],
+      "artifacts": [{ "path": "C:\\work\\deliver\\0f1e2d3c4b5a69788796a5b4c3d2e1f0\\attempt-0\\base.oml", "sha256": "aa" }]
+    }
+  },
+  "refusedBeforeMerge": {
+    "ok": false, "command": "deliver", "elapsedMs": 9120,
+    "data": {
+      "taskId": "1a2b3c4d5e6f708192a3b4c5d6e7f809", "module": "Orders", "delivered": false, "writeState": "not-sent", "stage": "apply",
+      "error": "job rejected by validation contract; merge was not attempted",
+      "apply": {
+        "isValid": false, "accepted": false,
+        "validation": { "new": [{ "id": "UndefinedVariable", "type": "Error", "key": "k1", "path": "Orders/ServerAction:SaveOrder", "detail": "Undefined variable 'Total'" }] },
+        "policyMessages": ["expectValid=True, but Verify isValid=False"]
+      }
+    }
+  },
+  "refusedAfterMerge": {
+    "ok": false, "command": "deliver", "elapsedMs": 52010,
+    "data": {
+      "taskId": "2b3c4d5e6f708192a3b4c5d6e7f8091a", "module": "Orders", "delivered": false, "writeState": "applied", "stage": "verify",
+      "error": "merge kept for review: new TrueChange errors or unexpected messages; inspect validation and contract. Ctrl+Z in Studio undoes it; nothing was published",
+      "merge": { "merged": true },
+      "validation": { "newErrors": 1, "new": [{ "id": "RequiredProperty", "type": "Error", "key": "k9", "path": "Orders/Entity:Order", "detail": "Required property 'Label' is empty" }] },
+      "contract": { "accepted": false },
+      "failures": [{ "stage": "verify", "error": "merge kept for review: new TrueChange errors or unexpected messages; inspect validation and contract. Ctrl+Z in Studio undoes it; nothing was published" }]
+    }
+  },
+  "uncertain": {
+    "ok": false, "command": "deliver", "elapsedMs": 905000,
+    "data": {
+      "taskId": "3c4d5e6f708192a3b4c5d6e7f8091a2b", "module": "Orders", "delivered": false, "writeState": "unknown", "stage": "merge",
+      "operationId": "9f8e7d6c5b4a39281706f5e4d3c2b1a0",
+      "error": "BridgeCallException: Bridge merge_from_oml timed out after 900000 ms"
+    }
+  },
+  "appliedUnconfirmed": {
+    "ok": false, "command": "deliver", "elapsedMs": 61000,
+    "data": {
+      "taskId": "4d5e6f708192a3b4c5d6e7f8091a2b3c", "module": "Orders", "delivered": false, "writeState": "applied", "stage": "verify",
+      "error": "bridge returned no snapshot delta", "merge": { "merged": true },
+      "failures": [{ "stage": "verify", "error": "bridge returned no snapshot delta" }]
+    }
+  },
+  "moduleHeld": {
+    "ok": false, "command": "deliver", "elapsedMs": 3100,
+    "data": {
+      "taskId": "5e6f708192a3b4c5d6e7f8091a2b3c4d", "module": "Orders", "delivered": false, "writeState": "not-sent", "stage": "active-module",
+      "error": "InvalidOperationException: Module has an unfinished delivery; resume task 3c4d5e6f708192a3b4c5d6e7f8091a2b before starting another"
+    }
+  },
+  "argumentError": {
+    "ok": false, "command": "deliver", "elapsedMs": 40,
+    "error": "ArgumentException: environment 'https://x' must be a bare host name, e.g. personal-x.outsystemscloud.com. Run ssam doctor --lane o11 first.",
+    "stack": "at Anvil.Core.Delivery.DeliverArguments.NormalizeEnvironment"
+  }
+}

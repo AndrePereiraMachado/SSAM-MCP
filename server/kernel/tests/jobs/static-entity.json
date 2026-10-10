@@ -1,0 +1,138 @@
+{
+ "description": "Static entity com atributos Id, Label e Order e records nomeados.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IStaticEntity",
+   "name": "Priority",
+   "as": "$s"
+  },
+  {
+   "op": "create",
+   "parent": "$s",
+   "type": "IEntityAttribute",
+   "name": "Id",
+   "as": "$id"
+  },
+  {
+   "op": "set",
+   "target": "$id",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "set",
+   "target": "$id",
+   "prop": "IsAutoNumber",
+   "value": "No"
+  },
+  {
+   "op": "set",
+   "target": "$s",
+   "prop": "IdentifierAttribute",
+   "value": "$id"
+  },
+  {
+   "op": "create",
+   "parent": "$s",
+   "type": "IEntityAttribute",
+   "name": "Label",
+   "as": "$label"
+  },
+  {
+   "op": "set",
+   "target": "$label",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$label",
+   "prop": "Length",
+   "value": 50
+  },
+  {
+   "op": "set",
+   "target": "$s",
+   "prop": "LabelAttribute",
+   "value": "$label"
+  },
+  {
+   "op": "create",
+   "parent": "$s",
+   "type": "IEntityAttribute",
+   "name": "Order",
+   "as": "$order"
+  },
+  {
+   "op": "set",
+   "target": "$order",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "set",
+   "target": "$s",
+   "prop": "OrderByAttribute",
+   "value": "$order"
+  },
+  {
+   "op": "create",
+   "parent": "$s",
+   "type": "IRecord",
+   "name": "Low",
+   "as": "$r1"
+  },
+  {
+   "op": "set",
+   "target": "$r1/Id",
+   "prop": "Value",
+   "value": "1"
+  },
+  {
+   "op": "set",
+   "target": "$r1/Label",
+   "prop": "Value",
+   "value": "\"Low\""
+  },
+  {
+   "op": "set",
+   "target": "$r1/Order",
+   "prop": "Value",
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$s",
+   "type": "IRecord",
+   "name": "High",
+   "as": "$r2"
+  },
+  {
+   "op": "set",
+   "target": "$r2/Id",
+   "prop": "Value",
+   "value": "2"
+  },
+  {
+   "op": "set",
+   "target": "$r2/Label",
+   "prop": "Value",
+   "value": "\"High\""
+  },
+  {
+   "op": "set",
+   "target": "$r2/Order",
+   "prop": "Value",
+   "value": "2"
+  },
+  {
+   "op": "dump",
+   "target": "$s",
+   "depth": 2
+  }
+ ]
+}

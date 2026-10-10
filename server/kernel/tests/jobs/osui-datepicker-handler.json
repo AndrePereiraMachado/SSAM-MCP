@@ -1,0 +1,275 @@
+{
+ "description": "Sessao fria J: tela Booking (Reactive) com padroes do OutSystems UI: DatePicker ligado a SelectedDate com OnSelected -> screen action que copia para Confirmed; Tag Pending amarela; Tooltip em volta de um Icon com Pick a date; Counter com 42 (escrito por uma LLM sem contexto na sessao fria J, rodada 2, 2026-09-04)",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedElement",
+   "element": "DatePicker1_OnSelected (ScreenAction) / DatePickerId (InputParameter)",
+   "why": "DatePickerId faz parte do contrato do evento; este exemplo usa somente a data selecionada."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "Booking",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/Title",
+   "type": "IExpression",
+   "as": "$title"
+  },
+  {
+   "op": "set",
+   "target": "$title",
+   "prop": "Value",
+   "value": "\"Booking\""
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "ILocalVariable",
+   "name": "SelectedDate",
+   "as": "$vSel"
+  },
+  {
+   "op": "set",
+   "target": "$vSel",
+   "prop": "DataType",
+   "value": "Date"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "ILocalVariable",
+   "name": "Confirmed",
+   "as": "$vConf"
+  },
+  {
+   "op": "set",
+   "target": "$vConf",
+   "prop": "DataType",
+   "value": "Date"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAction",
+   "name": "DatePicker1_OnSelected",
+   "as": "$h"
+  },
+  {
+   "op": "create",
+   "parent": "$h",
+   "type": "IInputParameter",
+   "name": "DatePickerId",
+   "as": "$hp1"
+  },
+  {
+   "op": "set",
+   "target": "$hp1",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$h",
+   "type": "IInputParameter",
+   "name": "SelectedDateTime",
+   "as": "$hp2"
+  },
+  {
+   "op": "set",
+   "target": "$hp2",
+   "prop": "DataType",
+   "value": "Date Time"
+  },
+  {
+   "op": "create",
+   "parent": "$h",
+   "type": "IStartNode",
+   "as": "$hs"
+  },
+  {
+   "op": "create",
+   "parent": "$h",
+   "type": "IAssignNode",
+   "name": "SetConfirmed",
+   "as": "$hAs"
+  },
+  {
+   "op": "set",
+   "target": "$hAs",
+   "prop": "Label",
+   "value": "SetConfirmed"
+  },
+  {
+   "op": "create",
+   "parent": "$hAs",
+   "type": "IAssignment",
+   "as": "$hA1"
+  },
+  {
+   "op": "set",
+   "target": "$hA1",
+   "prop": "Variable",
+   "value": "Confirmed"
+  },
+  {
+   "op": "set",
+   "target": "$hA1",
+   "prop": "Value",
+   "value": "DateTimeToDate(SelectedDateTime)"
+  },
+  {
+   "op": "create",
+   "parent": "$h",
+   "type": "IEndNode",
+   "as": "$he"
+  },
+  {
+   "op": "link",
+   "from": "$hs",
+   "to": "$hAs"
+  },
+  {
+   "op": "link",
+   "from": "$hAs",
+   "to": "$he"
+  },
+  {
+   "op": "layout",
+   "target": "$h"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IMobileBlockInstanceWidget",
+   "name": "DatePicker1",
+   "source": "IMobileBlock:DatePicker",
+   "as": "$dp"
+  },
+  {
+   "op": "set",
+   "target": "$dp/Datepicker/#IInput",
+   "prop": "Variable",
+   "value": "SelectedDate"
+  },
+  {
+   "op": "set",
+   "target": "$dp/OnSelected",
+   "prop": "Handler",
+   "value": "$h"
+  },
+  {
+   "op": "set",
+   "target": "$dp/OnSelected/DatePickerId",
+   "prop": "Value",
+   "value": "DatePickerId"
+  },
+  {
+   "op": "set",
+   "target": "$dp/OnSelected/SelectedDateTime",
+   "prop": "Value",
+   "value": "SelectedDateTime"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IMobileBlockInstanceWidget",
+   "name": "Tag1",
+   "source": "IMobileBlock:Tag",
+   "as": "$tag"
+  },
+  {
+   "op": "set",
+   "target": "$tag/Color",
+   "prop": "Value",
+   "value": "Entities.Color.Yellow"
+  },
+  {
+   "op": "create",
+   "parent": "$tag/Tag",
+   "type": "IExpression",
+   "as": "$tagT"
+  },
+  {
+   "op": "set",
+   "target": "$tagT",
+   "prop": "Value",
+   "value": "\"Pending\""
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IMobileBlockInstanceWidget",
+   "name": "Tooltip1",
+   "source": "IMobileBlock:Tooltip",
+   "as": "$tt"
+  },
+  {
+   "op": "create",
+   "parent": "$tt/Content",
+   "type": "IIcon",
+   "name": "HelpIcon",
+   "as": "$ico"
+  },
+  {
+   "op": "set",
+   "target": "$ico",
+   "prop": "Icon",
+   "value": "info-circle"
+  },
+  {
+   "op": "create",
+   "parent": "$tt/Tooltip",
+   "type": "IExpression",
+   "as": "$ttT"
+  },
+  {
+   "op": "set",
+   "target": "$ttT",
+   "prop": "Value",
+   "value": "\"Pick a date\""
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IMobileBlockInstanceWidget",
+   "name": "Counter1",
+   "source": "IMobileBlock:Counter",
+   "as": "$cnt"
+  },
+  {
+   "op": "create",
+   "parent": "$cnt/Content",
+   "type": "IExpression",
+   "as": "$cntT"
+  },
+  {
+   "op": "set",
+   "target": "$cntT",
+   "prop": "Value",
+   "value": "42"
+  },
+  {
+   "op": "get",
+   "target": "$dp/OnSelected"
+  },
+  {
+   "op": "dump",
+   "target": "$scr",
+   "depth": 9
+  }
+ ]
+}

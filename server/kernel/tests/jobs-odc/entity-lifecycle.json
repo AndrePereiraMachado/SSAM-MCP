@@ -1,0 +1,90 @@
+{
+ "description": "ODC (lote de dados, fase 3): o ciclo de vida do MODELO de entidades sobre um modelo herdado (job:data-full-model: WfCovOrganization -> WfCovProject -> WfCovTask com FKs, indices e a static WfCovPriority). Nada aqui e CRUD de registos publicados. (1) LER: entidade, atributos, o filho `WfCovTask Identifier` (IIdentifierType, gerado pela plataforma: e a ele que as FKs se ligam, por isso usages da entidade sub-reporta), indices incl. os AutoIndex das FKs. (2) CRIAR entidade relacionada por spec com FK e indice unico COMPOSTO (WfCovMilestone), e um atributo + um indice composto por verbos crus numa entidade herdada. (3) EDITAR propriedades de atributos existentes (Length, IsMandatory, Description, DefaultValue, DataType de um atributo SEM consumidores). (4) CONSUMIDOR real: server action publica com aggregate e filtro que cita o atributo. (5) RENOMEAR entidade e atributos com consumidores e ler o que seguiu (filtro, indices, FK) e o que nao seguiu (nome do indice). (6) MOVER um atributo. (7) INDICE: alterar Unique, apagar sem consumidores; a composicao altera-se apagando e recriando (nao ha verbo). (8) APAGAR um atributo sem consumidores de autoria (o IRecordAttributeValue e derivado). Execucao headless nao e migracao de banco: mudar tipo/obrigatoriedade/unicidade num banco publicado tem consequencias que este job nao prova.",
+ "base": "job:data-full-model",
+ "expectValid": true,
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCov_CountOpenTasks (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "ops": [
+  {"op": "find", "name": "WfCovTask", "_why": "(1) a entidade herdada e o seu filho `WfCovTask Identifier`"},
+  {"op": "get", "target": "IServerEntity:WfCovTask", "_why": "(1) Attributes 6 (Id + 5), Indexes 3 (IX_WfCovTask_ProjectDone + AutoIndex_ProjectId + AutoIndex_PriorityId), Public True"},
+  {"op": "dump", "target": "IServerEntity:WfCovTask", "depth": 2, "_why": "(1) a arvore: atributos por ordem de nascimento, indices, o IIdentifierType, o registo de exemplo, as entity actions"},
+  {"op": "get", "target": "IServerEntity:WfCovTask/ProjectId", "_why": "(1) a FK: DataType e o IIdentifierType de WfCovProject (`@<chave>.#IdentifierType`), DeleteRule Delete, IsMandatory True"},
+  {"op": "get", "target": "IServerEntity:WfCovTask/#IIdentifierType", "_why": "(1) o filho `WfCovTask Identifier` (IIdentifierType) gerado pela plataforma: so se le; e a ele que as FKs de outras entidades se ligam"},
+  {"op": "get", "target": "EntityIndex:IX_WfCovTask_ProjectDone", "_why": "(1) o indice composto do spec: Unique false, Attributes [ProjectId, IsDone], AttributeKeys por chave"},
+  {"op": "usages", "target": "IServerEntity:WfCovProject", "max": 20, "_why": "(1) SUB-REPORTA: real 1 (o registo anonimo `WfCovProject Record`); a FK WfCovTask.ProjectId nao aparece porque se liga ao filho identificador"},
+  {"op": "usages", "target": "IServerEntity:WfCovTask/ProjectId", "max": 20, "_why": "(1) a FK e usada pelos dois indices (IX_WfCovTask_ProjectDone e AutoIndex_ProjectId) e pelo valor derivado do registo de exemplo"},
+
+  {"op": "spec", "data": {"entities": [
+   {"name": "WfCovMilestone", "description": "Marco de um projecto (lote de dados, fase 3)", "attributes": [
+    {"name": "ProjectId", "type": "WfCovProject Identifier", "mandatory": true, "deleteRule": "Delete"},
+    {"name": "Name", "type": "Text", "mandatory": true, "length": 80},
+    {"name": "DueOn", "type": "Date"},
+    {"name": "IsReached", "type": "Boolean", "default": "False"}
+   ], "indexes": [
+    {"name": "UQ_WfCovMilestone_ProjName", "unique": true, "attributes": ["ProjectId", "Name"]}
+   ]}
+  ]}, "_why": "(2) entidade relacionada por spec: FK para uma entidade HERDADA, indice unico composto (FK + Name). DIFERENCA DE PLATAFORMA: o ODC Studio trunca o nome de um indice a 28 caracteres em silencio (UQ_WfCovMilestone_ProjectName ficaria UQ_WfCovMilestone_ProjectNam e o contrato de dados recusava o job); desde 2026-09-23 o kernel recusa nomes mais longos antes de escrever"},
+  {"op": "get", "target": "EntityIndex:UQ_WfCovMilestone_ProjName", "_why": "(2) Unique true, Attributes [ProjectId, Name]"},
+  {"op": "get", "target": "$WfCovMilestone.ProjectId", "_why": "(2) DataType = WfCovProject Identifier; DeleteRule Delete"},
+  {"op": "dump", "target": "$WfCovMilestone", "depth": 2, "_why": "(2) no ODC a FK nasce com o seu AutoIndex_ProjectId ao lado do indice do autor"},
+
+  {"op": "create", "parent": "IServerEntity:WfCovTask", "type": "IEntityAttribute", "name": "EstimatedHours", "as": "$hours", "_why": "(2) atributo por verbo cru numa entidade herdada: enderecada por caminho, nao por alias"},
+  {"op": "set", "target": "$hours", "prop": "DataType", "value": "Decimal"},
+  {"op": "set", "target": "$hours", "prop": "DefaultValue", "value": "0"},
+  {"op": "set", "target": "$hours", "prop": "Description", "value": "Horas estimadas (lote de dados, fase 3)"},
+  {"op": "create", "parent": "IServerEntity:WfCovTask", "type": "EntityIndex", "name": "IX_WfCovTask_DueDone", "args": {"unique": false, "attributes": ["IServerEntity:WfCovTask/DueOn", "IServerEntity:WfCovTask/IsDone"]}, "_why": "(2) indice composto por verbo cru sobre colunas herdadas, atributos por caminho"},
+  {"op": "get", "target": "EntityIndex:IX_WfCovTask_DueDone", "_why": "(2) Unique false, Attributes [DueOn, IsDone]"},
+
+  {"op": "set", "target": "IServerEntity:WfCovTask/Title", "prop": "Length", "value": 200, "_why": "(3) editar um atributo herdado: Length 150 -> 200"},
+  {"op": "set", "target": "IServerEntity:WfCovTask/Title", "prop": "Description", "value": "Titulo da tarefa (editado pelo lote de dados)"},
+  {"op": "set", "target": "IServerEntity:WfCovTask/DueOn", "prop": "IsMandatory", "value": true, "_why": "(3) obrigatoriedade: executa headless; num banco publicado com linhas sem DueOn isto NAO e provado aqui"},
+  {"op": "set", "target": "IServerEntity:WfCovProject/StartedOn", "prop": "DataType", "value": "Date Time", "_why": "(3) mudanca de tipo num atributo SEM consumidores de autoria (Date -> Date Time); com consumidores e o Verify quem decide, e a migracao dos dados nao e provada"},
+  {"op": "get", "target": "IServerEntity:WfCovProject/StartedOn", "_why": "(3) DataType Date Time"},
+  {"op": "get", "target": "IServerEntity:WfCovTask/Title", "_why": "(3) Length 200, Description nova; IndexInParent inalterado"},
+
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfCov_CountOpenTasks", "as": "$act", "_why": "(4) consumidor real da entidade e do atributo: aggregate com filtro"},
+  {"op": "create", "parent": "$act", "type": "IOutputParameter", "name": "Count", "as": "$out"},
+  {"op": "set", "target": "$out", "prop": "DataType", "value": "Long Integer"},
+  {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$s0"},
+  {"op": "create", "parent": "$act", "type": "IAggregateNode", "name": "GetOpen", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:WfCovTask"}},
+  {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "WfCovTask.IsDone = False"}, "as": "$flt"},
+  {"op": "create", "parent": "$act", "type": "IAssignNode", "name": "SetCount", "as": "$as"},
+  {"op": "set", "target": "$as", "prop": "Label", "value": "SetCount"},
+  {"op": "create", "parent": "$as", "type": "IAssignment", "as": "$a1"},
+  {"op": "set", "target": "$a1", "prop": "Variable", "value": "Count"},
+  {"op": "set", "target": "$a1", "prop": "Value", "value": "GetOpen.Count"},
+  {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$s9"},
+  {"op": "link", "from": "$s0", "to": "$agg"},
+  {"op": "link", "from": "$agg", "to": "$as"},
+  {"op": "link", "from": "$as", "to": "$s9"},
+  {"op": "layout", "target": "$act"},
+  {"op": "usages", "target": "IServerEntity:WfCovTask/IsDone", "max": 20, "_why": "(4) ANTES do rename: o filtro, os dois indices que a citam e o valor derivado"},
+  {"op": "usages", "target": "IServerEntity:WfCovTask", "max": 20, "_why": "(4) a entidade: aggregate source, registo anonimo; a FK de WfCovMilestone nao aparece (filho identificador)"},
+
+  {"op": "rename", "target": "IServerEntity:WfCovTask", "name": "WfCovJob", "_why": "(5) rename da entidade com consumidores: seguem por chave; o texto do filtro e reescrito pela plataforma"},
+  {"op": "get", "target": "$flt", "_why": "(5) Condition reescrita: WfCovJob.IsDone = False"},
+  {"op": "get", "target": "$WfCovMilestone.ProjectId", "_why": "(5) a FK de outra entidade nao muda de tipo: continua a apontar para WfCovProject (nao foi essa a renomeada); leitura de controlo"},
+  {"op": "rename", "target": "IServerEntity:WfCovJob/IsDone", "name": "IsClosed", "_why": "(5) rename de um atributo citado por filtro e por dois indices"},
+  {"op": "get", "target": "$flt", "_why": "(5) Condition reescrita outra vez: WfCovJob.IsClosed = False"},
+  {"op": "get", "target": "EntityIndex:IX_WfCovTask_DueDone", "_why": "(5) o indice segue por chave: Attributes [DueOn, IsClosed]; o NOME do indice fica IX_WfCovTask_DueDone (texto do autor)"},
+  {"op": "usages", "target": "IServerEntity:WfCovJob/IsClosed", "max": 20, "_why": "(5) os mesmos consumidores sob o nome novo"},
+  {"op": "rename", "target": "IServerEntity:WfCovJob/Title", "name": "Subject", "_why": "(5) rename de um atributo sem consumidores de expressao; a Description escrita em (3) fica"},
+  {"op": "get", "target": "IServerEntity:WfCovJob/Subject", "_why": "(5) Length 200 e a Description continuam"},
+
+  {"op": "move", "target": "IServerEntity:WfCovJob/EstimatedHours", "after": "IServerEntity:WfCovJob/Subject", "_why": "(6) reordenar: o atributo novo (nascido no fim) passa para depois de Subject; o resultado lista a ordem"},
+  {"op": "dump", "target": "IServerEntity:WfCovJob", "depth": 1, "_why": "(6) a ordem lida de volta"},
+
+  {"op": "set", "target": "EntityIndex:IX_WfCovTask_DueDone", "prop": "Unique", "value": true, "_why": "(7) alterar a unicidade de um indice existente (propriedade nativa do EntityIndex)"},
+  {"op": "get", "target": "EntityIndex:IX_WfCovTask_DueDone", "_why": "(7) Unique true"},
+  {"op": "set", "target": "EntityIndex:IX_WfCovTask_DueDone", "prop": "Unique", "value": false, "_why": "(7) e de volta"},
+  {"op": "delete", "target": "EntityIndex:IX_WfCovTask_DueDone", "_why": "(7) apagar um indice: sem consumidores por natureza"},
+  {"op": "create", "parent": "IServerEntity:WfCovJob", "type": "EntityIndex", "name": "IX_WfCovJob_ClosedDue", "args": {"unique": false, "attributes": ["IServerEntity:WfCovJob/IsClosed", "IServerEntity:WfCovJob/DueOn"]}, "_why": "(7) alterar a COMPOSICAO/ordem dos atributos de um indice = apagar e recriar (nao ha verbo de reordenacao de atributos de indice)"},
+  {"op": "get", "target": "EntityIndex:IX_WfCovJob_ClosedDue", "_why": "(7) Attributes [IsClosed, DueOn]"},
+
+  {"op": "usages", "target": "IServerEntity:WfCovJob/EstimatedHours", "max": 20, "_why": "(8) real 0: so o valor derivado do registo de exemplo"},
+  {"op": "delete", "target": "IServerEntity:WfCovJob/EstimatedHours", "_why": "(8) apagar um atributo sem consumidores de autoria: passa sem force, brokenConsumers 0"},
+  {"op": "get", "target": "IServerEntity:WfCovJob", "_why": "(8) Attributes 6 outra vez (o novo saiu), Indexes 4 (IX_WfCovTask_ProjectDone, 2 AutoIndex, IX_WfCovJob_ClosedDue)"},
+  {"op": "dump", "target": "IServerEntity:WfCovJob", "depth": 2},
+  {"op": "find", "name": "WfCovTask", "_why": "(8) o nome antigo ja nao existe como entidade"}
+ ]
+}

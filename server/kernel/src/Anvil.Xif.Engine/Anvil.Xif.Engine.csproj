@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Anvil.Xif.Engine: the host of the INSTALLED Integration Studio (net472, x86: its native parser needs a 32-bit process).
+    No compile-time reference to any OutSystems assembly: everything goes through reflection over the installation found at
+    run time (ANVIL_INTEGRATION_STUDIO_DIR, else the Windows uninstall registry, else Program Files), so it builds on any
+    machine and runs with whatever Integration Studio 11 the person has. One JSON request on stdin, one JSON answer on
+    stdout; no login, no network, a private TEMP given by the caller (XifEngineClient). Built by scripts\setup-dev.ps1 into
+    kernel\.local\xif-engine.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net472</TargetFramework>
+    <PlatformTarget>x86</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>Anvil.Xif.Engine</AssemblyName>
+    <RootNamespace>Anvil.Xif.Engine</RootNamespace>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AutoGenerateBindingRedirects>false</AutoGenerateBindingRedirects>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System.Web.Extensions" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="Microsoft.CSharp" />
+    <!-- The probe of the installed surface is shared with the net8 kernel (Anvil.Xif), which tests it with fake types. -->
+    <Compile Include="..\Anvil.Xif\XifEngineProbe.cs" Link="XifEngineProbe.cs" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,361 @@
+{
+  "fixture": "traditional-ui",
+  "features": [
+    "OutSystemsUI",
+    "OutSystemsUIWeb:ProgressCircle",
+    "OutSystemsUIWeb:RangeSlider",
+    "OutSystemsUIWeb:RangeSliderInterval",
+    "OutSystemsUIWeb:ResponsiveTableRecords",
+    "OutSystemsUIWeb:Search"
+  ],
+  "setup": [
+    {
+      "op": "reference",
+      "producer": "tests/fixtures/outsystems-ui-web.oml",
+      "elements": [
+        "IWebBlock:ProgressCircle",
+        "IWebBlock:RangeSlider",
+        "IWebBlock:RangeSliderInterval",
+        "IWebBlock:ResponsiveTableRecords",
+        "IWebBlock:Search"
+      ]
+    }
+  ],
+  "contract": {
+    "screens": [
+      {
+        "name": "Ui65_ProgressCircle",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:ProgressCircle",
+            "args": {
+              "Progress": "1"
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui66_RangeSlider",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part2",
+            "type": "IExpressionWidget",
+            "properties": {
+              "Value": "LastEvent"
+            }
+          },
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:RangeSlider",
+            "args": {
+              "MinValue": "1",
+              "MaxValue": "1",
+              "InitialValue": "\"Coverage\"",
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Label": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            },
+            "events": {
+              "OnChange": {
+                "destination": "IWebScreen:Ui66_RangeSlider/Ui66_RangeSlider_Event1",
+                "args": {
+                  "SelectedValue": "SelectedValue"
+                }
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "LastEvent",
+            "type": "Text"
+          }
+        ]
+      },
+      {
+        "name": "Ui67_RangeSliderInterval",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part2",
+            "type": "IExpressionWidget",
+            "properties": {
+              "Value": "LastEvent"
+            }
+          },
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:RangeSliderInterval",
+            "args": {
+              "MinValue": "1",
+              "MaxValue": "1",
+              "InitialIntervalStart": "1",
+              "InitialIntervalEnd": "1",
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Label": [
+                {
+                  "name": "Part3",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            },
+            "events": {
+              "OnChange": {
+                "destination": "IWebScreen:Ui67_RangeSliderInterval/Ui67_RangeSliderInterval_Event2",
+                "args": {
+                  "SelectedMinValue": "SelectedMinValue",
+                  "SelectedMaxValue": "SelectedMaxValue"
+                }
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "LastEvent",
+            "type": "Text"
+          }
+        ]
+      },
+      {
+        "name": "Ui68_ResponsiveTableRecords",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:ResponsiveTableRecords",
+            "args": {
+              "ResponsiveBehavior": "Entities.ResponsiveTableRecords.ExpandableRows"
+            },
+            "slots": {
+              "Content": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "vars": []
+      },
+      {
+        "name": "Ui69_Search",
+        "type": "IWebScreen",
+        "flow": "MainFlow",
+        "roles": [
+          "Registered"
+        ],
+        "widgets": [
+          {
+            "name": "Part1",
+            "type": "IWebBlockInstanceWidget",
+            "properties": {},
+            "source": "IWebBlock:Search",
+            "args": {
+              "ExtendedClass": "\"coverage\""
+            },
+            "slots": {
+              "Icon": [
+                {
+                  "name": "Part2",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Icon"
+                  }
+                }
+              ],
+              "Input": [
+                {
+                  "name": "Part3",
+                  "type": "IInputWidget",
+                  "properties": {
+                    "Variable": "Value1"
+                  }
+                }
+              ],
+              "Actions": [
+                {
+                  "name": "Part4",
+                  "type": "ITextWidget",
+                  "properties": {
+                    "Text": "Component content"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "Part5",
+            "type": "IButtonWidget",
+            "properties": {
+              "Label": "\"Submit\""
+            },
+            "events": {
+              "OnClick": {
+                "destination": "IWebScreen:Ui69_Search/Ui69_Search_Submit"
+              }
+            }
+          }
+        ],
+        "vars": [
+          {
+            "name": "Value1",
+            "type": "Text"
+          }
+        ]
+      }
+    ],
+    "logic": {
+      "actions": [
+        {
+          "name": "Ui66_RangeSlider_Event1",
+          "kind": "screen",
+          "owner": "IWebScreen:Ui66_RangeSlider",
+          "inputs": [
+            {
+              "name": "SelectedValue",
+              "type": "Decimal",
+              "mandatory": true
+            }
+          ],
+          "steps": [
+            {
+              "assign": {
+                "LastEvent": "DecimalToText(SelectedValue)"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ui67_RangeSliderInterval_Event2",
+          "kind": "screen",
+          "owner": "IWebScreen:Ui67_RangeSliderInterval",
+          "inputs": [
+            {
+              "name": "SelectedMinValue",
+              "type": "Decimal",
+              "mandatory": true
+            },
+            {
+              "name": "SelectedMaxValue",
+              "type": "Decimal",
+              "mandatory": true
+            }
+          ],
+          "steps": [
+            {
+              "assign": {
+                "LastEvent": "DecimalToText(SelectedMinValue)"
+              }
+            },
+            {
+              "assign": {
+                "LastEvent": "DecimalToText(SelectedMaxValue)"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ui69_Search_Submit",
+          "kind": "screen",
+          "owner": "IWebScreen:Ui69_Search",
+          "steps": []
+        }
+      ]
+    }
+  },
+  "mutations": [
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui65_ProgressCircle/Part1/Content/Part2",
+      "prop": "Text",
+      "value": "Changed",
+      "element": "ProgressCircle"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui66_RangeSlider/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "RangeSlider"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui67_RangeSliderInterval/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "RangeSliderInterval"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui68_ResponsiveTableRecords/Part1/Content/Part2",
+      "prop": "Text",
+      "value": "Changed",
+      "element": "ResponsiveTableRecords"
+    },
+    {
+      "op": "set",
+      "target": "IWebScreen:Ui69_Search/Part1/ExtendedClass",
+      "prop": "Value",
+      "value": "\"changed\"",
+      "element": "Search"
+    }
+  ]
+}

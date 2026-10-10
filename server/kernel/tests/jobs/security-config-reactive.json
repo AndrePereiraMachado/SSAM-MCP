@@ -1,0 +1,103 @@
+{
+ "description": "Seguranca e configuracao: role, tela restrita ao role (link Roles), site property, session variable, client variable, user exception",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedElement",
+   "element": "Headless_UI (ESpace) / LastFilter (ClientVariable)",
+   "why": "Configuracao declarada para demonstrar site property e client variable; nao e usada nesta tela de exemplo."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "Headless_UI (ESpace) / MaxContacts (SiteProperty)",
+   "why": "Configuracao declarada para demonstrar site property e client variable; nao e usada nesta tela de exemplo."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IRole",
+   "name": "Manager",
+   "as": "$role"
+  },
+  {
+   "op": "set",
+   "target": "$role",
+   "prop": "Description",
+   "value": "Gere contactos"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISiteProperty",
+   "name": "MaxContacts",
+   "as": "$sp"
+  },
+  {
+   "op": "set",
+   "target": "$sp",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "set",
+   "target": "$sp",
+   "prop": "DefaultValue",
+   "value": "100"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IClientVariable",
+   "name": "LastFilter",
+   "as": "$cv"
+  },
+  {
+   "op": "set",
+   "target": "$cv",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "Admin",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "link",
+   "from": "$scr",
+   "connector": "Roles",
+   "to": "$role"
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/Title",
+   "type": "IExpression",
+   "as": "$t"
+  },
+  {
+   "op": "set",
+   "target": "$t",
+   "prop": "Value",
+   "value": "\"Admin\""
+  },
+  {
+   "op": "get",
+   "target": "$scr"
+  },
+  {
+   "op": "get",
+   "target": "$sp"
+  }
+ ]
+}

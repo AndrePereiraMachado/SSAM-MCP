@@ -1,0 +1,17 @@
+{
+ "description": "FloatingContent (OutSystemsUI, Content) tipico; inputs obrigatorios Position ligados a variaveis da tela; placeholders Content com dados do aggregate de tarefas.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "PositionValue", "as": "$vPositionValue"},
+  {"op": "set", "target": "$vPositionValue", "prop": "DataType", "value": "Position Identifier"},
+  {"op": "set", "target": "$vPositionValue", "prop": "DefaultValue", "value": "Entities.Position.Right"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetShowcaseTasks", "as": "$tasks"},
+  {"op": "create", "parent": "$tasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "FloatingContentDemo", "source": "IMobileBlock:FloatingContent", "as": "$b"},
+  {"op": "set", "target": "$b/Position", "prop": "Value", "value": "PositionValue"},
+  {"op": "create", "parent": "$b/Content", "type": "IExpression", "as": "$ph1"},
+  {"op": "set", "target": "$ph1", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""}
+ ]
+}

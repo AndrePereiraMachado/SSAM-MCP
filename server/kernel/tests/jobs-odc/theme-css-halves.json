@@ -1,0 +1,12 @@
+{
+ "description": "As TRES metades do CSS de um tema. O tema InsuranceApp tem CSS do Theme Editor, e nesse caso ITheme.StyleSheet LE a efetiva e ESCREVE a do autor: sem o conserto do kernel o set parecia perdido (o get devolvia o texto antigo) enquanto o CSS do autor ja tinha sido substituido. Depois do conserto o get mostra as tres metades (StyleSheet efetiva, UserStyleSheet do autor, GeneratedStyleSheet do Theme Editor), o set diz onde o texto caiu, e a efetiva volta a ser gerada + CRLF + autor. Os valores sao aferidos em Anvil.Tests.Odc.ThemeCssTests; aqui prova-se que o modulo continua valido e que o OML grava as tres metades coerentes.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {"op": "get", "target": "IMobileTheme:InsuranceApp", "_why": "antes: StyleSheet = GeneratedStyleSheet + CRLF + UserStyleSheet"},
+  {"op": "set", "target": "IMobileTheme:InsuranceApp", "prop": "StyleSheet",
+   "value": "/* anvil:theme-css-halves */\n.anvil-halves { color: #0066db; }",
+   "_why": "substitui o CSS do AUTOR; para acrescentar, leia o texto antes e escreva o todo (ou use o op html, que ja faz o ciclo)"},
+  {"op": "get", "target": "IMobileTheme:InsuranceApp", "_why": "depois: UserStyleSheet e o texto novo e StyleSheet e gerada + CRLF + esse texto"}
+ ]
+}

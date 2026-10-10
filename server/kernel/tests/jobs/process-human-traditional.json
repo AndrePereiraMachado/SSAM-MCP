@@ -1,0 +1,150 @@
+{
+ "description": "BPT com atividade humana e timer sobre o CRUD Traditional: processo ApproveContact (input ContactId) com Start -> Human Activity Review (destino ContactDetailWeb com argumento) -> End; server action Contacts_Cleanup ligada a um Timer",
+ "base": "job:screen-crud-traditional",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IProcess",
+   "name": "ApproveContact",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IInputParameter",
+   "name": "ContactId",
+   "as": "$pin"
+  },
+  {
+   "op": "set",
+   "target": "$pin",
+   "prop": "DataType",
+   "value": "Contact Identifier"
+  },
+  {
+   "op": "set",
+   "target": "$p",
+   "prop": "Detail",
+   "value": "\"Approve contact \" + ContactId"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IStartNode",
+   "name": "Start",
+   "as": "$start"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IHumanActivityNode",
+   "name": "Review",
+   "as": "$human"
+  },
+  {
+   "op": "set",
+   "target": "$human",
+   "prop": "Label",
+   "value": "Review"
+  },
+  {
+   "op": "set",
+   "target": "$human",
+   "prop": "Destination",
+   "value": "IWebScreen:ContactDetailWeb"
+  },
+  {
+   "op": "set",
+   "target": "$human/ContactId",
+   "prop": "Value",
+   "value": "ContactId"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEndNode",
+   "name": "End",
+   "as": "$end"
+  },
+  {
+   "op": "link",
+   "from": "$start",
+   "to": "$human"
+  },
+  {
+   "op": "link",
+   "from": "$human",
+   "to": "$end"
+  },
+  {
+   "op": "layout",
+   "target": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "Contacts_Cleanup",
+   "as": "$cl"
+  },
+  {
+   "op": "create",
+   "parent": "$cl",
+   "type": "IStartNode",
+   "as": "$cl0"
+  },
+  {
+   "op": "create",
+   "parent": "$cl",
+   "type": "IEndNode",
+   "as": "$cl9"
+  },
+  {
+   "op": "link",
+   "from": "$cl0",
+   "to": "$cl9"
+  },
+  {
+   "op": "layout",
+   "target": "$cl"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ITimer",
+   "name": "ContactsCleanupTimer",
+   "as": "$timer"
+  },
+  {
+   "op": "set",
+   "target": "$timer",
+   "prop": "Action",
+   "value": "$cl"
+  },
+  {
+   "op": "set",
+   "target": "$timer",
+   "prop": "Description",
+   "value": "Limpeza diaria"
+  },
+  {
+   "op": "dump",
+   "target": "$p",
+   "depth": 2
+  },
+  {
+   "op": "get",
+   "target": "$start"
+  },
+  {
+   "op": "get",
+   "target": "$human"
+  },
+  {
+   "op": "get",
+   "target": "$end"
+  }
+ ]
+}

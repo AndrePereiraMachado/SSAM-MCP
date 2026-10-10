@@ -1,0 +1,29 @@
+{
+ "description": "Foto externa de cada produto numa List: a Url vem do atributo ImageUrl do registro e o logo do modulo fica como imagem padrao se a URL falhar.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [
+   {"name": "Name", "type": "Text", "length": 100, "mandatory": true},
+   {"name": "ImageUrl", "type": "Text", "length": 500}]}]}},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductPhotos", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "PhotoList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetProducts.List"},
+  {"op": "create", "parent": "$list", "type": "IContainer", "name": "PhotoRow", "as": "$row"},
+  {"op": "create", "parent": "$row", "type": "IImage", "name": "Photo", "as": "$img"},
+  {"op": "set", "target": "$img", "prop": "Type", "value": "External"},
+  {"op": "set", "target": "$img", "prop": "Url", "value": "GetProducts.List.Current.Product.ImageUrl", "_why": "a URL e um atributo do registro da linha"},
+  {"op": "set", "target": "$img", "prop": "DefaultImage", "value": "IImage:Logo", "_why": "imagem do modulo mostrada quando a URL nao carrega"},
+  {"op": "set", "target": "$img", "prop": "Style", "value": "\"border-radius-soft\""},
+  {"op": "create", "parent": "$row", "type": "IExpression", "as": "$name"},
+  {"op": "set", "target": "$name", "prop": "Value", "value": "GetProducts.List.Current.Product.Name"},
+
+  {"op": "get", "target": "$img"}
+ ]
+}

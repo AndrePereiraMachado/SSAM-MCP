@@ -1,0 +1,20 @@
+{
+ "description": "ODC: a RECUSA de Interval AtOrOn num ITimeOfDay. O item guarda a hora em Hour/Minute, nao em Values; com AtOrOn a ordenacao do Schedule (SortScheduleItemsComparer) le Values nulo e a plataforma caia em NullReferenceException ao segundo item, sem dizer o op. O kernel recusa antes de escrever e diz o caminho: o CronSchedule do timer, ou itens IHour/IMinute. O caminho limpo esta em tests/jobs-odc/timer-time-of-day.json.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectError": [
+  "op #7 (set Interval)",
+  "a time of day keeps Interval Any",
+  "CronSchedule"
+ ],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfCovNightlyAction", "as": "$action"},
+  {"op": "create", "parent": "$action", "type": "IStartNode", "as": "$start"},
+  {"op": "create", "parent": "$action", "type": "IEndNode", "as": "$end"},
+  {"op": "link", "from": "$start", "to": "$end"},
+  {"op": "create", "parent": "@espace", "type": "ITimer", "name": "WfCovNightly", "as": "$timer"},
+  {"op": "set", "target": "$timer", "prop": "Action", "value": "$action"},
+  {"op": "create", "parent": "$timer/ScheduleConfiguration", "type": "ITimeOfDay", "as": "$time"},
+  {"op": "set", "target": "$time", "prop": "Interval", "value": "AtOrOn"}
+ ]
+}

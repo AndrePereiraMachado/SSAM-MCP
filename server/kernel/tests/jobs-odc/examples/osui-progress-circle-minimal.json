@@ -1,0 +1,12 @@
+{
+ "description": "ProgressCircle do OSUI: Progress obrigatorio e empty, porque o Content de exemplo cita uma variavel que o app nao tem.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProgressCircleDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ProgressCircle1", "source": "IMobileBlock:ProgressCircle", "empty": true, "as": "$pc", "_why": "o Content de exemplo le ProgressCircleTextVariable, que nao existe na tela"},
+  {"op": "set", "target": "$pc/Progress", "prop": "Value", "value": "75"}
+ ]
+}

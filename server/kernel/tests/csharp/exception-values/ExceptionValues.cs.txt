@@ -1,0 +1,21 @@
+#nullable enable
+public sealed class FailureState { public Exception? Original; public Exception? Alias; public int Trace; }
+public readonly record struct FailureValue(Exception? Error);
+public static class Rules {
+    private static Exception Make() => new InvalidOperationException("held");
+    private static Exception Identity(Exception value) => value;
+    private static int ThrowValue(Exception value) { throw value; }
+    public static bool Aliases() { var first = new ArgumentException("same"); var second = new ArgumentException("same"); Exception alias = first; return ReferenceEquals(first, alias) && !ReferenceEquals(first, second) && first == alias && first != second; }
+    public static bool LocalState() { var state = new FailureState(); state.Original = Make(); state.Alias = Identity(state.Original); return ReferenceEquals(state.Original, state.Alias); }
+    public static bool ValueState() { var state = new FailureValue(Make()); var copy = state; return ReferenceEquals(state.Error, copy.Error); }
+    public static bool Inner() { var inner = new Exception("inner"); var outer = new InvalidOperationException("outer", inner); return ReferenceEquals(outer.InnerException, inner) && outer.InnerException!.Message == "inner"; }
+    public static bool CoalesceMissing() { Exception? missing = null; var chosen = missing ?? Make(); return missing == null && chosen != null && !ReferenceEquals(missing, chosen); }
+    public static bool CoalescePresent() { Exception? value = Make(); var chosen = value ?? Make(); return ReferenceEquals(value, chosen) && !ReferenceEquals(value, null); }
+    private static int ThrowNull() { Exception? value = null; throw value; }
+    private static int ThrowLiteral() { throw null!; }
+    private static int ReadNull() { Exception? value = null; return value!.HResult; }
+    public static string ConstructorEffects() { var state = new FailureState(); var value = new ArgumentOutOfRangeException(message: Message(state), paramName: Parameter(state), actualValue: Actual(state)); return state.Trace + "|" + value.Message; }
+    private static string Message(FailureState state) { state.Trace = state.Trace * 10 + 1; return "bad"; }
+    private static string Parameter(FailureState state) { state.Trace = state.Trace * 10 + 2; return "limit"; }
+    private static int Actual(FailureState state) { state.Trace = state.Trace * 10 + 3; return 5; }
+}

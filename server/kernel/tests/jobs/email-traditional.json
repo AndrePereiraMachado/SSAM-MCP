@@ -1,0 +1,135 @@
+{
+ "description": "Email (Traditional): email no flow Emails com input, Subject e conteudo; server action que envia com Send Email (To, argumento)",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IWebFlow:Emails",
+   "type": "IWebEmail",
+   "name": "WelcomeEmail",
+   "as": "$em"
+  },
+  {
+   "op": "create",
+   "parent": "$em",
+   "type": "IInputParameter",
+   "name": "UserName",
+   "as": "$emIn"
+  },
+  {
+   "op": "set",
+   "target": "$emIn",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "set",
+   "target": "$em",
+   "prop": "Subject",
+   "value": "\"Welcome, \" + UserName"
+  },
+  {
+   "op": "create",
+   "parent": "$em",
+   "type": "IExpressionWidget",
+   "as": "$txt"
+  },
+  {
+   "op": "set",
+   "target": "$txt",
+   "prop": "Value",
+   "value": "\"Hello \" + UserName + \", thanks for joining.\""
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "SendWelcome",
+   "as": "$sa"
+  },
+  {
+   "op": "set",
+   "target": "$sa",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IInputParameter",
+   "name": "Email",
+   "as": "$saTo"
+  },
+  {
+   "op": "set",
+   "target": "$saTo",
+   "prop": "DataType",
+   "value": "Email"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IInputParameter",
+   "name": "UserName",
+   "as": "$saName"
+  },
+  {
+   "op": "set",
+   "target": "$saName",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IStartNode",
+   "as": "$s0"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "ISendEmailNode",
+   "name": "SendWelcomeEmail",
+   "as": "$send"
+  },
+  {
+   "op": "set",
+   "target": "$send",
+   "prop": "Email",
+   "value": "$em"
+  },
+  {
+   "op": "set",
+   "target": "$send",
+   "prop": "To",
+   "value": "Email"
+  },
+  {
+   "op": "set",
+   "target": "$send/UserName",
+   "prop": "Value",
+   "value": "UserName"
+  },
+  {
+   "op": "create",
+   "parent": "$sa",
+   "type": "IEndNode",
+   "as": "$s9"
+  },
+  {
+   "op": "link",
+   "from": "$s0",
+   "to": "$send"
+  },
+  {
+   "op": "link",
+   "from": "$send",
+   "to": "$s9"
+  },
+  {
+   "op": "layout",
+   "target": "$sa"
+  }
+ ]
+}

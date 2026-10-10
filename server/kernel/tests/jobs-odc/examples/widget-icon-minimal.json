@@ -1,0 +1,13 @@
+{
+ "description": "Icon: um IIcon com o nome Phosphor e o Weight, que no ODC e obrigatorio para o icone resolver.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "IconDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IIcon", "name": "StarIcon", "as": "$ico"},
+  {"op": "set", "target": "$ico", "prop": "Icon", "value": "star"},
+  {"op": "set", "target": "$ico", "prop": "Weight", "value": "regular"}
+ ]
+}

@@ -1,0 +1,19 @@
+{
+ "description": "A RECUSA de apagar um evento de bloco, a outra metade de tests/jobs/block-events-delete-reactive.json. Sobre job:block-events-reactive nasce ainda uma segunda instancia SEM handler, e so entao se tenta apagar IBlockEvent:OnRate. O delete tem de ser recusado e a mensagem tem de nomear os TRES consumidores: o ITriggerNode que dispara (dentro do bloco), o IEventHandler da instancia que tem handler e o IEventHandler da instancia que NAO tem - porque o IEventHandler nasce com a instancia mesmo vazio, e um evento sem um unico handler ligado continua sem poder ser apagado. Roda com `python scripts/run_job.py tests/jobs-negative/delete-block-event-in-use.json`: tem de dar ok=False (NegativeJobTests.JobFailsWithTheTeachingMessage).",
+ "base": "job:block-events-reactive",
+ "expectValid": true,
+ "expectError": [
+  "delete: refused",
+  "IBlockEvent 'OnRate' is used by 3 consumer(s)",
+  "IMobileFlow:MainFlow/IMobileBlock:RatingPicker/IScreenAction:Rate/ITriggerNode:RaiseOnRate",
+  "IMobileBlockInstanceWidget:RatingPicker1/IEventHandler",
+  "IMobileBlockInstanceWidget:RatingPicker2/IEventHandler",
+  "pass \"force\": true to break them"
+ ],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "RatingPicker2", "as": "$i2", "source": "IMobileBlock:RatingPicker", "_why": "instancia sem handler: mesmo assim conta como consumidor do evento"},
+  {"op": "set", "target": "$i2/Caption", "prop": "Value", "value": "\"Sem handler, e mesmo assim consumidor\""},
+  {"op": "usages", "target": "IBlockEvent:OnRate"},
+  {"op": "delete", "target": "IBlockEvent:OnRate"}
+ ]
+}

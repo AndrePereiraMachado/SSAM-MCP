@@ -1,0 +1,328 @@
+{
+  "formatVersion": 1,
+  "sourceSha256": "933d61367b61eec0ad77321eb7c433af26c743c6d8d7e30df5e80f5c8d9c369f",
+  "cases": [
+    {
+      "id": "null/Measure",
+      "method": "Measure",
+      "arguments": [
+        null
+      ]
+    },
+    {
+      "id": "null/Describe",
+      "method": "Describe",
+      "arguments": [
+        null
+      ]
+    },
+    {
+      "id": "empty/Measure",
+      "method": "Measure",
+      "arguments": [
+        ""
+      ]
+    },
+    {
+      "id": "empty/Describe",
+      "method": "Describe",
+      "arguments": [
+        ""
+      ]
+    },
+    {
+      "id": "ascii/Measure",
+      "method": "Measure",
+      "arguments": [
+        "abc"
+      ]
+    },
+    {
+      "id": "ascii/Describe",
+      "method": "Describe",
+      "arguments": [
+        "abc"
+      ]
+    },
+    {
+      "id": "trailing-space/Measure",
+      "method": "Measure",
+      "arguments": [
+        "a "
+      ]
+    },
+    {
+      "id": "trailing-space/Describe",
+      "method": "Describe",
+      "arguments": [
+        "a "
+      ]
+    },
+    {
+      "id": "bmp-accent/Measure",
+      "method": "Measure",
+      "arguments": [
+        "\u00E9"
+      ]
+    },
+    {
+      "id": "bmp-accent/Describe",
+      "method": "Describe",
+      "arguments": [
+        "\u00E9"
+      ]
+    },
+    {
+      "id": "bmp-cjk/Measure",
+      "method": "Measure",
+      "arguments": [
+        "\u6F22\u5B57"
+      ]
+    },
+    {
+      "id": "bmp-cjk/Describe",
+      "method": "Describe",
+      "arguments": [
+        "\u6F22\u5B57"
+      ]
+    },
+    {
+      "id": "combining/Measure",
+      "method": "Measure",
+      "arguments": [
+        "e\u0301"
+      ]
+    },
+    {
+      "id": "combining/Describe",
+      "method": "Describe",
+      "arguments": [
+        "e\u0301"
+      ]
+    },
+    {
+      "id": "supplementary/Measure",
+      "method": "Measure",
+      "arguments": [
+        "\uD83D\uDE00"
+      ]
+    },
+    {
+      "id": "supplementary/Describe",
+      "method": "Describe",
+      "arguments": [
+        "\uD83D\uDE00"
+      ]
+    },
+    {
+      "id": "cold-shape-independent/Measure",
+      "method": "Measure",
+      "arguments": [
+        "\u00E9\uD83D\uDE00"
+      ]
+    },
+    {
+      "id": "cold-shape-independent/Describe",
+      "method": "Describe",
+      "arguments": [
+        "\u00E9\uD83D\uDE00"
+      ]
+    },
+    {
+      "id": "zwj-profession/Measure",
+      "method": "Measure",
+      "arguments": [
+        "\uD83D\uDC69\u200D\uD83D\uDCBB"
+      ]
+    },
+    {
+      "id": "zwj-profession/Describe",
+      "method": "Describe",
+      "arguments": [
+        "\uD83D\uDC69\u200D\uD83D\uDCBB"
+      ]
+    },
+    {
+      "id": "zwj-family/Measure",
+      "method": "Measure",
+      "arguments": [
+        "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66"
+      ]
+    },
+    {
+      "id": "zwj-family/Describe",
+      "method": "Describe",
+      "arguments": [
+        "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66"
+      ]
+    },
+    {
+      "id": "flag/Measure",
+      "method": "Measure",
+      "arguments": [
+        "\uD83C\uDDE7\uD83C\uDDF7"
+      ]
+    },
+    {
+      "id": "flag/Describe",
+      "method": "Describe",
+      "arguments": [
+        "\uD83C\uDDE7\uD83C\uDDF7"
+      ]
+    },
+    {
+      "id": "variation-selector/Measure",
+      "method": "Measure",
+      "arguments": [
+        "\u2764\uFE0F"
+      ]
+    },
+    {
+      "id": "variation-selector/Describe",
+      "method": "Describe",
+      "arguments": [
+        "\u2764\uFE0F"
+      ]
+    },
+    {
+      "id": "nul/Measure",
+      "method": "Measure",
+      "arguments": [
+        "\u0000x"
+      ]
+    },
+    {
+      "id": "nul/Describe",
+      "method": "Describe",
+      "arguments": [
+        "\u0000x"
+      ]
+    },
+    {
+      "id": "crlf/Measure",
+      "method": "Measure",
+      "arguments": [
+        "\r\n"
+      ]
+    },
+    {
+      "id": "crlf/Describe",
+      "method": "Describe",
+      "arguments": [
+        "\r\n"
+      ]
+    },
+    {
+      "id": "unicode-whitespace-only/Measure",
+      "method": "Measure",
+      "arguments": [
+        "\u00A0\u2003"
+      ]
+    },
+    {
+      "id": "unicode-whitespace-only/Describe",
+      "method": "Describe",
+      "arguments": [
+        "\u00A0\u2003"
+      ]
+    },
+    {
+      "id": "unicode-whitespace-bmp/Measure",
+      "method": "Measure",
+      "arguments": [
+        "\u00A0\u00E9\u2028"
+      ]
+    },
+    {
+      "id": "unicode-whitespace-bmp/Describe",
+      "method": "Describe",
+      "arguments": [
+        "\u00A0\u00E9\u2028"
+      ]
+    },
+    {
+      "id": "spaces-supplementary/Measure",
+      "method": "Measure",
+      "arguments": [
+        " \uD83D\uDE00 "
+      ]
+    },
+    {
+      "id": "spaces-supplementary/Describe",
+      "method": "Describe",
+      "arguments": [
+        " \uD83D\uDE00 "
+      ]
+    },
+    {
+      "id": "spaces-combining/Measure",
+      "method": "Measure",
+      "arguments": [
+        " e\u0301 "
+      ]
+    },
+    {
+      "id": "spaces-combining/Describe",
+      "method": "Describe",
+      "arguments": [
+        " e\u0301 "
+      ]
+    },
+    {
+      "id": "spaces-zwj/Measure",
+      "method": "Measure",
+      "arguments": [
+        " \uD83D\uDC69\u200D\uD83D\uDCBB "
+      ]
+    },
+    {
+      "id": "spaces-zwj/Describe",
+      "method": "Describe",
+      "arguments": [
+        " \uD83D\uDC69\u200D\uD83D\uDCBB "
+      ]
+    },
+    {
+      "id": "zero-width-space-not-whitespace/Measure",
+      "method": "Measure",
+      "arguments": [
+        "\u200B"
+      ]
+    },
+    {
+      "id": "zero-width-space-not-whitespace/Describe",
+      "method": "Describe",
+      "arguments": [
+        "\u200B"
+      ]
+    },
+    {
+      "id": "bom-not-whitespace/Measure",
+      "method": "Measure",
+      "arguments": [
+        "\uFEFF"
+      ]
+    },
+    {
+      "id": "bom-not-whitespace/Describe",
+      "method": "Describe",
+      "arguments": [
+        "\uFEFF"
+      ]
+    },
+    {
+      "id": "unicode-whitespace-supplementary/Measure",
+      "method": "Measure",
+      "arguments": [
+        "\u00A0\uD83D\uDE00\u2028"
+      ]
+    },
+    {
+      "id": "unicode-whitespace-supplementary/Describe",
+      "method": "Describe",
+      "arguments": [
+        "\u00A0\uD83D\uDE00\u2028"
+      ]
+    }
+  ]
+}

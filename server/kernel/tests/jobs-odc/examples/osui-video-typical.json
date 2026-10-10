@@ -1,0 +1,27 @@
+{
+ "description": "Video do OSUI: URL vinda de uma variavel, controles, tamanho, e o StateChanged guardando o estado do player.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductVideo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Video\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "VideoUrl", "as": "$vVideoUrl"},
+  {"op": "set", "target": "$vVideoUrl", "prop": "DataType", "value": "Text"},
+  {"op": "set", "target": "$vVideoUrl", "prop": "DefaultValue", "value": "\"https://www.w3schools.com/html/mov_bbb.mp4\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "PlayerState", "as": "$vPlayerState"},
+  {"op": "set", "target": "$vPlayerState", "prop": "DataType", "value": "Text"},
+  {"op": "logic", "data": {"actions": [{"name": "PlayerChanged", "kind": "screen", "owner": "IMobileScreen:ProductVideo", "inputs": [{"name": "VideoState", "type": "VideoState Identifier"}], "steps": [{"assign": {"PlayerState": "VideoState"}, "as": "Keep"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Video1", "source": "IMobileBlock:Video", "as": "$vd"},
+  {"op": "set", "target": "$vd/URL", "prop": "Value", "value": "VideoUrl"},
+  {"op": "set", "target": "$vd/Controls", "prop": "Value", "value": "True"},
+  {"op": "set", "target": "$vd/Width", "prop": "Value", "value": "\"640px\""},
+  {"op": "set", "target": "$vd/Height", "prop": "Value", "value": "\"360px\""},
+  {"op": "set", "target": "$vd/StateChanged", "prop": "Handler", "value": "IMobileScreen:ProductVideo/PlayerChanged"},
+  {"op": "set", "target": "$vd/StateChanged/VideoState", "prop": "Value", "value": "VideoState"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "\"State: \" + PlayerState"}
+ ]
+}

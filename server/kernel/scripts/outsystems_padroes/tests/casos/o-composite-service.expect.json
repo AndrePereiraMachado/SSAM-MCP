@@ -1,0 +1,118 @@
+{
+ "_leia": "Estagio oml (+truechange) sobre o OML do composto Service. O OML vem de: ssam job --lane o11 tests/casos/o-composite-service.json --out <pasta dos OMLs>/o-composite-service.oml.",
+ "stage": "oml,truechange",
+ "mode": "autor",
+ "oml": "o-composite-service.oml",
+ "resultForOml": "o-composite-service.result.json",
+ "exitCode": 1,
+ "mustFind": [
+  {
+   "rule": "D5",
+   "stage": "oml",
+   "contains": "GetOrdersOfCustomer"
+  },
+  {
+   "rule": "D5",
+   "stage": "oml",
+   "contains": "CheckBatch"
+  },
+  {
+   "rule": "L3",
+   "stage": "oml",
+   "contains": "PriorityText"
+  },
+  {
+   "rule": "L6",
+   "stage": "oml",
+   "contains": "SerializePayload"
+  },
+  {
+   "rule": "L6",
+   "stage": "oml",
+   "contains": "SummaryJson"
+  },
+  {
+   "rule": "N1",
+   "stage": "oml",
+   "contains": "QuotaCheck"
+  },
+  {
+   "rule": "D2",
+   "stage": "oml",
+   "contains": "GetAllCodes"
+  },
+  {
+   "rule": "D3",
+   "stage": "oml",
+   "contains": "SelectProducts"
+  },
+  {
+   "rule": "D3",
+   "stage": "truechange",
+   "contains": "Argument"
+  },
+  {
+   "rule": "AR2",
+   "stage": "oml",
+   "contains": "AllExceptions"
+  },
+  {
+   "rule": "P7",
+   "stage": "oml",
+   "contains": "CreateProtectedNegEntry"
+  },
+  {
+   "rule": "P7",
+   "stage": "oml",
+   "contains": "FeatureHardEnabled"
+  },
+  {
+   "rule": "N4",
+   "stage": "truechange",
+   "contains": "SQL_Enumeration"
+  },
+  {
+   "rule": "N1",
+   "stage": "oml",
+   "contains": "AggregateNode GetOrdersOfCustomer sem Description"
+  },
+  {
+   "rule": "N1",
+   "stage": "oml",
+   "contains": "JSONSerializeNode SerializePayload sem Description"
+  },
+  {
+   "rule": "N1",
+   "stage": "oml",
+   "contains": "SQLNode SelectProducts sem Description"
+  },
+  {
+   "rule": "N1",
+   "stage": "oml",
+   "contains": "AggregateNode ReadLatestNote sem Description"
+  },
+  {
+   "rule": "AR2",
+   "stage": "oml",
+   "contains": "ReopenNegItem_Impl"
+  }
+ ],
+ "mustNotFind": [
+  {
+   "rule": "L7",
+   "contains": "NegApiRoute"
+  },
+  {
+   "rule": "AR2",
+   "contains": "ApproveNegItem"
+  },
+  {
+   "rule": "AR2",
+   "contains": "ReopenNegItem ("
+  },
+  {
+   "rule": "N1",
+   "contains": "ReadItemToReopen"
+  }
+ ]
+}

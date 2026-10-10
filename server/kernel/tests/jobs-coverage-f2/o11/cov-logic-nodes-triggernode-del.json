@@ -1,0 +1,74 @@
+{
+ "description": "Cobertura testada (fase 2): del de OutSystems.Model.Logic.Nodes.ITriggerNode (o11) em blockActionFlowEvent. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedAction",
+   "element": "Headless_UI (ESpace) / MainFlow (MobileFlow) / CovSBlock (MobileBlock) / CovSAction (ScreenAction)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  },
+  {
+   "id": "WebBlock_CustomEventNotTriggered",
+   "element": "Headless_UI (ESpace) / MainFlow (MobileFlow) / CovSBlock (MobileBlock) / CovSEvent (BlockEvent)",
+   "why": "Cobertura fase 1: aviso esperado de um elemento minimo sem consumidor; o job mede o verbo, nao a aplicacao."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileBlock",
+   "name": "CovSBlock",
+   "as": "$blk"
+  },
+  {
+   "op": "create",
+   "parent": "$blk",
+   "type": "IBlockEvent",
+   "name": "CovSEvent",
+   "as": "$bev"
+  },
+  {
+   "op": "set",
+   "target": "$bev",
+   "prop": "IsMandatory",
+   "value": false
+  },
+  {
+   "op": "create",
+   "parent": "$blk",
+   "type": "IScreenAction",
+   "name": "CovSAction",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "ITriggerNode",
+   "name": "CovATriggerNode",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

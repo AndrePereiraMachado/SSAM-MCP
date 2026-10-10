@@ -1,0 +1,33 @@
+{
+ "description": "Consumidor: op reference traz a entidade e a action publica do produtor (aqui job:pat-producer-public-action; ao vivo producer e o NOME do modulo, com ssam_job/o11_job captureProducers:[\"<Modulo>\"] ou --producer <Modulo>=<snapshot.oml>) e a tela chama a action pelo nome.",
+ "base": "reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "reference", "producer": "job:pat-producer-public-action", "elements": ["IServerEntity:Supplier", "IServerAction:Supplier_GetSummary"]},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "Suppliers", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Suppliers\""},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "SummaryText", "as": "$vSummary"},
+  {"op": "set", "target": "$vSummary", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetSupplierList", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IEntitySignature:Supplier"}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "ShowSummary", "kind": "screen", "owner": "IMobileScreen:Suppliers", "description": "Chama a action publica do produtor e mostra o resultado",
+    "inputs": [{"name": "SupplierId", "type": "Supplier Identifier"}],
+    "steps": [
+     {"call": "Supplier_GetSummary", "as": "GetSummary", "args": {"SupplierId": "SupplierId"}},
+     {"assign": {"SummaryText": "GetSummary.Summary.Title"}, "as": "KeepSummary"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "SupplierList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetSupplierList.List"},
+  {"op": "create", "parent": "$list", "type": "ILink", "name": "SupplierLink", "as": "$lnk"},
+  {"op": "delete", "target": "$lnk/#ITextWidget"},
+  {"op": "create", "parent": "$lnk", "type": "IExpression", "as": "$lnkT"},
+  {"op": "set", "target": "$lnkT", "prop": "Value", "value": "GetSupplierList.List.Current.Supplier.Name"},
+  {"op": "set", "target": "$lnk/OnClick", "prop": "Destination", "value": "IScreenAction:ShowSummary"},
+  {"op": "set", "target": "$lnk/OnClick/SupplierId", "prop": "Value", "value": "GetSupplierList.List.Current.Supplier.Id"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$summary"},
+  {"op": "set", "target": "$summary", "prop": "Value", "value": "SummaryText"}
+ ]
+}

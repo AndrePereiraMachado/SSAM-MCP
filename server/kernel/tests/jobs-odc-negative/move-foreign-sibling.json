@@ -1,0 +1,22 @@
+{
+ "description": "O espelho de tests/jobs-negative/move-foreign-sibling.json na faixa ODC: before/after do move so aceita um irmao do MESMO pai, e a mensagem nomeia os dois caminhos. Sem a recusa a plataforma cai na mesma asserção interna (`Condition is false`) nas duas faixas. Roda em OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane. O caminho limpo esta em tests/jobs-odc/refactor-move.json.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectError": [
+  "move before:",
+  "is not a sibling of",
+  "IContainer:WfBoxB",
+  "IContainer:WfBoxA",
+  "move only REORDERS inside the same parent",
+  "to change the parent use \"into\""
+ ],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfMoveRefuse", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "WfBoxA", "as": "$a"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "WfBoxB", "as": "$b"},
+  {"op": "create", "parent": "$a", "type": "IContainer", "name": "Dentro", "as": "$dentro"},
+  {"op": "create", "parent": "$b", "type": "IContainer", "name": "Fora", "as": "$fora"},
+  {"op": "move", "target": "$dentro", "before": "$fora"}
+ ]
+}

@@ -1,0 +1,52 @@
+namespace ExceptionSearchOracle;
+
+internal static class CallerFilter
+{
+    internal static OracleResult Run()
+    {
+        var result = new OracleResult("caller-filter-before-callee-finally");
+        var original = new InvalidOperationException("original");
+        var state = 0;
+        var observedByFilter = -1;
+
+        bool Filter(Exception exception)
+        {
+            observedByFilter = state;
+            result.Events.Add($"caller.filter:{Identity.Of(exception, original)}:state={state}");
+            return true;
+        }
+
+        try
+        {
+            ThrowFromCallee(original, result.Events, () =>
+            {
+                result.Events.Add($"callee.finally.enter:state={state}");
+                state = 1;
+                result.Events.Add($"callee.finally.exit:state={state}");
+            });
+        }
+        catch (Exception exception) when (Filter(exception))
+        {
+            result.CaughtException = Identity.Of(exception, original);
+            result.Events.Add($"caller.catch:{result.CaughtException}:state={state}");
+            result.ReturnValue = "caught";
+        }
+
+        result.State["state"] = state.ToString();
+        result.State["observedByFilter"] = observedByFilter.ToString();
+        return result;
+    }
+
+    private static void ThrowFromCallee(Exception exception, List<string> events, Action cleanup)
+    {
+        try
+        {
+            events.Add("callee.throw:original");
+            throw exception;
+        }
+        finally
+        {
+            cleanup();
+        }
+    }
+}

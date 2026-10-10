@@ -1,0 +1,31 @@
+{
+ "description": "Prova viva: Headless_UI passa a referenciar Product e Product_GetById do modulo Headless_CS publicado (snapshot ligado por --producer Headless_CS=<oml>) e usa-os numa tela; nao e teste automatico porque depende do ambiente",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {"op": "reference", "producer": "Headless_CS", "elements": ["IServerEntity:Product", "IServerAction:Product_GetById"], "as": "$ref"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "Products", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Products\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IEntitySignature:Product"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "ProductList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetProducts.List"},
+  {"op": "create", "parent": "$list", "type": "IExpression", "as": "$ex"},
+  {"op": "set", "target": "$ex", "prop": "Value", "value": "GetProducts.List.Current.Product.Name"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "LoadSummary", "as": "$sa"},
+  {"op": "create", "parent": "$sa", "type": "IStartNode", "as": "$s0"},
+  {"op": "create", "parent": "$sa", "type": "IExecuteServerActionNode", "name": "Product_GetById", "as": "$call"},
+  {"op": "set", "target": "$call", "prop": "Action", "value": "IActionSignature:Product_GetById"},
+  {"op": "set", "target": "$call/ProductId", "prop": "Value", "value": "GetProducts.List.Current.Product.Id"},
+  {"op": "create", "parent": "$sa", "type": "IEndNode", "as": "$s9"},
+  {"op": "link", "from": "$s0", "to": "$call"},
+  {"op": "link", "from": "$call", "to": "$s9"},
+  {"op": "layout", "target": "$sa"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Actions", "type": "IButton", "name": "LoadButton", "as": "$btn"},
+  {"op": "create", "parent": "$btn", "type": "IExpression", "as": "$btnText"},
+  {"op": "set", "target": "$btnText", "prop": "Value", "value": "\"Load summary\""},
+  {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$sa"}
+ ]
+}

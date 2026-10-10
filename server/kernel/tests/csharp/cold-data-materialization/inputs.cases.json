@@ -1,0 +1,19 @@
+{
+  "source": "ColdDataMaterialization.cs.txt",
+  "class": "ColdDataMaterialization.Rules",
+  "resetSessionBeforeEveryCase": true,
+  "sessionSemantics": {
+    "query": "Each Query<T>() call snapshots persisted rows as detached objects. Within this returned IQueryable, LINQ preserves the identity of each source object through filtering, selection and join reuse.",
+    "insert": "Clone the supplied object; assign only the clone a positive generated Id; return Id<T>; do not mutate the argument.",
+    "update": "Replace persisted fields with a detached copy of the supplied object, identified by its Id. Later object mutations do not change storage."
+  },
+  "seed": {
+    "ColdDataMaterialization.StockRow": [
+      { "Id": 1, "Group": 7, "Quantity": 10, "Note": null },
+      { "Id": 2, "Group": 7, "Quantity": 20, "Note": "" },
+      { "Id": 3, "Group": 8, "Quantity": 30, "Note": "persisted" }
+    ]
+  },
+  "nextGeneratedId": 4,
+  "arguments": []
+}

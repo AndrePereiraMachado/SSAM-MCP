@@ -1,0 +1,485 @@
+[
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\t"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\tX\t"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\n"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\nX\n"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\u000b"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\u000bX\u000b"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\f"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\fX\f"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\r"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\rX\r"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      " "
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      " X "
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\u0085"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\u0085X\u0085"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\u00a0"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\u00a0X\u00a0"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\u1680"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\u1680X\u1680"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\u2000"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\u2000X\u2000"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\u2001"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\u2001X\u2001"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\u2002"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\u2002X\u2002"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\u2003"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\u2003X\u2003"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\u2004"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\u2004X\u2004"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\u2005"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\u2005X\u2005"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\u2006"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\u2006X\u2006"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\u2007"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\u2007X\u2007"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\u2008"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\u2008X\u2008"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\u2009"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\u2009X\u2009"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\u200a"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\u200aX\u200a"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\u2028"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\u2028X\u2028"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\u2029"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\u2029X\u2029"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\u202f"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\u202fX\u202f"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\u205f"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\u205fX\u205f"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\u3000"
+    ],
+    "expected": true
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\u3000X\u3000"
+    ],
+    "expected": "X"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\u180e"
+    ],
+    "expected": false
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\u180e"
+    ],
+    "expected": "\u180e"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\u200b"
+    ],
+    "expected": false
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\u200b"
+    ],
+    "expected": "\u200b"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "\ufeff"
+    ],
+    "expected": false
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "\ufeff"
+    ],
+    "expected": "\ufeff"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      "x"
+    ],
+    "expected": false
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      "x"
+    ],
+    "expected": "x"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      " \t x\r\n"
+    ],
+    "expected": false
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      " \t x\r\n"
+    ],
+    "expected": "x"
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      null
+    ],
+    "expected": true
+  },
+  {
+    "method": "IsBlank",
+    "arguments": [
+      ""
+    ],
+    "expected": true
+  },
+  {
+    "method": "IsEmpty",
+    "arguments": [
+      null
+    ],
+    "expected": true
+  },
+  {
+    "method": "IsEmpty",
+    "arguments": [
+      ""
+    ],
+    "expected": true
+  },
+  {
+    "method": "IsEmpty",
+    "arguments": [
+      " "
+    ],
+    "expected": false
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      ""
+    ],
+    "expected": ""
+  },
+  {
+    "method": "Clean",
+    "arguments": [
+      " \n\t"
+    ],
+    "expected": ""
+  },
+  {
+    "method": "CleanStart",
+    "arguments": [
+      " \tX\r\n"
+    ],
+    "expected": "X\r\n"
+  },
+  {
+    "method": "CleanEnd",
+    "arguments": [
+      " \tX\r\n"
+    ],
+    "expected": " \tX"
+  }
+]

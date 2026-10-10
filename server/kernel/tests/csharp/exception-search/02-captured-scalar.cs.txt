@@ -1,0 +1,54 @@
+namespace ExceptionSearchOracle;
+
+internal static class CapturedScalar
+{
+    internal static OracleResult Run()
+    {
+        var result = new OracleResult("filter-mutates-captured-caller-scalar");
+        var original = new InvalidOperationException("original");
+        var callerScalar = 10;
+        var observedInFinally = -1;
+
+        bool Filter(Exception exception)
+        {
+            result.Events.Add($"caller.filter.enter:{Identity.Of(exception, original)}:scalar={callerScalar}");
+            callerScalar += 7;
+            result.Events.Add($"caller.filter.exit:scalar={callerScalar}");
+            return true;
+        }
+
+        try
+        {
+            ThrowFromCallee(original, result.Events, () =>
+            {
+                observedInFinally = callerScalar;
+                result.Events.Add($"callee.finally.enter:scalar={callerScalar}");
+                callerScalar += 100;
+                result.Events.Add($"callee.finally.exit:scalar={callerScalar}");
+            });
+        }
+        catch (Exception exception) when (Filter(exception))
+        {
+            result.CaughtException = Identity.Of(exception, original);
+            result.Events.Add($"caller.catch:{result.CaughtException}:scalar={callerScalar}");
+            result.ReturnValue = callerScalar.ToString();
+        }
+
+        result.State["callerScalar"] = callerScalar.ToString();
+        result.State["observedInFinally"] = observedInFinally.ToString();
+        return result;
+    }
+
+    private static void ThrowFromCallee(Exception exception, List<string> events, Action cleanup)
+    {
+        try
+        {
+            events.Add("callee.throw:original");
+            throw exception;
+        }
+        finally
+        {
+            cleanup();
+        }
+    }
+}

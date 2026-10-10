@@ -1,0 +1,16 @@
+{
+ "description": "ODC: a RECUSA do delete de uma TELA. WfCovTaskDetail vem da cadeia screen-form -> screen-list e tem dois consumidores reais: o OnClick do TaskItem da lista WfCovTasks e o OnClick do botao NewButton. Sem force o delete tem de ser recusado E a mensagem tem de nomear os dois. O proprio modulo tambem a cita (no ODC o ESpace tem DefaultScreen e a primeira tela criada headless ficou com esse papel), mas isso ja nao recusa: o Studio apaga a tela padrao e deixa so o aviso 'Unknown Default Screen' (cobertura testada, fase 2). Roda em OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane. O caminho limpo esta em tests/jobs-odc/delete-screen.json.",
+ "base": "job:screen-list",
+ "expectValid": true,
+ "expectError": [
+  "delete: refused",
+  "IMobileScreen 'WfCovTaskDetail' is used by 2 consumer(s)",
+  "IPlaceholderContentWidget:Actions/IButton:NewButton/IBuiltinEvent:OnClick",
+  "IList:TaskList/IContent:content/IListItem:TaskItem/IBuiltinEvent:OnClick",
+  "list them with usages, fix or remove those usages, or pass \"force\": true to break them"
+ ],
+ "ops": [
+  {"op": "usages", "target": "IMobileScreen:WfCovTaskDetail"},
+  {"op": "delete", "target": "IMobileScreen:WfCovTaskDetail"}
+ ]
+}

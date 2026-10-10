@@ -1,0 +1,147 @@
+{
+ "description": "Cobertura testada (fase 1, medir): del de OutSystems.Model.Logic.Aggregates.Full.IAliasedSource (odc) em lgAggregateUsed. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "entities": [
+     {
+      "name": "CovSEntity",
+      "attributes": [
+       {
+        "name": "Title",
+        "type": "Text",
+        "length": 50
+       }
+      ]
+     },
+     {
+      "name": "CovSEntity2",
+      "attributes": [
+       {
+        "name": "Title",
+        "type": "Text",
+        "length": 50
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerAction",
+   "name": "CovSFlow",
+   "as": "$fp"
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "IOutputParameter",
+   "name": "CovSCount",
+   "as": "$fo"
+  },
+  {
+   "op": "set",
+   "target": "$fo",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "IStartNode",
+   "as": "$fs"
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "IEndNode",
+   "as": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "IAggregateNode",
+   "name": "CovSQuery",
+   "as": "$p"
+  },
+  {
+   "op": "create",
+   "parent": "$p",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "$CovSEntity"
+   },
+   "as": "$src1"
+  },
+  {
+   "op": "create",
+   "parent": "$fp",
+   "type": "IAssignNode",
+   "as": "$fa"
+  },
+  {
+   "op": "set",
+   "target": "$fa",
+   "prop": "Label",
+   "value": "CovSRead"
+  },
+  {
+   "op": "create",
+   "parent": "$fa",
+   "type": "IAssignment",
+   "as": "$fag"
+  },
+  {
+   "op": "set",
+   "target": "$fag",
+   "prop": "Variable",
+   "value": "CovSCount"
+  },
+  {
+   "op": "set",
+   "target": "$fag",
+   "prop": "Value",
+   "value": "CovSQuery.List.Length"
+  },
+  {
+   "op": "link",
+   "from": "$fs",
+   "to": "$p"
+  },
+  {
+   "op": "link",
+   "from": "$p",
+   "to": "$fa"
+  },
+  {
+   "op": "link",
+   "from": "$fa",
+   "to": "$fe"
+  },
+  {
+   "op": "create",
+   "parent": "$p/#ICombineSourcesOperation",
+   "type": "OutSystems.Model.Logic.Aggregates.Full.IAliasedSource",
+   "args": {
+    "dataSource": "$CovSEntity2"
+   },
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ],
+ "expectedMessages": [
+  {
+   "id": "UnusedUserAction",
+   "element": "WrightFlood (ESpace) / CovSFlow (ServerAction)",
+   "why": "ODC: um app nao expoe server action publica (o kernel recusa, como o Studio ao vivo); a action fica privada e sem consumidor neste job de cobertura"
+  }
+ ]
+}

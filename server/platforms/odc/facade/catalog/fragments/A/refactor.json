@@ -1,0 +1,358 @@
+{
+  "schemaVersion": "ssam-discovery-fragment/1",
+  "contract": "ssam-catalog-contribution/1",
+  "front": "A",
+  "title": "Cross-element refactoring and impact: rename, replace (repoint consumers), duplicate, move/reorder, delete with usages; transversal, per-role statuses live in the data.* and logic.* families",
+  "reviewedAt": "2026-09-23",
+  "synonyms": {
+    "usages": ["quem usa", "quem chama", "who uses", "who calls"],
+    "replace": ["migrar chamadores", "migrate callers", "trocar os chamadores", "reapontar os consumidores"]
+  },
+  "capabilities": [
+    {
+      "id": "refactor.rename",
+      "supersedes": ["refactor.rename"],
+      "category": "refactor",
+      "title": "Rename refactoring",
+      "keywords": [
+        "renomear a action", "renomear a server action", "renomear a entidade", "renomear o atributo", "renomear o elemento", "expressions rewritten", "expressoes reescritas", "name clash", "conflito de nome",
+        "atualizar todos os chamadores", "update every caller", "update all callers", "rename with propagation", "rename the action", "rename an attribute",
+        "rename the entity", "rename an element", "renomear sem perder", "propagar a renomeacao", "renomear e propagar"
+      ],
+      "summary": "`rename` refuses a name clash in the same scope and reports consumers and expressionsRewritten. Model references follow by key; free-typed literals are not rewritten.",
+      "route": {
+        "kind": "job",
+        "operation": "{\"op\":\"usages\",\"target\":\"<Type>:<Name>\"} then {\"op\":\"rename\",\"target\":\"<Type>:<Name>\",\"name\":\"<New>\"} then get/dump the consumers"
+      },
+      "contract": ["verbs.verbs.rename", "verbs.verbs.usages"],
+      "guidance": "usages first, rename, then read each consumer back with get. On O11 fix `<Node>.<Output>` expressions by hand (set Value) after renaming a client action or its output (measured case); ODC rewrites them. A static entity record is renamed with set Identifier, not rename.",
+      "example": { "ops": ["usages", "rename", "get"], "max": 8 },
+      "depends": [],
+      "recommends": [
+        { "id": "logic.server-action", "when": "the element is an action: its per-role rename status" },
+        { "id": "logic.variable", "when": "the element is a parameter or variable" },
+        { "id": "data.entity", "when": "the element is an entity, attribute or index" },
+        { "id": "data.static", "when": "a static entity record (set Identifier)" }
+      ],
+      "alternatives": [],
+      "elements": [],
+      "platforms": {
+        "odc": {
+          "proofs": ["rename-data-propagation", "rename-logic-propagation", "rename-interface-propagation", "refactor-inherited", "setting-lifecycle"],
+          "negative": ["rename-name-clash", "rename-structure-clash", "rename-static-record"],
+          "context": { "kinds": ["ServerAction", "ServerEntity", "MobileScreen"], "signatures": [] },
+          "limits": [
+            {
+              "text": "Model references follow by key; literals, Description, CSS, button labels, index names and hand-written URLs keep the old name, and the consumer node keeps its own name.",
+              "origin": "jobs-odc rename-data-propagation, rename-interface-propagation, refactor-inherited (descriptions)"
+            },
+            {
+              "text": "A clash with a sibling name (an action, a structure attribute) is refused with the name the Studio would have used; a static entity record is renamed with set Identifier.",
+              "origin": "jobs-odc-negative rename-name-clash, rename-structure-clash, rename-static-record"
+            },
+            {
+              "text": "Renaming an exposed REST method rewrites its public URL; IEvent/ISystemEvent/IBlockEvent renames are refused or silently ignored.",
+              "origin": "jobs-odc rest-expose-lifecycle, platform-events-lifecycle, block-event-lifecycle"
+            }
+          ],
+          "differences": [
+            "renaming a client action or its output rewrites the consumers' `<Node>.<Output>` expressions (O11 does not): jobs-odc rename-logic-propagation ops 82-90; renaming aggregate nodes rewrites their readers too: refactor-inherited ops 3-4"
+          ]
+        },
+        "o11": {
+          "proofs": ["rename-logic-propagation", "rename-data-propagation", "rename-indexed-attribute", "refactor-usages", "rename-interface-propagation"],
+          "negative": ["rename-name-clash", "rename-structure-clash", "rename-static-record"],
+          "context": { "kinds": ["ServerAction", "ServerEntity", "MobileScreen"], "signatures": [] },
+          "limits": [
+            {
+              "text": "After renaming a client action or its output parameter (the measured case), expressions that read `<Node>.<Output>` keep the old name (the consumer node itself is renamed): fix them with set Value, then Verify.",
+              "origin": "jobs/rename-logic-propagation ops 82-88"
+            },
+            {
+              "text": "Renaming an exposed REST method rewrites the method segment of its URLPath (a renamed URL input its placeholder): outside callers break with no Verify message.",
+              "origin": "jobs/rename-logic-propagation ops 128-131"
+            },
+            {
+              "text": "Model references follow by key; literals, Description, CSS, labels, index names and hand-written URLs keep the old name. A static entity record has no Name: rename writes its Identifier (the same write as set Identifier) and refuses a clash.",
+              "origin": "jobs rename-data-propagation, rename-interface-propagation, rename-indexed-attribute; jobs-negative/rename-static-record"
+            }
+          ],
+          "differences": [
+            "`<Node>.<Output>` expressions are not rewritten after a client action or output rename (ODC rewrites them): jobs/rename-logic-propagation ops 82-88"
+          ]
+        }
+      }
+    },
+    {
+      "id": "refactor.replace",
+      "supersedes": ["refactor.replace"],
+      "category": "refactor",
+      "title": "Repoint references (replace)",
+      "keywords": [
+        "repoint", "reapontar", "repoint consumers", "reapontar os consumidores", "redirecionar os consumidores", "redirect references", "replace references",
+        "substituir referencias", "replace server action", "replace the old", "substituir a antiga", "substituir o antigo", "trocar os chamadores",
+        "migrate callers", "migrar chamadores", "substituir a server action"
+      ],
+      "summary": "`replace from to` repoints each consumer of `from` to `to` by key (the Studio's ReplaceReferences), reporting rewired and stillPointingAtFrom; afterwards `from` has no consumers and `delete` needs no force. Same kind; a different kind needs force and usually breaks Verify; entities are refused.",
+      "route": {
+        "kind": "job",
+        "operation": "{\"op\":\"usages\",\"target\":\"IServerAction:Old\"} then {\"op\":\"replace\",\"from\":\"IServerAction:Old\",\"to\":\"IServerAction:New\"} then usages on both"
+      },
+      "contract": ["verbs.verbs.replace", "verbs.verbs.usages"],
+      "guidance": "Give the destination the same signature first: children are not mapped, so inputs, outputs and attributes read by consumers must exist on it. Read usages on both sides afterwards. Entities cannot be repointed: rename, or move the consumers by hand.",
+      "example": { "ops": ["usages", "replace", "usages", "delete"], "max": 6 },
+      "depends": [],
+      "recommends": [
+        { "id": "logic.server-action", "when": "the element is an action: create the destination with the same signature" },
+        { "id": "data.structure", "when": "the element is a structure" },
+        { "id": "data.static", "when": "the element is a static entity record" }
+      ],
+      "alternatives": [{ "id": "refactor.rename", "when": "the element keeps its identity and only its name must change" }],
+      "elements": [],
+      "platforms": {
+        "odc": {
+          "proofs": ["refactor-replace-action", "delete-logic-consumers", "exception-lifecycle", "refactor-inherited"],
+          "negative": ["replace-entity"],
+          "context": { "kinds": ["ServerAction"], "signatures": [] },
+          "limits": [
+            {
+              "text": "Different kinds need force and usually break Verify; literals, descriptions, URLs and CSS never propagate.",
+              "origin": "kernel/AGENTS.md section 2 (replace); api --op verbs: verbs.verbs.replace"
+            },
+            {
+              "text": "Replace between entities is refused: their consumers bind to children (identifier type, attributes, anonymous record, list type) that ReplaceReferences does not map.",
+              "origin": "jobs-odc-negative/replace-entity"
+            }
+          ],
+          "differences": []
+        },
+        "o11": {
+          "proofs": ["refactor-replace-action", "delete-logic-consumers", "entity-refactor", "static-record-refactor", "structure-refactor"],
+          "negative": ["replace-entity"],
+          "context": { "kinds": ["ServerAction"], "signatures": [] },
+          "limits": [
+            {
+              "text": "Replace between entities is refused: their consumers bind to children (identifier type, attributes, anonymous record, list type) that ReplaceReferences does not map.",
+              "origin": "jobs-negative/replace-entity"
+            },
+            {
+              "text": "Different kinds need force and usually break Verify; literals, descriptions, URLs and CSS never propagate.",
+              "origin": "api --op verbs: verbs.verbs.replace; kernel/AGENTS.md section 2 (replace); jobs/refactor-replace-action (description)"
+            }
+          ],
+          "differences": []
+        }
+      }
+    },
+    {
+      "id": "refactor.duplicate",
+      "supersedes": ["refactor.duplicate"],
+      "category": "refactor",
+      "title": "Duplicate (Ctrl+D)",
+      "keywords": [
+        "duplicar", "duplique", "duplicated", "clonar", "ctrl+d", "duplicate action", "duplicate server action", "duplicate screen", "duplicate block",
+        "duplicate entity", "duplicate structure", "duplicate element", "duplicate attribute", "duplicate widget", "copiar a action", "copiar a tela",
+        "copiar o bloco", "copiar a entidade", "copiar o elemento", "copy the action", "copy the screen", "copy an element", "copia da server action", "copia da action", "copia do elemento"
+      ],
+      "summary": "`duplicate` (Ctrl+D) makes a copy with the platform suffix (<Name>2) and no consumers; its content comes with it.",
+      "route": { "kind": "job", "operation": "{\"op\":\"duplicate\",\"target\":\"<Type>:<Name>\",\"as\":\"$copy\"} then rename/usages on $copy" },
+      "contract": ["verbs.verbs.duplicate", "verbs.verbs.rename", "verbs.verbs.usages"],
+      "guidance": "Rename the copy afterwards (the suffix is the platform's). A copied action raises UnusedAction until something calls it: declare the warning or repoint a consumer with replace. An index is not duplicated: create another one with a different composition.",
+      "example": { "ops": ["duplicate", "rename", "usages"], "max": 8 },
+      "depends": [],
+      "recommends": [
+        { "id": "refactor.rename", "when": "give the copy its final name" },
+        { "id": "refactor.replace", "when": "move the consumers of the original to the copy" }
+      ],
+      "alternatives": [],
+      "elements": [],
+      "platforms": {
+        "odc": {
+          "proofs": ["refactor-duplicate", "refactor-inherited"],
+          "negative": ["duplicate-index"],
+          "context": { "kinds": [], "signatures": [] },
+          "limits": [
+            {
+              "text": "A duplicated action (and the actions of a duplicated screen) is UnusedAction until something calls it: declare the warning or repoint a consumer.",
+              "origin": "jobs-odc/refactor-duplicate expectedMessages (UnusedAction)"
+            },
+            { "text": "An index is refused: create another index with a different composition.", "origin": "jobs-odc-negative/duplicate-index" }
+          ],
+          "differences": []
+        },
+        "o11": {
+          "proofs": ["refactor-duplicate", "structure-refactor", "static-record-refactor"],
+          "negative": ["duplicate-index"],
+          "context": { "kinds": [], "signatures": [] },
+          "limits": [
+            {
+              "text": "A copied action (and the actions of a copied screen) raise UnusedAction until called; the original keeps all its consumers.",
+              "origin": "jobs/refactor-duplicate expectedMessages, ops 35-38"
+            },
+            { "text": "An index is refused: create another index with a different composition.", "origin": "jobs-negative/duplicate-index" }
+          ],
+          "differences": []
+        }
+      }
+    },
+    {
+      "id": "refactor.move",
+      "supersedes": ["refactor.move"],
+      "category": "refactor",
+      "title": "Sibling sequence",
+      "keywords": [
+        "reordenar", "reordenacao", "reorder attributes", "reorder input", "reorder parameters", "reorder widgets", "reorder variables", "ordered sequence",
+        "sequencia ordenada", "mover um elemento", "move an element", "move an attribute"
+      ],
+      "summary": "`move` reorders siblings of a sequence relative to a sibling, or sets x/y coordinates; with `into` it reparents: a top-level element changes folder and keeps its key; anything else goes through the Studio's own move, which gives a new key and rebinds every consumer (refused for public elements).",
+      "route": {
+        "kind": "job",
+        "operation": "{\"op\":\"move\",\"target\":\"<path>\",\"first\":true} | {\"op\":\"move\",\"target\":\"<path>\",\"after\":\"<sibling>\"} | {\"op\":\"move\",\"target\":\"<node>\",\"x\":0,\"y\":0}"
+      },
+      "contract": ["verbs.verbs.move", "verbs.references"],
+      "guidance": "Read the order back in the move result. To change parent create the object at the new parent and delete the old one. Children that are not an ordered sequence are refused and the message lists the sequences the parent has.",
+      "example": { "ops": ["move"], "max": 6 },
+      "depends": [],
+      "recommends": [
+        { "id": "data.entity", "when": "attribute order (column/record order)" },
+        { "id": "logic.variable", "when": "input parameter order (what callers see)" },
+        { "id": "logic.flow", "when": "flow node position (x/y)" }
+      ],
+      "alternatives": [{ "id": "deliver.feature", "lanes": ["odc"], "when": "a widget must change parent: a C# feature (IModelServices.MoveObject); the verb only reorders" }],
+      "requires": [
+        {
+          "id": "deliver.feature",
+          "provider": "C",
+          "why": "pending on O11 only: reparenting a widget needs a C# feature (the verb only reorders), and deliver.feature does not exist on O11 yet (on ODC it is an alternative)"
+        }
+      ],
+      "elements": [],
+      "platforms": {
+        "odc": {
+          "proofs": ["refactor-move", "screen-block-edit", "structure-refactor", "entity-refactor"],
+          "negative": ["move-foreign-sibling", "move-index", "move-static-record"],
+          "context": { "kinds": [], "signatures": [] },
+          "limits": [
+            {
+              "text": "The verb only reorders: a sibling of another parent is refused (move only REORDERS inside the same parent).",
+              "origin": "jobs-odc-negative/move-foreign-sibling"
+            },
+            {
+              "text": "Indexes and static entity records are not an ordered sequence: move is refused.",
+              "origin": "jobs-odc-negative move-index, move-static-record"
+            }
+          ],
+          "differences": ["index attributes are an ordered sequence: move is accepted (O11 refuses): jobs-odc/entity-refactor op 42"]
+        },
+        "o11": {
+          "proofs": ["refactor-move", "structure-refactor"],
+          "negative": ["move-foreign-sibling", "move-not-a-sequence", "move-index", "move-static-record", "move-index-attribute"],
+          "context": { "kinds": [], "signatures": [] },
+          "limits": [
+            {
+              "text": "Screen actions, indexes and static entity records have no author order: move is refused and the message lists the parent's sequences.",
+              "origin": "jobs-negative move-not-a-sequence, move-index, move-static-record"
+            },
+            { "text": "Index attributes are not reorderable: delete and recreate the index.", "origin": "jobs-negative/move-index-attribute" }
+          ],
+          "differences": ["index attributes are not an ordered sequence (ODC reorders them): jobs-negative/move-index-attribute"]
+        }
+      }
+    },
+    {
+      "id": "refactor.delete",
+      "supersedes": ["refactor.delete"],
+      "category": "refactor",
+      "title": "Delete with usages",
+      "keywords": [
+        "apagar", "exclusao", "impacto de apagar", "impacto antes de apagar", "antes de apagar", "impacto da exclusao", "impact of deleting",
+        "impact before delete", "before deleting", "broken consumers", "consumidores quebrados", "force delete", "delete with force", "forcar a exclusao",
+        "delete an element", "delete a model element", "excluir um elemento", "remover um elemento", "apagar um elemento"
+      ],
+      "summary": "`delete` refuses while real consumers exist and names each one by path; derived usages (aggregate attribute lists, sample records) do not count. Run `usages` first, then repoint (replace) or rewrite each consumer; `force` breaks them (brokenConsumers) and is never the recommended path.",
+      "route": {
+        "kind": "job",
+        "operation": "{\"op\":\"usages\",\"target\":\"<path>\"} then remove or replace each consumer, then {\"op\":\"delete\",\"target\":\"<path>\"}"
+      },
+      "contract": ["verbs.verbs.delete", "verbs.verbs.usages", "verbs.verbs.replace"],
+      "guidance": "Impact first: usages lists real and derived consumers. Remove leaf consumers first (expression, filter, call node, widget) or repoint them with replace, then delete without force (brokenConsumers 0). A forced delete was only observed (read back, integrity not verified).",
+      "example": { "ops": ["usages", "replace", "delete"], "max": 8 },
+      "depends": [],
+      "recommends": [
+        { "id": "logic.server-action", "when": "the element is an action: per-role delete status" },
+        { "id": "data.entity", "when": "the element is an entity or attribute" },
+        { "id": "logic.flow", "when": "a node in the middle of a flow: relink the predecessor first" }
+      ],
+      "alternatives": [{ "id": "refactor.replace", "when": "the consumers must keep working: repoint them to another element first" }],
+      "elements": [],
+      "platforms": {
+        "odc": {
+          "proofs": [
+            "delete-data-consumers", "delete-logic-consumers", "delete-block", "delete-screen", "delete-entity-whole", "delete-attribute-no-consumers",
+            "timer-lifecycle"
+          ],
+          "negative": ["delete-data-in-use", "delete-logic-in-use", "delete-screen-in-use", "delete-block-event-in-use", "delete-entity-in-use", "delete-structure-in-use"],
+          "context": { "kinds": [], "signatures": [] },
+          "limits": [
+            {
+              "text": "Deleting sweeps down (children), never up: variables that only fed the deleted element stay as orphans. To delete a node in the middle of a flow relink the predecessor first.",
+              "origin": "job:delete-block description; kernel/AGENTS.md section 2 (delete)"
+            },
+            {
+              "text": "An entity is refused because its generated `<Name> Record` cites it; a foreign key that binds to its identifier is not listed by usages. There is no clean path without force (observed: brokenConsumers counted, integrity not verified).",
+              "origin": "jobs-odc-negative/delete-entity-in-use; jobs-odc delete-entity-whole op 9, entity-refactor op 46"
+            }
+          ],
+          "differences": []
+        },
+        "o11": {
+          "proofs": ["delete-data-consumers", "refactor-usages", "delete-logic-consumers", "delete-interface-consumers", "refactor-replace-action"],
+          "negative": ["delete-action-in-use", "delete-attribute-in-use", "delete-block-in-use", "delete-entity-in-use", "delete-structure-in-use", "delete-widget-in-use"],
+          "context": { "kinds": [], "signatures": [] },
+          "limits": [
+            {
+              "text": "An entity is refused even with no author consumer: its generated `<Name> Record` and `<Name> List` cite it; there is no clean path without force (observed with force: brokenConsumers counted, integrity not verified).",
+              "origin": "jobs-negative/delete-entity-in-use; jobs/entity-refactor op 30"
+            },
+            {
+              "text": "Deleting sweeps down, never up; the refusal lists consumer paths in an order that can change between runs.",
+              "origin": "jobs/delete-data-consumers; jobs-negative/delete-structure-in-use"
+            }
+          ],
+          "differences": []
+        }
+      }
+    }
+  ],
+  "unavailable": [],
+  "coverage": [
+    {
+      "type": "odc:OutSystems.Model.IModelObject",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "generic model-object mechanics behind the move/delete verbs, not an authoring element",
+      "origin": "inventory kindClass outside-object-root; api --op verbs: verbs.verbs.move, verbs.verbs.delete"
+    },
+    {
+      "type": "odc:OutSystems.Model.ISequence",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "ordered-sequence mechanics behind the move/delete verbs, not an authoring element",
+      "origin": "inventory kindClass outside-object-root; api --op verbs: verbs.verbs.move, verbs.verbs.delete"
+    },
+    {
+      "type": "odc:OutSystems.Model.ISequence<T>",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "ordered-sequence mechanics behind the move/delete verbs, not an authoring element",
+      "origin": "inventory kindClass outside-object-root; api --op verbs: verbs.verbs.move, verbs.verbs.delete"
+    },
+    {
+      "type": "o11:ISequence<T>",
+      "status": "excluded",
+      "applicability": "not-applicable",
+      "reason": "ordered-sequence mechanics behind the move/delete verbs, not an authoring element",
+      "origin": "inventory kindClass outside-object-root; api --op verbs: verbs.verbs.move, verbs.verbs.delete"
+    }
+  ]
+}

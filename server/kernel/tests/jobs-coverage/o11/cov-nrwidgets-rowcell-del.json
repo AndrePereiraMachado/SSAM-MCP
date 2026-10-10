@@ -1,0 +1,84 @@
+{
+ "description": "Cobertura testada (fase 1, medir): del de ServiceStudio.Plugin.NRWidgets.IRowCell (o11) em uiTableRecords. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "entities": [
+     {
+      "name": "CovSEntity",
+      "attributes": [
+       {
+        "name": "Title",
+        "type": "Text",
+        "length": 50
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "create",
+   "parent": "IMobileFlow:MainFlow",
+   "type": "IMobileScreen",
+   "name": "CovSScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr/#IMobileBlockInstanceWidget",
+   "prop": "SourceBlock",
+   "value": "IMobileBlock:LayoutTopMenu"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IScreenAggregate",
+   "name": "GetCovSItems",
+   "as": "$agg"
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "$CovSEntity"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$scr/#IMobileBlockInstanceWidget/MainContent",
+   "type": "IContainer",
+   "name": "CovSBox",
+   "as": "$box"
+  },
+  {
+   "op": "create",
+   "parent": "$box",
+   "type": "ITableRecords",
+   "name": "CovSTable",
+   "empty": true,
+   "as": "$tbl"
+  },
+  {
+   "op": "set",
+   "target": "$tbl",
+   "prop": "Source",
+   "value": "GetCovSItems.List"
+  },
+  {
+   "op": "create",
+   "parent": "$tbl/Row",
+   "type": "IRowCell",
+   "name": "CovARowCell",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

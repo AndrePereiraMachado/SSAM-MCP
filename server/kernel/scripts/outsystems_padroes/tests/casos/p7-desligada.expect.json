@@ -1,0 +1,28 @@
+{
+ "_leia": "P7 é configurável: com config.p7.protectedEntities vazia a checagem de escrita protegida fica desligada e a tool que grava a entidade não é acusada na P7 (a AR2 continua acusando a escrita sem guarda).",
+ "stage": "job",
+ "mode": "autor",
+ "module": "Domain_CS",
+ "jobs": [
+  "p7-tool-writes-protected.json"
+ ],
+ "configOverride": {
+  "p7": {
+   "protectedEntities": [],
+   "entryPatterns": ["^Tool_"]
+  }
+ },
+ "exitCode": 1,
+ "mustFind": [
+  {
+   "rule": "AR2",
+   "severity": "erro",
+   "contains": "Tool_ProposeEntry"
+  }
+ ],
+ "mustNotFind": [
+  {
+   "rule": "P7"
+  }
+ ]
+}

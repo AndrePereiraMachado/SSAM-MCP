@@ -1,0 +1,297 @@
+{
+ "description": "Cold A: entidade Invoice (Number, Amount, DueDate, StatusId -> static InvoiceStatus Pending/Paid/Overdue, default Pending) e service action Invoice_MarkPaid(InvoiceId) que le a invoice, marca Paid, grava e devolve Success=True se encontrou (escrito por uma LLM sem contexto na sessao fria A de 2026-09-04, passou a primeira)",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "static": [
+     {
+      "name": "InvoiceStatus",
+      "records": [
+       {
+        "name": "Pending",
+        "label": "Pending"
+       },
+       {
+        "name": "Paid",
+        "label": "Paid"
+       },
+       {
+        "name": "Overdue",
+        "label": "Overdue"
+       }
+      ]
+     }
+    ],
+    "entities": [
+     {
+      "name": "Invoice",
+      "public": true,
+      "description": "Fatura",
+      "attributes": [
+       {
+        "name": "Number",
+        "type": "Text",
+        "mandatory": true,
+        "length": 30
+       },
+       {
+        "name": "Amount",
+        "type": "Currency"
+       },
+       {
+        "name": "DueDate",
+        "type": "Date"
+       },
+       {
+        "name": "StatusId",
+        "type": "InvoiceStatus Identifier",
+        "default": "Entities.InvoiceStatus.Pending"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServiceAction",
+   "name": "Invoice_MarkPaid",
+   "as": "$svc"
+  },
+  {
+   "op": "set",
+   "target": "$svc",
+   "prop": "Description",
+   "value": "Marca a fatura como paga; Success=True se a fatura existe"
+  },
+  {
+   "op": "create",
+   "parent": "$svc",
+   "type": "IInputParameter",
+   "name": "InvoiceId",
+   "as": "$in"
+  },
+  {
+   "op": "set",
+   "target": "$in",
+   "prop": "DataType",
+   "value": "Invoice Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$svc",
+   "type": "IOutputParameter",
+   "name": "Success",
+   "as": "$out"
+  },
+  {
+   "op": "set",
+   "target": "$out",
+   "prop": "DataType",
+   "value": "Boolean"
+  },
+  {
+   "op": "create",
+   "parent": "$svc",
+   "type": "ILocalVariable",
+   "name": "Inv",
+   "as": "$inv"
+  },
+  {
+   "op": "set",
+   "target": "$inv",
+   "prop": "DataType",
+   "value": "Invoice"
+  },
+  {
+   "op": "create",
+   "parent": "$svc",
+   "type": "IStartNode",
+   "as": "$s0"
+  },
+  {
+   "op": "create",
+   "parent": "$svc",
+   "type": "IAggregateNode",
+   "name": "GetInvoice",
+   "as": "$agg"
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IAliasedSource",
+   "args": {
+    "dataSource": "$Invoice"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$agg",
+   "type": "IFilter",
+   "args": {
+    "condition": "Invoice.Id = InvoiceId"
+   }
+  },
+  {
+   "op": "create",
+   "parent": "$svc",
+   "type": "IIfNode",
+   "name": "Found",
+   "as": "$if"
+  },
+  {
+   "op": "set",
+   "target": "$if",
+   "prop": "Label",
+   "value": "Found"
+  },
+  {
+   "op": "set",
+   "target": "$if",
+   "prop": "Condition",
+   "value": "not GetInvoice.List.Empty"
+  },
+  {
+   "op": "create",
+   "parent": "$svc",
+   "type": "IAssignNode",
+   "name": "MarkPaid",
+   "as": "$as"
+  },
+  {
+   "op": "set",
+   "target": "$as",
+   "prop": "Label",
+   "value": "MarkPaid"
+  },
+  {
+   "op": "create",
+   "parent": "$as",
+   "type": "IAssignment",
+   "as": "$a1"
+  },
+  {
+   "op": "set",
+   "target": "$a1",
+   "prop": "Variable",
+   "value": "Inv"
+  },
+  {
+   "op": "set",
+   "target": "$a1",
+   "prop": "Value",
+   "value": "GetInvoice.List.Current.Invoice"
+  },
+  {
+   "op": "create",
+   "parent": "$as",
+   "type": "IAssignment",
+   "as": "$a2"
+  },
+  {
+   "op": "set",
+   "target": "$a2",
+   "prop": "Variable",
+   "value": "Inv.StatusId"
+  },
+  {
+   "op": "set",
+   "target": "$a2",
+   "prop": "Value",
+   "value": "Entities.InvoiceStatus.Paid"
+  },
+  {
+   "op": "create",
+   "parent": "$as",
+   "type": "IAssignment",
+   "as": "$a3"
+  },
+  {
+   "op": "set",
+   "target": "$a3",
+   "prop": "Variable",
+   "value": "Success"
+  },
+  {
+   "op": "set",
+   "target": "$a3",
+   "prop": "Value",
+   "value": "True"
+  },
+  {
+   "op": "create",
+   "parent": "$svc",
+   "type": "IExecuteServerActionNode",
+   "name": "UpdateInvoice",
+   "as": "$upd"
+  },
+  {
+   "op": "set",
+   "target": "$upd",
+   "prop": "Action",
+   "value": "IEntityActionSignature:UpdateInvoice"
+  },
+  {
+   "op": "set",
+   "target": "$upd/Source",
+   "prop": "Value",
+   "value": "Inv"
+  },
+  {
+   "op": "create",
+   "parent": "$svc",
+   "type": "IEndNode",
+   "name": "End",
+   "as": "$end"
+  },
+  {
+   "op": "link",
+   "from": "$s0",
+   "to": "$agg"
+  },
+  {
+   "op": "link",
+   "from": "$agg",
+   "to": "$if"
+  },
+  {
+   "op": "link",
+   "from": "$if",
+   "connector": "TrueTarget",
+   "to": "$as"
+  },
+  {
+   "op": "link",
+   "from": "$if",
+   "connector": "FalseTarget",
+   "to": "$end"
+  },
+  {
+   "op": "link",
+   "from": "$as",
+   "to": "$upd"
+  },
+  {
+   "op": "link",
+   "from": "$upd",
+   "to": "$end"
+  },
+  {
+   "op": "layout",
+   "target": "$svc"
+  },
+  {
+   "op": "find",
+   "name": "Invoice_MarkPaid"
+  },
+  {
+   "op": "dump",
+   "target": "$svc",
+   "depth": 2
+  }
+ ]
+}

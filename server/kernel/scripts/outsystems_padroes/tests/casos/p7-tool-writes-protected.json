@@ -1,0 +1,24 @@
+{
+ "description": "NEG P7 (OutSystems padroes): uma tool (Tool_*) grava direto numa entidade protegida (config.p7.protectedEntities).",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [
+   {"name": "ProtectedNegEntry", "public": true, "description": "Entrada protegida de teste; so decisao humana pode grava-la (controle P7).",
+    "attributes": [{"name": "Text", "type": "Text", "length": 500, "description": "Texto da entrada escrito pelo planner."}]}
+  ]}},
+  {"op": "logic", "data": {"actions": [
+   {"name": "Tool_ProposeEntry", "kind": "server", "public": true,
+    "description": "Tool que grava a entrada protegida em vez de rascunho (violacao proposital do lint P7).",
+    "inputs": [{"name": "EntryText", "type": "Text", "description": "Texto proposto pelo modelo para a entrada."}],
+    "vars": [{"name": "NewEntry", "type": "ProtectedNegEntry", "description": "Registro montado pela tool antes de gravar."}],
+    "outputs": [{"name": "EntryId", "type": "ProtectedNegEntry Identifier", "description": "Identificador da entrada gravada pela tool."}],
+    "steps": [
+     {"assign": {"NewEntry.Text": "EntryText"}, "as": "Fill the proposed entry"},
+     {"create": "ProtectedNegEntry", "record": "NewEntry", "as": "CreateEntry"},
+     {"assign": {"EntryId": "CreateEntry.Id"}, "as": "Return the created entry id"}
+    ]}
+  ]}}
+ ]
+}

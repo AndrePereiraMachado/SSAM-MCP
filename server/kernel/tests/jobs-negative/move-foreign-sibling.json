@@ -1,0 +1,22 @@
+{
+ "description": "A recusa do move: before/after so aceita um IRMAO, isto e, um objeto do MESMO pai. Sem esta recusa a plataforma cai numa asserção interna (`InvalidOperationException: Condition is false`) que nao diz nada a quem escreve o job. A mensagem tem de nomear o caminho dos DOIS pais e dizer que, sem `into`, move nao muda de pai. O caminho limpo esta em tests/jobs/refactor-move.json; mudar de pai, em tests/jobs/refactor-reparent.json.",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": true,
+ "expectError": [
+  "move before:",
+  "is not a sibling of",
+  "IContainer:BoxB",
+  "IContainer:BoxA",
+  "move only REORDERS inside the same parent",
+  "to change the parent use \"into\""
+ ],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "MoveRefuse", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "BoxA", "as": "$a"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "BoxB", "as": "$b"},
+  {"op": "create", "parent": "$a", "type": "IContainer", "name": "Dentro", "as": "$dentro"},
+  {"op": "create", "parent": "$b", "type": "IContainer", "name": "Fora", "as": "$fora"},
+  {"op": "move", "target": "$dentro", "before": "$fora"}
+ ]
+}

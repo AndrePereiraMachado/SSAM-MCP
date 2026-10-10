@@ -1,0 +1,18 @@
+{
+ "description": "Cobertura testada (fase 1, medir): del de OutSystems.Model.Processes.ITimer (o11) em espace. Job minimo gerado por docs/evidence/cobertura-testada/tools; o resultado carimbado e a evidencia.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ITimer",
+   "name": "CovATimer",
+   "as": "$a"
+  },
+  {
+   "op": "delete",
+   "target": "$a"
+  }
+ ]
+}

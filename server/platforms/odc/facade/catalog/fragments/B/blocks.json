@@ -1,0 +1,1009 @@
+{
+ "schemaVersion": "ssam-discovery-fragment/1",
+ "contract": "ssam-catalog-contribution/1",
+ "front": "B",
+ "title": "Blocks (Reactive/Mobile): own block definition (inputs, placeholders, events, triggers), block instances configured in a consumer, referenced block signatures (read-only)",
+ "reviewedAt": "2026-09-23",
+ "synonyms": {},
+ "capabilities": [
+  {
+   "id": "ui.block",
+   "supersedes": [
+    "ui.block"
+   ],
+   "category": "ui",
+   "title": "Own reusable block definition: parameters, placeholders, its own block-level triggers",
+   "keywords": [
+    "block",
+    "reusable",
+    "component",
+    "block event",
+    "trigger",
+    "placeholder",
+    "nested block",
+    "block input",
+    "mandatory event"
+   ],
+   "summary": "`create IMobileBlock` in a UI flow with input parameters and local variables (logic elements), IPlaceholderWidget (the extension point each instance fills), IBlockEvent (IsMandatory, parameters) fired by an ITriggerNode in a block screen action (`set $trg Event $ev`). The definition is edited here; instances are configured in ui.block-instance.",
+   "route": {
+    "kind": "job",
+    "operation": "create IMobileBlock in IMobileFlow:<Flow>; create IPlaceholderWidget, IBlockEvent (+ input parameters), ITriggerNode in a block screen action; set Event/IsMandatory/Description/StyleSheet; usages before delete"
+   },
+   "contract": [
+    "verbs.verbs.create",
+    "verbs.verbs.set",
+    "verbs.verbs.link",
+    "verbs.verbs.rename",
+    "verbs.verbs.delete",
+    "verbs.verbs.usages",
+    "verbs.verbs.get",
+    "logic.nativeNodes.ITriggerNode",
+    "html-visual.tags"
+   ],
+   "depends": [],
+   "alternatives": [],
+   "guidance": "Placeholder content written inside the block is example content: the platform copies it into each instance's IPlaceholderContentWidget, where it belongs to the consumer. Changing an event contract (a new parameter, IsMandatory) breaks the trigger in the producer and leaves each consumer handler with an empty argument to fill; instances keep their handler key. Delete order: consumers first (instance handlers and instances in the screens, then the triggers), then the event or the block.",
+   "example": {
+    "ops": [
+     "create",
+     "set",
+     "link",
+     "html"
+    ],
+    "max": 40
+   },
+   "elements": [
+    {
+     "role": "block",
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.UI.Mobile.IMobileBlock",
+       "jobType": "IMobileBlock",
+       "address": "IMobileBlock:<Name>"
+      },
+      "o11": {
+       "native": "OutSystems.Model.UI.Mobile.IMobileBlock",
+       "jobType": "IMobileBlock",
+       "address": "IMobileBlock:<Name>"
+      }
+     }
+    },
+    {
+     "role": "block event",
+     "child": true,
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.UI.IBlockEvent",
+       "jobType": "IBlockEvent",
+       "address": "IBlockEvent:<Name> | IMobileBlock:<Block>/<Event>"
+      },
+      "o11": {
+       "native": "OutSystems.Model.UI.IBlockEvent",
+       "jobType": "IBlockEvent",
+       "address": "IBlockEvent:<Name> | IMobileBlock:<Block>/<Event>"
+      }
+     }
+    },
+    {
+     "role": "trigger",
+     "child": true,
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.Logic.Nodes.ITriggerNode",
+       "jobType": "ITriggerNode",
+       "address": "IMobileBlock:<Block>/IScreenAction:<Action>/ITriggerNode:<Name>"
+      },
+      "o11": {
+       "native": "OutSystems.Model.Logic.Nodes.ITriggerNode",
+       "jobType": "ITriggerNode",
+       "address": "IMobileBlock:<Block>/IScreenAction:<Action>/ITriggerNode:<Name>"
+      }
+     }
+    },
+    {
+     "role": "placeholder",
+     "child": true,
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.UI.Mobile.Widgets.IPlaceholderWidget",
+       "jobType": "IPlaceholderWidget",
+       "address": "IMobileBlock:<Block>/<path>/<Placeholder>"
+      },
+      "o11": {
+       "native": "OutSystems.Model.UI.Mobile.Widgets.IPlaceholderWidget",
+       "jobType": "IPlaceholderWidget",
+       "address": "IMobileBlock:<Block>/<path>/<Placeholder>"
+      }
+     }
+    }
+   ],
+   "operations": {
+    "create": {
+     "route": "create IMobileBlock in a UI flow; IPlaceholderWidget under a container of the block; IBlockEvent under the block (+ create IInputParameter under the event); ITriggerNode in a block screen action + set Event",
+     "preconditions": [
+      "a new block with no instance raises UnusedElement unless it is public",
+      "a trigger must pass one argument per event parameter"
+     ],
+     "roles": {
+      "block": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "block-events",
+         "block-reuse"
+        ],
+        "scope": "an own block with an input and an event (block-events); a block with a placeholder, reused inside another block (block-reuse)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "block-events-reactive"
+        ],
+        "scope": "own Reactive blocks with inputs and events"
+       }
+      },
+      "block event": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "block-events-types",
+         "block-events"
+        ],
+        "scope": "parameters of 8 types: list, record, identifier... (block-events-types); Integer and Text parameters (block-events)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "block-events-reactive"
+        ],
+        "scope": "events with parameters of several types"
+       }
+      },
+      "trigger": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "block-events"
+        ],
+        "scope": "ITriggerNode in a block screen action, Event set to the block event, arguments per parameter"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "block-events-reactive"
+        ],
+        "scope": "idem"
+       }
+      },
+      "placeholder": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "block-reuse"
+        ],
+        "scope": "Footnote placeholder with example content"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-block-placeholder"
+        ],
+        "scope": "cat-b-block-placeholder: create (op 7)"
+       }
+      }
+     }
+    },
+    "set": {
+     "route": "set {target, prop, value}: block Description/StyleSheet; event IsMandatory/Description; trigger Event",
+     "preconditions": [
+      "StyleSheet replaces the block's own CSS: read it first",
+      "IsMandatory on an event with instances without handler turns into one Verify error per instance (EventHandlerRequiredAction)"
+     ],
+     "roles": {
+      "block": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-block-edit"
+        ],
+        "scope": "Description and StyleSheet of an inherited layout block; the consumers are unchanged"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "rename-interface-propagation"
+        ],
+        "scope": "StyleSheet of an own block"
+       }
+      },
+      "block event": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "block-event-lifecycle"
+        ],
+        "scope": "IsMandatory and a new parameter on an inherited event: the trigger must pass it, consumers keep the handler key"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "block-events-update"
+        ],
+        "scope": "IsMandatory and a new parameter: same handler key, the new argument filled on both sides"
+       }
+      },
+      "trigger": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "block-events"
+        ],
+        "scope": "Event"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "block-events-reactive"
+        ],
+        "scope": "Event"
+       }
+      }
+     }
+    },
+    "read": {
+     "route": "get/dump by path",
+     "preconditions": [],
+     "roles": {
+      "block": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-block-edit",
+         "block-event-lifecycle"
+        ],
+        "scope": "get of an inherited layout block (screen-block-edit); dump of a block tree (block-event-lifecycle)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "rename-interface-propagation"
+        ],
+        "scope": "get/dump of an own block"
+       }
+      },
+      "block event": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "block-events"
+        ],
+        "scope": "the event contract (parameters, IsMandatory)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "block-events-update"
+        ],
+        "scope": "contract before and after a change"
+       }
+      },
+      "placeholder": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "block-reuse"
+        ],
+        "scope": "get of the placeholder"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-block-placeholder"
+        ],
+        "scope": "cat-b-block-placeholder: get (op 31)"
+       }
+      },
+      "trigger": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "block-events",
+         "block-events-types"
+        ],
+        "scope": "get of the trigger node after set Event"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "block-events-reactive",
+         "block-events-update"
+        ],
+        "scope": "get of the trigger node (Event set; the arguments after an event contract change)"
+       }
+      }
+     }
+    },
+    "usages": {
+     "route": "usages {target}",
+     "preconditions": [],
+     "roles": {
+      "block": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-block-edit",
+         "delete-block"
+        ],
+        "scope": "instances in several screens and inside another block (the consumer screens and blocks are named)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "delete-interface-consumers",
+         "block-events-nested-reactive"
+        ],
+        "scope": "the instance that consumes the block"
+       }
+      },
+      "block event": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "block-events",
+         "block-events-types"
+        ],
+        "scope": "consumers = the ITriggerNode in the block and one IEventHandler per instance (it exists even without a handler)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "block-events-reactive",
+         "block-events-update"
+        ],
+        "scope": "trigger and instance handlers"
+       }
+      },
+      "placeholder": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "block-reuse"
+        ],
+        "scope": "one IPlaceholderContentWidget per instance"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-block-placeholder"
+        ],
+        "scope": "cat-b-block-placeholder: usages (op 32), consumers 2"
+       }
+      }
+     }
+    },
+    "rename": {
+     "route": "rename {target, name}",
+     "preconditions": [],
+     "roles": {
+      "block": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "rename-interface-propagation"
+        ],
+        "scope": "instances keep the block by key; the StyleSheet text is not rewritten"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "rename-interface-propagation"
+        ],
+        "scope": "idem"
+       }
+      },
+      "block event": {
+       "odc": {
+        "status": "not-applicable",
+        "note": "on ODC this build returns success and writes nothing (job:block-event-lifecycle description)",
+        "alternative": "rename the neighbours (trigger node, handler action) or recreate the event"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-block-rename"
+        ],
+        "scope": "cat-b-block-rename: the block event renamed (op 1: 2 consumers, the trigger node and the instance handler, follow by key); read by the new name (op 2), usages still 2 (op 3). Unlike ODC, where this rename returns success and writes nothing"
+       }
+      },
+      "trigger": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "block-event-lifecycle"
+        ],
+        "scope": "the trigger node of an inherited event"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-block-rename"
+        ],
+        "scope": "cat-b-block-rename: the trigger node renamed (op 4: 1 consumer follows by key), read by the new name (op 5)"
+       }
+      }
+     }
+    },
+    "delete": {
+     "route": "usages then delete (no force)",
+     "preconditions": [
+      "refused while consumers exist: delete instance handlers/instances in the consumer screens first, then the trigger, then the event; a block leaves after all its instances (top-down)"
+     ],
+     "roles": {
+      "block": {
+       "odc": {
+        "status": "conditional",
+        "proofs": [
+         "delete-block"
+        ],
+        "scope": "inherited blocks instanced 3 and 2 times: instances first (top-down), then the blocks; orphan variables deleted by hand"
+       },
+       "o11": {
+        "status": "conditional",
+        "proofs": [
+         "delete-interface-consumers"
+        ],
+        "negative": [
+         "delete-block-in-use"
+        ],
+        "scope": "the instance first, then the block without force; refused while an instance exists"
+       }
+      },
+      "block event": {
+       "odc": {
+        "status": "conditional",
+        "negative": [
+         "delete-block-event-in-use"
+        ],
+        "scope": "the instance IEventHandler deleted alone (the instance stays), the trigger node deleted after relinking its predecessor to the End, then the event without force, brokenConsumers 0; the orphan handler screen action deleted last (cat-b-block-event-delete)",
+        "proofs": [
+         "cat-b-block-event-delete"
+        ]
+       },
+       "o11": {
+        "status": "conditional",
+        "proofs": [
+         "block-events-delete-reactive"
+        ],
+        "negative": [
+         "delete-block-event-in-use"
+        ],
+        "scope": "instance IEventHandler deleted alone (the instance stays), then the trigger, then the event without force"
+       }
+      },
+      "trigger": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "block-events-delete-reactive"
+        ],
+        "scope": "the trigger node deleted after the instance handler and before the event: no force, brokenConsumers 0"
+       },
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-block-event-delete"
+        ],
+        "scope": "cat-b-block-event-delete: delete (op 5), no force, brokenConsumers 0"
+       }
+      }
+     }
+    }
+   },
+   "platforms": {
+    "odc": {
+     "proofs": [
+      "block-events",
+      "block-events-types",
+      "block-events-two-instances",
+      "block-events-nested",
+      "block-reuse",
+      "block-events-mandatory",
+      "block-event-lifecycle",
+      "delete-block",
+      "screen-block-edit",
+      "rename-interface-propagation",
+      "cat-b-block-event-delete"
+     ],
+     "negative": [
+      "delete-block-event-in-use"
+     ],
+     "context": {
+      "kinds": [
+       "MobileBlock",
+       "MobileBlockSignature"
+      ],
+      "signatures": [
+       "MobileBlock",
+       "MobileBlockSignature"
+      ]
+     },
+     "limits": [
+      {
+       "text": "Changing an event contract breaks the trigger (the producer's arguments mirror the event parameters), not the consumer handlers; the IEventHandler exists even without a handler and counts in usages.",
+       "origin": "job:block-event-lifecycle description"
+      },
+      {
+       "text": "`rename` of an IBlockEvent returns success but writes nothing on ODC in this build: rename its neighbours (trigger node, handler action) instead.",
+       "origin": "job:block-event-lifecycle description"
+      },
+      {
+       "text": "A mandatory event without handler is not refused by the kernel: Verify reports one EventHandlerRequiredAction error per instance.",
+       "origin": "job:block-events-mandatory (expectValid false)"
+      }
+     ],
+     "differences": []
+    },
+    "o11": {
+     "proofs": [
+      "block-events-reactive",
+      "block-events-types-reactive",
+      "block-events-nested-reactive",
+      "block-events-update",
+      "block-events-delete-reactive",
+      "block-events-mandatory-reactive",
+      "delete-interface-consumers",
+      "rename-interface-propagation",
+      "cat-b-block-placeholder",
+      "cat-b-block-rename"
+     ],
+     "negative": [
+      "delete-block-in-use",
+      "delete-block-event-in-use"
+     ],
+     "context": {
+      "kinds": [
+       "MobileBlock",
+       "MobileBlockSignature"
+      ],
+      "signatures": [
+       "MobileBlock",
+       "MobileBlockSignature"
+      ]
+     },
+     "limits": [
+      {
+       "text": "Block events have the same behaviour on O11 and ODC (5 positive jobs and 1 negative on each lane); IsMandatory without handler is an error per instance.",
+       "origin": "kernel/docs/NAO-DA.md 'Eventos de bloco'"
+      },
+      {
+       "text": "Evolving a PUBLIC block is guarded: removing Public, removing or retyping an input, or adding a mandatory input without migrating consumers is refused by the screen contract.",
+       "origin": "kernel/src/Anvil.Core/Kernel/ScreenModel.cs:35-60 (module specification route)"
+      }
+     ],
+     "differences": []
+    }
+   },
+   "recommends": [
+    {
+     "id": "logic.screen-action",
+     "when": "the block screen action that holds the trigger node"
+    }
+   ]
+  },
+  {
+   "id": "ui.block-instance",
+   "supersedes": [
+    "ui.block-instance"
+   ],
+   "category": "ui",
+   "title": "Instantiate an existing block (own or from a referenced library such as OutSystemsUI) and configure the instance: arguments, handlers, placeholder content",
+   "keywords": [
+    "instantiate block",
+    "use block",
+    "block instance",
+    "outsystems ui",
+    "datepicker",
+    "tabs",
+    "accordion",
+    "pattern",
+    "widget from library",
+    "event handler",
+    "placeholder content",
+    "layout block"
+   ],
+   "summary": "An instance (`IMobileBlockInstanceWidget`) points at a block with `source`/`SourceBlock` (own `IMobileBlock:<Name>` or a referenced block resolved through its signature). The consumer configures only the instance: input values (`set $inst/<Input> Value <expr>`), event handlers (`set $inst/<Event> Handler <screen action>` plus `set $inst/<Event>/<Param> Value`), and the content of each placeholder (widgets created under `$inst/<Placeholder>`, or `<slot name>` in html-visual). The visual `html` op writes the same thing from `<Block name :Input @Event><slot>`. The referenced block's inputs, events and placeholders are its signature: read them from the capture, never from curated text; the signature is edited only in its producer.",
+   "route": {
+    "kind": "job",
+    "operation": "create {parent, type: IMobileBlockInstanceWidget, name, source: 'IMobileBlock:<Block>', empty?}; set $inst/<Input> Value; set $inst/<Event> Handler; create widgets under $inst/<Placeholder>; or the fragment {\"op\":\"html\",\"parent\":\"<widget path>\",\"html\":\"<Block name=\\\"B\\\" :Input=\\\"expr\\\" @Event=\\\"ScreenAction\\\"><slot name=\\\"Placeholder\\\">...</slot></Block>\"}"
+   },
+   "contract": [
+    "verbs.verbs.create",
+    "verbs.verbs.set",
+    "verbs.verbs.delete",
+    "verbs.verbs.get",
+    "verbs.references",
+    "html-visual.tags",
+    "html-visual.shape"
+   ],
+   "depends": [],
+   "alternatives": [],
+   "guidance": "List what the module already references (--app: context.reads MobileBlockSignature) before choosing a block; a block from a library that the module does not reference yet needs the reference first (C: reference.*; not headless on ODC). A library block born with example content keeps it unless `empty: true`; a placeholder born with an Input is bound with `set .../#IInput Variable`, not emptied. A block instance has no Variable of its own: values reach the screen through the handler of an event. Components of third-party libraries are only known through the signature of the referenced revision; nothing here promises a catalog of every library component.",
+   "example": {
+    "ops": [
+     "create",
+     "set",
+     "html"
+    ],
+    "max": 12
+   },
+   "elements": [
+    {
+     "role": "block instance",
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.UI.Mobile.Widgets.IMobileBlockInstanceWidget",
+       "jobType": "IMobileBlockInstanceWidget",
+       "address": "<parent path>/<Instance> | $scr/#IMobileBlockInstanceWidget (the layout)"
+      },
+      "o11": {
+       "native": "OutSystems.Model.UI.Mobile.Widgets.IMobileBlockInstanceWidget",
+       "jobType": "IMobileBlockInstanceWidget",
+       "address": "<parent path>/<Instance> | $scr/#IMobileBlockInstanceWidget (the layout)"
+      }
+     }
+    },
+    {
+     "role": "instance event handler",
+     "child": true,
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.UI.IEventHandler",
+       "jobType": "(born with the instance)",
+       "address": "<instance path>/<Event> | <instance path>/#IEventHandler"
+      },
+      "o11": {
+       "native": "OutSystems.Model.UI.IEventHandler",
+       "jobType": "(born with the instance)",
+       "address": "<instance path>/<Event> | <instance path>/#IEventHandler"
+      }
+     }
+    },
+    {
+     "role": "placeholder content",
+     "child": true,
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.UI.Mobile.Widgets.IPlaceholderContentWidget",
+       "jobType": "(born with the instance)",
+       "address": "<instance path>/<Placeholder>"
+      },
+      "o11": {
+       "native": "OutSystems.Model.UI.Mobile.Widgets.IPlaceholderContentWidget",
+       "jobType": "(born with the instance)",
+       "address": "<instance path>/<Placeholder>"
+      }
+     }
+    },
+    {
+     "role": "referenced block",
+     "platforms": {
+      "odc": {
+       "native": "OutSystems.Model.UI.Mobile.IMobileBlockSignature",
+       "jobType": "IMobileBlock (resolved through the signature)",
+       "address": "IMobileBlock:<Name> | MobileBlockSignature:<Name> in the reader"
+      },
+      "o11": {
+       "native": "OutSystems.Model.UI.Mobile.IMobileBlockSignature",
+       "jobType": "IMobileBlock (resolved through the signature)",
+       "address": "IMobileBlock:<Name> | MobileBlockSignature:<Name> in the reader"
+      }
+     }
+    }
+   ],
+   "operations": {
+    "create": {
+     "route": "create {parent, type: IMobileBlockInstanceWidget, source, empty?} or html <Block>",
+     "preconditions": [
+      "the block must exist in the module or be referenced by it (a hidden indirect reference is unhidden by the verb when SourceBlock is bound)",
+      "instance inputs, events and placeholders must exist in the block signature (the html op refuses unknown ones)"
+     ],
+     "roles": {
+      "block instance": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "block-reuse",
+         "html-visual-block"
+        ],
+        "scope": "an own block instanced in several screens and inside another block (block-reuse); the OutSystemsUI DatePicker through html <Block> (html-visual-block)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "osui-patterns",
+         "osui-datepicker-handler"
+        ],
+        "scope": "OutSystemsUI Tabs, Accordion, Card (osui-patterns) and DatePicker, Tag, Tooltip, Counter (osui-datepicker-handler) in a Reactive module"
+       }
+      },
+      "instance event handler": {
+       "odc": {
+        "status": "not-applicable",
+        "note": "born with the instance (one per block event), with the Handler empty",
+        "alternative": "set <instance>/<Event> Handler"
+       },
+       "o11": {
+        "status": "not-applicable",
+        "note": "born with the instance (one per block event), with the Handler empty",
+        "alternative": "set <instance>/<Event> Handler"
+       }
+      },
+      "placeholder content": {
+       "odc": {
+        "status": "not-applicable",
+        "note": "born with the instance, one per placeholder of the block (the block's example content is copied into it)",
+        "alternative": "create widgets under <instance>/<Placeholder>, or <slot name> in html-visual"
+       },
+       "o11": {
+        "status": "not-applicable",
+        "note": "born with the instance",
+        "alternative": "create widgets under <instance>/<Placeholder>"
+       }
+      },
+      "referenced block": {
+       "odc": {
+        "status": "not-applicable",
+        "note": "a referenced block is authored in its producer module; the consumer only instances it",
+        "alternative": "author the block in the producer, then add/refresh the reference (C: reference.*)"
+       },
+       "o11": {
+        "status": "not-applicable",
+        "note": "authored in its producer module",
+        "alternative": "author the block in the producer, then add/refresh the reference (C: reference.*)"
+       }
+      }
+     }
+    },
+    "set": {
+     "route": "set {target: $inst, prop: SourceBlock} | {target: $inst/<Input>, prop: Value} | {target: $inst/<Event>, prop: Handler} | {target: $inst/<Event>/<Param>, prop: Value}",
+     "preconditions": [
+      "a Handler is a screen action of the consumer; an event parameter reaches the handler through the argument of the same name",
+      "a mandatory block event needs a handler on every instance"
+     ],
+     "roles": {
+      "block instance": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "screen-basic",
+         "screen-form"
+        ],
+        "scope": "SourceBlock of the layout instance (screen-basic, screen-form)"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "screen-form-reactive",
+         "hidden-reference-block"
+        ],
+        "scope": "SourceBlock of the layout instance (screen-form-reactive); SourceBlock of a library block whose reference was hidden, which the verb unhides (hidden-reference-block)"
+       }
+      },
+      "instance event handler": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "block-events"
+        ],
+        "scope": "Handler per instance, arguments remapped by expression; nested blocks relay events"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "block-events-reactive"
+        ],
+        "scope": "Handler of own and OutSystemsUI block events (OnTabChange, OnSelected, mouse events)"
+       }
+      },
+      "referenced block": {
+       "odc": {
+        "status": "not-applicable",
+        "note": "writable metadata of a signature does not authorize editing it in the consumer",
+        "alternative": "change the block in its producer"
+       },
+       "o11": {
+        "status": "not-applicable",
+        "note": "writable metadata of a signature does not authorize editing it in the consumer",
+        "alternative": "change the block in its producer"
+       }
+      }
+     }
+    },
+    "read": {
+     "route": "get by path; reader: element:MobileBlockSignature:<Name> (--app capture)",
+     "preconditions": [],
+     "roles": {
+      "block instance": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "block-reuse"
+        ],
+        "scope": "instance arguments and handlers read back"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "block-events-mandatory-reactive"
+        ],
+        "scope": "EventHandlers and Arguments counts"
+       }
+      },
+      "instance event handler": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "block-events"
+        ],
+        "scope": "the handler slot of an instance event"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "block-events-update"
+        ],
+        "scope": "same handler key after an event contract change; Arguments 3"
+       }
+      },
+      "referenced block": {
+       "odc": {
+        "status": "undetermined",
+        "note": "read by the capture reader (element:MobileBlockSignature:<Name>); no suite job reads a signature with get"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "hidden-reference-block"
+        ],
+        "scope": "a get on the referenced library block (OutSystemsUI MouseEvents) in the consumer answers with its signature (op 56)"
+       }
+      },
+      "placeholder content": {
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-block-placeholder"
+        ],
+        "scope": "cat-b-block-placeholder: get (ops 33-34)"
+       }
+      }
+     }
+    },
+    "delete": {
+     "route": "delete {target} (no force)",
+     "preconditions": [
+      "an instance leaves before its block; deleting an instance takes its placeholder content with it"
+     ],
+     "roles": {
+      "block instance": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "delete-block"
+        ],
+        "scope": "instances removed top-down before their blocks; the placeholder content leaves with the instance"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "delete-interface-consumers"
+        ],
+        "scope": "the instance removed before its block"
+       }
+      },
+      "instance event handler": {
+       "odc": {
+        "status": "applicable",
+        "proofs": [
+         "cat-b-block-event-delete"
+        ],
+        "scope": "cat-b-block-event-delete: delete (op 1), no force, brokenConsumers 0"
+       },
+       "o11": {
+        "status": "applicable",
+        "proofs": [
+         "block-events-delete-reactive"
+        ],
+        "scope": "the IEventHandler deleted alone: the instance stays (EventHandlers 0, Arguments 1)"
+       }
+      }
+     }
+    }
+   },
+   "platforms": {
+    "odc": {
+     "proofs": [
+      "html-visual-block",
+      "block-reuse",
+      "block-events-two-instances",
+      "block-events",
+      "delete-block",
+      "screen-block-edit",
+      "screen-basic",
+      "screen-form",
+      "cat-b-block-event-delete"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileBlockSignature",
+       "MobileBlock"
+      ],
+      "signatures": [
+       "MobileBlockSignature",
+       "MobileBlock"
+      ]
+     },
+     "limits": [
+      {
+       "text": "Only the DatePicker OutSystemsUI block has an ODC job; the other patterns (Tabs, Accordion, Search, Pagination, DropdownSearch...) are not exercised on ODC. Placeholders born with an Input are bound with `set .../#IInput Variable`, not `empty`.",
+       "origin": "index: ODC jobs; kernel/AGENTS.md 3.3"
+      },
+      {
+       "text": "Adding a new library reference is not headless on the ODC kernel (reference-import-headless): instance only blocks the module already references.",
+       "origin": "discovery-capabilities.json unavailable reference-import-headless (C)"
+      }
+     ],
+     "differences": []
+    },
+    "o11": {
+     "proofs": [
+      "osui-patterns",
+      "osui-datepicker-handler",
+      "osui-patterns-mobile",
+      "hidden-reference-block",
+      "block-events-reactive",
+      "block-events-delete-reactive",
+      "delete-interface-consumers",
+      "screen-form-reactive",
+      "block-events-mandatory-reactive",
+      "block-events-update",
+      "cat-b-block-placeholder"
+     ],
+     "negative": [],
+     "context": {
+      "kinds": [
+       "MobileBlockSignature",
+       "MobileBlock"
+      ],
+      "signatures": [
+       "MobileBlockSignature",
+       "MobileBlock"
+      ]
+     },
+     "limits": [
+      {
+       "text": "A hidden (indirect) reference to a library block is unhidden by the verb when SourceBlock is bound; otherwise the automatic 3-way merge dropped the handlers and arguments.",
+       "origin": "job:hidden-reference-block description"
+      },
+      {
+       "text": "The offline OutSystemsUI catalog (kernel/catalog/ui, 2.28.1) is not used by jobs nor by this answer: the contract of a library block is the signature in the module.",
+       "origin": "kernel/src/Anvil.Core/Kernel/ScreenContracts.cs:6"
+      }
+     ],
+     "differences": [
+      "library blocks are instanced in Reactive (MainContent) and Mobile (Content) modules alike"
+     ]
+    }
+   },
+   "recommends": [
+    {
+     "id": "logic.screen-action",
+     "when": "the screen action named as Handler of an instance event"
+    }
+   ]
+  }
+ ],
+ "unavailable": [],
+ "coverage": []
+}

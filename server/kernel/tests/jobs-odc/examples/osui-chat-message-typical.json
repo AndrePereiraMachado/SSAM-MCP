@@ -1,0 +1,23 @@
+{
+ "description": "ChatMessage do OSUI por linha de uma List: lado (DisplayOnRight), hora e status vindos do registro e o texto da mensagem no Content.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "ChatLine", "attributes": [{"name": "Body", "type": "Text", "length": 1000, "mandatory": true}, {"name": "IsMine", "type": "Boolean"}, {"name": "SentAt", "type": "Time"}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "SupportChat", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Support\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetLines", "as": "$GetLines"},
+  {"op": "create", "parent": "$GetLines", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:ChatLine"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "ChatList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetLines.List"},
+  {"op": "create", "parent": "$list", "type": "IMobileBlockInstanceWidget", "name": "Message", "source": "IMobileBlock:ChatMessage", "as": "$cm"},
+  {"op": "set", "target": "$cm/DisplayOnRight", "prop": "Value", "value": "GetLines.List.Current.ChatLine.IsMine"},
+  {"op": "set", "target": "$cm/Time", "prop": "Value", "value": "GetLines.List.Current.ChatLine.SentAt"},
+  {"op": "set", "target": "$cm/MessageStatus", "prop": "Value", "value": "If(GetLines.List.Current.ChatLine.IsMine, Entities.MessageStatus.Read, Entities.MessageStatus.Received)"},
+  {"op": "create", "parent": "$cm/Content", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "GetLines.List.Current.ChatLine.Body"}
+ ]
+}

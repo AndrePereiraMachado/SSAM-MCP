@@ -1,0 +1,39 @@
+{
+ "description": "Lista e detalhe: o item da List navega para a tela de detalhe com o Id obrigatorio, e o detalhe le o registro com um aggregate filtrado por esse input.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [
+   {"name": "Name", "type": "Text", "length": 100, "mandatory": true},
+   {"name": "Description", "type": "Text", "length": 500}]}]}},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductDetail", "as": "$detail"},
+  {"op": "set", "target": "$detail/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$detail", "type": "IInputParameter", "name": "ProductId", "as": "$pid"},
+  {"op": "set", "target": "$pid", "prop": "DataType", "value": "Product Identifier"},
+  {"op": "set", "target": "$pid", "prop": "IsMandatory", "value": true},
+  {"op": "create", "parent": "$detail", "type": "IScreenAggregate", "name": "GetProduct", "as": "$one"},
+  {"op": "create", "parent": "$one", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "create", "parent": "$one", "type": "IFilter", "args": {"condition": "Product.Id = ProductId"}, "_why": "o input da tela entra no filtro"},
+  {"op": "create", "parent": "$detail/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$dTitle"},
+  {"op": "set", "target": "$dTitle", "prop": "Value", "value": "GetProduct.List.Current.Product.Name"},
+  {"op": "create", "parent": "$detail/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$desc"},
+  {"op": "set", "target": "$desc", "prop": "Value", "value": "GetProduct.List.Current.Product.Description"},
+
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "Products", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$agg"},
+  {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "ProductList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetProducts.List"},
+  {"op": "create", "parent": "$list", "type": "IListItem", "name": "ProductItem", "as": "$item"},
+  {"op": "delete", "target": "$item/RightActions/#IListItemAction", "_why": "o ListItem nasce com uma swipe action de exemplo sem destino"},
+  {"op": "create", "parent": "$item/Content", "type": "IExpression", "as": "$name"},
+  {"op": "set", "target": "$name", "prop": "Value", "value": "GetProducts.List.Current.Product.Name"},
+  {"op": "set", "target": "$item/OnClick", "prop": "Destination", "value": "IMobileScreen:ProductDetail"},
+  {"op": "set", "target": "$item/OnClick/ProductId", "prop": "Value", "value": "GetProducts.List.Current.Product.Id"},
+
+  {"op": "get", "target": "$item/OnClick"}
+ ]
+}

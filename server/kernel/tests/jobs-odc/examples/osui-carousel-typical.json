@@ -1,0 +1,33 @@
+{
+ "description": "Carousel do OSUI: List de produtos no CarouselItems com foto externa, navegacao por pontos e OnSlideMoved guardando o indice.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "spec", "data": {"entities": [{"name": "Product", "attributes": [{"name": "Name", "type": "Text", "length": 100, "mandatory": true}, {"name": "Price", "type": "Currency"}, {"name": "ImageUrl", "type": "Text", "length": 500}]}]}},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductCarousel", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Featured\""},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$GetProducts"},
+  {"op": "create", "parent": "$GetProducts", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
+  {"op": "set", "target": "$GetProducts", "prop": "MaxRecords", "value": "5"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Slide", "as": "$vSlide"},
+  {"op": "set", "target": "$vSlide", "prop": "DataType", "value": "Integer"},
+  {"op": "logic", "data": {"actions": [{"name": "SlideMoved", "kind": "screen", "owner": "IMobileScreen:ProductCarousel", "inputs": [{"name": "ItemIndex", "type": "Integer"}], "steps": [{"assign": {"Slide": "ItemIndex"}, "as": "Remember"}]}]}},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Carousel1", "source": "IMobileBlock:Carousel", "empty": true, "as": "$car"},
+  {"op": "set", "target": "$car/Navigation", "prop": "Value", "value": "Entities.CarouselNavigation.Dots"},
+  {"op": "set", "target": "$car/Height", "prop": "Value", "value": "\"320px\""},
+  {"op": "set", "target": "$car/OnSlideMoved", "prop": "Handler", "value": "IMobileScreen:ProductCarousel/SlideMoved"},
+  {"op": "set", "target": "$car/OnSlideMoved/ItemIndex", "prop": "Value", "value": "ItemIndex"},
+  {"op": "create", "parent": "$car/CarouselItems", "type": "IList", "name": "SlideList", "as": "$list"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetProducts.List"},
+  {"op": "create", "parent": "$list", "type": "IImage", "name": "SlidePhoto", "as": "$img"},
+  {"op": "set", "target": "$img", "prop": "Type", "value": "External"},
+  {"op": "set", "target": "$img", "prop": "Url", "value": "GetProducts.List.Current.Product.ImageUrl"},
+  {"op": "create", "parent": "$list", "type": "IExpression", "as": "$expr1"},
+  {"op": "set", "target": "$expr1", "prop": "Value", "value": "GetProducts.List.Current.Product.Name"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$expr2"},
+  {"op": "set", "target": "$expr2", "prop": "Value", "value": "\"Slide \" + (Slide + 1)"}
+ ]
+}

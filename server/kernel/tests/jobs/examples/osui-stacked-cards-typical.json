@@ -1,0 +1,30 @@
+{
+ "description": "StackedCards (OutSystemsUI, Interaction) tipico; criado vazio e preenchido com conteudo proprio; placeholders Content, OverlayTop, OverlayRight, OverlayLeft com dados do aggregate de tarefas; eventos OnRightSwipe, OnItemChange, OnLeftSwipe, OnTopSwipe tratados por screen actions que guardam os parametros em variaveis.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "LastCurrentPosition", "as": "$vLastCurrentPosition"},
+  {"op": "set", "target": "$vLastCurrentPosition", "prop": "DataType", "value": "Integer"},
+  {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetShowcaseTasks", "as": "$tasks"},
+  {"op": "create", "parent": "$tasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
+  {"op": "logic", "data": {"actions": [{"name": "StackedCardsDemoOnRightSwipe", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de OnRightSwipe", "inputs": [{"name": "CurrentPosition", "type": "Integer"}],"steps": [{"assign": {"LastCurrentPosition": "CurrentPosition"},"as": "KeepOnRightSwipe"}]}, {"name": "StackedCardsDemoOnItemChange", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de OnItemChange", "inputs": [{"name": "CurrentPosition", "type": "Integer"}],"steps": [{"assign": {"LastCurrentPosition": "CurrentPosition"},"as": "KeepOnItemChange"}]}, {"name": "StackedCardsDemoOnLeftSwipe", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de OnLeftSwipe", "inputs": [{"name": "CurrentPosition", "type": "Integer"}],"steps": [{"assign": {"LastCurrentPosition": "CurrentPosition"},"as": "KeepOnLeftSwipe"}]}, {"name": "StackedCardsDemoOnTopSwipe", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Guarda os parametros de OnTopSwipe", "inputs": [{"name": "CurrentPosition", "type": "Integer"}],"steps": [{"assign": {"LastCurrentPosition": "CurrentPosition"},"as": "KeepOnTopSwipe"}]}]}},
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "StackedCardsDemo", "source": "IMobileBlock:StackedCards", "empty": true,"as": "$b"},
+  {"op": "set", "target": "$b/OnRightSwipe", "prop": "Handler", "value": "IScreenAction:StackedCardsDemoOnRightSwipe"},
+  {"op": "set", "target": "$b/OnRightSwipe/CurrentPosition", "prop": "Value", "value": "CurrentPosition"},
+  {"op": "set", "target": "$b/OnItemChange", "prop": "Handler", "value": "IScreenAction:StackedCardsDemoOnItemChange"},
+  {"op": "set", "target": "$b/OnItemChange/CurrentPosition", "prop": "Value", "value": "CurrentPosition"},
+  {"op": "set", "target": "$b/OnLeftSwipe", "prop": "Handler", "value": "IScreenAction:StackedCardsDemoOnLeftSwipe"},
+  {"op": "set", "target": "$b/OnLeftSwipe/CurrentPosition", "prop": "Value", "value": "CurrentPosition"},
+  {"op": "set", "target": "$b/OnTopSwipe", "prop": "Handler", "value": "IScreenAction:StackedCardsDemoOnTopSwipe"},
+  {"op": "set", "target": "$b/OnTopSwipe/CurrentPosition", "prop": "Value", "value": "CurrentPosition"},
+  {"op": "create", "parent": "$b/Content", "type": "IExpression", "as": "$ph1"},
+  {"op": "set", "target": "$ph1", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/OverlayTop", "type": "IExpression", "as": "$ph2"},
+  {"op": "set", "target": "$ph2", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/OverlayRight", "type": "IExpression", "as": "$ph3"},
+  {"op": "set", "target": "$ph3", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""},
+  {"op": "create", "parent": "$b/OverlayLeft", "type": "IExpression", "as": "$ph4"},
+  {"op": "set", "target": "$ph4", "prop": "Value", "value": "GetShowcaseTasks.Count + \" task(s)\""}
+ ]
+}

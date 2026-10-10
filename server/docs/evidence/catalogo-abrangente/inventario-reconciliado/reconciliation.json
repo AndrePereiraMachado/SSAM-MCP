@@ -1,0 +1,143 @@
+{
+ "schema": "ssam-catalog-reconciliation/1",
+ "generatedAt": "2026-09-23T20:03:27.521Z",
+ "from": {
+  "file": "docs/evidence/descoberta-cobertura-fase1/inventory.json",
+  "sha256": "67b4f361c1110999e37c6f2dc6c8e9e326d254e761382875058b21b001fff4ec",
+  "odc": "1.7.24.10718",
+  "o11": "11.55.69"
+ },
+ "to": {
+  "odc": "1.7.25.10778",
+  "o11": "11.55.87",
+  "installedOdc": "1.7.25.10778",
+  "installedO11": "11.55.87.65162"
+ },
+ "keyRule": "<lane>:<namespace>.<Name>; the version and assembly are not part of the key, so accounting entries survive a runtime update",
+ "lanes": {
+  "odc": {
+   "before": 556,
+   "after": 564,
+   "added": [
+    {
+     "type": "odc:OutSystems.Model.ISpecialListEntry",
+     "family": "ui.widget",
+     "kindClass": "concrete-authorable",
+     "owner": "B",
+     "rule": "family ui.widget"
+    },
+    {
+     "type": "odc:OutSystems.Model.ISpecialListEntrySignature",
+     "family": "ui.widget",
+     "kindClass": "referenced-signature",
+     "owner": "B",
+     "rule": "family ui.widget"
+    },
+    {
+     "type": "odc:OutSystems.Model.Logic.IKnowledgeBaseReference",
+     "family": "logic.action",
+     "kindClass": "concrete-authorable",
+     "owner": "C",
+     "rule": "AI/agents, search, knowledge bases and tool references (C), classified by evidence"
+    },
+    {
+     "type": "odc:OutSystems.Model.Logic.IToolReferenceAction",
+     "family": "logic.action",
+     "kindClass": "referenced-signature",
+     "owner": "C",
+     "rule": "AI/agents, search, knowledge bases and tool references (C), classified by evidence"
+    },
+    {
+     "type": "odc:OutSystems.Model.Logic.Nodes.ICallAgentManifestNode",
+     "family": "logic.node",
+     "kindClass": "concrete-authorable",
+     "owner": "C",
+     "rule": "AI/agents, search, knowledge bases and tool references (C), classified by evidence"
+    },
+    {
+     "type": "odc:OutSystems.Model.UI.Web.Widgets.ICommentWidget",
+     "family": "ui.widget",
+     "kindClass": "concrete-authorable",
+     "owner": "B",
+     "rule": "family ui.widget"
+    },
+    {
+     "type": "odc:OutSystems.Model.UI.Web.Widgets.IImageWidget",
+     "family": "ui.widget",
+     "kindClass": "concrete-authorable",
+     "owner": "B",
+     "rule": "family ui.widget"
+    },
+    {
+     "type": "odc:OutSystems.Model.UI.Web.Widgets.IImageWidgetSignature",
+     "family": "ui.widget",
+     "kindClass": "referenced-signature",
+     "owner": "B",
+     "rule": "family ui.widget"
+    },
+    {
+     "type": "odc:OutSystems.Model.UI.Web.Widgets.IListBoxWidget",
+     "family": "ui.widget",
+     "kindClass": "concrete-authorable",
+     "owner": "B",
+     "rule": "family ui.widget"
+    },
+    {
+     "type": "odc:OutSystems.Model.UI.Web.Widgets.IListBoxWidgetSignature",
+     "family": "ui.widget",
+     "kindClass": "referenced-signature",
+     "owner": "B",
+     "rule": "family ui.widget"
+    }
+   ],
+   "removed": [
+    {
+     "type": "odc:OutSystems.Model.Logic.ICallableAgent",
+     "family": "ai",
+     "kindClass": "base-interface",
+     "owner": "C"
+    },
+    {
+     "type": "odc:OutSystems.Model.Logic.ICallableAgentSignature",
+     "family": "reference.signature",
+     "kindClass": "referenced-signature",
+     "owner": "C"
+    }
+   ],
+   "changed": [
+    {
+     "type": "odc:OutSystems.Model.IExtendedProperty",
+     "owner": "C",
+     "factories": "changed"
+    },
+    {
+     "type": "odc:OutSystems.Model.Logic.IAgent",
+     "owner": "C",
+     "writableOwn": "changed"
+    },
+    {
+     "type": "odc:OutSystems.Model.Logic.IAgentManifest",
+     "owner": "C",
+     "writableOwn": "changed"
+    },
+    {
+     "type": "odc:OutSystems.Model.Logic.IMCPToolReference",
+     "owner": "C",
+     "writableOwn": "changed"
+    },
+    {
+     "type": "odc:OutSystems.Model.UI.Web.Widgets.IComboBoxWidget",
+     "owner": "B",
+     "writableOwn": "changed"
+    }
+   ]
+  },
+  "o11": {
+   "before": 408,
+   "after": 408,
+   "added": [],
+   "removed": [],
+   "changed": []
+  }
+ }
+}

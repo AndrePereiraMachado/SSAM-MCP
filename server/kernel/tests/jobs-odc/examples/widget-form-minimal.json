@@ -1,0 +1,15 @@
+{
+ "description": "Form: um IForm com um Input dentro, ligado a uma variavel local da tela.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "FormDemo", "as": "$scr"},
+  {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
+  {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "FullName", "as": "$name"},
+  {"op": "set", "target": "$name", "prop": "DataType", "value": "Text"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IForm", "name": "ContactForm", "as": "$form"},
+  {"op": "create", "parent": "$form", "type": "IInput", "name": "FullNameInput", "as": "$in"},
+  {"op": "set", "target": "$in", "prop": "Variable", "value": "FullName"}
+ ]
+}

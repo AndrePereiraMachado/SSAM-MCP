@@ -1,0 +1,10 @@
+{
+ "description": "Video (OutSystemsUI, Interaction) minimo: instancia como o Studio cria ao arrastar o bloco; inputs obrigatorios URL com valores simples.",
+ "base": "job:ex-base",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "VideoDemo", "source": "IMobileBlock:Video", "as": "$b"},
+  {"op": "set", "target": "$b/URL", "prop": "Value", "value": "\"https://www.example.com/intro.mp4\""}
+ ]
+}

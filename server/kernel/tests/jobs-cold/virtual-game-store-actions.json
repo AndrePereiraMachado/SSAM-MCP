@@ -1,0 +1,4406 @@
+{
+  "description": "Implementação das 68 actions internas e 5 Service Actions da loja virtual de videogames, com leitura, persistência, transições, coleções, pagamento, licenças, avaliações, promoções e timers.",
+  "base": "job:virtual-game-store-data",
+  "expectValid": true,
+  "expectedMessages": [
+    {
+      "id": "UnusedElement",
+      "element": "Admin_GetCustomerLibrary (ServerAction) / Page (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Admin_GetCustomerLibrary (ServerAction) / PageSize (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Admin_GetSalesDashboard (ServerAction) / PlatformId (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Admin_GetSalesDashboard (ServerAction) / GameId (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Admin_GetTopGames (ServerAction) / Limit (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Cart_Expire (ServerAction) / OlderThanDays (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Checkout_CreateOrder (ServerAction) / CouponCode (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Checkout_Validate (ServerAction) / CouponCode (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Coupon_Validate (ServerAction) / UserId (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Coupon_Validate (ServerAction) / CartId (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Game_Archive (ServerAction) / Reason (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "GameEdition_ListAvailable (ServerAction) / CountryCode (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Game_ListFeatured (ServerAction) / Page (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Game_ListFeatured (ServerAction) / PageSize (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "GameReview_List (ServerAction) / Page (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "GameReview_List (ServerAction) / PageSize (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "GameReview_List (ServerAction) / OnlyPublished (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "GameReview_Moderate (ServerAction) / ModerationNote (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Game_Search (ServerAction) / GenreId (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Game_Search (ServerAction) / PlatformId (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Game_Search (ServerAction) / AgeRatingId (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Game_Search (ServerAction) / Page (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Game_Search (ServerAction) / PageSize (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Library_ListMine (ServerAction) / Page (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Library_ListMine (ServerAction) / PageSize (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Library_ListMine (ServerAction) / PlatformId (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Order_Cancel (ServerAction) / Reason (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Order_ListMine (ServerAction) / Page (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Order_ListMine (ServerAction) / PageSize (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Order_ListMine (ServerAction) / StatusId (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Order_MarkPaid (ServerAction) / PaymentTransactionId (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Payment_HandleWebhook (ServerAction) / ProviderName (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Payment_HandleWebhook (ServerAction) / Payload (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Payment_HandleWebhook (ServerAction) / Signature (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Payment_ReconcilePending (ServerAction) / OlderThanMinutes (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Promotion_CalculatePrice (ServerAction) / UserId (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Promotion_CalculatePrice (ServerAction) / CouponCode (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Refund_Approve (ServerAction) / ApprovalNote (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Refund_HandleWebhook (ServerAction) / Payload (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Refund_HandleWebhook (ServerAction) / Signature (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Wishlist_ListMine (ServerAction) / Page (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    },
+    {
+      "id": "UnusedElement",
+      "element": "Wishlist_ListMine (ServerAction) / PageSize (InputParameter)",
+      "why": "Input de negocio ainda nao consumido pela logic spec desta versao da loja; limitacao explicita pendente do passo de inputs sem uso."
+    }
+  ],
+  "ops": [
+    {
+      "op": "logic",
+      "data": {
+        "actions": [
+          {
+            "name": "CustomerProfile_Get",
+            "kind": "server",
+            "public": true,
+            "description": "Obtém o perfil do usuário autenticado.",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "CustomerProfile",
+                "type": "CustomerProfile"
+              },
+              {
+                "name": "Found",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "CustomerProfile",
+                "as": "GetProfile",
+                "where": "CustomerProfile.UserId = GetUserId()",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "CustomerProfile": "GetProfile.List.Current.CustomerProfile",
+                  "Found": "not GetProfile.List.Empty"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "CustomerProfile_Update",
+            "kind": "server",
+            "public": true,
+            "description": "Atualiza o perfil do cliente.",
+            "inputs": [
+              {
+                "name": "ProfileId",
+                "type": "CustomerProfile Identifier"
+              },
+              {
+                "name": "DisplayName",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "CountryCode",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "PreferredLanguage",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "BirthDate",
+                "type": "Date",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "CustomerProfile",
+                "as": "GetCustomerProfile",
+                "where": "CustomerProfile.Id = ProfileId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "R": "GetCustomerProfile.List.Current.CustomerProfile",
+                  "R.DisplayName": "DisplayName",
+                  "R.CountryCode": "CountryCode",
+                  "R.PreferredLanguage": "PreferredLanguage",
+                  "R.BirthDate": "BirthDate"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "CustomerProfile",
+                "as": "SaveCustomerProfile",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "CustomerProfile"
+              }
+            ]
+          },
+          {
+            "name": "Game_Create",
+            "kind": "server",
+            "public": true,
+            "description": "Cria um jogo em rascunho.",
+            "inputs": [
+              {
+                "name": "Title",
+                "type": "Text"
+              },
+              {
+                "name": "Slug",
+                "type": "Text"
+              },
+              {
+                "name": "ShortDescription",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "Description",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "ReleaseDate",
+                "type": "Date",
+                "mandatory": false
+              },
+              {
+                "name": "AgeRatingId",
+                "type": "AgeRating Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "CoverUrl",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "TrailerUrl",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "WebsiteUrl",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "R.Title": "Title",
+                  "R.Slug": "Slug",
+                  "R.ShortDescription": "ShortDescription",
+                  "R.Description": "Description",
+                  "R.ReleaseDate": "ReleaseDate",
+                  "R.AgeRatingId": "AgeRatingId",
+                  "R.CoverUrl": "CoverUrl",
+                  "R.TrailerUrl": "TrailerUrl",
+                  "R.WebsiteUrl": "WebsiteUrl",
+                  "R.StatusId": "Entities.GameStatus.Draft",
+                  "R.CreatedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "create": "Game",
+                "as": "CreateGame",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "GameId": "CreateGame.Id",
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Game"
+              }
+            ]
+          },
+          {
+            "name": "Game_Update",
+            "kind": "server",
+            "public": true,
+            "description": "Atualiza Game.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "Title",
+                "type": "Text"
+              },
+              {
+                "name": "Slug",
+                "type": "Text"
+              },
+              {
+                "name": "ShortDescription",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "Description",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "ReleaseDate",
+                "type": "Date",
+                "mandatory": false
+              },
+              {
+                "name": "AgeRatingId",
+                "type": "AgeRating Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "CoverUrl",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "TrailerUrl",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "WebsiteUrl",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "IsFeatured",
+                "type": "Boolean"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Game",
+                "as": "GetGame",
+                "where": "Game.Id = GameId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "R": "GetGame.List.Current.Game",
+                  "R.Title": "Title",
+                  "R.Slug": "Slug",
+                  "R.ShortDescription": "ShortDescription",
+                  "R.Description": "Description",
+                  "R.ReleaseDate": "ReleaseDate",
+                  "R.AgeRatingId": "AgeRatingId",
+                  "R.CoverUrl": "CoverUrl",
+                  "R.TrailerUrl": "TrailerUrl",
+                  "R.WebsiteUrl": "WebsiteUrl",
+                  "R.IsFeatured": "IsFeatured",
+                  "R.UpdatedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "Game",
+                "as": "SaveGame",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Game"
+              }
+            ]
+          },
+          {
+            "name": "Game_Publish",
+            "kind": "server",
+            "public": true,
+            "description": "Publica um jogo.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Game",
+                "as": "GetGame",
+                "where": "Game.Id = GameId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "R": "GetGame.List.Current.Game",
+                  "R.StatusId": "Entities.GameStatus.Published",
+                  "R.PublishedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "Game",
+                "as": "SaveGame",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Game"
+              }
+            ]
+          },
+          {
+            "name": "Game_Archive",
+            "kind": "server",
+            "public": true,
+            "description": "Arquiva um jogo sem revogar licenças.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "Reason",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Game",
+                "as": "GetGame",
+                "where": "Game.Id = GameId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "R": "GetGame.List.Current.Game",
+                  "R.StatusId": "Entities.GameStatus.Archived"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "Game",
+                "as": "SaveGame",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Game"
+              }
+            ]
+          },
+          {
+            "name": "Game_Get",
+            "kind": "server",
+            "public": true,
+            "description": "Consulta um jogo.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Game",
+                "type": "Game"
+              },
+              {
+                "name": "Found",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Game",
+                "as": "GetGame",
+                "where": "Game.Id = GameId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "Game": "GetGame.List.Current.Game",
+                  "Found": "not GetGame.List.Empty"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Game_Search",
+            "kind": "server",
+            "public": true,
+            "description": "Pesquisa jogos publicados.",
+            "inputs": [
+              {
+                "name": "SearchText",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "GenreId",
+                "type": "Genre Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "PlatformId",
+                "type": "Platform Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "AgeRatingId",
+                "type": "AgeRating Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "Page",
+                "type": "Integer"
+              },
+              {
+                "name": "PageSize",
+                "type": "Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Games",
+                "type": "Game List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Game",
+                "as": "GetGames",
+                "where": "Game.StatusId = Entities.GameStatus.Published and (SearchText = \"\" or Game.Title like \"%\" + SearchText + \"%\")"
+              },
+              {
+                "assign": {
+                  "Games": "GetGames.List",
+                  "TotalCount": "GetGames.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Game_ListFeatured",
+            "kind": "server",
+            "public": true,
+            "description": "Lista jogos publicados em destaque.",
+            "inputs": [
+              {
+                "name": "Page",
+                "type": "Integer"
+              },
+              {
+                "name": "PageSize",
+                "type": "Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Games",
+                "type": "Game List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Game",
+                "as": "GetGames",
+                "where": "Game.StatusId = Entities.GameStatus.Published and Game.IsFeatured = True"
+              },
+              {
+                "assign": {
+                  "Games": "GetGames.List",
+                  "TotalCount": "GetGames.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Game_SetDevelopers",
+            "kind": "server",
+            "public": true,
+            "description": "Substitui desenvolvedores relacionados ao jogo.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "DeveloperIds",
+                "type": "Developer Identifier List"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GameDeveloper",
+                "as": "GetExistingGameDeveloper",
+                "where": "GameDeveloper.GameId = GameId"
+              },
+              {
+                "foreach": "GetExistingGameDeveloper.List",
+                "as": "EachExisting",
+                "do": [
+                  {
+                    "delete": "GameDeveloper",
+                    "as": "DeleteGameDeveloper",
+                    "id": "GetExistingGameDeveloper.List.Current.GameDeveloper.Id"
+                  }
+                ]
+              },
+              {
+                "foreach": "DeveloperIds",
+                "as": "EachDeveloper",
+                "do": [
+                  {
+                    "assign": {
+                      "R.GameId": "GameId",
+                      "R.DeveloperId": "DeveloperIds.Current"
+                    },
+                    "as": "BuildRelation"
+                  },
+                  {
+                    "create": "GameDeveloper",
+                    "as": "CreateGameDeveloper",
+                    "record": "R"
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "GameDeveloper"
+              }
+            ]
+          },
+          {
+            "name": "Game_SetPublishers",
+            "kind": "server",
+            "public": true,
+            "description": "Substitui publicadoras relacionadas ao jogo.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "PublisherIds",
+                "type": "Publisher Identifier List"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GamePublisher",
+                "as": "GetExistingGamePublisher",
+                "where": "GamePublisher.GameId = GameId"
+              },
+              {
+                "foreach": "GetExistingGamePublisher.List",
+                "as": "EachExisting",
+                "do": [
+                  {
+                    "delete": "GamePublisher",
+                    "as": "DeleteGamePublisher",
+                    "id": "GetExistingGamePublisher.List.Current.GamePublisher.Id"
+                  }
+                ]
+              },
+              {
+                "foreach": "PublisherIds",
+                "as": "EachPublisher",
+                "do": [
+                  {
+                    "assign": {
+                      "R.GameId": "GameId",
+                      "R.PublisherId": "PublisherIds.Current"
+                    },
+                    "as": "BuildRelation"
+                  },
+                  {
+                    "create": "GamePublisher",
+                    "as": "CreateGamePublisher",
+                    "record": "R"
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "GamePublisher"
+              }
+            ]
+          },
+          {
+            "name": "Game_SetGenres",
+            "kind": "server",
+            "public": true,
+            "description": "Substitui gêneros relacionados ao jogo.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "GenreIds",
+                "type": "Genre Identifier List"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GameGenre",
+                "as": "GetExistingGameGenre",
+                "where": "GameGenre.GameId = GameId"
+              },
+              {
+                "foreach": "GetExistingGameGenre.List",
+                "as": "EachExisting",
+                "do": [
+                  {
+                    "delete": "GameGenre",
+                    "as": "DeleteGameGenre",
+                    "id": "GetExistingGameGenre.List.Current.GameGenre.Id"
+                  }
+                ]
+              },
+              {
+                "foreach": "GenreIds",
+                "as": "EachGenre",
+                "do": [
+                  {
+                    "assign": {
+                      "R.GameId": "GameId",
+                      "R.GenreId": "GenreIds.Current"
+                    },
+                    "as": "BuildRelation"
+                  },
+                  {
+                    "create": "GameGenre",
+                    "as": "CreateGameGenre",
+                    "record": "R"
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "GameGenre"
+              }
+            ]
+          },
+          {
+            "name": "Game_SetPlatforms",
+            "kind": "server",
+            "public": true,
+            "description": "Substitui plataformas relacionadas ao jogo.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "PlatformIds",
+                "type": "Platform Identifier List"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GamePlatform",
+                "as": "GetExistingGamePlatform",
+                "where": "GamePlatform.GameId = GameId"
+              },
+              {
+                "foreach": "GetExistingGamePlatform.List",
+                "as": "EachExisting",
+                "do": [
+                  {
+                    "delete": "GamePlatform",
+                    "as": "DeleteGamePlatform",
+                    "id": "GetExistingGamePlatform.List.Current.GamePlatform.Id"
+                  }
+                ]
+              },
+              {
+                "foreach": "PlatformIds",
+                "as": "EachPlatform",
+                "do": [
+                  {
+                    "assign": {
+                      "R.GameId": "GameId",
+                      "R.PlatformId": "PlatformIds.Current"
+                    },
+                    "as": "BuildRelation"
+                  },
+                  {
+                    "create": "GamePlatform",
+                    "as": "CreateGamePlatform",
+                    "record": "R"
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "GamePlatform"
+              }
+            ]
+          },
+          {
+            "name": "GameEdition_Create",
+            "kind": "server",
+            "public": true,
+            "description": "Cria uma edição digital vendável.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "PlatformId",
+                "type": "Platform Identifier"
+              },
+              {
+                "name": "EditionTypeId",
+                "type": "EditionType Identifier"
+              },
+              {
+                "name": "Name",
+                "type": "Text"
+              },
+              {
+                "name": "SKU",
+                "type": "Text"
+              },
+              {
+                "name": "Description",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "Version",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "DownloadSizeBytes",
+                "type": "Long Integer",
+                "mandatory": false
+              },
+              {
+                "name": "BasePrice",
+                "type": "Currency"
+              },
+              {
+                "name": "CurrencyCode",
+                "type": "Text"
+              },
+              {
+                "name": "IsPreOrder",
+                "type": "Boolean"
+              },
+              {
+                "name": "ReleaseDate",
+                "type": "Date",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "GameEditionId",
+                "type": "GameEdition Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "R.GameId": "GameId",
+                  "R.PlatformId": "PlatformId",
+                  "R.EditionTypeId": "EditionTypeId",
+                  "R.Name": "Name",
+                  "R.SKU": "SKU",
+                  "R.Description": "Description",
+                  "R.Version": "Version",
+                  "R.DownloadSizeBytes": "DownloadSizeBytes",
+                  "R.BasePrice": "BasePrice",
+                  "R.CurrencyCode": "CurrencyCode",
+                  "R.IsPreOrder": "IsPreOrder",
+                  "R.ReleaseDate": "ReleaseDate",
+                  "R.IsActive": "True",
+                  "R.CreatedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "create": "GameEdition",
+                "as": "CreateGameEdition",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "GameEditionId": "CreateGameEdition.Id",
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "GameEdition"
+              }
+            ]
+          },
+          {
+            "name": "GameEdition_Update",
+            "kind": "server",
+            "public": true,
+            "description": "Atualiza GameEdition.",
+            "inputs": [
+              {
+                "name": "GameEditionId",
+                "type": "GameEdition Identifier"
+              },
+              {
+                "name": "Name",
+                "type": "Text"
+              },
+              {
+                "name": "SKU",
+                "type": "Text"
+              },
+              {
+                "name": "Description",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "Version",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "DownloadSizeBytes",
+                "type": "Long Integer",
+                "mandatory": false
+              },
+              {
+                "name": "BasePrice",
+                "type": "Currency"
+              },
+              {
+                "name": "CurrencyCode",
+                "type": "Text"
+              },
+              {
+                "name": "IsPreOrder",
+                "type": "Boolean"
+              },
+              {
+                "name": "ReleaseDate",
+                "type": "Date",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GameEdition",
+                "as": "GetGameEdition",
+                "where": "GameEdition.Id = GameEditionId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "R": "GetGameEdition.List.Current.GameEdition",
+                  "R.Name": "Name",
+                  "R.SKU": "SKU",
+                  "R.Description": "Description",
+                  "R.Version": "Version",
+                  "R.DownloadSizeBytes": "DownloadSizeBytes",
+                  "R.BasePrice": "BasePrice",
+                  "R.CurrencyCode": "CurrencyCode",
+                  "R.IsPreOrder": "IsPreOrder",
+                  "R.ReleaseDate": "ReleaseDate",
+                  "R.UpdatedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "GameEdition",
+                "as": "SaveGameEdition",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "GameEdition"
+              }
+            ]
+          },
+          {
+            "name": "GameEdition_Activate",
+            "kind": "server",
+            "public": true,
+            "description": "Ativa uma edição para venda.",
+            "inputs": [
+              {
+                "name": "GameEditionId",
+                "type": "GameEdition Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GameEdition",
+                "as": "GetGameEdition",
+                "where": "GameEdition.Id = GameEditionId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "R": "GetGameEdition.List.Current.GameEdition",
+                  "R.IsActive": "True"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "GameEdition",
+                "as": "SaveGameEdition",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "GameEdition"
+              }
+            ]
+          },
+          {
+            "name": "GameEdition_Deactivate",
+            "kind": "server",
+            "public": true,
+            "description": "Desativa uma edição sem revogar licenças.",
+            "inputs": [
+              {
+                "name": "GameEditionId",
+                "type": "GameEdition Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GameEdition",
+                "as": "GetGameEdition",
+                "where": "GameEdition.Id = GameEditionId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "R": "GetGameEdition.List.Current.GameEdition",
+                  "R.IsActive": "False"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "GameEdition",
+                "as": "SaveGameEdition",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "GameEdition"
+              }
+            ]
+          },
+          {
+            "name": "GameEdition_ListAvailable",
+            "kind": "server",
+            "public": true,
+            "description": "Lista edições ativas de um jogo.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "CountryCode",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "GameEditions",
+                "type": "GameEdition List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GameEdition",
+                "as": "GetGameEditions",
+                "where": "GameEdition.GameId = GameId and GameEdition.IsActive = True"
+              },
+              {
+                "assign": {
+                  "GameEditions": "GetGameEditions.List",
+                  "TotalCount": "GetGameEditions.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Promotion_Create",
+            "kind": "server",
+            "public": true,
+            "description": "Cria uma promoção.",
+            "inputs": [
+              {
+                "name": "Name",
+                "type": "Text"
+              },
+              {
+                "name": "Description",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "DiscountTypeId",
+                "type": "DiscountType Identifier"
+              },
+              {
+                "name": "DiscountValue",
+                "type": "Decimal"
+              },
+              {
+                "name": "StartsOn",
+                "type": "Date Time"
+              },
+              {
+                "name": "EndsOn",
+                "type": "Date Time"
+              },
+              {
+                "name": "MaxRedemptions",
+                "type": "Integer",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "PromotionId",
+                "type": "Promotion Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "R.Name": "Name",
+                  "R.Description": "Description",
+                  "R.DiscountTypeId": "DiscountTypeId",
+                  "R.DiscountValue": "DiscountValue",
+                  "R.StartsOn": "StartsOn",
+                  "R.EndsOn": "EndsOn",
+                  "R.MaxRedemptions": "MaxRedemptions",
+                  "R.RedemptionCount": "0",
+                  "R.IsActive": "False"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "create": "Promotion",
+                "as": "CreatePromotion",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "PromotionId": "CreatePromotion.Id",
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Promotion"
+              }
+            ]
+          },
+          {
+            "name": "Promotion_Update",
+            "kind": "server",
+            "public": true,
+            "description": "Atualiza Promotion.",
+            "inputs": [
+              {
+                "name": "PromotionId",
+                "type": "Promotion Identifier"
+              },
+              {
+                "name": "Name",
+                "type": "Text"
+              },
+              {
+                "name": "Description",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "DiscountTypeId",
+                "type": "DiscountType Identifier"
+              },
+              {
+                "name": "DiscountValue",
+                "type": "Decimal"
+              },
+              {
+                "name": "StartsOn",
+                "type": "Date Time"
+              },
+              {
+                "name": "EndsOn",
+                "type": "Date Time"
+              },
+              {
+                "name": "MaxRedemptions",
+                "type": "Integer",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Promotion",
+                "as": "GetPromotion",
+                "where": "Promotion.Id = PromotionId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "R": "GetPromotion.List.Current.Promotion",
+                  "R.Name": "Name",
+                  "R.Description": "Description",
+                  "R.DiscountTypeId": "DiscountTypeId",
+                  "R.DiscountValue": "DiscountValue",
+                  "R.StartsOn": "StartsOn",
+                  "R.EndsOn": "EndsOn",
+                  "R.MaxRedemptions": "MaxRedemptions"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "Promotion",
+                "as": "SavePromotion",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Promotion"
+              }
+            ]
+          },
+          {
+            "name": "Promotion_Activate",
+            "kind": "server",
+            "public": true,
+            "description": "Ativa uma promoção.",
+            "inputs": [
+              {
+                "name": "PromotionId",
+                "type": "Promotion Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Promotion",
+                "as": "GetPromotion",
+                "where": "Promotion.Id = PromotionId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "R": "GetPromotion.List.Current.Promotion",
+                  "R.IsActive": "True"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "Promotion",
+                "as": "SavePromotion",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Promotion"
+              }
+            ]
+          },
+          {
+            "name": "Promotion_Deactivate",
+            "kind": "server",
+            "public": true,
+            "description": "Desativa uma promoção.",
+            "inputs": [
+              {
+                "name": "PromotionId",
+                "type": "Promotion Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Promotion",
+                "as": "GetPromotion",
+                "where": "Promotion.Id = PromotionId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "R": "GetPromotion.List.Current.Promotion",
+                  "R.IsActive": "False"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "Promotion",
+                "as": "SavePromotion",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Promotion"
+              }
+            ]
+          },
+          {
+            "name": "Promotion_AddEdition",
+            "kind": "server",
+            "public": true,
+            "description": "Adiciona uma edição à promoção.",
+            "inputs": [
+              {
+                "name": "PromotionId",
+                "type": "Promotion Identifier"
+              },
+              {
+                "name": "GameEditionId",
+                "type": "GameEdition Identifier"
+              },
+              {
+                "name": "MaximumDiscount",
+                "type": "Currency",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "PromotionGameEditionId",
+                "type": "PromotionGameEdition Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "R.PromotionId": "PromotionId",
+                  "R.GameEditionId": "GameEditionId",
+                  "R.MaximumDiscount": "MaximumDiscount",
+                  "R.IsActive": "True"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "create": "PromotionGameEdition",
+                "as": "CreatePromotionGameEdition",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "PromotionGameEditionId": "CreatePromotionGameEdition.Id",
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "PromotionGameEdition"
+              }
+            ]
+          },
+          {
+            "name": "Promotion_RemoveEdition",
+            "kind": "server",
+            "public": true,
+            "description": "Remove uma edição de uma promoção.",
+            "inputs": [
+              {
+                "name": "PromotionGameEditionId",
+                "type": "PromotionGameEdition Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "delete": "PromotionGameEdition",
+                "as": "DeletePromotionGameEdition",
+                "id": "PromotionGameEditionId"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Promotion_CalculatePrice",
+            "kind": "server",
+            "public": true,
+            "description": "Calcula o preço atual de uma edição.",
+            "inputs": [
+              {
+                "name": "GameEditionId",
+                "type": "GameEdition Identifier"
+              },
+              {
+                "name": "UserId",
+                "type": "User Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "CouponCode",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "UnitPrice",
+                "type": "Currency"
+              },
+              {
+                "name": "DiscountAmount",
+                "type": "Currency"
+              },
+              {
+                "name": "TaxAmount",
+                "type": "Currency"
+              },
+              {
+                "name": "TotalAmount",
+                "type": "Currency"
+              },
+              {
+                "name": "CurrencyCode",
+                "type": "Text"
+              },
+              {
+                "name": "IsValid",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GameEdition",
+                "as": "GetEditionPrice",
+                "where": "GameEdition.Id = GameEditionId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "UnitPrice": "GetEditionPrice.List.Current.GameEdition.BasePrice",
+                  "DiscountAmount": "0",
+                  "TaxAmount": "0",
+                  "TotalAmount": "GetEditionPrice.List.Current.GameEdition.BasePrice",
+                  "CurrencyCode": "GetEditionPrice.List.Current.GameEdition.CurrencyCode",
+                  "IsValid": "not GetEditionPrice.List.Empty"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Coupon_Create",
+            "kind": "server",
+            "public": true,
+            "description": "Cria um cupom.",
+            "inputs": [
+              {
+                "name": "Code",
+                "type": "Text"
+              },
+              {
+                "name": "Description",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "DiscountTypeId",
+                "type": "DiscountType Identifier"
+              },
+              {
+                "name": "DiscountValue",
+                "type": "Decimal"
+              },
+              {
+                "name": "MinimumOrderAmount",
+                "type": "Currency"
+              },
+              {
+                "name": "StartsOn",
+                "type": "Date Time"
+              },
+              {
+                "name": "EndsOn",
+                "type": "Date Time"
+              },
+              {
+                "name": "MaximumRedemptions",
+                "type": "Integer",
+                "mandatory": false
+              },
+              {
+                "name": "MaximumPerUser",
+                "type": "Integer",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "CouponId",
+                "type": "Coupon Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "R.Code": "Code",
+                  "R.Description": "Description",
+                  "R.DiscountTypeId": "DiscountTypeId",
+                  "R.DiscountValue": "DiscountValue",
+                  "R.MinimumOrderAmount": "MinimumOrderAmount",
+                  "R.StartsOn": "StartsOn",
+                  "R.EndsOn": "EndsOn",
+                  "R.MaximumRedemptions": "MaximumRedemptions",
+                  "R.MaximumPerUser": "MaximumPerUser",
+                  "R.RedemptionCount": "0",
+                  "R.IsActive": "True"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "create": "Coupon",
+                "as": "CreateCoupon",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "CouponId": "CreateCoupon.Id",
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Coupon"
+              }
+            ]
+          },
+          {
+            "name": "Coupon_Validate",
+            "kind": "server",
+            "public": true,
+            "description": "Valida um cupom sem registrar seu uso.",
+            "inputs": [
+              {
+                "name": "CouponCode",
+                "type": "Text"
+              },
+              {
+                "name": "UserId",
+                "type": "User Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "CartId",
+                "type": "Cart Identifier",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "IsValid",
+                "type": "Boolean"
+              },
+              {
+                "name": "DiscountValue",
+                "type": "Decimal"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Coupon",
+                "as": "GetCoupon",
+                "where": "Coupon.Code = CouponCode and Coupon.IsActive = True",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "IsValid": "not GetCoupon.List.Empty",
+                  "DiscountValue": "GetCoupon.List.Current.Coupon.DiscountValue"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Cart_GetOrCreate",
+            "kind": "server",
+            "public": true,
+            "description": "Obtém ou cria o carrinho ativo do usuário.",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "CartId",
+                "type": "Cart Identifier"
+              },
+              {
+                "name": "Cart",
+                "type": "Cart"
+              },
+              {
+                "name": "Created",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Cart",
+                "as": "GetCart",
+                "where": "Cart.UserId = GetUserId() and Cart.StatusId = Entities.CartStatus.Active",
+                "max": 1
+              },
+              {
+                "if": "GetCart.List.Empty",
+                "as": "CartMissing",
+                "then": [
+                  {
+                    "assign": {
+                      "R.UserId": "GetUserId()",
+                      "R.StatusId": "Entities.CartStatus.Active",
+                      "R.CurrencyCode": "\"BRL\"",
+                      "R.CreatedOn": "CurrDateTime()"
+                    },
+                    "as": "BuildCart"
+                  },
+                  {
+                    "create": "Cart",
+                    "as": "CreateCart",
+                    "record": "R"
+                  },
+                  {
+                    "assign": {
+                      "CartId": "CreateCart.Id",
+                      "Cart": "R",
+                      "Created": "True"
+                    },
+                    "as": "SetCreatedCart"
+                  }
+                ],
+                "else": [
+                  {
+                    "assign": {
+                      "CartId": "GetCart.List.Current.Cart.Id",
+                      "Cart": "GetCart.List.Current.Cart",
+                      "Created": "False"
+                    },
+                    "as": "SetExistingCart"
+                  }
+                ]
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Cart"
+              }
+            ]
+          },
+          {
+            "name": "Cart_AddItem",
+            "kind": "server",
+            "public": true,
+            "description": "Adiciona uma edição digital ao carrinho.",
+            "inputs": [
+              {
+                "name": "GameEditionId",
+                "type": "GameEdition Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "CartItemId",
+                "type": "CartItem Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Cart",
+                "as": "GetCart",
+                "where": "Cart.UserId = GetUserId() and Cart.StatusId = Entities.CartStatus.Active",
+                "max": 1
+              },
+              {
+                "get": "CartItem",
+                "as": "GetExistingItem",
+                "where": "CartItem.CartId = GetCart.List.Current.Cart.Id and CartItem.GameEditionId = GameEditionId",
+                "max": 1
+              },
+              {
+                "if": "GetExistingItem.List.Empty",
+                "as": "ItemMissing",
+                "then": [
+                  {
+                    "assign": {
+                      "R.CartId": "GetCart.List.Current.Cart.Id",
+                      "R.GameEditionId": "GameEditionId",
+                      "R.Quantity": "1",
+                      "R.UnitPrice": "0",
+                      "R.DiscountAmount": "0",
+                      "R.AddedOn": "CurrDateTime()"
+                    },
+                    "as": "BuildCartItem"
+                  },
+                  {
+                    "create": "CartItem",
+                    "as": "CreateCartItem",
+                    "record": "R"
+                  },
+                  {
+                    "assign": {
+                      "CartItemId": "CreateCartItem.Id",
+                      "Success": "True"
+                    },
+                    "as": "SetNewCartItem"
+                  }
+                ],
+                "else": [
+                  {
+                    "assign": {
+                      "CartItemId": "GetExistingItem.List.Current.CartItem.Id",
+                      "Success": "False"
+                    },
+                    "as": "SetExistingCartItem"
+                  }
+                ]
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "CartItem"
+              }
+            ]
+          },
+          {
+            "name": "Cart_RemoveItem",
+            "kind": "server",
+            "public": true,
+            "description": "Remove um item do carrinho do usuário.",
+            "inputs": [
+              {
+                "name": "CartItemId",
+                "type": "CartItem Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "delete": "CartItem",
+                "as": "DeleteCartItem",
+                "id": "CartItemId"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Cart_Clear",
+            "kind": "server",
+            "public": true,
+            "description": "Esvazia o carrinho ativo.",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Cart",
+                "as": "GetCart",
+                "where": "Cart.UserId = GetUserId() and Cart.StatusId = Entities.CartStatus.Active",
+                "max": 1
+              },
+              {
+                "get": "CartItem",
+                "as": "FindCartItems",
+                "where": "CartItem.CartId = GetCart.List.Current.Cart.Id"
+              },
+              {
+                "foreach": "FindCartItems.List",
+                "as": "EachCartItem",
+                "do": [
+                  {
+                    "delete": "CartItem",
+                    "as": "DeleteCartItem",
+                    "id": "FindCartItems.List.Current.CartItem.Id"
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Cart_Get",
+            "kind": "server",
+            "public": true,
+            "description": "Consulta o carrinho ativo.",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "Cart",
+                "type": "Cart"
+              },
+              {
+                "name": "Found",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Cart",
+                "as": "GetCart",
+                "where": "Cart.UserId = GetUserId() and Cart.StatusId = Entities.CartStatus.Active",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "Cart": "GetCart.List.Current.Cart",
+                  "Found": "not GetCart.List.Empty"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Cart_Recalculate",
+            "kind": "server",
+            "public": true,
+            "description": "Recalcula preços e disponibilidade do carrinho.",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Cart",
+                "as": "GetCart",
+                "where": "Cart.UserId = GetUserId() and Cart.StatusId = Entities.CartStatus.Active",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "Success": "not GetCart.List.Empty"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Checkout_Validate",
+            "kind": "server",
+            "public": true,
+            "description": "Valida o carrinho antes do checkout.",
+            "inputs": [
+              {
+                "name": "CouponCode",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "IsValid",
+                "type": "Boolean"
+              },
+              {
+                "name": "CartId",
+                "type": "Cart Identifier"
+              },
+              {
+                "name": "Subtotal",
+                "type": "Currency"
+              },
+              {
+                "name": "DiscountTotal",
+                "type": "Currency"
+              },
+              {
+                "name": "TotalAmount",
+                "type": "Currency"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Cart",
+                "as": "GetCart",
+                "where": "Cart.UserId = GetUserId() and Cart.StatusId = Entities.CartStatus.Active",
+                "max": 1
+              },
+              {
+                "get": "CartItem",
+                "as": "FindCartItems",
+                "where": "CartItem.CartId = GetCart.List.Current.Cart.Id"
+              },
+              {
+                "assign": {
+                  "IsValid": "not GetCart.List.Empty and not FindCartItems.List.Empty",
+                  "CartId": "GetCart.List.Current.Cart.Id",
+                  "Subtotal": "0",
+                  "DiscountTotal": "0",
+                  "TotalAmount": "0"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Checkout_CreateOrder",
+            "kind": "server",
+            "public": true,
+            "description": "Cria um pedido a partir do carrinho.",
+            "inputs": [
+              {
+                "name": "CartId",
+                "type": "Cart Identifier"
+              },
+              {
+                "name": "CouponCode",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "BillingCountryCode",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "OrderId",
+                "type": "Order Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "R.UserId": "GetUserId()",
+                  "R.OrderNumber": "IntegerToText(CartId)",
+                  "R.StatusId": "Entities.OrderStatus.Created",
+                  "R.CurrencyCode": "\"BRL\"",
+                  "R.Subtotal": "0",
+                  "R.DiscountTotal": "0",
+                  "R.TaxTotal": "0",
+                  "R.TotalAmount": "0",
+                  "R.BillingCountryCode": "BillingCountryCode",
+                  "R.CreatedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "create": "Order",
+                "as": "CreateOrder",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "OrderId": "CreateOrder.Id",
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Order"
+              }
+            ]
+          },
+          {
+            "name": "Order_Get",
+            "kind": "server",
+            "public": true,
+            "description": "Consulta Order.",
+            "inputs": [
+              {
+                "name": "OrderId",
+                "type": "Order Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Order",
+                "type": "Order"
+              },
+              {
+                "name": "Found",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Order",
+                "as": "GetOrder",
+                "where": "Order.Id = OrderId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "Order": "GetOrder.List.Current.Order",
+                  "Found": "not GetOrder.List.Empty"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Order_ListMine",
+            "kind": "server",
+            "public": true,
+            "description": "Lista pedidos do usuário.",
+            "inputs": [
+              {
+                "name": "Page",
+                "type": "Integer"
+              },
+              {
+                "name": "PageSize",
+                "type": "Integer"
+              },
+              {
+                "name": "StatusId",
+                "type": "OrderStatus Identifier",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Orders",
+                "type": "Order List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Order",
+                "as": "FindOrders",
+                "where": "Order.UserId = GetUserId()"
+              },
+              {
+                "assign": {
+                  "Orders": "FindOrders.List",
+                  "TotalCount": "FindOrders.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Order_Cancel",
+            "kind": "server",
+            "public": true,
+            "description": "Cancela um pedido não pago.",
+            "inputs": [
+              {
+                "name": "OrderId",
+                "type": "Order Identifier"
+              },
+              {
+                "name": "Reason",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Order",
+                "as": "GetOrder",
+                "where": "Order.Id = OrderId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "R": "GetOrder.List.Current.Order",
+                  "R.StatusId": "Entities.OrderStatus.Cancelled"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "Order",
+                "as": "SaveOrder",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Order"
+              }
+            ]
+          },
+          {
+            "name": "Order_MarkPaid",
+            "kind": "server",
+            "public": true,
+            "description": "Confirma o pagamento de um pedido.",
+            "inputs": [
+              {
+                "name": "OrderId",
+                "type": "Order Identifier"
+              },
+              {
+                "name": "PaymentTransactionId",
+                "type": "PaymentTransaction Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Order",
+                "as": "GetOrder",
+                "where": "Order.Id = OrderId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "R": "GetOrder.List.Current.Order",
+                  "R.StatusId": "Entities.OrderStatus.Paid",
+                  "R.PaidOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "Order",
+                "as": "SaveOrder",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Order"
+              }
+            ]
+          },
+          {
+            "name": "Payment_CreateIntent",
+            "kind": "server",
+            "public": true,
+            "description": "Cria uma intenção de pagamento.",
+            "inputs": [
+              {
+                "name": "OrderId",
+                "type": "Order Identifier"
+              },
+              {
+                "name": "PaymentProvider",
+                "type": "Text"
+              },
+              {
+                "name": "PaymentMethodToken",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "PaymentTransactionId",
+                "type": "PaymentTransaction Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "R.OrderId": "OrderId",
+                  "R.ProviderName": "PaymentProvider",
+                  "R.PaymentMethodToken": "PaymentMethodToken",
+                  "R.StatusId": "Entities.PaymentStatus.Pending",
+                  "R.Amount": "0",
+                  "R.CurrencyCode": "\"BRL\"",
+                  "R.CreatedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "create": "PaymentTransaction",
+                "as": "CreatePaymentTransaction",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "PaymentTransactionId": "CreatePaymentTransaction.Id",
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "PaymentTransaction"
+              }
+            ]
+          },
+          {
+            "name": "Payment_HandleWebhook",
+            "kind": "server",
+            "public": true,
+            "description": "Processa um evento do provedor de pagamento.",
+            "inputs": [
+              {
+                "name": "ProviderName",
+                "type": "Text"
+              },
+              {
+                "name": "ProviderTransactionId",
+                "type": "Text"
+              },
+              {
+                "name": "EventType",
+                "type": "Text"
+              },
+              {
+                "name": "Payload",
+                "type": "Text"
+              },
+              {
+                "name": "Signature",
+                "type": "Text"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Processed",
+                "type": "Boolean"
+              },
+              {
+                "name": "OrderId",
+                "type": "Order Identifier"
+              }
+            ],
+            "steps": [
+              {
+                "get": "PaymentTransaction",
+                "as": "GetPayment",
+                "where": "PaymentTransaction.ProviderTransactionId = ProviderTransactionId",
+                "max": 1
+              },
+              {
+                "if": "EventType = \"payment.succeeded\"",
+                "as": "PaymentApproved",
+                "then": [
+                  {
+                    "assign": {
+                      "R": "GetPayment.List.Current.PaymentTransaction",
+                      "R.StatusId": "Entities.PaymentStatus.Approved",
+                      "R.ProcessedOn": "CurrDateTime()"
+                    },
+                    "as": "ApprovePayment"
+                  },
+                  {
+                    "save": "PaymentTransaction",
+                    "as": "SavePayment",
+                    "record": "R"
+                  },
+                  {
+                    "assign": {
+                      "Processed": "True",
+                      "OrderId": "GetPayment.List.Current.PaymentTransaction.OrderId"
+                    },
+                    "as": "SetApprovedPayment"
+                  }
+                ],
+                "else": [
+                  {
+                    "assign": {
+                      "Processed": "False",
+                      "OrderId": "GetPayment.List.Current.PaymentTransaction.OrderId"
+                    },
+                    "as": "SetUnchangedPayment"
+                  }
+                ]
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "PaymentTransaction"
+              }
+            ]
+          },
+          {
+            "name": "Payment_ReconcilePending",
+            "kind": "server",
+            "public": true,
+            "description": "Lista pagamentos pendentes para reconciliação.",
+            "inputs": [
+              {
+                "name": "OlderThanMinutes",
+                "type": "Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Payments",
+                "type": "PaymentTransaction List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "PaymentTransaction",
+                "as": "GetPayments",
+                "where": "PaymentTransaction.StatusId = Entities.PaymentStatus.Pending"
+              },
+              {
+                "assign": {
+                  "Payments": "GetPayments.List",
+                  "TotalCount": "GetPayments.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Refund_Request",
+            "kind": "server",
+            "public": true,
+            "description": "Solicita reembolso.",
+            "inputs": [
+              {
+                "name": "OrderId",
+                "type": "Order Identifier"
+              },
+              {
+                "name": "Reason",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "Amount",
+                "type": "Currency"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "RefundId",
+                "type": "Refund Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "R.OrderId": "OrderId",
+                  "R.Reason": "Reason",
+                  "R.Amount": "Amount",
+                  "R.StatusId": "Entities.RefundStatus.Requested",
+                  "R.RequestedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "create": "Refund",
+                "as": "CreateRefund",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "RefundId": "CreateRefund.Id",
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Refund"
+              }
+            ]
+          },
+          {
+            "name": "Refund_Approve",
+            "kind": "server",
+            "public": true,
+            "description": "Aprova uma solicitação de reembolso.",
+            "inputs": [
+              {
+                "name": "RefundId",
+                "type": "Refund Identifier"
+              },
+              {
+                "name": "ApprovalNote",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Refund",
+                "as": "GetRefund",
+                "where": "Refund.Id = RefundId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "R": "GetRefund.List.Current.Refund",
+                  "R.StatusId": "Entities.RefundStatus.Processing"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "Refund",
+                "as": "SaveRefund",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Refund"
+              }
+            ]
+          },
+          {
+            "name": "Refund_Process",
+            "kind": "server",
+            "public": true,
+            "description": "Conclui um reembolso.",
+            "inputs": [
+              {
+                "name": "RefundId",
+                "type": "Refund Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Refund",
+                "as": "GetRefund",
+                "where": "Refund.Id = RefundId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "R": "GetRefund.List.Current.Refund",
+                  "R.StatusId": "Entities.RefundStatus.Completed",
+                  "R.CompletedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "Refund",
+                "as": "SaveRefund",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Refund"
+              }
+            ]
+          },
+          {
+            "name": "Refund_HandleWebhook",
+            "kind": "server",
+            "public": true,
+            "description": "Processa a confirmação de reembolso.",
+            "inputs": [
+              {
+                "name": "RefundId",
+                "type": "Refund Identifier"
+              },
+              {
+                "name": "ProviderRefundId",
+                "type": "Text"
+              },
+              {
+                "name": "Payload",
+                "type": "Text"
+              },
+              {
+                "name": "Signature",
+                "type": "Text"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Refund",
+                "as": "GetRefund",
+                "where": "Refund.Id = RefundId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "R": "GetRefund.List.Current.Refund",
+                  "R.StatusId": "Entities.RefundStatus.Completed",
+                  "R.ProviderRefundId": "ProviderRefundId",
+                  "R.CompletedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "Refund",
+                "as": "SaveRefund",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Refund"
+              }
+            ]
+          },
+          {
+            "name": "License_GrantForOrder",
+            "kind": "server",
+            "public": true,
+            "description": "Concede uma licença para cada item de um pedido pago.",
+            "inputs": [
+              {
+                "name": "OrderId",
+                "type": "Order Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "GrantedCount",
+                "type": "Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Order",
+                "as": "GetOrder",
+                "where": "Order.Id = OrderId and Order.StatusId = Entities.OrderStatus.Paid",
+                "max": 1
+              },
+              {
+                "get": "OrderItem",
+                "as": "FindOrderItems",
+                "where": "OrderItem.OrderId = OrderId"
+              },
+              {
+                "foreach": "FindOrderItems.List",
+                "as": "EachOrderItem",
+                "do": [
+                  {
+                    "assign": {
+                      "R.UserId": "GetOrder.List.Current.Order.UserId",
+                      "R.OrderItemId": "FindOrderItems.List.Current.OrderItem.Id",
+                      "R.GameEditionId": "FindOrderItems.List.Current.OrderItem.GameEditionId",
+                      "R.StatusId": "Entities.LicenseStatus.Active",
+                      "R.GrantedOn": "CurrDateTime()"
+                    },
+                    "as": "BuildLicense"
+                  },
+                  {
+                    "create": "License",
+                    "as": "CreateLicense",
+                    "record": "R"
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "GrantedCount": "FindOrderItems.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "License"
+              }
+            ]
+          },
+          {
+            "name": "License_Get",
+            "kind": "server",
+            "public": true,
+            "description": "Consulta License.",
+            "inputs": [
+              {
+                "name": "LicenseId",
+                "type": "License Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "License",
+                "type": "License"
+              },
+              {
+                "name": "Found",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "License",
+                "as": "GetLicense",
+                "where": "License.Id = LicenseId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "License": "GetLicense.List.Current.License",
+                  "Found": "not GetLicense.List.Empty"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Library_ListMine",
+            "kind": "server",
+            "public": true,
+            "description": "Lista a biblioteca digital do usuário.",
+            "inputs": [
+              {
+                "name": "Page",
+                "type": "Integer"
+              },
+              {
+                "name": "PageSize",
+                "type": "Integer"
+              },
+              {
+                "name": "PlatformId",
+                "type": "Platform Identifier",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Licenses",
+                "type": "License List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "License",
+                "as": "GetLicenses",
+                "where": "License.UserId = GetUserId() and License.StatusId = Entities.LicenseStatus.Active"
+              },
+              {
+                "assign": {
+                  "Licenses": "GetLicenses.List",
+                  "TotalCount": "GetLicenses.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "License_ValidateAccess",
+            "kind": "server",
+            "public": true,
+            "description": "Valida se o usuário possui acesso a uma edição.",
+            "inputs": [
+              {
+                "name": "UserId",
+                "type": "User Identifier"
+              },
+              {
+                "name": "GameEditionId",
+                "type": "GameEdition Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "HasAccess",
+                "type": "Boolean"
+              },
+              {
+                "name": "LicenseId",
+                "type": "License Identifier"
+              }
+            ],
+            "steps": [
+              {
+                "get": "License",
+                "as": "GetAccess",
+                "where": "License.UserId = UserId and License.GameEditionId = GameEditionId and License.StatusId = Entities.LicenseStatus.Active",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "HasAccess": "not GetAccess.List.Empty",
+                  "LicenseId": "GetAccess.List.Current.License.Id"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Download_CreateGrant",
+            "kind": "server",
+            "public": true,
+            "description": "Cria autorização de download.",
+            "inputs": [
+              {
+                "name": "LicenseId",
+                "type": "License Identifier"
+              },
+              {
+                "name": "FileUrl",
+                "type": "Text"
+              },
+              {
+                "name": "FileVersion",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "DownloadGrantId",
+                "type": "DownloadGrant Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "R.LicenseId": "LicenseId",
+                  "R.FileUrl": "FileUrl",
+                  "R.FileVersion": "FileVersion",
+                  "R.DownloadCount": "0",
+                  "R.IsActive": "True"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "create": "DownloadGrant",
+                "as": "CreateDownloadGrant",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "DownloadGrantId": "CreateDownloadGrant.Id",
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "DownloadGrant"
+              }
+            ]
+          },
+          {
+            "name": "Download_Register",
+            "kind": "server",
+            "public": true,
+            "description": "Registra um download realizado.",
+            "inputs": [
+              {
+                "name": "DownloadGrantId",
+                "type": "DownloadGrant Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "DownloadGrant",
+                "as": "GetDownloadGrant",
+                "where": "DownloadGrant.Id = DownloadGrantId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "R": "GetDownloadGrant.List.Current.DownloadGrant",
+                  "R.DownloadCount": "R.DownloadCount + 1",
+                  "R.LastDownloadedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "DownloadGrant",
+                "as": "SaveDownloadGrant",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "DownloadGrant"
+              }
+            ]
+          },
+          {
+            "name": "License_Revoke",
+            "kind": "server",
+            "public": true,
+            "description": "Revoga uma licença.",
+            "inputs": [
+              {
+                "name": "LicenseId",
+                "type": "License Identifier"
+              },
+              {
+                "name": "Reason",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "License",
+                "as": "GetLicense",
+                "where": "License.Id = LicenseId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "R": "GetLicense.List.Current.License",
+                  "R.StatusId": "Entities.LicenseStatus.Revoked",
+                  "R.RevokedOn": "CurrDateTime()",
+                  "R.RevocationReason": "Reason"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "License",
+                "as": "SaveLicense",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "License"
+              }
+            ]
+          },
+          {
+            "name": "Wishlist_Add",
+            "kind": "server",
+            "public": true,
+            "description": "Adiciona um jogo à wishlist.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "NotifyOnPriceDrop",
+                "type": "Boolean"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "WishlistItemId",
+                "type": "WishlistItem Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "R.UserId": "GetUserId()",
+                  "R.GameId": "GameId",
+                  "R.NotifyOnPriceDrop": "NotifyOnPriceDrop",
+                  "R.AddedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "create": "WishlistItem",
+                "as": "CreateWishlistItem",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "WishlistItemId": "CreateWishlistItem.Id",
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "WishlistItem"
+              }
+            ]
+          },
+          {
+            "name": "Wishlist_Remove",
+            "kind": "server",
+            "public": true,
+            "description": "Remove um jogo da wishlist.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "WishlistItem",
+                "as": "GetWishlistItem",
+                "where": "WishlistItem.UserId = GetUserId() and WishlistItem.GameId = GameId",
+                "max": 1
+              },
+              {
+                "delete": "WishlistItem",
+                "as": "DeleteWishlistItem",
+                "id": "GetWishlistItem.List.Current.WishlistItem.Id"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Wishlist_ListMine",
+            "kind": "server",
+            "public": true,
+            "description": "Lista a wishlist do usuário.",
+            "inputs": [
+              {
+                "name": "Page",
+                "type": "Integer"
+              },
+              {
+                "name": "PageSize",
+                "type": "Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Items",
+                "type": "WishlistItem List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "WishlistItem",
+                "as": "FindWishlistItems",
+                "where": "WishlistItem.UserId = GetUserId() and WishlistItem.RemovedOn = NullDate()"
+              },
+              {
+                "assign": {
+                  "Items": "FindWishlistItems.List",
+                  "TotalCount": "FindWishlistItems.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Wishlist_CheckPriceDrops",
+            "kind": "server",
+            "public": true,
+            "description": "Localiza itens para monitoramento de preço.",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "Items",
+                "type": "WishlistItem List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "WishlistItem",
+                "as": "FindWishlistItems",
+                "where": "WishlistItem.NotifyOnPriceDrop = True and WishlistItem.RemovedOn = NullDate()"
+              },
+              {
+                "assign": {
+                  "Items": "FindWishlistItems.List",
+                  "TotalCount": "FindWishlistItems.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "GameReview_Create",
+            "kind": "server",
+            "public": true,
+            "description": "Cria uma avaliação pendente.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "OrderItemId",
+                "type": "OrderItem Identifier"
+              },
+              {
+                "name": "Rating",
+                "type": "Integer"
+              },
+              {
+                "name": "Title",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "Body",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "ReviewId",
+                "type": "GameReview Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "R.UserId": "GetUserId()",
+                  "R.GameId": "GameId",
+                  "R.OrderItemId": "OrderItemId",
+                  "R.Rating": "Rating",
+                  "R.Title": "Title",
+                  "R.Body": "Body",
+                  "R.StatusId": "Entities.ReviewStatus.Pending",
+                  "R.CreatedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "create": "GameReview",
+                "as": "CreateGameReview",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "ReviewId": "CreateGameReview.Id",
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "GameReview"
+              }
+            ]
+          },
+          {
+            "name": "GameReview_Update",
+            "kind": "server",
+            "public": true,
+            "description": "Edita uma avaliação e a envia para moderação.",
+            "inputs": [
+              {
+                "name": "ReviewId",
+                "type": "GameReview Identifier"
+              },
+              {
+                "name": "Rating",
+                "type": "Integer"
+              },
+              {
+                "name": "Title",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "Body",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GameReview",
+                "as": "GetGameReview",
+                "where": "GameReview.Id = ReviewId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "R": "GetGameReview.List.Current.GameReview",
+                  "R.Rating": "Rating",
+                  "R.Title": "Title",
+                  "R.Body": "Body",
+                  "R.StatusId": "Entities.ReviewStatus.Pending",
+                  "R.UpdatedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "GameReview",
+                "as": "SaveGameReview",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "GameReview"
+              }
+            ]
+          },
+          {
+            "name": "GameReview_Moderate",
+            "kind": "server",
+            "public": true,
+            "description": "Publica uma avaliação moderada.",
+            "inputs": [
+              {
+                "name": "ReviewId",
+                "type": "GameReview Identifier"
+              },
+              {
+                "name": "ModerationNote",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GameReview",
+                "as": "GetGameReview",
+                "where": "GameReview.Id = ReviewId",
+                "max": 1
+              },
+              {
+                "assign": {
+                  "R": "GetGameReview.List.Current.GameReview",
+                  "R.StatusId": "Entities.ReviewStatus.Published",
+                  "R.PublishedOn": "CurrDateTime()"
+                },
+                "as": "BuildRecord"
+              },
+              {
+                "save": "GameReview",
+                "as": "SaveGameReview",
+                "record": "R"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "GameReview"
+              }
+            ]
+          },
+          {
+            "name": "GameReview_List",
+            "kind": "server",
+            "public": true,
+            "description": "Lista avaliações publicadas.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              },
+              {
+                "name": "Page",
+                "type": "Integer"
+              },
+              {
+                "name": "PageSize",
+                "type": "Integer"
+              },
+              {
+                "name": "OnlyPublished",
+                "type": "Boolean"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Reviews",
+                "type": "GameReview List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "GameReview",
+                "as": "GetReviews",
+                "where": "GameReview.GameId = GameId and GameReview.StatusId = Entities.ReviewStatus.Published"
+              },
+              {
+                "assign": {
+                  "Reviews": "GetReviews.List",
+                  "TotalCount": "GetReviews.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "ReviewVote_Set",
+            "kind": "server",
+            "public": true,
+            "description": "Registra ou atualiza o voto de utilidade.",
+            "inputs": [
+              {
+                "name": "ReviewId",
+                "type": "GameReview Identifier"
+              },
+              {
+                "name": "IsHelpful",
+                "type": "Boolean"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "ReviewVoteId",
+                "type": "ReviewVote Identifier"
+              },
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "ReviewVote",
+                "as": "GetVote",
+                "where": "ReviewVote.ReviewId = ReviewId and ReviewVote.UserId = GetUserId()",
+                "max": 1
+              },
+              {
+                "if": "GetVote.List.Empty",
+                "as": "VoteMissing",
+                "then": [
+                  {
+                    "assign": {
+                      "R.ReviewId": "ReviewId",
+                      "R.UserId": "GetUserId()",
+                      "R.IsHelpful": "IsHelpful",
+                      "R.CreatedOn": "CurrDateTime()"
+                    },
+                    "as": "BuildVote"
+                  },
+                  {
+                    "create": "ReviewVote",
+                    "as": "CreateVote",
+                    "record": "R"
+                  },
+                  {
+                    "assign": {
+                      "ReviewVoteId": "CreateVote.Id",
+                      "Success": "True"
+                    },
+                    "as": "SetNewVote"
+                  }
+                ],
+                "else": [
+                  {
+                    "assign": {
+                      "R": "GetVote.List.Current.ReviewVote",
+                      "R.IsHelpful": "IsHelpful"
+                    },
+                    "as": "UpdateVote"
+                  },
+                  {
+                    "save": "ReviewVote",
+                    "as": "SaveVote",
+                    "record": "R"
+                  },
+                  {
+                    "assign": {
+                      "ReviewVoteId": "GetVote.List.Current.ReviewVote.Id",
+                      "Success": "True"
+                    },
+                    "as": "SetUpdatedVote"
+                  }
+                ]
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "ReviewVote"
+              }
+            ]
+          },
+          {
+            "name": "ReviewVote_Remove",
+            "kind": "server",
+            "public": true,
+            "description": "Remove o voto do usuário.",
+            "inputs": [
+              {
+                "name": "ReviewId",
+                "type": "GameReview Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Success",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "get": "ReviewVote",
+                "as": "GetVote",
+                "where": "ReviewVote.ReviewId = ReviewId and ReviewVote.UserId = GetUserId()",
+                "max": 1
+              },
+              {
+                "delete": "ReviewVote",
+                "as": "DeleteVote",
+                "id": "GetVote.List.Current.ReviewVote.Id"
+              },
+              {
+                "assign": {
+                  "Success": "True"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Admin_GetSalesDashboard",
+            "kind": "server",
+            "public": true,
+            "description": "Obtém métricas básicas de vendas e reembolsos.",
+            "inputs": [
+              {
+                "name": "StartDate",
+                "type": "Date Time"
+              },
+              {
+                "name": "EndDate",
+                "type": "Date Time"
+              },
+              {
+                "name": "PlatformId",
+                "type": "Platform Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "GameId",
+                "type": "Game Identifier",
+                "mandatory": false
+              }
+            ],
+            "outputs": [
+              {
+                "name": "PaidOrderCount",
+                "type": "Long Integer"
+              },
+              {
+                "name": "Revenue",
+                "type": "Currency"
+              },
+              {
+                "name": "RefundCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Order",
+                "as": "GetPaidOrders",
+                "where": "Order.StatusId = Entities.OrderStatus.Paid and Order.CreatedOn >= StartDate and Order.CreatedOn <= EndDate"
+              },
+              {
+                "get": "Refund",
+                "as": "GetRefunds",
+                "where": "Refund.RequestedOn >= StartDate and Refund.RequestedOn <= EndDate"
+              },
+              {
+                "assign": {
+                  "PaidOrderCount": "GetPaidOrders.List.Length",
+                  "Revenue": "0",
+                  "RefundCount": "GetRefunds.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Admin_GetTopGames",
+            "kind": "server",
+            "public": true,
+            "description": "Lista itens vendidos para ranking administrativo.",
+            "inputs": [
+              {
+                "name": "StartDate",
+                "type": "Date Time"
+              },
+              {
+                "name": "EndDate",
+                "type": "Date Time"
+              },
+              {
+                "name": "Limit",
+                "type": "Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Items",
+                "type": "OrderItem List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "OrderItem",
+                "as": "FindSoldItems",
+                "where": "OrderItem.CreatedOn >= StartDate and OrderItem.CreatedOn <= EndDate"
+              },
+              {
+                "assign": {
+                  "Items": "FindSoldItems.List",
+                  "TotalCount": "FindSoldItems.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Admin_GetCustomerLibrary",
+            "kind": "server",
+            "public": true,
+            "description": "Consulta a biblioteca de um cliente.",
+            "inputs": [
+              {
+                "name": "UserId",
+                "type": "User Identifier"
+              },
+              {
+                "name": "Page",
+                "type": "Integer"
+              },
+              {
+                "name": "PageSize",
+                "type": "Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Licenses",
+                "type": "License List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "License",
+                "as": "GetLicenses",
+                "where": "License.UserId = UserId and License.StatusId = Entities.LicenseStatus.Active"
+              },
+              {
+                "assign": {
+                  "Licenses": "GetLicenses.List",
+                  "TotalCount": "GetLicenses.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Cart_Expire",
+            "kind": "server",
+            "public": true,
+            "description": "Expira carrinhos antigos.",
+            "inputs": [
+              {
+                "name": "OlderThanDays",
+                "type": "Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "ExpiredCount",
+                "type": "Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Cart",
+                "as": "GetExpiredCarts",
+                "where": "Cart.StatusId = Entities.CartStatus.Active and Cart.ExpiresOn < CurrDateTime()"
+              },
+              {
+                "foreach": "GetExpiredCarts.List",
+                "as": "EachExpiredCart",
+                "do": [
+                  {
+                    "assign": {
+                      "R": "GetExpiredCarts.List.Current.Cart",
+                      "R.StatusId": "Entities.CartStatus.Expired"
+                    },
+                    "as": "ExpireCart"
+                  },
+                  {
+                    "save": "Cart",
+                    "as": "SaveExpiredCart",
+                    "record": "R"
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "ExpiredCount": "GetExpiredCarts.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Cart"
+              }
+            ]
+          },
+          {
+            "name": "Promotion_Expire",
+            "kind": "server",
+            "public": true,
+            "description": "Desativa promoções vencidas.",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "UpdatedCount",
+                "type": "Integer"
+              }
+            ],
+            "steps": [
+              {
+                "get": "Promotion",
+                "as": "GetExpiredPromotions",
+                "where": "Promotion.IsActive = True and Promotion.EndsOn < CurrDateTime()"
+              },
+              {
+                "foreach": "GetExpiredPromotions.List",
+                "as": "EachExpiredPromotion",
+                "do": [
+                  {
+                    "assign": {
+                      "R": "GetExpiredPromotions.List.Current.Promotion",
+                      "R.IsActive": "False"
+                    },
+                    "as": "ExpirePromotion"
+                  },
+                  {
+                    "save": "Promotion",
+                    "as": "SaveExpiredPromotion",
+                    "record": "R"
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "UpdatedCount": "GetExpiredPromotions.List.Length"
+                },
+                "as": "SetOutput"
+              }
+            ],
+            "vars": [
+              {
+                "name": "R",
+                "type": "Promotion"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "logic",
+      "data": {
+        "actions": [
+          {
+            "name": "Catalog_GetPublishedGame",
+            "kind": "service",
+            "public": true,
+            "description": "Expõe detalhes públicos de um jogo.",
+            "inputs": [
+              {
+                "name": "GameId",
+                "type": "Game Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Game",
+                "type": "Game"
+              },
+              {
+                "name": "Found",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "call": "Game_Get",
+                "as": "Get",
+                "args": {
+                  "GameId": "GameId"
+                }
+              },
+              {
+                "assign": {
+                  "Game": "Get.Game",
+                  "Found": "Get.Found"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Catalog_SearchPublishedGames",
+            "kind": "service",
+            "public": true,
+            "description": "Expõe a pesquisa pública do catálogo.",
+            "inputs": [
+              {
+                "name": "SearchText",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "GenreId",
+                "type": "Genre Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "PlatformId",
+                "type": "Platform Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "AgeRatingId",
+                "type": "AgeRating Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "Page",
+                "type": "Integer"
+              },
+              {
+                "name": "PageSize",
+                "type": "Integer"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Games",
+                "type": "Game List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "steps": [
+              {
+                "call": "Game_Search",
+                "as": "Search",
+                "args": {
+                  "SearchText": "SearchText",
+                  "GenreId": "GenreId",
+                  "PlatformId": "PlatformId",
+                  "AgeRatingId": "AgeRatingId",
+                  "Page": "Page",
+                  "PageSize": "PageSize"
+                }
+              },
+              {
+                "assign": {
+                  "Games": "Search.Games",
+                  "TotalCount": "Search.TotalCount"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Payment_ReceiveWebhook",
+            "kind": "service",
+            "public": true,
+            "description": "Recebe webhook de pagamento.",
+            "inputs": [
+              {
+                "name": "ProviderName",
+                "type": "Text"
+              },
+              {
+                "name": "ProviderTransactionId",
+                "type": "Text"
+              },
+              {
+                "name": "EventType",
+                "type": "Text"
+              },
+              {
+                "name": "Payload",
+                "type": "Text"
+              },
+              {
+                "name": "Signature",
+                "type": "Text"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Processed",
+                "type": "Boolean"
+              },
+              {
+                "name": "OrderId",
+                "type": "Order Identifier"
+              }
+            ],
+            "steps": [
+              {
+                "call": "Payment_HandleWebhook",
+                "as": "Webhook",
+                "args": {
+                  "ProviderName": "ProviderName",
+                  "ProviderTransactionId": "ProviderTransactionId",
+                  "EventType": "EventType",
+                  "Payload": "Payload",
+                  "Signature": "Signature"
+                }
+              },
+              {
+                "assign": {
+                  "Processed": "Webhook.Processed",
+                  "OrderId": "Webhook.OrderId"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "License_ValidateExternalAccess",
+            "kind": "service",
+            "public": true,
+            "description": "Valida acesso para launcher ou cliente externo.",
+            "inputs": [
+              {
+                "name": "UserId",
+                "type": "User Identifier"
+              },
+              {
+                "name": "GameEditionId",
+                "type": "GameEdition Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "HasAccess",
+                "type": "Boolean"
+              },
+              {
+                "name": "LicenseId",
+                "type": "License Identifier"
+              }
+            ],
+            "steps": [
+              {
+                "call": "License_ValidateAccess",
+                "as": "Access",
+                "args": {
+                  "UserId": "UserId",
+                  "GameEditionId": "GameEditionId"
+                }
+              },
+              {
+                "assign": {
+                  "HasAccess": "Access.HasAccess",
+                  "LicenseId": "Access.LicenseId"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          },
+          {
+            "name": "Order_GetReceipt",
+            "kind": "service",
+            "public": true,
+            "description": "Expõe um pedido autorizado para recibos.",
+            "inputs": [
+              {
+                "name": "OrderId",
+                "type": "Order Identifier"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Order",
+                "type": "Order"
+              },
+              {
+                "name": "Found",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "call": "Order_Get",
+                "as": "Receipt",
+                "args": {
+                  "OrderId": "OrderId"
+                }
+              },
+              {
+                "assign": {
+                  "Order": "Receipt.Order",
+                  "Found": "Receipt.Found"
+                },
+                "as": "SetOutput"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "find",
+      "name": "Game"
+    },
+    {
+      "op": "find",
+      "name": "Game_Create"
+    },
+    {
+      "op": "find",
+      "name": "Checkout_CreateOrder"
+    },
+    {
+      "op": "find",
+      "name": "License_GrantForOrder"
+    },
+    {
+      "op": "find",
+      "name": "Catalog_GetPublishedGame"
+    }
+  ]
+}
