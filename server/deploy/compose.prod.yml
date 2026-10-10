@@ -1,0 +1,171 @@
+# Production deploy of the SSAM hosted server on one Linux VPS with Docker Compose. Owned by the SSAM-MCP monorepo: it
+# does not come from the server line (the development compose is ../docker-compose.yml, with the ngrok tunnel).
+# Runbook in pt-BR: DEPLOY.md, in this folder.
+#
+#   ssam-server  the image of ../Dockerfile. No host port: only on the internal network `backend`, which has no route out
+#                (every operation on a customer's tenant or Studio goes through that customer's agent, which connects in).
+#   caddy        the only service with host ports (80/443): automatic HTTPS for ${SSAM_DOMAIN} and the reverse proxy to
+#                ssam-server:7310, without buffering (SSE on /mcp, NDJSON on /agent/v1/stream).
+#   ssam-admin   profile admin: issue, list, revoke and rotate tokens (state volume only, no network).
+#   ssam-ops     profile ops: backup.sh, restore.sh and file drops into the state volumes (no network, read-only).
+#
+# Every command runs from this folder, with the .env made from .env.prod.example:
+#   docker compose -f compose.prod.yml build ssam-server       # or pull the tag from the private registry
+#   docker compose -f compose.prod.yml up -d
+#   docker compose -f compose.prod.yml run --rm ssam-admin server-token issue --customer "Nome" --days 30 --lanes odc,o11
+
+name: ssam-prod
+
+x-hardening: &hardening
+  init: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
+
+services:
+  ssam-server:
+    <<: *hardening
+    image: ${SSAM_IMAGE:-ssam-server}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG in .env (for example prod-20261010-acea75a)}
+    # Built and proven for linux/amd64 only.
+    platform: linux/amd64
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      additional_contexts:
+        installers: ${STUDIO_INSTALLERS_DIR:-../docker/installers}
+      # Same names and defaults as ../Dockerfile; empty means "none". The Dockerfile refuses a Studio input without a
+      # pinned SHA256 (the bundles' come from studio-bundle.ps1).
+      args:
+        SERVICE_STUDIO_INSTALLER: ${SERVICE_STUDIO_INSTALLER:-ServiceStudio-11.55.91.65258.exe}
+        SERVICE_STUDIO_SHA256: ${SERVICE_STUDIO_SHA256:-10047d31a03adbbe6bd3a07c9de0506eeba3420e7031e51846607ee3fcde136c}
+        SERVICE_STUDIO_URL: ${SERVICE_STUDIO_URL:-}
+        SERVICE_STUDIO_BUNDLE: ${SERVICE_STUDIO_BUNDLE:-o11-studio-11.55.91.65258.tar.gz}
+        SERVICE_STUDIO_BUNDLE_SHA256: ${SERVICE_STUDIO_BUNDLE_SHA256:-}
+        ODC_STUDIO_INSTALLER: ${ODC_STUDIO_INSTALLER:-ODCStudio-1.7.27.10846.exe}
+        ODC_STUDIO_SHA256: ${ODC_STUDIO_SHA256:-}
+        ODC_STUDIO_URL: ${ODC_STUDIO_URL:-}
+        ODC_STUDIO_BUNDLE: ${ODC_STUDIO_BUNDLE:-odc-studio-1.7.27.10846.tar.gz}
+        ODC_STUDIO_BUNDLE_SHA256: ${ODC_STUDIO_BUNDLE_SHA256:-}
+        STUDIO_EXTRACTOR: ${STUDIO_EXTRACTOR:-nsis}
+        SSAM_VERSION: ${SSAM_IMAGE_TAG}
+        VCS_REF: ${SSAM_VCS_REF:-unknown}
+        BUILD_DATE: ${SSAM_BUILD_DATE:-unknown}
+    restart: unless-stopped
+    environment:
+      SSAM_PORT: "7310"
+      # The public host name: --public-host of `ssam serve` (Origin https://<domain> accepted from browsers).
+      SSAM_PUBLIC_HOST: ${SSAM_DOMAIN:?set SSAM_DOMAIN in .env (the DNS name of this VPS, e.g. ssam.example.com)}
+      SSAM_SERVER_RATE_PER_MINUTE: ${SSAM_RATE_PER_MINUTE:-240}
+      # The build pool (one resident O11 and ODC worker per slot). Set it explicitly: inside a container the default
+      # min(4, cores - 1) counts the host's cores, not the CPU limit below.
+      SSAM_BUILD_WORKERS: ${SSAM_BUILD_WORKERS:-2}
+    volumes:
+      - server-state:/data/server
+      - friction:/data/friction
+      - odc-features:/data/odc-features
+    expose:
+      - "7310"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7310/health',{signal:AbortSignal.timeout(4000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    # SIGTERM closes the sessions and the agent channels before node exits.
+    stop_grace_period: 30s
+    # Not read_only: the server line keeps runtime caches inside its own tree (/app/.local, /app/platforms/odc/.local)
+    # and writes the resident workers' locks and logs next to the compiled kernel CLIs (/app/kernel/.local). The image
+    # lets uid 10001 write only there, in /tmp and in the volumes; the rest of /app and /studio is root's (../Dockerfile).
+    read_only: false
+    deploy:
+      resources:
+        limits:
+          cpus: "${SSAM_CPUS:-2}"
+          memory: ${SSAM_MEMORY:-6g}
+          pids: ${SSAM_PIDS:-4096}
+
+  caddy:
+    <<: *hardening
+    image: caddy:2.11.7-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f
+    restart: unless-stopped
+    # Started, not healthy: Caddy gets the certificate while the server warms up (502 until it answers).
+    depends_on:
+      ssam-server:
+        condition: service_started
+    # SSAM_HTTP_PORT / SSAM_HTTPS_PORT may carry the address too (127.0.0.1:28443 for a local rehearsal).
+    ports:
+      - "${SSAM_HTTP_PORT:-80}:80"
+      - "${SSAM_HTTPS_PORT:-443}:443"
+    environment:
+      SSAM_DOMAIN: ${SSAM_DOMAIN:?set SSAM_DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env (contact of the ACME account)}
+      SSAM_ACME_CA: ${SSAM_ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    cap_add:
+      - NET_BIND_SERVICE
+    networks:
+      - edge
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 256m
+          pids: 256
+
+  # Token administration on demand: issue, list, revoke, agent-rotate. The plaintext token and agent credential are shown
+  # once; the volume keeps only their SHA-256. tokens.json is re-read by the running server at the next request.
+  ssam-admin:
+    <<: *hardening
+    image: ${SSAM_IMAGE:-ssam-server}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG in .env}
+    platform: linux/amd64
+    profiles: [admin]
+    entrypoint: ["node", "facade/ssam.mjs"]
+    command: ["server-token", "list"]
+    network_mode: none
+    volumes:
+      - server-state:/data/server
+
+  # Backup, restore and file drops (kernel.json, Features.xml) into the state volumes, as uid 10001 like the server.
+  ssam-ops:
+    <<: *hardening
+    image: ${SSAM_IMAGE:-ssam-server}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG in .env}
+    platform: linux/amd64
+    profiles: [ops]
+    command: ["sh", "-c", "du -sh /data/server /data/friction /data/odc-features"]
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    volumes:
+      - server-state:/data/server
+      - friction:/data/friction
+      - odc-features:/data/odc-features
+
+volumes:
+  server-state:
+  friction:
+  odc-features:
+  caddy-data:
+  caddy-config:
+
+networks:
+  # Caddy's way in and out (published ports, ACME).
+  edge:
+  # ssam-server <-> caddy only; internal: no route to the internet.
+  backend:
+    internal: true

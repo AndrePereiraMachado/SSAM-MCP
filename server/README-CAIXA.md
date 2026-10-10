@@ -5,6 +5,16 @@ painel do dono. Cópia de `servidor/fase4` (`e7b2119b`) de `C:\Users\andre\SSAM-
 atualizada para `servidor/fase4-22` (`1fbfa377`, 22º envio).
 Esta pasta é a raiz do repositório antigo: caminhos relativos, Dockerfile e compose funcionam daqui.
 
+Arquivos do SSAM-MCP nesta caixa, que **não vêm da linha do servidor**:
+
+- este `README-CAIXA.md`;
+- `Dockerfile`: a imagem de produção, derivada de `docker/ssam-server/Dockerfile`;
+- `deploy/`: compose de produção, Caddyfile, `.env.prod.example`, `backup.sh`, `restore.sh` e o runbook `deploy/DEPLOY.md`.
+
+Há uma exceção à regra de não editar arquivos copiados: o `.dockerignore` ganhou no fim um bloco marcado "added by the
+SSAM-MCP monorepo". Ele tira da imagem o `Dockerfile`, o `deploy/` e as cópias de estado (`ssam-state-*.tar.gz`). As
+regras anteriores e a guarda de nomes de cliente continuam iguais.
+
 O servidor no ar continua rodando do original (`SSAM-Hybrid-servidor-wt\fase4-22`, porta 7310). Não use essa porta para testar esta cópia.
 
 ## Compilar
@@ -41,7 +51,18 @@ dotnet test platforms/odc/studio/builder/tests/Builder.Tests.csproj -c Release -
 Em 2026-10-10: 154 de 163 passam. O `hosted-e2e` pula (o agente está na outra caixa). As 8 falhas vêm da falta de
 `platforms/odc/tenants.json`, que é dado do dono e ficou de fora. Builder.Tests 7/7.
 
-## Deploy
+## Deploy de produção (SSAM-MCP)
+
+VPS Linux com Docker Compose, HTTPS automático pelo Caddy e servidor sem porta no host: siga `deploy/DEPLOY.md`.
+
+- A imagem é a do `Dockerfile` desta pasta. As imagens base são fixadas por tag e digest, roda com uid 10001 e o
+  código pertence ao root.
+- O build recusa Studio sem SHA256 fixado.
+- Os arquivos de deploy são `deploy/compose.prod.yml` (serviços `ssam-server`, `caddy`, `ssam-admin` e `ssam-ops`),
+  `deploy/Caddyfile`, `deploy/.env.prod.example`, `deploy/backup.sh` e `deploy/restore.sh`.
+- Ainda não foi construída nem provada: os bundles dos Studios não estão no repositório.
+
+## Deploy de desenvolvimento (linha do servidor: `docker/ssam-server/Dockerfile` e `docker-compose.yml` com ngrok)
 
 1. Instaladores ou bundles dos Studios em `docker/installers` (veja o README de lá).
 2. `.env` a partir de `.env.example` (`NGROK_DOMAIN`, `NGROK_AUTHTOKEN`).
@@ -51,5 +72,13 @@ Em 2026-10-10: 154 de 163 passam. O `hosted-e2e` pula (o agente está na outra c
 6. `Features.xml` do ODC Studio em `/data/odc-features/`.
 7. Tokens: `docker compose run --rm ssam-admin server-token issue ...`.
 
-Pendências: Docker ainda não provado; `kernel/Anvil.slnx` lista a bridge fina (que está na caixa agent); os `.mcp.json`
-apontam para `C:\Users\andre\SSAM-Hybrid` (rode `node scripts/configure-mcp.mjs`). Detalhes no `README.md` da raiz.
+Pendências:
+
+- O Docker ainda não foi provado.
+- O Dockerfile de desenvolvimento instala `platforms/odc` com `--prod` e deixa de fora `@modelcontextprotocol/client`.
+  Esse pacote é uma devDependency que o servidor importa ao criar cada sessão, então nenhuma sessão MCP abriria. O de
+  produção já instala o pacote.
+- `kernel/Anvil.slnx` lista a bridge fina, que está na caixa agent.
+- Os `.mcp.json` apontam para `C:\Users\andre\SSAM-Hybrid` (rode `node scripts/configure-mcp.mjs`).
+
+Detalhes no `README.md` da raiz.

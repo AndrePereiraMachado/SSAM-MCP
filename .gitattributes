@@ -6,3 +6,7 @@
 
 docker-compose.yml text eol=lf
 .env.example text eol=lf
+
+# Production image of the server box (SSAM-MCP's own): read by BuildKit, LF on every checkout. server/deploy has its own
+# .gitattributes (LF for everything there).
+server/Dockerfile text eol=lf

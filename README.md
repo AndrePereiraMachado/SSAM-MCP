@@ -15,10 +15,15 @@ Os arquivos que existem nas duas caixas estão em [`SHARED.md`](SHARED.md), com 
 - Branch: `servidor/fase4`.
 - Commit: `e7b2119b9287eaaa1f2c95b8510f950feac175f2`.
 - Copiado em 2026-10-10 com `git archive` (só arquivos versionados). Nada de `.local`, tokens, `.env` ou dados de clientes.
-- Nenhum arquivo copiado foi editado. Os bytes são os da revisão.
+- Nenhum arquivo copiado foi editado: os bytes são os da revisão. A única exceção é `server/.dockerignore`, que ganhou
+  no fim o bloco do deploy de produção (veja "Deploy de produção").
+- São do SSAM-MCP, e não vêm da linha do servidor:
+  - `server/README-CAIXA.md`;
+  - `server/Dockerfile` (imagem de produção);
+  - `server/deploy/` (compose de produção, Caddy, backup e o runbook `DEPLOY.md`).
 - Cada caixa guarda o caminho relativo original. A raiz da caixa é a raiz do repositório antigo. Por isso os links dos
   `.csproj` (`../../../../kernel/...`), os imports `../platforms/odc/facade` e os scripts funcionam sem mudança.
-- Contagem: `server/` 5155 arquivos, `agent/` 125, 68 nas duas.
+- Contagem: `server/` 5155 arquivos, `agent/` 125, 68 nas duas. É a contagem da cópia, sem os arquivos do SSAM-MCP.
 - Atualizado em 2026-10-10 para o 22º envio: `servidor/fase4-22` (`1fbfa377e243cbd3262000089a70456eed623882`), a
   revisão que está no ar. Entraram em `server/` os 68 arquivos de `e7b2119b..1fbfa377` (53 alterados, 15 novos),
   com os bytes da revisão. Ficaram fora, pela mesma regra da cópia: os overlays de `scripts/release` e
@@ -78,7 +83,25 @@ node scripts/dashboard.mjs --dir <pasta de estado> --port 7320
 Primeiro plano: `node facade/ssam.mjs serve --port <porta> --log-file <pasta de estado>\server.log`.
 `SSAM_NO_WARM=1` desliga o warm. `SSAM_BUILD_WORKERS` ajusta o pool.
 
-### Deploy com Docker
+### Deploy de produção (do SSAM-MCP)
+
+Para uma VPS Linux com Docker Compose, siga [`server/deploy/DEPLOY.md`](server/deploy/DEPLOY.md). Esses arquivos são do
+SSAM-MCP e não vêm da linha do servidor.
+
+- `server/Dockerfile`: imagem de produção, com contexto `server/`.
+  - Deriva do Dockerfile de desenvolvimento e usa os mesmos scripts de `docker/ssam-server`.
+  - Imagens base fixadas por tag e digest; o build recusa Studio sem SHA256 fixado.
+  - Roda com uid 10001, com o código pertencendo ao root, `HEALTHCHECK` em `/health` e rótulos OCI.
+- `server/deploy/compose.prod.yml`:
+  - `ssam-server` sem porta no host, numa rede interna sem saída para a internet;
+  - `caddy` em 80/443 com HTTPS automático e proxy sem buffer;
+  - `ssam-admin` (tokens) e `ssam-ops` (backup e restore).
+- `server/deploy/Caddyfile`, `.env.prod.example`, `backup.sh`, `restore.sh` e `DEPLOY.md`.
+- O `.dockerignore` tira tudo isso da imagem, mais as cópias de estado `ssam-state-*.tar.gz`.
+
+Ainda não foi construída nem provada: os bundles dos Studios não estão no repositório.
+
+### Deploy com Docker (desenvolvimento, linha do servidor: túnel ngrok)
 
 1. Coloque em `docker/installers` o instalador oficial ou o studio bundle de cada Studio (veja `docker/installers/README.md`).
    São binários OutSystems: guarde num registro privado.
@@ -196,7 +219,11 @@ Caixa agent:
 
 ## O que falta para o deploy
 
-- O build Docker e o runtime Linux ainda não foram provados, nem no original.
+- O build Docker e o runtime Linux ainda não foram provados, nem no original. Isso vale também para a imagem de
+  produção (`server/Dockerfile`).
+- O Dockerfile de desenvolvimento instala `platforms/odc` com `--prod` e deixa de fora `@modelcontextprotocol/client`.
+  Esse pacote é uma devDependency que `createSsamServer` importa, então nenhuma sessão MCP abriria. O de produção já
+  instala o pacote. A correção na origem é a linha do servidor mover o pacote para `dependencies`.
 - `server/kernel/Anvil.slnx` ainda lista `Anvil.Bridge.Thin` e `Anvil.Bridge.Thin.Tests`. Compile os projetos um a um.
 - Os `.mcp.json` versionados apontam para `C:\Users\andre\SSAM-Hybrid`. Regenere com `node scripts/configure-mcp.mjs`.
 - O modo local (`--local-studios`) e 8 testes precisam de um `platforms/odc/tenants.json`. O modo hospedado não precisa.

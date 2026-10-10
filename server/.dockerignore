@@ -112,3 +112,11 @@ platforms/odc/studio/builder/features
 !.env.example
 # the Studio installers come in through their own build context (installers), read by the studio-* stages only
 docker/installers
+
+# ---- added by the SSAM-MCP monorepo (not from the server line): its production image and deploy run outside the image.
+# Dockerfile (production) and deploy/ (compose, Caddyfile, runbook, backup scripts, and the operator's .env and any
+# archive left there); state archives of deploy/backup.sh anywhere in the tree (customer data and customer names).
+Dockerfile
+deploy
+**/ssam-state-*.tar.gz
+**/ssam-state-*.tar.gz.*

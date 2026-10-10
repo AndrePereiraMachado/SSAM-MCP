@@ -1,0 +1,2 @@
+# The production deploy runs on Linux (sh scripts, Caddyfile, compose, .env): LF on every checkout, Windows included.
+* text eol=lf

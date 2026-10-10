@@ -1,0 +1,70 @@
+# Caddy in front of the SSAM hosted server (compose.prod.yml; runbook DEPLOY.md). Owned by the SSAM-MCP monorepo.
+#
+# What the server needs from its proxy (platforms/odc/facade/http-server.mjs and agent-hub.mjs):
+#   - no buffering: /mcp answers in SSE (a ": keepalive" every 25 s while a call runs) and the agent keeps a long
+#     GET /agent/v1/stream open in NDJSON (a ping every 15 s). Caddy already flushes SSE and responses without
+#     Content-Length at once; flush_interval -1 makes it explicit for every response;
+#   - long calls: an o11_deliver can take 60 min (docs/SERVIDOR-HTTPS.md), hence the 65 min transport timeouts. The
+#     keepalive and the ping keep bytes flowing well inside them; they only cut an upstream that went silent. No
+#     read_body or write timeout on the server side: either one would cut those streams;
+#   - Host and Origin: the server runs with --allow-remote (any Host) and --public-host ${SSAM_DOMAIN}, so the browser
+#     Origin https://${SSAM_DOMAIN} is accepted. Caddy passes Host and Origin through unchanged;
+#   - X-Forwarded-For: Caddy replaces what an untrusted client sent with the client's address (no trusted_proxies here),
+#     so the first hop the server logs (session-opened, agent-connected) is the real client. Put a CDN in front only
+#     with its ranges in trusted_proxies;
+#   - bodies: 16 MiB per MCP request, 4 MiB per agent file part; Caddy cuts at 20 MB, the server answers 413 below that.
+# Caddy redacts the Authorization header in its access log by default; the log goes to stdout (docker json-file, rotated).
+{
+	email {$ACME_EMAIL}
+	acme_ca {$SSAM_ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
+	servers {
+		# No HTTP/3: compose publishes TCP only.
+		protocols h1 h2
+		timeouts {
+			read_header 30s
+			idle 5m
+		}
+	}
+}
+
+{$SSAM_DOMAIN} {
+	request_body {
+		max_size 20MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+		Cross-Origin-Resource-Policy "same-origin"
+		-Server
+	}
+
+	# Only what the server serves: the MCP endpoint, the agent channel and the health check (no token, {"ok":true,...}).
+	@ssam path /mcp /agent /agent/* /health
+	handle @ssam {
+		reverse_proxy ssam-server:7310 {
+			flush_interval -1
+			# A server restarting (upgrade, rollback): wait for it instead of answering 502 at once.
+			lb_try_duration 15s
+			lb_try_interval 500ms
+			transport http {
+				dial_timeout 5s
+				response_header_timeout 65m
+				read_timeout 65m
+				write_timeout 65m
+				keepalive 2m
+			}
+		}
+	}
+	handle {
+		respond 404
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

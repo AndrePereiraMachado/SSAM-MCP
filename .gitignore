@@ -22,3 +22,6 @@
 **/*.credentials.json
 **/tokens.json
 **/.ssam-local.json
+
+# Cópias de estado do servidor (server/deploy/backup.sh): dados e nomes de clientes
+**/ssam-state-*.tar.gz*
