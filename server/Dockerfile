@@ -206,8 +206,22 @@ COPY --from=builder-odc /out/ /app/
 #   /app/kernel/.local, /app/kernel/.local/lane-odc     locks, logs and work folders of the resident kernel workers, which the
 #                                                       server line writes NEXT TO the compiled CLIs: root:ssam 1770 (sticky),
 #                                                       so ssam adds files there but can neither replace nor rename the CLIs
-# Because of the last two lines the container cannot run with a read-only root filesystem (deploy/compose.prod.yml).
+#   /app/.local/authority (0700)                        ANVIL_AUTHORITY_DIR (below): the server's own trusted-controller key
+#                                                       (bridge.key) of its resident ODC worker, builder and readers. Hosted
+#                                                       child processes never get it: hostedSpawnEnv gives each customer
+#                                                       <workspace>/state/relay-authority. Without the variable the kernel
+#                                                       (.NET: LocalApplicationData, "" while ~/.local/share does not exist)
+#                                                       and the facade (JS: $HOME/AppData/Local) disagree on the folder and
+#                                                       the ODC worker dies at start on /app/kernel/Anvil (seen in the first
+#                                                       rehearsal: warm "worker startup failed").
+# Because of the last lines the container cannot run with a read-only root filesystem (deploy/compose.prod.yml).
+# platforms/odc/studio/builder/features stays an EMPTY root-owned folder: .dockerignore keeps the builder's features out
+# (owner's lab, client app logic), so Builder.csproj's `features\*.cs` compiled nothing; without the folder lib.mjs
+# builderNeedsBuild() takes the builder for stale (missing glob folder), the warm skips the resident builder and a
+# hosted call that needs it answers COMPONENT_STALE.
 RUN install -d -o ssam -g ssam -m 0750 /data/server /data/friction /data/odc-features /app/.local /app/platforms/odc/.local \
+ && install -d -o ssam -g ssam -m 0700 /app/.local/authority \
+ && install -d -m 0755 /app/platforms/odc/studio/builder/features \
  && chown root:ssam /app/kernel/.local /app/kernel/.local/lane-odc \
  && chmod 1770 /app/kernel/.local /app/kernel/.local/lane-odc
 
@@ -222,6 +236,7 @@ ENV HOME=/tmp \
     ANVIL_STUDIO_DIR=/studio/o11 \
     ANVIL_ODC_STUDIO_DIR=/studio/odc \
     ANVIL_ODC_FEATURES_DIR=/data/odc-features \
+    ANVIL_AUTHORITY_DIR=/app/.local/authority \
     SSAM_NODE=/usr/local/bin/node \
     DOTNET_CLI_TELEMETRY_OPTOUT=1 \
     DOTNET_NOLOGO=1 \
