@@ -37,6 +37,9 @@ public static class Program
                 return 0;
             }
             if (command is not ("check-job" or "check-delivery" or "api" or "recipe" or "app-session" or "--version" or "xif")) StudioAssemblies.Bind(Opt(args, "--ss-dir"));
+            // primeira-certa A1: check-job judges the properties of the job's sets against the Model API (PropertyRules) when a
+            // Studio is installed; unbound, that rule was skipped and its problems came one round later, from apply.
+            else if (command == "check-job") { try { StudioAssemblies.Bind(Opt(args, "--ss-dir")); } catch { /* no Studio here: the rule stays a warning */ } }
             var data = Dispatch(command, args);
             if (data == null)
             {
@@ -171,6 +174,7 @@ public static class Program
                 "merge-probe" => MergeProbeCmd(args),
                 "publish-smoke" => PublishSmoke(args),
                 "edit-smoke" => EditSmoke(args),
+                "digest" => Digest(args),
                 "delete-app" => DeleteApp(args),
                 "create-app" => CreateApp(args),
                 "update-app" => UpdateApp(args),
@@ -384,6 +388,22 @@ public static class Program
             return data;
         }
         catch { return null; } // the model path reports the same input errors
+    }
+
+    /// <summary>`digest --oml &lt;capture&gt; [--out &lt;file.txt&gt;]`: the module digest (ssam-digest) of the capture, from the
+    /// store beside its module index, else built from the model and stored. Answers its file and sizes; --out writes the
+    /// text. The facade pages it (ssam map --digest).</summary>
+    private static object Digest(string[] args)
+    {
+        var store = Anvil.Reading.ModuleIndexStore.Default()
+            ?? throw new InvalidOperationException("No module index store: set SSAM_MODULE_INDEX_ROOT or run inside an SSAM workspace");
+        var answer = Anvil.Reading.ModuleDigest.Ensure(store, Need(args, "--oml"), (bytes, sha) => Host(args).BuildDigest(bytes, sha, store.Lane));
+        if (Opt(args, "--out") is { } outFile) {
+            File.WriteAllText(outFile, store.LoadDigest(answer["sourceSha256"]!.ToString())!.Text);
+            answer["out"] = Path.GetFullPath(outFile);
+        }
+        Log("digest: " + answer["bytes"] + " bytes, " + answer["tokens"] + " tokens, " + (answer["built"]!.GetValue<bool>() ? "built" : "stored") + " " + answer["path"]);
+        return answer;
     }
 
     private static object Inspect(string[] args)
@@ -719,7 +739,8 @@ public static class Program
         JobRunner.CheckJobName(Need(args, "--job"));   // regra de nome ANTES de subir o runtime (plano, item 09)
         JobRunner.ValidateJob(Need(args, "--job"));
         // Every problem at once, with the code and the structured problems in the error envelope (PREFLIGHT_REFUSED, I2).
-        JobPreflight.RequireValid(JobPreflight.Check(Need(args, "--job")));
+        // primeira-certa A2: the preflight runs inside JobRunner, which goes on to the base check, the apply and the Verify
+        // when the base loads, and refuses once with every phase (verifyRan says whether the Verify ran).
         var producers = ProducerBindings(args);
         var jobPath = Need(args, "--job"); var outPath = Need(args, "--out");
         var host = Host(args);

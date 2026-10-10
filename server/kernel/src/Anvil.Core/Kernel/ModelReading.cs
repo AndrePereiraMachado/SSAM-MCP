@@ -76,6 +76,19 @@ public abstract class ModelReader<T> where T : class
         var modelName = Name(node); var label = Label(node);
         return (Key(node), Kind(node), string.IsNullOrEmpty(modelName) ? label ?? "" : modelName, modelName, label, KindNames(node), Parent(node), Children(node).Count());
     }
+    // ModuleDigest reads through these, with the same rules as Read (Display, kind names, children, property lookup).
+    internal IEnumerable<T> ChildrenOf(T node) => Children(node);
+    internal string KeyOf(T node) => Key(node);
+    internal string KindOf(T node) => Kind(node);
+    internal string NameOf(T node) => Name(node);
+    internal string DisplayOf(T node) => Display(node);
+    internal bool IsKind(T node, string kind) => HasKind(node, kind);
+    internal Func<object?>? PropertyOf(T node, string name) => FindProperty(node, name);
+    internal IEnumerable<(string Name, Func<object?> Read)> PropertiesOf(T node) => Properties(node);
+    internal string? ExpressionText(object value) => Expression(value);
+    // Indexes of a server entity when the adapter reads them outside Children (the O11 Model API lists no index child);
+    // null means the digest reads the EntityIndex children.
+    protected internal virtual IReadOnlyList<(string Name, bool Unique, bool Auto, string[] Attributes)>? Indexes(T node) => null;
     // Tree with --properties Name: true when the Name property projects exactly to Name(node), false when the node has
     // no Name property (propertiesMissing), null when only the model can reproduce the answer.
     internal bool? NameProjection(T node, string modelName)

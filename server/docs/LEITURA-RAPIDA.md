@@ -10,8 +10,64 @@ O compartilhamento está em `kernel/src/Anvil.Core/Kernel/SnapshotReading.cs`,
 `platforms/odc/facade/reader-client.mjs`. ODC e O11 acrescentam apenas o adaptador de carga
 para seu modelo nativo. Não existe cópia do motor de leitura por plataforma.
 
-**Regra para agentes:** para ler uma aplicação, comece por `ssam map` / MCP `ssam_map`; depois leia
-subárvores, propriedades e usos por `@key` com o sha256 esperado (`inspect`, abaixo).
+**Regra para agentes:** para ler uma aplicação, leia o resumo do módulo uma vez: MCP
+`ssam_map {lane, target, view:"digest"}` (CLI `ssam map --digest`), as páginas de que a tarefa precisa. Trabalhe no
+contexto. O mapa (`ssam_map {lane, target}`) lista os elementos com `@key`. Use `inspect` (abaixo) só para descer numa
+`@key`, com o sha256 esperado.
+
+## Resumo do módulo (view "digest")
+
+O módulo inteiro como texto compacto (`ssam-digest/1`, `kernel/src/Anvil.Core/Kernel/ModuleDigest.cs`): referências,
+entidades, estruturas, variáveis, roles, exceções, actions em pseudocódigo, timers, REST/SOAP, telas e blocos com
+widgets e eventos, e a cobertura. Determinístico: os mesmos bytes dão o mesmo texto.
+
+```powershell
+.\ssam map --lane o11 <captura.oml|Módulo> --digest
+.\ssam map --lane odc <captura.oml|Módulo> --digest --page 2
+```
+
+MCP `ssam_map {lane, target, view:"digest", page?, budgetBytes?, expectedSourceSha256?}`. O alvo segue as regras do
+mapa: `.oml`, ou nome de módulo (capturado sem abrir aba; no O11 fechado ou de sistema, o OML publicado). Filtros e
+`offset` do mapa são recusados no resumo; `page` é recusado no mapa.
+
+**Nada cortado em silêncio.** Texto longo diz quantos caracteres faltam (`…(+N)`). Expressão passa de 2000 caracteres
+só com `…(+N @key)`: o `inspect` dessa `@key` com `full:true` traz o resto. A cobertura conta cada elemento: desenhado,
+valor de um dono desenhado, dobrado com o motivo (assinaturas de referência, temas, pastas...) ou não desenhado, por tipo.
+
+**Páginas** (fachada `platforms/odc/facade/module-digest.mjs`), dentro do orçamento (38912 bytes no servidor `ssam`):
+- O resumo inteiro cabe: uma página, o texto como foi escrito.
+- Senão, a página 1 (e as seguintes enquanto durar) é a visão geral: cabeçalho, entidades e estruturas, o índice de
+  todas as actions só com assinatura (kind, public, entradas e saídas com tipos, o que chama e quem chama) e a cobertura.
+  Entidade estática com mais de 10 registros mostra os 10 primeiros, a contagem e a página do resto.
+- Depois, os corpos por seção (actions agrupadas por pasta), em ordem estável, e os registros dobrados.
+- `contents` (página 1) dá as páginas de cada parte. `continuations.page` lê qualquer página.
+- Bloco maior que o espaço é quebrado em limite de linha: a página diz onde continua; a seguinte repete o título da
+  parte e a primeira linha do bloco. Linha maior que a página é quebrada do mesmo jeito, com as duas marcas.
+- Toda página traz `sourceSha256` e `file`. `continuations.next` fixa `target` (o arquivo da captura),
+  `expectedSourceSha256` e `budgetBytes`: todas as páginas vêm da mesma captura e da mesma paginação.
+
+**Armazenamento.** Ao lado do índice: `<raiz do índice>\v1\<faixa>\<sha256>.kernel.digest.json`. A chave é o sha256 dos
+bytes e a versão do extrator (`ModuleDigest.Extractor`, conferida também no Node). Escrita atômica, no corte de 512 MB
+da pasta. Arquivo inválido, de outra versão, faixa ou captura é falta. Na falta, a fachada pede `{"digest":"ensure"}`
+ao leitor residente do kernel da faixa: `anvil read-serve` no O11, `anvil-odc read-serve` no ODC. O leitor do builder
+não serve: o Model API público mostra widgets como árvores `Content` que o resumo não desenha (2.260 elementos sem
+desenho no ODC-B (app), contra 0 pelo kernel). A fachada nunca roda .NET no próprio processo. CLI fria do kernel:
+`anvil digest --oml <captura> [--out <txt>]` e `anvil-odc digest ...` (mesmo armazenamento).
+
+**Medidas** (10/10/2026, pela fachada, `budgetBytes` 38912; tokens = bytes/4; frio = leitor novo, carga e resumo):
+
+| Captura | Faixa | OML | Páginas | Pág. 1 | Resumo | Tokens (páginas) | Frio | Com cache |
+|---|---|---|---|---|---|---|---|---|
+| Haiku_CS | O11 | 0,45 MB | 1 | 30,1 KB | 27 KB | 6,9k | 5,1 s | 1 ms |
+| O11-A (cadastro) | O11 | 2,7 MB | 4 | 34,6 KB | 95 KB | 27k | 2,5 s* | 1 ms |
+| ODC-A (serviços) | ODC | 0,44 MB | 4 | 34,6 KB | 88 KB | 25k | 6,3 s | 1 ms |
+| ODC-B (app) | ODC | 5,9 MB | 14 | 34,7 KB | 380 KB | 107k | 9,4 s | 55 ms / 1 ms |
+| O11-B (casos) | O11 | 2,6 MB | 22 | 34,8 KB | 622 KB | 177k | 7,9 s | 64 ms / 1 ms |
+| O11-C (integrações) | O11 | 5,3 MB | 71 | 34,2 KB | 2.064 KB | 558k | 6,6 s* | 158 ms / 1 ms |
+
+\* leitor já de pé. Com cache: processo Node novo / mesmo processo; as outras páginas, cerca de 1 ms. Visão geral:
+1 página nos três menores, 2 no ODC-B (app), 5 no O11-B (casos) e 8 no O11-C (integrações) (os 3.524 registros de
+estáticas ficam nas páginas 34-71).
 
 ## Mapa do módulo (índice persistente por captura)
 

@@ -7,6 +7,7 @@ import { anvilRoot, odcRoot } from './workspace.mjs';
 import { hostedContext, hostedSpawnEnv } from './executor.mjs';
 import { catalogKind } from './studio-module.mjs';
 import { warningsFromVerdicts, highWarningsOf, HIGH } from './delivery-warnings.mjs';
+import { diagnosisOf, refusalFields } from './refusal-problems.mjs';
 import * as writeLock from './studio-write-lock.mjs';
 
 const exec = promisify(execFile);
@@ -34,6 +35,7 @@ export function withoutStack(text) {
   }
   return lines.join('\n').trimEnd().replace(/^System\.(?:[A-Za-z]+\.)*[A-Za-z]*Exception: /, '');
 }
+const clipLine = text => { const line = String(withoutStack(text) ?? 'no answer').split('\n')[0]; return line.length > 300 ? line.slice(0, 297) + '...' : line; };
 const sanitized = value => {
   if (!isObject(value)) return value;
   const { stack, stdout, stderr, ...rest } = value;
@@ -76,7 +78,11 @@ export function interpretKernelResult(result, { output, exitCode = 0 }) {
   const ok = exitCode === 0 && result.ok === true && result.data?.accepted === true && result.data?.isValid === true;
   return { ok, candidate, receipt,
     ...(ok ? {} : { error: withoutStack(result.error) ?? 'Kernel candidate must be accepted and valid before delivery.', diagnostics: result.data?.policyMessages,
-      ...(typeof result.code === 'string' ? { code: result.code } : {}), ...(Array.isArray(result.problems) ? { problems: result.problems } : {}) }),
+      ...(typeof result.code === 'string' ? { code: result.code } : {}),
+      // primeira-certa A3: every problem (a candidate only the Verify refused carries them in data), whether the Verify ran
+      // before the refusal, why not, and the phases of its problems.
+      ...(Array.isArray(result.problems) ? { problems: result.problems } : Array.isArray(result.data?.problems) ? { problems: result.data.problems } : {}),
+      ...diagnosisOf(Array.isArray(result.problems) ? result : result.data ?? result) }),
     validation: result.data?.validation, screenRoles: screenRolesOf(result.data?.results), leftovers: leftoversOf(result.data?.validation),
     // The HIGH warnings of the data-access rules (kernel highWarnings) first, then the Verify ones.
     warnings: [...highWarningsOf(result.data?.highWarnings), ...warningsOf(result.data?.validation)],
@@ -148,9 +154,10 @@ export async function applyKernel({ job, snapshot, output, producers = {} }, dep
   return { ...interpretKernelResult(result, { output, exitCode: response.exitCode }), kernel };
 }
 
-// C31: the job's own preflight (anvil-odc check-job: no Studio, no model) before the capture, so a job with pure errors is
-// refused with all of them at once and nothing is captured or sent to the Studio. On the worker when it serves, else cold.
-// -> {ok:true} | {ok:true, skipped} (the check could not say: the apply reports it) | {ok:false, code, problems, error}.
+// C31: the job's own preflight (anvil-odc check-job: no Studio, no model). primeira-certa A3: only a shortcut for when no
+// base can be had (the module could not be captured); with a capture the apply over it refuses once with every phase. On
+// the worker when it serves, else cold.
+// -> {ok:true} | {ok:true, skipped} (the check could not say: the apply reports it) | {ok:false, code, problems, error, verifyRan:false}.
 export async function checkJobKernel({ job }, deps = {}) {
   const cli = deps.cli ?? kernelCli();
   if (!fs.existsSync(cli)) return { ok: true, skipped: 'the ODC kernel CLI is not built' };
@@ -171,7 +178,8 @@ export async function checkJobKernel({ job }, deps = {}) {
   if (envelope.ok === true || (envelope.data?.valid !== false && !errors.length)) return { ok: true };
   if (!errors.length) return { ok: true, skipped: withoutStack(envelope.error) ?? 'check-job refused without problems' };
   return { ok: false, code: errors.length === 1 && errors[0].code ? errors[0].code : 'PREFLIGHT_REFUSED', problems: errors,
-    error: (Array.isArray(envelope.data?.errors) && envelope.data.errors.length ? envelope.data.errors : errors.map(p => p.message + (p.fix ? ' Fix: ' + p.fix : ''))).join('\n') };
+    error: (Array.isArray(envelope.data?.errors) && envelope.data.errors.length ? envelope.data.errors : errors.map(p => p.message + (p.fix ? ' Fix: ' + p.fix : ''))).join('\n'),
+    verifyRan: false, ...(typeof envelope.data?.verifyReason === 'string' ? { verifyReason: envelope.data.verifyReason } : {}) };
 }
 
 // The delivery's merge order, computed headless by the kernel (anvil-odc merge-order: Anvil.Core.MergePlanner over the
@@ -575,7 +583,9 @@ export async function deliverKernel(input, deps) {
     if (value.continuation) report.continuation = value.continuation;
     if (Array.isArray(value.openModules)) report.openModules = value.openModules;
     if (Array.isArray(value.candidates)) report.candidates = value.candidates;
-    if (Array.isArray(value.problems)) report.problems = value.problems;
+    // primeira-certa A3: every problem of every phase (grouped only to fit the answer), verifyRan and the phases.
+    if (Array.isArray(value.problems)) Object.assign(report, refusalFields(value.problems, value));
+    else Object.assign(report, diagnosisOf(value));
     if (Array.isArray(value.divergences)) report.divergences = value.divergences.slice(0, 50);
   };
   const call = async (step, fn, extra = {}) => {
@@ -678,27 +688,30 @@ export async function deliverKernel(input, deps) {
       }
       if (Array.isArray(prepared.documents) && prepared.documents.length) report.documents = prepared.documents.slice(0, 32);
     }
-    // C31: what the job alone already refuses (the kernel's preflight, no Studio and no model) comes back with every problem
-    // at once, before the capture: nothing is captured, built or sent to the Studio.
-    if (check) {
-      stage = 'preflight';
-      let checked = null;
-      try { checked = await check({ job }); } catch (error) { checked = { ok: true, skipped: withoutStack(error.message) }; }
-      if (checked?.ok === false) {
-        report.failed = 'preflight'; report.code = checked.code ?? 'PREFLIGHT_REFUSED';
-        report.problems = Array.isArray(checked.problems) ? checked.problems : [];
-        report.error = withoutStack(checked.error) ?? 'The job preflight refused the job.';
-        if (publish === true) report.publish = { requested: true, outcome: 'skipped' };
-        return report;
-      }
-      if (checked?.skipped) report.preflight = { skipped: checked.skipped };
-    }
     // The base is ALWAYS the module as it is now in the Studio: a fresh capture of the open model at every delivery
     // (bridge snapshot = SaveToMemoryStream of the live ESpace, hash-named), never a cached candidate or the manifest of an
     // earlier delivery. An edit the person made in the Studio, or an earlier uncertain merge, is in this capture; the merge
     // proves natively that the open module still equals it before CompareAndMerge.
+    // primeira-certa A3: no preflight of the job alone before it. The capture is a read; the apply over it (the build)
+    // refuses once with every problem of every phase (preflight, base, apply, Verify), before the merge, the only write.
     const snapshot = await call('snapshot', () => studio(['snapshot', module], pid));
-    if (!snapshot) return report;
+    if (!snapshot) {
+      // C31, now only a shortcut: no base could be had, so the job alone (anvil-odc check-job) is read and its problems
+      // answer, with verifyRan false and the reason; the failure of the capture stays in refusal and continuation.
+      if (check) {
+        let checked = null;
+        try { checked = await check({ job }); } catch (error) { checked = { ok: true, skipped: withoutStack(error.message) }; }
+        if (checked?.ok === false) {
+          const capture = report.error;
+          report.failed = 'preflight'; report.code = checked.code ?? 'PREFLIGHT_REFUSED';
+          Object.assign(report, refusalFields(Array.isArray(checked.problems) ? checked.problems : [], { verifyRan: false,
+            verifyReason: 'the module could not be captured (' + clipLine(capture) + '): only the job was read, so the base check, the apply and the Verify did not run' }));
+          report.error = withoutStack(checked.error) ?? 'The job preflight refused the job.';
+          if (publish === true) report.publish = { requested: true, outcome: 'skipped' };
+        }
+      }
+      return report;
+    }
     // The open module the capture names: the request may carry the app name the person sees ("QuizLive Web").
     if (typeof snapshot.module === 'string' && snapshot.module && snapshot.module !== module) {
       report.requestedModule = module; report.module = module = snapshot.module;

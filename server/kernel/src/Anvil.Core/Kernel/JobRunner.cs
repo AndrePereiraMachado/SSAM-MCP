@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace Anvil.Core;
 
 /// <summary>Carrega a base, aplica um job de verbos num unico comando, verifica e salva o foreign.</summary>
-public static class JobRunner
+public static partial class JobRunner
 {
     public static object Run(ModelHost host, string? basePath, string jobPath, string outPath, Action<string>? log = null,
         IReadOnlyDictionary<string, string>? bindings = null)
@@ -64,18 +64,36 @@ public static class JobRunner
             session.BeginFootprint();
             var footprintMs = sw.ElapsedMilliseconds - phase;
             foreach(var reference in prepared)
-                session.PrepareSignatureReference(reference,signatures[reference["producer"]!.ToString()]);
+            {
+                try { session.PrepareSignatureReference(reference,signatures[reference["producer"]!.ToString()]); }
+                catch (Exception ex)
+                {
+                    // primeira-certa A7: a frozen producer signature that cannot be imported stops before the apply; its refusal
+                    // keeps its own exception and code, and says so in the format of the single refusal.
+                    if (Errors.Diagnosis(ex) == null)
+                        Errors.Annotate(ex, false, "a frozen producer signature of the job could not be imported (" + Errors.Text(ex) + "): the apply and the Verify did not run",
+                            ["apply"], Errors.FindCoded(ex)?.Problems is { Count: > 0 } ? null : ReferenceProblems(ex, reference, ops.IndexOf(reference), opsPointer));
+                    throw;
+                }
+            }
             // Everything the job names that only the base can answer, all at once, before the first op (C20).
             phase = sw.ElapsedMilliseconds;
-            CheckAgainstBase(session, espace, ops, preflight, opsPointer, checkFunctions: expectedValid, log: log);
+            var baseCheck = CheckAgainstBase(session, espace, ops, preflight, opsPointer, checkFunctions: expectedValid, log: log);
             var baseCheckMs = sw.ElapsedMilliseconds - phase;
             phase = sw.ElapsedMilliseconds;
-            // A02 item 6: every failing op is recorded (its dependents skipped) and refused at once, before Verify and save.
+            // A02 item 6: every failing op is recorded (its dependents skipped). primeira-certa A2: kept, not thrown, so the
+            // Verify of what did apply joins the refusal; an op the preflight refused whole is never run.
             session.OpsPointer = opsPointer;
+            session.KeepFailures = true;
+            session.SkipOps = RefusedWhole(preflight);
             var results = session.Apply(ops, log);
             // What only the database upgrade (publish) would refuse, read on the effective model before anything is saved.
-            var upgrade = session.DatabaseUpgradeRefusals(ops, MessageExpectations.Lane);
-            if (upgrade.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, upgrade));
+            // Not on a model the Studio could not check at the end of the apply (a failed op left it half-built).
+            var upgrade = session.EndOfApplyFailure == null ? session.DatabaseUpgradeRefusals(ops, MessageExpectations.Lane) : [];
+            // primeira-certa A1/A2: a problem of any phase is refused once, with the problems of every phase, the Verify's
+            // included; nothing is saved.
+            if (preflight?["valid"]?.GetValue<bool>() == false || baseCheck.Problems.Count > 0 || session.Kept != null || upgrade.Count > 0)
+                throw Diagnosis(session, espace, before, ops, preflight, baseCheck, upgrade, expected, expectedValid, opsPointer, log);
             var sessionApplyMs = sw.ElapsedMilliseconds - phase;
             phase = sw.ElapsedMilliseconds;
             var dataContract = session.DataContract();
@@ -109,6 +127,18 @@ public static class JobRunner
                 policyMessages.Add("Data property mismatch: " + mismatch!.ToJsonString());
             if (snap.IsValid != expectedValid) policyMessages.Add($"expectValid={expectedValid}, but Verify isValid={snap.IsValid}");
             foreach (var d in details.Concat(policyMessages)) log?.Invoke("  " + d);
+            // primeira-certa A3: a candidate only the Verify refuses answers its errors as the single refusal does too: each
+            // with the op, the pointer into the job, the element, the key and a fix (the delivery shows them, never only text).
+            JsonArray? verifyProblems = null;
+            if (!accepted && expectedValid && policy.Unexpected.Count > 0)
+            {
+                try
+                {
+                    verifyProblems = new JsonArray(session.VerifyProblems(policy.Unexpected, ops, opsPointer, MessageExpectations.Lane, VerifyHints.TryRead())
+                        .Where(p => p["severity"]?.ToString() != "warning").Select(p => (JsonNode)JobPreflight.PublicProblem(p)).ToArray());
+                }
+                catch (Exception ex) { log?.Invoke("  verify problems not mapped: " + Errors.Text(ex)); }
+            }
             var detailsMs = sw.ElapsedMilliseconds - phase;
             phase = sw.ElapsedMilliseconds;
             var refactorAssertions = session.RefactorContract();
@@ -157,6 +187,12 @@ public static class JobRunner
                 if (receipt["notes"] is not JsonArray all) receipt["notes"] = all = new JsonArray();
                 for (var n = notes.Count - 1; n >= 0; n--) all.Insert(0, notes[n].DeepClone());
             }
+            if (verifyProblems is { Count: > 0 })
+            {
+                receipt["problems"] = verifyProblems;
+                receipt["verifyRan"] = true;
+                receipt["phases"] = new JsonArray("verify");
+            }
             if (integration.Count == 0 && receipt.Count == 0) return answer;
             var withIntegration = System.Text.Json.JsonSerializer.SerializeToNode(answer, Json.Compact)!.AsObject();
             if (integration.Count > 0) withIntegration["integration"] = integration;
@@ -181,8 +217,9 @@ public static class JobRunner
     /// job uses without declaring, the SQL names of the base, the names and keys the ops reference without creating, and the
     /// functions the logic expressions call (built-ins of this Studio, functions of the module or its references, the job's
     /// own actions). The refusal is a JobPreflightException (PREFLIGHT_REFUSED) with every problem; the wording of the type
-    /// and SQL lines stays the one tools already read.</summary>
-    private static void CheckAgainstBase(ModelSession session, ServiceStudio.Model.ESpace espace, JsonArray ops, JsonObject? preflight, string? opsPointer, bool checkFunctions = true, Action<string>? log = null)
+    /// and SQL lines stays the one tools already read. primeira-certa A2: the problems are returned, never thrown here: the
+    /// caller goes on to the apply and the Verify and refuses once with every phase (Diagnosis).</summary>
+    private static BaseCheck CheckAgainstBase(ModelSession session, ServiceStudio.Model.ESpace espace, JsonArray ops, JsonObject? preflight, string? opsPointer, bool checkFunctions = true, Action<string>? log = null)
     {
         var problems = new List<JsonObject>();
         var lines = new List<string>();
@@ -285,9 +322,9 @@ public static class JobRunner
                 problem = JobPreflight.Problem(index, Pointer(index) is { } at ? at + "/prop" : null, "PROPERTY_NOT_WRITABLE", "error",
                     ModelSession.PropertyErrorText(element, prop), $"write one of: {string.Join(", ", ModelSession.ClosestWritable(element, prop))}", null, "set");
             else if (set["value"] is JsonValue v && v.TryGetValue<string>(out var text) && ModelSession.IsExpressionProperty(element, prop)
-                     && ModelSession.ExpressionRewrite(text).Syntax is { } syntax)
+                     && SetSyntax(text) is { } syntax)
                 problem = JobPreflight.Problem(index, Pointer(index) is { } at ? at + "/value" : null, "EXPRESSION_SYNTAX", "error",
-                    $"{prop} = {text}: {syntax}", "close every text literal with \" (a quote inside a text is written \"\")", null, "set");
+                    $"{prop} = {text}: {syntax.Problem}", syntax.Fix, null, "set");
             if (problem == null) continue;
             problems.Add(problem);
             lines.Add(JobPreflight.Text(problem));
@@ -316,9 +353,18 @@ public static class JobRunner
                 if (builtins.Contains(name) || scope.Contains(name) || declared.Contains(name)) continue;
                 if (!seen.Add(op + "|" + name)) continue;
                 var closest = FunctionCatalog.Closest(name, scope);
-                var problem = JobPreflight.Problem(op, Pointer(op), "FUNCTION_UNKNOWN", "error",
+                // primeira-certa A4: the one built-in the call certainly means (a rename with the same arguments, or a typo of
+                // one letter) is the fix, with the patch that renames it in every expression of the op that calls it.
+                var certain = FunctionCatalog.Certain(name) is { } c && !scope.Contains(c) ? c : null;
+                var sites = CallSites(ops, op, name, opsPointer);
+                var rename = new Regex(@"(?<![\w.])" + Regex.Escape(name) + @"(?=\s*\()", RegexOptions.IgnoreCase);
+                var patch = certain == null || sites.Count == 0 || sites.Any(s => s.Sort) ? null
+                    : new JsonArray(sites.Select(s => (JsonNode)new JsonObject { ["op"] = "replace", ["path"] = s.Pointer,
+                        ["value"] = string.Concat(StringLiteral.Split(s.Text).Zip(StringLiteral.Matches(s.Text).Select(m => m.Value).Append(""), (code, literal) => rename.Replace(code, certain) + literal)) }).ToArray());
+                var problem = JobPreflight.Problem(op, sites.Count == 1 ? sites[0].Pointer : Pointer(op), "FUNCTION_UNKNOWN", "error",
                     $"'{name}(' is not a built-in function of this Studio ({MessageExpectations.Lane}), nor a function of the module, of its references or of this job",
-                    closest.Count > 0 ? "use one of: " + string.Join(", ", closest) : "see `anvil functions --find " + name + "`", null, "logic");
+                    certain != null ? $"write {certain}(...), the built-in meant here (same arguments)"
+                        : closest.Count > 0 ? "use one of: " + string.Join(", ", closest) : "see `anvil functions --find " + name + "`", patch, "logic");
                 problems.Add(problem);
                 lines.Add(JobPreflight.Text(problem));
             }
@@ -333,7 +379,51 @@ public static class JobRunner
         }
         // I6: what only the base could answer.
         foreach (var problem in problems) problem["phase"] ??= "base";
-        if (problems.Count > 0) throw JobPreflightException.Of(problems, lines);
+        return new(problems, lines);
+    }
+
+    private static readonly Regex MissingElement = new(@"signature: (\S+)\s*$", RegexOptions.Compiled);
+
+    /// <summary>The problem of a reference op whose frozen producer signature lacks an element the op names (or that fails
+    /// to import otherwise): its pointer is the element when the message names it.</summary>
+    private static JsonArray ReferenceProblems(Exception ex, JsonObject reference, int op, string? opsPointer)
+    {
+        var message = Errors.Text(ex);
+        var named = MissingElement.Match(message) is { Success: true } m ? m.Groups[1].Value : null;
+        var elements = (reference["elements"] as JsonArray ?? new JsonArray()).Select(e => e?.ToString()).ToList();
+        var k = named == null ? -1 : elements.FindIndex(e => string.Equals(e, named, StringComparison.OrdinalIgnoreCase));
+        var pointer = opsPointer == null || op < 0 ? null : k >= 0 ? $"{opsPointer}/{op}/elements/{k}" : $"{opsPointer}/{op}";
+        var problem = JobPreflight.Problem(op < 0 ? null : op, pointer, named != null ? "REFERENCE_ELEMENT_MISSING" : "REFERENCE_IMPORT_FAILED", "error", message,
+            named != null ? $"the frozen signature of producer {reference["producer"]} has no {named}: fix its kind or name, capture the producer again if it was published since (o11_dependencies capture), or remove it from the reference op"
+                : "capture the producer again (o11_dependencies capture) and deliver with it", null, "reference");
+        problem["phase"] = "apply";
+        return new JsonArray(JobPreflight.PublicProblem(problem));
+    }
+
+    /// <summary>The syntax problem of an expression a raw `set` writes: unbalanced quotes (what the apply refuses), else, for
+    /// a text the apply writes as it is (no rewrite), the whole syntax (primeira-certa A4, Preflight.ExpressionSyntax).</summary>
+    private static (string Problem, string Fix)? SetSyntax(string text)
+    {
+        var rewrite = ModelSession.ExpressionRewrite(text);
+        if (rewrite.Syntax != null) return (rewrite.Syntax, "close every text literal with \" (a quote inside a text is written \"\")");
+        return rewrite.Text == null ? Preflight.ExpressionSyntax.Check(text) : null;
+    }
+
+    /// <summary>primeira-certa A4: the expressions of op <paramref name="op"/> that call <paramref name="name"/>( and their
+    /// pointers in the job: the sites of its logic actions, or the value of a raw `set`.</summary>
+    private static List<(string Pointer, string Text, bool Sort)> CallSites(JsonArray ops, int op, string name, string? opsPointer)
+    {
+        var sites = new List<(string Pointer, string Text, bool Sort)>();
+        if (opsPointer == null || op < 0 || op >= ops.Count || ops[op] is not JsonObject source) return sites;
+        var call = new Regex(@"(?<![\w.])" + Regex.Escape(name) + @"\s*\(", RegexOptions.IgnoreCase);
+        bool Calls(string text) => call.IsMatch(StringLiteral.Replace(text, "\"\""));
+        if (source["op"]?.ToString() == "set" && source["value"] is JsonValue v && v.TryGetValue<string>(out var value) && Calls(value))
+            sites.Add(($"{opsPointer}/{op}/value", value, false));
+        for (var a = 0; a < (source["op"]?.ToString() == "logic" ? (source["data"]?["actions"] as JsonArray)?.Count ?? 0 : 0); a++)
+            if (source["data"]!["actions"]![a] is JsonObject action)
+                foreach (var site in Preflight.LogicScan.Of(action).Expressions.Where(s => Calls(s.Text)))
+                    sites.Add(($"{opsPointer}/{op}/data/actions/{a}{site.Pointer}", site.Text, site.Key == "sort"));
+        return sites;
     }
 
     private static readonly Regex VersionSuffix = new(@"(?:[-_][vV]\d+|\s*\(\d+\))$", RegexOptions.Compiled);
@@ -527,19 +617,39 @@ public static class JobRunner
                 // N3: a malformed expectation is a problem of the preflight below, with every other one (never thrown alone).
                 var expectations = MessageExpectations.Inspect(job, jobPath);
                 var expected = expectations.Expected;
-                // Reject cheap deterministic errors before rebuilding any base job.
+                // The cheap deterministic checks first. primeira-certa A2: a job they refuse still goes on, without saving, to
+                // the base check, the apply and the Verify when its base (and its producers) load, so the refusal carries every
+                // phase at once; when they do not load, the refusal says the Verify did not run and why.
                 var preflight = JobPreflight.Analyze(CollectOps(job, Path.GetDirectoryName(jobPath)!, null), job, null, jobPath);
-                JobPreflight.RequireValid(preflight);
                 var expectedValid = job is JsonObject obj && obj["expectValid"] is JsonValue ev && ev.TryGetValue<bool>(out var valid) ? valid : true;
-                var resolvedBase = basePath == null ? Base(jobPath) : Path.GetFullPath(basePath);
-                var ops = CollectOps(job, Path.GetDirectoryName(jobPath)!, log,
-                    (spec, dir, index) =>
-                    {
-                        try { return Resolve(spec, dir, "producer"); }
-                        catch (Exception ex) { throw new InvalidOperationException($"op #{index} (reference): {Errors.Text(ex)}", ex); }
-                    }, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { jobPath });
-                return ApplyResolved(host, resolvedBase, ops, outPath, log, expected, expectedValid, preflight,
-                    builtBase: built.ContainsValue(resolvedBase), opsPointer: JobPreflight.OpsPointer(job), notes: expectations.Notes);
+                string resolvedBase; JsonArray ops;
+                try
+                {
+                    resolvedBase = basePath == null ? Base(jobPath) : Path.GetFullPath(basePath);
+                    ops = CollectOps(job, Path.GetDirectoryName(jobPath)!, log,
+                        (spec, dir, index) =>
+                        {
+                            try { return Resolve(spec, dir, "producer"); }
+                            catch (Exception ex) { throw new InvalidOperationException($"op #{index} (reference): {Errors.Text(ex)}", ex); }
+                        }, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { jobPath });
+                }
+                catch (Exception ex) when (preflight["valid"]?.GetValue<bool>() == false)
+                {
+                    JobPreflight.RequireValid(preflight, $"the base or a producer of the job could not be loaded ({Errors.Text(ex)}): only the job was read, so the base check, the apply and the Verify did not run");
+                    throw;
+                }
+                try
+                {
+                    return ApplyResolved(host, resolvedBase, ops, outPath, log, expected, expectedValid, preflight,
+                        builtBase: built.ContainsValue(resolvedBase), opsPointer: JobPreflight.OpsPointer(job), notes: expectations.Notes);
+                }
+                // A later phase that stops without the union (a base file that does not load, a frozen producer signature
+                // without an element the job names) never hides the preflight's problems: they are refused, with the reason.
+                catch (Exception ex) when (preflight["valid"]?.GetValue<bool>() == false && ex is not JobPreflightException)
+                {
+                    JobPreflight.RequireValid(preflight, $"the base check, the apply and the Verify stopped before the refusal ({Errors.Text(ex)}): only the job was read");
+                    throw;
+                }
             }
             finally { active.RemoveAt(active.Count - 1); }
         }

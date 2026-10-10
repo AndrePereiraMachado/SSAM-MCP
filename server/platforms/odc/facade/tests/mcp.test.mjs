@@ -52,7 +52,9 @@ test('facade serves studio_* and odc_* tools on one stdio server', async () => {
     assert.equal(map.annotations.readOnlyHint, true);
     assert.deepEqual(map.inputSchema.properties.lane.enum, ['odc', 'o11']);
     assert.ok(map.inputSchema.properties.role.enum.includes('screen'));
-    assert.match(client.getInstructions(), /To read an application, start with ssam_map \{lane, target\}.*then studio_inspect subtrees, properties and usages by path "@<key>" with expectedSourceSha256/);
+    assert.match(client.getInstructions(), /To read an application, start with ssam_map \{lane, target, view:"digest"\}: the whole module as text, in pages.*read it once and work in context\. ssam_map \{lane, target\} lists every element with its @key.*studio_inspect only to go deeper into an @key \(path "@<key>" with expectedSourceSha256\)/);
+    assert.deepEqual(map.inputSchema.properties.view.enum, ['map', 'digest']);
+    assert.match(map.description, /view "digest": the whole module as compact text/);
     assert.match(tools.find(t => t.name === 'studio_inspect').description, /Start with ssam_map/);
     assert.ok(names.includes('ssam_debug'));
     assert.ok(!names.includes('studio_debug'));

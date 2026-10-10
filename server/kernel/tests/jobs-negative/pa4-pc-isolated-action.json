@@ -1,0 +1,28 @@
+{
+ "description": "NEGATIVO (primeira-certa, A4/A6): uma op logic com uma action que falha no apply (call a action inexistente) aplica sem ela e sem a que a chama, e as outras chegam ao Verify (Text atribuido a Integer); a mesma recusa traz os patches exatos: output e argumento de uma action do proprio job escritos errado, NullDateTime( que e NullDate( e a sintaxe de uma expressao (==). Nada e salvo.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectError": [
+  "[ARGUMENT_UNKNOWN]: 'Quantty' is not an input of PcCalc",
+  "[EXPR_UNKNOWN_IDENTIFIER]: can't identify 'Totl' in Calc.Totl",
+  "[EXPRESSION_SYNTAX]: R == 1",
+  "[FUNCTION_UNKNOWN]: 'NullDateTime('",
+  "op #0 (logic PcBroken)",
+  "[ExpressionInvalidExpressionType]"
+ ],
+ "ops": [
+  {"op": "logic", "data": {"actions": [
+   {"name": "PcGood", "kind": "server", "description": "Synthetic action that applies; its Verify error comes in the refusal.",
+    "outputs": [{"name": "Code", "type": "Integer"}], "steps": [{"assign": {"Code": "\"abc\""}}]},
+   {"name": "PcBroken", "kind": "server", "description": "Synthetic action that fails at apply.",
+    "outputs": [{"name": "N", "type": "Integer"}], "steps": [{"call": "PcNoSuchAction", "as": "Nope"}, {"assign": {"N": "1"}}]},
+   {"name": "PcUsesBroken", "kind": "server", "description": "Synthetic action left out with the failed one.",
+    "steps": [{"call": "PcBroken", "as": "Again"}]},
+   {"name": "PcCalc", "kind": "server", "description": "Synthetic callee.",
+    "inputs": [{"name": "Quantity", "type": "Integer"}], "outputs": [{"name": "Total", "type": "Integer"}, {"name": "Code", "type": "Text"}],
+    "steps": [{"assign": {"Total": "Quantity", "Code": "\"x\""}}]},
+   {"name": "PcUse", "kind": "server", "description": "Synthetic caller with the output and the input written wrong.",
+    "outputs": [{"name": "R", "type": "Integer"}, {"name": "At", "type": "Date Time"}, {"name": "Same", "type": "Boolean"}],
+    "steps": [{"call": "PcCalc", "as": "Calc", "args": {"Quantty": "2"}}, {"assign": {"R": "Calc.Totl", "At": "NullDateTime()", "Same": "R == 1"}}]}
+  ]}}
+ ]
+}

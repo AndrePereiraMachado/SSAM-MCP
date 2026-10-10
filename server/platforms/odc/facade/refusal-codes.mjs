@@ -94,12 +94,17 @@ function textsOf(value, texts = []) {
   return out;
 }
 
-// The code of a refusal without one: the text rules over its texts, then its step, then the tool (when given).
+// The code of a refusal without one: a refusal with the problems of a job (PREFLIGHT_REFUSED), the text rules over its
+// texts, then its step, then the tool (when given).
 // `tool` absent (the friction store): null when neither texts nor step name one, so the store keeps OPERATION_FAILED.
 // An answer that declares its outcome uncertain is never "failed": OUTCOME_UNCERTAIN (EQUIVALENCE_UNCERTAIN at the
 // equivalence gate), the same codes the friction store records.
 export function refusalCode({ tool, value, texts = [] } = {}) {
   if (value && typeof value === 'object' && value.outcome === 'uncertain') return value.gate === 'equivalence' ? 'EQUIVALENCE_UNCERTAIN' : 'OUTCOME_UNCERTAIN';
+  // primeira-certa A3: a refusal that carries the problems of a job (phase, pointer, fix, patch) is the kernel's single
+  // refusal, whatever step it came from: every problem is in it, and patch + basedOn applies them.
+  if (value && typeof value === 'object' && Array.isArray(value.problems) && value.problems.some(p => p && typeof p === 'object' && typeof p.code === 'string' && p.severity !== 'warning'))
+    return 'PREFLIGHT_REFUSED';
   for (const text of textsOf(value, texts)) { const code = codeFromText(text); if (code) return code; }
   return stepCode(value) ?? toolCode(tool);
 }

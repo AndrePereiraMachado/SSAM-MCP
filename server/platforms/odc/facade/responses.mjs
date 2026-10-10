@@ -353,8 +353,11 @@ export function compactDelivery(tool, args, value) {
       // Delivered but the publish of the same call failed or is uncertain: the delivery is never repeated, so the answer
       // keeps that it was delivered and what the publish said.
       ...(RESULTS.has(value.result) ? { result: value.result } : {}), ...sharedFields(value),
-      // A preflight refusal: every problem with its op, code and fix (interface I2), the whole list in one answer.
+      // The refusal of a job (I2, primeira-certa A3): every problem of every phase over the capture with its phase, op,
+      // pointer, code, fix and patch, the whole list in one answer (grouped only to fit it), whether the Verify ran and
+      // the phases; the patches go back with patch + basedOn.
       ...(Array.isArray(problems) && problems.length ? { problems } : {}),
+      ...Object.fromEntries(['problemsTotal', 'grouped', 'verifyRan', 'verifyReason', 'phases'].filter(key => value[key] != null).map(key => [key, value[key]])),
       ...correction,
       // A module name that reached no open module (or several): the open modules are the fix.
       ...(Array.isArray(value.openModules) ? { openModules: value.openModules } : {}), ...(Array.isArray(value.candidates) ? { candidates: value.candidates } : {}),

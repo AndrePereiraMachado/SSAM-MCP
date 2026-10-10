@@ -25,6 +25,8 @@ namespace Anvil.Cli.Odc;
 ///                                                   app ou library nova como o ODC Studio monta (clone do template / ESpace.Create),
 ///                                                   com OML, recibo e manifesto de criacao para o bridge; nunca sobrescreve
 ///   inspect --oml &lt;modulo.oml&gt; [--work &lt;dir&gt;]      nome, tipo, objetos, referencias, validacao
+///   digest --oml &lt;modulo.oml&gt; [--out &lt;f.txt&gt;]     resumo do modulo (ssam-digest), guardado junto do indice do modulo
+///   read-serve --state &lt;f&gt; --generation &lt;g&gt;       leitor residente so de leitura (o resumo do ssam_map view:"digest")
 ///   references --oml &lt;modulo.oml&gt;                  as referencias registradas no modulo
 ///   verify-catalog [--id &lt;VerifyId&gt;] [--out &lt;f&gt;]   o catalogo publico lido da instalacao do ODC Studio; --out grava
 ///                                                  so os ids (catalog/odc/verify-messages-&lt;versao&gt;.json)
@@ -86,10 +88,12 @@ usage: anvil-odc <comando> [--flags]
     {
         // ---- headless ---------------------------------------------------------------------------------
         "apply" => Apply(args),
-        "check-job" => JobPreflight.Check(Need(args, "--job")),
+        "check-job" => CheckJob(args),
         "create-blank" => CreateBlank(args),
         "create-app" => CreateApp(args),
         "inspect" => Inspect(args),
+        "digest" => Digest(args),
+        "read-serve" => ReadServe(args),
         "census" => Census(args),
         "references" => Host(args).References(File.ReadAllBytes(Need(args, "--oml"))),
         "verify-catalog" => VerifyCatalogCmd(args),
@@ -113,13 +117,22 @@ usage: anvil-odc <comando> [--flags]
 
     // ---- comandos ---------------------------------------------------------------------------------------
 
+    /// <summary>primeira-certa A1: check-job judges the properties of the job's sets against the Model API (PropertyRules)
+    /// when the ODC Studio is installed; unbound, that rule was skipped and its problems came one round later, from apply.</summary>
+    private static object CheckJob(string[] args)
+    {
+        try { StudioAssembliesOdc.Bind(null); } catch { /* no ODC Studio here: the rule stays a warning */ }
+        return JobPreflight.Check(Need(args, "--job"));
+    }
+
     private static object Apply(string[] args)
     {
         var job = Need(args, "--job");
         JobRunner.CheckJobName(job);        // a regra do nome antes de subir o runtime, como na faixa O11
         JobRunner.ValidateJob(job);
         // Every problem at once, with the code and the structured problems in the error envelope (PREFLIGHT_REFUSED, I2).
-        JobPreflight.RequireValid(JobPreflight.Check(job));
+        // primeira-certa A2: the preflight runs inside JobRunner, which goes on to the base check, the apply and the Verify
+        // when the base loads, and refuses once with every phase (verifyRan says whether the Verify ran).
         var producers = args.Select((a, i) => (a, i)).Where(x => x.a == "--producer" && x.i + 1 < args.Length)
             .Select(x => args[x.i + 1].Split('=', 2)).Where(p => p.Length == 2)
             .ToDictionary(p => p[0], p => Path.GetFullPath(p[1]), StringComparer.OrdinalIgnoreCase);
@@ -201,6 +214,30 @@ usage: anvil-odc <comando> [--flags]
         var snap = Host(args).Inspect(Need(args, "--oml"));
         Log($"{snap.Name} ({snap.Kind}): {snap.Objects} objects, {snap.References.Count} references, {snap.Validation.Total} messages, load {snap.LoadMs} ms");
         return snap;
+    }
+
+    // `read-serve --state <f> --generation <g> [--work <dir>]`: the resident read-only reader (reader-client.mjs) over the
+    // kernel's ODC reader, as `anvil read-serve` on O11. The facade asks it for the module digest (ssam_map view:"digest"):
+    // the builder's reader sees the public Model API, where widgets read as Content trees the digest does not render.
+    private static object ReadServe(string[] args)
+    {
+        StudioAssembliesOdc.Bind(null);
+        return KernelSnapshotReading.Serve(Need(args, "--state"), Need(args, "--generation"), Opt(args, "--work") ?? Path.Combine(Path.GetTempPath(), "anvil-odc-reading"));
+    }
+
+    // `digest --oml <capture> [--out <file.txt>]`: the module digest (ssam-digest) of the capture, from the store beside its
+    // module index (a hit binds no ODC Studio), else built from the model and stored; --out writes the text.
+    private static object Digest(string[] args)
+    {
+        var store = Anvil.Reading.ModuleIndexStore.Default()
+            ?? throw new InvalidOperationException("No module index store: set SSAM_MODULE_INDEX_ROOT or run inside an SSAM workspace");
+        var answer = Anvil.Reading.ModuleDigest.Ensure(store, Need(args, "--oml"), (bytes, sha) => Host(args).BuildDigest(bytes, sha, store.Lane));
+        if (Opt(args, "--out") is { } outFile) {
+            File.WriteAllText(outFile, store.LoadDigest(answer["sourceSha256"]!.ToString())!.Text);
+            answer["out"] = Path.GetFullPath(outFile);
+        }
+        Log("digest: " + answer["bytes"] + " bytes, " + answer["tokens"] + " tokens, " + (answer["built"]!.GetValue<bool>() ? "built" : "stored") + " " + answer["path"]);
+        return answer;
     }
 
     private static JsonObject? IndexedInspect(string[] args)

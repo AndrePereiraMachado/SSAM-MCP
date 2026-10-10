@@ -25,6 +25,7 @@ import { createWorkerClient, workerDisabled } from './anvil-worker.mjs';
 import { resolvePatchedJob, jobIdentity, failedOpOf } from './job-patch.mjs';
 import { seamFields, usesWorkspace, workspacePath } from './executor.mjs';
 import { highWarningsOf } from './delivery-warnings.mjs';
+import { refusalFields, diagnosisOf } from './refusal-problems.mjs';
 
 export const JOB_LANES = ['o11', 'odc'];
 const clip = (text, max = 400) => { const s = String(text ?? ''); return s.length > max ? s.slice(0, max - 3) + '...' : s; };
@@ -70,8 +71,9 @@ function resultsOf(results) {
   return out;
 }
 
-// Preflight problems (I2: {op, pointer, code, severity, message, fix, patch}) as the answer keeps them: all of them, each
-// text cut at 300 characters; a mechanical patch stays only while it is small (the job file keeps nothing else).
+// Problems of the single refusal (I2 and primeira-certa A3: {phase, op, pointer, code, severity, message, fix, patch,
+// element, key}) as the answer keeps them: all of them, each text cut at 300 characters, the patch whole (it is the fix
+// that patch + basedOn applies); grouped only to fit the answer (refusal-problems.mjs).
 export function problemsOf(list) {
   if (!Array.isArray(list)) return undefined;
   return list.map(p => {
@@ -79,13 +81,15 @@ export function problemsOf(list) {
     const out = {};
     for (const [k, v] of Object.entries(p)) {
       if (typeof v === 'string') out[k] = clip(v, 300);
-      else if (k === 'patch' && v != null) { const text = JSON.stringify(v); if (text.length <= 300) out[k] = v; else out.patchOmitted = true; }
+      else if (k === 'patch' && v != null) out[k] = v;
       else if (v === null || typeof v !== 'object') out[k] = v;
       else out[k] = fitted(v, 300);
     }
     return out;
   });
 }
+// The problems field of an answer, fitted to the budget, with whether the Verify ran and the phases.
+const refusalOf = (list, source) => { const problems = problemsOf(list); return problems?.length ? refusalFields(problems, source, { limit: 300 }) : diagnosisOf(source); };
 // A successful run answers in about 1 KB (C19): what it proved (ok, accepted, isValid, counts) and where the whole result
 // is (resultFile, read with ssam_evidence). Results, details and messages stay in that file; the results of a small read
 // job still come inline when they fit.
@@ -141,9 +145,10 @@ export function summarize({ lane, job, out, resultFile, saved, note, quiet = fal
     // jobTool adds jobSha256 and jobShape (about 100 bytes) after this.
     return successOf(value, results, SUCCESS_BYTES - 120, x.results?.length ?? 0);
   }
-  // A refusal of the job (I2): every problem, from the CLI's error envelope or from the apply's own preflight.
-  const problems = problemsOf(saved.problems ?? x.preflight?.problems);
-  if (problems?.length) value.problems = problems;
+  // A refusal of the job (I2): every problem of every phase, from the CLI's error envelope or from the apply's own
+  // preflight, with verifyRan and the phases (primeira-certa A3).
+  // A candidate only the Verify refused carries its errors the same way (data.problems).
+  Object.assign(value, refusalOf(saved.problems ?? x.problems ?? x.preflight?.problems, saved.problems ? saved : x));
   if (x.messages !== undefined) value.messages = Array.isArray(x.messages) ? x.messages.slice(0, 10).map(m => clip(typeof m === 'string' ? m : JSON.stringify(m), 300)) : x.messages;
   if (x.details?.length) { value.details = x.details.slice(0, 10).map(d => clip(d)); if (x.details.length > 10) value.detailsTotal = x.details.length; }
   if (x.preflight?.actions) value.preflight = { actions: x.preflight.actions, publicActions: x.preflight.publicActions, helpers: x.preflight.helpers,
@@ -242,9 +247,8 @@ export async function runJob(request = {}, deps = {}) {
     const wallMs = now() - started;
     // An error envelope carries error/stack, no data: run_job.py printed it and wrote no result file.
     if (envelope.data == null) {
-      const problems = problemsOf(envelope.problems);
       return { ok: false, lane, job, via, command: envelope.command, elapsedMs: envelope.elapsedMs, wallMs, ...(envelope.code ? { code: envelope.code } : {}),
-        error: clip(envelope.error ?? 'the CLI returned no data', 2000), ...(problems?.length ? { problems } : {}), ...(note ? { worker: note } : {}) };
+        error: clip(envelope.error ?? 'the CLI returned no data', 2000), ...refusalOf(envelope.problems, envelope), ...(note ? { worker: note } : {}) };
     }
     saved = { ok: Boolean(envelope.ok), data: envelope.data, via, wallMs };
   } else {

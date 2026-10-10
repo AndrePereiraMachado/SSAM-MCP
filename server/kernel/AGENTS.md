@@ -62,12 +62,37 @@ vivo sao os gates de entrega. A suite completa e gate de manutencao do Anvil e C
 Mantenha verificacoes de regras de negocio proporcionais ao pedido; Verify nao prova autorizacao nem transacoes.
 
 `check-job` nao carrega o Studio: valida sintaxe de spec/logic, nomes/aliases/ciclos e parametros sem uso antes de
-reconstruir bases. Devolve todas as falhas independentes, contagem de actions publicas/helpers, corpos identicos e
+reconstruir bases. Com o Studio instalado, julga as propriedades dos `set` pela Model API (PropertyRules), como o apply. Devolve todas as falhas independentes, contagem de actions publicas/helpers, corpos identicos e
 endpoints que terminam sempre em excecao. Nao reporte esses endpoints como integracoes implementadas. Corpos
 identicos com nomes diferentes pedem revisao de intencao e consumidores; nao apague APIs diferentes automaticamente.
 `timings` em apply mostra load, Verify, apply, diagnosticos, save e release. Compare o mesmo job/base/runtime;
 conte separadamente escrita pela LLM, espera, ferramenta e retrabalho. Metas do dono: 2-3 min para modelo aprovado
 com ~111 entidades e 5-10 min para ~170 actions; nao reduza escopo, autorizacao ou validacao para caber no prazo.
+
+Recusa unica (decisao do dono, 10/10/2026): job com problema e recusado UMA vez, com todos. `apply --job <j> --base <oml>
+--out <o>` (e `--producer Nome=<oml>`) roda as fases em ordem na copia descartavel da base: preflight, checagem da base,
+apply (op que falha fica registrada, dependentes pulados; op que o preflight recusou inteira nao roda) e Verify do que aplicou.
+A recusa `PREFLIGHT_REFUSED` traz em `problems[]` a uniao das fases: `phase` (preflight, base, apply, verify), `op`, `pointer`,
+`code`, `message`, `fix` e `patch` quando a correcao e unica. Erro do Verify: `code` = id do Verify, `element`, `key`, ponteiro
+ate a expressao quando o texto esta no job. O mesmo lugar sai uma vez (fica o que tem patch). Nada e salvo. O envelope traz
+`verifyRan`, `verifyReason` e `phases`. `check-job` le so o job: `verifyRan:false` com o motivo; base que nao carrega, idem.
+Fase seguinte que para sem a uniao (assinatura congelada de produtor sem o elemento) tambem: recusa do preflight, com o motivo.
+Mensagem do Verify sobre o que um op falho deixou pela metade nao entra (aviso `VERIFY_OF_FAILED_OPS_OMITTED`). Problema de
+uma fase so mantem o code e o texto de antes (DELETE_HAS_CONSUMERS, upgrade do banco) e o envelope vem completo do mesmo jeito:
+`verifyRan`, `phases` e `problems[]` no formato da recusa unica (`Errors.Annotate`). Assinatura congelada de produtor sem o
+elemento: `REFERENCE_ELEMENT_MISSING` em `/ops/<i>/elements/<k>`, `verifyRan:false`. Candidato que so o Verify recusa (nenhum
+op falhou, `accepted:false`): os erros vem tambem em `data.problems` (op, ponteiro, element, key, fix), com `verifyRan`.
+Op logic com varias actions (sem `replace`): a action que falha no apply sai da op, e sai tambem a action da op que a chama
+(aviso `APPLY_SKIPPED` com o ponteiro dela); o resto da op aplica de novo e chega ao Verify. Cada problema aponta para
+`/ops/<i>/data/actions/<j>/...` do job escrito (`ModelSession.IsolateActions`). Spec e html ainda falham a op inteira.
+Regras com patch exato: site property sem `Site.` (ODC: setting sem `Settings.`), funcao desconhecida com uma unica builtin
+certa (`FunctionCatalog.Certain`: NullDateTime -> NullDate, Len -> Length, um erro de letra), output ou argumento de action do
+proprio job escrito errado (patch quando so um casa) e `EXPRESSION_SYNTAX` em toda expressao de logic e de `set` na base
+(`Preflight/ExpressionSyntax.cs`: aspas, `#data#`, parenteses, `==`, `&&`, `||`, `!=`, aspas simples, operando sem operador).
+Entrega O11 (`Delivery.cs`): o preflight puro nao recusa mais antes do Studio; a captura e o apply recusam com tudo. Sem
+captura (modulo nao abre, bridge falha) a recusa e a do preflight, com `verifyRan:false` e o motivo.
+Provas: `pa4-pc-four-phases.json` e `pa4-pc-isolated-action.json` (`tests/jobs-negative` e `tests/jobs-odc-negative`),
+`tests/Anvil.Tests/PrimeiraCertaTests.cs` e `tests/Anvil.Tests/PrimeiraCertaCompleteTests.cs`.
 
 SQL (`SqlPreflight.cs`, chamado pelo `check-job` e pelo apply): todo SQL do job (logic `get` com `sql:true`, `ISQLNode`
 criado no job, `set ... Statement` num no existente) e lido antes do Studio e recusado com `op #N (SQL <onde>, line L)`
@@ -106,6 +131,17 @@ para `highWarnings` do recibo do apply; a entrega O11 (`Delivery.cs`) e a fachad
 cita o fluxo). Testes: `tests/Shared/QueryRulesScenarios.cs` (O11 e ODC).
 
 Regressao do motor: `performance-lookup.json` prova tipos compartilhados e chamada de action declarada adiante.
+
+Resumo do modulo (`Kernel/ModuleDigest.cs`, `ssam-digest/1`; uso em `docs/LEITURA-RAPIDA.md`): o modulo inteiro como texto,
+lido so por `ModelReader` (O11, ODC e o builder compilam o mesmo arquivo). Fica ao lado do indice do modulo
+(`ModuleIndexStore.SaveDigest`, `<sha256>.<adaptador>.digest.json`), pedido ao leitor residente por `{"digest":"ensure"}`
+(`SnapshotReadCache.EnsureDigest`) ou pela CLI fria `anvil digest` / `anvil-odc digest`. No ODC o leitor e o `anvil-odc
+read-serve` (kernel), nunca o builder. Manutencao: toda mudanca no texto sobe `ModuleDigest.Extractor` e `DIGEST_EXTRACTOR`
+de `platforms/odc/facade/module-digest.mjs` (o teste da fachada confere os dois); arquivo de outra versao e falta. Tipo
+novo que o resumo nao desenha aparece em `not rendered` da cobertura: desenhe-o, ou dobre-o com motivo, ou marque-o como
+valor de um dono desenhado (`ValueKinds`). Os ultimos registros de um bloco de estatica sao `DigestEntry.Records`: mantenha-os
+no fim, uma linha cada. Testes: `tests/Shared/ModuleDigestTests.cs` (as duas faixas) e
+`platforms/odc/facade/tests/module-digest.test.mjs` (paginas, cache, `view`, captura fixada pelo sha).
 
 ## Dados: uma spec, uma entrega e uma prova
 

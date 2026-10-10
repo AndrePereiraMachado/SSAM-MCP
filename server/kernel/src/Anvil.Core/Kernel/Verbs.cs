@@ -61,6 +61,9 @@ public sealed partial class ModelSession
         var opsPointer = OpsPointer;
         using var timing = NativePerformanceCapture.Measure("apply.total", cpu: true);
         var results = new JsonArray();
+        EndOfApplyFailure = null;
+        try
+        {
         StudioAdapter.Runtime.Mutate(_espace, "Anvil: apply job", _ =>
         {
             var beforeFlows = ops.OfType<JsonObject>().Any(op => op["op"]?.ToString() is not ("get" or "find" or "dump" or "usages" or "layout"))
@@ -69,15 +72,26 @@ public sealed partial class ModelSession
             var retiredTypes=ops.OfType<JsonObject>().Any(op=>op["op"]?.ToString()=="delete")?ReferencedManagedCSharpTypes():null;
             var failures = new List<ApplyFailure>();
             var skipped = new List<(int Op, int Because, string Uses)>();
+            var isolationWarnings = new List<JsonObject>();
             var blocked = new Blocked();
+            Kept = null;
+            // primeira-certa A2: an op the preflight refused whole (it cannot be compiled) is never run; what uses it is skipped.
+            var refusedBefore = false;
             // C28 (K2, atritos 3): an event argument written before the Destination of its event runs right after it.
             var order = ArgumentOrder(ops, (argument, destination) => Report("reorderedArguments", new JsonObject { ["op"] = argument, ["after"] = destination }));
             foreach (var i in order)
             {
                 var node = ops[i];
+                if (KeepFailures && (SkipOps?.Contains(i) == true || node is not JsonObject || node["op"] is not JsonValue))
+                {
+                    refusedBefore = true;
+                    if (node is JsonObject refused) blocked.Mark(refused, i);
+                    log?.Invoke($"#{i} not run: the preflight refused it");
+                    continue;
+                }
                 var op = node!.AsObject();
                 var kind = op["op"]?.GetValue<string>() ?? throw new InvalidOperationException($"op #{i}: missing 'op'");
-                if (failures.Count > 0 && blocked.UsedBy(op) is { } uses)
+                if ((failures.Count > 0 || refusedBefore) && blocked.UsedBy(op) is { } uses)
                 {
                     skipped.Add((i, uses.Op, uses.Name));
                     blocked.Mark(op, uses.Op);
@@ -86,7 +100,9 @@ public sealed partial class ModelSession
                 }
                 JsonNode? r;
                 _applyOps = ops; _applyIndex = i;
-                try { r = ApplyOne(op); }
+                BeginAnchors(i);
+                var opFailed = true;
+                try { r = ApplyOne(op); opFailed = false; }
                 catch (Exception ex)
                 {
                     var msg = $"op #{i} ({kind} {op["name"]?.GetValue<string>() ?? op["prop"]?.GetValue<string>() ?? ""}): {Unwrap(ex)}";
@@ -97,11 +113,26 @@ public sealed partial class ModelSession
                     if (Errors.FindUnresolved(ex) is { } u) msg += ForwardRefs.Explain(ops, i, u.Name);
                     // A name that does not resolve because an earlier failed (or skipped) op would have created it is that op's
                     // consequence, not a fault of its own: the op is skipped, never a second problem.
-                    if (failures.Count > 0 && Blocked.MissingName(ex, msg) is { } missing && blocked.Mentioned(missing) is { } origin)
+                    if ((failures.Count > 0 || refusedBefore) && Blocked.MissingName(ex, msg) is { } missing && blocked.Mentioned(missing) is { } origin)
                     {
                         skipped.Add((i, origin, missing));
                         blocked.Mark(op, origin);
                         log?.Invoke($"#{i} {kind} skipped: {missing} would come from failed op #{origin}");
+                        continue;
+                    }
+                    // primeira-certa A6: a logic op whose action fails runs again without it (and without the actions of the
+                    // op that use it), so its other actions reach the Verify; each failure points at its action.
+                    if (KeepFailures && kind == "logic" && IsolateActions(op, i, ex, opsPointer, log) is { } isolated)
+                    {
+                        failures.AddRange(isolated.Failures);
+                        isolationWarnings.AddRange(isolated.Warnings);
+                        blocked.Mark(isolated.Broken, i);
+                        if (isolated.Result != null)
+                        {
+                            opFailed = false;
+                            results.Add(new JsonObject { ["op"] = kind, ["result"] = isolated.Result, ["isolated"] = isolated.Kept });
+                            log?.Invoke($"#{i} {kind} applied without {isolated.Broken["data"]!["actions"]!.AsArray().Count} action(s): failed or using a failed one");
+                        }
                         continue;
                     }
                     failures.Add(new ApplyFailure(i, kind, op, new InvalidOperationException(msg, ex)));
@@ -109,6 +140,7 @@ public sealed partial class ModelSession
                     log?.Invoke($"#{i} {kind} failed: {Unwrap(ex)}");
                     continue;
                 }
+                finally { EndAnchors(opFailed); }
                 results.Add(new JsonObject { ["op"] = kind, ["result"] = r });
                 log?.Invoke($"#{i} {kind} ok");
             }
@@ -127,8 +159,16 @@ public sealed partial class ModelSession
             // failure of this refusal; legacy loops, escapes and AGGREGATES_MERGEABLE go to the receipt (highWarnings).
             QueryInLoopReview(ops, failures);
             AggregateConsolidationReview(ops);
-            if (failures.Count > 0) throw ApplyRefusal(failures, skipped, opsPointer);
-            if(retiredTypes!=null)
+            var failed = failures.Count > 0 || refusedBefore;
+            if (failed)
+            {
+                // primeira-certa A2: kept, not thrown: the caller runs the Verify of what did apply and refuses once, with
+                // every phase. The candidate is never saved (JobRunner.ApplyResolved).
+                if (!KeepFailures) throw ApplyRefusal(failures, skipped, opsPointer);
+                Kept = KeptFailures(failures, skipped, opsPointer);
+                Kept.Warnings.AddRange(isolationWarnings.Select(JobPreflight.PublicProblem));
+            }
+            if(!failed && retiredTypes!=null)
             {
                 // Deleting a consumer retires only untouched compiler types that became
                 // orphaned in this same transaction; read-only jobs never run cleanup.
@@ -142,6 +182,15 @@ public sealed partial class ModelSession
             }
             if (beforeFlows != null) AutomaticLayouts = LayoutChangedFlows(beforeFlows);
         });
+        }
+        catch (Exception ex) when (KeepFailures && Kept != null)
+        {
+            // The Studio checks the model when the command ends; an element a failed op left half-built can break that check
+            // (ODC screen cards: ListDescriptor.Validate on a List without its content). The kept failures are the refusal;
+            // the Verify of what did apply cannot run on that model, and the refusal says so.
+            EndOfApplyFailure = $"{ex.GetType().Name}: {ex.Message}";
+            log?.Invoke("  the Studio's check at the end of the apply failed: " + EndOfApplyFailure);
+        }
         return results;
     }
 
@@ -186,7 +235,7 @@ public sealed partial class ModelSession
     }
 
     /// <summary>Registers an `as` alias (C30): the alias as written; Resolve also answers to it with or without its $.</summary>
-    public void Register(string alias, object obj) => _handles[alias] = obj;
+    public void Register(string alias, object obj) { _handles[alias] = obj; Anchor(obj); }
 
     private static readonly System.Text.RegularExpressions.Regex BareAlias = new(@"^\$?[A-Za-z_][A-Za-z0-9_.~\-]*$", System.Text.RegularExpressions.RegexOptions.Compiled);
 
@@ -429,7 +478,13 @@ public sealed partial class ModelSession
                     Register(e["as"]!.ToString(), ((IObjectSignature)Resolve(parent.ToString())).Children.Single(p => TypeResolver.Name(p) == e["name"]!.ToString() && Implements(p, e["type"]!.ToString())));
                 else ApplyOne(e);
             }
-            catch (Exception ex) { throw new InvalidOperationException($"logic op #{k} ({e["op"]} {e["name"] ?? e["prop"]} on {e["parent"] ?? e["target"] ?? e["from"]}): {Unwrap(ex)}", ex); }
+            catch (Exception ex)
+            {
+                var failed = new InvalidOperationException($"logic op #{k} ({e["op"]} {e["name"] ?? e["prop"]} on {e["parent"] ?? e["target"] ?? e["from"]}): {Unwrap(ex)}", ex);
+                // primeira-certa A6: the declared action this generated op belongs to, for the isolation of the apply.
+                if (ActionOfGenerated(e, expanded, data) is { } action) failed.Data[LogicActionKey] = action;
+                throw failed;
+            }
         }
         var healed = new JsonArray();
         foreach (var replacement in replacements)
@@ -561,10 +616,14 @@ public sealed partial class ModelSession
             && !string.Equals(actual, name, StringComparison.OrdinalIgnoreCase) && System.Text.RegularExpressions.Regex.IsMatch(actual, "^" + System.Text.RegularExpressions.Regex.Escape(name) + @"\d+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
         {
             var taken = (parent as IObjectSignature)?.Children.FirstOrDefault(c => !ReferenceEquals(c, created) && string.Equals(TypeResolver.Name(c), name, StringComparison.OrdinalIgnoreCase));
+            // primeira-certa A6: what the Studio created is this failed op's: anchored, so the isolation of a logic op removes
+            // it and the Verify of the refusal never reports the renamed element (a flow without Start) as a fault of its own.
+            Anchor(created, created: true);
             throw new InvalidOperationException($"create {typeName.Split('.').Last()} '{name}' under {Describe(parent)}: the name collides with "
                 + (taken != null ? $"{Describe(taken)}" : "an element of the same name in that scope") + $" and the Studio renamed it to '{actual}'; "
                 + $"every expression of this job that names '{name}' would read the other element. Fix: give it another name (or '{actual}' explicitly), or use the existing '{name}' instead of creating it");
         }
+        Anchor(created, created: true);
         if (op["as"]?.GetValue<string>() is { } alias) Register(alias, created);
         if (_byKey != null && created is IObjectSignature sig && sig.ObjectKey != null) _byKey[sig.ObjectKey.ToString()!] = sig;
         if (op["source"]?.GetValue<string>() is { } source)

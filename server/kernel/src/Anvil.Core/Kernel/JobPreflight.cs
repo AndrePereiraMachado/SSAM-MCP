@@ -31,6 +31,14 @@ public sealed class JobPreflightException : InvalidOperationException, ICodedErr
     public static JobPreflightException Of(IReadOnlyList<JsonObject> problems, IReadOnlyList<string>? lines = null)
         => new(string.Join(Environment.NewLine, lines ?? problems.Select(JobPreflight.Text).ToList()),
             new JsonArray(problems.Select(p => (JsonNode)JobPreflight.PublicProblem(p)).ToArray()));
+
+    /// <summary>Whether the Verify of the candidate ran before this refusal (primeira-certa A2): true when the union of the
+    /// phases includes the Verify's errors; false with <see cref="VerifyReason"/> when it could not run (only the job was
+    /// read, or the base could not be loaded), so the refusal never passes for complete. Null: not said (other refusals).</summary>
+    public bool? VerifyRan { get; set; }
+    public string? VerifyReason { get; set; }
+    /// <summary>The phases whose problems this refusal carries, in order (preflight, base, apply, verify).</summary>
+    public IReadOnlyList<string>? Phases { get; set; }
 }
 
 /// <summary>Cheap syntax and implementation inventory, before loading a fixture or building dependencies. Every problem of
@@ -48,20 +56,28 @@ public static class JobPreflight
         // N3: the problems of expectedMessages are collected with the others (Analyze with the job's path).
         var ops = JobRunner.CollectOps(job, Path.GetDirectoryName(Path.GetFullPath(path))!);
         var result = Analyze(ops, job, null, path);
+        // primeira-certa A2: check-job reads the job only; it never passes for the complete verdict.
+        result["verifyRan"] = false;
+        result["verifyReason"] = OnlyTheJob;
         result["elapsedMs"] = clock.ElapsedMilliseconds;
         return result;
     }
+
+    /// <summary>Why a refusal of the job alone is not complete: what did not run, and the command that runs it all.</summary>
+    public const string OnlyTheJob = "only the job was read (no base loaded): the base check, the apply and the Verify did not run; "
+        + "`apply --job <job> --base <oml> --out <oml>` runs every phase and refuses once with all of them";
 
     public static void Validate(JsonArray ops)
     {
         RequireValid(Analyze(ops));
     }
 
-    public static void RequireValid(JsonObject result)
+    public static void RequireValid(JsonObject result, string? verifyReason = null)
     {
         if (result["errors"]!.AsArray().Count > 0)
             throw new JobPreflightException(string.Join(Environment.NewLine, result["errors"]!.AsArray().Select(e => e!.ToString())),
-                result["problems"]?.DeepClone().AsArray() ?? new JsonArray(), result["warnings"]?.DeepClone().AsArray());
+                result["problems"]?.DeepClone().AsArray() ?? new JsonArray(), result["warnings"]?.DeepClone().AsArray())
+            { VerifyRan = false, VerifyReason = verifyReason ?? OnlyTheJob, Phases = ["preflight"] };
     }
 
     /// <summary>Without the job document the pointers assume the usual {"ops":[...]} shape.</summary>
@@ -239,6 +255,8 @@ public static class JobPreflight
             }).ToArray();
         // Stable order: by op (problems without an op last), then as found.
         var sorted = problems.Select((p, n) => (p, n)).OrderBy(x => x.p["op"]?.GetValue<int>() ?? int.MaxValue).ThenBy(x => x.n).Select(x => x.p).ToList();
+        // primeira-certa A2: every problem says its phase; these are the job's own (no base, no model).
+        foreach (var p in sorted) p["phase"] ??= "preflight";
         var errors = new JsonArray(sorted.Select(p => (JsonNode)Text(p)).ToArray());
         return new JsonObject
         {

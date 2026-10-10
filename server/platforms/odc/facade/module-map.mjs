@@ -5,6 +5,8 @@
 // is a miss, and the lane reader builds it again ({"index":"ensure"}). The store is a cache: its writer trims it.
 //   ssam map [--lane o11|odc] <capture.oml|Module> [--kind K] [--name N] [--prefix P] [--role R] [--parent @key]
 //     [--key @key] [--offset N] [--max N] [--budget B] [--detail] [--expectedSourceSha256 H]
+//   ssam map [--lane o11|odc] <capture.oml|Module> --digest [--page N] [--budget B] [--expectedSourceSha256 H]
+//     the module digest of the same capture (view "digest", module-digest.mjs): the whole module as text, in pages
 //   node module-map.mjs --prefetch <capture.oml> --lane o11|odc      (the detached warm-up, see prefetchIndex)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,13 +21,15 @@ import { o11LaneOf } from './o11-lane.mjs';
 import { resolveOpenModule, systemModuleName } from './studio-module.mjs';
 import { withStudioWriteLock } from './studio-write-lock.mjs';
 import { canonicalCapture } from './oml-content-sha.mjs';
+import { DIGEST_ADAPTER, DIGEST_PAGE_SCHEMA, DIGEST_SCHEMA, DIGEST_NOTE, loadDigest, digestPages, digestBody } from './module-digest.mjs';
 
 export const INDEX_SCHEMA = 'ssam-module-index/1';
 export const EXTRACTOR = 1;
 export const MAP_SCHEMA = 'ssam-map/1';
 export const ROLES = ['module', 'flow', 'screen', 'block', 'action', 'actionRef', 'aggregate', 'entity', 'staticEntity', 'structure',
   'attribute', 'parameter', 'variable', 'widget', 'event', 'flowNode', 'expression', 'reference', 'other'];
-export const MAP_USAGE = 'ssam map [--lane o11|odc] <capture.oml|Module> [--kind K] [--name N] [--prefix P] [--role R] [--parent @key] [--key @key] [--offset N] [--max N] [--budget B] [--detail] [--expectedSourceSha256 H]';
+export const MAP_USAGE = 'ssam map [--lane o11|odc] <capture.oml|Module> [--kind K] [--name N] [--prefix P] [--role R] [--parent @key] [--key @key] [--offset N] [--max N] [--budget B] [--detail] [--expectedSourceSha256 H] | ssam map [--lane o11|odc] <capture.oml|Module> --digest [--page N] [--budget B] [--expectedSourceSha256 H]';
+export const VIEWS = ['map', 'digest'];
 const DETAIL_ROLES = new Set(['expression', 'reference', 'other']);
 const ANONYMOUS_KINDS = ['AnonymousStructure', 'ListType'];
 // The reader's own refusal text (SnapshotReading.Read), which discovery and callers already recognize.
@@ -39,6 +43,8 @@ export const sha256Of = file => createHash('sha256').update(fs.readFileSync(file
 // own folder (ModuleIndexStore.Default); readerConfig hands every reader this resolved root, so both sides use one folder.
 export const indexRoot = (env = process.env) => env.SSAM_MODULE_INDEX_ROOT ? path.resolve(env.SSAM_MODULE_INDEX_ROOT) : path.join(workspaceRoot, '.local', 'module-index');
 export const indexFile = (lane, sha256, env = process.env) => path.join(indexRoot(env), 'v1', lane, sha256.toLowerCase() + '.' + adapterOf(lane) + '.json');
+// The module digest beside the index (ModuleIndexStore.DigestPathOf), written in both lanes by the kernel's own reader.
+export const digestFile = (lane, sha256, env = process.env) => path.join(indexRoot(env), 'v1', lane, sha256.toLowerCase() + '.' + DIGEST_ADAPTER + '.digest.json');
 // C15: the registry of canonical captures by content (oml-content-sha.mjs canonicalCapture), beside the index store.
 export const contentRegistry = (lane, env = process.env) => path.join(indexRoot(env), 'v1', lane, 'content');
 // The capture that answers a read of `file`: the first intact capture of the same content (its index and its sha), or the
@@ -57,6 +63,14 @@ export function readerConfig(lane, { entry = LANES.o11, ssDir, env = process.env
       entry.lane === 'ss5' ? 'Service Studio 11 - Anvil 4536' : 'Service Studio 11 - Anvil 4516', 'Service Studio'),
     cacheRoot: env.SSAM_READER_CACHE_ROOT ?? path.join(entry.root, '.local', 'readers'), indexRoot: indexRoot(env) };
   throw new Error('Unknown lane ' + lane + '; lanes: odc, o11');
+}
+// The reader that writes the module digest: on O11 the lane reader itself; on ODC the kernel's reader (anvil-odc
+// read-serve), never the builder, whose public Model API shows widgets as Content trees the digest does not render.
+export const odcKernelCli = () => path.join(anvilRoot, '.local', 'lane-odc', 'cli', 'anvil-odc.dll');
+export function digestReaderConfig(lane, { entry, ssDir, env = process.env } = {}) {
+  if (lane === 'odc') return { dll: odcKernelCli(), platform: 'odc', runtimeDir: odcStudioDir(env),
+    cacheRoot: env.SSAM_READER_CACHE_ROOT ?? path.join(odcRoot, '.local', 'readers'), indexRoot: indexRoot(env) };
+  return readerConfig(lane, { ...(entry ? { entry } : {}), ssDir, env });
 }
 
 // ---- the store
@@ -153,18 +167,34 @@ function mapRequest(input) {
   for (const name of ['kind', 'name', 'prefix', 'role', 'parent', 'key'])
     if (input[name] != null && (typeof input[name] !== 'string' || !input[name])) throw new Error(name + ' must be a non-empty string');
   if (input.expectedSourceSha256 != null && !/^[a-fA-F0-9]{64}$/.test(input.expectedSourceSha256)) throw new Error('expectedSourceSha256 must be 64 hexadecimal characters');
-  return { lane, target: input.target, kind: input.kind, name: input.name, prefix: input.prefix, role: input.role, parent: input.parent, key: input.key,
-    offset: integer('offset', input.offset, 0, Number.MAX_SAFE_INTEGER, 0), max: integer('max', input.max, 1, 500, 100),
+  const view = input.view ?? 'map';
+  if (!VIEWS.includes(view)) throw new Error('view must be one of: ' + VIEWS.join(', ') + ' (map: the elements with their @keys; digest: the whole module as text, in pages)');
+  const offset = integer('offset', input.offset, 0, Number.MAX_SAFE_INTEGER, 0);
+  if (view === 'digest') {
+    // The digest pages the whole module: the map's filters and paging would read as a filtered digest, which it is not.
+    const mapOnly = ['kind', 'name', 'prefix', 'role', 'parent', 'key'].filter(k => input[k] != null);
+    if (input.includeDetail === true) mapOnly.push('includeDetail');
+    if (offset > 0) mapOnly.push('offset');
+    if (mapOnly.length) throw new Error('view "digest" pages the whole module digest; ' + mapOnly.join(', ') + ' belong to view "map". Use page to move through the digest.');
+  } else if (input.page != null) throw new Error('page belongs to view "digest" (the module digest in pages); the map pages with offset and max');
+  return { lane, target: input.target, view, page: view === 'digest' ? integer('page', input.page, 1, 100000, 1) : undefined,
+    kind: input.kind, name: input.name, prefix: input.prefix, role: input.role, parent: input.parent, key: input.key,
+    offset, max: integer('max', input.max, 1, 500, 100),
     budgetBytes: integer('budgetBytes', input.budgetBytes, 2000, 1048576, DEFAULT_MAP_BUDGET()), includeDetail: input.includeDetail === true,
     expectedSourceSha256: input.expectedSourceSha256?.toLowerCase(), pid: input.pid };
 }
 export function parseMapArguments(args) {
   const input = {};
   const values = { '--lane': 'lane', '--kind': 'kind', '--name': 'name', '--prefix': 'prefix', '--role': 'role', '--parent': 'parent', '--key': 'key',
-    '--offset': 'offset', '--max': 'max', '--budget': 'budgetBytes', '--expectedSourceSha256': 'expectedSourceSha256', '--oml': 'target', '--pid': 'pid' };
+    '--offset': 'offset', '--max': 'max', '--budget': 'budgetBytes', '--expectedSourceSha256': 'expectedSourceSha256', '--oml': 'target', '--pid': 'pid',
+    '--page': 'page', '--view': 'view' };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--detail') { input.includeDetail = true; continue; }
+    if (arg === '--digest') {
+      if (input.view != null && input.view !== 'digest') throw new Error('--digest and --view ' + input.view + ' disagree');
+      input.view = 'digest'; continue;
+    }
     if (values[arg]) {
       const value = args[++i];
       if (value == null || value.startsWith('--')) throw new Error('Missing value for ' + arg);
@@ -211,6 +241,7 @@ export async function moduleMap(input = {}, deps = {}) {
     const hashMs = performance.now() - started;
     // expectedSourceSha256: the raw sha256 of the capture served, of the capture just taken, or their content sha256.
     if (q.expectedSourceSha256 && ![sha256, canonical.contentSha256, ...(canonical.reused ? [sha256Of(captured)] : [])].includes(q.expectedSourceSha256)) throw new Error(CHANGED);
+    if (q.view === 'digest') return await digestAnswer(q, { file, sha256, canonical, captured, snapshot, started, hashMs, read, reader, env });
     const stored = indexFile(q.lane, sha256, env);
     let index = loadIndex(stored, q.lane, sha256), served = stored, cache = { index: 'hit' }, ensureMs;
     if (!index) {
@@ -237,6 +268,54 @@ export async function moduleMap(input = {}, deps = {}) {
   } catch (error) {
     return { ok: false, lane: q?.lane ?? input.lane ?? 'odc', target: input.target, ...(file ? { file } : {}), error: error.message };
   }
+}
+
+// ---- the digest view: one page of the module digest of the capture (module-digest.mjs). A miss asks the lane's kernel
+// reader to write it ({"digest":"ensure"}) and reads the file it wrote; every continuation pins this capture's file and hash.
+async function digestAnswer(q, { file, sha256, canonical, captured, snapshot, started, hashMs, read, reader, env }) {
+  const stored = digestFile(q.lane, sha256, env);
+  let loaded = loadDigest(stored, q.lane, sha256), served = stored, cache = { digest: 'hit' }, ensureMs;
+  if (!loaded) {
+    const phase = performance.now();
+    const config = digestReaderConfig(q.lane, { ...reader, env });
+    if (read === readSnapshot && !fs.existsSync(config.dll))
+      throw new Error('The ' + q.lane + ' kernel reader that writes the module digest is not built: ' + config.dll + ' (scripts/setup-dev.ps1 builds it)');
+    const response = await read({ ...config, request: { file, digest: 'ensure', expectedSourceSha256: sha256 } });
+    const built = response.digest ?? response.data?.digest;
+    if (!built) throw new Error('The ' + q.lane + ' reader answered without a module digest: its binaries predate ' + DIGEST_SCHEMA + '; rebuild the reader');
+    loaded = loadDigest(stored, q.lane, sha256);
+    // A reader started under another store root (SSAM_MODULE_INDEX_ROOT at its start) reports where it wrote.
+    const reported = typeof built.path === 'string' ? path.resolve(built.path) : null;
+    if (!loaded && reported && reported !== stored) { loaded = loadDigest(reported, q.lane, sha256); served = reported; }
+    if (!loaded) throw new Error('The module digest of this capture is missing or invalid after the reader built it: ' + stored);
+    ensureMs = performance.now() - phase;
+    cache = { digest: 'ensured', built: built.built === true, ...(response.cache ? { loads: response.cache.loads, generation: response.cache.generation } : {}) };
+  }
+  const { digest, stamp } = loaded;
+  const laid = digestPages(digest, { budgetBytes: q.budgetBytes, key: served + '|' + stamp });
+  if (q.page > laid.pages.length)
+    throw new Error('page ' + q.page + ' does not exist: the module digest of this capture has ' + laid.pages.length + ' page(s) at budgetBytes ' + q.budgetBytes);
+  const pin = { lane: q.lane, target: file, view: 'digest', budgetBytes: q.budgetBytes, expectedSourceSha256: sha256 };
+  const inspect = q.lane === 'odc'
+    ? { tool: 'studio_inspect', arguments: { target: file, path: '@<key>', expectedSourceSha256: sha256 } }
+    : { tool: 'o11_inspect', arguments: { oml: file, path: '@<key>', expectedSourceSha256: sha256 } };
+  const answer = { ok: true, schema: DIGEST_PAGE_SCHEMA, lane: q.lane, target: q.target, file, sourceSha256: sha256, contentSha256: canonical.contentSha256,
+    ...(snapshot ? { snapshotSha256: snapshot.sha256 } : {}),
+    ...(snapshot?.capturedBy === PUBLISHED_CAPTURE ? { capturedBy: PUBLISHED_CAPTURE, versionId: snapshot.versionId ?? null } : {}),
+    module: digest.module, answeredBy: 'module-digest',
+    store: { file: served, adapter: digest.adapter, extractor: digest.extractor, createdAt: digest.createdAt ?? null },
+    ...digestBody(digest, laid, q.page), cache,
+    ...(canonical.reused ? { capture: { file: captured, reused: true, note: 'same content as the capture this answer reads (volatile header fields aside): its keys and index serve' } } : {}),
+    continuations: { next: q.page < laid.pages.length ? { tool: 'ssam_map', arguments: { ...pin, page: q.page + 1 } } : null,
+      page: { tool: 'ssam_map', arguments: { ...pin, page: '<n>' } }, inspect,
+      note: 'next is the following page; page reads any page of contents (same capture, same budget); inspect reads an @key with this hash' },
+    note: DIGEST_NOTE };
+  const round = n => Math.round(n * 10) / 10;
+  answer.size = { bytes: 0, budgetBytes: q.budgetBytes };
+  answer.timings = { hashMs: round(hashMs), ...(ensureMs != null ? { ensureMs: round(ensureMs) } : {}), totalMs: round(performance.now() - started) };
+  // The bytes of the answer itself, size field included (its own digits change the count at most twice).
+  for (let i = 0; i < 3; i++) answer.size.bytes = Buffer.byteLength(JSON.stringify(answer), 'utf8');
+  return answer;
 }
 
 function present(index, q, { file, sha256, stored, cache, snapshot }) {

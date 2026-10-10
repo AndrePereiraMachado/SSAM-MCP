@@ -95,7 +95,7 @@ test('the normal MCP entry tells every new session how to obtain contracts and t
     await Promise.all([server.connect(a), client.connect(b)]);
     assert.match(client.getInstructions(), /ssam_discover \{intent, lane\}/);
     // Every session reads an application map first, then the subtrees by @key with the expected hash.
-    assert.match(client.getInstructions(), /To read an application, start with ssam_map \{lane, target\}:.*then inspect subtrees, properties and usages by @key with the expected sha256/);
+    assert.match(client.getInstructions(), /To read an application, start with ssam_map \{lane, target, view:"digest"\}: the whole module as text in pages.*read it once and work in context\. ssam_map \{lane, target\} lists every element with its @key; inspect only to go deeper into an @key with the expected sha256/);
     assert.match(client.getInstructions(), /failed ssam_job\/o11_job .* answers with `discovery`/);
     const tools = (await client.listTools()).tools;
     for (const name of ['ssam_job', 'o11_job']) assert.match(tools.find(t => t.name === name).description, /A failed run also returns `discovery`/, name);

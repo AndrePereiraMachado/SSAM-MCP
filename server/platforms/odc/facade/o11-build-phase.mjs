@@ -130,8 +130,11 @@ export async function buildBeforeApply({ input, job, ctx, lane, task, signal }) 
     throw error;
   }
   const data = run?.envelope?.data;
-  // The kernel's verdict on the live module: a refused preflight (pure job problems) or a validation verdict.
-  if (run?.envelope?.code === 'PREFLIGHT_REFUSED' && (!data || typeof data !== 'object')) { notePhase({ built: true }); return { refused: run }; }
+  // The kernel's verdict on the live module: the single refusal (every problem of every phase, PREFLIGHT_REFUSED), a
+  // refusal of the apply alone with its own code and its problems (primeira-certa A7: DELETE_HAS_CONSUMERS, ...), or a
+  // validation verdict. Nothing of it reaches the Studio.
+  if (run?.envelope?.ok === false && (!data || typeof data !== 'object')
+    && (run.envelope.code === 'PREFLIGHT_REFUSED' || (Array.isArray(run.envelope.problems) && run.envelope.problems.length))) { notePhase({ built: true }); return { refused: run }; }
   if (data && typeof data === 'object' && (data.isValid === false || data.accepted === false)) {
     notePhase({ built: true });
     return { refused: { ...run, envelope: { ...run.envelope, data: { stage: 'apply', apply: data, writeState: 'not-sent', error: 'job rejected by validation contract; merge was not attempted' } } } };

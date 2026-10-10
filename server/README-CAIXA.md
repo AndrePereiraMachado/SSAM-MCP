@@ -1,10 +1,11 @@
 # Caixa server
 
 Servidor MCP hospedado do SSAM: `ssam serve`, hub do agente, tokens, kernels O11 e ODC, builder ODC, imagem Docker e
-painel do dono. Cópia de `servidor/fase4` (`e7b2119b`) de `C:\Users\andre\SSAM-Hybrid-servidor`, sem edição.
+painel do dono. Cópia de `servidor/fase4` (`e7b2119b`) de `C:\Users\andre\SSAM-Hybrid-servidor`, sem edição,
+atualizada para `servidor/fase4-22` (`1fbfa377`, 22º envio).
 Esta pasta é a raiz do repositório antigo: caminhos relativos, Dockerfile e compose funcionam daqui.
 
-O servidor no ar continua rodando do original (porta 7310). Não use essa porta para testar esta cópia.
+O servidor no ar continua rodando do original (`SSAM-Hybrid-servidor-wt\fase4-22`, porta 7310). Não use essa porta para testar esta cópia.
 
 ## Compilar
 

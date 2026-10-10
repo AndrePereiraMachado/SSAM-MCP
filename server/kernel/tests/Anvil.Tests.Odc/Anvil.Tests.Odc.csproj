@@ -38,6 +38,7 @@
     <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="../Shared/ModelReadingTests.cs" Link="ModelReadingTests.cs" />
     <Compile Include="../Shared/ModuleIndexTests.cs" Link="ModuleIndexTests.cs" />
+    <Compile Include="../Shared/ModuleDigestTests.cs" Link="ModuleDigestTests.cs" />
     <Compile Include="../Shared/AutomaticFlowLayoutTests.cs" Link="AutomaticFlowLayoutTests.cs" />
     <Compile Include="../Shared/DataContractIdentityScenarios.cs" Link="DataContractIdentityScenarios.cs" />
     <Compile Include="../Shared/QueryRulesScenarios.cs" Link="QueryRulesScenarios.cs" />

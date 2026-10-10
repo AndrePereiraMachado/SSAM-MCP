@@ -18,7 +18,7 @@ public sealed partial class ModelSession
     /// <summary>An existing object a write verb changed (recorded by the verbs themselves, where the target is resolved).</summary>
     private void Touch(object? target)
     {
-        if (target is IObjectSignature) _touched.Add(target);
+        if (target is IObjectSignature) { _touched.Add(target); Anchor(target); }
     }
 
     /// <summary>C08: the screen a write opened to anonymous users (the job's declared intent).</summary>

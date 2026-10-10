@@ -440,7 +440,7 @@ test('the MCP surface tells every session to start each request with ssam_discov
     await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
     try {
       assert.match(client.getInstructions(), /Every SSAM request starts with ssam_discover \{intent, lane\}/);
-      assert.match(client.getInstructions(), /To read an application, start with ssam_map \{lane, target\}/);
+      assert.match(client.getInstructions(), /To read an application, start with ssam_map \{lane, target, view:"digest"\}/);
       const tool = (await client.listTools()).tools.find(t => t.name === 'ssam_discover');
       assert.match(tool.description, /^Start EVERY SSAM request here, model change or not\./);
       assert.match(tool.description, /`tools`.*exact MCP tool, its verb/);

@@ -124,7 +124,8 @@ test('a successful ssam_job answers in about 1 KB; a refusal keeps every problem
   assert.equal(refused.problems.length, 3);
   for (const p of refused.problems) { assert.ok(p.message.length <= 300 && p.fix.length <= 300); assert.match(p.code, /^CODE_\d$/); }
   assert.deepEqual(refused.problems[0].patch, problems[0].patch, 'a small mechanical patch is kept');
-  assert.equal(refused.problems[2].patch, undefined); assert.equal(refused.problems[2].patchOmitted, true);
+  // primeira-certa A3: the patch is the fix patch + basedOn applies: kept whole, whatever its size.
+  assert.deepEqual(refused.problems[2].patch, problems[2].patch); assert.equal(refused.problems[2].patchOmitted, undefined);
   // A failed apply (accepted:false) keeps its messages, details and policy messages, as before.
   const failed = summarize({ ...common, saved: { ok: true, data: { ...data, accepted: false, preflight: { problems: problems.slice(0, 1) } }, via: 'worker', wallMs: 1 } });
   assert.equal(failed.ok, false); assert.equal(failed.messages.length, 10); assert.equal(failed.details.length, 10); assert.deepEqual(failed.policyMessages, ['policy: x']);

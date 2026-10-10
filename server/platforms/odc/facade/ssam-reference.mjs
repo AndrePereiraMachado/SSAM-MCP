@@ -15,9 +15,24 @@ import * as z from 'zod/v4';
 import { anvilRoot, o11Lane } from './workspace.mjs';
 import { o11LaneOf } from './o11-lane.mjs';
 import { createAnvilRunner } from './anvil-cli.mjs';
-import { seamFields, usesWorkspace, workspacePath } from './executor.mjs';
+import { hostedContext, seamFields, usesWorkspace, workspacePath } from './executor.mjs';
 import { GUIDE_FILES, guideSections, guideText } from './runtime-guides.mjs';
 import { closest } from './tool-input.mjs';
+import { refusalFields } from './refusal-problems.mjs';
+
+// The base a job names ({"base": "..."}), or null: a job without one is checked alone (the CLI's default fixture is not
+// the module the job was written for).
+const declaredBase = file => {
+  try { const job = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, '')); return job && !Array.isArray(job) && typeof job.base === 'string' && job.base.trim() ? job.base : null; }
+  catch { return null; }
+};
+// Hosted (servidor/fase4-22): the base a job declares resolves on the server (a path anywhere on it, or a name of the
+// kernel's suite, whose fixtures are customer captures), never inside the customer's workspace; the hosted ssam_job never
+// applies over it either (hosted/policy.mjs NEUTRAL_ODC_BASE). So a hosted check-job reads the job alone, as before the
+// 22nd release, and says why the other phases did not run.
+export const HOSTED_DECLARED_BASE_REASON = 'hosted SSAM server: the base this job declares is not read here (it would resolve on the server, outside '
+  + 'your workspace), so only the job was read and the base check, the apply and the Verify did not run; studio_deliver (ODC) and o11_deliver (O11) '
+  + 'check every phase over your live module, once, before any change';
 
 export const REFERENCE_KINDS = ['api', 'functions', 'ui-block', 'types', 'where-can', 'recipe', 'check-job', 'check-delivery', 'verify-message', 'example', 'rules'];
 // recipe and example on ODC are answered here from the suite files (no CLI): the ODC CLI has no recipe, and a session
@@ -410,6 +425,26 @@ export function registerSsamReference(server, deps = {}) {
       fs.writeFileSync(built.job, JSON.stringify(built.inlineJob, null, 2));
       built.argv.push(built.job);
     }
+    // primeira-certa A3: a job that names its base (a fixture, job:<name>, a capture) is checked over it: the apply of the
+    // CLI runs every phase (preflight, base, apply, Verify) on a disposable copy and refuses once with all of them. A job
+    // without a base is read alone (check-job), and the answer says the Verify did not run.
+    const hostedBase = kind === 'check-job' && hostedContext() !== null && declaredBase(built.job) !== null;
+    if (kind === 'check-job' && !hostedBase && declaredBase(built.job)) {
+      const out =path.join(local(lane), 'jobs', 'check', uuid() + '.oml');
+      fs.mkdirSync(path.dirname(out), { recursive: true });
+      const work = lane === 'odc' ? path.join(local(lane), 'jobs', 'work') : o11LaneOf(laneName, { root, env }).work;
+      const applied = await runAnvil(['apply', '--job', built.job, '--out', out, '--work', work], { timeoutMs, cwd: root, ...(lane === 'odc' ? { cli } : {}) });
+      const verdict = applied.envelope;
+      if (!verdict) return refusal(applied.timedOut ? 'TIMEOUT' : 'CLI_FAILED', firstLine((applied.stderr ?? []).at(-1) ?? 'the CLI gave no answer'), doctor(lane, 'check the lane CLI'));
+      const ran = verdict.data;
+      if (verdict.ok === true && ran?.accepted === true && ran?.isValid === true)
+        return { ok: true, lane, kind, job: built.job, valid: true, verifyRan: true, base: declaredBase(built.job), accepted: true, isValid: true, messages: ran.messages ?? null };
+      return refusal('JOB_INVALID', 'the job does not pass: every problem of every phase over its base, at once', again(lane, kind, built.job, 'fix every problem (apply the patches) and check the stored job again'),
+        { job: built.job, base: declaredBase(built.job), ...(verdict.code ? { refusalCode: verdict.code } : {}),
+          errors: String(verdict.error ?? '').split(/\r?\n/).filter(Boolean).slice(0, 20).map(l => l.slice(0, 500)),
+          ...refusalFields(verdict.problems ?? ran?.preflight?.problems, verdict.problems ? verdict : { verifyRan: true, phases: ['verify'] }),
+          ...(!verdict.problems && Array.isArray(ran?.policyMessages) ? { policyMessages: ran.policyMessages.slice(0, 20) } : {}) });
+    }
     const run = await runAnvil(built.argv, { timeoutMs, cwd: root, ...(lane === 'odc' ? { cli } : {}) });
     const envelope = run.envelope;
     if (!envelope) return refusal(run.timedOut ? 'TIMEOUT' : 'CLI_FAILED', firstLine((run.stderr ?? []).at(-1) ?? 'the CLI gave no answer'), doctor(lane, 'check the lane CLI'));
@@ -417,9 +452,11 @@ export function registerSsamReference(server, deps = {}) {
       return refusal('CLI_REFUSED', firstLine(envelope.error), nextLookup(lane, kind, query));
     let data = envelope.data;
     if (kind === 'check-job') {
-      if (data?.valid === true) return { ok: true, lane, kind, job: built.job, ...sized(lane, data) };
+      const alone = { verifyRan: false, verifyReason: hostedBase ? HOSTED_DECLARED_BASE_REASON
+        : data?.verifyReason ?? 'only the job was read: it names no base, so the base check, the apply and the Verify did not run; give the job a base (a fixture, job:<name>) to check every phase' };
+      if (data?.valid === true) return { ok: true, lane, kind, job: built.job, ...sized(lane, data), ...alone };
       return refusal('JOB_INVALID', 'the job does not pass the preflight', again(lane, kind, built.job, 'fix the errors and check the stored job again'),
-        { job: built.job, errors: (data?.errors ?? []).slice(0, 20) });
+        { job: built.job, errors: (data?.errors ?? []).slice(0, 20), ...refusalFields(data?.problems, alone) });
     }
     if (kind === 'check-delivery') {
       const named = built.taskId ? { taskId: built.taskId, result: built.result } : {};
@@ -442,7 +479,8 @@ export function registerSsamReference(server, deps = {}) {
       + '{op} (a grammar such as logic, or a job verb such as create: its line) | {op:"native", type}; functions "Name" | {name}|{find}; ui-block "Block" | {catalog?, name}|{catalog?, find} (catalog: '
       + 'library name such as OutSystemsUI, default OutSystemsUI); types {assembly, filter, max?}; where-can "IInterface"; recipe "text" | '
       + '{find, ops?, max?} (ops without max: 20); verify-message "Id" | {name}|{find}; check-job: absolute path or the job object itself (stored under '
-      + '<lane>/jobs/inline); check-delivery: {taskId} of an o11_deliver answer, or the absolute path of its result.json; an unknown query field answers the closest valid form; example "<id>" | {id}|{find}: a whole proven '
+      + '<lane>/jobs/inline); a job that names its base is checked over it, every phase at once as a delivery refuses (problems[] with phase, '
+      + 'pointer, fix, patch; verifyRan), one without base is read alone (verifyRan:false); check-delivery: {taskId} of an o11_deliver answer, or the absolute path of its result.json; an unknown query field answers the closest valid form; example "<id>" | {id}|{find}: a whole proven '
       + 'example by id (a job of the lane suite, e.g. "timer-action", or an html source, e.g. "html/visual/block-event.html"); '
       + 'rules "all" | "<section number or heading words>" | "padroes" | {doc?: "time"|"padroes", section?}: the team rules to read '
       + 'before generating or changing modules (how to work, standards, platform lessons; padroes: the 35 OutSystems padrões rules), '

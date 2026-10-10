@@ -62,8 +62,51 @@ public static class Errors
             envelope["code"] = coded.Code;
             if (coded.Problems is { } problems) envelope["problems"] = problems.DeepClone();
         }
+        // primeira-certa A2/A7: whether the Verify ran before the refusal (and why not), its phases and, for a refusal of
+        // one phase alone that keeps its own exception, the problems in the same form.
+        if (Diagnosis(ex) is { } diagnosis)
+            foreach (var (key, value) in diagnosis)
+                if (key != "problems" || envelope["problems"] == null) envelope[key] = value?.DeepClone();
         envelope["stack"] = stack;
         return envelope;
+    }
+
+    /// <summary>Where <see cref="Annotate"/> keeps the fields of a refusal whose exception is not a JobPreflightException.</summary>
+    public const string DiagnosisKey = "anvil.diagnosis";
+
+    /// <summary>primeira-certa A7: a refusal of one phase alone (a lone apply failure such as DELETE_HAS_CONSUMERS, a lone
+    /// database-upgrade refusal) keeps its own exception and code, and still says whether the Verify ran, its phases and
+    /// its problems in the format of the single refusal.</summary>
+    public static void Annotate(Exception ex, bool verifyRan, string? verifyReason, IReadOnlyList<string> phases, JsonArray? problems)
+    {
+        if (ex is JobPreflightException refusal)
+        {
+            refusal.VerifyRan = verifyRan; refusal.VerifyReason = verifyReason; refusal.Phases = phases;
+            return;
+        }
+        var fields = new JsonObject { ["verifyRan"] = verifyRan };
+        if (verifyReason != null) fields["verifyReason"] = verifyReason;
+        fields["phases"] = new JsonArray(phases.Select(p => (JsonNode)p).ToArray());
+        if (problems != null) fields["problems"] = problems.DeepClone();
+        ex.Data[DiagnosisKey] = fields;
+    }
+
+    /// <summary>The diagnosis fields of a refusal (verifyRan, verifyReason, phases and, from <see cref="Annotate"/>,
+    /// problems), outermost first; null when the refusal says none.</summary>
+    public static JsonObject? Diagnosis(Exception ex)
+    {
+        for (var e = ex; e != null; e = e.InnerException)
+        {
+            if (e.Data.Contains(DiagnosisKey) && e.Data[DiagnosisKey] is JsonObject annotated) return annotated.DeepClone().AsObject();
+            if (e is JobPreflightException { VerifyRan: { } ran } refusal)
+            {
+                var fields = new JsonObject { ["verifyRan"] = ran };
+                if (refusal.VerifyReason != null) fields["verifyReason"] = refusal.VerifyReason;
+                if (refusal.Phases != null) fields["phases"] = new JsonArray(refusal.Phases.Select(p => (JsonNode)p).ToArray());
+                return fields;
+            }
+        }
+        return null;
     }
 
     public static (string Type, string Message, string? Stack) Describe(Exception ex)

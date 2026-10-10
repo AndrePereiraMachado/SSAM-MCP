@@ -69,6 +69,8 @@ public static partial class Delivery
         result.Remove("referencesRefreshed"); result.Remove("referencesRefreshFailed");
         IReadOnlyDictionary<string, VerifyHint>? hints = null;
         var dataProofDiffers = false;
+        // primeira-certa A3: the preflight of a job it refuses, kept for an answer without a capture (Fail).
+        JsonObject? pure = null;
         try
         {
             if (result["sources"] == null)
@@ -85,20 +87,13 @@ public static partial class Delivery
                 if (request.Specification == null || !ModuleSpecification.IsAuthoredSource(request.JobPath)) JobRunner.ValidateJob(request.JobPath);
                 if (request.Specification == null)
                 {
-                    // The whole-job preflight (C20/C28): recorded as it is, and a refusal carries every problem at once,
-                    // before the Studio is touched. The task keeps no sources, so the same task id re-validates on resume;
-                    // its job record (path + SHA-256) stays for the correction by basedOn {taskId}.
+                    // The whole-job preflight (C20/C28), recorded as it is. primeira-certa A3: a job it refuses is no longer
+                    // refused here, alone: the delivery goes on to the capture of the live module and the apply over it, which
+                    // refuses once with every phase (preflight, base, apply, Verify) before the merge, the only Studio write.
+                    // The preflight alone answers only when no capture can be had (Fail below), with verifyRan false.
                     var preflight = JobPreflight.Check(request.JobPath);
                     result["preflight"] = preflight.DeepClone();
-                    if (preflight["valid"]?.GetValue<bool>() == false)
-                    {
-                        result.Remove("sources");
-                        result["code"] = PreflightRefused;
-                        result["problems"] = PreflightProblems(preflight);
-                        stage = "preflight";
-                        return Fail("Job refused by the preflight before any Studio call; nothing was sent. "
-                            + string.Join(" ", (preflight["errors"] as JsonArray ?? new JsonArray()).Select(e => e?.ToString()).Where(e => !string.IsNullOrWhiteSpace(e))));
-                    }
+                    if (preflight["valid"]?.GetValue<bool>() == false) pure = preflight;
                 }
                 else
                 {
@@ -649,6 +644,10 @@ public static partial class Delivery
                 result["code"] = coded.Code;
                 if (coded.Problems is { } problems) result["problems"] = problems.DeepClone();
             }
+            // primeira-certa A2/A7: whether the Verify ran, the phases and, for a refusal of one phase, its problems.
+            if (Errors.Diagnosis(ex) is { } diagnosis && result["apply"] == null)
+                foreach (var (key, value) in diagnosis)
+                    if (key != "problems" || result["problems"] == null) result[key] = value?.DeepClone();
             return Fail(Errors.Text(ex));
         }
         finally
@@ -708,7 +707,25 @@ public static partial class Delivery
                 : merge["merged"]?.GetValue<bool>() == false ? "not-applied" : "unknown";
             task.Save("merge-recorded");
         }
-        JsonObject Fail(string message) { result["error"] = message; return result; }
+        JsonObject Fail(string message)
+        {
+            // primeira-certa A3: a job the preflight refused, stopped before the apply over the capture could refuse it with
+            // every phase (no capture, the module not open, a producer, a bridge failure): the preflight's own refusal, with
+            // the reason the rest did not run. The task keeps no sources, so the same task id validates again on resume.
+            if (pure != null && result["code"] == null && result["problems"] == null)
+            {
+                result.Remove("sources");
+                result["code"] = PreflightRefused;
+                result["problems"] = PreflightProblems(pure);
+                result["verifyRan"] = false;
+                result["verifyReason"] = "the delivery stopped before the apply over the live module (" + message + "): only the job was read, so the base check, the apply and the Verify did not run";
+                result["phases"] = new JsonArray("preflight");
+                stage = "preflight";
+                message = "Job refused by the preflight; nothing was merged. "
+                    + string.Join(" ", (pure["errors"] as JsonArray ?? new JsonArray()).Select(e => e?.ToString()).Where(e => !string.IsNullOrWhiteSpace(e)));
+            }
+            result["error"] = message; return result;
+        }
     }
     /// <summary>Explicit bindings plus the producers this task captures. Each producer is captured (read-only) into the
     /// task folder and recorded, path + SHA-256, among the task sources and in capturedProducers, and the task is saved

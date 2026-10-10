@@ -48,6 +48,13 @@ public static class ExpressionRules
             }
             foreach (var site in scan.Expressions)
             {
+                // primeira-certa A4: an expression whose syntax does not hold is that problem alone (its tokens mean nothing
+                // to the other rules); said once, by the pure pass.
+                if (ExpressionSyntax.Check(site.Text) is { } syntax)
+                {
+                    if (model == null) Add(site, "EXPRESSION_SYNTAX", $"{site.Text}: {syntax.Problem}", syntax.Fix);
+                    continue;
+                }
                 var tokens = ExpressionText.Tokens(site.Text);
                 var calls = ExpressionText.Calls(site.Text, tokens);
                 if (builtins != null) Arity(site, calls, builtins, job, model, Add);
@@ -325,8 +332,16 @@ public static class ExpressionRules
                 var outputs = job.Callee(target, action)?.Outputs ?? model?.Callee(target, action.Declaration)?.Outputs;
                 var output = outputs?.FirstOrDefault(o => string.Equals(o.Name, parts[1], StringComparison.OrdinalIgnoreCase));
                 if (outputs != null && output == null)
+                {
+                    // primeira-certa A4: the output the expression meant, when only one can be it (the callee's only output, or
+                    // the only one that differs by a few letters or contains the name): the patch writes it.
+                    var meant = NameSuggestions.OnlyMatch(parts[1], outputs.Select(o => o.Name).ToList());
+                    string Written(string name) => site.Text[..t.Start] + string.Join(".", new[] { root, name }.Concat(parts.Skip(2))) + site.Text[(t.Start + t.Text.Length)..];
                     add(site, "EXPR_UNKNOWN_IDENTIFIER", $"can't identify '{parts[1]}' in {t.Text}: the action {target} that {root} calls has " + (outputs.Count == 0 ? "no outputs" : $"the outputs {Short(outputs.Select(o => o.Name))}"),
-                        outputs.Count == 0 ? $"read nothing from {root}, or declare the output in {target}" : $"use {root}.<output>: {Closest(parts[1], outputs.Select(o => o.Name))}", null);
+                        outputs.Count == 0 ? $"read nothing from {root}, or declare the output in {target}"
+                            : meant != null ? $"write {root}.{meant} (the output of {target})" : $"use {root}.<output>: {Closest(parts[1], outputs.Select(o => o.Name))}",
+                        meant != null && !t.Text.StartsWith('.') ? Written(meant) : null);
+                }
                 else if (output != null && parts.Length >= 4 && parts[2].Equals("Current", StringComparison.OrdinalIgnoreCase) && output.Type is { Length: > 0 } outputType)
                     CurrentOfList(site, t, $"{root}.{output.Name}", outputType, parts, 3, job, model, add);
                 continue;
@@ -351,6 +366,15 @@ public static class ExpressionRules
             if (action.IsServerSide && !IsListLambda(site) && !Globals.Contains(root) && !scan.HandledExceptions.Contains(root)
                 && !ValueAliases.SystemExceptions.Contains(ValueAliases.SystemExceptionKey(root)))
             {
+                // primeira-certa A4: a site property (an ODC setting) of the module or of the job, written without its
+                // qualifier: the patch writes Site.<Name> (Settings.<Name>).
+                if ((job.Globals.TryGetValue(root, out var declared) ? declared : model?.GlobalOf(root)) is { } qualifier
+                    && (qualifier == "Site") == !string.Equals(lane, "odc", StringComparison.OrdinalIgnoreCase))
+                {
+                    add(site, "EXPR_UNKNOWN_IDENTIFIER", $"can't identify '{root}' in {t.Text}: {root} is a {(qualifier == "Site" ? "site property" : "setting")} of the module, read as {qualifier}.{root}",
+                        $"write {qualifier}.{root}", site.Text[..t.Start] + qualifier + "." + site.Text[t.Start..]);
+                    continue;
+                }
                 var candidates = locals.Keys.Concat(scan.Nodes.Keys);
                 var type = job.Records.ContainsKey(root) || model?.NamesOnlyTypes(root) == true;
                 add(site, "EXPR_UNKNOWN_IDENTIFIER", type

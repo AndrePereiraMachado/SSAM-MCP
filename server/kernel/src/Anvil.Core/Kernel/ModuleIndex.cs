@@ -336,8 +336,10 @@ public sealed class ModuleIndex
     private static string Clip(string text, int max) => text.Length > max ? text[..max] + "…" : text;
 }
 
-// One folder of indexes per lane: <root>\v1\<lane>\<sha256>.<adapter>.json. A cache: written atomically, trimmed to the
-// budget by oldest write, and any file that fails validation is a miss.
+// One folder of indexes per lane: <root>\v1\<lane>\<sha256>.<adapter>.json, and beside each the module digest
+// <sha256>.<adapter>.digest.json (ModuleDigest: valid for the same schema, extractor, lane, adapter and sha256). A cache:
+// written atomically, trimmed to the budget by oldest write (indexes and digests together), and any file that fails
+// validation is a miss.
 public sealed class ModuleIndexStore(string root, string lane, string adapter, long budget = 512L * 1024 * 1024)
 {
     public string Root => root;
@@ -374,6 +376,24 @@ public sealed class ModuleIndexStore(string root, string lane, string adapter, l
         if (index.Lane != lane || index.Adapter != adapter) throw new ArgumentException("Module index belongs to " + index.Lane + "/" + index.Adapter);
         var file = PathOf(index.SourceSha256);
         DurableJson.WriteBytes(file, index.ToJson());
+        Trim(file);
+        return file;
+    }
+
+    public string DigestPathOf(string sourceSha256) => Path.Combine(root, "v1", lane, sourceSha256.ToLowerInvariant() + "." + adapter + ".digest.json");
+
+    public ModuleDigest? LoadDigest(string sourceSha256)
+    {
+        var file = DigestPathOf(sourceSha256);
+        try { return File.Exists(file) ? ModuleDigest.Parse(File.ReadAllBytes(file), lane, adapter, sourceSha256) : null; }
+        catch { return null; }
+    }
+
+    public string SaveDigest(ModuleDigest digest)
+    {
+        if (digest.Lane != lane) throw new ArgumentException("Module digest belongs to the " + digest.Lane + " lane");
+        var file = DigestPathOf(digest.SourceSha256);
+        DurableJson.WriteBytes(file, digest.ToJson(adapter));
         Trim(file);
         return file;
     }

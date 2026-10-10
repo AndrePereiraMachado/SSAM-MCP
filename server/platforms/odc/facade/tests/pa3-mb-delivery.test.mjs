@@ -162,15 +162,20 @@ test('a merge the bridge proved equal but for the Studio\'s known rewrites is de
   assert.equal(uncertain.ok, false); assert.equal(uncertain.code, 'MERGE_UNCERTAIN');
 });
 
-test('C31: a job with three pure errors is refused with all of them before any capture', async t => {
+// primeira-certa A3: the job alone is read only when no capture can be had; with a capture the apply over it refuses
+// once with every phase (pa4-primeira-certa.test.mjs).
+test('C31: without a capture, a job with three pure errors is refused with all of them, verifyRan false, nothing applied', async t => {
   const f = delivery(t, { merge: { ok: true, merged: true, strictlyEqual: true } });
+  const studio = f.deps.studio;
+  f.deps.studio = async (args, pid) => (args[0] === 'snapshot' ? (f.calls.push('snapshot'), { ok: false, error: 'the module is not open' }) : studio(args, pid));
   const problems = [1, 2, 3].map(i => ({ op: i - 1, pointer: `/ops/${i - 1}`, code: 'DATA_INVALID', severity: 'error', message: `$Bad${i}.B.Length must be a positive integer`, fix: null }));
   const exec = async () => ({ stdout: JSON.stringify({ ok: false, command: 'check-job', data: { valid: false, errors: problems.map(p => p.message), problems, warnings: [] } }) });
   const cli = path.join(f.root, 'cli.dll'); fs.writeFileSync(cli, '');
   const result = await deliverKernel(f.input, { ...f.deps, check: input => checkJobKernel(input, { cli, worker: null, exec }) });
   assert.equal(result.ok, false); assert.equal(result.failed, 'preflight'); assert.equal(result.code, 'PREFLIGHT_REFUSED');
   assert.equal(result.problems.length, 3);
-  assert.deepEqual(f.calls, []);                       // no snapshot, no apply, nothing sent to the Studio
+  assert.equal(result.verifyRan, false); assert.match(result.verifyReason, /could not be captured/);
+  assert.deepEqual(f.calls, ['snapshot']);             // the capture failed: no apply, nothing sent to the Studio
   assert.equal(result.evidence, undefined);
 });
 

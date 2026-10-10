@@ -11,8 +11,9 @@ Carregue as ferramentas centrais num só ToolSearch (troque `ssam` pelo nome des
 
 - Comece por `ssam_doctor`. `ssam_connect` (sem lane) anexa os Studios já abertos. Nunca feche, salve, publique ou reabra para conectar.
 - Todo pedido começa por `ssam_discover {intent, lane}`: `tools` traz ferramenta, verbo e argumentos; `matches`, contrato e exemplo.
-- Ler um app: `ssam_map {lane, target}`; depois `studio_inspect` ou `o11_inspect` por `@key`, com `expectedSourceSha256`.
-- Mudar um módulo: uma chamada, `o11_deliver` ou `studio_deliver`. Recusa: corrija com `patch` + `basedOn {job, sha256}`; nunca reenvie o job inteiro.
+- Ler um app: `ssam_map {lane, target, view:"digest"}` uma vez, todas as páginas de que a tarefa precisa (`continuations.next`; a página 1 traz entidades, estruturas, a assinatura de toda action e `contents`). Trabalhe no contexto.
+  `ssam_map {lane, target}` lista os elementos com `@key`. `studio_inspect` ou `o11_inspect` só para descer numa `@key`, com `expectedSourceSha256`.
+- Mudar um módulo: uma chamada, `o11_deliver` ou `studio_deliver`. Recusa: vem uma vez, com todos os problemas de todas as fases e os patches certos; corrija tudo numa chamada com `patch` + `basedOn {job, sha256}`; nunca reenvie o job inteiro.
 - Evidência JSON (recibos, `result.json`, diários): `ssam_evidence`, nunca script.
 - Leituras independentes juntas, na mesma mensagem. Escritas no mesmo Studio entram numa fila e esperam a vez.
 - Recusa traz `continuation {tool, arguments, why}`: siga-a.

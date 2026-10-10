@@ -5,6 +5,7 @@
 //   ssam doctor [--lane o11|odc]        both lanes side by side: CLI, catalog, and which Studio is open in each
 //   ssam inspect|deliver|data|publish|job [--lane l] <args...>   passthrough to the lane's CLI
 //   ssam map [--lane o11|odc] <capture.oml|Module> [...]   every element of a capture from its module index (module-map.mjs)
+//   ssam map [--lane o11|odc] <capture.oml|Module> --digest [--page n]   the whole module as text, in pages (module-digest.mjs)
 //   ssam access plan|apply|verify --lane o11 --manifest <abs>.json [--words "..." [--execute]]   O11 end-user roles by manifest
 //   ssam connect [--lane o11|odc] [--pid p]   attach every open Studio (or one lane / one pid), as MCP ssam_connect
 //   ssam warm [--lane o11|odc]          build (or find cached) the discover index of each lane (end of scripts/build.ps1)
@@ -689,13 +690,16 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
       + 'Every SSAM request starts with ssam_discover {intent, lane}: for an operation its `tools` names the exact tool, verb and '
       + 'arguments; for a model change `matches` gives the capabilities, contract and a proven example; an empty intent lists every '
       + 'tool by group. Ask it (then ssam_reference) before reading source code or docs. A tool served by both lanes takes `lane`. '
-      + 'To read an application, start with ssam_map {lane, target}: every element with its @key; then inspect subtrees, properties '
-      + 'and usages by @key with the expected sha256 (o11_inspect or studio_inspect, path:"@<key>", expectedSourceSha256), as its '
-      + 'continuations say. Evidence files (inspect out, result.json, receipts, journals): ssam_evidence, never a script. '
+      + 'To read an application, start with ssam_map {lane, target, view:"digest"}: the whole module as text in pages (page 1: '
+      + 'entities, structures and every action with its signature, calls and callers); read it once and work in context. '
+      + 'ssam_map {lane, target} lists every element with its @key; inspect only to go deeper into an @key with the expected sha256 '
+      + '(o11_inspect or studio_inspect, path:"@<key>", expectedSourceSha256), as the continuations say. '
+      + 'Evidence files (inspect out, result.json, receipts, journals): ssam_evidence, never a script. '
       + 'Independent READS together in one message; WRITES to the same Studio wait their turn in a queue (STUDIO_WRITE_QUEUE_TIMEOUT '
       + 'only after a bounded wait). To change a module, ONE call: o11_deliver (O11) or studio_deliver (ODC), the '
       + 'job inline; it validates inside the call and refuses before any change, so no proof and no preview come first; without '
-      + 'errors it answers only "entregue". A refusal names its job (job, jobSha256, failedOp): correct it with patch + basedOn '
+      + 'errors it answers only "entregue". A refusal comes ONCE with every problem of every phase (problems[]: phase, pointer, fix, '
+      + 'patch when certain) and names its job (job, jobSha256, failedOp): correct all of them in one patch + basedOn '
       + '{job, sha256}, never by resending the whole job (on O11 also closePrevious with the refused taskId). ssam_job/o11_job '
       + 'prove a job on a fixture only when the person asks; a failed ssam_job/o11_job (or a job delivery refused at build) '
       + 'answers with `discovery`. Studio state, waits, dialogs and sign-in: o11_studio (O11), studio_status/studio_wait/'
@@ -942,7 +946,8 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
   const runJobTool = deps.jobTool ?? jobTool;
   server.registerTool('o11_job', { title: 'Run a verb job on an O11 fixture', description:
     '[o11] Applies a job to a fixture and returns ok/isValid and the messages. '
-    + 'It proves a job; it delivers nothing to the Studio (o11_deliver does, validating inside the call: deliver directly, and prove here only when the person asks). A failed run also returns `discovery` (contract of the failing '
+    + 'It proves a job; it delivers nothing to the Studio (o11_deliver does, validating inside the call: deliver directly, and prove here only when the person asks). '
+    + 'A refused run answers ONCE with every problem of every phase over the base (problems[]: phase, op, pointer, code, fix, patch when certain; verifyRan). A failed run also returns `discovery` (contract of the failing '
     + 'op, catalog capability of its element, proven refusal, next step). job is a path or the job itself (inline ops); '
     + 'patch + basedOn {job, sha256} (the job and jobSha256 of an answer) corrects it without resending it. '
     + 'producers binds {Name: absolute .oml/.avsig path}; captureProducers ["Name" | "Name=Producer", e.g. "System=(System)"] '
@@ -960,6 +965,7 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
     + 'patch + basedOn {job, sha256} (the job and jobSha256 of an answer) corrects it without resending it. '
     + 'Only when the person asks for a headless proof: a normal change goes straight to o11_deliver (O11) or studio_deliver with job/module/feature/owners/changes (ODC), '
     + 'which validate inside the call and refuse before any change; studio_manifest prepares an existing candidate. '
+    + 'A refused run answers ONCE with every problem of every phase over the base (problems[]: phase, op, pointer, code, fix, patch when certain, identical ones grouped; verifyRan). '
     + 'A failed run also returns `discovery` (contract of the failing op, catalog capability of its element, proven refusal, next step); ssam_discover gives the contracts before writing the job.', inputSchema: fromJsonSchema({ type: 'object',
       properties: { job: inlineJobSchema, patch: patchJsonSchema, basedOn: basedOnJsonSchema, lane: { type: 'string', enum: laneNames, description: 'o11 (default) or odc.' },
         base: { type: 'string' }, out: { type: 'string' }, ...producerSchema }, additionalProperties: false }),

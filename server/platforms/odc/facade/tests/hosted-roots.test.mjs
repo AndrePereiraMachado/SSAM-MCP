@@ -348,6 +348,20 @@ test('the ODC kernel, the builder and the reference CLI run with the customer\'s
       markers.files.push(path.join(anvilRoot, '.local', 'lane-odc', 'jobs', 'inline', path.basename(checked.job)));
       assertOdcSpawn(spawned[0], context);
 
+      // 22nd release: a job that declares its base is checked over it locally (apply, every phase). Hosted, that base would
+      // resolve on the server (a suite fixture is a customer capture, an absolute path anything): only the job is read,
+      // and the answer says why the Verify did not run.
+      for (const base of ['tests/fixtures/odc/blank-crossdevice.oml', 'job:some-suite-job', path.join(os.tmpdir(), 'another-customer.oml')]) {
+        reset();
+        const withBase = await result(server.tools, 'ssam_reference', { lane: 'odc', kind: 'check-job', query: { base, ops: [] } });
+        assert.equal(withBase.ok, true, JSON.stringify(withBase));
+        assert.equal(withBase.verifyRan, false);
+        assert.match(withBase.verifyReason, /^hosted SSAM server: the base this job declares is not read here/);
+        assert.equal(spawned.length, 1); assert.ok(spawned[0].args.includes('check-job')); assert.ok(!spawned[0].args.includes('apply'), 'never the apply over the declared base');
+        assertOdcSpawn(spawned[0], context);
+        markers.files.push(path.join(anvilRoot, '.local', 'lane-odc', 'jobs', 'inline', path.basename(withBase.job)));
+      }
+
       reset();
       const odcJob = await runJob({ lane: 'odc', job: { ops: [] } });
       if (odcJob.code === 'odc-cli-missing') assert.deepEqual(spawned, []);

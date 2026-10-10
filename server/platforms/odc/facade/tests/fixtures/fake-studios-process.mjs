@@ -2,10 +2,13 @@
 // (hosted-e2e-processes.mjs). Never a real Studio: a fake ODC bridge on \\.\pipe\ODC3-Bridge-<ODC_BRIDGE>-<unlikely pid> and a
 // fake O11 bridge (the thin Anvil bridge, flavor "thin", that already serves the fake Service Studio) on a loopback port
 // in 7400-7499.
-//   node fake-studios-process.mjs <agentRoot> <studiosFile> <o11Port> [snapshotBytes] [o11Module.json]
+//   node fake-studios-process.mjs <agentRoot> <studiosFile> <o11Port> [snapshotBytes] [o11Module.json] [odcModule.json]
 // Writes {odcPid, o11Pid, o11Port, odcVersion, o11Version} to <studiosFile> once both listen, and one JSON line per
 // request to <studiosFile>.log. Like the real bridges it reads and writes files only under the agent root it was given
 // (the open O11 module's bytes come from the OML named in o11Module.json, the module the fake Service Studio has open).
+// odcModule.json {name, oml, moduleKey, host, developerId} (servidor/fase4-22): a snapshot of that ODC module writes the
+// bytes of that OML with the identity a real capture carries, so the server's kernel can build over it; any other
+// module stays random bytes.
 //
 // The fake O11 bridge keeps the wire contract of the thin bridge (docs/O11-BRIDGE-FINA.md 3, 14): the 21 verbs, the removed
 // ones answer {success:false, executed:false, "Unknown method: <m>"}; merge_from_oml with base_path needs the
@@ -21,7 +24,8 @@ import path from 'node:path';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { ODC_BRIDGE } from './odc-bridge-version.mjs';
 
-const [agentRoot, studiosFile, portText, bytesText, moduleFile] = process.argv.slice(2);
+const [agentRoot, studiosFile, portText, bytesText, moduleFile, odcModuleFile] = process.argv.slice(2);
+const odcModule = odcModuleFile ? JSON.parse(fs.readFileSync(odcModuleFile, 'utf8')) : null;
 const o11Port = Number(portText);
 const snapshotBytes = Number(bytesText) || 6 * 1024 * 1024 + 4321;
 const odcPid = 900000 + Math.floor(Math.random() * 90000), o11Pid = odcPid + 1;
@@ -42,13 +46,15 @@ function odcReply(line) {
   // A compromised bridge (or agent) naming a file outside the customer's workspace.
   if (command === 'snapshot' && args[0] === 'Evil') return { ok: true, module: 'Evil', path: 'agent:..\\..\\..\\.local\\server\\tokens.json' };
   if (command === 'snapshot') {
-    const bytes = randomBytes(snapshotBytes);
+    const real = odcModule && args[0] === odcModule.name;
+    const bytes = real ? fs.readFileSync(odcModule.oml) : randomBytes(snapshotBytes);
     const hash = sha(bytes).toUpperCase();
     const file = path.join(agentRoot, 'odc', 'snapshots', args[0] + '-' + hash + '.oml');
+    const identity = real ? { moduleKey: odcModule.moduleKey, host: odcModule.host, developerId: odcModule.developerId } : {};
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, bytes);
-    fs.writeFileSync(file + '.json', JSON.stringify({ ok: true, module: args[0], sha256: hash, path: file }));
-    return { ok: true, module: args[0], sha256: hash, size: bytes.length, path: file };
+    fs.writeFileSync(file + '.json', JSON.stringify({ ok: true, module: args[0], sha256: hash, path: file, ...identity }));
+    return { ok: true, module: args[0], sha256: hash, size: bytes.length, path: file, ...identity };
   }
   if (command === 'open') {
     if (!args[1]) return { ok: true, module: args[0], opened: true };

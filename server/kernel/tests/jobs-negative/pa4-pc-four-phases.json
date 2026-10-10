@@ -1,0 +1,29 @@
+{
+ "description": "NEGATIVO (primeira-certa, A2): um job com erros de quatro fases recebe UMA recusa com todos, cada um com fase e ponteiro: regra do preflight (EXPR_UNKNOWN_IDENTIFIER; DEFAULT_LITERAL_INVALID com patch), checagem da base (REFERENCE_UNRESOLVED), falha do apply (filho inexistente numa action criada pelo job) e Verify (Text atribuido a Integer). Nada e salvo.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectError": [
+  "[EXPR_UNKNOWN_IDENTIFIER]: can't identify 'LowStockThreshold'",
+  "[DEFAULT_LITERAL_INVALID]",
+  "[REFERENCE_UNRESOLVED]: IServerAction:PcMissingAction does not resolve in the base module",
+  "has no child 'PcNoSuchNode'",
+  "[ExpressionInvalidExpressionType]"
+ ],
+ "ops": [
+  {"op": "logic", "data": {"actions": [
+   {"name": "PcTotal", "kind": "server", "description": "Synthetic action of the four-phase refusal.",
+    "inputs": [{"name": "Quantity", "type": "Integer"}, {"name": "Prefix", "type": "Text", "default": "abc", "mandatory": false}],
+    "outputs": [{"name": "Total", "type": "Integer"}, {"name": "Code", "type": "Integer"}, {"name": "Shown", "type": "Text"}],
+    "steps": [
+     {"assign": {"Total": "Quantity + LowStockThreshold"}},
+     {"assign": {"Code": "\"abc\""}},
+     {"assign": {"Shown": "Prefix"}}
+    ]}
+  ]}},
+  {"op": "set", "target": "IServerAction:PcMissingAction", "prop": "Description", "value": "x"},
+  {"op": "logic", "data": {"actions": [
+   {"name": "PcHelper", "kind": "server", "description": "Synthetic helper of the four-phase refusal.",
+    "outputs": [{"name": "Ok", "type": "Boolean"}], "steps": [{"assign": {"Ok": "True"}}]}
+  ]}},
+  {"op": "set", "target": "IServerAction:PcHelper/PcNoSuchNode", "prop": "Label", "value": "x"}
+ ]
+}

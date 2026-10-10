@@ -33,6 +33,9 @@ public interface IBaseFacts
     bool NamesOnlyTypes(string name);
     bool IsFunction(string name);
     string? ModuleType { get; }
+    /// <summary>primeira-certa A4: the qualifier a module-wide value of this name is read through ("Site" for a site
+    /// property, "Settings" for an ODC setting), or null.</summary>
+    string? GlobalOf(string name) => null;
     /// <summary>The expression a raw `set` writes on an element of the base: null when the target does not resolve or the
     /// property holds no expression; with the aggregate the element belongs to, when it is inside one.</summary>
     RawExpressionFact? RawExpression(string target, string prop);
@@ -53,6 +56,8 @@ public sealed class JobFacts
     public HashSet<string> ClientEntities { get; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Every name the job declares: actions, parameters, created elements, spec types and attributes, renames.</summary>
     public HashSet<string> Names { get; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>The site properties (Site) and settings (Settings) the job creates, by name: the qualifier they are read through.</summary>
+    public Dictionary<string, string> Globals { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     public static JobFacts From(JsonArray ops)
     {
@@ -62,6 +67,11 @@ public sealed class JobFacts
             if (ops[i] is not JsonObject op) continue;
             var kind = op["op"]?.ToString();
             if (op["name"] is JsonValue n && n.TryGetValue<string>(out var created)) facts.Names.Add(created);
+            if (kind == "create" && op["name"]?.ToString() is { Length: > 0 } global && op["type"]?.ToString()?.Split('.').Last() is { } createdType)
+            {
+                if (createdType is "ISiteProperty" or "SiteProperty") facts.Globals[global] = "Site";
+                else if (createdType is "ISetting" or "Setting") facts.Globals[global] = "Settings";
+            }
             if (kind == "logic" && op["data"]?["actions"] is JsonArray actions)
                 for (var a = 0; a < actions.Count; a++)
                     if (actions[a] is JsonObject action && action["name"] is JsonValue an && an.TryGetValue<string>(out var name))

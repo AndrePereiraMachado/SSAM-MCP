@@ -194,7 +194,11 @@ const prefixSource = dir => path.resolve(dir).split(/[\\/]+/).filter(Boolean).ma
 const TAIL = `(?:${SEP}[^\\\\/\\s"'<>|*?]+)*`;
 const END = `(?=$|[\\\\/\\s"'<>|*?,;)\\]}])`;
 
-export function presenter({ workspace, serverRoots = [workspaceRoot, os.homedir()] }) {
+// The server's own data roots that may live outside the checkout and the profile (servidor/fase4-22): the module index
+// store, where the 22nd release also keeps the module digest (ssam_map index.file and store.file), and the readers' copy.
+export const serverDataRoots = (env = process.env) => [env.SSAM_MODULE_INDEX_ROOT, env.SSAM_READER_CACHE_ROOT]
+  .filter(root => typeof root === 'string' && root.trim()).map(root => path.resolve(root));
+export function presenter({ workspace, serverRoots = [workspaceRoot, os.homedir(), ...serverDataRoots()] }) {
   const ws = path.resolve(workspace);
   const wsSource = prefixSource(ws);
   const roots = [...new Set(serverRoots.filter(Boolean).map(r => path.resolve(r)))].sort((a, b) => b.length - a.length);

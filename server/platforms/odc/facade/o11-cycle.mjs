@@ -21,7 +21,9 @@
 // - every producer a `reference` op of the job names is captured read-only (captureProducers), as the ODC lane does (C27).
 // - a job made only of `set StyleSheet` on blocks or themes gets one deterministic touch of a block widget (C32): the
 //   published block CSS is regenerated only when a widget of the block changes. The answer says touch {target, op}.
-// - a refused preflight answers PREFLIGHT_REFUSED with every problem; the kernel's own codes (VERIFY_UNAVAILABLE,
+// - a refused job answers PREFLIGHT_REFUSED with every problem of every phase over the live module (primeira-certa A3:
+//   the build applies the job to the capture; refusal-problems.mjs keeps phase, pointer, fix, patch, element, key,
+//   verifyRan and phases, grouped only to fit the answer); the kernel's own codes (VERIFY_UNAVAILABLE,
 //   MERGE_ROLLED_BACK, SIGNATURE_PREVIEW_REFUSED, ...) pass through; a delivery answers leftovers, screenRoles and
 //   lastPublication when there is something to say.
 // - ssam_task {id, close} closes a refused task, or an uncertain one with the kernel's hash proof (C15).
@@ -54,6 +56,7 @@ import { prepareIntegrationJob } from './integration-documents.mjs';
 import { taskWarnings, warningFields } from './delivery-warnings.mjs';
 // Lane wp (atritos 3): the build phase of a phased delivery, outside the Studio lock (o11-build-phase.mjs).
 import { phaseGuards, buildBeforeApply, afterApply } from './o11-build-phase.mjs';
+import { refusalFields, diagnosisOf } from './refusal-problems.mjs';
 import { PHASES_META } from './studio-write-lock.mjs';
 
 const readOnly = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
@@ -339,16 +342,22 @@ export function validationMessages(state, limit = 20) {
 
 // Problems of a refused preflight (contract I2), each one line: op, pointer, code, severity, message, fix (and patch when
 // the correction is mechanical). All of them, never a first-error-only answer.
+// primeira-certa A3: with the phase of each (preflight, base, apply, verify), and the element and key of a Verify problem.
 export function preflightProblems(problems, limit = 300) {
   return (Array.isArray(problems) ? problems : []).filter(p => p && typeof p === 'object').map(p => ({
+    ...(typeof p.phase === 'string' ? { phase: p.phase } : {}),
     op: Number.isInteger(p.op) ? p.op : null, pointer: typeof p.pointer === 'string' ? p.pointer : null, code: String(p.code ?? 'PREFLIGHT_ERROR'),
     severity: p.severity === 'warning' ? 'warning' : 'error', message: clean(p.message, limit), fix: p.fix == null ? null : clean(p.fix, limit),
-    ...(Array.isArray(p.patch) && p.patch.length ? { patch: p.patch } : {}) }));
+    ...(Array.isArray(p.patch) && p.patch.length ? { patch: p.patch } : {}),
+    ...(typeof p.element === 'string' && p.element ? { element: clean(p.element, limit) } : {}), ...(typeof p.key === 'string' && p.key ? { key: p.key } : {}) }));
 }
 // The refusal names the job it ran (withJob adds job and jobSha256), so every problem is fixed with one patch + basedOn.
-const preflightRefusal = (source, base) => ({ ok: false, outcome: 'refused', code: 'PREFLIGHT_REFUSED', ...base, stage: 'preflight', failed: 'preflight',
+// primeira-certa A3: the kernel's single refusal over the live module (every phase, verifyRan, phases), grouped only to
+// fit the answer; a refusal of the apply alone keeps its own code (A7: DELETE_HAS_CONSUMERS) with the same fields.
+const preflightRefusal = (source, base, code = 'PREFLIGHT_REFUSED') => ({ ok: false, outcome: 'refused', code, ...base,
+  ...(code === 'PREFLIGHT_REFUSED' ? { stage: 'preflight', failed: 'preflight' } : { stage: base.stage ?? 'apply' }),
   error: clean(source.error ?? 'The job was refused by the preflight; nothing was sent to the Studio.', 400),
-  problems: preflightProblems(source.problems) });
+  ...refusalFields(preflightProblems(source.problems), source) });
 
 // Section 3.2 fields of a delivered answer from the kernel's apply (contract I3/I4): leftovers (expectations met and
 // allowlisted Unused* warnings, at most 20 plus leftoversTotal) and screenRoles (html page screens, at most 20 plus
@@ -401,9 +410,10 @@ export const dataProofContinuation = (state, work) => ({ tool: 'ssam_evidence', 
 
 export function deliverOutcome(run, { trackId, work, job, taskId, since, input = {} }) {
   let state = run?.envelope?.data;
-  // The CLI's own preflight refusal (Program.ErrorEnvelope with code and problems): nothing reached the Studio.
-  if ((!state || typeof state !== 'object') && run?.envelope?.code === 'PREFLIGHT_REFUSED')
-    return preflightRefusal(run.envelope, { taskId: taskId ?? null });
+  // The CLI's own refusal of the job (Program.ErrorEnvelope with code and problems): nothing reached the Studio. The single
+  // refusal (PREFLIGHT_REFUSED) or one of the apply alone with its own code and problems (primeira-certa A7).
+  if ((!state || typeof state !== 'object') && (run?.envelope?.code === 'PREFLIGHT_REFUSED' || (Array.isArray(run?.envelope?.problems) && run.envelope.problems.length)))
+    return preflightRefusal(run.envelope, { taskId: taskId ?? null }, /^[A-Z][A-Z0-9_]{2,}$/.test(String(run.envelope.code ?? '')) ? run.envelope.code : 'PREFLIGHT_REFUSED');
   if (!state || typeof state !== 'object') {
     const found = findKernelTask(work, { taskId, job, since });
     const error = run?.envelope?.error ?? (run?.timedOut ? 'deliver timed out' : 'deliver ended without an answer');
@@ -479,6 +489,11 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
   const refreshNext = state.code === 'REFERENCES_REFRESH_FAILED' && state.referencesRefreshFailed?.next?.tool ? state.referencesRefreshFailed.next : null;
   const continuation = next ?? evidence ?? refreshNext ?? repair;
   return { ok: false, outcome: 'refused', code: kernelCode ?? (invalid ? 'VALIDATION_REFUSED' : 'DELIVERY_FAILED'), ...base, error,
+    // primeira-certa A3/A7: a refusal of the apply alone (DELETE_HAS_CONSUMERS, ...) with its problems, verifyRan and phases.
+    // A candidate only the Verify refused: its errors with op, pointer, element, key and fix (apply.problems).
+    ...(!merged && Array.isArray(state.problems) && state.problems.length ? refusalFields(preflightProblems(state.problems), state)
+      : !merged && Array.isArray(state.apply?.problems) && state.apply.problems.length ? refusalFields(preflightProblems(state.apply.problems), state.apply)
+      : merged ? {} : diagnosisOf(state)),
     ...(failedOp != null ? { failedOp } : {}), ...(lines.length > 1 ? { refusalLines: lines } : {}),
     ...(messages.length ? { messages } : {}), ...(omitted ? { messagesOmitted: omitted } : {}), ...(failures.length ? { failures } : {}),
     ...(merged ? { merged: true } : {}), ...(order ? { mergeOrder: order } : {}), ...(dataProof ? { dataProof } : {}),
@@ -979,9 +994,11 @@ export function registerO11Cycle(server, deps = {}) {
     description: 'Delivers a job to the module open in the Service Studio selected on the O11 lane: deliver directly, with no separate proof (o11_job/ssam_job) '
       + 'or until=apply step first. It captures the module as it is now in the Studio, validates the candidate headless (TrueChange) '
       + 'before the native merge, merges once, then checks the new messages and the named checks. '
-      + 'Delivered: "entregue" (plus leftovers, warnings, screenRoles and lastPublication when there is something to say; only errors and security warnings refuse). Validation errors come '
-      + 'back with stage, taskId, job and jobSha256 (failedOp when the kernel names the op) and nothing is delivered; correct them with patch '
-      + 'and basedOn {job, sha256} (or {taskId}) instead of the whole job. A refused preflight returns every problem at once (PREFLIGHT_REFUSED). '
+      + 'Delivered: "entregue" (plus leftovers, warnings, screenRoles and lastPublication when there is something to say; only errors and security warnings refuse). '
+      + 'A refused job comes back ONCE, before any Studio write, with every problem of every phase over the live module (the job alone, the base, the apply, the Verify of '
+      + 'the candidate): problems[] with phase, op, pointer, code, message, fix and the patch of each certain fix (identical ones grouped with their pointers), verifyRan, '
+      + 'stage, taskId, job and jobSha256 (failedOp when the kernel names the op); nothing is delivered. Correct all of them in ONE call: patch (the patches returned plus '
+      + 'your fixes) and basedOn {job, sha256} (or {taskId}) instead of the whole job. '
       + 'outcome "uncertain" is never repeated: follow continuation (resume reconciles the same task). A refused task that still holds the '
       + 'module: deliver the corrected job with closePrevious, or close {taskId, reason} alone ("fechada"); an uncertain task is never closed '
       + 'here (ssam_task {id, close} closes it only with the proof that nothing was applied). '

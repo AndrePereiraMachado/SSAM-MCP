@@ -77,8 +77,11 @@ public sealed class PacoteD1VerifyTests
         Assert.False(live["accepted"]!.GetValue<bool>());
     }
 
+    /// <summary>primeira-certa A3: the pure preflight answers alone only when no capture can be had (here the fake Studio
+    /// answers nothing past open_module); with a capture the apply over it refuses with every phase
+    /// (PrimeiraCertaCompleteTests).</summary>
     [Fact]
-    public void ARefusedPreflightAnswersEveryProblemBeforeAnyStudioCall()
+    public void ARefusedPreflightAnswersEveryProblemWhenNoCaptureCanBeHad()
     {
         var root = JobRunner.RepoRoot(Path.GetDirectoryName(typeof(PacoteD1VerifyTests).Assembly.Location)!)!;
         var work = Path.Combine(root, ".local", "pacote-d1-verify-tests", Guid.NewGuid().ToString("N"));
@@ -101,7 +104,8 @@ public sealed class PacoteD1VerifyTests
         Assert.NotEmpty(problems);
         Assert.All(problems, p => { Assert.Equal("error", p!["severity"]!.ToString()); Assert.False(string.IsNullOrEmpty(p["code"]?.ToString())); });
         Assert.Contains("has no Id", result["error"]!.ToString());
-        Assert.Empty(bridge.Calls);
+        Assert.False(result["verifyRan"]!.GetValue<bool>());
+        Assert.DoesNotContain("merge_from_oml", bridge.Calls);
         // The preflight's own structured problems (contract I2) pass through unchanged.
         var own = new JsonArray(new JsonObject { ["op"] = 2, ["code"] = "X_CODE", ["severity"] = "error", ["message"] = "m", ["fix"] = "f" });
         Assert.Equal("X_CODE", Delivery.PreflightProblems(new JsonObject { ["problems"] = own, ["errors"] = new JsonArray("x") })[0]!["code"]!.ToString());

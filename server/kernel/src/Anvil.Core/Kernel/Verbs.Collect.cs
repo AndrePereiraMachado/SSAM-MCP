@@ -10,7 +10,9 @@ namespace Anvil.Core;
 /// </summary>
 public sealed partial class ModelSession
 {
-    private sealed record ApplyFailure(int Op, string Kind, JsonObject Source, Exception Error);
+    /// <summary>One failed op. <paramref name="Problems"/>: the problems already mapped to the job (primeira-certa A6: the
+    /// actions of a logic op that failed alone, with their pointers in the op as the job wrote it).</summary>
+    private sealed record ApplyFailure(int Op, string Kind, JsonObject Source, Exception Error, List<JsonObject>? Problems = null);
 
     /// <summary>The aliases and names a failed (or skipped) op would have created. A later op that writes one of them, as a
     /// reference or as a word of any of its texts, depends on it and is skipped instead of failing again.</summary>
@@ -140,10 +142,13 @@ public sealed partial class ModelSession
     /// op.data, an html fragment relative to the op), or one problem with the code its message names.</summary>
     private static IEnumerable<JsonObject> ApplyProblems(ApplyFailure failure, string? opsPointer)
     {
+        if (failure.Problems != null) return failure.Problems.Select(p => p.DeepClone().AsObject());
         var at = opsPointer == null ? null : $"{opsPointer}/{failure.Op}";
+        // An integration problem's path is relative to the op (/data/methods/0/path), the others' to the op's data.
         var relative = failure.Kind switch
         {
-            "logic" or "spec" or "screen" or "rest" or "rest-expose" or "soap" => at == null ? null : at + "/data",
+            "rest" or "rest-expose" or "soap" => at,
+            "logic" or "spec" or "screen" => at == null ? null : at + "/data",
             "html" when failure.Source["parent"] == null => at == null ? null : at + "/data",
             _ => at,
         };
@@ -152,7 +157,12 @@ public sealed partial class ModelSession
         var prefix = Regex.Match(message, @"^op #\d+ \([^)]*\):\s*");
         var text = prefix.Success ? message[prefix.Length..] : message;
         var code = Errors.FindCoded(failure.Error)?.Code ?? ApplyCode(failure.Error, text);
-        var problem = JobPreflight.Problem(failure.Op, at, code, "error", text, JobPreflight.FixFrom(text) ?? JobPreflight.DefaultFix(failure.Kind), null, failure.Kind);
+        // A missing child names the children there are: the fix is one of them (primeira-certa A2, every problem with its fix).
+        var children = code == "CHILD_NOT_FOUND" ? Regex.Match(text, @"has no child '([^']+)' \(children: ([^)]*)\)") : Match.Empty;
+        var fix = children.Success
+            ? $"use one of the children: {string.Join(", ", NameSuggestions.Closest(children.Groups[1].Value, children.Groups[2].Value.Split(", ").Select(c => c[(c.IndexOf(':') + 1)..])) is { Count: > 0 } close ? close : children.Groups[2].Value.Split(", "))}; or create '{children.Groups[1].Value}' earlier in this job"
+            : JobPreflight.FixFrom(text) ?? JobPreflight.DefaultFix(failure.Kind);
+        var problem = JobPreflight.Problem(failure.Op, at, code, "error", text, fix, null, failure.Kind);
         problem["phase"] = "apply";
         return [problem];
     }

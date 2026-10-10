@@ -63,6 +63,21 @@ internal sealed class ModelBaseFacts(ModelSession session, ServiceStudio.Model.E
         catch { return false; }
     }
 
+    public string? GlobalOf(string name)
+    {
+        // Through the session's Resolve, as a `set` on ISiteProperty:<Name> finds it (the descendants index leaves them out).
+        foreach (var (kind, qualifier) in new[] { ("ISiteProperty", "Site"), ("ISetting", "Settings") })
+        {
+            try
+            {
+                if (session.Resolve(kind + ":" + name) is IObjectSignature found && (ModelSession.Implements(found, kind) || ModelSession.Implements(found, kind + "Signature")))
+                    return qualifier;
+            }
+            catch { /* not one of these */ }
+        }
+        return null;
+    }
+
     public bool IsFunction(string name)
     {
         try { _functions ??= ExpressionCheck.ScopeFunctions(espace); }

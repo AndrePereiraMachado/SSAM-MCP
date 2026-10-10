@@ -109,10 +109,12 @@ public sealed class Pa2F2ApplyTests
           {"op":"create","parent":"$a","type":"IOutputParameter","name":"Categorias","as":"$o2"}]}
         """);
         var refused = Assert.IsType<JobPreflightException>(error);
-        var problem = Assert.Single(refused.Problems)!;
+        var problem = Assert.Single(refused.Problems, p => p!["phase"]!.GetValue<string>() == "apply")!;
         Assert.Equal("NAME_COLLISION", problem["code"]!.GetValue<string>());
         Assert.Equal(2, problem["op"]!.GetValue<int>());
         Assert.Contains("Categorias2", problem["message"]!.GetValue<string>());
+        // primeira-certa A2: the Verify of what did apply joins the refusal (the raw action has no Start), never a later round.
+        Assert.Contains(refused.Problems, p => p!["phase"]!.GetValue<string>() == "verify" && p["code"]!.GetValue<string>() == "InvalidFlow_NoStart" && p["op"]!.GetValue<int>() == 0);
         Assert.False(File.Exists(output));
     }
 

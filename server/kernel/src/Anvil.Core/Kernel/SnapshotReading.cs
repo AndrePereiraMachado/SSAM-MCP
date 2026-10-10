@@ -10,6 +10,7 @@ public interface IReadSnapshot : IDisposable
     string Name { get; }
     JsonObject Read(string? path, ReadingOptions options, string[]? select, string file);
     ModuleIndex BuildIndex(string lane, string adapter, string sourceSha256, long sourceBytes);
+    ModuleDigest BuildDigest(string lane, string sourceSha256, long sourceBytes);
 }
 
 // Owned exclusively by a read process. Never share these native objects with a write worker.
@@ -20,6 +21,8 @@ public sealed class ReadSnapshot<T>(T root, ModelReader<T> reader, string name, 
     public void Dispose() => close();
     public ModuleIndex BuildIndex(string lane, string adapter, string sourceSha256, long sourceBytes) =>
         ModuleIndex.Build(root, reader, name, lane, adapter, sourceSha256, sourceBytes);
+    public ModuleDigest BuildDigest(string lane, string sourceSha256, long sourceBytes) =>
+        ModuleDigest.Build(root, reader, lane, sourceSha256, sourceBytes);
     public JsonObject Read(string? path, ReadingOptions options, string[]? select, string file)
     {
         options.Validate();
@@ -76,6 +79,7 @@ public sealed class SnapshotReadCache(Func<byte[], IReadSnapshot> load, ModuleIn
         if (request["expectedSourceSha256"] is { } expected && !string.Equals(expected.GetValue<string>(), actual, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Snapshot content changed: expectedSourceSha256 does not match the source bytes");
         if (request["index"] is { } mode) return EnsureIndex(mode.GetValue<string>(), bytes, actual, total);
+        if (request["digest"] is { } digestMode) return EnsureDigest(digestMode.GetValue<string>(), bytes, actual, total);
         var cold = request["cold"]?.GetValue<bool>() == true;
         var modelHit = snapshot != null && hash == actual && !cold;
         // Include the file because the legacy module map includes its source path.
@@ -136,6 +140,26 @@ public sealed class SnapshotReadCache(Func<byte[], IReadSnapshot> load, ModuleIn
             ["index"] = new JsonObject { ["path"] = indexes.PathOf(actual), ["sourceSha256"] = index.SourceSha256, ["built"] = built,
                 ["complete"] = index.Complete, ["counts"] = index.Counts() },
             ["cache"] = new JsonObject { ["loads"] = loads }, ["timings"] = new JsonObject { ["serverMs"] = total.Elapsed.TotalMilliseconds } };
+    }
+
+    // {"digest":"ensure"}: the capture's module digest is stored beside its index (built from the model, loaded here when
+    // needed, when absent or invalid). The facade reads and pages the file; the answer carries its path and sizes.
+    private JsonObject EnsureDigest(string mode, byte[] bytes, string actual, Stopwatch total)
+    {
+        if (mode != "ensure") throw new ArgumentException("digest accepts only \"ensure\"");
+        if (indexes == null) throw new InvalidOperationException("No module index store: set SSAM_MODULE_INDEX_ROOT or run the reader inside an SSAM workspace");
+        var digest = indexes.LoadDigest(actual); var built = false; double loadMs = 0, buildMs = 0;
+        if (digest == null) {
+            var phase = total.Elapsed.TotalMilliseconds;
+            if (snapshot == null || hash != actual) { Dispose(); snapshot = load(bytes); hash = actual; loads++; }
+            loadMs = total.Elapsed.TotalMilliseconds - phase; phase = total.Elapsed.TotalMilliseconds;
+            digest = snapshot.BuildDigest(indexes.Lane, actual, bytes.Length);
+            indexes.SaveDigest(digest); built = true;
+            buildMs = total.Elapsed.TotalMilliseconds - phase;
+        }
+        return new JsonObject { ["ok"] = true, ["sourceSha256"] = actual, ["digest"] = digest.Answer(indexes.DigestPathOf(actual), built),
+            ["cache"] = new JsonObject { ["loads"] = loads },
+            ["timings"] = new JsonObject { ["loadMs"] = loadMs, ["digestMs"] = buildMs, ["serverMs"] = total.Elapsed.TotalMilliseconds } };
     }
 
     // Once per loaded capture: store its index unless a valid one is already on disk. Never fails the read.

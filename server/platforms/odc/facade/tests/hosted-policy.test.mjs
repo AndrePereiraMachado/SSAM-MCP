@@ -217,6 +217,24 @@ test('answers show ws: in the object and in the JSON text; other server paths be
   assert.equal(pretty.content[0].text, JSON.stringify({ file: 'ws:odc/lab/01-x/result.json' }));
 });
 
+test('the module index store and the readers\' copy are server paths wherever their roots are (ssam_map index.file, the 22nd digest store.file)', () => {
+  const h = harness();
+  const saved = { index: process.env.SSAM_MODULE_INDEX_ROOT, readers: process.env.SSAM_READER_CACHE_ROOT };
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-index-root-'));
+  try {
+    process.env.SSAM_MODULE_INDEX_ROOT = path.join(outside, 'module-index');
+    process.env.SSAM_READER_CACHE_ROOT = path.join(outside, 'readers');
+    const shown = presenter({ workspace: h.workspace }).value({
+      store: { file: path.join(outside, 'module-index', 'v1', 'odc', 'ab'.repeat(32) + '.kernel.digest.json') },
+      reader: path.join(outside, 'readers', 'odc', 'gen', 'reader.log'), file: path.join(h.workspace, 'odc', 'snapshots', 'A.oml') });
+    assert.deepEqual(shown, { store: { file: '<servidor>' }, reader: '<servidor>', file: 'ws:odc/snapshots/A.oml' });
+  } finally {
+    for (const [name, value] of [['SSAM_MODULE_INDEX_ROOT', saved.index], ['SSAM_READER_CACHE_ROOT', saved.readers]])
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
+});
+
 test('every hosted answer loses the evidence of a client capture (evidence.mjs) before it is presented; the lane jobs, on the anonymized fixture, stay', async () => {
   const h = harness();
   const capture = path.join(anvilRoot, 'tests', 'fixtures', 'odc', 'wrightflood-personal-r8.oml');

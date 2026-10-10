@@ -167,6 +167,15 @@ public sealed class ModelHost
         } finally { Release(module); }
     }
 
+    /// <summary>The module digest of these bytes (ssam-digest), built from the loaded model; the caller stores it
+    /// (Anvil.Reading.ModuleDigest.Ensure).</summary>
+    public Anvil.Reading.ModuleDigest BuildDigest(byte[] source, string sourceSha256, string lane)
+    {
+        var module = Load(source);
+        try { return Anvil.Reading.ModuleDigest.Build((IObjectSignature)module, new KernelModelReader(), lane, sourceSha256, source.Length); }
+        finally { Release(module); }
+    }
+
     /// <summary>Referencias que o modulo consome, lidas do OML (sem servidor).</summary>
     public IReadOnlyList<ModuleReference> References(byte[] oml)
     {

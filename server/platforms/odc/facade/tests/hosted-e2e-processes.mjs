@@ -57,6 +57,9 @@ const ownerHome = path.join(T, 'owner-home');
 for (const dir of [serverDir, secrets, path.join(ownerHome, 'AppData', 'Local'), path.join(ownerHome, 'AppData', 'Roaming'), path.join(T, 'owner-authority'), path.join(T, 'owner-tmp')])
   fs.mkdirSync(dir, { recursive: true });
 const clean = env => Object.fromEntries(Object.entries(env).filter(([k]) => !/^(ANVIL_|SSAM_)/i.test(k)));
+// The owner's machine has its Anvil authority initialized (bridge.key): the server's own resident readers (ssam_map, the
+// module digest) trust it. Hosted child processes never get it (hosted-roots.test.mjs): each customer has its relay key.
+fs.writeFileSync(path.join(T, 'owner-authority', 'bridge.key'), randomBytes(32).toString('base64url'));
 // The Service Studio the server's O11 kernel loads headless (apply, the reference plan, find, refresh): compile-time and
 // model runtime only, never a Studio process.
 const serverStudio = process.env.ANVIL_STUDIO_DIR || path.join(process.env.ProgramFiles || 'C:\\Program Files', 'OutSystems', 'Service Studio 11', 'Service Studio');
@@ -170,9 +173,15 @@ const O11_MODULE = { oml: path.join(repo, 'kernel', 'tests', 'fixtures', 'blank-
   environment: 'thin-e2e.outsystemscloud.com', systemKey: 'uXCIR2Atc0+es3zYuZSnNw' };
 const moduleFile = path.join(T, 'o11-module.json');
 write(moduleFile, JSON.stringify(O11_MODULE));
+// The ODC module the fake ODC Studio captures with real bytes (servidor/fase4-22): the neutral blank CrossDevice app of
+// the kernel (anvil-odc create-blank), with the identity a capture of the real bridge carries.
+const ODC_MODULE = { name: 'SsamNeutralApp', oml: path.join(repo, 'kernel', 'tests', 'fixtures', 'odc', 'blank-crossdevice.oml'),
+  moduleKey: 'ojF0o++TwanqKJN76uNzpw', host: 'neutral-e2e.outsystems.dev', developerId: 'e2e.dev@neutral-e2e' };
+const odcModuleFile = path.join(T, 'odc-module.json');
+write(odcModuleFile, JSON.stringify(ODC_MODULE));
 async function startStudios(machine) {
   const o11Port = await freePort();
-  machine.studios = start([path.join(fixtures, 'fake-studios-process.mjs'), machine.root, machine.studiosFile, String(o11Port), '0', moduleFile], { env: machine.env, name: machine.name + '-studios' });
+  machine.studios = start([path.join(fixtures, 'fake-studios-process.mjs'), machine.root, machine.studiosFile, String(o11Port), '0', moduleFile, odcModuleFile], { env: machine.env, name: machine.name + '-studios' });
   const ready = await waitFor(() => fs.existsSync(machine.studiosFile), 15000);
   must(machine.name + ': fake Studios up (ODC pipe + O11 bridge)', ready, machine.studios.out);
   machine.fakes = JSON.parse(fs.readFileSync(machine.studiosFile, 'utf8'));
@@ -409,7 +418,9 @@ try {
   // The ninth release: a delivery reads the module's last publication once (publish_log, lastPublication), a read-only
   // primitive of the thin bridge, after the verify.
   check('thin: the bridge saw only primitive verbs of the 21, each with the agent\'s own key',
-    deliverSeen.length > 0 && deliverSeen.every(e => probe(e) || (e.authOk && ['open_module', 'get_active_module', 'snapshot_module', 'merge_from_oml', 'get_errors', 'publish_log'].includes(e.method)))
+    // list_open_modules (a read verb of the 21, capability list_open_modules:server_operation) is how a delivery confirms
+    // the open module before the capture.
+    deliverSeen.length > 0 && deliverSeen.every(e => probe(e) || (e.authOk && ['list_open_modules', 'open_module', 'get_active_module', 'snapshot_module', 'merge_from_oml', 'get_errors', 'publish_log'].includes(e.method)))
       && deliverSeen.filter(e => e.method === 'publish_log').length <= 1,
     deliverSeen.map(e => e.method));
   // C28 over the thin wire: the kernel's verify after the merge asks get_errors with settle; the thin bridge answers
@@ -506,6 +517,71 @@ try {
       && !/wrightflood-personal-r8/i.test(JSON.stringify(ownerDiscover[0])),
     discoverSeen);
 
+  // 9g. The 22nd product release over the hosted path (servidor/fase4-22).
+  //   - studio_deliver: the capture comes from the customer's (fake) ODC Studio through the agent, the server's kernel
+  //     builds over it and refuses ONCE with every problem of every phase; the Studio sees the capture only.
+  //   - o11_deliver: the same through the relay and the thin bridge; no merge_from_oml, the open module unchanged.
+  //   - ssam_map view:"digest": the server's kernel readers write the module digest of a capture of the customer's
+  //     workspace; the answer pins the ws: capture and names no server path.
+  //   - ssam_reference check-job with a declared base: only the job is read hosted (the base would resolve on the server).
+  const textOf = value => JSON.stringify(value ?? null);
+  const serverPathIn = value => { const text = textOf(value); return [repo, T, serverDir].some(p => text.toLowerCase().includes(JSON.stringify(p).slice(1, -1).toLowerCase())); };
+  const pcOdc = JSON.parse(fs.readFileSync(path.join(repo, 'kernel', 'tests', 'jobs-odc-negative', 'pa4-pc-four-phases.json'), 'utf8').replace(/^﻿/, ''));
+  const pcO11 = JSON.parse(fs.readFileSync(path.join(repo, 'kernel', 'tests', 'jobs-negative', 'pa4-pc-four-phases.json'), 'utf8').replace(/^﻿/, ''));
+  const PC_CODES = ['EXPR_UNKNOWN_IDENTIFIER', 'DEFAULT_LITERAL_INVALID', 'REFERENCE_UNRESOLVED', 'ExpressionInvalidExpressionType'];
+  const refusalSummary = value => (value && typeof value === 'object' ? { code: value.code ?? null, failed: value.failed ?? value.stage ?? null, verifyRan: value.verifyRan ?? null,
+    verifyReason: value.verifyReason ?? null, phases: value.phases ?? null, problems: Array.isArray(value.problems) ? value.problems.map(p => (p.phase ?? '?') + ':' + p.code) : null,
+    error: typeof value.error === 'string' ? value.error.slice(0, 160) : null } : value);
+  const singleRefusal = value => value?.ok === false && value.code === 'PREFLIGHT_REFUSED' && Array.isArray(value.problems)
+    && PC_CODES.every(code => textOf(value.problems).includes(code)) && /has no child 'PcNoSuchNode'/.test(textOf(value.problems)) && value.verifyRan === true
+    // The phase of each problem (the answer's `phases` list is replaced by the build-phase timings of lane wp on a delivery
+    // that built: studio-write-lock.mjs runPhased, product behavior, the same outside a hosted server).
+    && ['preflight', 'base', 'apply', 'verify'].every(phase => value.problems.some(p => p.phase === phase));
+  const odcCapture = sc(await call(clientA, 'studio_snapshot', { module: ODC_MODULE.name }));
+  const odcCaptureFile = serverFile(odcCapture?.path);
+  check('22nd: studio_snapshot of the ODC module brings its real capture to the workspace (ws:odc/snapshots)',
+    odcCaptureFile && fs.existsSync(odcCaptureFile) && shaFile(odcCaptureFile) === shaFile(ODC_MODULE.oml) && /^ws:odc\/snapshots\//.test(odcCapture.path), odcCapture);
+  write(path.join(A.root, 'inbox', 'pc-odc-four-phases.json'), JSON.stringify({ ops: pcOdc.ops }, null, 1));
+  const odcLinesBeforeDeliver = odcLines(A).length;
+  const odcRefused = await call(clientA, 'studio_deliver', { feature: 'pc-four-phases', module: ODC_MODULE.name, job: 'agent:inbox/pc-odc-four-phases.json',
+    owners: ['e2e'], changes: ['The single refusal over the hosted path'] }, 900000);
+  const odcDeliverLines = odcLines(A).slice(odcLinesBeforeDeliver).map(e => e.line.split(' ')[0]);
+  check('22nd: hosted studio_deliver refuses ONCE with every problem of every phase (preflight, base, apply, Verify), verifyRan:true, built on the server over the capture the agent brought',
+    singleRefusal(sc(odcRefused)), sc(odcRefused) ? refusalSummary(sc(odcRefused)) : odcRefused);
+  check('22nd: the customer\'s ODC Studio saw only the capture of that delivery (snapshot), never a merge, check-base, preview or open',
+    odcDeliverLines.length >= 1 && odcDeliverLines.every(c => c === 'snapshot' || c === 'status'), odcDeliverLines);
+  check('22nd: the hosted refusal names no server path', !serverPathIn(sc(odcRefused)), textOf(sc(odcRefused)).slice(0, 300));
+
+  seen = o11Count();
+  const o11BeforeRefusal = sc(await call(clientA, 'o11_studio', { command: 'snapshot' }));
+  seen = o11Count();
+  const o11Refused = await call(clientA, 'o11_deliver', { module: O11_MODULE.name, job: { ops: pcO11.ops }, authorize: 'pode entregar no Headless_CS' }, 900000);
+  const o11RefusedSeen = o11Since(seen);
+  const o11AfterRefusal = sc(await call(clientA, 'o11_studio', { command: 'snapshot' }));
+  check('22nd: hosted o11_deliver refuses ONCE with every problem of every phase over the live module (relay + thin bridge capture, kernel on the server), verifyRan:true',
+    singleRefusal(sc(o11Refused)), sc(o11Refused) ? refusalSummary(sc(o11Refused)) : o11Refused);
+  check('22nd: the thin bridge saw reads only (no merge_from_oml, no refresh_references) and the open module is unchanged',
+    o11RefusedSeen.some(e => e.method === 'snapshot_module' && e.authOk) && !o11RefusedSeen.some(e => ['merge_from_oml', 'refresh_references', 'publish'].includes(e.method))
+      && o11BeforeRefusal?.sha256 && o11BeforeRefusal.sha256 === o11AfterRefusal?.sha256,
+    { seen: o11RefusedSeen.map(e => e.method), before: o11BeforeRefusal?.sha256 ?? null, after: o11AfterRefusal?.sha256 ?? null });
+
+  for (const [lane, captured, moduleName] of [['odc', odcCapture?.path, ODC_MODULE.name], ['o11', o11AfterRefusal?.path, O11_MODULE.name]]) {
+    const digest = await call(clientA, 'ssam_map', { lane, target: captured, view: 'digest' }, 600000);
+    const page = sc(digest);
+    const next = page?.continuations?.next ?? null;
+    check(`22nd: hosted ssam_map {lane:"${lane}", view:"digest"} over a capture of the customer's workspace: the server's reader writes the digest, page 1 names the module`,
+      digest.isError !== true && page?.ok === true && page.schema === 'ssam-digest-page/1' && page.page === 1 && typeof page.text === 'string' && page.text.includes(moduleName)
+        && page.file === captured && page.store?.file === '<servidor>',
+      page ? { ok: page.ok, schema: page.schema, file: page.file, store: page.store, pages: page.pages, cache: page.cache, error: page.error } : digest);
+    check(`22nd: the ${lane} digest answer pins the ws: capture in its continuations and names no server path`,
+      page?.continuations?.page?.arguments?.target === captured && (next === null || next.arguments?.target === captured) && !serverPathIn(page),
+      { next, page: page?.continuations?.page ?? null });
+  }
+
+  const hostedCheck = sc(await call(clientA, 'ssam_reference', { lane: 'odc', kind: 'check-job', query: { base: 'tests/fixtures/odc/blank-mobile.oml', ops: pcOdc.ops } }));
+  check('22nd: hosted ssam_reference check-job with a declared base reads the job alone (verifyRan:false, the hosted reason), never an apply over a server file',
+    hostedCheck?.verifyRan === false && /^hosted SSAM server: the base this job declares is not read here/.test(hostedCheck?.verifyReason ?? '') && !serverPathIn(hostedCheck), hostedCheck);
+
   // 10. Customer B never reaches customer A's agent or workspace.
   const clientB = await connect(issued.b.token);
   const aLines = odcLines(A).length;
@@ -570,8 +646,9 @@ try {
     check(`no write outside the workspaces: ${key} unchanged`, JSON.stringify(now) === JSON.stringify(before[key]),
       JSON.stringify(now) === JSON.stringify(before[key]) ? '' : { changed: changed.slice(0, 12), count: changed.length });
   }
-  const top = fs.readdirSync(serverDir).filter(name => !['customers', 'tokens.json', 'kernel.json', 'server.log', 'server.pid', 'server.json'].includes(name) && !/^audit-\d{8}\.jsonl$/.test(name));
-  check('the server folder holds only tokens, kernel.json, servidor.ps1 files, audit and customers', top.length === 0, top);
+  // machine-pins.json and access-alerts.jsonl: the access trail of each token (agent-hub.mjs), as hosted-e2e.test.mjs allows.
+  const top = fs.readdirSync(serverDir).filter(name => !['customers', 'tokens.json', 'kernel.json', 'server.log', 'server.pid', 'server.json', 'machine-pins.json', 'access-alerts.jsonl'].includes(name) && !/^audit-\d{8}\.jsonl$/.test(name));
+  check('the server folder holds only tokens, kernel.json, servidor.ps1 files, audit, the access trail and customers', top.length === 0, top);
   const logs = fs.readdirSync(serverDir).filter(n => n.endsWith('.log') || n.endsWith('.jsonl')).map(n => fs.readFileSync(path.join(serverDir, n), 'utf8')).join('\n');
   check('server.log and audit carry no token or agent credential', ![issued.a, issued.b].some(x => logs.includes(x.token) || logs.includes(x.credential)));
   check('the customer workspaces are separate folders', fs.existsSync(issued.a.workspace) && fs.existsSync(issued.b.workspace) && !fs.existsSync(path.join(issued.b.workspace, 'odc', 'lab', 'Candidate.oml')));
@@ -586,6 +663,13 @@ try {
   if (port) await powershell(['-File', path.join(repo, 'scripts', 'servidor.ps1'), 'stop'], ownerEnv, 60000).catch(() => {});
   for (const run of [...children]) { try { run.child.stdin.end(); } catch { /* closed */ } await Promise.race([run.exit, delay(3000)]); }
   for (const run of [...children]) { try { run.child.kill(); } catch { /* gone */ } }
+  // The server's resident readers (ssam_map, step 9g) live under T and exit only after 15 idle minutes: stopped here by
+  // the pid of their own state file (reader-client.mjs worker.json).
+  const states = [];
+  const findStates = dir => { let entries = []; try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) { const full = path.join(dir, entry.name); if (entry.isDirectory()) { if (entry.name !== 'bin') findStates(full); } else if (entry.name === 'worker.json') states.push(full); } };
+  for (const folder of ['readers', 'readers-prefetch']) findStates(path.join(T, folder));
+  for (const file of states) { try { const pid = JSON.parse(fs.readFileSync(file, 'utf8')).pid; if (Number.isInteger(pid)) process.kill(pid); } catch { /* already gone */ } }
   await delay(300);
   try { fs.rmSync(T, { recursive: true, force: true }); } catch { /* best effort */ }
 }

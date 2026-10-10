@@ -24,10 +24,11 @@ public sealed class AtritosBDeliveryTests
     public void ARefusedPreflightRecordsTheJobPathAndHashInTheTask()
     {
         var (work, job) = Job(RefusedJob);
-        var bridge = new Bridge();
+        // primeira-certa A3: without a capture (open blocked) the preflight answers alone.
+        var bridge = new Bridge { BlockOpen = true };
         var result = Delivery.Run(bridge, new DeliveryRequest("Probe", job, work, []), (_, _, _) => throw new Exception("must not apply"));
         Assert.Equal(Delivery.PreflightRefused, result["code"]!.ToString());
-        Assert.Empty(bridge.Calls);
+        Assert.DoesNotContain("merge_from_oml", bridge.Calls);
         // The checkpoint the facade reads (work/deliver/<taskId>/task.json): no sources, the job record with its hash.
         var state = DurableJson.Read(Path.Combine(work, "deliver", result["taskId"]!.ToString(), "task.json"));
         Assert.Null(state["sources"]);

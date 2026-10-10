@@ -43,6 +43,7 @@
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\ModelReading.cs" Link="shared\ModelReading.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\SnapshotReading.cs" Link="shared\SnapshotReading.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\ModuleIndex.cs" Link="shared\ModuleIndex.cs" />
+    <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\ModuleDigest.cs" Link="shared\ModuleDigest.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Hosting\SnapshotReadServer.cs" Link="shared\SnapshotReadServer.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Hosting\WorkerServer.cs" Link="shared\WorkerServer.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Delivery\BridgeAccess.cs" Link="shared\BridgeAccess.cs" />

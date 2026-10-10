@@ -19,6 +19,11 @@ Os arquivos que existem nas duas caixas estão em [`SHARED.md`](SHARED.md), com 
 - Cada caixa guarda o caminho relativo original. A raiz da caixa é a raiz do repositório antigo. Por isso os links dos
   `.csproj` (`../../../../kernel/...`), os imports `../platforms/odc/facade` e os scripts funcionam sem mudança.
 - Contagem: `server/` 5155 arquivos, `agent/` 125, 68 nas duas.
+- Atualizado em 2026-10-10 para o 22º envio: `servidor/fase4-22` (`1fbfa377e243cbd3262000089a70456eed623882`), a
+  revisão que está no ar. Entraram em `server/` os 68 arquivos de `e7b2119b..1fbfa377` (53 alterados, 15 novos),
+  com os bytes da revisão. Ficaram fora, pela mesma regra da cópia: os overlays de `scripts/release` e
+  `docs/OPERACOES-O11.md`. `agent/` não muda (bridges, gancho e agente iguais; pacote atual vale).
+  `kernel/tests/Shared/ModuleDigestTests.cs` lê `tests/fixtures/hmisjha`, que não está aqui (material de cliente).
 
 ## Aviso: o servidor no ar não mudou
 

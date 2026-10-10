@@ -77,6 +77,28 @@ public static partial class FunctionCatalog
         ["Ceiling"] = ["Round"],
     };
 
+    /// <summary>primeira-certa A4: names whose built-in takes the same arguments, so renaming the call is the whole fix.
+    /// Every target must exist in the catalog (only those are used).</summary>
+    public static readonly IReadOnlyDictionary<string, string> Renames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["NullDateTime"] = "NullDate",
+        ["Len"] = "Length", ["Upper"] = "ToUpper", ["Lower"] = "ToLower", ["ToUpperCase"] = "ToUpper", ["ToLowerCase"] = "ToLower",
+        ["Now"] = "CurrDateTime", ["CurrentDateTime"] = "CurrDateTime", ["CurrentDate"] = "CurrDate", ["CurrentTime"] = "CurrTime",
+        ["Today"] = "CurrDate", ["IIf"] = "If", ["NullId"] = "NullIdentifier",
+    };
+
+    /// <summary>The one built-in a call to the unknown <paramref name="name"/> certainly means, or null: a rename of
+    /// <see cref="Renames"/>, else the only built-in at most one letter (two in a name of eight or more) away.</summary>
+    public static string? Certain(string name)
+    {
+        if (Renames.TryGetValue(name, out var renamed)) return Names.Contains(renamed) ? renamed : null;
+        if (name.Length < 5) return null;
+        var limit = name.Length >= 8 ? 2 : 1;
+        var lower = name.ToLowerInvariant();
+        var near = All.Select(f => f.Name).Distinct(StringComparer.Ordinal).Where(c => Math.Abs(c.Length - name.Length) <= limit && Distance(lower, c.ToLowerInvariant()) <= limit).ToList();
+        return near.Count == 1 ? near[0] : null;
+    }
+
     public static IReadOnlyList<BuiltinFunctionInfo> Extract()
     {
         var list = new List<BuiltinFunctionInfo>();

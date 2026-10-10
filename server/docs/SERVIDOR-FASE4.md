@@ -174,3 +174,21 @@ conversa com a fase3, mas a bridge ODC do pacote novo (`v45`) não é a da fase3
 - C14 no espelho O11 (`o11-stage.mjs`): continua um arquivo por ida (o cliente atual é só ODC).
 - C25 parte do servidor (resposta do `create_app` desacoplada do canal) e C39 (`DUPLICATE_MCP_ENTRY`): não feitos.
 - Prova ao vivo: só com o dono (troca da seção 2 e uma entrega real medida).
+
+## 7. 22º envio do produto (`servidor/fase4-22`)
+
+Merge de `consolidacao/main` `04ac63b9` (mesma árvore de `publicar/main` `0891629e`). Um conflito, no overlay
+`scripts/release/overlay/kernel/src/Anvil.Cli/Program.cs.patch`, recapturado sobre o `Program.cs` do merge.
+
+- Recusa única: `studio_deliver` e `o11_deliver` capturam o módulo pelo mesmo caminho de antes (agente, relay e bridge
+  fina) e o kernel do servidor recusa uma vez com todos os problemas de todas as fases. O Studio do cliente só vê a captura.
+- Resumo do módulo: `ssam_map {view:"digest"}` roda nos leitores do servidor sobre a captura que já está no workspace
+  (`ws:`). O resumo fica no índice de módulos do servidor e a resposta não mostra caminho do servidor: a apresentação
+  hospedada esconde também `SSAM_MODULE_INDEX_ROOT` e `SSAM_READER_CACHE_ROOT` quando ficam fora do checkout e do perfil.
+- `ssam_reference check-job` com `base` declarada no job: hospedado, só o job é lido (`verifyRan:false` e o motivo).
+  A base declarada seria resolvida no servidor (fixture da suíte ou qualquer caminho). A entrega faz todas as fases.
+- Bridges e agente iguais aos da `servidor/fase4` (ODC `v48`): o pacote do agente atual continua valendo.
+- O ponta a ponta (`hosted-e2e-processes.mjs`, passo 9g) confere as duas recusas e o resumo nas duas faixas
+  (83 de 83). O Studio ODC falso captura o app neutro com bytes reais (`odcModule.json`).
+- Do produto, sem correção aqui: numa entrega ODC que compilou, o campo `phases` da recusa (lista de fases) é trocado
+  pelos tempos da faixa wp (`studio-write-lock.mjs`). Cada problema continua com a sua fase.

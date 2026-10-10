@@ -6124,33 +6124,85 @@
    "group": "leitura",
    "kind": "model",
    "title": "Map every element of an application capture",
-   "when": "First read of an application: every element of a capture with @key, kind, role, parent and path, filtered and paged.",
+   "when": "First read of an application: the whole module as text in pages (view digest), or every element with @key, kind, role, parent and path (view map).",
    "preconditions": [
     "a capture .oml, or a module open in that lane's Studio (O11: an open tab is read by key; opening is a write)"
    ],
-   "next": "continuations.inspect (o11_inspect / studio_inspect by @key)",
+   "next": "continuations.next (the next page of the same capture) or continuations.inspect (o11_inspect / studio_inspect by @key)",
    "args": {
     "lane": "<lane>",
     "target": "<capture.oml or open Module>",
-    "role": "<screen|action|entity|...>"
+    "view": "digest"
    },
    "cli": "ssam map",
-   "triggers": [
-    ["@mapear", "@modulo"],
-    ["@mapear", "@app"],
-    ["@mapa", "@modulo"],
-    ["@consultar", "@tela", "@modulo"],
-    ["@consultar", "@acao_logica", "@modulo"],
-    ["@consultar", "@estrutura", "@modulo"],
-    ["@estrutura", "@modulo"]
-   ],
-   "without": ["@renomear", "@criar", "@adicionar", "@apagar", "@extensao"],
-   "slots": {
-    "target": ["@modulo", "@app"]
-   },
-   "intents": {
-    "pt": ["listar as telas do módulo", "quais actions o módulo tem", "ler a aplicação"],
-    "en": ["map module Orders", "list the screens of the module", "which actions does the module have", "read the application"]
+   "verbParam": "view",
+   "verbSelector": "enum",
+   "verbs": {
+    "digest": {
+     "field": "view",
+     "value": "digest",
+     "selector": "enum",
+     "when": "Read the whole module once, as text in pages: page 1 the overview (entities, structures, every action's signature, calls and callers), then the bodies; work in context, inspect only an @key.",
+     "next": "continuations.next until the parts the task needs are read (contents on page 1 gives their pages); inspect an @key only to go deeper",
+     "args": {
+      "lane": "<lane>",
+      "target": "<capture.oml or open Module>",
+      "view": "digest"
+     },
+     "cli": "ssam map --digest",
+     "triggers": [
+      ["@resumo", "@modulo"],
+      ["@resumo", "@app"],
+      ["@consultar", "@modulo", "inteiro"],
+      ["@consultar", "@app", "inteira"],
+      ["@consultar", "whole", "@modulo"],
+      ["@consultar", "whole", "@app"],
+      ["entender", "@modulo"],
+      ["understand", "@modulo"],
+      ["@existir", "nesse", "@modulo"],
+      ["@existir", "neste", "@modulo"],
+      ["@consultar", "@modulo", "contain"],
+      ["@consultar", "@app"]
+     ],
+     "without": ["@renomear", "@criar", "@adicionar", "@apagar", "@extensao"],
+     "slots": {
+      "target": ["@modulo", "@app"]
+     },
+     "intents": {
+      "pt": ["ler o módulo inteiro", "resumo do módulo", "entender o módulo", "o que tem nesse módulo", "ler a aplicação"],
+      "en": ["read the whole module", "summary of the module", "understand the module", "what does this module contain", "read the application"]
+     }
+    },
+    "map": {
+     "field": "view",
+     "value": "map",
+     "selector": "enum",
+     "when": "List the elements of a capture with @key, kind, role, parent and path, filtered by kind, name, prefix, role or parent, and paged.",
+     "next": "continuations.inspect (o11_inspect / studio_inspect by @key)",
+     "args": {
+      "lane": "<lane>",
+      "target": "<capture.oml or open Module>",
+      "view": "map",
+      "role": "<screen|action|entity|...>"
+     },
+     "triggers": [
+      ["@mapear", "@modulo"],
+      ["@mapear", "@app"],
+      ["@mapa", "@modulo"],
+      ["@consultar", "@tela", "@modulo"],
+      ["@consultar", "@acao_logica", "@modulo"],
+      ["@consultar", "@estrutura", "@modulo"],
+      ["@estrutura", "@modulo"]
+     ],
+     "without": ["@renomear", "@criar", "@adicionar", "@apagar", "@extensao"],
+     "slots": {
+      "target": ["@modulo", "@app"]
+     },
+     "intents": {
+      "pt": ["listar as telas do módulo", "quais actions o módulo tem"],
+      "en": ["map module Orders", "list the screens of the module", "which actions does the module have"]
+     }
+    }
    }
   },
   "ssam_app_url": {
