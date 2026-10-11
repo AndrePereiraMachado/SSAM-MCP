@@ -120,3 +120,5 @@ Dockerfile
 deploy
 **/ssam-state-*.tar.gz
 **/ssam-state-*.tar.gz.*
+# the decrypted ODC feature cache (deploy/odc-features-export.ps1, tenant feature flags) goes into the volume, never here
+**/Features.plain.xml

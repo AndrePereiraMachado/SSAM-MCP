@@ -111,8 +111,9 @@ Ainda não foi construída nem provada: os bundles dos Studios não estão no re
 4. `docker compose build` e `docker compose up -d` (ssam-server em 127.0.0.1:7310 e túnel ngrok).
 5. Grave o kernel no volume: `docker compose cp kernel.json ssam-server:/data/server/kernel.json`, com
    `{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v48"}`. No Linux a detecção por versão de exe não roda.
-6. Copie `Features.xml` de `%LocalAppData%\OutSystems\ODC Studio` de uma máquina já logada no tenant:
-   `docker compose cp Features.xml ssam-server:/data/odc-features/`.
+6. Cache de features do ODC: o `Features.xml` do Windows é cifrado com DPAPI e o Linux não o lê. Numa máquina já
+   logada no tenant, como o mesmo usuário, gere `Features.plain.xml` com `server\deploy\odc-features-export.ps1` e
+   grave em `/data/odc-features/` (detalhes no `server/deploy/DEPLOY.md`, seção 7.2).
 7. Tokens: `docker compose run --rm ssam-admin server-token issue --customer "Nome" --days 30 --lanes "odc,o11"`.
 
 Sem compose: `docker buildx build -f docker/ssam-server/Dockerfile --build-context installers=docker/installers -t ssam-server .`

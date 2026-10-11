@@ -228,8 +228,10 @@ RUN install -d -o ssam -g ssam -m 0750 /data/server /data/friction /data/odc-fea
 # State lives in volumes, never in the image:
 #   /data/server        tokens.json (SHA-256 of each token only), kernel.json, customers' workspaces, audit, server.log
 #   /data/friction      the friction store
-#   /data/odc-features  Features.xml (+ FeaturesOverride.xml) of an ODC Studio that signed in once (the ODC model asks its
-#                       feature provider; the installer does not carry it)
+#   /data/odc-features  Features.plain.xml: the feature cache of an ODC Studio that signed in once, decrypted on its Windows
+#                       machine by deploy/odc-features-export.ps1 (the Windows Features.xml is DPAPI, unreadable here; the
+#                       kernel encrypts the plain file with the Studio's Linux service, OdcFeatures.cs). The ODC model asks
+#                       its feature provider; the installer does not carry it.
 ENV HOME=/tmp \
     SSAM_SERVER_DIR=/data/server \
     SSAM_FRICTION_DIR=/data/friction \

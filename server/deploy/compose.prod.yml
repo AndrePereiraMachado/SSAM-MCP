@@ -140,7 +140,7 @@ services:
     volumes:
       - server-state:/data/server
 
-  # Backup, restore and file drops (kernel.json, Features.xml) into the state volumes, as uid 10001 like the server.
+  # Backup, restore and file drops (kernel.json, Features.plain.xml) into the state volumes, as uid 10001 like the server.
   ssam-ops:
     <<: *hardening
     image: ${SSAM_IMAGE:-ssam-server}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG in .env}

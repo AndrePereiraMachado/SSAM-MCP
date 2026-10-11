@@ -10,6 +10,7 @@ automático. Estes arquivos são do monorepo SSAM-MCP e não vêm da linha do se
 | `server/deploy/Caddyfile` | HTTPS automático e proxy reverso sem buffer. |
 | `server/deploy/.env.prod.example` | Modelo do `.env` (sem segredo). |
 | `server/deploy/backup.sh`, `restore.sh` | Cópia e volta do estado (volumes). |
+| `server/deploy/odc-features-export.ps1` | No Windows: decifra o cache de features do ODC Studio para a VPS (7.2). |
 
 Todos os comandos `docker compose` abaixo rodam **dentro de `server/deploy`**, onde fica o `.env`.
 
@@ -29,7 +30,7 @@ agente do cliente (https://<domínio>/agent) ─┤
 - Só o Caddy publica portas. O `ssam-server` não tem porta no host e não alcança a internet: tudo o que toca o tenant ou
   o Studio do cliente passa pelo agente do cliente, que se conecta ao servidor.
 - Estado nos volumes: hash SHA-256 de cada token, `kernel.json`, espaço de trabalho de cada cliente (até 5 GiB cada),
-  auditoria, `server.log`, atritos e o `Features.xml` do ODC. A imagem não guarda estado.
+  auditoria, `server.log`, atritos e o cache de features do ODC (`Features.plain.xml`, 7.2). A imagem não guarda estado.
 - `ssam-admin` emite, lista e revoga tokens. `ssam-ops` faz backup, restore e grava arquivos nos volumes. Os dois rodam
   sem rede e só quando chamados.
 
@@ -225,20 +226,37 @@ printf '%s\n' '{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v48"}' \
   | docker compose -f compose.prod.yml run --rm -T ssam-ops sh -c 'cat > /data/server/kernel.json'
 ```
 
-### 7.2 `Features.xml` do ODC
+### 7.2 Cache de features do ODC (`Features.plain.xml`)
 
 O modelo do ODC consulta o provedor de features (agregados, por exemplo), e nem o instalador nem o bundle trazem esse
-cache.
+cache. Sem ele, `studio_deliver` e o `ssam_map` da faixa ODC falham com `ODC Studio feature cache not found`.
 
-1. Numa máquina Windows onde o ODC Studio já entrou no tenant, copie `%LocalAppData%\OutSystems\ODC Studio\Features.xml`
-   (e `FeaturesOverride.xml`, se houver) para a VPS.
-2. Grave os arquivos no volume e apague as cópias:
+O `Features.xml` que o ODC Studio grava no Windows é cifrado com o DPAPI do usuário do Windows. No Linux, o serviço de
+cifra do Studio é outro (ASP.NET Data Protection) e não lê esse arquivo: copiar o `Features.xml` dá
+`The provided payload cannot be decrypted because it was not protected with this protection provider` (visto no ensaio
+de 2026-10-11). Por isso a VPS recebe o cache **decifrado**, e o kernel o cifra de novo com o serviço do Linux antes de o
+provedor ler (`kernel/src/Anvil.Core.Odc/Adapters.ODC/OdcFeatures.cs`).
+
+1. Numa máquina Windows onde o ODC Studio já entrou no tenant, **como o mesmo usuário do Windows** e num PowerShell
+   comum (não aberto de dentro de um app MSIX, que tem um `%LocalAppData%` só dele):
+
+   ```powershell
+   powershell -NoProfile -ExecutionPolicy Bypass -File server\deploy\odc-features-export.ps1 -Out C:\t\Features.plain.xml
+   ```
+
+   O script decifra `%LocalAppData%\OutSystems\ODC Studio\Features.xml`, confere que é um `<Features>` e mostra a
+   contagem e o sha256, nunca o conteúdo. O arquivo tem as flags de features do tenant, sem credencial: trate como
+   privado.
+2. Copie para a VPS, grave no volume e apague as cópias:
 
    ```bash
-   docker compose -f compose.prod.yml run --rm -T ssam-ops sh -c 'cat > /data/odc-features/Features.xml' < Features.xml
-   docker compose -f compose.prod.yml run --rm -T ssam-ops sh -c 'cat > /data/odc-features/FeaturesOverride.xml' < FeaturesOverride.xml
-   rm Features.xml FeaturesOverride.xml
+   docker compose -f compose.prod.yml run --rm -T ssam-ops sh -c 'cat > /data/odc-features/Features.plain.xml' < Features.plain.xml
+   rm Features.plain.xml
    ```
+
+3. Repita depois de uma troca de versão do ODC Studio ou quando o tenant ganhar features novas.
+
+`FeaturesOverride.xml` (raro) é copiado como está e não foi provado no Linux.
 
 ### 7.3 Subir
 

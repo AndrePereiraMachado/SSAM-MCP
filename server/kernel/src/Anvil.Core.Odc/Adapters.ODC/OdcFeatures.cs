@@ -10,10 +10,17 @@ namespace Anvil.Core;
 /// Studio keeps in %LocalAppData%\OutSystems\ODC Studio\Features.xml (plus FeaturesOverride.xml when present), copied
 /// into the work directory, with the Studio's own encryption service. Same steps as SSAM-Hybrid-ODC's builder
 /// (studio\engine\NativeFeatureBootstrap.cs), which delivered with it. Idempotent; no remote source is contacted.
+/// Linux (the ssam-server image): the Studio's encryption service there is ASP.NET Core Data Protection with its key ring
+/// in the folder it is given, so the Features.xml a Windows Studio wrote (DPAPI, user scope) cannot be read ("The provided
+/// payload cannot be decrypted because it was not protected with this protection provider", seen in the Docker Desktop
+/// rehearsal). There the owner drops the DECRYPTED cache as Features.plain.xml (server/deploy/odc-features-export.ps1 on
+/// the Windows machine whose ODC Studio signed in), and it is encrypted here with the service of the work folder before the
+/// provider reads it. Windows is unchanged.
 /// </summary>
 public static class OdcFeatures
 {
     private static readonly object Gate = new();
+    public const string PlainCacheFile = "Features.plain.xml";
 
     public static string CacheDirectory =>
         Environment.GetEnvironmentVariable("ANVIL_ODC_FEATURES_DIR")
@@ -27,11 +34,15 @@ public static class OdcFeatures
             var providerType = common.GetType("ServiceStudio.Common.FeatureManagement.FeaturesProvider", throwOnError: true)!;
             if ((bool)providerType.GetProperty("IsInitialized")!.GetValue(null)!) return;
             var source = Path.Combine(CacheDirectory, "Features.xml");
-            if (!File.Exists(source))
-                throw new FileNotFoundException("ODC Studio feature cache not found; open the ODC Studio once on this machine (or set ANVIL_ODC_FEATURES_DIR).", source);
+            var plain = Path.Combine(CacheDirectory, PlainCacheFile);
+            var fromPlain = !OperatingSystem.IsWindows() && File.Exists(plain);
+            if (!fromPlain && !File.Exists(source))
+                throw new FileNotFoundException(OperatingSystem.IsWindows()
+                    ? "ODC Studio feature cache not found; open the ODC Studio once on this machine (or set ANVIL_ODC_FEATURES_DIR)."
+                    : "ODC Studio feature cache not found: put " + PlainCacheFile + " (server/deploy/odc-features-export.ps1) in ANVIL_ODC_FEATURES_DIR.", OperatingSystem.IsWindows() ? source : plain);
             var folder = Path.Combine(workDirectory, "odc-features");
             Directory.CreateDirectory(folder);
-            File.Copy(source, Path.Combine(folder, "Features.xml"), overwrite: true);
+            if (!fromPlain) File.Copy(source, Path.Combine(folder, "Features.xml"), overwrite: true);
             var overrideSource = Path.Combine(CacheDirectory, "FeaturesOverride.xml");
             if (File.Exists(overrideSource)) File.Copy(overrideSource, Path.Combine(folder, "FeaturesOverride.xml"), overwrite: true);
 
@@ -40,6 +51,13 @@ public static class OdcFeatures
             var productType = encryptionAssembly.GetType("OutSystems.ServiceStudio.Encryption.ProductIdentifier", throwOnError: true)!;
             var factory = encryptionAssembly.GetType("OutSystems.ServiceStudio.Encryption.EncryptionServiceFactory", throwOnError: true)!;
             var encryption = factory.GetMethod("GetEncryptionService")!.Invoke(null, [folder, Enum.Parse(productType, "OdcStudio")]);
+            if (fromPlain)
+            {
+                var encrypt = encryptionInterface.GetMethod("Encrypt", [typeof(string)])
+                    ?? encryption!.GetType().GetMethod("Encrypt", [typeof(string)])
+                    ?? throw new MissingMethodException("OutSystems.ServiceStudio.Encryption.IEncryptionService", "Encrypt(string)");
+                File.WriteAllText(Path.Combine(folder, "Features.xml"), (string)encrypt.Invoke(encryption, [File.ReadAllText(plain)])!);
+            }
             var constructorType = typeof(Func<>).MakeGenericType(encryptionInterface);
             var constructor = System.Linq.Expressions.Expression.Lambda(constructorType, System.Linq.Expressions.Expression.Constant(encryption, encryptionInterface)).Compile();
             common.GetType("ServiceStudio.Common.EncryptionService", throwOnError: true)!.GetMethod("SetInstance")!.Invoke(null, [constructor, null]);

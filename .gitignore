@@ -25,3 +25,6 @@
 
 # Cópias de estado do servidor (server/deploy/backup.sh): dados e nomes de clientes
 **/ssam-state-*.tar.gz*
+
+# Cache de features do ODC decifrado (server/deploy/odc-features-export.ps1): flags do tenant, vai só para o volume
+**/Features.plain.xml

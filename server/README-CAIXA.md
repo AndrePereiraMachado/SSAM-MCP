@@ -69,7 +69,8 @@ VPS Linux com Docker Compose, HTTPS automático pelo Caddy e servidor sem porta 
 3. `node --test platforms/odc/facade/tests/hosted-image-denylist.test.mjs` antes de cada build.
 4. `docker compose build` e `docker compose up -d`.
 5. `kernel.json` no volume: `{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v48"}` em `/data/server/kernel.json`.
-6. `Features.xml` do ODC Studio em `/data/odc-features/`.
+6. `Features.plain.xml` (do `deploy/odc-features-export.ps1`; o `Features.xml` do Windows é DPAPI e o Linux não o lê)
+   em `/data/odc-features/` (`deploy/DEPLOY.md`, seção 7.2).
 7. Tokens: `docker compose run --rm ssam-admin server-token issue ...`.
 
 Pendências:
