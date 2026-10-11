@@ -271,6 +271,9 @@ curl -s -o /dev/null -w '%{http_code}\n' https://ssam.seudominio.com/mcp   # 401
 - O log do `ssam-server` mostra `kernel` com as versões do `kernel.json`, depois `listening` com `mode: "hosted"` e,
   uns segundos depois, `warm`.
 - Se `kernel` sair com `null`, o `kernel.json` não foi lido: refaça o 7.1.
+- `healthy` sai em uns 10 s, mas o servidor ainda aquece por 1 a 2 minutos depois de cada container novo (`up` com
+  imagem nova, `--force-recreate`): refaz os índices do discover e sobe os workers. No ensaio, o primeiro `ssam_discover`
+  da faixa O11 nesse intervalo levou 83 s; os seguintes, menos de 1 s. Um `restart` simples mantém esses caches.
 
 ### 7.4 Token de cliente
 
@@ -427,9 +430,44 @@ Para provar a pilha numa máquina de desenvolvimento sem tocar em portas em uso:
 
 - `.env` com `COMPOSE_PROJECT_NAME=ssam-prova-prod`, `SSAM_DOMAIN=localhost`, qualquer endereço em `ACME_EMAIL`,
   `SSAM_HTTP_PORT=127.0.0.1:28080`, `SSAM_HTTPS_PORT=127.0.0.1:28443` e `BACKUP_DIR` numa pasta de rascunho.
-- Para `localhost`, o Caddy usa a CA interna dele, sem ACME.
-- Teste com `curl -k https://localhost:28443/health`.
+- Para `localhost`, o Caddy usa a CA interna dele, sem ACME. O ensaio de 2026-10-11 montou, por um override do compose,
+  uma cópia do `Caddyfile` com `tls internal` a mais. O Caddy avisa `failed to install root certificate`: é só a CA
+  local, sem efeito.
+- Teste com `curl -k https://localhost:28443/health`. Clientes Node confiam na raiz local do Caddy
+  (`/data/caddy/pki/authorities/local/root.crt`, copiada com `docker compose exec caddy cat ...`) por
+  `NODE_EXTRA_CA_CERTS`, sem desligar a verificação TLS.
+- Agente: o pacote da caixa agent com binários de mentira e os Studios **falsos** dos testes da caixa
+  (`platforms/odc/facade/tests/fixtures/fake-studios-process.mjs` e `agent-process.mjs`). Nunca os Studios reais da
+  máquina.
 - Nunca use as portas 80, 443 ou 7310 de uma máquina que já roda outro servidor SSAM.
+
+### Resultado do ensaio de 2026-10-11
+
+Imagem `ssam-server:prod-20261011-2761cb8`, Docker Desktop 29.8.2 (linux/amd64), `.env` do ensaio com 3 CPUs, 6 GB e
+2 workers. Tudo pelo HTTPS do Caddy em `127.0.0.1:28443`.
+
+| Item | Resultado |
+| --- | --- |
+| Build sem cache de camadas (bases e cache do NuGet já locais) | 92 s. Rebuild de uma mudança de código: 6 a 40 s. |
+| Tamanho | 1,13 GB descompactada; cerca de 295 MB comprimida (`docker save`). |
+| Subida | `healthy` em 8 a 10 s; aquecimento de 1 a 2 min depois de um container novo (7.3). |
+| Processo e disco | uid/gid 10001, `NoNewPrivs`, nenhuma capability. Código e Studios só de leitura para o `ssam`; ele grava só nos volumes, em `/tmp` e nos caches de `/app` (seção 14). |
+| Rede | `ssam-server` só na rede `backend` (interna): sem DNS nem saída para a internet. Portas do host só no Caddy. |
+| `/health` | 200 pelo Caddy, com HSTS, nosniff, DENY, CSP, CORP e no-referrer, sem `Server`. Outros caminhos: 404. |
+| Tokens | emitidos pelo `ssam-admin`; o volume guarda só os hashes. |
+| MCP | `initialize` e `tools/list` (79 ferramentas) com o token; `ssam_reference` e `ssam_discover` nas duas faixas; `o11_extension` recusado com `HOSTED_UNAVAILABLE` (`XIF_ENGINE_WINDOWS_ONLY`). |
+| Acesso negado | sem token, token desconhecido ou credencial de agente no `/mcp`: 401. Token revogado: 403 `Token revoked`, também para a credencial do agente dele. |
+| Agente (Studios falsos) | `studio_status`, `studio_attach`, captura de 6 MiB, `ssam_connect`, `o11_studio`, `o11_deliver` "entregue" (kernel O11 no Linux), `studio_deliver` ODC recusado de uma vez nas quatro fases com `verifyRan:true` (kernel ODC no Linux), `ssam_map` digest nas duas faixas. |
+| Conexão longa | canal do agente aberto 7 min pelo Caddy, sem queda nem reconexão. |
+| Restart e recriação | tokens e revogações mantidos; o agente reconecta sozinho em 1 a 5 s. |
+| Segredos | nenhum token nem credencial no `server.log`, na auditoria, nos logs do Docker, do Caddy (Authorization `REDACTED`) e do agente. |
+| Nomes de cliente | nenhum nos arquivos do SSAM na imagem. As 12 ocorrências da varredura são de terceiros: pedaços de identificadores (tipos do AWS SDK, runtime .NET) e bytes de binários. |
+
+Correções que o ensaio trouxe, todas com commit no `main`: cache do NuGet por estágio, pasta de autoridade do dono e
+pasta `features` vazia do builder (`server/Dockerfile`); versão da bridge ODC no pipe hospedado; caminhos Linux
+apresentados como `ws:` (`hosted/policy.mjs`); `TMPDIR` dos processos do kernel (`executor.mjs`); cache de features do ODC
+no Linux (`OdcFeatures.cs`, `odc-features-export.ps1`, 7.2); argumentos dos rótulos só antes do `LABEL`, para reaproveitar
+as camadas entre versões.
 
 ## 13. Problemas comuns
 
@@ -444,12 +482,19 @@ Para provar a pilha numa máquina de desenvolvimento sem tocar em portas em uso:
 | `HOSTED_UNAVAILABLE` em `o11_extension`, `odc_external_library`, depurador ou preview | Esperado: essas ferramentas não rodam no servidor hospedado Linux. |
 | 429 | Limite por token: `SSAM_RATE_PER_MINUTE`, ou 8 sessões abertas por token. |
 | Build para em "has no pinned SHA256" | Falta `*_BUNDLE_SHA256` (ou `*_SHA256` do instalador) no `.env` (seção 4). |
+| `ODC Studio feature cache not found` ou `ODC feature provider could not load the local cache` | Falta o `Features.plain.xml` no volume, ou foi copiado o `Features.xml` cifrado do Windows (7.2). |
+| Primeiro `ssam_discover` demora mais de 1 min | Aquecimento depois de um container novo (7.3). |
 
 ## 14. Limitações conhecidas
 
-- A imagem de produção ainda não foi construída nem provada numa VPS: os bundles dos Studios não estão neste repositório.
-  - No ensaio, procure no log `EACCES` ou `EROFS`: seria um lugar onde o servidor grava e que a imagem não liberou.
-  - Procure também `HOSTED_CONTEXT_LOST`.
+- A imagem foi construída e provada no Docker Desktop (seção 12), mas ainda não numa VPS: o certificado do
+  Let's Encrypt, o DNS e o firewall da VPS não foram provados. Os bundles dos Studios não estão neste repositório.
+  - No ensaio não apareceu `EACCES`, `EROFS`, `EPERM` nem `HOSTED_CONTEXT_LOST`. Numa VPS, procure de novo no log.
+- Quatro correções do ensaio mexem em arquivos de produto copiados da linha do servidor
+  (`platforms/odc/facade/hosted/agent-executor.mjs`, `hosted/policy.mjs`, `executor.mjs` e
+  `kernel/src/Anvil.Core.Odc/Adapters.ODC/OdcFeatures.cs`). A linha do servidor precisa fazer a mesma mudança na origem,
+  senão a próxima cópia desfaz.
+- O índice do discover e os outros caches de `/app` se perdem a cada container novo: 1 a 2 min de aquecimento (7.3).
 - O container não roda com o sistema de arquivos raiz só de leitura.
   - A linha do servidor grava caches em `/app/.local` e `/app/platforms/odc/.local`, e os locks e logs dos workers ao
     lado dos CLIs, em `/app/kernel/.local`.

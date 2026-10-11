@@ -60,7 +60,8 @@ VPS Linux com Docker Compose, HTTPS automático pelo Caddy e servidor sem porta 
 - O build recusa Studio sem SHA256 fixado.
 - Os arquivos de deploy são `deploy/compose.prod.yml` (serviços `ssam-server`, `caddy`, `ssam-admin` e `ssam-ops`),
   `deploy/Caddyfile`, `deploy/.env.prod.example`, `deploy/backup.sh` e `deploy/restore.sh`.
-- Ainda não foi construída nem provada: os bundles dos Studios não estão no repositório.
+- Construída e provada no Docker Desktop em 2026-10-11 (`deploy/DEPLOY.md`, seção 12, imagem
+  `ssam-server:prod-20261011-2761cb8`); falta uma VPS de verdade. Os bundles dos Studios não estão no repositório.
 
 ## Deploy de desenvolvimento (linha do servidor: `docker/ssam-server/Dockerfile` e `docker-compose.yml` com ngrok)
 

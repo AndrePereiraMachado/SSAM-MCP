@@ -96,10 +96,12 @@ SSAM-MCP e não vêm da linha do servidor.
   - `ssam-server` sem porta no host, numa rede interna sem saída para a internet;
   - `caddy` em 80/443 com HTTPS automático e proxy sem buffer;
   - `ssam-admin` (tokens) e `ssam-ops` (backup e restore).
-- `server/deploy/Caddyfile`, `.env.prod.example`, `backup.sh`, `restore.sh` e `DEPLOY.md`.
-- O `.dockerignore` tira tudo isso da imagem, mais as cópias de estado `ssam-state-*.tar.gz`.
+- `server/deploy/Caddyfile`, `.env.prod.example`, `backup.sh`, `restore.sh`, `odc-features-export.ps1` e `DEPLOY.md`.
+- O `.dockerignore` tira tudo isso da imagem, mais as cópias de estado `ssam-state-*.tar.gz` e o `Features.plain.xml`.
 
-Ainda não foi construída nem provada: os bundles dos Studios não estão no repositório.
+Construída e provada no Docker Desktop em 2026-10-11 (`server/deploy/DEPLOY.md`, seção 12): imagem
+`ssam-server:prod-20261011-2761cb8`, 1,13 GB (cerca de 295 MB comprimida). Falta uma VPS de verdade (Let's Encrypt, DNS,
+firewall). Os bundles dos Studios não estão no repositório.
 
 ### Deploy com Docker (desenvolvimento, linha do servidor: túnel ngrok)
 
