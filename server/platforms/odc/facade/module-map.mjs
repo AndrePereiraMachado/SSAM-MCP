@@ -7,6 +7,11 @@
 //     [--key @key] [--offset N] [--max N] [--budget B] [--detail] [--expectedSourceSha256 H]
 //   ssam map [--lane o11|odc] <capture.oml|Module> --digest [--page N] [--budget B] [--expectedSourceSha256 H]
 //     the module digest of the same capture (view "digest", module-digest.mjs): the whole module as text, in pages
+//   ssam map [--lane o11|odc] <capture|Module>... --search <text> [--regex] [--property P] [--kind K] [--role R] [--offset N] [--max N]
+//   ssam map [--lane o11|odc] <capture|Module>... --uses <@key|Module.Element|Flow/Screen/Action|Kind:Name|Name> [--kind K]
+//     views "search" and "uses" (module-rich.mjs): the rich index of each capture (one or several of an app), built only
+//     on request ({"rich":"ensure"}) and read here; search finds text in expressions and values, uses finds who uses an
+//     element inside and across the given modules
 //   node module-map.mjs --prefetch <capture.oml> --lane o11|odc      (the detached warm-up, see prefetchIndex)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -22,14 +27,19 @@ import { resolveOpenModule, systemModuleName } from './studio-module.mjs';
 import { withStudioWriteLock } from './studio-write-lock.mjs';
 import { canonicalCapture } from './oml-content-sha.mjs';
 import { DIGEST_ADAPTER, DIGEST_PAGE_SCHEMA, DIGEST_SCHEMA, DIGEST_NOTE, loadDigest, digestPages, digestBody } from './module-digest.mjs';
+import { RICH_ADAPTER, RICH_SCHEMA, SEARCH_SCHEMA, USES_SCHEMA, SEARCH_NOTE, USES_NOTE, loadRich, searchRich, searchEntry, resolveElement, usesRich,
+  usesEntry, describeRow } from './module-rich.mjs';
 
 export const INDEX_SCHEMA = 'ssam-module-index/1';
 export const EXTRACTOR = 1;
 export const MAP_SCHEMA = 'ssam-map/1';
 export const ROLES = ['module', 'flow', 'screen', 'block', 'action', 'actionRef', 'aggregate', 'entity', 'staticEntity', 'structure',
   'attribute', 'parameter', 'variable', 'widget', 'event', 'flowNode', 'expression', 'reference', 'other'];
-export const MAP_USAGE = 'ssam map [--lane o11|odc] <capture.oml|Module> [--kind K] [--name N] [--prefix P] [--role R] [--parent @key] [--key @key] [--offset N] [--max N] [--budget B] [--detail] [--expectedSourceSha256 H] | ssam map [--lane o11|odc] <capture.oml|Module> --digest [--page N] [--budget B] [--expectedSourceSha256 H]';
-export const VIEWS = ['map', 'digest'];
+export const MAP_USAGE = 'ssam map [--lane o11|odc] <capture.oml|Module> [--kind K] [--name N] [--prefix P] [--role R] [--parent @key] [--key @key] [--offset N] [--max N] [--budget B] [--detail] [--expectedSourceSha256 H] | ssam map [--lane o11|odc] <capture.oml|Module> --digest [--page N] [--budget B] [--expectedSourceSha256 H] | ssam map [--lane o11|odc] <capture|Module>... --search <text> [--regex] [--property P] [--kind K] [--role R] [--offset N] [--max N] | ssam map [--lane o11|odc] <capture|Module>... --uses <element> [--kind K] [--role R]';
+export const VIEWS = ['map', 'digest', 'search', 'uses'];
+const RICH_VIEWS = ['search', 'uses'];
+// The most captures one search or uses call reads (the modules of one app).
+export const MAX_TARGETS = 16;
 const DETAIL_ROLES = new Set(['expression', 'reference', 'other']);
 const ANONYMOUS_KINDS = ['AnonymousStructure', 'ListType'];
 // The reader's own refusal text (SnapshotReading.Read), which discovery and callers already recognize.
@@ -45,6 +55,8 @@ export const indexRoot = (env = process.env) => env.SSAM_MODULE_INDEX_ROOT ? pat
 export const indexFile = (lane, sha256, env = process.env) => path.join(indexRoot(env), 'v1', lane, sha256.toLowerCase() + '.' + adapterOf(lane) + '.json');
 // The module digest beside the index (ModuleIndexStore.DigestPathOf), written in both lanes by the kernel's own reader.
 export const digestFile = (lane, sha256, env = process.env) => path.join(indexRoot(env), 'v1', lane, sha256.toLowerCase() + '.' + DIGEST_ADAPTER + '.digest.json');
+// The rich index beside them (ModuleIndexStore.RichPathOf), written by the same kernel reader as the digest, only on request.
+export const richFile = (lane, sha256, env = process.env) => path.join(indexRoot(env), 'v1', lane, sha256.toLowerCase() + '.' + RICH_ADAPTER + '.rich.json');
 // C15: the registry of canonical captures by content (oml-content-sha.mjs canonicalCapture), beside the index store.
 export const contentRegistry = (lane, env = process.env) => path.join(indexRoot(env), 'v1', lane, 'content');
 // The capture that answers a read of `file`: the first intact capture of the same content (its index and its sha), or the
@@ -163,13 +175,42 @@ export const DEFAULT_MAP_BUDGET = (env = process.env) => {
 function mapRequest(input) {
   const lane = input.lane ?? 'odc';
   if (!['odc', 'o11'].includes(lane)) throw new Error('Unknown lane ' + lane + '; lanes: odc, o11');
-  if (typeof input.target !== 'string' || !input.target.trim()) throw new Error('target is required: a capture .oml or, on ODC, an open module name. ' + MAP_USAGE);
-  for (const name of ['kind', 'name', 'prefix', 'role', 'parent', 'key'])
-    if (input[name] != null && (typeof input[name] !== 'string' || !input[name])) throw new Error(name + ' must be a non-empty string');
-  if (input.expectedSourceSha256 != null && !/^[a-fA-F0-9]{64}$/.test(input.expectedSourceSha256)) throw new Error('expectedSourceSha256 must be 64 hexadecimal characters');
   const view = input.view ?? 'map';
-  if (!VIEWS.includes(view)) throw new Error('view must be one of: ' + VIEWS.join(', ') + ' (map: the elements with their @keys; digest: the whole module as text, in pages)');
+  if (!VIEWS.includes(view)) throw new Error('view must be one of: ' + VIEWS.join(', ') + ' (map: the elements with their @keys; digest: the whole module as text, in pages; search: text in expressions and values; uses: who uses an element)');
+  const rich = RICH_VIEWS.includes(view);
+  const targets = Array.isArray(input.target) ? input.target : [input.target];
+  if (Array.isArray(input.target) && !rich) throw new Error('a list of targets belongs to views "search" and "uses"; view "' + view + '" reads one capture or module');
+  if (!targets.length || targets.length > MAX_TARGETS || targets.some(t => typeof t !== 'string' || !t.trim()))
+    throw new Error('target is required: a capture .oml or an open module name' + (rich ? ', or a list of 1 to ' + MAX_TARGETS + ' of them (the modules of one app)' : '') + '. ' + MAP_USAGE);
+  for (const name of ['kind', 'name', 'prefix', 'role', 'parent', 'key', 'text', 'property', 'element'])
+    if (input[name] != null && (typeof input[name] !== 'string' || !input[name])) throw new Error(name + ' must be a non-empty string');
+  const hashes = input.expectedSourceSha256 == null ? [] : Array.isArray(input.expectedSourceSha256) ? input.expectedSourceSha256 : [input.expectedSourceSha256];
+  if (hashes.some(h => typeof h !== 'string' || !/^[a-fA-F0-9]{64}$/.test(h))) throw new Error('expectedSourceSha256 must be 64 hexadecimal characters' + (rich ? ' (or a list of them, one per target)' : ''));
+  if (Array.isArray(input.expectedSourceSha256) && (!Array.isArray(input.target) || hashes.length !== targets.length))
+    throw new Error('expectedSourceSha256 as a list needs a list target with one hash per target (' + targets.length + ')');
   const offset = integer('offset', input.offset, 0, Number.MAX_SAFE_INTEGER, 0);
+  const richOnly = ['text', 'property', 'element'].filter(k => input[k] != null);
+  if (input.regex === true) richOnly.push('regex');
+  if (!rich && richOnly.length) throw new Error(richOnly.join(', ') + ' belong to views "search" (text, regex, property) and "uses" (element)');
+  if (rich) {
+    // The rich views filter by kind and role and page with offset and max; the map's own filters would read as a scope
+    // they do not have.
+    const mapOnly = ['name', 'prefix', 'parent', 'key'].filter(k => input[k] != null);
+    if (input.includeDetail === true) mapOnly.push('includeDetail');
+    if (input.page != null) mapOnly.push('page');
+    if (view === 'search' && input.element != null) mapOnly.push('element');
+    if (view === 'uses') { for (const k of ['text', 'property']) if (input[k] != null) mapOnly.push(k); if (input.regex === true) mapOnly.push('regex'); }
+    if (mapOnly.length) throw new Error('view "' + view + '" takes ' + (view === 'search' ? 'text (regex, property)' : 'element') + ', kind, role, offset and max; '
+      + mapOnly.join(', ') + ' belong to ' + (mapOnly.some(k => ['text', 'property', 'regex'].includes(k)) ? 'view "search"' : mapOnly.includes('element') ? 'view "uses"' : mapOnly.includes('page') ? 'view "digest"' : 'view "map"'));
+    if (view === 'search' && input.text == null) throw new Error('view "search" needs text: the text to find in expressions, values, arguments and names (substring, case-insensitive; regex:true for a regular expression)');
+    if (view === 'search' && input.text.length > 500) throw new Error('text must have at most 500 characters');
+    if (view === 'uses' && input.element == null) throw new Error('view "uses" needs element: @key, Module.Element (producer.element), a name path such as MainFlow/Home/Search, Kind:Name or a name');
+    if (input.role != null && !ROLES.includes(input.role)) throw new Error('Unknown role ' + input.role + '; roles: ' + ROLES.join(', '));
+    return { lane, target: Array.isArray(input.target) ? targets : targets[0], view, kind: input.kind, role: input.role, text: input.text, regex: input.regex === true,
+      property: input.property, element: input.element, offset, max: integer('max', input.max, 1, 500, 100),
+      budgetBytes: integer('budgetBytes', input.budgetBytes, 2000, 1048576, DEFAULT_MAP_BUDGET()),
+      expectedSourceSha256: Array.isArray(input.expectedSourceSha256) ? hashes.map(h => h.toLowerCase()) : hashes[0]?.toLowerCase(), pid: input.pid };
+  }
   if (view === 'digest') {
     // The digest pages the whole module: the map's filters and paging would read as a filtered digest, which it is not.
     const mapOnly = ['kind', 'name', 'prefix', 'role', 'parent', 'key'].filter(k => input[k] != null);
@@ -187,25 +228,40 @@ export function parseMapArguments(args) {
   const input = {};
   const values = { '--lane': 'lane', '--kind': 'kind', '--name': 'name', '--prefix': 'prefix', '--role': 'role', '--parent': 'parent', '--key': 'key',
     '--offset': 'offset', '--max': 'max', '--budget': 'budgetBytes', '--expectedSourceSha256': 'expectedSourceSha256', '--oml': 'target', '--pid': 'pid',
-    '--page': 'page', '--view': 'view' };
+    '--page': 'page', '--view': 'view', '--text': 'text', '--property': 'property', '--element': 'element' };
+  // --digest, --search <text> and --uses <element> name their view; a second view word disagrees.
+  const views = { '--digest': ['digest'], '--search': ['search', 'text'], '--uses': ['uses', 'element'] };
+  const targets = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--detail') { input.includeDetail = true; continue; }
-    if (arg === '--digest') {
-      if (input.view != null && input.view !== 'digest') throw new Error('--digest and --view ' + input.view + ' disagree');
-      input.view = 'digest'; continue;
+    if (arg === '--regex') { input.regex = true; continue; }
+    if (views[arg]) {
+      const [view, field] = views[arg];
+      if (input.view != null && input.view !== view) throw new Error(arg + ' and --view ' + input.view + ' disagree');
+      input.view = view;
+      if (field) {
+        const value = args[++i];
+        if (value == null || value.startsWith('--')) throw new Error('Missing value for ' + arg);
+        input[field] = value;
+      }
+      continue;
     }
+    if (values[arg] === 'view' && args[i + 1] != null && input.view != null && input.view !== args[i + 1]) throw new Error('--' + input.view + ' and --view ' + args[i + 1] + ' disagree');
     if (values[arg]) {
       const value = args[++i];
       if (value == null || value.startsWith('--')) throw new Error('Missing value for ' + arg);
-      if (values[arg] in input) throw new Error('Duplicate ' + (values[arg] === 'target' ? 'target' : arg));
+      if (values[arg] === 'target') { targets.push(value); continue; }
+      if (values[arg] in input && !(values[arg] === 'view' && input.view === value)) throw new Error('Duplicate ' + arg);
       input[values[arg]] = value; continue;
     }
     if (arg.startsWith('--')) throw new Error('Unknown map argument ' + arg + '; ' + MAP_USAGE);
-    if ('target' in input) throw new Error('map takes one target; ' + MAP_USAGE);
-    input.target = arg;
+    targets.push(arg);
   }
-  if (!input.target) throw new Error(MAP_USAGE);
+  if (!targets.length) throw new Error(MAP_USAGE);
+  // Several targets only for search and uses (one app's modules); the other views refuse a list with their own words.
+  if (targets.length > 1 && !RICH_VIEWS.includes(input.view)) throw new Error('map takes one target; ' + MAP_USAGE);
+  input.target = targets.length > 1 ? targets : targets[0];
   if (input.pid != null) input.pid = integer('--pid', input.pid, 1, Number.MAX_SAFE_INTEGER);
   return input;
 }
@@ -213,34 +269,30 @@ export function parseMapArguments(args) {
 // ---- the answer
 // One call answers from the store; a miss asks the lane reader to build the index ({"index":"ensure"}) and reads the
 // file it wrote. deps replace the reader transport, the builder check and the Studio snapshot (tests).
+// The capture of q.target (captureTarget below): {file, sha256, canonical, captured, snapshot}, or {refused} with the
+// snapshot's own refusal.
+async function captureOf(q, deps) {
+  const { capture = studio, env = process.env } = deps;
+  const target = await captureTarget(q.target, q, { deps, capture, env });
+  return target.ok ? target : { refused: target.refusal };
+}
+// expectedSourceSha256: the raw sha256 of the capture served, of the capture just taken, or their content sha256.
+const expectedHolds = (q, { sha256, canonical, captured }) =>
+  !q.expectedSourceSha256 || [sha256, canonical.contentSha256, ...(canonical.reused ? [sha256Of(captured)] : [])].includes(q.expectedSourceSha256);
+
 export async function moduleMap(input = {}, deps = {}) {
-  const { read = readSnapshot, prepare = ensureBuilder, capture = studio, reader = {}, env = process.env } = deps;
+  const { read = readSnapshot, prepare = ensureBuilder, reader = {}, env = process.env } = deps;
   const started = performance.now();
   let q, file;
   try {
     q = mapRequest(input);
-    let snapshot = null;
-    if (/\.oml$/i.test(q.target)) file = path.resolve(q.target);
-    else {
-      // A module name is the live module: snapshot first, as inspect does; the map itself warms nothing else. O11
-      // captures through the selected Service Studio (captureO11Module: an open tab by its key, without the write lock;
-      // a closed or system module from its published OML, never a tab), ODC through the ODC Studio bridge. deps.o11:
-      // options of captureO11Module (bridge, assertSelected, download, lockDeps, ...).
-      snapshot = q.lane === 'o11'
-        ? await (deps.captureO11 ?? (module => captureO11Module(module, { env, ...(deps.o11 ?? {}) })))(q.target)
-        : await capture(['snapshot', q.target], q.pid, { prefetch: false });
-      if (!snapshot?.ok) return { ...snapshot, ok: false, lane: q.lane, target: q.target };
-      file = path.resolve(snapshot.path);
-    }
-    // C15: a capture of an unchanged module differs from the previous one only in volatile header fields; the first intact
-    // capture of the same content answers the read, so its index (keyed by its raw sha256) and its keys serve again.
-    const captured = file;
-    const canonical = readCapture(file, q.lane, { module: snapshot?.module ?? null, env });
-    file = canonical.file;
-    const sha256 = canonical.rawSha256;
+    if (RICH_VIEWS.includes(q.view)) return await richAnswer(q, { deps, read, capture: deps.capture ?? studio, reader, env, started });
+    const target = await captureOf(q, deps);
+    if (target.refused) return target.refused;
+    file = target.file;
+    const { sha256, canonical, captured, snapshot } = target;
     const hashMs = performance.now() - started;
-    // expectedSourceSha256: the raw sha256 of the capture served, of the capture just taken, or their content sha256.
-    if (q.expectedSourceSha256 && ![sha256, canonical.contentSha256, ...(canonical.reused ? [sha256Of(captured)] : [])].includes(q.expectedSourceSha256)) throw new Error(CHANGED);
+    if (!expectedHolds(q, target)) throw new Error(CHANGED);
     if (q.view === 'digest') return await digestAnswer(q, { file, sha256, canonical, captured, snapshot, started, hashMs, read, reader, env });
     const stored = indexFile(q.lane, sha256, env);
     let index = loadIndex(stored, q.lane, sha256), served = stored, cache = { index: 'hit' }, ensureMs;
@@ -270,27 +322,197 @@ export async function moduleMap(input = {}, deps = {}) {
   }
 }
 
+// The capture a target names: a .oml as it is, a module name captured first (the live module, as inspect does; nothing
+// else is warmed). O11 captures through the selected Service Studio (captureO11Module: an open tab by its key, without
+// the write lock; a closed or system module from its published OML, never a tab), ODC through the ODC Studio bridge.
+// deps.o11: options of captureO11Module (bridge, assertSelected, download, lockDeps, ...). C15: a capture of an unchanged
+// module differs from the previous one only in volatile header fields; the first intact capture of the same content
+// answers the read, so its index (keyed by its raw sha256) and its keys serve again.
+async function captureTarget(target, q, { deps, capture, env }) {
+  let snapshot = null, file;
+  if (/\.oml$/i.test(target)) file = path.resolve(target);
+  else {
+    snapshot = q.lane === 'o11'
+      ? await (deps.captureO11 ?? (module => captureO11Module(module, { env, ...(deps.o11 ?? {}) })))(target)
+      : await capture(['snapshot', target], q.pid, { prefetch: false });
+    if (!snapshot?.ok) return { ok: false, refusal: { ...snapshot, ok: false, lane: q.lane, target } };
+    file = path.resolve(snapshot.path);
+  }
+  const captured = file;
+  const canonical = readCapture(file, q.lane, { module: snapshot?.module ?? null, env });
+  return { ok: true, file: canonical.file, captured, canonical, sha256: canonical.rawSha256, snapshot };
+}
+
+// ---- the rich views (module-rich.mjs): search and uses over the rich index of each target, built on request. A miss
+// asks the lane's kernel reader to write it ({"rich":"ensure"}, the same reader as the digest) and reads the file it
+// wrote; the answer says which captures were built and how long it took. Every continuation pins the same captures by
+// file and hash; the page is cut to budgetBytes and says what it left for the next call.
+async function richAnswer(q, { deps, read, capture, reader, env, started }) {
+  const targets = Array.isArray(q.target) ? q.target : [q.target];
+  const pins = q.expectedSourceSha256 == null ? [] : Array.isArray(q.expectedSourceSha256) ? q.expectedSourceSha256 : [q.expectedSourceSha256];
+  const captures = [];
+  const round = n => Math.round(n * 10) / 10;
+  let ensureMs = 0;
+  for (let k = 0; k < targets.length; k++) {
+    const t = await captureTarget(targets[k], q, { deps, capture, env });
+    if (!t.ok) return { ...t.refusal, view: q.view, ...(targets.length > 1 ? { target: q.target, failedTarget: targets[k] } : {}) };
+    if (pins[k] && ![t.sha256, t.canonical.contentSha256, ...(t.canonical.reused ? [sha256Of(t.captured)] : [])].includes(pins[k]))
+      throw new Error(CHANGED + (targets.length > 1 ? ' (target ' + targets[k] + ')' : ''));
+    if (captures.some(c => c.sha256 === t.sha256)) throw new Error('target names the same capture twice: ' + targets[k] + ' (' + t.sha256 + ')');
+    const stored = richFile(q.lane, t.sha256, env);
+    let loaded = loadRich(stored, q.lane, t.sha256, ROLES), served = stored, cache;
+    if (loaded) cache = { rich: loaded.memory ? 'memory' : 'hit' };
+    else {
+      const phase = performance.now();
+      const config = digestReaderConfig(q.lane, { ...reader, env });
+      if (read === readSnapshot && !fs.existsSync(config.dll))
+        throw new Error('The ' + q.lane + ' kernel reader that writes the rich index is not built: ' + config.dll + ' (scripts/setup-dev.ps1 builds it)');
+      const response = await read({ ...config, request: { file: t.file, rich: 'ensure', expectedSourceSha256: t.sha256 } });
+      const built = response.rich ?? response.data?.rich;
+      if (!built) throw new Error('The ' + q.lane + ' reader answered without a rich index: its binaries predate ' + RICH_SCHEMA + '; rebuild the reader');
+      loaded = loadRich(stored, q.lane, t.sha256, ROLES);
+      // A reader started under another store root (SSAM_MODULE_INDEX_ROOT at its start) reports where it wrote.
+      const reported = typeof built.path === 'string' ? path.resolve(built.path) : null;
+      if (!loaded && reported && reported !== stored) { loaded = loadRich(reported, q.lane, t.sha256, ROLES); served = reported; }
+      if (!loaded) throw new Error('The rich index of this capture is missing or invalid after the reader built it: ' + stored);
+      const ms = performance.now() - phase; ensureMs += ms;
+      cache = { rich: 'ensured', built: built.built === true, ensureMs: round(ms),
+        ...(response.timings?.loadMs != null ? { loadMs: round(response.timings.loadMs) } : {}), ...(response.timings?.richMs != null ? { buildMs: round(response.timings.richMs) } : {}),
+        ...(response.cache ? { loads: response.cache.loads, generation: response.cache.generation } : {}) };
+    }
+    captures.push({ rich: loaded.rich, file: t.file, captured: t.captured, sha256: t.sha256, canonical: t.canonical, snapshot: t.snapshot, store: served, bytes: loaded.bytes, cache });
+  }
+  const queryStarted = performance.now();
+  const single = !Array.isArray(q.target);
+  const query = Object.fromEntries(Object.entries({ text: q.text, regex: q.regex || undefined, property: q.property, element: q.element, kind: q.kind, role: q.role })
+    .filter(([, v]) => v != null));
+  const pin = { lane: q.lane, target: single ? captures[0].file : captures.map(c => c.file), view: q.view, ...query, max: q.max, budgetBytes: q.budgetBytes,
+    expectedSourceSha256: single ? captures[0].sha256 : captures.map(c => c.sha256) };
+  const inspectOf = c => q.lane === 'odc'
+    ? { tool: 'studio_inspect', arguments: { target: c.file, path: '@<key>', expectedSourceSha256: c.sha256 } }
+    : { tool: 'o11_inspect', arguments: { oml: c.file, path: '@<key>', expectedSourceSha256: c.sha256 } };
+  const capturesOut = captures.map(c => ({ module: c.rich.module.name, file: c.file, sourceSha256: c.sha256, contentSha256: c.canonical.contentSha256,
+    ...(c.snapshot ? { snapshotSha256: c.snapshot.sha256 } : {}), ...(c.snapshot?.capturedBy === PUBLISHED_CAPTURE ? { capturedBy: PUBLISHED_CAPTURE, versionId: c.snapshot.versionId ?? null } : {}),
+    ...(c.canonical.reused ? { capturedFile: c.captured, reused: true } : {}),
+    rich: { file: c.store, bytes: c.bytes, extractor: c.rich.extractor, elements: c.rich.rows.length, complete: c.rich.complete === true, readErrors: c.rich.readErrors ?? 0 },
+    cache: c.cache, inspect: inspectOf(c) }));
+  const built = captures.filter(c => c.cache.rich === 'ensured').map(c => ({ module: c.rich.module.name, built: c.cache.built, ensureMs: c.cache.ensureMs }));
+  let all, head, entryOf, extra = {};
+  if (q.view === 'search') {
+    const found = searchRich(captures, q);
+    all = found.hits; entryOf = hit => searchEntry(captures, hit);
+    // The hits per property, the most frequent first (at most 25; the rest counted together).
+    const properties = Object.entries(found.byProperty).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+    head = { schema: SEARCH_SCHEMA, fieldsSearched: found.fields, byModule: found.byModule, byProperty: Object.fromEntries(properties.slice(0, 25)),
+      ...(properties.length > 25 ? { otherProperties: { properties: properties.length - 25, hits: properties.slice(25).reduce((s, [, v]) => s + v, 0) } } : {}) };
+    extra = { note: SEARCH_NOTE };
+  } else {
+    const resolved = resolveElement(captures, q);
+    if (!resolved.ok) {
+      const candidates = resolved.candidates.slice(0, 20).map(x => describeRow(captures, x));
+      const last = q.element.replace(/^.*[/.:]/, '');
+      return { ok: false, code: resolved.ambiguous ? 'AMBIGUOUS_ELEMENT' : 'ELEMENT_NOT_FOUND', lane: q.lane, view: 'uses', target: q.target, element: q.element,
+        error: resolved.ambiguous
+          ? 'element "' + q.element + '" names ' + resolved.candidates.length + ' different elements in these captures; name one by its @key (or narrow with kind)'
+          : 'element "' + q.element + '" names no element of these captures (' + captures.map(c => c.rich.module.name).join(', ') + ')',
+        ...(candidates.length ? { candidates, candidatesOmitted: resolved.candidates.length - candidates.length } : {}),
+        continuation: resolved.ambiguous
+          ? { tool: 'ssam_map', arguments: { ...pin, element: '@<key>' }, why: 'the same question for one of the candidates' }
+          : { tool: 'ssam_map', arguments: (({ element, kind, role, ...rest }) => ({ ...rest, view: 'search', text: last, property: 'Name' }))(pin), why: 'find the element by name in the same captures' },
+        captures: capturesOut };
+    }
+    const { edges, homeModule } = usesRich(captures, resolved);
+    all = edges; entryOf = edge => usesEntry(captures, edge);
+    const count = (list, key) => list.reduce((o, e) => { const k = key(e); o[k] = (o[k] ?? 0) + 1; return o; }, {});
+    head = { schema: USES_SCHEMA, resolved: { ...describeRow(captures, resolved.home), identity: resolved.identity, homeModule,
+      foundIn: resolved.found.map(x => ({ module: captures[x.c].rich.module.name, key: captures[x.c].rich.rows[x.i][0] })),
+      ...(resolved.alsoMatched ? { alsoMatched: resolved.alsoMatched, alsoMatchedNote: 'nested elements of the same name were left out for the top-level one: name them by @key or by a name path' } : {}) },
+      consumers: new Set(edges.map(e => e.c + ':' + e.from)).size, direct: edges.filter(e => e.direct).length, descendant: edges.filter(e => !e.direct).length,
+      crossModule: edges.filter(e => e.cross).length, byModule: count(edges, e => captures[e.c].rich.module.name),
+      byConsumerKind: count(edges, e => captures[e.c].rich.types[captures[e.c].rich.rows[e.from][1]].kind) };
+    extra = { note: USES_NOTE };
+  }
+  const queryMs = performance.now() - queryStarted;
+  const total = all.length;
+  const page = all.slice(q.offset, q.offset + q.max).map(entryOf);
+  const answer = n => {
+    const nextOffset = q.offset + n < total ? q.offset + n : null;
+    return { ok: true, ...head, lane: q.lane, view: q.view, target: q.target, query, captures: capturesOut, ...(built.length ? { built } : {}),
+      count: total, returned: n, offset: q.offset, omitted: total - n, truncated: total !== n, nextOffset, entries: page.slice(0, n),
+      continuations: { next: nextOffset != null ? { tool: 'ssam_map', arguments: { ...pin, offset: nextOffset } } : null,
+        inspect: single ? capturesOut[0].inspect : 'captures[<capture>].inspect with the @key of an entry',
+        note: 'next is the following page of the same query over the same captures (pinned by file and hash)' }, ...extra };
+  };
+  const bytes = value => Buffer.byteLength(JSON.stringify(value), 'utf8') + 200;
+  const minimal = bytes(answer(0));
+  if (minimal > q.budgetBytes) {
+    const raise = Math.min(1048576, minimal + 2000);
+    const short = { ok: true, schema: head.schema, lane: q.lane, view: q.view, target: q.target, query, count: total, returned: 0, offset: q.offset, omitted: total,
+      truncated: total > 0, nextOffset: total > q.offset ? q.offset : null, entries: [],
+      continuation: { tool: 'ssam_map', arguments: { ...pin, offset: q.offset, budgetBytes: raise }, why: 'the smallest page of this query needs ' + minimal + ' bytes' } };
+    short.size = { status: 'insufficient', bytes: 0, budgetBytes: q.budgetBytes, minimalBytes: minimal, limitedBy: 'budget' };
+    short.size.bytes = Buffer.byteLength(JSON.stringify(short), 'utf8');
+    return short;
+  }
+  let n = 0, used = minimal;
+  while (n < page.length && used + Buffer.byteLength(JSON.stringify(page[n]), 'utf8') + 1 <= q.budgetBytes) used += Buffer.byteLength(JSON.stringify(page[n++]), 'utf8') + 1;
+  let result = answer(n);
+  while (n > 0 && bytes(result) > q.budgetBytes) result = answer(--n);
+  result.size = { bytes: 0, budgetBytes: q.budgetBytes, limitedBy: n < page.length ? 'budget' : total > q.offset + n ? 'max' : null };
+  result.timings = { ...(ensureMs ? { ensureMs: round(ensureMs) } : {}), queryMs: round(queryMs), totalMs: round(performance.now() - started) };
+  for (let i = 0; i < 3; i++) result.size.bytes = Buffer.byteLength(JSON.stringify(result), 'utf8');
+  return result;
+}
+
 // ---- the digest view: one page of the module digest of the capture (module-digest.mjs). A miss asks the lane's kernel
 // reader to write it ({"digest":"ensure"}) and reads the file it wrote; every continuation pins this capture's file and hash.
-async function digestAnswer(q, { file, sha256, canonical, captured, snapshot, started, hashMs, read, reader, env }) {
-  const stored = digestFile(q.lane, sha256, env);
-  let loaded = loadDigest(stored, q.lane, sha256), served = stored, cache = { digest: 'hit' }, ensureMs;
+// The stored digest of a capture, or the one the lane's kernel reader writes on a miss: {loaded: {digest, stamp}, served,
+// cache, ensureMs}.
+async function ensureDigest(lane, { file, sha256, read, reader, env }) {
+  const stored = digestFile(lane, sha256, env);
+  let loaded = loadDigest(stored, lane, sha256), served = stored, cache = { digest: 'hit' }, ensureMs;
   if (!loaded) {
     const phase = performance.now();
-    const config = digestReaderConfig(q.lane, { ...reader, env });
+    const config = digestReaderConfig(lane, { ...reader, env });
     if (read === readSnapshot && !fs.existsSync(config.dll))
-      throw new Error('The ' + q.lane + ' kernel reader that writes the module digest is not built: ' + config.dll + ' (scripts/setup-dev.ps1 builds it)');
+      throw new Error('The ' + lane + ' kernel reader that writes the module digest is not built: ' + config.dll + ' (scripts/setup-dev.ps1 builds it)');
     const response = await read({ ...config, request: { file, digest: 'ensure', expectedSourceSha256: sha256 } });
     const built = response.digest ?? response.data?.digest;
-    if (!built) throw new Error('The ' + q.lane + ' reader answered without a module digest: its binaries predate ' + DIGEST_SCHEMA + '; rebuild the reader');
-    loaded = loadDigest(stored, q.lane, sha256);
+    if (!built) throw new Error('The ' + lane + ' reader answered without a module digest: its binaries predate ' + DIGEST_SCHEMA + '; rebuild the reader');
+    loaded = loadDigest(stored, lane, sha256);
     // A reader started under another store root (SSAM_MODULE_INDEX_ROOT at its start) reports where it wrote.
     const reported = typeof built.path === 'string' ? path.resolve(built.path) : null;
-    if (!loaded && reported && reported !== stored) { loaded = loadDigest(reported, q.lane, sha256); served = reported; }
+    if (!loaded && reported && reported !== stored) { loaded = loadDigest(reported, lane, sha256); served = reported; }
     if (!loaded) throw new Error('The module digest of this capture is missing or invalid after the reader built it: ' + stored);
     ensureMs = performance.now() - phase;
     cache = { digest: 'ensured', built: built.built === true, ...(response.cache ? { loads: response.cache.loads, generation: response.cache.generation } : {}) };
   }
+  return { loaded, served, cache, ensureMs };
+}
+
+// The whole module digest of a target, unpaged (the work packet of ssam_discover, work-packet.mjs): the same target rules,
+// capture and store as view "digest". {ok, lane, target, file, sourceSha256, contentSha256, module, digest, cache}; a
+// failure answers {ok:false, error} (or the snapshot's own refusal) and never throws.
+export async function moduleDigest(input = {}, deps = {}) {
+  const { read = readSnapshot, reader = {}, env = process.env } = deps;
+  const lane = input.lane ?? 'odc';
+  try {
+    if (!['odc', 'o11'].includes(lane)) throw new Error('Unknown lane ' + lane + '; lanes: odc, o11');
+    if (typeof input.target !== 'string' || !input.target.trim()) throw new Error('target is required: a capture .oml or an open module name');
+    const q = { lane, target: input.target, pid: input.pid, expectedSourceSha256: input.expectedSourceSha256?.toLowerCase() };
+    const target = await captureOf(q, deps);
+    if (target.refused) return target.refused;
+    if (!expectedHolds(q, target)) throw new Error(CHANGED);
+    const { loaded, cache } = await ensureDigest(lane, { file: target.file, sha256: target.sha256, read, reader, env });
+    return { ok: true, lane, target: input.target, file: target.file, sourceSha256: target.sha256, contentSha256: target.canonical.contentSha256,
+      module: loaded.digest.module, digest: loaded.digest, cache };
+  } catch (error) {
+    return { ok: false, lane, target: input.target, error: error.message };
+  }
+}
+
+async function digestAnswer(q, { file, sha256, canonical, captured, snapshot, started, hashMs, read, reader, env }) {
+  const { loaded, served, cache, ensureMs } = await ensureDigest(q.lane, { file, sha256, read, reader, env });
   const { digest, stamp } = loaded;
   const laid = digestPages(digest, { budgetBytes: q.budgetBytes, key: served + '|' + stamp });
   if (q.page > laid.pages.length)

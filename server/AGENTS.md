@@ -11,9 +11,12 @@ Carregue as ferramentas centrais num só ToolSearch (troque `ssam` pelo nome des
 
 - Comece por `ssam_doctor`. `ssam_connect` (sem lane) anexa os Studios já abertos. Nunca feche, salve, publique ou reabra para conectar.
 - Todo pedido começa por `ssam_discover {intent, lane}`: `tools` traz ferramenta, verbo e argumentos; `matches`, contrato e exemplo.
+- Agente ou subagente começa a tarefa por `ssam_discover {intent, lane, app, packet:true}`: elementos do módulo, contrato, exemplo provado, regras do time e próximo passo, num pacote só. Trabalhe a partir dele, sem reler docs.
 - Ler um app: `ssam_map {lane, target, view:"digest"}` uma vez, todas as páginas de que a tarefa precisa (`continuations.next`; a página 1 traz entidades, estruturas, a assinatura de toda action e `contents`). Trabalhe no contexto.
   `ssam_map {lane, target}` lista os elementos com `@key`. `studio_inspect` ou `o11_inspect` só para descer numa `@key`, com `expectedSourceSha256`.
+  Pergunta transversal (onde um texto ou elemento é usado, quem chama, impacto de mudar, usos entre módulos): uma chamada `ssam_map` com `view:"search"` `{text}` ou `view:"uses"` `{element}`, `target` a captura ou a lista dos módulos do app.
 - Mudar um módulo: uma chamada, `o11_deliver` ou `studio_deliver`. Recusa: vem uma vez, com todos os problemas de todas as fases e os patches certos; corrija tudo numa chamada com `patch` + `basedOn {job, sha256}`; nunca reenvie o job inteiro.
+  Toda resposta traz `nextBasedOn` (o job usado). No patch, o caminho pode usar nomes: `actions/<Ação>/steps/<as>/assign/<Var>` (a recusa já traz `patchByName`). Ou mande em `job` só as actions/entidades alteradas ou novas, com o mesmo `basedOn`: o mesmo nome substitui, nome novo entra; remover só com `patch` (`remove`).
 - Evidência JSON (recibos, `result.json`, diários): `ssam_evidence`, nunca script.
 - Leituras independentes juntas, na mesma mensagem. Escritas no mesmo Studio entram numa fila e esperam a vez.
 - Recusa traz `continuation {tool, arguments, why}`: siga-a.

@@ -22,7 +22,7 @@ async function connect(server) {
 }
 const temp = prefix => fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 
-test('one server answers an O11 delivery with only "entregue", through the shared response shaper', async () => {
+test('one server answers an O11 delivery with "entregue" and the job it used (nextBasedOn), through the shared response shaper', async () => {
   const root = temp('ssam-int-root-');
   const runAnvil = fakeAnvil({ deliver: () => ({ ok: true, command: 'deliver', data: { delivered: true, taskId: 't1', writeState: 'applied' } }) });
   const server = await createSsamServer({ odc: false, deps: { cycle: { root, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil, assertSelected: async () => {}, tasksDir: path.join(root, 'tasks') },
@@ -31,10 +31,11 @@ test('one server answers an O11 delivery with only "entregue", through the share
   try {
     const reply = await client.callTool({ name: 'o11_deliver', arguments: { module: 'Quotes_CS', job: { ops: [{ op: 'rename', from: 'A', to: 'B' }] }, authorize: 'pode entregar' } });
     assert.notEqual(reply.isError, true, JSON.stringify(reply));
-    assert.equal(reply.content[0].text, 'entregue');
+    assert.equal(JSON.parse(reply.content[0].text).result, 'entregue');
     assert.equal(runAnvil.calls[0].args[0], 'deliver');
     // The inline job became a file the CLI read; the words never reached the CLI.
     const job = runAnvil.calls[0].args[runAnvil.calls[0].args.indexOf('--job') + 1];
+    assert.deepEqual(JSON.parse(reply.content[0].text), { ok: true, result: 'entregue', nextBasedOn: { job, sha256: sha256(fs.readFileSync(job)) } });
     assert.ok(fs.existsSync(job)); assert.doesNotMatch(runAnvil.calls[0].args.join(' '), /pode entregar/);
   } finally { await client.close(); await server.close(); fs.rmSync(root, { recursive: true, force: true }); }
 });
@@ -80,16 +81,16 @@ test('two writes on one Studio never overlap through the ssam server: the second
     assert.match(read.content[0].text, /merge/);
     assert.equal(runAnvil.calls.filter(c => c.args[0] === 'deliver').length, 1, 'the second write waits in the queue');
     release();
-    assert.equal((await first).content[0].text, 'entregue');
+    assert.equal(JSON.parse((await first).content[0].text).result, 'entregue');
     const waited = await second;
     assert.notEqual(waited.isError, true, JSON.stringify(waited));
-    assert.equal(waited.content[0].text, 'entregue');
+    assert.equal(JSON.parse(waited.content[0].text).result, 'entregue');
     const queue = waited.structuredContent?.queue ?? waited.content.map(c => { try { return JSON.parse(c.text).queue; } catch { return undefined; } }).find(Boolean);
     assert.deepEqual([queue?.position, queue?.holder?.tool], [1, 'o11_deliver'], JSON.stringify(waited));
     assert.doesNotMatch(JSON.stringify(waited), /Ana 0912/);
     assert.equal(runAnvil.calls.filter(c => c.args[0] === 'deliver').length, 2);
     // Released: the next write runs, and no lock file is left behind.
-    assert.equal((await client.callTool({ name: 'o11_deliver', arguments: { module: 'Quotes_CS', job, authorize: words } })).content[0].text, 'entregue');
+    assert.equal(JSON.parse((await client.callTool({ name: 'o11_deliver', arguments: { module: 'Quotes_CS', job, authorize: words } })).content[0].text).result, 'entregue');
     assert.deepEqual(fs.readdirSync(path.join(root, '.local', 'locks')), []);
   } finally { release(); await client.close(); await server.close(); fs.rmSync(root, { recursive: true, force: true }); }
 });

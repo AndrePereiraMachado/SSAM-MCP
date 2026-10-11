@@ -123,7 +123,7 @@ não substituir por `sc_api TestQuery`, que permanece bloqueado.
 
 - Leitura: `docs/LEITURA-RAPIDA.md` (mapa e índice por captura) e `docs/LEITURA-MODELO.md`.
 - Preview local ODC/O11: `docs/PREVIEW-LOCAL.md`.
-- Descoberta contextual: `docs/DESCOBERTA-CONTEXTUAL.md`.
+- Descoberta contextual: `docs/DESCOBERTA-CONTEXTUAL.md`. Pacote de trabalho (`ssam_discover {packet:true}`, `work-packet.mjs`): §1.5. Studio da faixa O11 na descoberta: §2.3.
 - Conexão com o Studio aberto: `docs/CONEXAO-STUDIO.md`.
 - Dados O11 headless: `docs/O11-DADOS-HEADLESS.md`.
 - Debugger: `docs/DEBUGGER-HEADLESS.md`; continuidade em `docs/HANDOFF-DEBUGGER-HEADLESS-2026-10-03.md`.

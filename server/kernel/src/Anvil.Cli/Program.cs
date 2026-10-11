@@ -175,6 +175,7 @@ public static class Program
                 "publish-smoke" => PublishSmoke(args),
                 "edit-smoke" => EditSmoke(args),
                 "digest" => Digest(args),
+                "rich-index" => RichIndex(args),
                 "delete-app" => DeleteApp(args),
                 "create-app" => CreateApp(args),
                 "update-app" => UpdateApp(args),
@@ -406,6 +407,17 @@ public static class Program
         return answer;
     }
 
+    /// <summary>`rich-index --oml &lt;capture&gt;`: the rich module index (ssam-rich-index) of the capture, from the store beside
+    /// its module index, else built from the model and stored. Answers its file and counts; the facade searches it and reads
+    /// usages from it (ssam map --view search|uses).</summary>
+    private static object RichIndex(string[] args)
+    {
+        var store = Anvil.Reading.ModuleIndexStore.Default()
+            ?? throw new InvalidOperationException("No module index store: set SSAM_MODULE_INDEX_ROOT or run inside an SSAM workspace");
+        var answer = Anvil.Reading.ModuleRichIndex.Ensure(store, Need(args, "--oml"), (bytes, sha) => Host(args).BuildRich(bytes, sha, store.Lane));
+        Log("rich-index: " + answer["bytes"] + " bytes, " + answer["counts"]!["elements"] + " elements, " + (answer["built"]!.GetValue<bool>() ? "built" : "stored") + " " + answer["path"]);
+        return answer;
+    }
     private static object Inspect(string[] args)
     {
         if (Anvil.Reading.ReadingOptions.Requested(args))

@@ -4,8 +4,10 @@
 //   o11_deliver  the Anvil CLI `deliver` (headless validation, one native merge, TrueChange check), or with until=apply a
 //                snapshot through the bridge plus `apply` (validation only, nothing merged); close / closePrevious run
 //                `deliver --close` on a refused task that still holds the module (never on an uncertain one); patch +
-//                basedOn correct a refused job with a JSON Patch into a new job file (job-patch.mjs), and every refusal
-//                names the job it used (job, jobSha256) so the next call patches it;
+//                basedOn correct a refused job with a JSON Patch into a new job file (job-patch.mjs; paths by index or by
+//                name), job + basedOn merges a partial job (only the changed or new elements) into it, and every refusal
+//                and success names the job it used (job, jobSha256, nextBasedOn; a refusal's patches also by name,
+//                patchByName) so the next call patches or completes it;
 //   ssam_task    the long tasks (ssam-task.mjs).
 // Policy stays in the kernel: the CLI validates, merges once and keeps the task (work/deliver/<taskId>/task.json). This
 // file builds the argv, keeps the user's words as a sha256 in the lane journal and reads the outcome: delivered ->
@@ -49,7 +51,7 @@ import { readConnection } from './studio-session.mjs';
 import { trackTask, registerSsamTask, tasksDir } from './ssam-task.mjs';
 import { seamFields } from './executor.mjs';
 import { o11Studio, lastPublicationOf, readInventory } from './o11-studio.mjs';
-import { resolvePatchedJob, failedOpOf, jobShapeOf, PATCH_MAX_OPS } from './job-patch.mjs';
+import { resolvePatchedJob, failedOpOf, jobShapeOf, PATCH_MAX_OPS, nextBasedOnOf, withNamedPatches } from './job-patch.mjs';
 import { resolveOpenModule } from './studio-module.mjs';
 import * as standingGrants from './standing-grants.mjs';
 import { prepareIntegrationJob } from './integration-documents.mjs';
@@ -169,10 +171,11 @@ const basedOnSchema = z.union([z.object({ job: z.string().min(1), sha256: z.stri
 const deliverSchema = z.object({
   module: z.string().min(1).optional().describe('Module open (or to open) in the selected Service Studio; a label with spaces ("GameStore CS") reaches the open module with the same letters and digits. Required unless resume or close (with basedOn.taskId it defaults to that task\'s module)'),
   job: z.union([z.string().min(1), ops, z.record(z.string(), z.unknown())]).optional()
-    .describe('Absolute path of the job JSON, or the job itself (array of ops, or {ops} / {jobs}). Required unless resume, close or patch'),
+    .describe('Absolute path of the job JSON, or the job itself (array of ops, or {ops} / {jobs}). With basedOn: a partial job, only the changed or new '
+      + 'actions/entities/structures/ops (same name replaces, new name is added). Required unless resume, close or patch'),
   patch: patchSchema.optional().describe('Instead of job: JSON Patch (add, remove, replace, test; at most 50) over the job of basedOn, '
-    + 'paths /ops/<i>/... (/<i>/... for an array job); the patched job is a new file'),
-  basedOn: basedOnSchema.optional().describe('With patch: {job, sha256} as a refusal returned them (job, jobSha256), or {taskId} of a refused delivery'),
+    + 'paths /ops/<i>/... (/<i>/... for an array job) or by name: actions/<Action>/steps/<as>/...; the patched job is a new file'),
+  basedOn: basedOnSchema.optional().describe('With patch or a partial job: {job, sha256} as an answer returned them (nextBasedOn), or {taskId} of a refused delivery'),
   checks: z.array(z.string().min(1).regex(/^[^,]+$/)).max(64).optional().describe('Element names that must exist after the merge'),
   until: z.enum(['apply', 'merge']).default('merge').describe('apply: validate on a fresh snapshot without merging, only when the person asks for it'),
   producers: z.union([z.literal('published'), z.record(z.string(), z.string().min(1))]).optional()
@@ -241,22 +244,29 @@ function resolveJob(input, lane) {
     ...(input.expectedEnvironment ? { expectedEnvironment: input.expectedEnvironment } : {}),
     ...(input.until === 'apply' ? { until: 'apply' } : {}), ...(input.closePrevious ? { closePrevious: input.closePrevious } : {}), authorize: WORDS_MARKER },
     why: 'The job file changed after that refusal: send it as it is now, or the whole corrected job; a patch applies only to the content the refusal named. authorize: as palavras do usuário no lugar do marcador.' } : undefined;
-  throw new Refusal(resolved.code, resolved.error, next, resolved.at != null ? { at: resolved.at } : {});
+  throw new Refusal(resolved.code, resolved.error, next, { ...(resolved.at != null ? { at: resolved.at } : {}), ...(resolved.candidates ? { candidates: resolved.candidates } : {}) });
 }
 // Every refusal of a delivery that ran a job names that job, so the next call patches it (jobShape 'array': its patch
-// paths are /<i>/...); an uncertain one never does (it is resumed, never corrected).
+// paths are /<i>/...), with nextBasedOn ready for basedOn and each patch of its problems also by name (patchByName); a
+// partial job says what it merged (partial). An uncertain one never names it (it is resumed, never corrected).
 function withJob(value, resolved) {
   if (value?.ok !== false || value.outcome === 'uncertain' || !resolved?.path || value.job != null) return value;
   const shape = jobShapeOf(resolved.path);
-  return { ...value, job: resolved.path, jobSha256: resolved.sha256, ...(shape ? { jobShape: shape } : {}) };
+  return withNamedPatches({ ...value, job: resolved.path, jobSha256: resolved.sha256, ...(shape ? { jobShape: shape } : {}), ...nextBasedOnOf(resolved.path, resolved.sha256),
+    ...(resolved.partial ? { partial: resolved.partial } : {}) }, resolved.path);
+}
+// A success names the job it delivered (or validated) the same way: nextBasedOn, and what a partial job merged.
+function withJobDone(value, resolved) {
+  if ((value?.ok !== true && value?.result !== 'entregue') || !resolved?.path) return value;
+  return { ...value, ...nextBasedOnOf(resolved.path, resolved.sha256), ...(resolved.partial ? { partial: resolved.partial } : {}) };
 }
 
-// patch + basedOn instead of job. A base task with an unconfirmed write is resumed, never patched; the module defaults to
-// the base task's. Returns the input to deliver, or a refusal ({ok:false}).
+// patch + basedOn instead of job, or job + basedOn (a partial job, a patch applied after it). A base task with an
+// unconfirmed write is resumed, never patched; the module defaults to the base task's. Returns the input to deliver, or a
+// refusal ({ok:false}).
 function patchInput(input, lane) {
-  if (input.job != null) throw new Refusal('PATCH_INVALID', 'patch replaces job: send the whole job without patch, or patch with basedOn and no job.');
-  if (input.patch == null) throw new Refusal('PATCH_INVALID', 'basedOn goes with patch.');
-  if (input.basedOn == null) throw new Refusal('PATCH_INVALID', 'patch needs basedOn: {job, sha256} as a refusal returned them, or {taskId} of the refused delivery.');
+  if (input.basedOn == null) throw new Refusal('PATCH_INVALID', 'patch needs basedOn: {job, sha256} as a refusal returned them (nextBasedOn), or {taskId} of the refused delivery.');
+  if (input.patch == null && input.job == null) throw new Refusal('PATCH_INVALID', 'basedOn goes with patch, or with job: a partial job with only the changed or new elements.');
   const id = input.basedOn.taskId;
   if (!id) return input;
   const state = findKernelTask(lane.work, { taskId: id });
@@ -848,7 +858,8 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
     const jobSha256 = job ? resolved.sha256 : null;
     // The provenance of a patched job goes to the journal (and the task summary), never into the job file.
     const summary = { module: input.module ?? null, until, ...(job ? { job, jobSha256 } : {}), ...(input.resume ? { resume: input.resume } : {}),
-      ...(input.closePrevious ? { closePrevious: input.closePrevious } : {}), ...(resolved?.basedOn ? { basedOn: resolved.basedOn, patchOps: input.patch.length } : {}),
+      ...(input.closePrevious ? { closePrevious: input.closePrevious } : {}),
+      ...(resolved?.basedOn ? { basedOn: resolved.basedOn, ...(input.patch ? { patchOps: input.patch.length } : {}), ...(resolved.partial ? { partial: resolved.partial } : {}) } : {}),
       ...(autoCaptured.length ? { autoCaptured } : {}), ...(touch ? { touch: touch.target } : {}), ...(input.publish === true && until === 'merge' ? { publish: true } : {}) };
     let kernelState = null; // the kernel task of this delivery (its open answer decides the tab closed after a publication)
     let value = withJob(await tracked(ctx, lane, summary, words, async task => {
@@ -869,7 +880,8 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
       afterApply(run, built, lane);
       return deliverOutcome(run, { trackId: task.id, work: lane.work, job, taskId: input.resume, since, input });
     }), resolved);
-    if (until !== 'merge' || value === CLOSED) return value;
+    if (value === CLOSED) return value;
+    if (until !== 'merge') return withJobDone(value, resolved);
     const module = input.module ?? findKernelTask(lane.work, { taskId: input.resume })?.module ?? null;
     if (touch) value = { ...value, touch };
     if (input.publish === true) {
@@ -884,7 +896,7 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
       const last = await ctx.lastPublication(module);
       if (last) value = { ...value, lastPublication: last };
     }
-    return value;
+    return withJobDone(value, resolved);
   } catch (error) {
     if (error instanceof Refusal) return withJob(refusal(error.code, error.message, error.continuation
       ?? { tool: 'o11_deliver', arguments: input.module ? { module: input.module } : {}, why: 'Call again with the arguments fixed as the error says, and the user\'s words in authorize.' }, error.extra), resolved);
@@ -997,8 +1009,10 @@ export function registerO11Cycle(server, deps = {}) {
       + 'Delivered: "entregue" (plus leftovers, warnings, screenRoles and lastPublication when there is something to say; only errors and security warnings refuse). '
       + 'A refused job comes back ONCE, before any Studio write, with every problem of every phase over the live module (the job alone, the base, the apply, the Verify of '
       + 'the candidate): problems[] with phase, op, pointer, code, message, fix and the patch of each certain fix (identical ones grouped with their pointers), verifyRan, '
-      + 'stage, taskId, job and jobSha256 (failedOp when the kernel names the op); nothing is delivered. Correct all of them in ONE call: patch (the patches returned plus '
-      + 'your fixes) and basedOn {job, sha256} (or {taskId}) instead of the whole job. '
+      + 'stage, taskId, job, jobSha256 and nextBasedOn (failedOp when the kernel names the op); nothing is delivered. Correct all of them in ONE call, never by rewriting '
+      + 'the whole job: patch (the patches returned, by index or patchByName, plus your fixes; a path may name elements: actions/<Action>/steps/<as>/...) with basedOn '
+      + '= nextBasedOn (or {taskId}), or job with only the changed or new actions/entities plus basedOn (a partial job: same name replaces, new name is added; removal only by patch). '
+      + 'Every answer names nextBasedOn {job, sha256} of the job it used. '
       + 'outcome "uncertain" is never repeated: follow continuation (resume reconciles the same task). A refused task that still holds the '
       + 'module: deliver the corrected job with closePrevious, or close {taskId, reason} alone ("fechada"); an uncertain task is never closed '
       + 'here (ssam_task {id, close} closes it only with the proof that nothing was applied). '

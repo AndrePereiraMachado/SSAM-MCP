@@ -11,6 +11,7 @@ public interface IReadSnapshot : IDisposable
     JsonObject Read(string? path, ReadingOptions options, string[]? select, string file);
     ModuleIndex BuildIndex(string lane, string adapter, string sourceSha256, long sourceBytes);
     ModuleDigest BuildDigest(string lane, string sourceSha256, long sourceBytes);
+    ModuleRichIndex BuildRich(string lane, string sourceSha256, long sourceBytes);
 }
 
 // Owned exclusively by a read process. Never share these native objects with a write worker.
@@ -23,6 +24,8 @@ public sealed class ReadSnapshot<T>(T root, ModelReader<T> reader, string name, 
         ModuleIndex.Build(root, reader, name, lane, adapter, sourceSha256, sourceBytes);
     public ModuleDigest BuildDigest(string lane, string sourceSha256, long sourceBytes) =>
         ModuleDigest.Build(root, reader, lane, sourceSha256, sourceBytes);
+    public ModuleRichIndex BuildRich(string lane, string sourceSha256, long sourceBytes) =>
+        ModuleRichIndex.Build(root, reader, lane, sourceSha256, sourceBytes);
     public JsonObject Read(string? path, ReadingOptions options, string[]? select, string file)
     {
         options.Validate();
@@ -80,6 +83,7 @@ public sealed class SnapshotReadCache(Func<byte[], IReadSnapshot> load, ModuleIn
             throw new InvalidOperationException("Snapshot content changed: expectedSourceSha256 does not match the source bytes");
         if (request["index"] is { } mode) return EnsureIndex(mode.GetValue<string>(), bytes, actual, total);
         if (request["digest"] is { } digestMode) return EnsureDigest(digestMode.GetValue<string>(), bytes, actual, total);
+        if (request["rich"] is { } richMode) return EnsureRich(richMode.GetValue<string>(), bytes, actual, total);
         var cold = request["cold"]?.GetValue<bool>() == true;
         var modelHit = snapshot != null && hash == actual && !cold;
         // Include the file because the legacy module map includes its source path.
@@ -160,6 +164,26 @@ public sealed class SnapshotReadCache(Func<byte[], IReadSnapshot> load, ModuleIn
         return new JsonObject { ["ok"] = true, ["sourceSha256"] = actual, ["digest"] = digest.Answer(indexes.DigestPathOf(actual), built),
             ["cache"] = new JsonObject { ["loads"] = loads },
             ["timings"] = new JsonObject { ["loadMs"] = loadMs, ["digestMs"] = buildMs, ["serverMs"] = total.Elapsed.TotalMilliseconds } };
+    }
+
+    // {"rich":"ensure"}: the capture's rich index (ModuleRichIndex) is stored beside its index, built from the model (loaded
+    // here when needed) only when absent or invalid. Never built by any other request: it is large and asked for on purpose.
+    private JsonObject EnsureRich(string mode, byte[] bytes, string actual, Stopwatch total)
+    {
+        if (mode != "ensure") throw new ArgumentException("rich accepts only \"ensure\"");
+        if (indexes == null) throw new InvalidOperationException("No module index store: set SSAM_MODULE_INDEX_ROOT or run the reader inside an SSAM workspace");
+        var rich = indexes.LoadRich(actual); var built = false; double loadMs = 0, buildMs = 0;
+        if (rich == null) {
+            var phase = total.Elapsed.TotalMilliseconds;
+            if (snapshot == null || hash != actual) { Dispose(); snapshot = load(bytes); hash = actual; loads++; }
+            loadMs = total.Elapsed.TotalMilliseconds - phase; phase = total.Elapsed.TotalMilliseconds;
+            rich = snapshot.BuildRich(indexes.Lane, actual, bytes.Length);
+            indexes.SaveRich(rich); built = true;
+            buildMs = total.Elapsed.TotalMilliseconds - phase;
+        }
+        return new JsonObject { ["ok"] = true, ["sourceSha256"] = actual, ["rich"] = rich.Answer(indexes.RichPathOf(actual), built),
+            ["cache"] = new JsonObject { ["loads"] = loads },
+            ["timings"] = new JsonObject { ["loadMs"] = loadMs, ["richMs"] = buildMs, ["serverMs"] = total.Elapsed.TotalMilliseconds } };
     }
 
     // Once per loaded capture: store its index unless a valid one is already on disk. Never fails the read.

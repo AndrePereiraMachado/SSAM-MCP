@@ -582,6 +582,100 @@ try {
   check('22nd: hosted ssam_reference check-job with a declared base reads the job alone (verifyRan:false, the hosted reason), never an apply over a server file',
     hostedCheck?.verifyRan === false && /^hosted SSAM server: the base this job declares is not read here/.test(hostedCheck?.verifyReason ?? '') && !serverPathIn(hostedCheck), hostedCheck);
 
+  // 9h. The 23rd product release over the hosted path (servidor/fase4-23).
+  //   - patch by name and partial job: a refused studio_deliver / o11_deliver names nextBasedOn in the customer's
+  //     workspace (ws:) and each certain patch also by name; the correction travels as a patch by name, or as only the
+  //     changed action (a partial job), over that basedOn; the whole job is written in the workspace, the Studio still
+  //     sees captures only, and nothing names a server path;
+  //   - ssam_reference check-job {basedOn, patch}: the patched job in ws:odc/.local/jobs/inline, read alone (hosted reason);
+  //   - ssam_discover {app, packet:true}: the work packet over a ws: capture, its module section read by the server's
+  //     kernel reader;
+  //   - ssam_map views search and uses: over ws: captures and over a list with the open module's name (captured through
+  //     the relay), the rich index written by the server's reader; a server path in the list never reaches the reader.
+  const inWs = (wsPath, prefix) => typeof wsPath === 'string' && wsPath.startsWith(prefix) && fs.existsSync(serverFile(wsPath));
+  const codesOf = value => (Array.isArray(value?.problems) ? value.problems.map(p => p.code) : []);
+  const firstOdc = sc(odcRefused);
+  check('23rd: the hosted studio_deliver refusal names nextBasedOn in the customer\'s workspace (the job it ran) and each certain patch also by name',
+    firstOdc?.nextBasedOn?.job === 'ws:inbox/pc-odc-four-phases.json' && firstOdc.nextBasedOn.sha256 === shaFile(path.join(issued.a.workspace, 'inbox', 'pc-odc-four-phases.json'))
+      && (firstOdc.problems ?? []).some(p => Array.isArray(p.patchByName) && p.patchByName.length),
+    { nextBasedOn: firstOdc?.nextBasedOn ?? null, problems: (firstOdc?.problems ?? []).map(p => p.code + (p.patchByName ? '+byName' : '')) });
+  const odcLinesBeforePatch = odcLines(A).length;
+  const byName = await call(clientA, 'studio_deliver', { feature: 'pc-four-phases', module: ODC_MODULE.name, owners: ['e2e'], changes: ['Patch by name over the hosted path'],
+    basedOn: firstOdc?.nextBasedOn, patch: [{ op: 'replace', path: 'actions/PcTotal/steps/0/assign/Total', value: 'Quantity' }] }, 900000);
+  const second = sc(byName);
+  const patchedFile = serverFile(second?.nextBasedOn?.job);
+  check('23rd: hosted studio_deliver with a patch by name over basedOn: the corrected job is written in ws:odc/.local/jobs/inline, the fixed problem is gone, the others come again at once',
+    second?.ok === false && inWs(second?.nextBasedOn?.job, 'ws:odc/.local/jobs/inline/') && JSON.parse(fs.readFileSync(patchedFile, 'utf8')).ops[0].data.actions[0].steps[0].assign.Total === 'Quantity'
+      && !codesOf(second).includes('EXPR_UNKNOWN_IDENTIFIER') && ['REFERENCE_UNRESOLVED', 'ExpressionInvalidExpressionType'].every(code => textOf(second.problems).includes(code)) && !serverPathIn(second),
+    second ? { ...refusalSummary(second), nextBasedOn: second.nextBasedOn ?? null } : byName);
+  const partialOdc = await call(clientA, 'studio_deliver', { feature: 'pc-four-phases', module: ODC_MODULE.name, owners: ['e2e'], changes: ['Partial job over the hosted path'],
+    basedOn: second?.nextBasedOn, job: { ops: [{ op: 'logic', data: { actions: [{ name: 'PcTotal', kind: 'server', description: 'Synthetic action of the four-phase refusal, corrected.',
+      inputs: [{ name: 'Quantity', type: 'Integer' }, { name: 'Prefix', type: 'Text', default: '"abc"', mandatory: false }],
+      outputs: [{ name: 'Total', type: 'Integer' }, { name: 'Code', type: 'Integer' }, { name: 'Shown', type: 'Text' }],
+      steps: [{ assign: { Total: 'Quantity' } }, { assign: { Code: '1' } }, { assign: { Shown: 'Prefix' } }] }] } }] } }, 900000);
+  const third = sc(partialOdc);
+  check('23rd: hosted studio_deliver with only the changed action (a partial job) over basedOn: partial names what it replaced, the whole job is in the workspace, only the problems left come back',
+    third?.ok === false && third.partial?.replaced === 1 && inWs(third?.nextBasedOn?.job, 'ws:odc/.local/jobs/inline/') && third.nextBasedOn.job !== second?.nextBasedOn?.job
+      && !codesOf(third).some(code => ['EXPR_UNKNOWN_IDENTIFIER', 'ExpressionInvalidExpressionType'].includes(code)) && textOf(third.problems).includes('REFERENCE_UNRESOLVED') && !serverPathIn(third),
+    third ? { ...refusalSummary(third), partial: third.partial ?? null, nextBasedOn: third.nextBasedOn ?? null } : partialOdc);
+  const odcPatchLines = odcLines(A).slice(odcLinesBeforePatch).map(e => e.line.split(' ')[0]);
+  check('23rd: the customer\'s ODC Studio saw only captures of those two deliveries, never a merge',
+    odcPatchLines.length >= 1 && odcPatchLines.every(c => c === 'snapshot' || c === 'status'), odcPatchLines);
+
+  const firstO11 = sc(o11Refused);
+  seen = o11Count();
+  const o11ByName = await call(clientA, 'o11_deliver', { module: O11_MODULE.name, basedOn: firstO11?.nextBasedOn,
+    patch: [{ op: 'replace', path: 'actions/PcTotal/steps/0/assign/Total', value: 'Quantity' }], authorize: 'pode entregar no Headless_CS' }, 900000);
+  const o11Second = sc(o11ByName);
+  const o11PatchSeen = o11Since(seen);
+  const o11AfterPatch = sc(await call(clientA, 'o11_studio', { command: 'snapshot' }));
+  check('23rd: hosted o11_deliver: the refusal named nextBasedOn in ws:o11/; a patch by name over it refuses again without the fixed problem, the corrected job in ws:o11/jobs/inline',
+    inWs(firstO11?.nextBasedOn?.job, 'ws:o11/') && o11Second?.ok === false && inWs(o11Second?.nextBasedOn?.job, 'ws:o11/jobs/inline/')
+      && !codesOf(o11Second).includes('EXPR_UNKNOWN_IDENTIFIER') && textOf(o11Second.problems).includes('REFERENCE_UNRESOLVED') && !serverPathIn(o11Second),
+    o11Second ? { ...refusalSummary(o11Second), first: firstO11?.nextBasedOn ?? null, nextBasedOn: o11Second.nextBasedOn ?? null, continuation: o11Second.continuation ?? null } : o11ByName);
+  check('23rd: the thin bridge saw reads only for the patched delivery and the open module is unchanged',
+    !o11PatchSeen.some(e => ['merge_from_oml', 'refresh_references', 'publish'].includes(e.method)) && o11AfterRefusal?.sha256 && o11AfterRefusal.sha256 === o11AfterPatch?.sha256,
+    { seen: o11PatchSeen.map(e => e.method), before: o11AfterRefusal?.sha256 ?? null, after: o11AfterPatch?.sha256 ?? null });
+
+  const named = sc(await call(clientA, 'ssam_reference', { lane: 'odc', kind: 'check-job',
+    query: { basedOn: hostedCheck?.nextBasedOn, patch: [{ op: 'replace', path: 'actions/PcTotal/steps/0/assign/Total', value: 'Quantity' }] } }));
+  check('23rd: hosted ssam_reference check-job {basedOn, patch by name}: the patched job in ws:odc/.local/jobs/inline, still read alone (hosted reason), nextBasedOn for the next call',
+    inWs(hostedCheck?.nextBasedOn?.job, 'ws:odc/.local/jobs/inline/') && inWs(named?.job, 'ws:odc/.local/jobs/inline/') && named.nextBasedOn?.job === named.job && named.job !== hostedCheck.nextBasedOn.job
+      && named.verifyRan === false && /^hosted SSAM server: the base this job declares is not read here/.test(named.verifyReason ?? '') && !serverPathIn(named),
+    { first: hostedCheck?.nextBasedOn ?? null, named });
+  const foreignBase = sc(await call(clientA, 'ssam_reference', { lane: 'odc', kind: 'check-job',
+    query: { basedOn: { job: path.join(serverDir, 'tokens.json'), sha256: 'a'.repeat(64) }, patch: [] } }));
+  check('23rd: a check-job basedOn outside the workspace is refused by the gate (PATH_OUTSIDE_WORKSPACE)', foreignBase?.code === 'PATH_OUTSIDE_WORKSPACE', foreignBase);
+
+  for (const [lane, captured, moduleName] of [['odc', odcCapture?.path, ODC_MODULE.name], ['o11', o11AfterPatch?.path, O11_MODULE.name]]) {
+    const packet = await call(clientA, 'ssam_discover', { lane, intent: 'mudar a action PcTotal do modulo', app: captured, packet: true }, 600000);
+    const value = sc(packet);
+    check(`23rd: hosted ssam_discover {lane:"${lane}", app: ws: capture, packet:true}: the work packet with the module read by the server's kernel reader, no server path, no client text`,
+      // module.file is the capture that answers the read: this one, or the first intact one of the same content (C15).
+      packet.isError !== true && value?.ok === true && value.schemaVersion === 'ssam-packet/1' && value.app === captured && value.module?.name === moduleName && inWs(value.module?.file, 'ws:' + lane + '/')
+        && value.next?.deliver?.arguments?.module === moduleName && !serverPathIn(value) && clientHits(value).length === 0,
+      value ? { ok: value.ok, schema: value.schemaVersion, app: value.app, module: value.module ? { name: value.module.name, file: value.module.file } : null, next: value.next?.deliver ?? null,
+        size: value.size, error: value.error ?? null, client: clientHits(value) } : packet);
+  }
+
+  const search = sc(await call(clientA, 'ssam_map', { lane: 'odc', target: odcCapture?.path, view: 'search', text: ODC_MODULE.name }, 600000));
+  check('23rd: hosted ssam_map {view:"search"} over a ws: capture: the server\'s reader writes the rich index, hits with @key, captures pinned to ws:, no server path',
+    search?.ok === true && search.count >= 1 && inWs(search.captures?.[0]?.file, 'ws:odc/') && search.captures[0].rich?.file === '<servidor>' && !serverPathIn(search),
+    search ? { ok: search.ok, count: search.count, captures: search.captures?.map(c => ({ module: c.module, file: c.file, rich: c.rich?.file, cache: c.cache })), error: search.error ?? null } : search);
+  seen = o11Count();
+  const uses = sc(await call(clientA, 'ssam_map', { lane: 'o11', target: [capture?.path, O11_MODULE.name], view: 'uses', element: 'ThinE2EPing' }, 600000));
+  const usesSeen = o11Since(seen);
+  // The module name is captured as captureO11Module decides (the open tab by its key, else its published OML through the
+  // environment_session primitives): either way through the relay and the agent, with the agent's key, read-only.
+  check('23rd: hosted ssam_map {view:"uses"} over a list with a ws: capture and the module\'s name: the name is captured through the relay and the agent (read-only, the agent\'s key), both captures in ws:o11/, the element resolved, no server path',
+    uses?.ok === true && uses.captures?.length === 2 && uses.captures.every(c => inWs(c.file, 'ws:o11/')) && uses.resolved?.name === 'ThinE2EPing'
+      && usesSeen.some(e => ['snapshot_module', 'environment_session'].includes(e.method) && e.authOk) && usesSeen.every(e => probe(e) || e.authOk)
+      && !usesSeen.some(e => ['merge_from_oml', 'publish', 'refresh_references', 'open_module'].includes(e.method)) && !serverPathIn(uses),
+    uses ? { ok: uses.ok, seen: usesSeen.map(e => e.method + (e.authOk ? '+key' : '')), files: uses.captures?.map(c => c.file), consumers: uses.consumers ?? null, server: serverPathIn(uses),
+      code: uses.code ?? null, error: uses.error ?? null } : uses);
+  const outsideList = sc(await call(clientA, 'ssam_map', { lane: 'odc', target: [odcCapture?.path, path.join(repo, 'kernel', 'tests', 'fixtures', 'odc', 'blank-mobile.oml')], view: 'search', text: 'x' }));
+  check('23rd: a server path in a list target is refused by the gate (PATH_OUTSIDE_WORKSPACE) before any read', outsideList?.code === 'PATH_OUTSIDE_WORKSPACE', outsideList);
+
   // 10. Customer B never reaches customer A's agent or workspace.
   const clientB = await connect(issued.b.token);
   const aLines = odcLines(A).length;

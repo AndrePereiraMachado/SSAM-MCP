@@ -281,7 +281,10 @@ test('with the record every O11 child gets the relay port, the relay key folder 
 
       registerO11Cycle(server);
       const delivered = await result(server.tools, 'o11_deliver', { module: 'Orders', job: [{ op: 'get', target: 'ServerAction:SaveOrder' }], authorize: 'pode entregar no Orders' });
-      assert.deepEqual(delivered, { ok: true, result: 'entregue' });
+      // 23rd release: every delivered answer names nextBasedOn {job, sha256}; hosted, that job is the customer's inline job.
+      const { nextBasedOn, ...deliveredRest } = delivered;
+      assert.deepEqual(deliveredRest, { ok: true, result: 'entregue' });
+      assert.ok(inside(nextBasedOn?.job, path.join(context.workspace, 'o11', 'jobs', 'inline')) && /^[0-9a-f]{64}$/.test(nextBasedOn.sha256), JSON.stringify(nextBasedOn));
       const deliver = spawned.find(c => c.args.includes('deliver'));
       assertO11Spawn(deliver, context);
       assert.equal(argAfter(deliver.args, '--port'), String(context.relay));
@@ -361,6 +364,32 @@ test('the ODC kernel, the builder and the reference CLI run with the customer\'s
         assertOdcSpawn(spawned[0], context);
         markers.files.push(path.join(anvilRoot, '.local', 'lane-odc', 'jobs', 'inline', path.basename(withBase.job)));
       }
+
+      // 23rd release (servidor/fase4-23): check-job over basedOn, by a patch by name or a partial job. The job of basedOn,
+      // the whole job written and the patch journal are the customer's (<ws>/odc/.local), and every answer names nextBasedOn
+      // there for the next call; still only check-job runs.
+      const inline = path.join(context.workspace, 'odc', '.local', 'jobs', 'inline');
+      reset();
+      const first = await result(server.tools, 'ssam_reference', { lane: 'odc', kind: 'check-job',
+        query: { ops: [{ op: 'logic', data: { actions: [{ name: 'Alpha', kind: 'server', steps: [] }] } }] } });
+      assert.equal(first.ok, true, JSON.stringify(first));
+      assert.ok(inside(first.job, inline)); assert.deepEqual(first.nextBasedOn, { job: first.job, sha256: first.jobSha256 });
+      markers.files.push(path.join(anvilRoot, '.local', 'lane-odc', 'jobs', 'inline', path.basename(first.job)));
+      for (const query of [{ basedOn: first.nextBasedOn, patch: [{ op: 'replace', path: 'actions/Alpha/kind', value: 'service' }] },
+        { basedOn: first.nextBasedOn, job: { ops: [{ op: 'logic', data: { actions: [{ name: 'Beta', kind: 'server', steps: [] }] } }] } }]) {
+        reset();
+        const next = await result(server.tools, 'ssam_reference', { lane: 'odc', kind: 'check-job', query });
+        assert.equal(next.ok, true, JSON.stringify(next));
+        assert.ok(inside(next.job, inline) && next.job !== first.job, next.job);
+        assert.deepEqual(next.nextBasedOn, { job: next.job, sha256: next.jobSha256 });
+        if (query.job) assert.ok(next.partial, 'a partial job says what it merged');
+        const written = JSON.parse(fs.readFileSync(next.job, 'utf8'));
+        assert.equal(query.patch ? written.ops[0].data.actions[0].kind : written.ops.flatMap(o => o.data?.actions ?? []).map(a => a.name).join(','),
+          query.patch ? 'service' : 'Alpha,Beta');
+        assert.equal(spawned.length, 1); assert.ok(spawned[0].args.includes('check-job')); assertOdcSpawn(spawned[0], context);
+        markers.files.push(path.join(anvilRoot, '.local', 'lane-odc', 'jobs', 'inline', path.basename(next.job)));
+      }
+      assert.ok(fs.existsSync(path.join(context.workspace, 'odc', '.local', 'journal', 'job-patch.jsonl')), 'the provenance stays in the customer\'s journal');
 
       reset();
       const odcJob = await runJob({ lane: 'odc', job: { ops: [] } });
@@ -566,6 +595,26 @@ test('the vault, the API Client and the prompt of the server are refused in host
   });
   assert.deepEqual(present, [], 'the server vault is never asked'); assert.deepEqual(opened, [], 'no prompt opens');
   assert.deepEqual(spawned, [], 'no PowerShell vault read'); assert.deepEqual(connections, []);
+});
+
+// 23rd release (W3): the O11 discover binds the Studio of the connection record, then ANVIL_STUDIO_DIR, then the one this
+// machine's registry names. Hosted, the registry is never read (studio-locate.mjs, behind the seam): no reg.exe, and the
+// Studio is the server kernel's that the customer's record names.
+test('hosted, the O11 discover reads no registry of this machine (no reg.exe); the Studio is the server kernel\'s of the customer\'s record', async () => {
+  reset();
+  const { laneSources } = await import('../discovery.mjs');
+  const { registryInstallLocation } = await import('../studio-locate.mjs');
+  const regs = () => spawned.filter(c => /reg(\.exe)?$/i.test(String(c.file)));
+  await within(hosted({ record: true }), async () => {
+    assert.equal(registryInstallLocation(), null);
+    const bound = laneSources('o11', { studio: { exists: file => path.dirname(file) === SERVER_STUDIO } });
+    assert.equal(bound.studioDir, SERVER_STUDIO); assert.equal(bound.studioSource, 'connection');
+    const none = laneSources('o11', { studio: { exists: () => false } });
+    assert.ok(!none.studioSource || none.studioSource === 'none', JSON.stringify(none.studioSource));
+  });
+  assert.deepEqual(regs(), [], 'no reg.exe inside a hosted call');
+  registryInstallLocation('SSAM test key that does not exist');
+  assert.ok(regs().length >= 1, 'outside a hosted call the registry is read as before');
 });
 
 test('nothing of the hosted calls lands in the repository data folders or in the user profile', () => {

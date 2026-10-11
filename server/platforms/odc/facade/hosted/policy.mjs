@@ -4,7 +4,8 @@
 // resolved inside the visible area of the customer's workspace (ws:<rel>, agent:<rel>, relative or absolute), an
 // ssam_job {lane:"odc"} without base gets the neutral fixture as base (docs/O11-BRIDGE-FINA.md 7.2), the handler runs
 // inside run(context, fn), and the answer loses the evidence of third-party jobs (evidence.mjs; an ssam_discover answer
-// also loses the client names of the owner's catalogs) and is presented: workspace paths become ws:<rel>, other paths
+// also loses the client names of the owner's catalogs, not those of the customer's own module: scrubDiscover) and is
+// presented: workspace paths become ws:<rel>, other paths
 // of this server become <servidor>. Nothing here touches a Studio or the agent by itself, except bringing an
 // agent:<rel> the LLM named (executor.pullFile).
 import fs from 'node:fs';
@@ -12,7 +13,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { anvilRoot, workspaceRoot } from '../workspace.mjs';
-import { scrubEvidence, thirdPartyJobs } from './evidence.mjs';
+import { scrubDiscover, scrubEvidence, thirdPartyJobs } from './evidence.mjs';
 import { agentReadable, agentSegments, insideVisible } from './mirror.mjs';
 import { agentPath, outsideWorkspaceRefusal } from '../agent-paths.mjs';
 
@@ -40,7 +41,8 @@ export function agentNeed(rule, args = {}) {
   const empty = v => v === undefined || v === null || v === '';
   let needs;
   switch (rule.when) {
-    case 'module-target': needs = typeof value === 'string' && value !== '' && !looksLikePath(value); break;
+    // servidor/fase4-23: ssam_map views search and uses take a list of targets; one module name in it needs the agent.
+    case 'module-target': needs = (Array.isArray(value) ? value : [value]).some(v => typeof v === 'string' && v !== '' && !looksLikePath(v)); break;
     case 'present': needs = !empty(value); break;
     case 'non-empty': needs = Array.isArray(value) ? value.length > 0 : value && typeof value === 'object' ? Object.keys(value).length > 0 : !empty(value); break;
     case 'in': needs = rule.values.includes(value); break;
@@ -119,12 +121,20 @@ function locations(node, segments) {
   return keys.flatMap(key => rest.length ? locations(node[key], rest) : [{ parent: node, key, value: node[key] }]);
 }
 const segmentsOf = pointer => pointer.split('/').slice(1).map(s => s.replaceAll('~1', '/').replaceAll('~0', '~'));
-// Arguments that take a module or a path; studio_command passes only what looks like a path; ssam_reference /query is a
-// file only for the job checks.
+// Arguments that take a module or a path (one, or a list of them: ssam_map search/uses); studio_command passes only what
+// looks like a path; ssam_reference /query is a file only for the job checks.
+// servidor/fase4-23: ssam_reference check-job {basedOn, patch?, job?} (patch by name, partial job) reads the job of
+// basedOn and a partial job given as a file: both are the customer's files. A partial job given as its JSON text is no
+// path, and an inline job (no basedOn, no patch) is the job itself: nothing in it is a path.
+const isJsonText = value => /^\s*[[{]/.test(value);
+const patchedQuery = args => args?.kind === 'check-job' && args?.query !== null && typeof args?.query === 'object' && !Array.isArray(args.query)
+  && (args.query.basedOn !== undefined || args.query.patch !== undefined);
 const pathOnlyWhen = (name, entry, pointer, args, value) => {
-  if (entry.agent?.when === 'module-target' && pointer === '/' + entry.agent.arg) return looksLikePath(value);
+  if (entry.agent?.when === 'module-target' && (pointer === '/' + entry.agent.arg || pointer === '/' + entry.agent.arg + '/*')) return looksLikePath(value);
   if (name === 'studio_command' && pointer === '/args/*') return looksLikePath(value);
   if (name === 'ssam_reference' && pointer === '/query') return ['check-job', 'check-delivery'].includes(args?.kind);
+  if (name === 'ssam_reference' && pointer === '/query/basedOn/job') return patchedQuery(args);
+  if (name === 'ssam_reference' && pointer === '/query/job') return patchedQuery(args) && !isJsonText(value);
   return true;
 };
 
@@ -190,16 +200,7 @@ export async function resolvePaths(name, entry, args, lane, context, { agentRoot
 // ---- presentation (6.3 rule 4)
 const escapeRe = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const SEP = '[\\\\/]+';
-// A folder whose absolute path starts with a separator (POSIX, and Windows UNC) keeps that separator in its pattern, and
-// its match must start a path, not continue another one. Without both, on Linux (server/Dockerfile) /data/server/... lost
-// its leading "/": the workspace came out as "/ws:odc/..." (a path no tool takes back) and a short server root such as
-// HOME=/tmp turned any ".../tmp/..." into "<servidor>". A Windows drive path (C:\...) keeps its pattern as before.
-const PATH_START = `(?<![^\\s"'<>|*?,;:=()[\\]{}])`;
-const prefixSource = (dir, api = path) => {
-  const abs = api.resolve(dir);
-  const parts = abs.split(/[\\/]+/).filter(Boolean).map(escapeRe);
-  return /^[\\/]/.test(abs) ? PATH_START + SEP + parts.join(SEP) : parts.join(SEP);
-};
+const prefixSource = dir => path.resolve(dir).split(/[\\/]+/).filter(Boolean).map(escapeRe).join(SEP);
 const TAIL = `(?:${SEP}[^\\\\/\\s"'<>|*?]+)*`;
 const END = `(?=$|[\\\\/\\s"'<>|*?,;)\\]}])`;
 
@@ -207,12 +208,11 @@ const END = `(?=$|[\\\\/\\s"'<>|*?,;)\\]}])`;
 // store, where the 22nd release also keeps the module digest (ssam_map index.file and store.file), and the readers' copy.
 export const serverDataRoots = (env = process.env) => [env.SSAM_MODULE_INDEX_ROOT, env.SSAM_READER_CACHE_ROOT]
   .filter(root => typeof root === 'string' && root.trim()).map(root => path.resolve(root));
-// pathApi: the path flavor of this server (path.posix in a test of the Linux image's paths).
-export function presenter({ workspace, serverRoots = [workspaceRoot, os.homedir(), ...serverDataRoots()], pathApi = path }) {
-  const ws = pathApi.resolve(workspace);
-  const wsSource = prefixSource(ws, pathApi);
-  const roots = [...new Set(serverRoots.filter(Boolean).map(r => pathApi.resolve(r)))].sort((a, b) => b.length - a.length);
-  const rootSources = roots.map(root => prefixSource(root, pathApi));
+export function presenter({ workspace, serverRoots = [workspaceRoot, os.homedir(), ...serverDataRoots()] }) {
+  const ws = path.resolve(workspace);
+  const wsSource = prefixSource(ws);
+  const roots = [...new Set(serverRoots.filter(Boolean).map(r => path.resolve(r)))].sort((a, b) => b.length - a.length);
+  const rootSources = roots.map(prefixSource);
   const asWs = rest => {
     const segments = rest.split(/[\\/]+/).filter(Boolean);
     return segments.length && ['odc', 'o11', 'inbox'].includes(segments[0].toLowerCase()) ? 'ws:' + segments.join('/') : '<servidor>';
@@ -295,6 +295,7 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
         resolved = { ...resolved, base: NEUTRAL_ODC_BASE };
     }
     const result = await run(context, () => handler(...(hasArgs ? [resolved, ...params.slice(1)] : params)));
-    return result?.resultType === 'input_required' ? result : present.result(scrubEvidence(result, thirdPartyJobs(), { clientText: name === 'ssam_discover' }));
+    return result?.resultType === 'input_required' ? result
+      : present.result(name === 'ssam_discover' ? scrubDiscover(result, thirdPartyJobs()) : scrubEvidence(result, thirdPartyJobs()));
   };
 }

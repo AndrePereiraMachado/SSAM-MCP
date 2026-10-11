@@ -91,7 +91,6 @@ test('malformed patches are PATCH_INVALID with the operation index', () => {
     [[{ op: 'move', path: '/ops/0', from: '/ops/1' }], /unknown key\(s\) from/],
     [[{ op: 'move', path: '/ops/0' }], /op is one of add, remove, replace, test/],
     [[{ op: 'add', path: '/ops/0' }], /add needs value/],
-    [[{ op: 'replace', path: 'ops/0/name', value: 'x' }], /JSON pointer/],
     [[{ op: 'replace', path: '/ops/0/na~2me', value: 'x' }], /~0/],
     [[{ op: 'replace', path: '/ops/9/name', value: 'x' }], /no value at \/ops\/9$/],
     [[{ op: 'replace', path: '/ops/0/missing/deeper', value: 'x' }], /no value at \/ops\/0\/missing$/],
@@ -107,6 +106,8 @@ test('malformed patches are PATCH_INVALID with the operation index', () => {
     assert.equal(error.code, 'PATCH_INVALID', JSON.stringify(patch)); assert.match(error.message, message); assert.equal(error.at, 0);
   }
   assert.equal(thrown(() => applyJobPatch(JOB, [])).code, 'PATCH_INVALID');
+  // patch-por-nome: a path without the leading / is the same path (a path by name reads as one)
+  assert.deepEqual(applyJobPatch(JOB, [{ op: 'replace', path: 'ops/0/name', value: 'x' }]), applyJobPatch(JOB, [{ op: 'replace', path: '/ops/0/name', value: 'x' }]));
   const many = Array.from({ length: PATCH_MAX_OPS + 1 }, () => ({ op: 'test', path: '/ops/0/op', value: 'create' }));
   assert.match(thrown(() => applyJobPatch(JOB, many)).message, /at most 50/);
   assert.doesNotThrow(() => applyJobPatch(JOB, many.slice(1)));
@@ -162,16 +163,20 @@ test('a base whose sha256 differs is BASE_CHANGED and nothing is written; missin
   assert.deepEqual(fs.readdirSync(s.inlineDir), ['patched-1.json'], 'only the accepted patch (relative to root) wrote a file');
 });
 
-test('patch and job are exclusive; patch needs basedOn; job alone is resolved as o11_deliver resolved it', t => {
+test('patch needs basedOn, basedOn needs patch or a partial job; job alone is resolved as o11_deliver resolved it', t => {
   const s = sandbox(t);
   const options = { inlineDir: s.inlineDir, uuid: s.uuid };
   const patch = [{ op: 'remove', path: '/ops/2' }];
-  assert.equal(resolvePatchedJob({ job: s.job, patch, basedOn: { job: s.job, sha256: sha256(s.bytes()) } }, options).code, 'PATCH_INVALID');
+  // patch-por-nome: job + basedOn is a partial job (here the base itself: every op replaced by its own), the patch after it
+  const both = resolvePatchedJob({ job: s.job, patch, basedOn: { job: s.job, sha256: sha256(s.bytes()) } }, options);
+  assert.equal(both.ok, true, JSON.stringify(both)); assert.equal(JSON.parse(fs.readFileSync(both.path, 'utf8')).ops.length, 2);
+  assert.deepEqual(both.partial, { replaced: 3, added: 0, newOps: 0, replacedAt: ['/ops/0', '/ops/1', '/ops/2'] });
+  assert.match(resolvePatchedJob({ job: s.job, patch }, options).error, /patch needs basedOn/);
   assert.match(resolvePatchedJob({ patch }, options).error, /patch needs basedOn/);
-  assert.match(resolvePatchedJob({ basedOn: { job: s.job, sha256: sha256(s.bytes()) } }, options).error, /basedOn goes with patch/);
+  assert.match(resolvePatchedJob({ basedOn: { job: s.job, sha256: sha256(s.bytes()) } }, options).error, /basedOn goes with patch, or with job/);
   assert.deepEqual(resolvePatchedJob({ job: s.job }, options), { ok: true, path: s.job, sha256: sha256(s.bytes()) });
   const inline = resolvePatchedJob({ job: JOB.ops }, options);
-  assert.equal(inline.path, path.join(s.inlineDir, 'patched-1.json')); assert.deepEqual(JSON.parse(fs.readFileSync(inline.path, 'utf8')), JOB.ops);
+  assert.equal(inline.path, path.join(s.inlineDir, 'patched-2.json')); assert.deepEqual(JSON.parse(fs.readFileSync(inline.path, 'utf8')), JOB.ops);
   assert.equal(inline.sha256, sha256(fs.readFileSync(inline.path)));
   assert.equal(resolvePatchedJob({ job: '{"ops":' }, options).code, 'JOB_INVALID');
   assert.equal(resolvePatchedJob({ job: 'relative.json' }, options).code, 'JOB_PATH_NOT_ABSOLUTE');
@@ -224,7 +229,7 @@ test('the provenance goes to the journal only; the patched job carries none of i
 
 test('jobIdentity and failedOpOf: the op index only when the kernel names it reliably', t => {
   const s = sandbox(t);
-  assert.deepEqual(jobIdentity(s.job), { job: s.job, jobSha256: sha256(s.bytes()) });
+  assert.deepEqual(jobIdentity(s.job), { job: s.job, jobSha256: sha256(s.bytes()), nextBasedOn: { job: s.job, sha256: sha256(s.bytes()) } });
   assert.deepEqual(jobIdentity(path.join(s.base, 'none.json')), { job: path.join(s.base, 'none.json') });
   assert.deepEqual(jobIdentity(null), {});
   // Verbs.Apply: `op #N (<verb> <name|prop>): <Exception>: ...`, with or without the type in front (Errors.Text)
@@ -287,7 +292,7 @@ test('the patched copy keeps resolving the references of its base: job:X, a nega
 test('jobIdentity names an array job (jobShape), whose patch paths are /<i>/...', t => {
   const s = sandbox(t);
   const array = path.join(s.base, 'array.json'); fs.writeFileSync(array, JSON.stringify(JOB.ops));
-  assert.deepEqual(jobIdentity(array), { job: array, jobSha256: sha256(fs.readFileSync(array)), jobShape: 'array' });
+  assert.deepEqual(jobIdentity(array), { job: array, jobSha256: sha256(fs.readFileSync(array)), jobShape: 'array', nextBasedOn: { job: array, sha256: sha256(fs.readFileSync(array)) } });
   assert.equal(jobIdentity(s.job).jobShape, undefined);
 });
 

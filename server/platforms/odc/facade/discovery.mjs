@@ -12,6 +12,8 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { anvilRoot, odcRoot, o11Lane } from './workspace.mjs';
+import { readConnection } from './studio-session.mjs';
+import { registryInstallLocation } from './studio-locate.mjs';
 import { composeCatalog, applySupersedes, rewriteAliases, keywordProblems, synonymProblems, FRAGMENTS_DIR, STOP, normalize, derived, stem, words, tokens, fold, folded } from './catalog.mjs';
 import { isScreenIntent, appTypesFromKinds, appTypesFromIntent, osuiSection, osuiExpansion, osuiCatalogAvailable, namedPatterns, APP_TYPES } from './osui-catalog.mjs';
 
@@ -34,14 +36,40 @@ const bytes = value => Buffer.byteLength(JSON.stringify(value), 'utf8');
 // share discovery-capabilities-shared.json, composed with the catalog fragments (catalog/fragments/<front>/*.json,
 // catalog.mjs), whose capabilities are projected per lane at index build.
 const SHARED_FILE = path.join(here, 'discovery-capabilities-shared.json');
-export function laneSources(lane, { kernel = anvilRoot, odc = odcRoot } = {}) {
-  const programFiles = process.env.ProgramFiles ?? 'C:\\Program Files';
+// The Service Studio the O11 discover answers for is the one the lane's tools use (W3, 2026-10-10). The suite stamps name
+// the Studio that ran it (ideVersion, nativeAssemblies); a discover bound to the lane's old copy (Service Studio 11 - Anvil
+// 4516, 11.55.87) while the suite ran on the installed Studio (11.55.91) read every result as historical. Order, first
+// folder holding ServiceStudio.Framework.dll wins: the selected connection's Studio (studio-session.mjs readConnection, as
+// anvil-cli.mjs laneEnvironment), ANVIL_STUDIO_DIR, the installation the registry names (Uninstall "OutSystems Service
+// Studio 11", 64-bit then 32-bit view), %ProgramFiles%, and only then the old copy of the lane. Provenance is not
+// relaxed: the stamps are compared as before, against this one folder, which every CLI process of the discover binds too.
+const O11_MARKER = 'ServiceStudio.Framework.dll';
+// The registry read lives behind the executor seam (studio-locate.mjs, servidor/fase4-23): never inside a hosted call.
+export { registryInstallLocation };
+export function o11StudioDir({ kernel = anvilRoot, laneName = o11Lane.lane, env = process.env, exists: present = file => exists(file), registry = registryInstallLocation, connection = readConnection } = {}) {
+  const valid = dir => typeof dir === 'string' && dir !== '' && present(path.join(dir, O11_MARKER));
+  const tried = [];
+  const attempt = (source, dir) => { if (!dir) return null; const ok = valid(dir); tried.push({ source, dir, valid: ok }); return ok ? { dir, source } : null; };
+  let record = null; try { record = connection(kernel, laneName); } catch { /* an invalid record is reported by the tools that need it */ }
+  const bridge = laneName === 'ss5' ? 4536 : 4516;
+  const installed = registry();
+  const found = attempt('connection', record?.studioDir) ?? attempt('variable', env.ANVIL_STUDIO_DIR)
+    ?? attempt('registry', installed ? path.join(installed, 'Service Studio') : null)
+    ?? attempt('programfiles', path.join(env.ProgramFiles || 'C:\\Program Files', 'OutSystems', 'Service Studio 11', 'Service Studio'))
+    ?? attempt('lane-copy', path.join(env.USERPROFILE ?? '', 'OutSystems', `Service Studio 11 - Anvil ${bridge}`, 'Service Studio'));
+  // Nothing valid: the lane copy is named (its absence is reported by the CLI that binds it), as before.
+  return { ...(found ?? { dir: path.join(env.USERPROFILE ?? '', 'OutSystems', `Service Studio 11 - Anvil ${bridge}`, 'Service Studio'), source: 'none' }), tried,
+    ...(record?.authorityDir && found?.source === 'connection' ? { authorityDir: record.authorityDir } : {}) };
+}
+export function laneSources(lane, { kernel = anvilRoot, odc = odcRoot, env = process.env, studio = null } = {}) {
+  const programFiles = env.ProgramFiles ?? 'C:\\Program Files';
   if (lane === 'odc') {
     const cliDir = path.join(kernel, '.local', 'lane-odc', 'cli');
+    const studioDir = env.ANVIL_ODC_STUDIO_DIR ?? path.join(programFiles, 'OutSystems', 'ODC Studio', 'ODC Studio');
     return {
       lane, kernel, odc, shared: SHARED_FILE, fragments: FRAGMENTS_DIR,
       cli: path.join(cliDir, 'anvil-odc.dll'), kernelDll: path.join(cliDir, 'Anvil.Core.Odc.dll'),
-      studioDir: process.env.ANVIL_ODC_STUDIO_DIR ?? path.join(programFiles, 'OutSystems', 'ODC Studio', 'ODC Studio'),
+      studioDir, env: { ...env, ANVIL_ODC_STUDIO_DIR: studioDir },
       modelDlls: ['OutSystems.Model.dll', 'OutSystems.Model.V1.dll', 'OutSystems.Model.Implementation.dll', 'OutSystems.ModelAPILoader.dll', 'OutSystems.Model.Plugin.NRWidgets.dll'],
       jobsDir: path.join(kernel, 'tests', 'jobs-odc'), negativeDir: path.join(kernel, 'tests', 'jobs-odc-negative'),
       // The proven examples (ExamplesOdcTests): jobs named examples/<job>, results under <testWork>/examples.
@@ -63,10 +91,14 @@ export function laneSources(lane, { kernel = anvilRoot, odc = odcRoot } = {}) {
     // The O11 lane comes from the single rule in workspace.mjs (explicit ANVIL_LANE, else the workspace's o11Lane).
     const laneName = o11Lane.lane;
     const local = path.join(kernel, laneName === 'ss5' ? path.join('.local', 'lane-ss5') : '.local');
+    // studio (tests): the options of o11StudioDir (exists, registry, connection).
+    const resolved = o11StudioDir({ kernel, laneName, env, ...(studio ?? {}) });
     return {
       lane, kernel, odc, shared: SHARED_FILE, fragments: FRAGMENTS_DIR, o11Lane: { name: laneName, source: o11Lane.source },
       cli: path.join(local, 'cli', 'anvil.dll'), kernelDll: path.join(local, 'cli', 'Anvil.Core.dll'),
-      studioDir: process.env.ANVIL_STUDIO_DIR ?? path.join(process.env.USERPROFILE ?? '', 'OutSystems', laneName === 'ss5' ? 'Service Studio 11 - Anvil 4536' : 'Service Studio 11 - Anvil 4516', 'Service Studio'),
+      studioDir: resolved.dir, studioSource: resolved.source,
+      // The environment of every CLI process of the discover: the same lane and Studio (and the connection's authority).
+      env: { ...env, ANVIL_LANE: laneName, ANVIL_STUDIO_DIR: resolved.dir, ...(resolved.authorityDir ? { ANVIL_AUTHORITY_DIR: resolved.authorityDir } : {}) },
       modelDlls: ['OutSystems.Model.V1.dll', 'ServiceStudio.Framework.dll'],
       jobsDir: path.join(kernel, 'tests', 'jobs'), negativeDir: path.join(kernel, 'tests', 'jobs-negative'),
       // The proven examples (ExamplesO11Tests): jobs named examples/<job>, results under <testWork>/examples.
@@ -205,12 +237,18 @@ function canonicalize(list, synonyms, derivedTokens = null, { genitive = new Set
 }
 
 // ---- sources
+// Every CLI process of the discover runs with the lane's environment (sources.env) and binds sources.studioDir, the Studio
+// the index names and whose assemblies it hashes (W3): one folder, even for a copy of sources with another studioDir.
+// sources.dotnet: the host (tests).
+const cliEnv = sources => ({ ...(sources.env ?? process.env), ...(sources.studioDir ? { [sources.lane === 'odc' ? 'ANVIL_ODC_STUDIO_DIR' : 'ANVIL_STUDIO_DIR']: sources.studioDir } : {}) });
+const cli = (sources, args, maxBuffer = 16 * 1024 * 1024) => run(sources.dotnet ?? 'dotnet', [sources.cli, ...args],
+  { windowsHide: true, maxBuffer, cwd: sources.kernel, env: cliEnv(sources) });
 async function apiSchemas(sources) {
   const contracts = {}; const timings = {};
   for (const op of API_OPS) {
     const started = performance.now();
     try {
-      const { stdout } = await run('dotnet', [sources.cli, 'api', '--op', op], { windowsHide: true, maxBuffer: 16 * 1024 * 1024, cwd: sources.kernel });
+      const { stdout } = await cli(sources, ['api', '--op', op]);
       const envelope = JSON.parse(stdout);
       contracts[op] = envelope.ok ? envelope.data : { error: envelope.error };
     } catch (error) {
@@ -223,11 +261,11 @@ async function apiSchemas(sources) {
 }
 // The lane CLI binds the installed Studio for `verify-catalog` and reports platform, IDE version and the count of
 // Verify definitions read from its DLL: the identity of the native side, measured, not copied from a doc.
-async function studioIdentity(sources) {
+export async function studioIdentity(sources) {
   const dlls = {};
   for (const name of sources.modelDlls) { const file = path.join(sources.studioDir, name); if (exists(file)) dlls[name] = sha256(fs.readFileSync(file)).slice(0, 16); }
   try {
-    const { stdout } = await run('dotnet', [sources.cli, 'verify-catalog'], { windowsHide: true, maxBuffer: 32 * 1024 * 1024, cwd: sources.kernel });
+    const { stdout } = await cli(sources, ['verify-catalog'], 32 * 1024 * 1024);
     const data = JSON.parse(stdout).data ?? {};
     return { platform: data.platform ?? null, ideVersion: data.ideVersion ?? null, verifyDefinitions: data.count ?? null, dir: sources.studioDir, modelDlls: dlls };
   } catch (error) { return { error: String(error.stderr || error.message).split(/\r?\n/).find(Boolean), dir: sources.studioDir, modelDlls: dlls }; }
@@ -797,7 +835,7 @@ async function nativeRuntime(sources, types, { concurrency = Number(process.env.
   for (const type of types) { if (cache[type] && !cache[type].error) out[type] = cache[type]; else missing.push(type); }
   const probe = async type => {
     try {
-      const { stdout } = await run('dotnet', [sources.cli, 'api', '--op', 'native', '--type', type], { windowsHide: true, maxBuffer: 16 * 1024 * 1024, cwd: sources.kernel });
+      const { stdout } = await cli(sources, ['api', '--op', 'native', '--type', type]);
       const envelope = JSON.parse(stdout); const d = envelope.ok ? envelope.data : null;
       const hit = d?.candidates?.find(c => c.fullName === type) ?? null;
       out[type] = hit ? { found: true, platform: d.platform, ideVersion: d.ideVersion, assembly: hit.assembly, bases: hit.bases, writable: hit.writable, properties: hit.properties.length, methods: hit.methods }
@@ -954,6 +992,12 @@ export function laneMap(lane, sources = laneSources(lane)) {
   const reader = lane === 'o11' ? { entry: { cli: sources.cli, root: sources.kernel, lane: sources.o11Lane.name }, ssDir: sources.studioDir } : {};
   return async request => (await import('./module-map.mjs')).moduleMap({ ...request, lane }, { reader });
 }
+// The module digest of `app` for the work packet (module-map.mjs moduleDigest): the same lane reader and Studio as laneMap.
+export function laneDigest(lane, sources = laneSources(lane)) {
+  if (!['odc', 'o11'].includes(lane)) return null;
+  const reader = lane === 'o11' ? { entry: { cli: sources.cli, root: sources.kernel, lane: sources.o11Lane.name }, ssDir: sources.studioDir } : {};
+  return async target => (await import('./module-map.mjs')).moduleDigest({ lane, target }, { reader });
+}
 
 // ---- matching
 // A keyword entry as the matcher reads it (request A-006): its form in tokens, and for an ANCHORED keyword
@@ -1077,7 +1121,7 @@ export function contractNode(index, pointer) {
   for (const key of rest) node = Array.isArray(node) ? node.find(x => x === key) : node?.[key];
   return node;
 }
-function contractSlice(index, pointers, { full = false, capBytes = 6144 } = {}) {
+export function contractSlice(index, pointers, { full = false, capBytes = 6144 } = {}) {
   const out = {};
   const small = v => typeof v !== 'object' || v === null || Array.isArray(v) || (Object.keys(v).length <= 4 && Object.values(v).every(x => typeof x !== 'object' || x === null || Array.isArray(x)));
   for (const pointer of pointers ?? []) {
@@ -1281,6 +1325,14 @@ export function query(index, { intent = '', limit = 8 } = {}) {
   const bindingsTotal = bindings.length; bindings.length = Math.min(bindings.length, 12);
   return { terms, matches, contracts, routes: Object.fromEntries([...new Set(matches.map(m => m.route.kind))].filter(Boolean).map(k => [k, index.routes?.[k] ?? null])),
     order, cycles, invalidDependencies: invalid, decisions, recommended, unavailable, relatedJobs, unmatched, bindings, bindingsTotal };
+}
+// A capability as a direct match of the work packet when the module holds the element the intent names exactly (W1): the
+// fields of a direct match of query() that the packet reads.
+export function packetMatch(index, id, why = []) {
+  const c = index.capabilities.find(k => k.id === id); if (!c) return null;
+  return { id: c.id, category: c.category, title: c.title, via: 'match', score: 0, why, level: levelOf(index, c), route: { kind: c.route?.kind ?? null, operation: c.route?.operation ?? null },
+    contract: c.contract ?? [], proofs: proofsOf(index, c), depends: (c.depends ?? []).map(d => (typeof d === 'string' ? { id: d } : { id: d.id, unless: d.unless ?? null })),
+    summary: c.summary, limits: (c.limits ?? []).slice(0, 2), guidance: c.guidance ?? null, from: 'module' };
 }
 function relatedNotes(index, c, terms) {
   const notes = [];
@@ -1921,7 +1973,7 @@ export function fitC07(answer, extras, budgetBytes) {
 }
 
 // ---- public entry
-export async function discover({ lane = 'odc', intent = '', app = null, detail = null, expand = null, type = null, limit = 8, rebuild = false, budgetBytes = DEFAULT_BUDGET_BYTES, inspect = null, map = null, sources = laneSources(lane), descriptorFile = sources.descriptor, outsystemsUi = true } = {}) {
+export async function discover({ lane = 'odc', intent = '', app = null, detail = null, expand = null, type = null, limit = 8, rebuild = false, budgetBytes = DEFAULT_BUDGET_BYTES, inspect = null, map = null, sources = laneSources(lane), descriptorFile = sources.descriptor, outsystemsUi = true, packet = false, digest = null, operations = null } = {}) {
   const started = performance.now();
   const built = await buildIndex(lane, { sources, descriptorFile, rebuild });
   const index = built.index;
@@ -1974,6 +2026,28 @@ export async function discover({ lane = 'odc', intent = '', app = null, detail =
   const proven = provenExample(sources, index, q.matches, intent, { unmatched: q.unmatched });
   const steps = stepsSection(sources, index, stepKindsOf(intent));
   const values = valuesFor(lane, intent);
+  // packet:true (W1): the work packet an agent starts from (work-packet.mjs), from the same matches, contracts and proven
+  // example, plus the elements of the capture the intent names (its module digest) and the team rules; nothing in it
+  // depends on the time or the cache, so the same input gives the same bytes. Within the answer ceiling (PACKET_BUDGET).
+  if (packet) {
+    const { workPacket, PACKET_BUDGET, namedCapabilities } = await import('./work-packet.mjs');
+    let found = null;
+    if (app) { const reader = digest ?? laneDigest(lane, sources); found = reader ? await reader(app) : { ok: false, target: app, error: 'no module digest reader on lane ' + lane }; }
+    // The capabilities of the elements the intent names exactly in the module come first; the proven example is chosen
+    // again with them.
+    const named = found?.ok ? namedCapabilities(found.digest, intent).filter(n => !q.matches.some(m => m.id === n.id && m.via === 'match')) : [];
+    const extra = named.map(n => packetMatch(index, n.id, [n.element + ' (' + n.kind + ' of the module)'])).filter(Boolean);
+    const matches = [...extra, ...q.matches];
+    const chosen = extra.length ? provenExample(sources, index, matches, intent, { unmatched: q.unmatched }) ?? proven : proven;
+    const first = matches.find(m => m.via === 'match');
+    const firstExample = !first ? null : examples[first.id] ?? exampleOps(sources, index, index.capabilities.find(k => k.id === first.id), { maxOps: 8, focus: first.focus ?? null });
+    return workPacket({ lane, intent, app, basis: { index: index.key }, matches, unavailable: q.unavailable,
+      categories: new Map(index.capabilities.map(c => [c.id, c.category])),
+      slices: (pointers, form) => contractSlice(index, pointers, { full: form === 'full', capBytes: 3072 }),
+      steps: steps ? { kinds: steps.kinds, shape: steps.shape, grammar: steps.grammar } : null,
+      proven: chosen, example: firstExample, exampleFor: first?.id ?? null, module: found, operations },
+    { budgetBytes: Math.min(budgetBytes, PACKET_BUDGET) });
+  }
   let context = null;
   if (app) context = inspect ? await applicationContext(index, sources, { app, matches: q.matches, terms: q.terms, inspect, map }) : { ok: false, status: 'failed', code: 'NO_READER', target: app, error: 'no reader available in this entry for lane ' + lane, reads: [], signatures: [], reuse: [] };
   if (context?.ok) {
@@ -2181,8 +2255,9 @@ export function parseDiscoverArguments(args) {
     else if (a === '--limit') input.limit = Number(args[++i]);
     else if (a === '--budget') input.budgetBytes = Number(args[++i]);
     else if (a === '--rebuild') input.rebuild = true;
+    else if (a === '--packet') input.packet = true;
     else if (a === '--intent') input.intent = args[++i];
-    else if (a.startsWith('--')) throw new Error('Unknown discover option ' + a + '; usage: discover <intent words...> [--lane odc|o11] [--app <capture.oml|Module>] [--expand <id>:<parts>,contract:<pointer>,element:<Kind:Name>] [--detail <capability>] [--type <Interface>] [--limit N] [--budget <bytes>] [--rebuild]');
+    else if (a.startsWith('--')) throw new Error('Unknown discover option ' + a + '; usage: discover <intent words...> [--lane odc|o11] [--app <capture.oml|Module>] [--packet] [--expand <id>:<parts>,contract:<pointer>,element:<Kind:Name>] [--detail <capability>] [--type <Interface>] [--limit N] [--budget <bytes>] [--rebuild]');
     else words.push(a);
   }
   if (input.expand != null && !String(input.expand).trim()) throw new Error('--expand needs a value, e.g. ui.list:example+evidence,logic.aggregate:example');

@@ -12,13 +12,15 @@
 //   STUDIOS, SOURCES
 //   isStudioDir(kind, dir, exists?)
 //   regQuery(key, value, view)        reg.exe query <key> /v <value> /reg:<64|32>; the data, or null
+//   registryInstallLocation(name)     InstallLocation of HKLM Uninstall\<name>, synchronous, cached; null in a hosted call
+//                                     (servidor/fase4-23, for discovery.mjs)
 //   studioProcesses(image)            [{pid, path}] of the running processes with that image name
 //   locateStudio(kind, deps?) -> {kind, dir, source, tried: [{source, dir, valid}]}; dir and source are null when
 //                                     nothing is found. deps (all optional, for tests): env, regQuery, processes,
 //                                     connection (kind -> studioDir or null), exists, programFiles
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readConnection } from './release-layout.mjs';
 
@@ -52,6 +54,31 @@ export async function regQuery(key, value, view = 64) {
     }
   } catch { /* no such key or value */ }
   return null;
+}
+
+// The InstallLocation of an Uninstall key of this machine (HKLM, 64-bit view then 32-bit), read once per name by reg.exe,
+// synchronously: the Service Studio of the O11 discover (discovery.mjs o11StudioDir, W3 of the 23rd release). Inside a
+// hosted call it is null and nothing runs (servidor/fase4-23): this machine is the server, and a hosted O11 Studio is the
+// server kernel's, named by the customer's connection record or ANVIL_STUDIO_DIR before the registry is asked.
+const installs = new Map();
+const hostedCall = () => globalThis[Symbol.for('ssam.facade.currentExecutor')]?.()?.hosted === true;
+export function registryInstallLocation(name = STUDIOS.o11.uninstall) {
+  if (hostedCall()) return null;
+  if (installs.has(name)) return installs.get(name);
+  let found = null;
+  if (process.platform === 'win32') {
+    const exe = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'reg.exe');
+    for (const view of [64, 32]) {
+      try {
+        const out = execFileSync(exe, ['query', 'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\' + name, '/v', 'InstallLocation', '/reg:' + view],
+          { windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 });
+        const value = out.split(/\r?\n/).map(l => /^\s+InstallLocation\s+REG_(?:EXPAND_)?SZ\s+(.+?)\s*$/.exec(l)?.[1]).find(Boolean);
+        if (value) { found = value; break; }
+      } catch { /* no such key or value in this view */ }
+    }
+  }
+  installs.set(name, found);
+  return found;
 }
 
 // The same CIM query as lanes.mjs studioProcesses; release callers may inject another lister (deps.processes).

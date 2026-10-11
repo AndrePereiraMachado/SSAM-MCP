@@ -106,6 +106,13 @@
   "@baixar": ["baixar", "baixe", "download", "exportar", "export", "grab"],
   "@consumidor": ["consumidor", "consumer", "consome", "consomem", "consume", "consumes"],
   "@quem_usa": ["quem usa", "who uses", "quem chama", "who calls", "usages", "usos", "quem consome"],
+  "@usado": ["usado", "usada", "usados", "usadas", "used", "utilizado", "utilizada", "referenciado", "referenciada", "referenced"],
+  "@impacto": ["impacto", "impact", "afeta", "afetado", "afetados", "affects", "affected"],
+  "@expressao": ["expressao", "expressoes", "expression", "expressions", "formula", "formulas"],
+  "@aparece": ["aparece", "aparecem", "appears", "appear", "ocorre", "ocorrem", "occurs", "mencionado", "mentioned", "mentions"],
+  "@cruzado": ["across", "outros", "outras", "other", "entre", "between", "cross"],
+  "@agregado": ["aggregate", "aggregates", "agregado", "agregados"],
+  "@filtro": ["filtro", "filtros", "filter", "filters", "filtrando", "filtering"],
   "@elemento": ["elemento", "element"],
   "@dependencia": ["dependencia", "dependency", "depende", "depend", "depends"],
   "@referencia": ["referencia", "reference", "refs", "ref", "referenciar"],
@@ -4268,23 +4275,18 @@
    "cli": "ssam inspect --lane o11",
    "triggers": [
     ["@inspecionar"],
-    ["@quem_usa", "@entidade"],
-    ["@quem_usa", "@acao_logica"],
     ["@propriedade", "@acao_logica"],
     ["@consultar", "@fluxo", "@acao_logica"],
     ["@consultar", "@propriedade", "@tela"],
     ["@inspecionar", "@elemento"],
-    ["@quem_usa", "@tela"],
-    ["@quem_usa", "atributo"],
-    ["@quem_usa", "attribute"],
     ["@elemref"],
     ["@consultar", "@elemref"],
     ["@propriedade", "@elemref"]
    ],
    "without": ["@renomear", "@criar", "@adicionar", "@apagar", "@dependencia", "@mudar", "@mover", "@corrigir"],
    "intents": {
-    "pt": ["ver as propriedades da action no O11", "quem usa a entidade Cliente", "ler o fluxo da server action", "inspecionar o elemento @key"],
-    "en": ["show the properties of the action in O11", "who uses entity Customer", "read the server action flow", "inspect element @key"]
+    "pt": ["ver as propriedades da action no O11", "ler o fluxo da server action", "inspecionar o elemento @key"],
+    "en": ["show the properties of the action in O11", "read the server action flow", "inspect element @key"]
    },
    "equivalent": {
     "odc": {
@@ -4508,9 +4510,9 @@
      "field": "patch",
      "value": "[JSON Patch]",
      "selector": "presence",
-     "when": "Correct a refused job with JSON Patch over /ops/<i>/... instead of resending it.",
+     "when": "Correct a refused job with JSON Patch over basedOn (paths by index /ops/<i>/... or by name actions/<Action>/steps/<as>/...; patchByName of the refusal), or send in job only the changed actions as a partial job with basedOn; never resend the whole job.",
      "preconditions": [
-      "a refusal that named job and jobSha256"
+      "a refusal that named job and jobSha256 (nextBasedOn)"
      ],
      "next": "o11_publish after \"entregue\"",
      "args": {
@@ -4518,7 +4520,7 @@
       "patch": [
        {
         "op": "replace",
-        "path": "/ops/<i>/<field>",
+        "path": "actions/<Action>/steps/<as>/<field>",
         "value": "<new>"
        }
       ],
@@ -6094,9 +6096,9 @@
    "group": "leitura",
    "kind": "model",
    "title": "Discover capabilities and contracts for an intent",
-   "when": "The single entry for how to do anything in SSAM: model changes return capabilities, ops, contracts, examples and the continuation; other requests return the route to the tool.",
+   "when": "The single entry of any SSAM request: capabilities, ops, contracts and examples of a model change, or the route to the tool. packet:true (with app): the work packet an agent or subagent starts from.",
    "preconditions": [],
-   "next": "model change: ssam_job / o11_deliver / studio_deliver; otherwise the routed tool",
+   "next": "model change: o11_deliver / studio_deliver (from the packet); otherwise the routed tool",
    "args": {
     "intent": "<request in pt or en>",
     "lane": "<lane>",
@@ -6124,7 +6126,7 @@
    "group": "leitura",
    "kind": "model",
    "title": "Map every element of an application capture",
-   "when": "First read of an application: the whole module as text in pages (view digest), or every element with @key, kind, role, parent and path (view map).",
+   "when": "Read an application: the module as text in pages (digest), every element with @key (map), text in expressions and values (search), who uses an element across the app's modules (uses).",
    "preconditions": [
     "a capture .oml, or a module open in that lane's Studio (O11: an open tab is read by key; opening is a write)"
    ],
@@ -6201,6 +6203,81 @@
      "intents": {
       "pt": ["listar as telas do módulo", "quais actions o módulo tem"],
       "en": ["map module Orders", "list the screens of the module", "which actions does the module have"]
+     }
+    },
+    "search": {
+     "field": "view",
+     "value": "search",
+     "selector": "enum",
+     "when": "Find a text in every expression, value, call argument and name of one capture or of the app's modules, in one call: @key, module, path, property and the passage of each hit.",
+     "next": "continuations.next for more hits; the capture's inspect (path @key, properties, full:true) for a whole value; view uses for who uses what was found",
+     "args": {
+      "lane": "<lane>",
+      "target": "<capture.oml or open Module, or a list of them>",
+      "view": "search",
+      "text": "<text to find>"
+     },
+     "cli": "ssam map --search",
+     "triggers": [
+      ["@procurar", "@expressao"],
+      ["@consultar", "@expressao", "@modulo"],
+      ["@consultar", "@expressao", "@app"],
+      ["@procurar", "texto"],
+      ["@procurar", "text"],
+      ["@onde", "@aparece"],
+      ["@procurar", "@aparece"],
+      ["@expressao", "@aparece"],
+      ["@todos", "@agregado", "@filtro"],
+      ["@consultar", "@agregado", "@filtro"],
+      ["@procurar", "@agregado", "@filtro"]
+     ],
+     "without": ["@criar", "@adicionar", "@renomear", "@apagar", "@extensao", "@api", "@operacao"],
+     "explains": ["@acao_logica", "@entidade", "@tela", "@siteproperty", "@propriedade", "@variavel", "@atributo", "@elemento", "@valor"],
+     "slots": {
+      "target": ["@modulo", "@app"]
+     },
+     "intents": {
+      "pt": ["buscar nas expressões do módulo o texto Pending", "procurar nas expressões e valores da aplicação", "onde aparece o texto Site.MaxLines no módulo", "todos os aggregates sobre Order com os filtros"],
+      "en": ["search the expressions of the module for a text", "find every expression that mentions Order.Status", "where does the text Pending appear in the app", "every aggregate filtering on Order with its filters"]
+     }
+    },
+    "uses": {
+     "field": "view",
+     "value": "uses",
+     "selector": "enum",
+     "when": "Who uses an element (by @key, Module.Element, name path or name), inside and across the given modules of an app, with the property that uses it: impact of a change, callers of a public action.",
+     "next": "continuations.next for more consumers; after changing a producer, refresh references and republish each consumer module listed",
+     "args": {
+      "lane": "<lane>",
+      "target": "<capture.oml or open Module, or a list of the app's modules>",
+      "view": "uses",
+      "element": "<@key | Module.Element | Flow/Screen/Action | Name>"
+     },
+     "cli": "ssam map --uses",
+     "triggers": [
+      ["@quem_usa", "@entidade"],
+      ["@quem_usa", "@acao_logica"],
+      ["@quem_usa", "@tela"],
+      ["@quem_usa", "@atributo"],
+      ["@quem_usa", "@siteproperty"],
+      ["@quem_usa", "@variavel"],
+      ["@quem_usa", "@elemento"],
+      ["@onde", "@usado"],
+      ["@impacto", "@mudar"],
+      ["@impacto", "@acao_logica"],
+      ["@impacto", "@entidade"],
+      ["@quem_usa", "@cruzado", "@modulo"],
+      ["@quem_usa", "@acao_logica", "@cruzado"],
+      ["@procurar", "@quem_usa"]
+     ],
+     "without": ["@renomear", "@criar", "@adicionar", "@apagar", "@dependencia", "@mover", "@corrigir", "@extensao", "@asset", "@biblioteca"],
+     "explains": ["@acao_logica", "@entidade", "@tela", "@siteproperty", "@propriedade", "@variavel", "@atributo", "@elemento", "@mudar", "@publico"],
+     "slots": {
+      "target": ["@modulo", "@app"]
+     },
+     "intents": {
+      "pt": ["onde é usada a site property MaxLines", "quem chama esta action pública em outros módulos", "impacto de mudar a entidade Order", "quem usa a entidade Cliente", "quem usa a entidade no ODC"],
+      "en": ["find usages across modules", "who calls this public action in other modules", "impact of changing the action GetOrders", "who uses entity Customer", "who uses the entity in ODC"]
      }
     }
    }
@@ -7047,15 +7124,10 @@
    "cli": "odc inspect",
    "triggers": [
     ["@inspecionar"],
-    ["@quem_usa", "@entidade"],
-    ["@quem_usa", "@acao_logica"],
     ["@propriedade", "@tela"],
     ["@consultar", "@fluxo", "@acao_logica"],
     ["@consultar", "@propriedade", "@tela"],
     ["@inspecionar", "@elemento"],
-    ["@quem_usa", "@tela"],
-    ["@quem_usa", "atributo"],
-    ["@quem_usa", "attribute"],
     ["@elemref"],
     ["@consultar", "@elemref"],
     ["@propriedade", "@elemref"]
@@ -7065,8 +7137,8 @@
     "target": ["@modulo", "@app"]
    },
    "intents": {
-    "pt": ["ver as propriedades da tela no ODC", "quem usa a entidade no ODC", "inspecionar o elemento @key", "ler o fluxo da action GetQuotes"],
-    "en": ["show the screen properties in ODC", "who uses the entity in ODC", "inspect element @key", "read the flow of action GetQuotes"]
+    "pt": ["ver as propriedades da tela no ODC", "inspecionar o elemento @key", "ler o fluxo da action GetQuotes"],
+    "en": ["show the screen properties in ODC", "inspect element @key", "read the flow of action GetQuotes"]
    },
    "equivalent": {
     "o11": {
@@ -7844,9 +7916,9 @@
      "field": "patch",
      "value": "[JSON Patch]",
      "selector": "presence",
-     "when": "Correct a refused job with JSON Patch over /ops/<i>/... instead of resending it.",
+     "when": "Correct a refused job with JSON Patch over basedOn (paths by index /ops/<i>/... or by name actions/<Action>/steps/<as>/...; patchByName of the refusal), or send in job only the changed actions as a partial job with basedOn; never resend the whole job.",
      "preconditions": [
-      "a refusal that named job and jobSha256"
+      "a refusal that named job and jobSha256 (nextBasedOn)"
      ],
      "next": "studio_authorize -> studio_publish",
      "args": {
@@ -7855,7 +7927,7 @@
       "patch": [
        {
         "op": "replace",
-        "path": "/ops/<i>/<field>",
+        "path": "actions/<Action>/steps/<as>/<field>",
         "value": "<new>"
        }
       ],

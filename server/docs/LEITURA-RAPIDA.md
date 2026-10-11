@@ -69,6 +69,73 @@ desenho no ODC-B (app), contra 0 pelo kernel). A fachada nunca roda .NET no pró
 1 página nos três menores, 2 no ODC-B (app), 5 no O11-B (casos) e 8 no O11-C (integrações) (os 3.524 registros de
 estáticas ficam nas páginas 34-71).
 
+## Busca e usos (views "search" e "uses", índice rico)
+
+Perguntas transversais numa chamada, sobre uma captura ou a lista de capturas de um app: onde um texto aparece, onde
+uma site property é usada, quem chama uma action pública em outros módulos, o impacto de mudar uma entidade.
+
+```powershell
+.\ssam map --lane o11 <captura|Módulo>... --search "Site.MaxLines" [--regex] [--property Condition] [--kind K] [--role R]
+.\ssam map --lane odc <captura|Módulo>... --uses "Servicos.ExistingQuote" [--kind K]
+```
+
+MCP `ssam_map {lane, target, view:"search", text, regex?, property?, kind?, role?, offset?, max?}` e
+`ssam_map {lane, target, view:"uses", element, kind?, role?, offset?, max?}`. `target` é uma captura, um módulo ou uma
+lista de até 16 deles; `expectedSourceSha256` é um hash ou a lista, um por alvo.
+
+- `search`: texto (substring sem caixa, ou `regex:true`) nas expressões, valores, argumentos e nomes. Cada achado traz
+  módulo, `@key`, tipo, caminho, propriedade (`arg:<parâmetro>` para argumento) e o trecho. Trecho cortado diz
+  `clipped` e `textLength`; o `inspect` da captura (`captures[i].inspect`, com `properties` e `full:true`) traz o valor.
+- `uses`: `element` é `@key`, `Módulo.Elemento`, caminho de nomes (`MainFlow/Home/Search`), `Kind:Nome` ou nome.
+  Nome vale primeiro para o elemento de topo (filho do módulo, ou assinatura logo abaixo de uma referência); os aninhados
+  de mesmo nome contam em `alsoMatched`. Nomes de elementos diferentes: `AMBIGUOUS_ELEMENT` com os candidatos.
+  A resposta lista cada consumidor (módulo, `@key`, caminho), a propriedade que usa (`via`), `direct` ou `descendant`
+  (um atributo, um parâmetro) e `crossModule`. Usos dentro do próprio elemento não contam.
+- Entre módulos, a identidade é a `GlobalKey` (`<chave do módulo>*<chave do elemento>`): a assinatura no consumidor tem
+  a do produtor. Sem a captura do produtor, a assinatura responde por ele. Módulo fora de `target` não é visto.
+- Consumidor roda a versão do produtor com que foi compilado: depois de mudar o produtor, atualize as referências e
+  republique cada consumidor listado.
+
+**Índice rico** (`ssam-rich-index/1`, `kernel/src/Anvil.Core/Kernel/ModuleRichIndex.cs`). Por elemento: chave, tipo,
+nome, pai, papel, propriedades com valor (literal, enum, `True`, nome do alvo), o texto de toda expressão, os argumentos
+das chamadas (parâmetro → expressão) e as referências que ele faz (alvo e propriedade). As referências vêm das
+propriedades e do grafo nativo (`Referers`), que acha o que uma expressão usa. Argumento e elemento de expressão falam
+pelo dono. Ficam fora: `False`, texto vazio, binário, listas que só repetem os filhos e a contabilidade do modelo
+(chaves, posições, descritores do ODC). Determinístico, menos `createdAt`.
+
+**Sob pedido.** Só `search` e `uses` constroem; mapa, resumo e leitura nunca. Ao lado do índice:
+`<raiz do índice>\v1\<faixa>\<sha256>.kernel.rich.json`, com a versão do extrator (`ModuleRichIndex.Extractor`, conferida
+no Node). Na falta, a fachada pede `{"rich":"ensure"}` ao leitor do kernel da faixa (o mesmo do resumo) e diz em `built`
+e `captures[i].cache` quanto levou (`ensureMs`, `loadMs`, `buildMs`). CLI fria: `anvil rich-index --oml <captura>` e
+`anvil-odc rich-index ...`. A fachada lê o arquivo sem .NET e guarda em memória os últimos (até 6 e 64 MB de arquivos).
+
+**Páginas.** Dentro do orçamento (38912 bytes no servidor `ssam`), com `count`, `returned`, `nextOffset` e
+`continuations.next`, que fixa as capturas por arquivo e hash. Nada some entre páginas.
+
+**Medidas** (10/10/2026). Frio: processo novo da CLI (liga o Studio, carrega, constrói, grava). Leitor de pé: carga do
+modelo + construção no leitor residente. Consulta: Node novo (lê e valida os arquivos) / mesmo processo.
+
+| Captura | Faixa | OML | Índice rico | Elementos | Frio (CLI) | Leitor de pé (carga + build) |
+|---|---|---|---|---|---|---|
+| Haiku_CS | O11 | 0,47 MB | 0,35 MB | 880 | 5,0 s | 2,8 + 0,5 s (leitor novo: 7,0 s) |
+| O11-D (núcleo, fixture) | O11 | 1,4 MB | 2,7 MB | 16.794 | 9,4 s | 0,3 + 1,7 s |
+| O11-A (cadastro) | O11 | 2,9 MB | 4,5 MB | 17.770 | 10,0 s | 1,2 + 3,9 s |
+| O11-B (casos) | O11 | 2,7 MB | 4,5 MB | 31.422 | 10,6 s | 1,3 + 9,5 s |
+| O11-E (análise, fixture) | O11 | 3,5 MB | 6,9 MB | 47.260 | 17,8 s | 0,9 + 4,2 s |
+| O11-C (integrações) | O11 | 5,6 MB | 17,4 MB | 147.085 | 16,5 s | 3,4 + 11,3 s |
+| ODC-A (serviços) | ODC | 0,46 MB | 1,0 MB | 4.459 | 9,1 s | 6,3 + 2,3 s (leitor novo) |
+| ODC-B (app) | ODC | 6,1 MB | 5,7 MB | 26.422 | 22,2 s | 6,6 + 13,4 s |
+| insurance-reactive-r8 (fixture) | ODC | 6,5 MB | 7,4 MB | 35.534 | 20,0 s | 3,5 + 6,9 s |
+
+Perguntas reais, uma chamada cada (antes: N chamadas de map/inspect, contadas pelo caminho mais curto):
+
+| Pergunta | Alvo | Resposta | Consulta | Antes |
+|---|---|---|---|---|
+| Quem chama `CanReadCase` do O11-B (casos)? (`uses`) | O11-B, O11-C, O11-A | 96 usos, 64 consumidores, 75 no O11-C, com `via`; 1 página | 640 ms / 13 ms | 7 (map + usages por módulo, 2 páginas no O11-C); 71 para saber a propriedade de cada consumidor |
+| Onde aparece `Site.IsProduction`? (`search`) | os mesmos 3 | 5 achados (argumentos `arg:IsProduction`) | 526 ms / 32 ms | 3 inspect `--text` (um por módulo, árvores inteiras) + 5 para achar a propriedade |
+| Impacto de mudar `ExistingQuote` do ODC-A (serviços) (`uses`) | ODC-B, ODC-A | 225 usos, 63 consumidores, 121 no ODC-B; 3 páginas | 151 ms / 3 ms | 7 (map + usages, 2 a 3 páginas, por módulo); 70 com a propriedade |
+| Filtros e condições sobre `Carrier.` (`search`, `property:"Condition"`) | ODC-B | 36 achados (filtros, joins, ifs) | 126 ms / 17 ms | 52 (map dos 51 aggregates + um inspect por aggregate) |
+
 ## Mapa do módulo (índice persistente por captura)
 
 A primeira leitura de qualquer aplicação, nas duas faixas:

@@ -26,7 +26,8 @@ namespace Anvil.Cli.Odc;
 ///                                                   com OML, recibo e manifesto de criacao para o bridge; nunca sobrescreve
 ///   inspect --oml &lt;modulo.oml&gt; [--work &lt;dir&gt;]      nome, tipo, objetos, referencias, validacao
 ///   digest --oml &lt;modulo.oml&gt; [--out &lt;f.txt&gt;]     resumo do modulo (ssam-digest), guardado junto do indice do modulo
-///   read-serve --state &lt;f&gt; --generation &lt;g&gt;       leitor residente so de leitura (o resumo do ssam_map view:"digest")
+///   rich-index --oml &lt;modulo.oml&gt;                 indice rico (ssam-rich-index): valores, expressoes, argumentos, referencias
+///   read-serve --state &lt;f&gt; --generation &lt;g&gt;       leitor residente so de leitura (resumo e indice rico do ssam_map)
 ///   references --oml &lt;modulo.oml&gt;                  as referencias registradas no modulo
 ///   verify-catalog [--id &lt;VerifyId&gt;] [--out &lt;f&gt;]   o catalogo publico lido da instalacao do ODC Studio; --out grava
 ///                                                  so os ids (catalog/odc/verify-messages-&lt;versao&gt;.json)
@@ -93,6 +94,7 @@ usage: anvil-odc <comando> [--flags]
         "create-app" => CreateApp(args),
         "inspect" => Inspect(args),
         "digest" => Digest(args),
+        "rich-index" => RichIndex(args),
         "read-serve" => ReadServe(args),
         "census" => Census(args),
         "references" => Host(args).References(File.ReadAllBytes(Need(args, "--oml"))),
@@ -240,6 +242,16 @@ usage: anvil-odc <comando> [--flags]
         return answer;
     }
 
+    // `rich-index --oml <capture>`: the rich module index (ssam-rich-index) of the capture, from the store beside its module
+    // index (a hit binds no ODC Studio), else built from the model and stored.
+    private static object RichIndex(string[] args)
+    {
+        var store = Anvil.Reading.ModuleIndexStore.Default()
+            ?? throw new InvalidOperationException("No module index store: set SSAM_MODULE_INDEX_ROOT or run inside an SSAM workspace");
+        var answer = Anvil.Reading.ModuleRichIndex.Ensure(store, Need(args, "--oml"), (bytes, sha) => Host(args).BuildRich(bytes, sha, store.Lane));
+        Log("rich-index: " + answer["bytes"] + " bytes, " + answer["counts"]!["elements"] + " elements, " + (answer["built"]!.GetValue<bool>() ? "built" : "stored") + " " + answer["path"]);
+        return answer;
+    }
     private static JsonObject? IndexedInspect(string[] args)
     {
         try

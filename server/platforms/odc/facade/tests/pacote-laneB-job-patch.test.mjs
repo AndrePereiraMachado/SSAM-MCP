@@ -29,7 +29,8 @@ test('base and expectValid stay closed; an array job has no expectedMessages', (
     assert.equal(thrown(() => applyJobPatch(JOB, [{ op: 'replace', path: where, value: 'x' }])).code, 'PATCH_PATH_FORBIDDEN', where);
   const array = thrown(() => applyJobPatch(JOB.ops, [{ op: 'add', path: '/expectedMessages', value: [] }]));
   assert.ok(array instanceof PatchError);
-  assert.equal(array.code, 'PATCH_INVALID'); // /expectedMessages of an array is not an index of its ops
+  // /expectedMessages of an array is not an index of its ops: read as the name of an op (patch-por-nome), which none has
+  assert.equal(array.code, 'PATCH_NAME_NOT_FOUND');
 });
 
 test('the failed op of a preflight refusal in the I2 text form is found', t => {

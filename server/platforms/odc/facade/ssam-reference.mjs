@@ -19,6 +19,7 @@ import { hostedContext, seamFields, usesWorkspace, workspacePath } from './execu
 import { GUIDE_FILES, guideSections, guideText } from './runtime-guides.mjs';
 import { closest } from './tool-input.mjs';
 import { refusalFields } from './refusal-problems.mjs';
+import { resolvePatchedJob, jobIdentity, withNamedPatches } from './job-patch.mjs';
 
 // The base a job names ({"base": "..."}), or null: a job without one is checked alone (the CLI's default fixture is not
 // the module the job was written for).
@@ -135,6 +136,13 @@ export function referenceArguments(lane, kind, query, { root, work }) {
 
   if (kind === 'check-job') {
     if (isText) return file(query, 'job') ?? { argv: ['check-job', '--job', query], job: query };
+    // {basedOn, patch?, job?}: a patch (by index or by name) or a partial job over an earlier job (job-patch.mjs), the whole
+    // job written to a new file once the call can run.
+    if (q.basedOn !== undefined || q.patch !== undefined) {
+      const refused = only('basedOn', 'patch', 'job');
+      if (refused) return refused;
+      return { argv: ['check-job', '--job'], patched: { job: q.job, patch: q.patch, basedOn: q.basedOn } };
+    }
     // Stored only once the call can run (the caller checks the CLI first); its path completes the argv.
     return { argv: ['check-job', '--job'], inlineJob: q };
   }
@@ -425,6 +433,21 @@ export function registerSsamReference(server, deps = {}) {
       fs.writeFileSync(built.job, JSON.stringify(built.inlineJob, null, 2));
       built.argv.push(built.job);
     }
+    if (built.patched) {
+      const patched = resolvePatchedJob(built.patched, { inlineDir: path.join(local(lane), 'jobs', 'inline'), work: lane === 'odc' ? null : o11LaneOf(laneName, { root, env }).work,
+        journalDir: path.join(local(lane), 'journal'), tool: 'ssam_reference', uuid });
+      if (!patched.ok) return refusal(patched.code, patched.error, again(lane, kind, { basedOn: built.patched.basedOn, patch: '<patch>' }, 'fix the patch or the partial job as the error says'),
+        { ...(patched.at != null ? { at: patched.at } : {}), ...(patched.candidates ? { candidates: patched.candidates } : {}), ...(patched.job ? { job: patched.job } : {}) });
+      built.job = patched.path; built.partial = patched.partial;
+      built.argv.push(built.job);
+    }
+    // Every answer names the job it checked, ready for the next basedOn (and what a partial job merged); a refusal's
+    // patches come by index and by name.
+    const named = value => {
+      const identity = jobIdentity(built.job);
+      const answer = { ...value, ...(identity.jobSha256 ? { jobSha256: identity.jobSha256, nextBasedOn: identity.nextBasedOn } : {}), ...(built.partial ? { partial: built.partial } : {}) };
+      return answer.ok === false ? withNamedPatches(answer, built.job) : answer;
+    };
     // primeira-certa A3: a job that names its base (a fixture, job:<name>, a capture) is checked over it: the apply of the
     // CLI runs every phase (preflight, base, apply, Verify) on a disposable copy and refuses once with all of them. A job
     // without a base is read alone (check-job), and the answer says the Verify did not run.
@@ -438,12 +461,12 @@ export function registerSsamReference(server, deps = {}) {
       if (!verdict) return refusal(applied.timedOut ? 'TIMEOUT' : 'CLI_FAILED', firstLine((applied.stderr ?? []).at(-1) ?? 'the CLI gave no answer'), doctor(lane, 'check the lane CLI'));
       const ran = verdict.data;
       if (verdict.ok === true && ran?.accepted === true && ran?.isValid === true)
-        return { ok: true, lane, kind, job: built.job, valid: true, verifyRan: true, base: declaredBase(built.job), accepted: true, isValid: true, messages: ran.messages ?? null };
-      return refusal('JOB_INVALID', 'the job does not pass: every problem of every phase over its base, at once', again(lane, kind, built.job, 'fix every problem (apply the patches) and check the stored job again'),
+        return named({ ok: true, lane, kind, job: built.job, valid: true, verifyRan: true, base: declaredBase(built.job), accepted: true, isValid: true, messages: ran.messages ?? null });
+      return named(refusal('JOB_INVALID', 'the job does not pass: every problem of every phase over its base, at once', again(lane, kind, built.job, 'fix every problem (apply the patches) and check the stored job again'),
         { job: built.job, base: declaredBase(built.job), ...(verdict.code ? { refusalCode: verdict.code } : {}),
           errors: String(verdict.error ?? '').split(/\r?\n/).filter(Boolean).slice(0, 20).map(l => l.slice(0, 500)),
           ...refusalFields(verdict.problems ?? ran?.preflight?.problems, verdict.problems ? verdict : { verifyRan: true, phases: ['verify'] }),
-          ...(!verdict.problems && Array.isArray(ran?.policyMessages) ? { policyMessages: ran.policyMessages.slice(0, 20) } : {}) });
+          ...(!verdict.problems && Array.isArray(ran?.policyMessages) ? { policyMessages: ran.policyMessages.slice(0, 20) } : {}) }));
     }
     const run = await runAnvil(built.argv, { timeoutMs, cwd: root, ...(lane === 'odc' ? { cli } : {}) });
     const envelope = run.envelope;
@@ -454,9 +477,9 @@ export function registerSsamReference(server, deps = {}) {
     if (kind === 'check-job') {
       const alone = { verifyRan: false, verifyReason: hostedBase ? HOSTED_DECLARED_BASE_REASON
         : data?.verifyReason ?? 'only the job was read: it names no base, so the base check, the apply and the Verify did not run; give the job a base (a fixture, job:<name>) to check every phase' };
-      if (data?.valid === true) return { ok: true, lane, kind, job: built.job, ...sized(lane, data), ...alone };
-      return refusal('JOB_INVALID', 'the job does not pass the preflight', again(lane, kind, built.job, 'fix the errors and check the stored job again'),
-        { job: built.job, errors: (data?.errors ?? []).slice(0, 20), ...refusalFields(data?.problems, alone) });
+      if (data?.valid === true) return named({ ok: true, lane, kind, job: built.job, ...sized(lane, data), ...alone });
+      return named(refusal('JOB_INVALID', 'the job does not pass the preflight', again(lane, kind, built.job, 'fix the errors and check the stored job again'),
+        { job: built.job, errors: (data?.errors ?? []).slice(0, 20), ...refusalFields(data?.problems, alone) }));
     }
     if (kind === 'check-delivery') {
       const named = built.taskId ? { taskId: built.taskId, result: built.result } : {};
@@ -479,8 +502,9 @@ export function registerSsamReference(server, deps = {}) {
       + '{op} (a grammar such as logic, or a job verb such as create: its line) | {op:"native", type}; functions "Name" | {name}|{find}; ui-block "Block" | {catalog?, name}|{catalog?, find} (catalog: '
       + 'library name such as OutSystemsUI, default OutSystemsUI); types {assembly, filter, max?}; where-can "IInterface"; recipe "text" | '
       + '{find, ops?, max?} (ops without max: 20); verify-message "Id" | {name}|{find}; check-job: absolute path or the job object itself (stored under '
-      + '<lane>/jobs/inline); a job that names its base is checked over it, every phase at once as a delivery refuses (problems[] with phase, '
-      + 'pointer, fix, patch; verifyRan), one without base is read alone (verifyRan:false); check-delivery: {taskId} of an o11_deliver answer, or the absolute path of its result.json; an unknown query field answers the closest valid form; example "<id>" | {id}|{find}: a whole proven '
+      + '<lane>/jobs/inline), or {basedOn, patch?, job?} (a patch by index or by name, or a partial job, over an earlier job: answers name nextBasedOn); '
+      + 'a job that names its base is checked over it, every phase at once as a delivery refuses (problems[] with phase, '
+      + 'pointer, fix, patch, patchByName; verifyRan), one without base is read alone (verifyRan:false); check-delivery: {taskId} of an o11_deliver answer, or the absolute path of its result.json; an unknown query field answers the closest valid form; example "<id>" | {id}|{find}: a whole proven '
       + 'example by id (a job of the lane suite, e.g. "timer-action", or an html source, e.g. "html/visual/block-event.html"); '
       + 'rules "all" | "<section number or heading words>" | "padroes" | {doc?: "time"|"padroes", section?}: the team rules to read '
       + 'before generating or changing modules (how to work, standards, platform lessons; padroes: the 35 OutSystems padrões rules), '

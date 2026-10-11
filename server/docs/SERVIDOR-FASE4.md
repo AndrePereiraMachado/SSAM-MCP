@@ -192,3 +192,94 @@ Merge de `consolidacao/main` `04ac63b9` (mesma árvore de `publicar/main` `08916
   (83 de 83). O Studio ODC falso captura o app neutro com bytes reais (`odcModule.json`).
 - Do produto, sem correção aqui: numa entrega ODC que compilou, o campo `phases` da recusa (lista de fases) é trocado
   pelos tempos da faixa wp (`studio-write-lock.mjs`). Cada problema continua com a sua fase.
+
+## 8. 23º envio do produto (`servidor/fase4-23`)
+
+Ramo `servidor/fase4-23`, worktree `C:\Users\andre\SSAM-Hybrid-servidor-wt\fase4-23`, a partir de `servidor/fase4-22`
+(`1fbfa377`). Merge de `integracao/liberacao23-20261010` `cd7e4f11`: `consolidacao/main` `04ac63b9` mais as faixas do
+23º (patch por nome e job parcial, pacote de trabalho do discover com o Service Studio da faixa, índice rico com
+`ssam_map` search/uses). O protótipo do job compacto ficou fora (revertido em `cd7e4f11`). O servidor no ar continua na
+`fase4-22`: a troca é a da seção 2, pela integradora.
+
+Três conflitos:
+- `platforms/odc/facade/job-runner.mjs`: os imports dos dois lados (`withNamedPatches` e os do workspace hospedado).
+- `platforms/odc/facade/ssam-reference.mjs`: o `check-job` mantém o motivo hospedado da base declarada (22º) e toda
+  resposta passa por `named()` (`jobSha256`, `nextBasedOn`, `partial`, patches por nome).
+- `scripts/release/overlay/kernel/src/Anvil.Cli/Program.cs.patch`: recapturado com `stage.mjs edit`/`capture` (faixa W).
+  A forma de release de cada lado (o `Program.cs` com o próprio overlay) fez merge de 3 vias sem conflito. O merge de 3
+  vias dos `Program.cs` sem overlay é igual ao `Program.cs` do merge. `stage check --from-worktree`: 53 overlays, ok.
+
+Imagem: `docs/LEITURA-RAPIDA.md` (medidas do índice rico) e `kernel/AGENTS.md` citavam capturas de clientes
+(`hosted-image-denylist` falhou, 7 achados). As capturas viram O11-A/B/C e ODC-A/B, como no 22º, mais O11-D e O11-E para
+as duas fixtures do kernel. Os números são os mesmos.
+
+### O que muda no modo hospedado
+
+- **Patch por nome e job parcial** (`studio_deliver`, `o11_deliver`, `ssam_job`, `o11_job`): `/job` e `/basedOn/job` já
+  eram caminhos do workspace. Toda resposta com job traz `nextBasedOn` no `ws:`: o job que rodou (por exemplo
+  `ws:inbox/<job>.json`) e cada job corrigido em `ws:odc/.local/jobs/inline/` (ODC) ou `ws:o11/jobs/inline/` (O11). O
+  diário do patch também fica no workspace: `<ws>/odc/journal` (`studio_deliver`), `<ws>/odc/.local/journal`
+  (`ssam_job` e `ssam_reference` ODC) e `<ws>/o11/journal` (O11). Um `o11_deliver` entregue também traz o `nextBasedOn`
+  (`hosted-roots` atualizado).
+- **`ssam_reference check-job {basedOn, patch?, job?}`** (novo): o gate trata `/query/basedOn/job` e `/query/job` como
+  caminhos do workspace quando a consulta tem essa forma. Antes, um `basedOn.job` ou um job parcial com caminho absoluto
+  do servidor chegava ao handler (bastava o sha256 de um arquivo do servidor para copiá-lo para o workspace). Um job
+  parcial em texto JSON não é caminho. Um job inline (sem `basedOn` nem `patch`) é o próprio job. Com base declarada,
+  continua lendo só o job (motivo hospedado do 22º).
+- **`ssam_map` search/uses**: `target` aceita uma lista. O gate só resolvia `/target` como texto, então um caminho do
+  servidor dentro da lista (fixture da suíte, captura de outro cliente) chegava ao leitor. Agora `/target/*` é confinado
+  item a item. Nome de módulo fica como está, e um nome na lista exige o agente. O índice rico fica no índice de módulos
+  do servidor (`<servidor>` na resposta) e cada captura sai como `ws:`.
+- **`ssam_discover {app, packet:true}`**: o resumo do módulo é lido pelo leitor do kernel do servidor sobre a captura
+  `ws:` (ou capturada pelo agente, quando `app` é um nome). O gate tirava nomes de clientes de toda resposta do discover.
+  Um cliente cujo próprio módulo tem um desses nomes recebia `<cliente omitido>` na seção `module` do pacote, no corte que
+  a relê e em `next.deliver.arguments.module` (e, desde o 22º, no `context` de `app`). `scrubDiscover`
+  (`hosted/evidence.mjs`) mantém `app`, `context` e, no pacote, `module`, o corte dele e `next.deliver` como vieram da
+  captura do cliente. A evidência de terceiros continua fora. Os catálogos do dono (capacidades, exemplos, regras,
+  ferramentas) continuam sem nomes de clientes.
+- **Service Studio do discover O11 (W3)**: hospedado, o registro de conexão é o do cliente (`executor.o11Connection()`),
+  com `studioDir` do kernel do servidor. Depois vem `ANVIL_STUDIO_DIR`. O W3 lia também o registro do Windows
+  (`reg.exe query`) direto do `discovery.mjs`, e o `seam-guard` falhou: acesso à máquina fora da costura. A leitura foi
+  para `studio-locate.mjs` (localizador atrás da costura) e responde `null` numa chamada hospedada, sem rodar nada. Fora
+  dela (aquecimento, CLI local) nada muda. `hosted-roots` confere: nenhum `reg.exe` hospedado, Studio do registro de
+  conexão.
+- Nada novo recusa por ser hospedado: as quatro novidades funcionam sobre o `ws:` do cliente.
+- Divergência do produto: `discovery.mjs` e `studio-locate.mjs` diferem da `consolidacao/main` só nessa leitura do
+  registro. Um próximo merge que mexa no `o11StudioDir` deve manter a leitura em `studio-locate.mjs`.
+
+### Pacote do agente
+
+Não muda. Bridges ODC (`v48`) e O11 (completa e fina), gancho, `kernel/query-test`, `studio/shared`, `studio/engine`,
+`agent/` e `scripts/agent-pack.ps1` estão iguais aos da `servidor/fase4-22`. O `Builder.csproj` ganhou o
+`ModuleRichIndex.cs` (lado do servidor).
+
+### Testes desta entrega
+
+Build: `setup-dev.ps1 -Yes -NoUserEnv -SkipInstall -SkipMcp -SkipDoctor` (sem shutdown de worker e sem porta), com
+`ANVIL_WORKER=0`, `ANVIL_ODC_NO_WORKER=1` e os workers do `.ssam-workspace.json` trocados só localmente para
+19517/19537/19547.
+
+- `Anvil.Bridge.Thin.Tests` 110/110, `Bridge.Tests` 149/149, `Builder.Tests` 7/7.
+- `Anvil.Tests` e `Anvil.Tests.Odc` filtrados nas áreas do 23º (`ModuleRichIndex|ModuleDigest|ModuleIndex|ModelReading|PrimeiraCerta`):
+  47/47 e 26/26.
+- Linha do servidor (node): `agent-hub`, `hosted-*` (12 arquivos), `http-server`, `fase4-server`, `fase4-wp-load`,
+  `server-tokens`, `public-signature-drift` e `hosted-image-denylist`: 154/154.
+- Fachada dirigida da linha (seção 5: `executor`, `seam-guard`, `app-urls`, `pa3-*`, `kernel-delivery`,
+  `studio-create-app`, `studio-connect`, `lanes`, `pacote-laneE-responses`): 200/200 em 31 arquivos.
+- Fachada nas áreas do 23º e nos arquivos do merge (`module-rich`, `patch-por-nome`, `pacote-trabalho`,
+  `discover-studio`, `job-patch`, `job-runner`, `mcp`, `o11-cycle`, `pacote-laneB-job-patch`, `ssam-integration`,
+  `pa2-f4-queue`, `ssam-reference`, `module-map`, `module-digest`): 138/138.
+- `agent/tests`: 64/65. `ps1.test.mjs` falhou uma vez numa rodada com carga (o agente parou com código 1) e passou
+  sozinho 3 de 3 na cabeça: intermitente. A falha que fica é anterior ao 23º: `drift.test.mjs` ("o11-wire.mjs carries the frozen block of
+  o11-bridge.mjs") falha igual rodado sozinho numa worktree destacada de `servidor/fase4-22` `1fbfa377`. A cópia do
+  agente (`agent/lib/o11-wire.mjs`) ficou atrás dos `TIMEOUTS` de `o11-bridge.mjs` desde o 20º envio (`d7293c74`:
+  publish com 45 s de settle, `close_module`). Corrigir muda o pacote do agente: fica para a integradora.
+- Ponta a ponta com Studios falsos (`hosted-e2e-processes.mjs`): 96 de 96, os 83 do 22º mais o passo 9h.
+  - Patch por nome e job parcial no `studio_deliver` e no `o11_deliver`, com `nextBasedOn` no `ws:`. Os Studios só veem
+    capturas e o módulo O11 aberto não muda.
+  - `check-job {basedOn, patch}` hospedado. Um `basedOn` na pasta do servidor dá `PATH_OUTSIDE_WORKSPACE`.
+  - Pacote de trabalho nas duas faixas.
+  - `search` sobre captura `ws:` e `uses` sobre lista com captura e nome do módulo (capturado pelo relay e pelo agente,
+    só leitura). Um caminho do servidor na lista é recusado pelo gate.
+  - Rode com `ANVIL_ODC_FEATURES_DIR` apontando para o cache de features do ODC Studio da máquina (o perfil do dono no
+    teste é uma pasta temporária). Sem isso, as etapas ODC que compilam falham com "ODC Studio feature cache not found".

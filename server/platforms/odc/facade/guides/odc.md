@@ -75,7 +75,7 @@ While a merge or a publication runs, `studio_status {}` answers at once from tha
 | `MODULE_NOT_OPEN` | `studio_open {module}`, then the same call again; `openModules` lists what is open |
 | `MODULE_AMBIGUOUS` | the same call with one of `candidates`, the exact module name |
 | `NO_CHANGE` | none: the module, as it is now, already has what the job asks for |
-| `ODC_STRUCTURE_PUBLIC_IN_APP`, `ODC_REFRESH_MAXRECORDS`, `PREFLIGHT_REFUSED` | fix the job as each item of `problems` says (`fix`, `patch`), then the same `studio_deliver` |
+| `ODC_STRUCTURE_PUBLIC_IN_APP`, `ODC_REFRESH_MAXRECORDS`, `PREFLIGHT_REFUSED` | fix the job as each item of `problems` says (`fix`, `patch`, `patchByName`): the same `studio_deliver` with `patch` + `basedOn` (`nextBasedOn`), or only the changed actions in `job` + `basedOn`; never the whole job |
 | `PUBLISH_AUTHORIZATION_REQUIRED` | the same `studio_deliver` with `authorize` (the user's words naming the app) |
 | `PUBLISH_FAILED`, `PUBLISH_UNCERTAIN` | the `studio_publish` continuation after the fix the publish log names; never a new delivery |
 | `MERGE_UNCERTAIN` | none: read `divergences`, the receipts and the journal; never repeat the merge |

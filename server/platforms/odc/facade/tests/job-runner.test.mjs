@@ -288,7 +288,10 @@ test('jobTool with patch + basedOn runs a new job file, leaves the base intact a
 test('jobTool refuses a bad patch before anything runs and without guidance; a kernel failure names failedOp', async t => {
   const s = sandbox(t);
   const basedOn = { job: s.job, sha256: sha(fs.readFileSync(s.job)) };
-  assert.equal(jobToolRequest({ job: 'x.json', patch: RENAME, basedOn }).code, 'PATCH_INVALID');
+  // patch-por-nome: job + basedOn is a partial job (a patch may come with it); patch still needs basedOn
+  assert.equal(jobToolRequest({ job: 'x.json', patch: RENAME, basedOn }).ok, true);
+  assert.equal(jobToolRequest({ job: 'x.json', basedOn }).ok, true);
+  assert.equal(jobToolRequest({ job: 'x.json', patch: RENAME }).code, 'PATCH_INVALID');
   assert.match(jobToolRequest({ patch: RENAME }).error, /patch needs basedOn/);
   assert.match(jobToolRequest({ basedOn }).error, /basedOn goes with patch/);
   const guided = [];

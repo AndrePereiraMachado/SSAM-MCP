@@ -11,8 +11,9 @@ public static class SnapshotReadServer
     {
         var credential = BridgeAccess.ReadCredential();
         if (string.IsNullOrWhiteSpace(credential)) throw new InvalidOperationException("Local Hybrid authority is not initialized");
-        // A read request may also carry "index":"ensure" (SnapshotReadCache.EnsureIndex) or "digest":"ensure"
-        // (SnapshotReadCache.EnsureDigest, the module digest stored beside the index).
+        // A read request may also carry "index":"ensure" (SnapshotReadCache.EnsureIndex), "digest":"ensure"
+        // (SnapshotReadCache.EnsureDigest, the module digest stored beside the index) or "rich":"ensure" (EnsureRich, the
+        // rich index built only on request).
         var indexes = ModuleIndexStore.Default();
         var cache = new SnapshotReadCache(load, indexes);
         var lastRead = Stopwatch.GetTimestamp();

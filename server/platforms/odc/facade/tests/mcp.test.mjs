@@ -53,8 +53,14 @@ test('facade serves studio_* and odc_* tools on one stdio server', async () => {
     assert.deepEqual(map.inputSchema.properties.lane.enum, ['odc', 'o11']);
     assert.ok(map.inputSchema.properties.role.enum.includes('screen'));
     assert.match(client.getInstructions(), /To read an application, start with ssam_map \{lane, target, view:"digest"\}: the whole module as text, in pages.*read it once and work in context\. ssam_map \{lane, target\} lists every element with its @key.*studio_inspect only to go deeper into an @key \(path "@<key>" with expectedSourceSha256\)/);
-    assert.deepEqual(map.inputSchema.properties.view.enum, ['map', 'digest']);
+    assert.deepEqual(map.inputSchema.properties.view.enum, ['map', 'digest', 'search', 'uses']);
     assert.match(map.description, /view "digest": the whole module as compact text/);
+    // Cross-cutting questions in one call: search and uses over one capture or the list of an app's modules.
+    assert.match(map.description, /view "search" \{text, regex\?, property\?, kind\?, role\?\}.*view "uses" \{element: @key, Module\.Element/);
+    assert.ok(map.inputSchema.properties.target.anyOf.some(s => s.type === 'array'), 'target takes a list');
+    assert.ok(map.inputSchema.properties.expectedSourceSha256.anyOf.some(s => s.type === 'array'), 'one hash per target');
+    for (const field of ['text', 'regex', 'property', 'element']) assert.ok(map.inputSchema.properties[field], field);
+    assert.match(client.getInstructions(), /Cross-cutting questions .*: ONE ssam_map call, view "search" \{text\} or view "uses" \{element\}/);
     assert.match(tools.find(t => t.name === 'studio_inspect').description, /Start with ssam_map/);
     assert.ok(names.includes('ssam_debug'));
     assert.ok(!names.includes('studio_debug'));

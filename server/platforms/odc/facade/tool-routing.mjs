@@ -819,6 +819,9 @@ export async function discoverAll(input = {}, { discover = null, file = TOOLS_FI
     return { ...answer, error: 'intent is required (or expand/detail): categories lists the model capabilities, toolGroups every SSAM tool of this lane; call ssam_discover with an intent for the exact call (tool, verb and arguments)', toolGroups: groups, otherLaneTools };
   }
   const routed = compiled ? routeTools({ intent, lane }, compiled) : { tools: [] };
+  // packet:true (W1): discover()'s work packet as it is, sized by itself; the tools the words route to ride in its next
+  // section by name only (no fitting around it, so the same input keeps the same bytes).
+  if (input.packet === true) return run({ ...input, operations: routed.tools.length ? levelItems(routed.tools, 'names') : null });
   let answer;
   try { answer = await run(input); }
   catch (error) {

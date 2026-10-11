@@ -308,9 +308,12 @@ function validationErrors(v) {
     if (Array.isArray(candidate) && candidate.length) return candidate;
   return null;
 }
-// What a refused job delivery is corrected from (the job, its hash, the op that failed, the job it was patched from):
-// kept as given, top level first, else from the raw refusal.
-const CORRECTION = ['job', 'jobSha256', 'jobShape', 'failedOp', 'basedOn'];
+// What a refused job delivery is corrected from (the job, its hash, the op that failed, the job it was patched from, the
+// basedOn of the next call, what a partial job merged): kept as given, top level first, else from the raw refusal.
+const CORRECTION = ['job', 'jobSha256', 'jobShape', 'failedOp', 'basedOn', 'nextBasedOn', 'partial', 'patchByNameOmitted'];
+// What a delivered job keeps for the next call (lane "patch por nome"): the basedOn of the job it used and what a partial
+// job merged.
+const NEXT = ['nextBasedOn', 'partial'];
 // The shared fields of a deliver/publish answer (contract of the 2026-10-05 package, section 3.2): kept exactly on a
 // success. `result` "entregue e publicado" says the publish ran in the same call; `publish` carries its outcome;
 // `lastPublication`, `leftovers` (what the job declared to pass the gate) and `screenRoles` (who can open each screen the
@@ -387,6 +390,7 @@ export function compactDelivery(tool, args, value) {
       const published = value.result === 'entregue e publicado' || value.publish?.outcome === 'published';
       const module = typeof value.module === 'string' && value.module ? value.module : args?.module;
       return { ok: true, result: RESULTS.has(value.result) ? value.result : 'entregue', ...sharedFields(value), ...inputFields(value),
+        ...Object.fromEntries(NEXT.filter(key => value[key] != null).map(key => [key, value[key]])),
         ...(typeof value.manifest === 'string' && value.manifest ? { manifest: value.manifest } : {}),
         ...(!published && typeof module === 'string' && module ? { continuation: { tool: 'studio_publish', arguments: { module, ...(Number.isInteger(args?.pid) ? { pid: args.pid } : {}) },
           why: 'only when the person asks to publish: with the user\'s own words in authorize, or the standing grant of the app' } } : {}) };

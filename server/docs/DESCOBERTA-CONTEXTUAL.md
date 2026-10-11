@@ -128,6 +128,33 @@ headless (`ssam_job`) só quando a pessoa pede. Dropdown, instância de bloco (i
 `<slot>`) e listas aninhadas trazem na rota a forma de fragmento que o op html já compila. Testes:
 `tests/pacote-laneE-discover.test.mjs`.
 
+### 1.5 Pacote de trabalho (`packet:true`, 10/10/2026)
+
+O SSAM não controla como cada cliente abre e instrui seus agentes. Agente sem brief relê docs e o módulo (medido:
+1.428 leituras repetidas de docs; 29 a 82 leituras por agente antes de escrever). Por isso o brief vem do SSAM, numa
+chamada que qualquer agente faz: `ssam_discover {intent, lane, app, packet:true}` (CLI `ssam discover ... --packet`).
+As instruções do servidor, a descrição da ferramenta e o `AGENTS.md` dizem: agente ou subagente começa por ela.
+
+Resposta `ssam-packet/1` (`platforms/odc/facade/work-packet.mjs`), seções nesta ordem:
+- `module`: do resumo do módulo (`ssam-digest/1`, `moduleDigest` em `module-map.mjs`), os elementos que a intenção
+  nomeia: entidades, estáticas (10 primeiros registros), estruturas e a assinatura das actions. Nome escrito inteiro
+  (`Order_Create`) traz também o corpo da action, logo depois dela, e os vizinhos (o que ela chama, quem a chama, os
+  tipos da assinatura). Intenção de tela traz a tela nomeada. Nada nomeado: o panorama, na ordem do resumo. Sem `app`:
+  só uma nota.
+- `capabilities`: os matches diretos com operação, fatias do contrato, dependências, o que a faixa não tem e a gramática
+  dos passos citados. Elemento nomeado inteiro no módulo traz antes a capacidade do tipo dele (action de servidor:
+  `logic.server-action` e `logic.flow`).
+- `example`: o exemplo provado (`provenExample`, escolhido de novo com essas capacidades), senão o do primeiro match.
+- `rules`: até 16 regras do time (`docs/CONHECIMENTO-DO-TIME.md`) e do OutSystems padrões, escolhidas por tópico
+  (categorias dos matches fortes, palavras da intenção; tópico raro pesa mais) e por palavra de técnica (json, visible,
+  lambda...). Lição "O11:" só no O11; AR1 só no O11. Nunca o texto inteiro.
+- `next`: entregar com `o11_deliver`/`studio_deliver`; corrigir com `patch` + `basedOn`; as operações roteadas, por nome.
+
+Tamanho: até 38.912 bytes (o teto da resposta menos a folga do moldador); um `budgetBytes` menor vale. Cada seção tem
+uma parte da sala (`SHARES`); o que ela não usa passa para a seguinte, na ordem. Dentro da seção ficam os itens mais
+relevantes; o resto sai e é nomeado em `cuts`, com a chamada que o devolve. Mesma entrada, mesmos bytes: o pacote não
+traz tempo, cache nem data. Testes: `tests/pacote-trabalho.test.mjs`.
+
 ## 2. Arquitetura e o que foi reutilizado
 
 Nenhuma assinatura vive na descoberta. O índice é construído das fontes verificáveis e reutilizado por identidade:
@@ -192,6 +219,15 @@ host da suíte saem da **mesma** compilação; uma recompilação de um dos lado
 um DLL com hash diferente, e a descoberta passou corretamente a `historical` com `kernelSha256: result … vs current …`
 até o CLI ser recompilado a partir do mesmo `obj`. Procedimento: compilar o CLI e correr a suíte na mesma sessão de
 build (nesta ordem ou na inversa, sem compilações intermédias).
+
+Studio da faixa O11 (W3, 10/10/2026): `laneSources('o11')` usava por padrão a cópia antiga
+`Service Studio 11 - Anvil 4516` (11.55.87), e a suíte carimba com o Studio instalado (11.55.91): tudo saía histórico.
+Agora a pasta vem de `o11StudioDir` (`discovery.mjs`), primeira que tem `ServiceStudio.Framework.dll`: a conexão
+registrada (`readConnection`, como `laneEnvironment`), `ANVIL_STUDIO_DIR`, a instalação do registro (Uninstall
+"OutSystems Service Studio 11"), `%ProgramFiles%` e, por último, a cópia antiga. Todo processo do CLI da descoberta
+(`api`, `verify-catalog`, `api --op native`) roda com `sources.env`: a mesma pasta em `ANVIL_STUDIO_DIR` (no ODC,
+`ANVIL_ODC_STUDIO_DIR`). A proveniência não mudou: os carimbos são comparados como antes, com a pasta que o CLI carrega.
+`studioSource` diz de onde ela veio. Testes: `tests/discover-studio.test.mjs`.
 
 ### 2.4 Contexto da aplicação, busca, composição, orçamento
 

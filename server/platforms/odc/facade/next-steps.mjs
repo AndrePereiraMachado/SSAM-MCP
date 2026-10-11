@@ -106,7 +106,8 @@ function redeliver(tool, input, value) {
   const published = isObject(value.publish) && value.publish.outcome !== 'skipped';
   if (tool !== 'o11_deliver' || !str(input.module) || value.merged === true || DELIVERED.has(value.result) || published) return null;
   const fix = correction(value, input);
-  const how = fix.patch ? 'corrija só o que as mensagens apontam com patch sobre basedOn (o job desta recusa), sem reenviar o job inteiro'
+  const how = fix.patch ? 'corrija só o que as mensagens apontam com patch sobre basedOn (o job desta recusa; caminhos por nome: actions/<Ação>/steps/<as>/..., '
+    + 'ou os patchByName da recusa) ou mande em job só as actions alteradas com o mesmo basedOn, sem reenviar o job inteiro'
     : 'corrija o job pelas mensagens acima';
   const same = { module: input.module, ...fix, ...(Array.isArray(input.checks) && input.checks.length ? { checks: input.checks } : {}),
     ...(isObject(input.producers) ? { producers: input.producers } : {}),

@@ -37,7 +37,9 @@ Um job grande vai num arquivo gravado com a ferramenta Write, em UTF-8, e a cham
 
 O prompt de um subagente começa carregando as ferramentas SSAM por ToolSearch, numa busca só, antes do primeiro uso
 (`select:mcp__<servidor>__ssam_discover,mcp__<servidor>__ssam_map,...`). Sem isso o subagente não vê as ferramentas e
-cai para shell ou script.
+cai para shell ou script. A primeira chamada dele é `ssam_discover {intent, lane, app, packet:true}`: o pacote traz os
+elementos do módulo, o contrato, um exemplo provado, as regras que valem e o próximo passo. Ele trabalha a partir do
+pacote, sem reler docs nem o módulo.
 
 ### Mudança de fachada: quando reconectar o MCP
 

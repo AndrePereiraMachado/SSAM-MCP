@@ -86,6 +86,10 @@ public abstract class ModelReader<T> where T : class
     internal Func<object?>? PropertyOf(T node, string name) => FindProperty(node, name);
     internal IEnumerable<(string Name, Func<object?> Read)> PropertiesOf(T node) => Properties(node);
     internal string? ExpressionText(object value) => Expression(value);
+    // ModuleRichIndex reads the native graph (who refers to a node) and the parent chain of a consumer that is no row.
+    internal IEnumerable<T> ReferrersOf(T node) => Referrers(node);
+    internal T? ParentOf(T node) => Parent(node);
+    internal static bool IsNoise(string property) => Noise.Contains(property);
     // Indexes of a server entity when the adapter reads them outside Children (the O11 Model API lists no index child);
     // null means the digest reads the EntityIndex children.
     protected internal virtual IReadOnlyList<(string Name, bool Unique, bool Auto, string[] Attributes)>? Indexes(T node) => null;

@@ -126,7 +126,7 @@
         "operation": "both, first: ssam map [--lane odc|o11] <capture.oml|Module> [--kind K] [--name N] [--prefix P] [--role R] [--parent @key] [--offset N] [--max N] [--budget B] [--detail] / MCP ssam_map {lane, target, kind?, name?, prefix?, role?, parent?, key?, offset?, max?, budgetBytes?, includeDetail?, expectedSourceSha256?}; ODC: odc inspect <capture.oml> [Kind:Name/...|@key] [--kind K] [--name N] [--text T] [--usages] [--select p ...] [--budget N] / MCP studio_inspect {target, path?, kind?, name?, text?, select?, usages?, depth?, max?, budget?, expectedSourceSha256?}; O11: ssam inspect --lane o11 --oml <capture.oml> [--kind K] [--name N] [--text T] [--path P|@key] [--select ...] [--depth N] [--max N]; both: ssam discover --app <capture.oml>"
       },
       "contract": [],
-      "guidance": "To read an application, start with ssam map / ssam_map; then inspect subtrees, properties and usages by @key with the expected sha256 (the map's continuations carry both). ok=true means the query ran, not that the answer is complete: check notices, kindObserved, searchComplete and omissions. Kinds are interface names without the leading I (MobileScreen, ServerAction...). Reuse the same capture between pages; after any Studio change take a new capture (keys are not valid across captures). A module name as target snapshots the live module first (ODC); in isolated work use .oml captures only.",
+      "guidance": "To read an application, start with ssam map / ssam_map; then inspect subtrees, properties and usages by @key with the expected sha256 (the map's continuations carry both). ok=true means the query ran, not that the answer is complete: check notices, kindObserved, searchComplete and omissions. Kinds are interface names without the leading I (MobileScreen, ServerAction...). Reuse the same capture between pages; after any Studio change take a new capture (keys are not valid across captures). Cross-cutting questions (where a site property, a variable or a text is used, who calls an action, the impact of a change, usages across the modules of an app) are ONE ssam_map call: view search {text, regex?, property?, kind?, role?} or view uses {element}, with target one capture or the list of the app's modules. A module name as target snapshots the live module first (ODC); in isolated work use .oml captures only.",
       "platforms": {
         "odc": {
           "proofs": ["examples/cap-read-inspect-minimal", "examples/cap-read-inspect-typical"],
@@ -141,7 +141,7 @@
               "origin": "platforms/odc/facade/reader-client.mjs:128-129; platforms/odc/facade/lib.mjs:31-37, 152-157, 278, 285"
             },
             {
-              "text": "The module map covers the reader-visible elements (names, kinds, roles, parents, data types of parameters, attributes and variables), not text search, property values, usages or other modules; a missing index is built once by the lane reader (index ensure) and a stale or corrupt one is never served.",
+              "text": "The module map (view map) covers the reader-visible elements (names, kinds, roles, parents, data types of parameters, attributes and variables); text search, property values, usages and other modules are the views search and uses, over the rich index of each capture, built only when one of them asks (rich ensure). A missing index is built once by the lane reader (index ensure) and a stale or corrupt one is never served.",
               "origin": "platforms/odc/facade/module-map.mjs (moduleMap, loadIndex); docs/LEITURA-RAPIDA.md (Mapa do módulo)"
             }
           ]
@@ -155,7 +155,7 @@
               "origin": "platforms/odc/facade/kernel-reading.mjs:10-52; platforms/odc/facade/lanes.mjs:116-121"
             },
             {
-              "text": "The module map covers the reader-visible elements (names, kinds, roles, parents, data types of parameters, attributes and variables), not text search, property values, usages or other modules; a missing index is built once by the lane reader (index ensure) and a stale or corrupt one is never served.",
+              "text": "The module map (view map) covers the reader-visible elements (names, kinds, roles, parents, data types of parameters, attributes and variables); text search, property values, usages and other modules are the views search and uses, over the rich index of each capture, built only when one of them asks (rich ensure). A missing index is built once by the lane reader (index ensure) and a stale or corrupt one is never served.",
               "origin": "platforms/odc/facade/module-map.mjs (moduleMap, loadIndex); docs/LEITURA-RAPIDA.md (Mapa do módulo)"
             }
           ]

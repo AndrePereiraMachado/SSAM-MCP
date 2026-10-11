@@ -13,7 +13,9 @@
 // of that file, never text lines. A job may be a path (absolute or relative to the kernel root, as before) or the job
 // itself (object or array of ops), written to <lane local>/jobs/inline/<uuid>.json first, or patch + basedOn: a JSON
 // Patch over an earlier job applied into a new file there (job-patch.mjs; the base never changes, the provenance goes
-// to <lane local>/journal/job-patch.jsonl). jobTool answers the job it ran with its sha256, for the next patch.
+// to <lane local>/journal/job-patch.jsonl), paths by index or by name; or a partial job + basedOn (only the changed or new
+// elements, merged by name into the earlier job). jobTool answers the job it ran with its sha256 and nextBasedOn, for
+// the next patch, and a refusal's patches also by name (patchByName).
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -22,7 +24,7 @@ import { o11LaneOf } from './o11-lane.mjs';
 import { readConnection } from './studio-session.mjs';
 import { createAnvilRunner } from './anvil-cli.mjs';
 import { createWorkerClient, workerDisabled } from './anvil-worker.mjs';
-import { resolvePatchedJob, jobIdentity, failedOpOf } from './job-patch.mjs';
+import { resolvePatchedJob, jobIdentity, failedOpOf, withNamedPatches } from './job-patch.mjs';
 import { seamFields, usesWorkspace, workspacePath } from './executor.mjs';
 import { highWarningsOf } from './delivery-warnings.mjs';
 import { refusalFields, diagnosisOf } from './refusal-problems.mjs';
@@ -142,7 +144,8 @@ export function summarize({ lane, job, out, resultFile, saved, note, quiet = fal
     if (x.details?.length) value.detailsTotal = x.details.length;
     const warnings = x.preflight?.warnings;
     if (Array.isArray(warnings) && warnings.length) value.preflightWarnings = warnings.length;
-    // jobTool adds jobSha256 and jobShape (about 100 bytes) after this.
+    // jobTool adds jobSha256 and jobShape (about 100 bytes) after this, and nextBasedOn (the job path and its sha256 again,
+    // ready for the next basedOn).
     return successOf(value, results, SUCCESS_BYTES - 120, x.results?.length ?? 0);
   }
   // A refusal of the job (I2): every problem of every phase, from the CLI's error envelope or from the apply's own
@@ -178,12 +181,12 @@ export async function runJob(request = {}, deps = {}) {
 
   const abs = p => path.resolve(root, String(p));
   const laneLocal = lane === 'odc' ? odcLocal : o11.local;
-  let job;
+  let job; let partial;
   if (request.patch != null || request.basedOn != null) {
     const patched = resolvePatchedJob({ job: request.job, patch: request.patch, basedOn: request.basedOn }, { root, inlineDir: path.join(laneLocal, 'jobs', 'inline'),
       work: lane === 'o11' ? o11.work : null, journalDir: path.join(laneLocal, 'journal'), tool: lane === 'odc' ? 'ssam_job' : 'o11_job', uuid: deps.uuid ?? randomUUID });
     if (!patched.ok) return { ...patched, lane };
-    job = patched.path;
+    job = patched.path; partial = patched.partial;
   } else if (typeof request.job === 'string' && request.job.trim()) job = abs(request.job);
   else if (request.job && typeof request.job === 'object') {
     const folder = path.join(lane === 'odc' ? odcLocal : o11.local, 'jobs', 'inline');
@@ -273,7 +276,9 @@ export async function runJob(request = {}, deps = {}) {
   if (receipts.length) saved.capturedProducers = receipts;
   const resultFile = withSuffix(out, '.result.json');
   fs.writeFileSync(resultFile, JSON.stringify(saved, null, 2), 'utf8');
-  return summarize({ lane, job, out, resultFile, saved, note, quiet: request.quiet === true });
+  const value = summarize({ lane, job, out, resultFile, saved, note, quiet: request.quiet === true });
+  // A partial job: what it replaced and added in the earlier job (the whole job is `job`).
+  return partial ? { ...value, partial } : value;
 }
 
 // The MCP inputs of o11_job / ssam_job, checked as ssam.mjs producerArgs checks them: binding names, absolute
@@ -284,11 +289,13 @@ export function jobToolRequest(input = {}) {
   if (unknown.length) return refusal('unknown-argument', 'Unknown argument(s) ' + unknown.join(', '));
   const lane = input.lane ?? 'o11';
   if (!JOB_LANES.includes(lane)) return refusal('unknown-lane', `Unknown lane ${lane}; lanes: ${JOB_LANES.join(', ')}`);
-  // patch + basedOn stand for job (job-patch.mjs checks the patch and the base).
+  // patch + basedOn stand for job; job + basedOn is a partial job (only the changed or new elements), with a patch applied
+  // after it when given (job-patch.mjs checks the patch, the partial job and the base).
   const patching = input.patch != null || input.basedOn != null;
-  if (patching && input.job != null) return refusal('PATCH_INVALID', 'patch replaces job: send the whole job without patch, or patch with basedOn and no job');
-  if (patching && (input.patch == null || input.basedOn == null))
-    return refusal('PATCH_INVALID', input.patch == null ? 'basedOn goes with patch' : 'patch needs basedOn: {job, sha256} as an answer returned them (job, jobSha256), or {taskId} of an O11 delivery');
+  if (input.patch != null && input.basedOn == null)
+    return refusal('PATCH_INVALID', 'patch needs basedOn: {job, sha256} as an answer returned them (nextBasedOn), or {taskId} of an O11 delivery');
+  if (input.basedOn != null && input.patch == null && input.job == null)
+    return refusal('PATCH_INVALID', 'basedOn goes with patch, or with job: a partial job with only the changed or new elements');
   const producers = input.producers ?? {};
   if (typeof producers !== 'object' || Array.isArray(producers)) return refusal('invalid-producers', 'producers is {Name: absolute path of a frozen producer .oml or .avsig}');
   for (const [name, file] of Object.entries(producers)) {
@@ -307,14 +314,15 @@ export function jobToolRequest(input = {}) {
     ...(patching ? { patch: input.patch, basedOn: input.basedOn } : {}) } };
 }
 
-// The job file that ran, with its sha256 (the next call patches it with basedOn {job, sha256}; jobShape 'array' when its
-// patch paths are /<i>/...) and, on a failure, the op the kernel refused when its own error names it (job-patch.mjs
-// failedOpOf).
+// The job file that ran, with its sha256 and nextBasedOn {job, sha256} (the next call patches or completes it with that
+// basedOn; jobShape 'array' when its patch paths are /<i>/...) and, on a failure, the op the kernel refused when its own
+// error names it (job-patch.mjs failedOpOf) and each patch of the problems also by name (patchByName).
 function withJobIdentity(result) {
   if (!result || typeof result !== 'object' || typeof result.job !== 'string') return result;
-  const { jobSha256, jobShape } = jobIdentity(result.job);
+  const { jobSha256, jobShape, nextBasedOn } = jobIdentity(result.job);
   const failedOp = result.ok ? null : failedOpOf(result.error, result.job);
-  return { ...result, ...(jobSha256 ? { jobSha256 } : {}), ...(jobShape ? { jobShape } : {}), ...(failedOp != null ? { failedOp } : {}) };
+  const named = { ...result, ...(jobSha256 ? { jobSha256 } : {}), ...(jobShape ? { jobShape } : {}), ...(nextBasedOn ? { nextBasedOn } : {}), ...(failedOp != null ? { failedOp } : {}) };
+  return result.ok ? named : withNamedPatches(named, result.job);
 }
 
 // o11_job / ssam_job: the checked request, the run, and on failure the catalog guidance (job-guidance.mjs) for the

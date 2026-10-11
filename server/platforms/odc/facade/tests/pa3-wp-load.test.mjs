@@ -59,14 +59,14 @@ test('wp load: 8 deliveries over 4 modules of one Studio, parallel against seria
   const calls = [...MODULES, ...MODULES];
   const serial = await bench(t);
   let started = Date.now();
-  for (const module of calls) assert.equal((await serial.deliver(module)).content[0].text, 'entregue');
+  for (const module of calls) assert.equal(JSON.parse((await serial.deliver(module)).content[0].text).result, 'entregue');
   const serialMs = Date.now() - started;
 
   const parallel = await bench(t);
   started = Date.now();
   const answers = await Promise.all(calls.map(module => parallel.deliver(module)));
   const parallelMs = Date.now() - started;
-  for (const answer of answers) assert.equal(answer.content[0].text, 'entregue', JSON.stringify(answer));
+  for (const answer of answers) assert.equal(JSON.parse(answer.content[0].text).result, 'entregue', JSON.stringify(answer));
 
   const merges = parallel.log.merges;
   for (let i = 0; i < merges.length; i++) for (let j = i + 1; j < merges.length; j++)

@@ -97,6 +97,32 @@ function dropScrubbedExamples(original, shown) {
   });
 }
 
+// An ssam_discover answer with `app` also carries the customer's own module, read from the customer's capture: the
+// application context (context) and, in the work packet of the 23rd release (packet:true, ssam-packet/1), the module
+// section, the cut that reads it again and the module the next delivery names (servidor/fase4-23). Those parts keep the
+// customer's own names, as every other answer does: only the owner's catalogs (capabilities, examples, rules, tools) lose
+// client names. The third-party evidence goes out of all of them.
+const PACKET = 'ssam-packet/1';
+export function scrubDiscover(result, jobs = thirdPartyJobs()) {
+  const shown = scrubEvidence(result, jobs, { clientText: true });
+  const original = result?.structuredContent;
+  if (!isObject(original) || !isObject(shown.structuredContent) || (original.app === undefined && original.context === undefined)) return shown;
+  const own = scrubEvidence(result, jobs).structuredContent;
+  const out = shown.structuredContent;
+  for (const key of ['app', 'context']) if (Object.hasOwn(original, key)) out[key] = own[key];
+  if (original.schemaVersion === PACKET) {
+    if (Object.hasOwn(original, 'module')) out.module = own.module;
+    if (isObject(original.next) && Object.hasOwn(original.next, 'deliver') && isObject(out.next)) out.next = { ...out.next, deliver: own.next?.deliver ?? null };
+    if (Array.isArray(original.cuts) && Array.isArray(out.cuts) && Array.isArray(own.cuts) && own.cuts.length === out.cuts.length)
+      out.cuts = out.cuts.map((cut, i) => (cut?.section === 'module' ? own.cuts[i] : cut));
+  }
+  if (Array.isArray(shown.content)) {
+    const originalText = JSON.stringify(original);
+    shown.content = shown.content.map((item, i) => (result.content[i]?.type === 'text' && result.content[i].text === originalText ? { ...item, text: JSON.stringify(out) } : item));
+  }
+  return shown;
+}
+
 // scrubEvidence(result, jobs, {clientText}) -> a new tool result. In structuredContent, at any depth: a list item that
 // is evidence of a job of the set (an object whose job is in the set or whose path, base or fixture names the capture,
 // or the job name itself) leaves the list; such an object as a field value becomes null; every other text naming the

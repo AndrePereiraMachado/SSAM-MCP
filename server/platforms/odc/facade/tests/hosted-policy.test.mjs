@@ -178,6 +178,42 @@ test('relative inputs land in ws:<lane>/, relative outputs in ws:odc/lab/ (ODC) 
     assert.equal(codeOf(await h.gate('o11_deliver')({ module: 'M', ...args })), 'PATH_OUTSIDE_WORKSPACE', JSON.stringify(args));
 });
 
+test('23rd release: a list of ssam_map targets and the check-job {basedOn, patch, job} files are confined; a module name in the list needs the agent', async () => {
+  const h = harness();
+  const ws = (...p) => path.join(h.workspace, ...p);
+  await h.gate('ssam_map')({ lane: 'odc', view: 'uses', element: 'Orders.GetOrders', target: ['ws:odc/snapshots/A.oml', 'snapshots/B.oml', 'Orders'] });
+  assert.deepEqual(h.calls.at(-1).args.target, [ws('odc', 'snapshots', 'A.oml'), ws('odc', 'snapshots', 'B.oml'), 'Orders'], 'captures resolved, a module name kept');
+  await h.gate('ssam_map')({ lane: 'o11', view: 'search', text: 'Site.', target: 'snapshots/M.oml' });
+  assert.equal(h.calls.at(-1).args.target, ws('o11', 'snapshots', 'M.oml'), 'a single target as before');
+  const before = h.calls.length;
+  for (const target of [['ws:odc/snapshots/A.oml', path.join(anvilRoot, 'tests', 'fixtures', 'odc', 'blank-crossdevice.oml')], ['C:\\Windows\\x.oml'], ['ws:state/x.oml'], ['../../x.oml']])
+    assert.equal(codeOf(await h.gate('ssam_map')({ lane: 'odc', view: 'search', text: 'x', target })), 'PATH_OUTSIDE_WORKSPACE', JSON.stringify(target));
+  assert.equal(h.calls.length, before, 'no server capture reaches the handler');
+  const offline = harness({ connected: false });
+  assert.notEqual((await offline.gate('ssam_map')({ lane: 'odc', view: 'uses', element: 'x', target: ['ws:odc/a.oml', 'lab/b.oml'] })).isError, true, 'captures only: no agent');
+  assert.equal(codeOf(await offline.gate('ssam_map')({ lane: 'odc', view: 'uses', element: 'x', target: ['ws:odc/a.oml', 'Orders'] })), 'AGENT_NOT_CONNECTED');
+  assert.equal(agentNeed({ when: 'module-target', arg: 'target' }, { target: ['C:\\x\\M.oml', 'ws:odc/N.oml'] }), 'never');
+  assert.equal(agentNeed({ when: 'module-target', arg: 'target' }, { target: ['C:\\x\\M.oml', 'Orders'] }), 'always');
+
+  await h.gate('ssam_reference')({ lane: 'odc', kind: 'check-job', query: { basedOn: { job: 'ws:odc/.local/jobs/inline/a.json', sha256: SHA }, patch: [] } });
+  assert.equal(h.calls.at(-1).args.query.basedOn.job, ws('odc', '.local', 'jobs', 'inline', 'a.json'));
+  await h.gate('ssam_reference')({ lane: 'o11', kind: 'check-job', query: { basedOn: { job: 'jobs/a.json', sha256: SHA }, job: 'jobs/partial.json' } });
+  assert.deepEqual(h.calls.at(-1).args.query, { basedOn: { job: ws('o11', 'jobs', 'a.json'), sha256: SHA }, job: ws('o11', 'jobs', 'partial.json') });
+  const text = '{"ops":[{"op":"logic","data":{"actions":[{"name":"A"}]}}]}';
+  await h.gate('ssam_reference')({ lane: 'odc', kind: 'check-job', query: { basedOn: { job: 'ws:odc/a.json', sha256: SHA }, job: text } });
+  assert.equal(h.calls.at(-1).args.query.job, text, 'a partial job as JSON text is not a path');
+  const inline = { ops: [], job: 'not a path of this tool' };
+  await h.gate('ssam_reference')({ lane: 'odc', kind: 'check-job', query: inline });
+  assert.deepEqual(h.calls.at(-1).args.query, inline, 'an inline job is the job itself');
+  await h.gate('ssam_reference')({ lane: 'odc', kind: 'api', query: { basedOn: { job: 'x.json' } } });
+  assert.deepEqual(h.calls.at(-1).args.query, { basedOn: { job: 'x.json' } }, 'only the job checks read files');
+  const count = h.calls.length;
+  for (const query of [{ basedOn: { job: path.join(workspaceRoot, '.local', 'server', 'tokens.json'), sha256: SHA }, patch: [] },
+    { basedOn: { job: 'ws:odc/a.json', sha256: SHA }, job: 'C:\\Users\\other\\partial.json' }, { basedOn: { job: '..\\..\\state\\x.json', sha256: SHA }, patch: [] }])
+    assert.equal(codeOf(await h.gate('ssam_reference')({ lane: 'odc', kind: 'check-job', query })), 'PATH_OUTSIDE_WORKSPACE', JSON.stringify(query));
+  assert.equal(h.calls.length, count);
+});
+
 test('agent:inbox/<file> is brought through the executor; agent:odc|o11 only when missing; a bad agent: from the LLM never blames the agent', async () => {
   const h = harness();
   await h.gate('studio_open')({ module: 'Mine', localOml: 'agent:inbox/Mine.oml' });
@@ -215,24 +251,6 @@ test('answers show ws: in the object and in the JSON text; other server paths be
   assert.equal(plain.string(h.workspace + '-other\\x'), '<servidor>', 'a sibling folder is not the workspace');
   const pretty = plain.result({ content: [{ type: 'text', text: JSON.stringify({ file }, null, 2) }] });
   assert.equal(pretty.content[0].text, JSON.stringify({ file: 'ws:odc/lab/01-x/result.json' }));
-});
-
-test('Linux paths (server/Dockerfile): the workspace is ws:<rel> without a leading "/", and a short root like HOME=/tmp hides only real /tmp paths', () => {
-  const linux = presenter({ workspace: '/data/server/customers/tok_x/ws', serverRoots: ['/app', '/tmp', '/data/server'], pathApi: path.posix });
-  // Seen in the Docker Desktop rehearsal before the fix: "/ws:odc/snapshots/..." and "/<servidor>".
-  assert.equal(linux.string('/data/server/customers/tok_x/ws/odc/snapshots/Orders-AB.oml'), 'ws:odc/snapshots/Orders-AB.oml');
-  assert.equal(linux.string('/data/server/customers/tok_x/ws/o11/tmp/thin-bridge/1.oml'), 'ws:o11/tmp/thin-bridge/1.oml', 'the workspace tmp is not the server /tmp');
-  assert.equal(linux.string('wrote /data/server/customers/tok_x/ws/inbox/b.json and /app/kernel/.local/cli/anvil.dll (done)'), 'wrote ws:inbox/b.json and <servidor> (done)');
-  assert.equal(linux.string('Path outside the workspace of this account: "/tmp/thin-bridge/2.oml"'), 'Path outside the workspace of this account: "<servidor>"');
-  assert.equal(linux.string('/tmp'), '<servidor>');
-  assert.equal(linux.string('/data/server/tokens.json'), '<servidor>');
-  assert.equal(linux.string('/data/server/customers/tok_x/ws-other/x'), '<servidor>', 'a sibling folder is not the workspace');
-  // A path that only contains a root's name further in is not that root.
-  assert.equal(linux.string('C:\\SSAM-Agent\\tmp\\x.json'), 'C:\\SSAM-Agent\\tmp\\x.json');
-  assert.equal(linux.string('ws:o11/tmp/a.oml'), 'ws:o11/tmp/a.oml');
-  assert.equal(linux.string('/home/user/apps/x'), '/home/user/apps/x', '/app is not /apps');
-  assert.equal(linux.string(JSON.stringify({ a: '/data/server/customers/tok_x/ws/odc/lab/r.json', b: '/tmp/z' }).slice(1, -1)), '"a":"ws:odc/lab/r.json","b":"<servidor>"');
-  assert.deepEqual(linux.value({ path: '/data/server/customers/tok_x/ws/o11/snapshots/H.oml', home: '/tmp/.dotnet' }), { path: 'ws:o11/snapshots/H.oml', home: '<servidor>' });
 });
 
 test('the module index store and the readers\' copy are server paths wherever their roots are (ssam_map index.file, the 22nd digest store.file)', () => {
@@ -281,6 +299,34 @@ test('only an ssam_discover answer (the owner\'s catalogs) loses client names; o
     const shown = (await h.gate(name, async () => reply(value))({ lane: 'odc', job: { ops: [] } })).structuredContent;
     assert.deepEqual(shown, value, name);
   }
+});
+
+test('23rd release: the work packet of ssam_discover keeps the customer\'s own module (and the context of app); the owner\'s catalogs in it still lose client names', async () => {
+  const h = harness();
+  const capture = path.join(h.workspace, 'odc', 'snapshots', 'FloodQuotes-' + 'a'.repeat(64) + '.oml');
+  const read = { tool: 'ssam_map', arguments: { lane: 'odc', target: capture, view: 'digest', expectedSourceSha256: SHA } };
+  const packet = { ok: true, schemaVersion: 'ssam-packet/1', lane: 'odc', intent: 'mudar GetQuote', app: capture,
+    module: { name: 'FloodQuotes', file: capture, sourceSha256: SHA, items: [{ group: 'actions', name: 'GetFloodQuotes', text: 'GetFloodQuotes(QuoteId) calls FloodServices.ExistingQuote' }] },
+    capabilities: { items: [{ id: 'logic.action', why: ['GetFloodQuotes (action of the module)'], summary: 'proven on the WrightFlood capture' }] },
+    example: { job: 'examples/x', note: 'medido no WrightFlood' }, rules: { items: [{ rule: 'FloodQuotes DEV only' }] },
+    next: { deliver: { tool: 'studio_deliver', arguments: { feature: '<Feature>', module: 'FloodQuotes' }, why: 'one call' }, fix: { how: 'patch' } },
+    cuts: [{ section: 'module', left: { actions: 3 }, recover: read }, { section: 'rules', left: { rules: 1 }, recover: { tool: 'ssam_reference', arguments: { kind: 'rules', query: 'FloodQuotes' } } }] };
+  const shown = (await h.gate('ssam_discover', async () => reply(packet))({ intent: 'mudar GetQuote', lane: 'odc', app: 'ws:odc/snapshots/FloodQuotes-' + 'a'.repeat(64) + '.oml', packet: true }));
+  const value = shown.structuredContent;
+  const wsCapture = 'ws:odc/snapshots/FloodQuotes-' + 'a'.repeat(64) + '.oml';
+  assert.equal(value.app, wsCapture);
+  assert.deepEqual(value.module, { ...packet.module, file: wsCapture }, 'the customer\'s own module, presented');
+  assert.equal(value.next.deliver.arguments.module, 'FloodQuotes', 'the next delivery names the customer\'s module');
+  assert.equal(value.cuts[0].recover.arguments.target, wsCapture, 'the cut that reads the module again');
+  assert.equal(value.capabilities.items[0].summary, 'proven on the <cliente omitido> capture', 'the owner\'s catalogs still lose client names');
+  assert.equal(value.example.note, 'medido no <cliente omitido>');
+  assert.equal(value.rules.items[0].rule, '<cliente omitido> DEV only');
+  assert.equal(value.cuts[1].recover.arguments.query, '<cliente omitido>');
+  assert.equal(shown.content[0].text, JSON.stringify(value), 'the JSON text is the shown value');
+  const context = { ok: true, matches: [{ id: 'logic.action', title: 'WrightFlood action' }], context: { ok: true, target: capture, reads: [{ name: 'FloodQuotes.GetQuote' }] } };
+  const withApp = (await h.gate('ssam_discover', async () => reply(context))({ intent: 'x', lane: 'odc', app: wsCapture })).structuredContent;
+  assert.deepEqual(withApp.context, { ok: true, target: wsCapture, reads: [{ name: 'FloodQuotes.GetQuote' }] });
+  assert.equal(withApp.matches[0].title, '<cliente omitido> action');
 });
 
 test('createSsamServer({hosted}): every tool and ssam_friction go through the gate inside run(context); the doctor shows the agent', async t => {

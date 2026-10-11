@@ -28,13 +28,17 @@ async function liveTools() {
 }
 
 // 6.4 grammar: JSON Pointer segments; a named segment must be in `properties` (of any anyOf/oneOf alternative) or the
-// parent must be a record (additionalProperties); '*' needs `items` or `additionalProperties` in the parent.
+// parent must be a record (additionalProperties); '*' needs `items` or `additionalProperties` in the parent. A value of
+// any shape (an empty schema, e.g. the z.unknown() values of ssam_reference's query record) takes any segment below it:
+// check-job {basedOn: {job}} (servidor/fase4-23).
 const alternatives = node => !node || typeof node !== 'object' ? [] : [node, ...[...(node.anyOf ?? []), ...(node.oneOf ?? [])].flatMap(alternatives)];
+const anyValue = node => Object.keys(node).every(key => ['description', 'title', '$schema'].includes(key));
 function pointerExists(schema, pointer) {
   let nodes = [schema];
   for (const segment of pointer.split('/').slice(1)) {
     const next = [];
     for (const node of nodes.flatMap(alternatives)) {
+      if (node !== schema && anyValue(node)) { next.push(node); continue; }
       const record = node.additionalProperties && typeof node.additionalProperties === 'object' ? node.additionalProperties : node.additionalProperties === true ? {} : null;
       if (segment === '*') { if (node.items) next.push(node.items); if (record) next.push(record); }
       else if (node.properties?.[segment]) next.push(node.properties[segment]);
@@ -92,6 +96,11 @@ test('every in/out pointer exists in the tool schema under the 6.4 grammar', asy
     for (const pointer of [...entry.paths.in, ...entry.paths.out]) if (!pointerExists(names.get(name).inputSchema, pointer)) missing.push(name + ' ' + pointer);
   assert.deepEqual(missing, []);
   for (const name of ['o11_deliver', 'o11_job', 'ssam_job', 'studio_deliver']) assert.ok(tools[name].paths.in.includes('/basedOn/job'), name + ' confines /basedOn/job');
+  // servidor/fase4-23: check-job over basedOn (patch by name, partial job) and the list target of ssam_map search/uses.
+  assert.deepEqual(tools.ssam_reference.paths.in, ['/query', '/query/basedOn/job', '/query/job'], 'ssam_reference confines the job files of check-job');
+  assert.deepEqual(tools.ssam_map.paths.in, ['/target', '/target/*'], 'ssam_map confines each target of a list');
+  assert.equal(pointerExists(names.get('ssam_map').inputSchema, '/target/*'), true, 'a list target');
+  assert.equal(pointerExists(names.get('studio_open').inputSchema, '/module/x'), false, 'a string takes no segment');
   assert.equal(pointerExists(names.get('o11_studio').inputSchema, '/args/path'), true, 'a record parent');
   assert.equal(pointerExists(names.get('studio_command').inputSchema, '/args/*'), true, 'items');
   assert.equal(pointerExists(names.get('studio_open').inputSchema, '/nope'), false);

@@ -120,7 +120,7 @@ public sealed class ModuleIndex
     // Roles are informative (counts, facade summaries); queries match kinds through answers, never through roles.
     // Order matters, measured on both Model APIs: every local action answers IFlow, screens and blocks answer
     // IFlowNode, O11 ServerEntity answers IStaticEntity, the ODC Expression widget answers IExpression.
-    private static int RoleOf(string kind, HashSet<string> answers)
+    internal static int RoleOf(string kind, HashSet<string> answers)
     {
         bool Is(params string[] interfaces) => interfaces.Any(i => answers.Contains("I" + i));
         bool Ends(string suffix) => kind.EndsWith(suffix, StringComparison.Ordinal);
@@ -337,9 +337,10 @@ public sealed class ModuleIndex
 }
 
 // One folder of indexes per lane: <root>\v1\<lane>\<sha256>.<adapter>.json, and beside each the module digest
-// <sha256>.<adapter>.digest.json (ModuleDigest: valid for the same schema, extractor, lane, adapter and sha256). A cache:
-// written atomically, trimmed to the budget by oldest write (indexes and digests together), and any file that fails
-// validation is a miss.
+// <sha256>.<adapter>.digest.json (ModuleDigest: valid for the same schema, extractor, lane, adapter and sha256) and, when
+// asked for, the rich index <sha256>.<adapter>.rich.json (ModuleRichIndex, the same rule). A cache: written atomically,
+// trimmed to the budget by oldest write (indexes, digests and rich indexes together), and any file that fails validation
+// is a miss.
 public sealed class ModuleIndexStore(string root, string lane, string adapter, long budget = 512L * 1024 * 1024)
 {
     public string Root => root;
@@ -394,6 +395,25 @@ public sealed class ModuleIndexStore(string root, string lane, string adapter, l
         if (digest.Lane != lane) throw new ArgumentException("Module digest belongs to the " + digest.Lane + " lane");
         var file = DigestPathOf(digest.SourceSha256);
         DurableJson.WriteBytes(file, digest.ToJson(adapter));
+        Trim(file);
+        return file;
+    }
+
+    // The rich index (ModuleRichIndex, built only on request) beside them: <sha256>.<adapter>.rich.json.
+    public string RichPathOf(string sourceSha256) => Path.Combine(root, "v1", lane, sourceSha256.ToLowerInvariant() + "." + adapter + ".rich.json");
+
+    public ModuleRichIndex? LoadRich(string sourceSha256)
+    {
+        var file = RichPathOf(sourceSha256);
+        try { return File.Exists(file) ? ModuleRichIndex.Parse(File.ReadAllBytes(file), lane, adapter, sourceSha256) : null; }
+        catch { return null; }
+    }
+
+    public string SaveRich(ModuleRichIndex rich)
+    {
+        if (rich.Lane != lane) throw new ArgumentException("Rich module index belongs to the " + rich.Lane + " lane");
+        var file = RichPathOf(rich.SourceSha256);
+        DurableJson.WriteBytes(file, rich.ToJson(adapter));
         Trim(file);
         return file;
     }

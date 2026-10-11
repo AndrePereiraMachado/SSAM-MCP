@@ -173,7 +173,7 @@ test('an inline job becomes a file under the lane jobs folder and that file is w
   const { call, close } = await serve(box.deps); t.after(close);
   const job = { ops: [{ op: 'set', target: 'ServerAction:SaveOrder', property: 'Description', value: 'Saves' }] };
   const result = await call('o11_deliver', { module: 'Orders', job, authorize: WORDS });
-  assert.equal(result.content[0].text, 'entregue');
+  assert.equal(result.structuredContent.result, 'entregue');
   const inline = path.join(box.local, 'jobs', 'inline');
   const files = fs.readdirSync(inline);
   assert.equal(files.length, 1); assert.match(files[0], /^[0-9a-f-]{36}\.json$/);
@@ -204,13 +204,14 @@ test('deliver gets the exact argv: module, job, checks, producers, captures, env
   assert.equal(box.runAnvil.calls.length, 1);
 });
 
-test('a delivered task answers only "entregue"', async t => {
+test('a delivered task answers "entregue" and the job it used, ready for the next basedOn (nextBasedOn)', async t => {
   const box = setup(t);
   const { call, close } = await serve(box.deps); t.after(close);
   const result = await call('o11_deliver', { module: 'Orders', job: box.job, authorize: WORDS });
   assert.equal(result.isError, undefined);
-  assert.deepEqual(result.content, [{ type: 'text', text: 'entregue' }]);
-  assert.deepEqual(result.structuredContent, { ok: true, result: 'entregue' });
+  const value = { ok: true, result: 'entregue', nextBasedOn: { job: box.job, sha256: sha256(fs.readFileSync(box.job)) } };
+  assert.deepEqual(result.structuredContent, value);
+  assert.deepEqual(result.content, [{ type: 'text', text: JSON.stringify(value) }]);
 });
 
 test('validation errors come back with stage and taskId, and nothing is delivered', async t => {
@@ -375,7 +376,7 @@ test('until=apply snapshots through the bridge, applies on that capture and neve
     deps: { bridge: o11Bridge({ port: bridge.port, authorization: 'TESTKEY' }) } });
   const { call, close } = await serve(box.deps); t.after(close);
   const valid = await call('o11_deliver', { module: 'Orders', job: box.job, until: 'apply', expectedEnvironment: 'personal-x.outsystemscloud.com', authorize: WORDS });
-  assert.deepEqual(valid.structuredContent, { ok: true, valid: true });
+  assert.deepEqual(valid.structuredContent, { ok: true, valid: true, nextBasedOn: { job: box.job, sha256: sha256(fs.readFileSync(box.job)) } });
   assert.deepEqual(bridge.seen.map(r => r.method), ['open_module', 'get_active_module', 'snapshot_module']);
   assert.deepEqual(bridge.seen[0].params, { name: 'Orders', environment: 'personal-x.outsystemscloud.com' });
   const snapshot = bridge.seen[2].params.path;
@@ -417,7 +418,7 @@ test('a module label with spaces reaches the one open module with the same lette
   const box = setup(t, { deps: { bridge: o11Bridge({ port: bridge.port, authorization: 'TESTKEY' }) } });
   const { call, close } = await serve(box.deps); t.after(close);
   const delivered = await call('o11_deliver', { module: 'Orders CS', job: box.job, authorize: WORDS });
-  assert.equal(delivered.content[0].text, 'entregue');
+  assert.equal(delivered.structuredContent.result, 'entregue');
   assert.deepEqual(box.runAnvil.calls[0].args.slice(0, 3), ['deliver', '--module', 'Orders_CS']);
   // Besides the name, a delivered module reads only its last publication (section 3.2 lastPublication, publish_log).
   const studio = () => bridge.seen.map(r => r.method).filter(m => m !== 'publish_log');
@@ -437,7 +438,7 @@ test('resume becomes deliver --resume <id> --work --port and keeps the task requ
   const id = '3c4d5e6f708192a3b4c5d6e7f8091a2b';
   const { call, close } = await serve(box.deps); t.after(close);
   const resumed = await call('o11_deliver', { resume: id, authorize: WORDS });
-  assert.equal(resumed.content[0].text, 'entregue');
+  assert.equal(resumed.structuredContent.result, 'entregue');
   assert.deepEqual(box.runAnvil.calls[0].args, ['deliver', '--resume', id, '--work', box.work, '--port', '45999', '--close-opened-tab']);
   const replaced = (await call('o11_deliver', { resume: id, job: box.job, authorize: WORDS })).structuredContent;
   assert.equal(replaced.code, 'RESUME_FIXED');
@@ -534,7 +535,7 @@ test('closePrevious closes the refused task first, then delivers the corrected j
   writeKernelTask(box.work, REFUSED_ID, refusedAfterMerge);
   const { call, close } = await serve(box.deps); t.after(close);
   const result = await call('o11_deliver', { module: 'Orders', job: box.job, checks: ['SaveOrder'], closePrevious: REFUSED_ID, authorize: WORDS });
-  assert.deepEqual(result.content, [{ type: 'text', text: 'entregue' }]);
+  assert.equal(result.structuredContent.result, 'entregue');
   assert.deepEqual(box.runAnvil.calls.map(c => c.args), [
     ['deliver', '--close', REFUSED_ID, '--reason', 'superseded by a corrected job', '--work', box.work, '--port', '45999'],
     ['deliver', '--module', 'Orders', '--job', box.job, '--checks', 'SaveOrder', '--work', box.work, '--port', '45999', '--close-opened-tab']]);
@@ -543,7 +544,7 @@ test('closePrevious closes the refused task first, then delivers the corrected j
   // a refused task that never reached the module holds nothing: no close, only the delivery
   const early = 'dddddddddddddddddddddddddddddddd';
   writeKernelTask(box.work, early, { writeState: 'not-sent', stage: 'open', error: 'open_module is blocked: dialog' });
-  assert.equal((await call('o11_deliver', { module: 'Orders', job: box.job, closePrevious: early, authorize: WORDS })).content[0].text, 'entregue');
+  assert.equal((await call('o11_deliver', { module: 'Orders', job: box.job, closePrevious: early, authorize: WORDS })).structuredContent.result, 'entregue');
   assert.deepEqual(box.runAnvil.calls.slice(2).map(c => c.args[1]), ['--module']);
 });
 
@@ -643,7 +644,7 @@ test('refused, then corrected with a patch in one call: deliver gets a new file 
   const { call, close } = await serve(box.deps); t.after(close);
   const refused = (await call('o11_deliver', { module: 'Orders', job: box.job, authorize: WORDS })).structuredContent;
   const patched = await call('o11_deliver', { module: 'Orders', patch: RENAME, basedOn: { job: refused.job, sha256: refused.jobSha256 }, checks: ['SaveOrder2'], authorize: WORDS });
-  assert.deepEqual(patched.content, [{ type: 'text', text: 'entregue' }]);
+  assert.equal(patched.structuredContent.result, 'entregue');
   const first = jobUsed(box.runAnvil.calls[1]);
   assert.equal(path.dirname(first), INLINE(box)); assert.notEqual(first, box.job);
   assert.deepEqual(box.runAnvil.calls[1].args, ['deliver', '--module', 'Orders', '--job', first, '--checks', 'SaveOrder2', '--work', box.work, '--port', '45999', '--close-opened-tab']);
@@ -667,7 +668,7 @@ test('closePrevious + patch on basedOn.taskId: the refused task is closed first,
   writeKernelTask(box.work, REFUSED_ID, { ...refusedAfterMerge, request: { Module: 'Orders', JobPath: box.job }, sources: [{ path: box.job, sha256: sha256(fs.readFileSync(box.job)) }] });
   const { call, close } = await serve(box.deps); t.after(close);
   const result = await call('o11_deliver', { patch: RENAME, basedOn: { taskId: REFUSED_ID }, closePrevious: REFUSED_ID, authorize: WORDS });
-  assert.deepEqual(result.content, [{ type: 'text', text: 'entregue' }], result.content[0].text);
+  assert.equal(result.structuredContent.result, 'entregue', result.content[0].text);
   const used = jobUsed(box.runAnvil.calls[1]);
   assert.deepEqual(box.runAnvil.calls.map(c => c.args), [
     ['deliver', '--close', REFUSED_ID, '--reason', 'superseded by a corrected job', '--work', box.work, '--port', '45999'],
@@ -690,7 +691,8 @@ test('an uncertain base task is never patched (resume), and a bad patch, base or
   const code = async args => (await call('o11_deliver', { authorize: WORDS, ...args })).structuredContent;
   assert.equal((await code({ resume: HELD, patch: RENAME, basedOn })).code, 'RESUME_FIXED');
   assert.equal((await code({ close: { taskId: HELD, reason: 'x' }, patch: RENAME, basedOn })).code, 'CLOSE_ALONE');
-  assert.equal((await code({ module: 'Orders', job: box.job, patch: RENAME, basedOn })).code, 'PATCH_INVALID');
+  // job + basedOn is a partial job now (patch-por-nome); a partial job that is not one (a composite) is refused before anything runs
+  assert.equal((await code({ module: 'Orders', job: { jobs: ['job:a'] }, patch: RENAME, basedOn })).code, 'PARTIAL_INVALID');
   assert.match((await code({ module: 'Orders', patch: RENAME })).error, /patch needs basedOn/);
   assert.match((await code({ module: 'Orders', basedOn })).error, /basedOn goes with patch/);
   assert.equal((await code({ patch: RENAME, basedOn })).code, 'MODULE_AND_JOB_REQUIRED');

@@ -211,7 +211,7 @@ test('through the ssam server: a second o11_deliver on the same Studio waits for
   await sleep(150);
   assert.equal(delivers, 1, 'the second delivery waits its turn: never two on the Studio at once, never refused');
   release();
-  assert.equal((await first).content[0].text, 'entregue');
+  assert.equal(JSON.parse((await first).content[0].text).result, 'entregue');
   const after = await second;
   assert.notEqual(after.isError, true, JSON.stringify(after));
   const texts = after.content.map(c => c.text).join('\n');

@@ -35,7 +35,7 @@ import { registerPreviewTools } from './preview/mcp.mjs';
 import { registerSsamReference } from './ssam-reference.mjs';
 import { registerSsamEvidence } from './ssam-evidence.mjs';
 import { jobTool } from './job-runner.mjs';
-import { resolvePatchedJob, jobIdentity, failedOpOf, patchJsonSchema, basedOnJsonSchema } from './job-patch.mjs';
+import { resolvePatchedJob, jobIdentity, failedOpOf, patchJsonSchema, basedOnJsonSchema, withNamedPatches } from './job-patch.mjs';
 import { createWorkerFirstRunner } from './anvil-worker.mjs';
 import { shapeToolResult } from './responses.mjs';
 import { withStudioWriteLock, busyToolResult, isWrite, isPhased, declaresPhases, PHASES_META, processAlive } from './studio-write-lock.mjs';
@@ -689,18 +689,24 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
       + 'Start with ssam_doctor (which Studio is open in each lane); ssam_connect (no lane) attaches every Studio already open in one call. '
       + 'Every SSAM request starts with ssam_discover {intent, lane}: for an operation its `tools` names the exact tool, verb and '
       + 'arguments; for a model change `matches` gives the capabilities, contract and a proven example; an empty intent lists every '
-      + 'tool by group. Ask it (then ssam_reference) before reading source code or docs. A tool served by both lanes takes `lane`. '
+      + 'tool by group. Ask it (then ssam_reference) before reading source code or docs. An agent or subagent starts its task with '
+      + 'ssam_discover {intent, lane, app, packet:true} (module elements, contracts, a proven example, team rules, next step) and '
+      + 'works from that packet, without reading docs again. A tool served by both lanes takes `lane`. '
       + 'To read an application, start with ssam_map {lane, target, view:"digest"}: the whole module as text in pages (page 1: '
       + 'entities, structures and every action with its signature, calls and callers); read it once and work in context. '
       + 'ssam_map {lane, target} lists every element with its @key; inspect only to go deeper into an @key with the expected sha256 '
       + '(o11_inspect or studio_inspect, path:"@<key>", expectedSourceSha256), as the continuations say. '
+      + 'Cross-cutting questions (where an element, a site property or a text is used, who calls an action, the impact of a change, '
+      + 'uses across modules): ONE ssam_map call, view "search" {text} or view "uses" {element}, target the capture or the list of '
+      + 'the app\'s modules, instead of inspecting element by element. '
       + 'Evidence files (inspect out, result.json, receipts, journals): ssam_evidence, never a script. '
       + 'Independent READS together in one message; WRITES to the same Studio wait their turn in a queue (STUDIO_WRITE_QUEUE_TIMEOUT '
       + 'only after a bounded wait). To change a module, ONE call: o11_deliver (O11) or studio_deliver (ODC), the '
       + 'job inline; it validates inside the call and refuses before any change, so no proof and no preview come first; without '
       + 'errors it answers only "entregue". A refusal comes ONCE with every problem of every phase (problems[]: phase, pointer, fix, '
-      + 'patch when certain) and names its job (job, jobSha256, failedOp): correct all of them in one patch + basedOn '
-      + '{job, sha256}, never by resending the whole job (on O11 also closePrevious with the refused taskId). ssam_job/o11_job '
+      + 'patch when certain, also by name in patchByName) and names its job (nextBasedOn {job, sha256}, failedOp): correct all of them in one '
+      + 'patch + basedOn (paths by name: actions/<Action>/steps/<as>/...) or send only the changed actions as a partial job + basedOn; '
+      + 'never rewrite the whole job (on O11 also closePrevious with the refused taskId). ssam_job/o11_job '
       + 'prove a job on a fixture only when the person asks; a failed ssam_job/o11_job (or a job delivery refused at build) '
       + 'answers with `discovery`. Studio state, waits, dialogs and sign-in: o11_studio (O11), studio_status/studio_wait/'
       + 'studio_dismiss_dialog (ODC); they answer once the state holds: never sleep or poll. Long operations: ssam_task. '
@@ -888,13 +894,16 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
       // An ssam_* tool with its own `lane` argument (ssam_discover, ssam_map) serves both lanes: no lane prefix.
       const ownLane = tool.name.startsWith('ssam_') && tool.inputSchema?.properties?.lane != null;
       // studio_deliver also takes the job inline (the ops themselves), like o11_deliver: one call, no file to write; and
-      // patch + basedOn {job, sha256} (the job and jobSha256 of a refusal) instead of the whole job again (job-patch.mjs).
+      // patch + basedOn {job, sha256} (the nextBasedOn of an answer) instead of the whole job again, paths by index or by
+      // name, or job + basedOn: a partial job with only the changed or new elements (job-patch.mjs).
       const inlineJob = tool.name === 'studio_deliver' && schema?.properties?.job;
       const exposed = inlineJob ? { ...schema, properties: { ...schema.properties, job: { anyOf: [{ type: 'string' }, { type: 'object' }, { type: 'array' }],
-        description: 'Path of the job JSON (absolute or relative to the SSAM-Hybrid-ODC root), or the job itself ({ops:[...]} or an array of ops).' },
+        description: 'Path of the job JSON (absolute or relative to the SSAM-Hybrid-ODC root), or the job itself ({ops:[...]} or an array of ops). '
+          + 'With basedOn: a partial job, only the changed or new actions/entities/ops (same name replaces, new name is added).' },
         patch: patchJsonSchema, basedOn: basedOnJsonSchema } } : schema;
       const description = (needsLane ? '[o11 | odc] ' : ownLane ? '' : '[' + laneName + '] ') + (tool.description ?? '')
-        + (inlineJob ? ' A refusal names its job (job, jobSha256, failedOp when the kernel names the op): correct it with patch + basedOn {job, sha256}, never the whole job again.' : '');
+        + (inlineJob ? ' Every answer with a job names nextBasedOn {job, sha256}; a refusal also job, jobSha256, failedOp and each patch by name (patchByName). '
+          + 'Correct it with patch + basedOn (paths by index or by name: actions/<Action>/steps/<as>/...), or with only the changed actions as a partial job + basedOn; never rewrite the whole job.' : '');
       // A tool with its own byte budget answers within the ceiling: an omitted budget is the ceiling (less the shaper's room).
       const budgeted = schema?.properties?.budgetBytes != null;
       server.registerTool(proxyName(tool.name, laneName), {
@@ -908,14 +917,16 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
         if (!client) return { content: [{ type: 'text', text: JSON.stringify({ ok: false, error: 'Unknown lane ' + chosen }) }], isError: true };
         let forwarded = needsLane ? rest : { ...args };
         if (budgeted && forwarded.budgetBytes == null) forwarded = { ...forwarded, budgetBytes: budgetCeiling(maxBytes) };
+        let partial = null;
         if (inlineJob && (forwarded.patch != null || forwarded.basedOn != null)) {
           // The corrected job is a new file under <odcRoot>/.local/jobs/inline; the base never changes. The ODC server
-          // is strict: patch/basedOn never travel to it.
+          // is strict: patch/basedOn never travel to it (a partial job travels as the whole job it completes).
           const { patch, basedOn, ...others } = forwarded;
           const patched = resolvePatchedJob({ job: others.job, patch, basedOn }, { root: odcLaneRoot, inlineDir: path.join(odcLaneRoot, '.local', 'jobs', 'inline'),
             journalDir: patchJournal, tool: 'studio_deliver' });
           if (!patched.ok) return reply(patched);
           forwarded = { ...others, job: patched.path };
+          partial = patched.partial ?? null;
         }
         if (inlineJob && forwarded.job != null && typeof forwarded.job !== 'string') forwarded = { ...forwarded, job: writeInlineJob(odcLaneRoot, forwarded.job) };
         // SDK 2 (installed @modelcontextprotocol/client 2.0.0): callTool(params, options).
@@ -925,14 +936,21 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
           return reply(relayFailure(error, { tool: tool.name, args: forwarded, signal: ctx?.mcpReq?.signal, timeoutMs: relayTimeoutMs,
             statusTool: listedNames.has('studio_status') ? 'studio_status' : 'ssam_doctor' }));
         }
-        // A refusal names the job it ran (job, jobSha256, failedOp when the kernel names the op) for the next patch; an
-        // uncertain one never does (it is settled from its receipts, never corrected).
+        // A refusal names the job it ran (job, jobSha256, nextBasedOn, failedOp when the kernel names the op, each patch also
+        // by name) for the next patch; a success names nextBasedOn; an uncertain one never does (it is settled from its
+        // receipts, never corrected).
         const value = result?.structuredContent;
-        if (inlineJob && result?.isError && typeof forwarded.job === 'string' && value && typeof value === 'object' && !Array.isArray(value) && value.outcome !== 'uncertain') {
+        if (inlineJob && typeof forwarded.job === 'string' && value && typeof value === 'object' && !Array.isArray(value) && value.outcome !== 'uncertain') {
           const file = path.resolve(odcLaneRoot, forwarded.job);
-          const failedOp = failedOpOf(value.error ?? value.refusal?.error, file);
-          const named = { ...value, ...jobIdentity(file), ...(failedOp != null ? { failedOp } : {}) };
-          return { ...result, structuredContent: named, content: [{ type: 'text', text: JSON.stringify(named) }] };
+          let named;
+          if (result?.isError) {
+            const failedOp = failedOpOf(value.error ?? value.refusal?.error, file);
+            named = withNamedPatches({ ...value, ...jobIdentity(file), ...(failedOp != null ? { failedOp } : {}), ...(partial ? { partial } : {}) }, file);
+          } else if (value.ok === true) {
+            const { nextBasedOn } = jobIdentity(file);
+            if (nextBasedOn || partial) named = { ...value, ...(nextBasedOn ? { nextBasedOn } : {}), ...(partial ? { partial } : {}) };
+          }
+          if (named) return { ...result, structuredContent: named, content: [{ type: 'text', text: JSON.stringify(named) }] };
         }
         return result;
       });
@@ -949,7 +967,8 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
     + 'It proves a job; it delivers nothing to the Studio (o11_deliver does, validating inside the call: deliver directly, and prove here only when the person asks). '
     + 'A refused run answers ONCE with every problem of every phase over the base (problems[]: phase, op, pointer, code, fix, patch when certain; verifyRan). A failed run also returns `discovery` (contract of the failing '
     + 'op, catalog capability of its element, proven refusal, next step). job is a path or the job itself (inline ops); '
-    + 'patch + basedOn {job, sha256} (the job and jobSha256 of an answer) corrects it without resending it. '
+    + 'patch (paths by index or by name: actions/<Action>/steps/<as>/...) + basedOn {job, sha256} (the nextBasedOn of an answer) corrects it, '
+    + 'or job with only the changed or new elements + basedOn (a partial job); never resend the whole job. '
     + 'producers binds {Name: absolute .oml/.avsig path}; captureProducers ["Name" | "Name=Producer", e.g. "System=(System)"] '
     + 'first reads each producer\'s current signature read-only through the logged-in Studio and binds the .avsig.',
     inputSchema: fromJsonSchema({ type: 'object',
@@ -962,7 +981,8 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
   server.registerTool('ssam_job', { title: 'Run a verb job on a fixture, in either lane', description:
     'Applies a job to a fixture and returns ok/isValid and the '
     + 'messages. lane o11 (default) uses the Anvil fixtures; lane odc uses tests/jobs-odc over the ODC fixture. job is a path or the job itself (inline ops); '
-    + 'patch + basedOn {job, sha256} (the job and jobSha256 of an answer) corrects it without resending it. '
+    + 'patch (paths by index or by name: actions/<Action>/steps/<as>/...) + basedOn {job, sha256} (the nextBasedOn of an answer) corrects it, '
+    + 'or job with only the changed or new elements + basedOn (a partial job); never resend the whole job. '
     + 'Only when the person asks for a headless proof: a normal change goes straight to o11_deliver (O11) or studio_deliver with job/module/feature/owners/changes (ODC), '
     + 'which validate inside the call and refuse before any change; studio_manifest prepares an existing candidate. '
     + 'A refused run answers ONCE with every problem of every phase over the base (problems[]: phase, op, pointer, code, fix, patch when certain, identical ones grouped; verifyRan). '

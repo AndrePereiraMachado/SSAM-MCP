@@ -93,6 +93,10 @@ Entrega O11 (`Delivery.cs`): o preflight puro nao recusa mais antes do Studio; a
 captura (modulo nao abre, bridge falha) a recusa e a do preflight, com `verifyRan:false` e o motivo.
 Provas: `pa4-pc-four-phases.json` e `pa4-pc-isolated-action.json` (`tests/jobs-negative` e `tests/jobs-odc-negative`),
 `tests/Anvil.Tests/PrimeiraCertaTests.cs` e `tests/Anvil.Tests/PrimeiraCertaCompleteTests.cs`.
+Correcao por nome (fachada, `platforms/odc/facade/job-patch.mjs`; o kernel segue recebendo o job inteiro): o patch aceita nomes
+no caminho (`actions/<Acao>/steps/<as>/...`; identidade = primeiro texto entre name, as, key, id, label; digitos sao indice) e
+`job` parcial + `basedOn` (mesmo nome substitui, nome novo entra; remover so por patch). A fachada gera o job completo, e o
+`patch` numerico do kernel volta tambem como `patchByName`. Testes: `platforms/odc/facade/tests/patch-por-nome.test.mjs`.
 
 SQL (`SqlPreflight.cs`, chamado pelo `check-job` e pelo apply): todo SQL do job (logic `get` com `sql:true`, `ISQLNode`
 criado no job, `set ... Statement` num no existente) e lido antes do Studio e recusado com `op #N (SQL <onde>, line L)`
@@ -142,6 +146,18 @@ novo que o resumo nao desenha aparece em `not rendered` da cobertura: desenhe-o,
 valor de um dono desenhado (`ValueKinds`). Os ultimos registros de um bloco de estatica sao `DigestEntry.Records`: mantenha-os
 no fim, uma linha cada. Testes: `tests/Shared/ModuleDigestTests.cs` (as duas faixas) e
 `platforms/odc/facade/tests/module-digest.test.mjs` (paginas, cache, `view`, captura fixada pelo sha).
+
+Indice rico (`Kernel/ModuleRichIndex.cs`, `ssam-rich-index/1`; uso em `docs/LEITURA-RAPIDA.md`, `ssam_map` views `search`
+e `uses`): por elemento, as propriedades com valor, o texto de toda expressao, os argumentos das chamadas e as referencias
+(por propriedade e pelo grafo nativo `ReferrersOf`). Lido so por `ModelReader`; O11, ODC e o builder compilam o mesmo
+arquivo. So sob pedido: `{"rich":"ensure"}` no leitor residente (`SnapshotReadCache.EnsureRich`) ou a CLI fria
+`anvil rich-index` / `anvil-odc rich-index`; nada mais o constroi. Fica ao lado do indice
+(`ModuleIndexStore.SaveRich`, `<sha256>.<adaptador>.rich.json`). Identidade entre modulos: a `GlobalKey`, gravada so
+quando nao e a do proprio modulo (assinaturas sob uma `Reference`). Manutencao: toda mudanca do arquivo sobe
+`ModuleRichIndex.Extractor` e `RICH_EXTRACTOR` de `platforms/odc/facade/module-rich.mjs` (o teste da fachada confere);
+propriedade nova que so pesa (contabilidade do modelo, descritor) entra em `Skipped`, medida nas fixtures. Testes:
+`tests/Shared/ModuleRichIndexTests.cs` (as duas faixas; um consumidor -> o seu produtor, as duas fixtures O11 do kernel, pela `GlobalKey`) e
+`platforms/odc/facade/tests/module-rich.test.mjs` (search, uses dentro e entre modulos, construcao sob pedido, paginas).
 
 ## Dados: uma spec, uma entrega e uma prova
 
