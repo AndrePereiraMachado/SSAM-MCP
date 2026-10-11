@@ -238,7 +238,10 @@ export function hostedSpawnEnv(lane) {
   const cwd = path.join(context.workspace, lane);
   const tmp = path.join(cwd, 'tmp');
   fs.mkdirSync(tmp, { recursive: true });
-  env.TEMP = tmp; env.TMP = tmp;
+  // TMPDIR is the temp folder of .NET on Linux (Path.GetTempPath; TEMP/TMP only on Windows). Without it the kernel of the
+  // Linux image (server/Dockerfile) wrote to /tmp, shared by every customer and outside the workspace: the thin O11
+  // bridge's snapshot_module path (ThinBridge.cs, <temp>/thin-bridge/<guid>.oml) was refused PATH_OUTSIDE_WORKSPACE.
+  env.TEMP = tmp; env.TMP = tmp; env.TMPDIR = tmp;
   // Also for ODC: without the variable the kernel's BridgeAccess would read the owner's HKCU value.
   env.ANVIL_AUTHORITY_DIR = path.join(context.workspace, 'state', 'relay-authority');
   if (lane === 'o11') {

@@ -142,6 +142,7 @@ test('hostedSpawnEnv is a closed list: the workspace, the relay, and nothing els
       assert.equal(cwd, path.join(none.workspace, 'odc'));
       assert.equal(env.SSAM_HYBRID_ODC_ROOT, path.join(none.workspace, 'odc'));
       assert.equal(env.TEMP, path.join(none.workspace, 'odc', 'tmp')); assert.equal(env.TMP, env.TEMP); assert.ok(fs.existsSync(env.TEMP));
+      assert.equal(env.TMPDIR, env.TEMP, 'TMPDIR: the temp folder of .NET on Linux');
       assert.equal(env.ANVIL_AUTHORITY_DIR, path.join(none.workspace, 'state', 'relay-authority'));
       assert.equal(env.ANVIL_ODC_FEATURES_DIR, 'C:\\server\\features');
       assert.equal(env.ANVIL_BRIDGE_PORT, undefined);
@@ -156,7 +157,8 @@ test('hostedSpawnEnv is a closed list: the workspace, the relay, and nothing els
       assert.equal(env.ANVIL_LANE, 'ss4');
       assert.equal(env.ANVIL_BRIDGE_FLAVOR, 'thin', 'set here, never copied from this process');
       assert.equal(env.ANVIL_BRIDGE_TIMEOUT_SECONDS, '600');
-      const allowed = new Set([...SPAWN_ALLOWED, 'TEMP', 'TMP', 'ANVIL_AUTHORITY_DIR', 'ANVIL_BRIDGE_PORT', 'ANVIL_STUDIO_DIR', 'ANVIL_LANE',
+      assert.equal(env.TMPDIR, path.join(context.workspace, 'o11', 'tmp'));
+      const allowed = new Set([...SPAWN_ALLOWED, 'TEMP', 'TMP', 'TMPDIR', 'ANVIL_AUTHORITY_DIR', 'ANVIL_BRIDGE_PORT', 'ANVIL_STUDIO_DIR', 'ANVIL_LANE',
         'ANVIL_BRIDGE_FLAVOR', 'ANVIL_BRIDGE_TIMEOUT_SECONDS']);
       assert.deepEqual(Object.keys(env).filter(k => !allowed.has(k)), []);
       for (const leaked of ['ANVIL_CSHARP_RUNTIME_REGISTRATION', 'SSAM_HYBRID_ODC_TENANT', 'ODC_CLIENT_SECRET', 'SSAM_HYBRID_ODC_ROOT']) assert.equal(env[leaked], undefined, leaked);
