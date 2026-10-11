@@ -665,33 +665,41 @@ Para provar a pilha numa máquina de desenvolvimento sem tocar em portas em uso:
   máquina.
 - Nunca use as portas 80, 443 ou 7310 de uma máquina que já roda outro servidor SSAM.
 
-### Resultado do ensaio de 2026-10-11
+### Resultado dos ensaios de 2026-10-11
 
-Imagem `ssam-server:prod-20261011-2761cb8`, Docker Desktop 29.8.2 (linux/amd64), `.env` do ensaio com 3 CPUs, 6 GB e
-2 workers. Tudo pelo HTTPS do Caddy em `127.0.0.1:28443`.
+Docker Desktop 29.8.2 (linux/amd64), `.env` do ensaio com 3 CPUs, 6 GB e 2 workers, o override acima e o `Caddyfile`
+deste repositório. Tudo pelo HTTPS do Caddy em `127.0.0.1:28443`, com a raiz local do Caddy em `NODE_EXTRA_CA_CERTS` (TLS
+verificado, sem `-k` nos clientes Node). Segundo ensaio (depois da revisão), imagens `ssam-server:prod-20261011-83f936c`
+(22º envio) e `ssam-server:prod-20261011-8ae231d` (23º envio, ver a seção 14).
 
 | Item | Resultado |
 | --- | --- |
-| Build sem cache de camadas (bases e cache do NuGet já locais) | 92 s. Rebuild de uma mudança de código: 6 a 40 s. |
-| Tamanho | 1,13 GB descompactada; cerca de 295 MB comprimida (`docker save`). |
-| Subida | `healthy` em 8 a 10 s; aquecimento de 1 a 2 min depois de um container novo (7.3). |
-| Processo e disco | uid/gid 10001, `NoNewPrivs`, nenhuma capability. Código e Studios só de leitura para o `ssam`; ele grava só nos volumes, em `/tmp` e nos caches de `/app` (seção 14). |
-| Rede | `ssam-server` só na rede `backend` (interna): sem DNS nem saída para a internet. Portas do host só no Caddy. |
-| `/health` | 200 pelo Caddy, com HSTS, nosniff, DENY, CSP, CORP e no-referrer, sem `Server`. Outros caminhos: 404. |
-| Tokens | emitidos pelo `ssam-admin`; o volume guarda só os hashes. |
-| MCP | `initialize` e `tools/list` (79 ferramentas) com o token; `ssam_reference` e `ssam_discover` nas duas faixas; `o11_extension` recusado com `HOSTED_UNAVAILABLE` (`XIF_ENGINE_WINDOWS_ONLY`). |
-| Acesso negado | sem token, token desconhecido ou credencial de agente no `/mcp`: 401. Token revogado: 403 `Token revoked`, também para a credencial do agente dele. |
-| Agente (Studios falsos) | `studio_status`, `studio_attach`, captura de 6 MiB, `ssam_connect`, `o11_studio`, `o11_deliver` "entregue" (kernel O11 no Linux), `studio_deliver` ODC recusado de uma vez nas quatro fases com `verifyRan:true` (kernel ODC no Linux), `ssam_map` digest nas duas faixas. |
-| Conexão longa | canal do agente aberto 7 min pelo Caddy, sem queda nem reconexão. |
-| Restart e recriação | tokens e revogações mantidos; o agente reconecta sozinho em 1 a 5 s. |
-| Segredos | nenhum token nem credencial no `server.log`, na auditoria, nos logs do Docker, do Caddy (Authorization `REDACTED`) e do agente. |
-| Nomes de cliente | nenhum nos arquivos do SSAM na imagem. As 12 ocorrências da varredura são de terceiros: pedaços de identificadores (tipos do AWS SDK, runtime .NET) e bytes de binários. |
+| Bundles | ODC Studio instalado ainda 1.7.27.10846 e Service Studio 11.55.91.65258: os bundles de 2026-10-10 conferem arquivo por arquivo com os Studios e com as listas `studio-*.txt`. O build confere o SHA-256 fixado de cada um. |
+| Guarda no build | `build.sh` com um arquivo de teste com nome de cliente no contexto: a guarda falha e nada é construído. Sem ele: 4/4 e o build segue. |
+| Build (`build.sh`) | Guarda ~20 s (bind mount do Windows) + build. Sem cache de camadas (`--no-cache`; bases e NuGet já locais): 45 s de build, 67 s no total. Com cache, numa mudança de código: 32 a 52 s. |
+| Tamanho | 1,13 GB descompactada; o `docker save -o` dá um arquivo de 297 MB (camadas já comprimidas). |
+| Subida | `healthy` em menos de 10 s. Aquecimento de 1,5 min num container novo (índices do discover, 41 s por faixa); depois de um `restart`, 4 s. |
+| Processo e disco | uid/gid 10001, PID 1 `docker-init`, `NoNewPrivs`, nenhuma capability. Código e Studios só de leitura para o `ssam` (gravações recusadas em `/app`, `/studio`, `/usr`, `/etc`); grava só nos volumes, em `/tmp` e nos caches de `/app`. Caddy com raiz só de leitura, `/tmp` em tmpfs e só `NET_BIND_SERVICE`. |
+| Rede | `ssam-server` só na rede `backend` (interna): sem DNS nem internet (`EAI_AGAIN`). Portas do host só no Caddy, e só 127.0.0.1:28080/28443. Rede `edge` com IPv6 (sub-rede ULA automática; o Caddy ganhou endereço IPv6). |
+| `/health` | 200 pelo Caddy, com HSTS, nosniff, DENY, CSP, CORP e no-referrer, sem `Server`. Outros caminhos: 404. HTTP 28080: 308 para HTTPS. |
+| Tokens | emitidos pelo `ssam-admin`, que roda sem log (`docker logs`: "configured logging driver does not support reading"). O `tokens.json` guarda só `sha256` e `agentSha256`. |
+| MCP | `initialize` e `tools/list` (79 ferramentas); `ssam_reference` e `ssam_discover` nas duas faixas; `o11_extension` recusado com `HOSTED_UNAVAILABLE` (`XIF_ENGINE_WINDOWS_ONLY`). |
+| Acesso negado | sem token, token desconhecido ou credencial de agente no `/mcp`: 401. Token revogado: 403 `Token revoked` no `/mcp` e `AGENT_REVOKED` no canal do agente (por desenho: 401 é "quem é você", 403 é "esse token não vale mais"). |
+| `kernel.json` | o evento `kernel` mostra `odcBridgeAccepted: ["v45"]`. |
+| Agente (Studios falsos) | 14/14: `studio_status`, `studio_attach`, captura de 6 MiB, `ssam_connect`, `o11_studio`, `o11_deliver` "entregue" (kernel O11 no Linux), `studio_deliver` ODC recusado de uma vez nas quatro fases com `verifyRan:true`, `ssam_map` digest nas duas faixas. Uma entrega ODC de 93 s durante o aquecimento passou 6 keepalives SSE pelo Caddy. |
+| Conexão longa | canal do agente aberto 7 min pelo Caddy, consultado a cada 30 s: sem queda nem reconexão. Com o `keepalive 4s`, nenhum 502 em 264 pedidos (191 `POST /agent/v1/messages`). |
+| Restart e recriação | tokens e revogações mantidos; o agente reconecta em cerca de 1 s. Depois de `--force-recreate`, o índice de módulos continua no volume `cache` (`ssam_map` em 88 ms, antes 4,6 s). |
+| Builder residente | antes da correção de `ssam-server-start`, todo container novo dava `warm` com "the resident builder failed to start"; depois, `builder ok` já na primeira subida. |
+| Backup, restore e rotação | como um usuário comum no grupo do socket do Docker, com a pasta `deploy` vinda de `git archive` (caminhos B e C): pasta ausente recusada com o comando que resolve; a linha do cron (online) com cópia cifrada `age` + `rclone` (decifra para o mesmo SHA-256) e heartbeat; falha no envio sai com erro e sem heartbeat; cópia parada com o servidor de volta e healthy; `rotate-logs.sh` gira, comprime e apaga pelas idades; restore que falha antes de mexer no estado sobe o servidor de novo; restore bom com `tokens.json` idêntico. 36 de 38 verificações passaram; as 2 restantes eram erro do próprio teste (revisão `-dirty` e dono mostrado como `ssam` em vez de `10001`). |
+| Segredos | nenhum token nem credencial no `server.log`, na auditoria, nos jornais e atritos dos clientes, nos logs do Docker, do Caddy (Authorization `REDACTED`), do agente, do teste de operação e dos builds. |
+| Nomes de cliente | nenhum nos arquivos do SSAM na imagem. As 12 ocorrências da varredura são de terceiros: bytes de binários (.NET, ICU, node, um plugin do Service Studio) e pedaços de identificadores dos tipos do AWS SDK. Os arquivos internos do dono (`.mcp.json`, `hosts.json` etc.) não estão na imagem. |
 
-Correções que o ensaio trouxe, todas com commit no `main`: cache do NuGet por estágio, pasta de autoridade do dono e
+Correções do primeiro ensaio, todas com commit no `main`: cache do NuGet por estágio, pasta de autoridade do dono e
 pasta `features` vazia do builder (`server/Dockerfile`); versão da bridge ODC no pipe hospedado; caminhos Linux
 apresentados como `ws:` (`hosted/policy.mjs`); `TMPDIR` dos processos do kernel (`executor.mjs`); cache de features do ODC
-no Linux (`OdcFeatures.cs`, `odc-features-export.ps1`, 7.2); argumentos dos rótulos só antes do `LABEL`, para reaproveitar
-as camadas entre versões.
+no Linux (`OdcFeatures.cs`, `odc-features-export.ps1`, 7.2); argumentos dos rótulos só antes do `LABEL`.
+Correções do segundo ensaio: `build.sh` desligava a conversão de caminhos do Git Bash para o script inteiro (o `git` não
+achava o repositório); `ssam-server-start` cria a chave da autoridade antes do node (builder residente).
 
 ## 13. Problemas comuns
 
@@ -719,6 +727,12 @@ as camadas entre versões.
   (`platforms/odc/facade/hosted/agent-executor.mjs`, `hosted/policy.mjs`, `executor.mjs` e
   `kernel/src/Anvil.Core.Odc/Adapters.ODC/OdcFeatures.cs`). A linha do servidor precisa fazer a mesma mudança na origem,
   senão a próxima cópia desfaz.
+  - **Já aconteceu**: a cópia do 23º envio (`935c4ad`) trouxe o `hosted/policy.mjs` da linha do servidor e desfez a
+    correção `bfd3ec7`. Numa imagem do `main` a partir dela, as respostas hospedadas no Linux saem com `/ws:odc/...`
+    (um caminho que nenhuma ferramenta aceita de volta: `studio_snapshot` e `ssam_map` falham) e qualquer `app` vira
+    `<servidor>`. Não faça deploy dessa imagem.
+  - `git show bfd3ec7` aplica limpo sobre o 23º envio. Com ele, `hosted-policy` e `hosted-roots` passam (31/31) e o
+    ensaio do agente volta a 14/14. Falta reaplicar no `main`, depois que o trabalho do 23º envio terminar.
 - O índice do `ssam_discover` e os outros caches de `/app` se perdem a cada container novo: 1 a 2 min de aquecimento
   (7.3). O índice de módulos e a cópia dos leitores ficam no volume `cache` e passam pela recriação.
 - O container não roda com o sistema de arquivos raiz só de leitura.

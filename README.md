@@ -101,9 +101,11 @@ SSAM-MCP e não vêm da linha do servidor.
 - `server/deploy/Caddyfile`, `.env.prod.example`, `backup.sh`, `restore.sh`, `odc-features-export.ps1` e `DEPLOY.md`.
 - O `.dockerignore` tira tudo isso da imagem, mais as cópias de estado `ssam-state-*.tar.gz` e o `Features.plain.xml`.
 
-Construída e provada no Docker Desktop em 2026-10-11 (`server/deploy/DEPLOY.md`, seção 12): imagem
-`ssam-server:prod-20261011-2761cb8`, 1,13 GB (cerca de 295 MB comprimida). Falta uma VPS de verdade (Let's Encrypt, DNS,
-firewall). Os bundles dos Studios não estão no repositório.
+Construída e provada no Docker Desktop em 2026-10-11, duas vezes (`server/deploy/DEPLOY.md`, seção 12). Imagens do
+segundo ensaio: `ssam-server:prod-20261011-83f936c` (22º envio) e `ssam-server:prod-20261011-8ae231d` (23º envio), 1,13 GB
+(297 MB no `docker save`). A cópia do 23º envio desfez a correção dos caminhos Linux em `hosted/policy.mjs`: não faça
+deploy de uma imagem do `main` até reaplicar `bfd3ec7` (seção 14 do DEPLOY). Falta uma VPS de verdade (Let's Encrypt,
+DNS, firewall). Os bundles dos Studios não estão no repositório.
 
 ### Deploy com Docker (desenvolvimento, linha do servidor: túnel ngrok)
 
