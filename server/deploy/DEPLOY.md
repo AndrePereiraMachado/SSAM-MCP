@@ -135,8 +135,19 @@ No `.env`:
 
   Os valores de memória são estimativa e ainda não foram medidos. O `SSAM_CPUS` não pode passar do número de vCPUs.
 - Só para o build na VPS: `ODC_STUDIO_BUNDLE_SHA256` e `SERVICE_STUDIO_BUNDLE_SHA256`.
-- `BACKUP_DIR`: fora do repositório.
+- `BACKUP_DIR`: fora do repositório, de preferência num volume de bloco só para ele (seção 9).
 - Para testar DNS e firewall sem gastar o limite do Let's Encrypt, use `SSAM_ACME_CA` com a URL de staging. Tire depois.
+
+A pasta dos backups é criada uma vez, com o dono certo. O `backup.sh` roda como o seu usuário (grupo docker, sem root) e
+não consegue criar nada em `/var/backups`, que é do root. O log do cron fica na mesma pasta, porque o usuário também não
+escreve em `/var/log`:
+
+```bash
+sudo install -d -o "$USER" -g "$USER" -m 0700 /var/backups/ssam-server
+install -m 0600 /dev/null /var/backups/ssam-server/cron.log
+```
+
+Se `BACKUP_DIR` apontar para outro lugar, crie esse lugar do mesmo jeito.
 
 ## 6. A imagem
 
@@ -326,7 +337,7 @@ C:\SSAM-Agent\agent\node\node.exe C:\SSAM-Agent\agent\ssam-agent.mjs doctor --ro
 
 **Upgrade**
 
-1. Faça um backup: `sh backup.sh`.
+1. Faça um backup: `sh backup.sh --online` (a pasta já existe desde a seção 5).
 2. Gere a imagem nova com uma tag nova (seção 6).
 3. Troque `SSAM_IMAGE_TAG` no `.env`.
 4. Recrie só o servidor: `docker compose -f compose.prod.yml up -d ssam-server`.
@@ -350,27 +361,65 @@ Para o Caddy, troque a imagem fixada em `compose.prod.yml` (tag e digest, resolv
 ## 9. Backup e restore
 
 ```bash
-sh backup.sh                 # para o ssam-server durante a cópia (consistente) e sobe de novo
-sh backup.sh --online        # sem parar (um arquivo sendo escrito pode sair cortado)
+sh backup.sh --online        # sem parar o servidor: o modo do cron diário
+sh backup.sh                 # para o ssam-server durante a cópia (consistente) e sobe de novo: só numa janela anunciada
 sh restore.sh /var/backups/ssam-server/ssam-state-<data>.tar.gz
 ```
 
-- O backup grava `ssam-state-<data>.tar.gz` em `BACKUP_DIR`, com `.sha256` e `.info` (tag da imagem, projeto e modo).
+- O backup grava `ssam-state-<data>.tar.gz` em `BACKUP_DIR` (criada na seção 5), com `.sha256` e `.info`. O `.info` diz
+  a tag, o id da imagem, a revisão (commit), os digests de registro, o projeto e o modo.
   Leva os três volumes. Não leva os certificados do Caddy (são emitidos de novo) nem a imagem.
-- `BACKUP_KEEP_DAYS` apaga os arquivos mais velhos que esse número de dias. Com 0, guarda todos.
+- **Parar ou não**: o modo padrão para o servidor, e isso corta toda chamada em curso (um `o11_deliver` leva até 60 min)
+  e fecha as sessões e os canais dos agentes. Por isso o cron usa `--online`. O `tokens.json` é gravado por troca atômica
+  de nome e os logs só crescem, então numa cópia online o pior caso é a última linha de um log cortada. Faça uma cópia
+  parada de vez em quando, numa janela anunciada (por exemplo, semanal).
+- Se a VPS reiniciar no meio de uma cópia parada, o `restart: unless-stopped` deixa o servidor parado: rode
+  `docker compose -f compose.prod.yml up -d`.
+- `BACKUP_KEEP_DAYS` apaga os arquivos mais velhos que esse número de dias. Com 0, guarda todos. Dimensione o disco:
+  dias guardados × tamanho de um arquivo (cada cliente vai até 5 GiB de espaço de trabalho).
 - O restore confere o hash e o conteúdo e pede a palavra `restore`.
-  - Ele salva o estado atual em `BACKUP_DIR/pre-restore`, esvazia os volumes, extrai e espera o servidor ficar healthy.
+  - Ele para o servidor e salva o estado atual em `BACKUP_DIR/pre-restore`. Se essa cópia falhar, o servidor volta a
+    subir e nada mudou.
+  - Depois esvazia os volumes, extrai e espera o servidor ficar healthy. Se a extração falhar, o servidor **fica parado**
+    (o estado está pela metade) e a mensagem diz qual arquivo de `pre-restore` restaurar para voltar.
   - Restaure com a tag que fez o backup (o `.info` diz qual) ou uma mais nova.
   - Tokens revogados depois do backup voltam a valer: revogue-os de novo.
-- Agendamento diário (o usuário precisa estar no grupo docker e poder escrever em `BACKUP_DIR`):
 
-  ```bash
-  echo '30 3 * * * <usuário> cd /opt/ssam/SSAM-MCP/server/deploy && sh backup.sh >> /var/log/ssam-backup.log 2>&1' \
-    | sudo tee /etc/cron.d/ssam-backup
-  ```
+**Agendamento diário**, como o seu usuário (grupo docker), com o log na pasta dos backups:
 
-- Mande uma cópia **cifrada** para fora da VPS (por exemplo, `age` ou `gpg` e depois `rclone` ou `rsync`). Teste um
-  restore de tempos em tempos numa VPS de ensaio.
+```bash
+echo "30 3 * * * $USER cd $PWD && sh backup.sh --online >> /var/backups/ssam-server/cron.log 2>&1" \
+  | sudo tee /etc/cron.d/ssam-backup
+sudo -u "$USER" sh -c "cd $PWD && sh backup.sh --online >> /var/backups/ssam-server/cron.log 2>&1"; echo "exit $?"
+tail -n 5 /var/backups/ssam-server/cron.log
+```
+
+- Rode o `echo` dentro da pasta `deploy` (o `$PWD` vira o caminho dela).
+- A segunda linha roda o mesmo comando do cron uma vez, de verdade, antes de ir ao ar: tem de dar `exit 0`, e o log tem
+  de mostrar `backup: ... sha256 ...`.
+
+**Aviso quando o backup não roda.** Um backup que falha no cron não avisa ninguém. Use um monitor do tipo "dead man's
+switch" (healthchecks.io, Uptime Kuma em modo push, Better Stack heartbeat): crie uma verificação diária com tolerância de
+2 h e ponha a URL em `BACKUP_HEARTBEAT_URL` no `.env`. O `backup.sh` só faz o GET no fim de um backup bom, depois da cópia
+para fora. Assim o monitor alerta se o cron não rodou, se o disco encheu ou se qualquer passo falhou.
+Sem monitor externo, um teste local que pode ir para qualquer alerta é este (falha se o backup mais novo tiver mais de
+26 h): `find /var/backups/ssam-server -maxdepth 1 -name 'ssam-state-*.tar.gz' -mmin -1560 | grep -q .`
+
+**Cópia fora da VPS (cifrada).** Os backups no disco da VPS somem junto com ela. Com `BACKUP_AGE_RECIPIENT` e
+`BACKUP_RCLONE_REMOTE` no `.env`, cada backup bom também vai, cifrado, para outro lugar:
+
+1. Na sua máquina (não na VPS): `age-keygen -o ssam-backup.key`. Guarde a chave privada fora da VPS, com o mesmo cuidado
+   de um segredo. A linha `# public key: age1...` é o `BACKUP_AGE_RECIPIENT`.
+2. Na VPS: `sudo apt-get install -y age rclone` e `rclone config` para um armazenamento de objetos (B2, S3, R2 etc.), com
+   um usuário que só escreve naquele bucket. O nome do remoto com o caminho é o `BACKUP_RCLONE_REMOTE`, por exemplo
+   `offsite:ssam-backups`.
+3. O `backup.sh` manda `<arquivo>.age` (o tar.gz cifrado no caminho, sem cópia em claro a mais), o `.sha256` e o `.info`.
+   Uma falha no envio faz o backup sair com erro (e sem heartbeat).
+4. A retenção do lado de lá é do provedor (regra de ciclo de vida do bucket).
+5. Para voltar: baixe os três arquivos, `age -d -i ssam-backup.key -o <arquivo> <arquivo>.age`, e então
+   `sh restore.sh <arquivo>` (o `.sha256` confere o arquivo decifrado).
+
+Teste um restore de tempos em tempos numa VPS de ensaio, com um arquivo vindo de fora.
 
 ## 10. Monitoração
 
