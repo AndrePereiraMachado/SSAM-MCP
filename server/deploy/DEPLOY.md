@@ -57,6 +57,12 @@ O backup do estado também é sensível: leva dados e nomes de clientes e os has
 **DNS**: um registro A (e AAAA, se a VPS tiver IPv6) de `ssam.seudominio.com` para o IP da VPS. Confira com
 `dig +short ssam.seudominio.com` antes de subir o Caddy. O Let's Encrypt precisa alcançar as portas 80 e 443.
 
+- A rede `edge` do compose tem IPv6 ligado (`SSAM_EDGE_IPV6`, padrão `true`). Assim uma conexão IPv6 chega ao Caddy com o
+  endereço do cliente, e os logs e a auditoria mostram o cliente, não o gateway do Docker.
+- Numa VPS sem IPv6, ponha `SSAM_EDGE_IPV6=false` no `.env` e **não** publique AAAA.
+- Depois de subir, confira com um cliente IPv6 de verdade (`curl -6 https://ssam.seudominio.com/health`): o
+  `remote_ip` do log do Caddy tem de ser o endereço do cliente.
+
 **Docker Engine e Compose** (repositório oficial da Docker):
 
 ```bash
@@ -490,9 +496,26 @@ Para provar a pilha numa máquina de desenvolvimento sem tocar em portas em uso:
 
 - `.env` com `COMPOSE_PROJECT_NAME=ssam-prova-prod`, `SSAM_DOMAIN=localhost`, qualquer endereço em `ACME_EMAIL`,
   `SSAM_HTTP_PORT=127.0.0.1:28080`, `SSAM_HTTPS_PORT=127.0.0.1:28443` e `BACKUP_DIR` numa pasta de rascunho.
-- Para `localhost`, o Caddy usa a CA interna dele, sem ACME. O ensaio de 2026-10-11 montou, por um override do compose,
-  uma cópia do `Caddyfile` com `tls internal` a mais. O Caddy avisa `failed to install root certificate`: é só a CA
-  local, sem efeito.
+- Um override do compose, fora do repositório, que só dá o domínio, o `tls internal` e as portas do host. O `Caddyfile`
+  que roda é o deste repositório, sem cópia: a linha `{$SSAM_CADDY_TLS}` dele fica vazia em produção e vira
+  `tls internal` aqui. O `!override` troca a lista de portas inteira, então nem um `.env` errado publica 80 ou 443.
+
+  ```yaml
+  # compose.prova.yml: docker compose -p ssam-prova-prod --env-file <.env do ensaio> -f compose.prod.yml -f compose.prova.yml ...
+  services:
+    ssam-server:
+      environment:
+        SSAM_PUBLIC_HOST: localhost
+    caddy:
+      environment:
+        SSAM_DOMAIN: localhost
+        SSAM_CADDY_TLS: tls internal
+      ports: !override
+        - "127.0.0.1:28080:80"
+        - "127.0.0.1:28443:443"
+  ```
+
+- O Caddy avisa `failed to install root certificate`: é só a CA local, sem efeito.
 - Teste com `curl -k https://localhost:28443/health`. Clientes Node confiam na raiz local do Caddy
   (`/data/caddy/pki/authorities/local/root.crt`, copiada com `docker compose exec caddy cat ...`) por
   `NODE_EXTRA_CA_CERTS`, sem desligar a verificação TLS.

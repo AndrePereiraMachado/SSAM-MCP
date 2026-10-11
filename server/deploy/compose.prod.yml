@@ -31,6 +31,8 @@ x-hardening: &hardening
 services:
   ssam-server:
     <<: *hardening
+    # SSAM_IMAGE_TAG may carry the digest (prod-...@sha256:<digest>, the digest of the image pushed to the registry): a tag pushed again
+    # to the registry then cannot change the bits under the same name, and a rollback gets exactly the old image.
     image: ${SSAM_IMAGE:-ssam-server}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG in .env (for example prod-20261010-acea75a)}
     # Built and proven for linux/amd64 only.
     platform: linux/amd64
@@ -134,6 +136,11 @@ services:
     image: ${SSAM_IMAGE:-ssam-server}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG in .env}
     platform: linux/amd64
     profiles: [admin]
+    # No log driver: `issue` and `agent-rotate` print the plaintext token and agent credential, and json-file would keep
+    # them in /var/lib/docker/containers/<id>/*-json.log for as long as the container exists (forever without --rm).
+    # The attached terminal of `docker compose run` still shows the output.
+    logging:
+      driver: none
     entrypoint: ["node", "facade/ssam.mjs"]
     command: ["server-token", "list"]
     network_mode: none
@@ -164,8 +171,13 @@ volumes:
   caddy-config:
 
 networks:
-  # Caddy's way in and out (published ports, ACME).
+  # Caddy's way in and out (published ports, ACME). IPv6 on: with an AAAA record, a client's IPv6 connection reaches Caddy
+  # through ip6tables with its own address; on an IPv4-only network it would come through docker-proxy as the network's
+  # gateway (172.x.0.1), and the audit trail (Caddy's log, session-opened, agent-connected, access-alerts) would show that
+  # gateway instead of the client. Docker Engine 27+ gives the network a ULA subnet by itself. SSAM_EDGE_IPV6=false only
+  # on a host without IPv6, and then publish no AAAA record.
   edge:
+    enable_ipv6: ${SSAM_EDGE_IPV6:-true}
   # ssam-server <-> caddy only; internal: no route to the internet.
   backend:
     internal: true

@@ -12,8 +12,15 @@
 #   - X-Forwarded-For: Caddy replaces what an untrusted client sent with the client's address (no trusted_proxies here),
 #     so the first hop the server logs (session-opened, agent-connected) is the real client. Put a CDN in front only
 #     with its ranges in trusted_proxies;
-#   - bodies: 16 MiB per MCP request, 4 MiB per agent file part; Caddy cuts at 20 MB, the server answers 413 below that.
+#   - bodies: 16 MiB per MCP request, 4 MiB per agent file part; Caddy cuts at 20 MB, the server answers 413 below that;
+#   - idle upstream connections: Node closes its idle keep-alive sockets after 5 s (http-server.mjs keeps the default
+#     keepAliveTimeout), so Caddy drops its own after 4 s. A longer keepalive lets a POST /mcp or /agent/v1/messages
+#     pick a socket Node has just closed: a 502 that Caddy does not retry (it retries only safe methods once sent).
 # Caddy redacts the Authorization header in its access log by default; the log goes to stdout (docker json-file, rotated).
+#
+# SSAM_CADDY_TLS is empty in production (no such variable in compose.prod.yml): automatic HTTPS from the ACME CA above.
+# The local rehearsal (DEPLOY.md section 12) sets it to "tls internal" through a compose override, so this very file is
+# what runs there too. Caddy substitutes {$VAR} before parsing, so an empty value leaves an empty line.
 {
 	email {$ACME_EMAIL}
 	acme_ca {$SSAM_ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
@@ -28,6 +35,8 @@
 }
 
 {$SSAM_DOMAIN} {
+	{$SSAM_CADDY_TLS}
+
 	request_body {
 		max_size 20MB
 	}
@@ -55,7 +64,8 @@
 				response_header_timeout 65m
 				read_timeout 65m
 				write_timeout 65m
-				keepalive 2m
+				# Below Node's 5 s keepAliveTimeout (see the top of this file).
+				keepalive 4s
 			}
 		}
 	}
