@@ -67,11 +67,12 @@ VPS Linux com Docker Compose, HTTPS automático pelo Caddy e servidor sem porta 
 - Os arquivos de deploy são `deploy/compose.prod.yml` (serviços `ssam-server`, `caddy`, `ssam-admin` e `ssam-ops`),
   `deploy/Caddyfile`, `deploy/.env.prod.example`, `deploy/build.sh` (guarda de nomes de cliente e build: o único jeito de
   construir a imagem), `deploy/backup.sh`, `deploy/restore.sh` e `deploy/rotate-logs.sh`.
-- Construída e provada no Docker Desktop em 2026-10-11 (`deploy/DEPLOY.md`, seção 12; imagens
-  `ssam-server:prod-20261011-83f936c` e `prod-20261011-8ae231d`); falta uma VPS de verdade. Os bundles dos Studios não estão
-  no repositório.
-- A cópia do 23º envio desfez a correção `bfd3ec7` (caminhos Linux em `platforms/odc/facade/hosted/policy.mjs`). Até
-  reaplicá-la, a imagem do `main` responde `/ws:...` aos clientes hospedados (DEPLOY.md, seção 14).
+- Construída e provada no Docker Desktop em 2026-10-11 (`deploy/DEPLOY.md`, seção 12). A imagem candidata à produção é
+  `ssam-server:prod-20261011-ed0f94b` (terceiro ensaio); falta uma VPS de verdade. Os bundles dos Studios não estão no
+  repositório.
+- A cópia do 23º envio tinha desfeito a correção `bfd3ec7` (caminhos Linux em `platforms/odc/facade/hosted/policy.mjs`).
+  Ela foi reaplicada em `ed0f94b`. A linha do servidor tem as quatro correções na branch `servidor/fase4-23-linux`, e as
+  próximas cópias saem dela (DEPLOY.md, seção 14).
 
 ## Deploy de desenvolvimento (linha do servidor: `docker/ssam-server/Dockerfile` e `docker-compose.yml` com ngrok)
 

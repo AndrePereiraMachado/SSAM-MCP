@@ -701,6 +701,30 @@ no Linux (`OdcFeatures.cs`, `odc-features-export.ps1`, 7.2); argumentos dos rót
 Correções do segundo ensaio: `build.sh` desligava a conversão de caminhos do Git Bash para o script inteiro (o `git` não
 achava o repositório); `ssam-server-start` cria a chave da autoridade antes do node (builder residente).
 
+### Terceiro ensaio (2026-10-11): imagem candidata à produção
+
+**`ssam-server:prod-20261011-ed0f94b` é a imagem candidata à produção.** É a primeira imagem do `main` com as quatro
+correções do primeiro ensaio e a `bfd3ec7` reaplicada (`ed0f94b`, seção 14). As imagens `prod-20261011-8ae231d` e
+anteriores não vão para produção.
+
+Mesma máquina, mesmo `.env` (3 CPUs, 6 GB, 2 workers) e mesmo override. Os volumes do segundo ensaio já não existiam:
+a primeira subida foi refeita do zero (7.1, 7.2 e 7.4), o que também a prova.
+
+| Item | Resultado |
+| --- | --- |
+| Imagem | `build.sh` no `main` em `ed0f94b`, árvore limpa: guarda 4/4, 91 s no total (15 s de build com o cache de camadas). Id `sha256:232e6a22dec2788d2964fd87b617ac54ca120906517557b1a0a9616b7b57f174`, 1,13 GB, linux/amd64, uid 10001. Rótulos: versão `prod-20261011-ed0f94b`, revisão `ed0f94ba986867ae132dc72ca97c84e7cb2c4d78` (sem `-dirty`). Só local: nada foi para registro. |
+| Primeira subida | `kernel.json` (7.1) e `Features.plain.xml` (7.2, 500 features, exportado pelo `odc-features-export.ps1`; a cópia local foi apagada depois de gravada) nos volumes novos, donos 10001. `healthy` em 7 s; o evento `kernel` mostra `odcBridgeAccepted: ["v45"]`. |
+| `/health` | 200 pelo Caddy, com TLS verificado pela raiz local. Cabeçalhos: HSTS, nosniff, DENY, CSP `default-src 'none'; frame-ancestors 'none'`, CORP `same-origin` e `no-referrer`, sem `Server`. Outro caminho: 404. HTTP 28080: 308 para HTTPS. `/mcp` sem token: 401. |
+| MCP | 10/10: 401 sem token, com token desconhecido e com a credencial do agente; `initialize` e `tools/list` (79 ferramentas); `ssam_reference` e `ssam_discover` nas duas faixas (o primeiro `ssam_discover` O11 levou 83 s no aquecimento); `o11_extension` recusado com `HOSTED_UNAVAILABLE`. |
+| Agente (Studios falsos) | 16/16: os 14 do segundo ensaio e mais dois. `studio_snapshot` devolve `ws:odc/snapshots/...`. `ssam_map` (as duas faixas) e `studio_inspect` aceitam de volta esses caminhos `ws:`. Nas 12 respostas (6 caminhos `ws:` diferentes), nenhuma traz `/ws:` nem `{<servidor>}`, e o `studio_status` mantém o `{app}` das URLs de aplicação: o defeito que a `bfd3ec7` corrige não aparece. `o11_deliver` "entregue" em 5,2 s. `studio_deliver` ODC recusado de uma vez nas quatro fases, em 3,6 s. Nenhuma reconexão do agente em 46 chamadas. |
+| Restart e recriação | Um token revogado antes do `restart` e do `--force-recreate`. Depois de cada um, os dois tokens ativos continuam com 200, e o revogado continua com 403 `Token revoked` no `/mcp` e `AGENT_REVOKED` no `hello` e no `stream` do agente. O agente reconecta sozinho. Depois da recriação, `ssam_map` com caminho `ws:` em 63 ms (antes, 4,7 s): o índice ficou no volume `cache`. |
+| Backup e restore | 38/38, como operador comum (uid 1000 no grupo do socket), com a pasta `deploy` vinda de `git archive ed0f94b`: linha do cron (online) com cópia cifrada `age` + `rclone` e heartbeat; falha no envio; `rotate-logs.sh`; cópia parada; restore que falha antes de mexer no estado; recusas; restore bom com `tokens.json` idêntico. O `.info` traz a revisão `ed0f94b...` sem `-dirty`. Os dois erros do teste no segundo ensaio foram corrigidos (o dono agora é conferido como uid). Depois do restore: tokens e revogação mantidos, agente reconectado. |
+| Segredos | Nenhum token nem credencial em 28 arquivos: `server.log`, auditoria, jornais e atritos dos clientes, logs do Docker (servidor e Caddy, com `Authorization` `REDACTED`), agente, preparação do agente, teste de operação e build. |
+| Nomes de cliente | Nenhum nos logs (os 11 termos da lista). Na imagem, as mesmas 12 ocorrências de terceiros do segundo ensaio e nenhuma nova. |
+| Recursos | Em repouso, depois do ensaio: `ssam-server` com 415 MiB dos 6 GiB e 34 processos; Caddy com 15 MiB. |
+
+A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensaio ficaram.
+
 ## 13. Problemas comuns
 
 | Sintoma | Causa provável |
@@ -730,9 +754,13 @@ achava o repositório); `ssam-server-start` cria a chave da autoridade antes do 
   - **Já aconteceu**: a cópia do 23º envio (`935c4ad`) trouxe o `hosted/policy.mjs` da linha do servidor e desfez a
     correção `bfd3ec7`. Numa imagem do `main` a partir dela, as respostas hospedadas no Linux saem com `/ws:odc/...`
     (um caminho que nenhuma ferramenta aceita de volta: `studio_snapshot` e `ssam_map` falham) e qualquer `app` vira
-    `<servidor>`. Não faça deploy dessa imagem.
-  - `git show bfd3ec7` aplica limpo sobre o 23º envio. Com ele, `hosted-policy` e `hosted-roots` passam (31/31) e o
-    ensaio do agente volta a 14/14. Falta reaplicar no `main`, depois que o trabalho do 23º envio terminar.
+    `<servidor>`. Não faça deploy dessa imagem (`prod-20261011-8ae231d` e anteriores).
+  - **Estado atual**: a correção foi reaplicada no `main` em `ed0f94b`. A imagem `prod-20261011-ed0f94b` passou no
+    terceiro ensaio (seção 12) e é a candidata à produção.
+  - A linha do servidor ganhou as quatro correções na branch `servidor/fase4-23-linux` (`77a38635`, `05c6e6de`,
+    `867cf3c9` e `b37715e1`, sobre o 23º envio `e589be22`). Os quatro arquivos e o teste `hosted-policy.test.mjs` têm
+    lá os mesmos bytes do `main`. As próximas cópias para esta caixa saem dessa branch (ou de uma linha que a contenha),
+    não de `servidor/fase4-23`.
 - O índice do `ssam_discover` e os outros caches de `/app` se perdem a cada container novo: 1 a 2 min de aquecimento
   (7.3). O índice de módulos e a cópia dos leitores ficam no volume `cache` e passam pela recriação.
 - O container não roda com o sistema de arquivos raiz só de leitura.
