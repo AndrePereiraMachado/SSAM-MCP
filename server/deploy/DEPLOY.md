@@ -25,13 +25,16 @@ agente do cliente (https://<domínio>/agent) ─┤
                                   │  rede "backend", interna, sem saída para a internet
                                   ▼
                       ssam-server:7310  (uid 10001, sem porta no host)
-                      volumes: server-state (/data/server), friction (/data/friction), odc-features (/data/odc-features)
+                      volumes: server-state (/data/server), friction (/data/friction), odc-features (/data/odc-features),
+                               cache (/data/cache)
 ```
 
 - Só o Caddy publica portas. O `ssam-server` não tem porta no host e não alcança a internet: tudo o que toca o tenant ou
   o Studio do cliente passa pelo agente do cliente, que se conecta ao servidor.
 - Estado nos volumes: hash SHA-256 de cada token, `kernel.json`, espaço de trabalho de cada cliente (até 5 GiB cada),
   auditoria, `server.log`, atritos e o cache de features do ODC (`Features.plain.xml`, 7.2). A imagem não guarda estado.
+- O volume `cache` guarda o índice de módulos do `ssam_map` (com resumos das capturas dos clientes) e a cópia dos
+  leitores. Ele passa por recriações do container (um upgrade não começa frio) e fica fora do backup: o servidor o refaz.
 - `ssam-admin` emite, lista e revoga tokens. `ssam-ops` faz backup, restore e grava arquivos nos volumes. Os dois rodam
   sem rede e só quando chamados.
 
@@ -428,7 +431,8 @@ sh restore.sh /var/backups/ssam-server/ssam-state-<data>.tar.gz
 
 - O backup grava `ssam-state-<data>.tar.gz` em `BACKUP_DIR` (criada na seção 5), com `.sha256` e `.info`. O `.info` diz
   a tag, o id da imagem, a revisão (commit), os digests de registro, o projeto e o modo.
-  Leva os três volumes. Não leva os certificados do Caddy (são emitidos de novo) nem a imagem.
+  Leva os três volumes de estado. Não leva o volume `cache` (o servidor o refaz), os certificados do Caddy (são emitidos
+  de novo) nem a imagem.
 - **Parar ou não**: o modo padrão para o servidor, e isso corta toda chamada em curso (um `o11_deliver` leva até 60 min)
   e fecha as sessões e os canais dos agentes. Por isso o cron usa `--online`. O `tokens.json` é gravado por troca atômica
   de nome e os logs só crescem, então numa cópia online o pior caso é a última linha de um log cortada. Faça uma cópia
@@ -620,10 +624,11 @@ as camadas entre versões.
   (`platforms/odc/facade/hosted/agent-executor.mjs`, `hosted/policy.mjs`, `executor.mjs` e
   `kernel/src/Anvil.Core.Odc/Adapters.ODC/OdcFeatures.cs`). A linha do servidor precisa fazer a mesma mudança na origem,
   senão a próxima cópia desfaz.
-- O índice do discover e os outros caches de `/app` se perdem a cada container novo: 1 a 2 min de aquecimento (7.3).
+- O índice do `ssam_discover` e os outros caches de `/app` se perdem a cada container novo: 1 a 2 min de aquecimento
+  (7.3). O índice de módulos e a cópia dos leitores ficam no volume `cache` e passam pela recriação.
 - O container não roda com o sistema de arquivos raiz só de leitura.
-  - A linha do servidor grava caches em `/app/.local` e `/app/platforms/odc/.local`, e os locks e logs dos workers ao
-    lado dos CLIs, em `/app/kernel/.local`.
+  - A linha do servidor grava caches em `/app/.local` e `/app/platforms/odc/.local` (o índice do discover, por exemplo),
+    e os locks e logs dos workers ao lado dos CLIs, em `/app/kernel/.local`. Falta uma variável para mudar esses lugares.
   - A imagem libera só esses lugares, `/tmp` e os volumes. O resto de `/app` e `/studio` é do root.
   - Esses caches ficam na camada do container e se perdem ao recriá-lo. São reconstruídos depois.
 - O `kernel.json` é manual (7.1) e precisa ser revisto a cada troca de versão de Studio ou bridge.

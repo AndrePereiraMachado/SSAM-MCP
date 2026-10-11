@@ -50,6 +50,9 @@ services:
       - server-state:/data/server
       - friction:/data/friction
       - odc-features:/data/odc-features
+      # Module index and readers' copy (SSAM_MODULE_INDEX_ROOT, SSAM_READER_CACHE_ROOT of ../Dockerfile): kept across
+      # container recreations (no cold start after an upgrade), outside the backup (the server rebuilds it).
+      - cache:/data/cache
     expose:
       - "7310"
     networks:
@@ -126,13 +129,14 @@ services:
     volumes:
       - server-state:/data/server
 
-  # Backup, restore and file drops (kernel.json, Features.plain.xml) into the state volumes, as uid 10001 like the server.
+  # Backup, restore and file drops (kernel.json, Features.plain.xml) into the state volumes, and the cache clean-up, as
+  # uid 10001 like the server. backup.sh and restore.sh name the three state folders, never /data/cache.
   ssam-ops:
     <<: *hardening
     image: ${SSAM_IMAGE:-ssam-server}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG in .env}
     platform: linux/amd64
     profiles: [ops]
-    command: ["sh", "-c", "du -sh /data/server /data/friction /data/odc-features"]
+    command: ["sh", "-c", "du -sh /data/server /data/friction /data/odc-features /data/cache"]
     network_mode: none
     read_only: true
     tmpfs:
@@ -141,11 +145,13 @@ services:
       - server-state:/data/server
       - friction:/data/friction
       - odc-features:/data/odc-features
+      - cache:/data/cache
 
 volumes:
   server-state:
   friction:
   odc-features:
+  cache:
   caddy-data:
   caddy-config:
 

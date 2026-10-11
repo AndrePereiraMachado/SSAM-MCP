@@ -198,9 +198,10 @@ COPY --from=builder-odc /out/ /app/
 
 # Writable by ssam (everything else under /app and /studio is root's and read-only for it):
 #   /data/server, /data/friction, /data/odc-features   the state volumes (below)
+#   /data/cache                                         the cache volume: module index and readers' copy (below)
 #   /tmp                                                temp files, and HOME (per-user folders of .NET and the Studio libraries)
-#   /app/.local, /app/platforms/odc/.local              caches the server line keeps inside its tree: module index, readers,
-#                                                       discover index, debugger state
+#   /app/.local, /app/platforms/odc/.local              caches the server line keeps inside its tree: discover index,
+#                                                       debugger state (module index and readers: /data/cache)
 #   /app/kernel/.local, /app/kernel/.local/lane-odc     locks, logs and work folders of the resident kernel workers, which the
 #                                                       server line writes NEXT TO the compiled CLIs: root:ssam 1770 (sticky),
 #                                                       so ssam adds files there but can neither replace nor rename the CLIs
@@ -217,7 +218,7 @@ COPY --from=builder-odc /out/ /app/
 # (owner's lab, client app logic), so Builder.csproj's `features\*.cs` compiled nothing; without the folder lib.mjs
 # builderNeedsBuild() takes the builder for stale (missing glob folder), the warm skips the resident builder and a
 # hosted call that needs it answers COMPONENT_STALE.
-RUN install -d -o ssam -g ssam -m 0750 /data/server /data/friction /data/odc-features /app/.local /app/platforms/odc/.local \
+RUN install -d -o ssam -g ssam -m 0750 /data/server /data/friction /data/odc-features /data/cache /app/.local /app/platforms/odc/.local \
  && install -d -o ssam -g ssam -m 0700 /app/.local/authority \
  && install -d -m 0755 /app/platforms/odc/studio/builder/features \
  && chown root:ssam /app/kernel/.local /app/kernel/.local/lane-odc \
@@ -230,6 +231,11 @@ RUN install -d -o ssam -g ssam -m 0750 /data/server /data/friction /data/odc-fea
 #                       machine by deploy/odc-features-export.ps1 (the Windows Features.xml is DPAPI, unreadable here; the
 #                       kernel encrypts the plain file with the Studio's Linux service, OdcFeatures.cs). The ODC model asks
 #                       its feature provider; the installer does not carry it.
+# And one cache volume, outside the backup (the server rebuilds it), kept across container recreations so an upgrade does
+# not start cold, and emptied per customer offboarding (deploy/DEPLOY.md):
+#   /data/cache         module-index/ (SSAM_MODULE_INDEX_ROOT: the ssam_map index and the module digests of the customers'
+#                       captures) and readers/ (SSAM_READER_CACHE_ROOT: the resident readers' copy, one folder per build).
+#                       Before, both lived in the container layer under /app/.local and were lost at every new container.
 ENV HOME=/tmp \
     SSAM_SERVER_DIR=/data/server \
     SSAM_FRICTION_DIR=/data/friction \
@@ -237,12 +243,14 @@ ENV HOME=/tmp \
     ANVIL_ODC_STUDIO_DIR=/studio/odc \
     ANVIL_ODC_FEATURES_DIR=/data/odc-features \
     ANVIL_AUTHORITY_DIR=/app/.local/authority \
+    SSAM_MODULE_INDEX_ROOT=/data/cache/module-index \
+    SSAM_READER_CACHE_ROOT=/data/cache/readers \
     SSAM_NODE=/usr/local/bin/node \
     DOTNET_CLI_TELEMETRY_OPTOUT=1 \
     DOTNET_NOLOGO=1 \
     SSAM_PORT=7310 \
     SSAM_PUBLIC_HOST=
-VOLUME ["/data/server", "/data/friction", "/data/odc-features"]
+VOLUME ["/data/server", "/data/friction", "/data/odc-features", "/data/cache"]
 
 # The label values are declared only here: a build arg declared earlier in the stage is part of the cache key of every
 # RUN after it, so a new BUILD_DATE rebuilt the apt layer and every runtime layer after it (seen in the Docker Desktop

@@ -2,7 +2,8 @@
 # Backup of the SSAM server state: the volumes /data/server (tokens.json with the token hashes, kernel.json, customers'
 # workspaces, audit, server.log), /data/friction and /data/odc-features, in one tar.gz on this host, with a .sha256 and an
 # .info (image, image id, revision, project, and mode: "online" when the server was running during the copy, else
-# "stopped"). Uses compose.prod.yml and the .env next to this script; run it from anywhere.
+# "stopped"). Uses compose.prod.yml and the .env next to this script; run it from anywhere. The cache volume (module index,
+# readers' copy) is not copied: the server rebuilds it.
 #
 #   sh backup.sh [--online] [--dir <folder>] [--keep-days <n>] [--local-only]
 #
