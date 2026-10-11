@@ -224,6 +224,27 @@ RUN install -d -o ssam -g ssam -m 0750 /data/server /data/friction /data/odc-fea
  && chown root:ssam /app/kernel/.local /app/kernel/.local/lane-odc \
  && chmod 1770 /app/kernel/.local /app/kernel/.local/lane-odc
 
+# The start of the server (CMD). Before node, the server's own trusted-controller key (bridge.key of ANVIL_AUTHORITY_DIR,
+# in the container layer: a new one per container) is made the way the kernel's BridgeAccess.Initialize makes it (64 hex
+# characters, folder 0700) when it is missing. Without this, the warm-up of every NEW container (first start, upgrade,
+# --force-recreate) started the resident ODC builder before the ODC worker had initialized the key: warm
+# "the resident builder failed to start" ("Local Hybrid authority is not initialized", ManifestServer.cs), seen in both
+# Docker Desktop rehearsals; a plain restart, with the key already there, warmed it fine. The kernel keeps an existing key.
+COPY --chmod=0755 <<'EOF' /usr/local/bin/ssam-server-start
+#!/bin/sh
+set -eu
+authority=${ANVIL_AUTHORITY_DIR:-/app/.local/authority}
+if [ ! -s "$authority/bridge.key" ]; then
+  umask 077
+  mkdir -p "$authority"
+  key=$(head -c 32 /dev/urandom | od -An -v -tx1 | tr -d ' \n' | tr 'a-f' 'A-F')
+  [ "${#key}" -eq 64 ] || { echo "ssam-server-start: could not make the authority key" >&2; exit 1; }
+  printf '%s' "$key" > "$authority/bridge.key.$$"
+  mv -f "$authority/bridge.key.$$" "$authority/bridge.key"
+fi
+exec node facade/ssam.mjs serve --host 0.0.0.0 --allow-remote --port "${SSAM_PORT:-7310}" --log-file /data/server/server.log ${SSAM_PUBLIC_HOST:+--public-host "$SSAM_PUBLIC_HOST"}
+EOF
+
 # State lives in volumes, never in the image:
 #   /data/server        tokens.json (SHA-256 of each token only), kernel.json, customers' workspaces, audit, server.log
 #   /data/friction      the friction store
@@ -275,5 +296,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
 
 # Listens on 0.0.0.0 of the container network only (--allow-remote: hosted mode behind the TLS proxy the owner controls,
 # the caddy service of deploy/compose.prod.yml, which publishes no port of this container). SSAM_PUBLIC_HOST is the public
-# host name the proxy answers for (Origin check of http-server.mjs for browsers).
-CMD ["sh", "-c", "exec node facade/ssam.mjs serve --host 0.0.0.0 --allow-remote --port \"$SSAM_PORT\" --log-file /data/server/server.log ${SSAM_PUBLIC_HOST:+--public-host \"$SSAM_PUBLIC_HOST\"}"]
+# host name the proxy answers for (Origin check of http-server.mjs for browsers). ssam-server-start (above) makes the
+# authority key first, then execs node facade/ssam.mjs serve.
+CMD ["ssam-server-start"]
