@@ -166,9 +166,6 @@ RUN --mount=type=bind,from=studio-odc,source=/studio/odc,target=/studio/odc \
 FROM ${NODE_IMAGE} AS node
 FROM ${DOTNET_RUNTIME_IMAGE} AS runtime
 ARG DOTNET_RUNTIME_IMAGE
-ARG SSAM_VERSION
-ARG VCS_REF
-ARG BUILD_DATE
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 # libsqlite3-0 for the SQLite provider of the Studio model libraries (the Studios ship only the Windows e_sqlite3.dll); the
 # .NET image already carries ICU, OpenSSL, CA certificates and tzdata. The ssam user has no home of its own: HOME is /tmp
@@ -246,6 +243,13 @@ ENV HOME=/tmp \
     SSAM_PUBLIC_HOST=
 VOLUME ["/data/server", "/data/friction", "/data/odc-features"]
 
+# The label values are declared only here: a build arg declared earlier in the stage is part of the cache key of every
+# RUN after it, so a new BUILD_DATE rebuilt the apt layer and every runtime layer after it (seen in the Docker Desktop
+# rehearsal: two builds of one tree shared none of them, ~600 MB more to push and pull). Now a release changes only the
+# layers of its code.
+ARG SSAM_VERSION
+ARG VCS_REF
+ARG BUILD_DATE
 LABEL org.opencontainers.image.title="ssam-server" \
       org.opencontainers.image.description="SSAM hosted MCP server (production). Contains OutSystems Studio binaries: private registry only." \
       org.opencontainers.image.version="${SSAM_VERSION}" \
