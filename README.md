@@ -112,7 +112,8 @@ firewall). Os bundles dos Studios não estão no repositório.
    `node --test platforms/odc/facade/tests/hosted-image-denylist.test.mjs`.
 4. `docker compose build` e `docker compose up -d` (ssam-server em 127.0.0.1:7310 e túnel ngrok).
 5. Grave o kernel no volume: `docker compose cp kernel.json ssam-server:/data/server/kernel.json`, com
-   `{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v48"}`. No Linux a detecção por versão de exe não roda.
+   `{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v48","odcBridgeAccepted":["v45"]}`, o mesmo do servidor no ar (aceita
+   agentes ainda com a bridge v45). No Linux a detecção por versão de exe não roda.
 6. Cache de features do ODC: o `Features.xml` do Windows é cifrado com DPAPI e o Linux não o lê. Numa máquina já
    logada no tenant, como o mesmo usuário, gere `Features.plain.xml` com `server\deploy\odc-features-export.ps1` e
    grave em `/data/odc-features/` (detalhes no `server/deploy/DEPLOY.md`, seção 7.2).

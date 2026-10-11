@@ -69,7 +69,8 @@ VPS Linux com Docker Compose, HTTPS automático pelo Caddy e servidor sem porta 
 2. `.env` a partir de `.env.example` (`NGROK_DOMAIN`, `NGROK_AUTHTOKEN`).
 3. `node --test platforms/odc/facade/tests/hosted-image-denylist.test.mjs` antes de cada build.
 4. `docker compose build` e `docker compose up -d`.
-5. `kernel.json` no volume: `{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v48"}` em `/data/server/kernel.json`.
+5. `kernel.json` no volume: `{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v48","odcBridgeAccepted":["v45"]}` em
+   `/data/server/kernel.json`, o mesmo do servidor no ar (aceita agentes ainda com a bridge v45).
 6. `Features.plain.xml` (do `deploy/odc-features-export.ps1`; o `Features.xml` do Windows é DPAPI e o Linux não o lê)
    em `/data/odc-features/` (`deploy/DEPLOY.md`, seção 7.2).
 7. Tokens: `docker compose run --rm ssam-admin server-token issue ...`.

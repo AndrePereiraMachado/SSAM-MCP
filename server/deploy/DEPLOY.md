@@ -231,11 +231,21 @@ No Linux o servidor não lê a versão dos Studios nos `.exe`. Sem `kernel.json`
 recusa o pacote do cliente (`AGENT_PACK_MISMATCH`). Os valores têm de bater com o pacote do agente (`pack.json`:
 `odcBridge` e `o11BuiltFor`), como diz a seção "Compatibilidade entre as caixas" do `README.md` da raiz.
 
+Grave o mesmo `kernel.json` do servidor no ar (hoje no Windows do dono, na pasta de estado dele):
+
 ```bash
-cd /opt/ssam/SSAM-MCP/server/deploy
-printf '%s\n' '{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v48"}' \
+printf '%s\n' '{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v48","odcBridgeAccepted":["v45"]}' \
   | docker compose -f compose.prod.yml run --rm -T ssam-ops sh -c 'cat > /data/server/kernel.json'
+docker compose -f compose.prod.yml run --rm -T ssam-ops cat /data/server/kernel.json
 ```
+
+- `odcBridge` é a bridge ODC do pacote atual do agente. `odcBridgeAccepted` lista as bridges mais antigas que o servidor
+  ainda atende: um agente com o pacote v45 continua funcionando depois do salto para v48. Sem esse campo, todo cliente
+  ainda com o pacote v45 recebe `AGENT_PACK_MISMATCH` na faixa ODC.
+- Só tire uma versão de `odcBridgeAccepted` quando nenhum cliente a usar mais. O log do servidor não mostra a bridge do
+  agente (`agent-connected` traz só a versão do agente): confirme com cada cliente (`ssam-agent doctor` ou o `pack.json`
+  da pasta do agente).
+- O `kernel.json` acompanha a versão dos Studios e da bridge: no upgrade e no rollback (seção 8) ele é regravado junto.
 
 ### 7.2 Cache de features do ODC (`Features.plain.xml`)
 
@@ -345,7 +355,7 @@ C:\SSAM-Agent\agent\node\node.exe C:\SSAM-Agent\agent\ssam-agent.mjs doctor --ro
    - O Caddy espera até 15 s pelo servidor antes de responder 502.
 5. Confira `ps` (healthy), `/health` e o log (`listening`, `kernel`, `warm`).
 6. Se mudou a versão de um Studio ou da bridge ODC, atualize o `kernel.json` (7.1) e mande o pacote novo do agente aos
-   clientes.
+   clientes. Num salto de bridge, a anterior entra em `odcBridgeAccepted` até todos os clientes trocarem de pacote.
 
 Para o Caddy, troque a imagem fixada em `compose.prod.yml` (tag e digest, resolvidos com
 `docker buildx imagetools inspect caddy:<versão>-alpine`) e rode `up -d caddy`.
@@ -353,6 +363,7 @@ Para o Caddy, troque a imagem fixada em `compose.prod.yml` (tag e digest, resolv
 **Rollback**
 
 1. Volte `SSAM_IMAGE_TAG` no `.env` para a tag anterior e rode `docker compose -f compose.prod.yml up -d ssam-server`.
+   Se o upgrade mudou o `kernel.json`, grave de novo o da versão anterior (7.1) antes do `up -d`.
 2. A imagem anterior tem de existir na VPS ou no registro. Não rode `docker image prune -a` enquanto um rollback puder ser
    preciso.
 3. Se a versão nova mudou o formato do estado, volte também o backup do passo 1 do upgrade:
@@ -525,7 +536,7 @@ as camadas entre versões.
 | 502 do Caddy | `ssam-server` parado ou ainda subindo: `ps` e `logs ssam-server`. |
 | Certificado não sai | DNS não aponta para a VPS, porta 80 ou 443 fechada, ou limite do Let's Encrypt (use staging). |
 | 401 `Unknown token` / 403 `Token revoked` ou `expired` | Token errado, revogado ou vencido: `server-token list`. |
-| `AGENT_PACK_MISMATCH` | `kernel.json` (7.1) não bate com o pacote do agente do cliente. |
+| `AGENT_PACK_MISMATCH` | `kernel.json` (7.1) não bate com o pacote do agente do cliente: a bridge do pacote não é `odcBridge` nem está em `odcBridgeAccepted`, ou o `o11BuiltFor` não é o `o11`. |
 | `STUDIO_VERSION_MISMATCH` | O Service Studio do cliente não é o da imagem (11.55.91). |
 | 403 `Origin not allowed` | Cliente de navegador com uma origem diferente de `https://<SSAM_DOMAIN>`. |
 | `HOSTED_UNAVAILABLE` em `o11_extension`, `odc_external_library`, depurador ou preview | Esperado: essas ferramentas não rodam no servidor hospedado Linux. |
