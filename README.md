@@ -96,6 +96,8 @@ SSAM-MCP e não vêm da linha do servidor.
   - `ssam-server` sem porta no host, numa rede interna sem saída para a internet;
   - `caddy` em 80/443 com HTTPS automático e proxy sem buffer;
   - `ssam-admin` (tokens) e `ssam-ops` (backup e restore).
+- `server/deploy/build.sh`: o único jeito documentado de construir a imagem. Roda antes a guarda de nomes de cliente e
+  não edita o `.env`. O compose não tem `build:`.
 - `server/deploy/Caddyfile`, `.env.prod.example`, `backup.sh`, `restore.sh`, `odc-features-export.ps1` e `DEPLOY.md`.
 - O `.dockerignore` tira tudo isso da imagem, mais as cópias de estado `ssam-state-*.tar.gz` e o `Features.plain.xml`.
 

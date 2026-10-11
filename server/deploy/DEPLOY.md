@@ -9,10 +9,11 @@ automático. Estes arquivos são do monorepo SSAM-MCP e não vêm da linha do se
 | `server/deploy/compose.prod.yml` | Serviços `ssam-server`, `caddy`, `ssam-admin` (perfil `admin`) e `ssam-ops` (perfil `ops`). |
 | `server/deploy/Caddyfile` | HTTPS automático e proxy reverso sem buffer. |
 | `server/deploy/.env.prod.example` | Modelo do `.env` (sem segredo). |
+| `server/deploy/build.sh` | A guarda de nomes de cliente e depois o build da imagem (seção 6). |
 | `server/deploy/backup.sh`, `restore.sh` | Cópia e volta do estado (volumes). |
 | `server/deploy/odc-features-export.ps1` | No Windows: decifra o cache de features do ODC Studio para a VPS (7.2). |
 
-Todos os comandos `docker compose` abaixo rodam **dentro de `server/deploy`**, onde fica o `.env`.
+Todos os comandos `docker compose` e `sh` abaixo rodam **dentro da pasta `deploy`** da VPS (seção 5), onde fica o `.env`.
 
 ## 1. Como fica
 
@@ -115,11 +116,38 @@ Get-Content docker\installers\*.sha256
   dele já está fixado.
 - Os bundles nunca vão para o git (`.gitignore`) nem para o contexto principal da imagem (`.dockerignore`).
 
-## 5. Código e configuração na VPS
+## 5. Arquivos de deploy e configuração na VPS
+
+A VPS só precisa da pasta `server/deploy` (compose, Caddyfile, scripts e o `.env`), menos no caminho A da seção 6, que
+constrói a imagem ali e precisa do repositório.
+
+**Caminhos B e C** (a imagem vem pronta): só `server/deploy`, do commit aprovado, sem clonar o repositório. Ele leva
+`client-denylist.json` (com os nomes dos clientes) e docs internos que a VPS não usa. Na máquina do dono, na raiz do
+SSAM-MCP (PowerShell ou bash: um arquivo, sem pipe):
+
+```powershell
+git archive -o ssam-deploy.tar <commit aprovado> server/deploy
+scp ssam-deploy.tar <usuário>@<vps>:/tmp/
+```
+
+Na VPS:
 
 ```bash
-sudo mkdir -p /opt/ssam && sudo chown "$USER" /opt/ssam
+sudo install -d -o "$USER" -g "$USER" -m 0750 /opt/ssam
+tar -xf /tmp/ssam-deploy.tar -C /opt/ssam --strip-components=1 && rm /tmp/ssam-deploy.tar
+cd /opt/ssam/deploy
+cp .env.prod.example .env && chmod 600 .env
+nano .env
+```
+
+No upgrade, refaça o `git archive` do commit novo e extraia por cima: o `.env` não está no arquivo e fica.
+
+**Caminho A** (build na VPS): o repositório inteiro, com permissão só para o seu usuário.
+
+```bash
+sudo install -d -o "$USER" -g "$USER" -m 0750 /opt/ssam
 git clone <URL privada do SSAM-MCP> /opt/ssam/SSAM-MCP     # chave de deploy só de leitura
+chmod 0700 /opt/ssam/SSAM-MCP
 cd /opt/ssam/SSAM-MCP && git checkout <commit ou tag aprovado>
 cd server/deploy
 cp .env.prod.example .env && chmod 600 .env
@@ -157,19 +185,24 @@ Se `BACKUP_DIR` apontar para outro lugar, crie esse lugar do mesmo jeito.
 
 ## 6. A imagem
 
-Antes de cada build, rode a guarda de nomes de cliente. Nenhum nome de cliente pode entrar na imagem. A guarda lê o
-contexto exatamente como o Docker, pelas regras do `.dockerignore`:
+Toda imagem sai do `deploy/build.sh`. Ele roda primeiro a guarda de nomes de cliente
+(`platforms/odc/facade/tests/hosted-image-denylist.test.mjs`, no node fixado do `Dockerfile`, sem rede e com a árvore só
+de leitura), que lê o contexto exatamente como o Docker, pelas regras do `.dockerignore`. Se ela falhar, nada é
+construído. Depois ele faz o build com os bundles e os hashes fixados, põe os rótulos (versão = tag, revisão = commit) e
+mostra a tag e o id. Ele **nunca** edita o `.env`: a troca de tag é o passo 3 do upgrade (seção 8), depois de um build bom.
 
-```bash
-cd /opt/ssam/SSAM-MCP/server
-docker run --rm --network none -v "$PWD":/src:ro -w /src/platforms/odc/facade \
-  node:24.21.0-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 \
-  node --test tests/hosted-image-denylist.test.mjs
-```
+- O `compose.prod.yml` não tem `build:`, de propósito: um `docker compose build` pularia a guarda.
+- Tag padrão: `prod-<aaaammdd>-<commit curto>`, com `-dirty` se houver mudança não commitada. `--tag` escolhe outra.
+- Lê do ambiente ou do `.env` da pasta `deploy`: `SSAM_IMAGE`, `STUDIO_INSTALLERS_DIR`, `ODC_STUDIO_BUNDLE_SHA256`,
+  `SERVICE_STUDIO_BUNDLE_SHA256` e, para outros arquivos de Studio, os nomes da seção 4.
+- Precisa de `sh`, `docker` com buildx e `git`: Linux, WSL, ou Git Bash no Windows (provado no Docker Desktop, seção 12).
 
-Escolha um dos três caminhos.
+Escolha um dos três caminhos. Numa VPS de 8 GB, prefira B ou C.
 
 ### A. Build na própria VPS
+
+O build (pnpm, NuGet e três projetos .NET) disputa CPU e memória com o servidor no ar e deixa alguns GB de cache. Rode-o
+numa hora calma.
 
 No Windows, em `server\`, mande os bundles e os `.sha256` para a VPS:
 
@@ -181,49 +214,59 @@ Na VPS:
 
 ```bash
 cd /opt/ssam/SSAM-MCP/server/deploy
-TAG=prod-$(date -u +%Y%m%d)-$(git rev-parse --short HEAD)
-sed -i "s/^SSAM_IMAGE_TAG=.*/SSAM_IMAGE_TAG=$TAG/" .env
-SSAM_VCS_REF=$(git rev-parse HEAD) SSAM_BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-  docker compose -f compose.prod.yml build ssam-server
+sh build.sh                                     # guarda, build, tag; o .env não muda
+docker builder prune -f --reserved-space 8gb    # limpa o cache de build além de 8 GB
 ```
 
-- O primeiro build leva dezenas de minutos (pnpm, NuGet e três projetos .NET) e precisa de internet.
-- As imagens base estão fixadas por tag e digest no `Dockerfile`.
+- O primeiro build leva dezenas de minutos e precisa de internet. As imagens base estão fixadas por tag e digest.
+- Siga na seção 8, passo 3, com a tag que o `build.sh` mostrou.
 
 ### B. Build em outra máquina e registro privado
 
-Numa máquina com Docker (Linux, WSL ou Docker Desktop), na pasta `server/`:
+Numa máquina com Docker e o repositório (Linux, WSL, ou Git Bash com Docker Desktop), com os bundles em
+`server/docker/installers` e os hashes no ambiente ou no `server/deploy/.env` dela:
 
 ```bash
-TAG=prod-$(date -u +%Y%m%d)-$(git rev-parse --short HEAD)
-REG=registry.seudominio.com/ssam/ssam-server       # registro PRIVADO, com autenticação
-docker buildx build -f Dockerfile --platform linux/amd64 --build-context installers=docker/installers \
-  --build-arg ODC_STUDIO_BUNDLE_SHA256=<sha256> --build-arg SERVICE_STUDIO_BUNDLE_SHA256=<sha256> \
-  --build-arg SSAM_VERSION=$TAG --build-arg VCS_REF=$(git rev-parse HEAD) \
-  --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-  -t $REG:$TAG --push .
+cd server
+sh deploy/build.sh --image registry.seudominio.com/ssam/ssam-server --push   # registro PRIVADO, com autenticação
 ```
+
+O `build.sh` mostra a linha para o `.env` da VPS, **com o digest**: `SSAM_IMAGE_TAG=<tag>@sha256:<digest>`. Com o digest,
+uma tag empurrada de novo não muda o que a VPS roda, e o rollback volta exatamente para a imagem anterior.
 
 Na VPS:
 
 ```bash
 docker login registry.seudominio.com        # token só de leitura
-# .env: SSAM_IMAGE=registry.seudominio.com/ssam/ssam-server e SSAM_IMAGE_TAG=<TAG>
+# .env: SSAM_IMAGE=registry.seudominio.com/ssam/ssam-server e SSAM_IMAGE_TAG=<tag>@sha256:<digest>
 docker compose -f compose.prod.yml pull ssam-server
 ```
 
 Serve qualquer registro privado: GHCR com pacote privado, GitLab, ECR, ACR ou um `registry:2` próprio atrás de TLS e
-senha.
+senha. Se o registro tiver tags imutáveis, ligue.
 
 ### C. Sem registro (cópia por SSH)
 
-```bash
-docker save ssam-server:$TAG | gzip | ssh <usuário>@<vps> 'gunzip | docker load'
+Na máquina do build, depois do `sh deploy/build.sh`, sempre por arquivo e nunca por pipe (no PowerShell 5.1 um pipe de
+programa nativo, como `docker save | ssh`, corrompe os bytes):
+
+```powershell
+docker save -o ssam-server-<tag>.tar ssam-server:<tag>
+(Get-FileHash ssam-server-<tag>.tar -Algorithm SHA256).Hash.ToLower()     # no bash: sha256sum ssam-server-<tag>.tar
+scp ssam-server-<tag>.tar <usuário>@<vps>:/tmp/
 ```
 
-Na VPS, o `.env` fica com `SSAM_IMAGE=ssam-server` e `SSAM_IMAGE_TAG=<TAG>`.
+Na VPS:
 
-Confira os rótulos: `docker image inspect ssam-server:$TAG --format '{{json .Config.Labels}}'`.
+```bash
+sha256sum /tmp/ssam-server-<tag>.tar          # o mesmo hash da máquina do build
+docker load -i /tmp/ssam-server-<tag>.tar && rm /tmp/ssam-server-<tag>.tar
+```
+
+O `.env` fica com `SSAM_IMAGE=ssam-server` e `SSAM_IMAGE_TAG=<tag>`. Uma imagem carregada por `docker load` não tem
+digest de registro: a garantia é o hash conferido do arquivo e o id da imagem (`docker image inspect`).
+
+Confira os rótulos: `docker image inspect ssam-server:<tag> --format '{{json .Config.Labels}}'`.
 
 ## 7. Primeira subida
 

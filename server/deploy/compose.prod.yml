@@ -10,7 +10,7 @@
 #   ssam-ops     profile ops: backup.sh, restore.sh and file drops into the state volumes (no network, read-only).
 #
 # Every command runs from this folder, with the .env made from .env.prod.example:
-#   docker compose -f compose.prod.yml build ssam-server       # or pull the tag from the private registry
+#   sh build.sh                                                # the image (guard first), or pull it from the private registry
 #   docker compose -f compose.prod.yml up -d
 #   docker compose -f compose.prod.yml run --rm ssam-admin server-token issue --customer "Nome" --days 30 --lanes odc,o11
 
@@ -34,30 +34,9 @@ services:
     # SSAM_IMAGE_TAG may carry the digest (prod-...@sha256:<digest>, the digest of the image pushed to the registry): a tag pushed again
     # to the registry then cannot change the bits under the same name, and a rollback gets exactly the old image.
     image: ${SSAM_IMAGE:-ssam-server}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG in .env (for example prod-20261010-acea75a)}
-    # Built and proven for linux/amd64 only.
+    # Built and proven for linux/amd64 only. No `build:` on purpose: the image comes only from deploy/build.sh, which runs
+    # the client-name guard first (a `docker compose build` would skip it).
     platform: linux/amd64
-    build:
-      context: ..
-      dockerfile: Dockerfile
-      additional_contexts:
-        installers: ${STUDIO_INSTALLERS_DIR:-../docker/installers}
-      # Same names and defaults as ../Dockerfile; empty means "none". The Dockerfile refuses a Studio input without a
-      # pinned SHA256 (the bundles' come from studio-bundle.ps1).
-      args:
-        SERVICE_STUDIO_INSTALLER: ${SERVICE_STUDIO_INSTALLER:-ServiceStudio-11.55.91.65258.exe}
-        SERVICE_STUDIO_SHA256: ${SERVICE_STUDIO_SHA256:-10047d31a03adbbe6bd3a07c9de0506eeba3420e7031e51846607ee3fcde136c}
-        SERVICE_STUDIO_URL: ${SERVICE_STUDIO_URL:-}
-        SERVICE_STUDIO_BUNDLE: ${SERVICE_STUDIO_BUNDLE:-o11-studio-11.55.91.65258.tar.gz}
-        SERVICE_STUDIO_BUNDLE_SHA256: ${SERVICE_STUDIO_BUNDLE_SHA256:-}
-        ODC_STUDIO_INSTALLER: ${ODC_STUDIO_INSTALLER:-ODCStudio-1.7.27.10846.exe}
-        ODC_STUDIO_SHA256: ${ODC_STUDIO_SHA256:-}
-        ODC_STUDIO_URL: ${ODC_STUDIO_URL:-}
-        ODC_STUDIO_BUNDLE: ${ODC_STUDIO_BUNDLE:-odc-studio-1.7.27.10846.tar.gz}
-        ODC_STUDIO_BUNDLE_SHA256: ${ODC_STUDIO_BUNDLE_SHA256:-}
-        STUDIO_EXTRACTOR: ${STUDIO_EXTRACTOR:-nsis}
-        SSAM_VERSION: ${SSAM_IMAGE_TAG}
-        VCS_REF: ${SSAM_VCS_REF:-unknown}
-        BUILD_DATE: ${SSAM_BUILD_DATE:-unknown}
     restart: unless-stopped
     environment:
       SSAM_PORT: "7310"

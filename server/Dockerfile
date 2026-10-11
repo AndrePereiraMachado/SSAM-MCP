@@ -16,12 +16,13 @@
 #     the kernel processes are reaped;
 #   - OCI labels; no secret; nothing in the runtime beyond the base image, node and libsqlite3-0.
 #
-# Build context = this folder (server/), Studios through the `installers` named context:
+# Build it with deploy/build.sh, the only documented way: it runs the client-name guard
+# (platforms/odc/facade/tests/hosted-image-denylist.test.mjs) first and builds only when no client name would ship. It
+# runs, from this folder (server/), with the Studios through the `installers` named context:
 #   docker buildx build -f Dockerfile --build-context installers=docker/installers \
 #     --build-arg ODC_STUDIO_BUNDLE_SHA256=<sha256> --build-arg SERVICE_STUDIO_BUNDLE_SHA256=<sha256> \
 #     --build-arg SSAM_VERSION=prod-<yyyymmdd>-<commit> --build-arg VCS_REF=<commit> --build-arg BUILD_DATE=<utc iso> \
 #     --platform linux/amd64 -t ssam-server:prod-<yyyymmdd>-<commit> .
-# Before every build: node --test platforms/odc/facade/tests/hosted-image-denylist.test.mjs (no client name ships).
 #
 # LICENSE: the image carries OutSystems binaries (the part of each Studio the kernels compile against and load), like the
 # studio bundles. Keep it in a PRIVATE registry or store; never push it to a public one.
