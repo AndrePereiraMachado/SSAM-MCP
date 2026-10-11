@@ -200,7 +200,16 @@ export async function resolvePaths(name, entry, args, lane, context, { agentRoot
 // ---- presentation (6.3 rule 4)
 const escapeRe = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const SEP = '[\\\\/]+';
-const prefixSource = dir => path.resolve(dir).split(/[\\/]+/).filter(Boolean).map(escapeRe).join(SEP);
+// A folder whose absolute path starts with a separator (POSIX, and Windows UNC) keeps that separator in its pattern, and
+// its match must start a path, not continue another one. Without both, on Linux (server/Dockerfile) /data/server/... lost
+// its leading "/": the workspace came out as "/ws:odc/..." (a path no tool takes back) and a short server root such as
+// HOME=/tmp turned any ".../tmp/..." into "<servidor>". A Windows drive path (C:\...) keeps its pattern as before.
+const PATH_START = `(?<![^\\s"'<>|*?,;:=()[\\]{}])`;
+const prefixSource = (dir, api = path) => {
+  const abs = api.resolve(dir);
+  const parts = abs.split(/[\\/]+/).filter(Boolean).map(escapeRe);
+  return /^[\\/]/.test(abs) ? PATH_START + SEP + parts.join(SEP) : parts.join(SEP);
+};
 const TAIL = `(?:${SEP}[^\\\\/\\s"'<>|*?]+)*`;
 const END = `(?=$|[\\\\/\\s"'<>|*?,;)\\]}])`;
 
@@ -208,11 +217,12 @@ const END = `(?=$|[\\\\/\\s"'<>|*?,;)\\]}])`;
 // store, where the 22nd release also keeps the module digest (ssam_map index.file and store.file), and the readers' copy.
 export const serverDataRoots = (env = process.env) => [env.SSAM_MODULE_INDEX_ROOT, env.SSAM_READER_CACHE_ROOT]
   .filter(root => typeof root === 'string' && root.trim()).map(root => path.resolve(root));
-export function presenter({ workspace, serverRoots = [workspaceRoot, os.homedir(), ...serverDataRoots()] }) {
-  const ws = path.resolve(workspace);
-  const wsSource = prefixSource(ws);
-  const roots = [...new Set(serverRoots.filter(Boolean).map(r => path.resolve(r)))].sort((a, b) => b.length - a.length);
-  const rootSources = roots.map(prefixSource);
+// pathApi: the path flavor of this server (path.posix in a test of the Linux image's paths).
+export function presenter({ workspace, serverRoots = [workspaceRoot, os.homedir(), ...serverDataRoots()], pathApi = path }) {
+  const ws = pathApi.resolve(workspace);
+  const wsSource = prefixSource(ws, pathApi);
+  const roots = [...new Set(serverRoots.filter(Boolean).map(r => pathApi.resolve(r)))].sort((a, b) => b.length - a.length);
+  const rootSources = roots.map(root => prefixSource(root, pathApi));
   const asWs = rest => {
     const segments = rest.split(/[\\/]+/).filter(Boolean);
     return segments.length && ['odc', 'o11', 'inbox'].includes(segments[0].toLowerCase()) ? 'ws:' + segments.join('/') : '<servidor>';

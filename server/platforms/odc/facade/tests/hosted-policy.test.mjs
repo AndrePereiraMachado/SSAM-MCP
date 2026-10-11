@@ -253,6 +253,24 @@ test('answers show ws: in the object and in the JSON text; other server paths be
   assert.equal(pretty.content[0].text, JSON.stringify({ file: 'ws:odc/lab/01-x/result.json' }));
 });
 
+test('Linux paths (server/Dockerfile): the workspace is ws:<rel> without a leading "/", and a short root like HOME=/tmp hides only real /tmp paths', () => {
+  const linux = presenter({ workspace: '/data/server/customers/tok_x/ws', serverRoots: ['/app', '/tmp', '/data/server'], pathApi: path.posix });
+  // Seen in the Docker Desktop rehearsal before the fix: "/ws:odc/snapshots/..." and "/<servidor>".
+  assert.equal(linux.string('/data/server/customers/tok_x/ws/odc/snapshots/Orders-AB.oml'), 'ws:odc/snapshots/Orders-AB.oml');
+  assert.equal(linux.string('/data/server/customers/tok_x/ws/o11/tmp/thin-bridge/1.oml'), 'ws:o11/tmp/thin-bridge/1.oml', 'the workspace tmp is not the server /tmp');
+  assert.equal(linux.string('wrote /data/server/customers/tok_x/ws/inbox/b.json and /app/kernel/.local/cli/anvil.dll (done)'), 'wrote ws:inbox/b.json and <servidor> (done)');
+  assert.equal(linux.string('Path outside the workspace of this account: "/tmp/thin-bridge/2.oml"'), 'Path outside the workspace of this account: "<servidor>"');
+  assert.equal(linux.string('/tmp'), '<servidor>');
+  assert.equal(linux.string('/data/server/tokens.json'), '<servidor>');
+  assert.equal(linux.string('/data/server/customers/tok_x/ws-other/x'), '<servidor>', 'a sibling folder is not the workspace');
+  // A path that only contains a root's name further in is not that root.
+  assert.equal(linux.string('C:\\SSAM-Agent\\tmp\\x.json'), 'C:\\SSAM-Agent\\tmp\\x.json');
+  assert.equal(linux.string('ws:o11/tmp/a.oml'), 'ws:o11/tmp/a.oml');
+  assert.equal(linux.string('/home/user/apps/x'), '/home/user/apps/x', '/app is not /apps');
+  assert.equal(linux.string(JSON.stringify({ a: '/data/server/customers/tok_x/ws/odc/lab/r.json', b: '/tmp/z' }).slice(1, -1)), '"a":"ws:odc/lab/r.json","b":"<servidor>"');
+  assert.deepEqual(linux.value({ path: '/data/server/customers/tok_x/ws/o11/snapshots/H.oml', home: '/tmp/.dotnet' }), { path: 'ws:o11/snapshots/H.oml', home: '<servidor>' });
+});
+
 test('the module index store and the readers\' copy are server paths wherever their roots are (ssam_map index.file, the 22nd digest store.file)', () => {
   const h = harness();
   const saved = { index: process.env.SSAM_MODULE_INDEX_ROOT, readers: process.env.SSAM_READER_CACHE_ROOT };
