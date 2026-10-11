@@ -122,3 +122,17 @@ deploy
 **/ssam-state-*.tar.gz.*
 # the decrypted ODC feature cache (deploy/odc-features-export.ps1, tenant feature flags) goes into the volume, never here
 **/Features.plain.xml
+# the owner's own data, read by nothing the hosted server runs (checked 2026-10-11): MCP client config with his paths,
+# the ngrok example (his reserved domain; the line above re-included it), the integration contract with his e-mail (the
+# code only names it in comments and catalog "origin" texts), the Service Center host policy with his personal
+# environment (without it every host is "corporate", the strictest class), and labs and debugger tests with his hosts
+.mcp.json
+**/.mcp.json
+README-CAIXA.md
+.env.example
+docs/INTEGRACOES-GITSSAM.md
+kernel/scripts/service_center/hosts.json
+kernel/scripts/probes
+kernel/debug/tests
+kernel/debug/tests-o11
+kernel/debug/tests-odc

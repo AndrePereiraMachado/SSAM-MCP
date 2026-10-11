@@ -12,8 +12,14 @@ Arquivos do SSAM-MCP nesta caixa, que **não vêm da linha do servidor**:
 - `deploy/`: compose de produção, Caddyfile, `.env.prod.example`, `backup.sh`, `restore.sh` e o runbook `deploy/DEPLOY.md`.
 
 Há uma exceção à regra de não editar arquivos copiados: o `.dockerignore` ganhou no fim um bloco marcado "added by the
-SSAM-MCP monorepo". Ele tira da imagem o `Dockerfile`, o `deploy/` e as cópias de estado (`ssam-state-*.tar.gz`). As
-regras anteriores e a guarda de nomes de cliente continuam iguais.
+SSAM-MCP monorepo". Ele tira da imagem o `Dockerfile`, o `deploy/`, as cópias de estado (`ssam-state-*.tar.gz`), este
+README e os dados internos do dono que o servidor hospedado não lê (`.mcp.json`, `.env.example`,
+`docs/INTEGRACOES-GITSSAM.md`, `kernel/scripts/service_center/hosts.json`, `kernel/scripts/probes` e os testes do
+depurador). As regras anteriores e a guarda de nomes de cliente continuam iguais.
+
+Ainda vão na imagem, porque são código ou documentação da linha do servidor: caminhos `C:\Users\andre\...` em docs,
+catálogos e comentários, e o host do ambiente pessoal do dono em fontes do kernel e da fachada. Isso se corrige na
+origem (linha do servidor), não aqui.
 
 O servidor no ar continua rodando do original (`SSAM-Hybrid-servidor-wt\fase4-22`, porta 7310). Não use essa porta para testar esta cópia.
 
