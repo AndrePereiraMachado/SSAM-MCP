@@ -27,17 +27,20 @@
 //   - a worker that loaded a kernel older than the CLI on disk is shut down and restarted when idle, served (with a
 //     warning) when busy; its age comes from the record of a successful ping (worker_process.remember, or ours);
 //   - ANVIL_WORKER=0 (both lanes) and ANVIL_ODC_NO_WORKER (ODC) always run cold.
+// Hosted (executor.mjs), the O11 lane's worker above is off; each customer may get a resident O11 worker of its own,
+// started with that customer's hosted spawn environment (HostedO11Workers, at the end of this file).
 // Out of scope, on purpose: the worker pool (worker_pool.py: several workers, reservation, base affinity) stays
 // Python-only and is never used from here; a port that accepts connections but does not answer the ping is left
 // alone (no pid to verify) and the job runs cold; the stale-deploy warning of anvil_cli.py (sources newer than .local/cli).
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { spawn, execFile } from 'node:child_process';
 import { anvilRoot, workspaceRoot, o11Lane } from './workspace.mjs';
 import { o11LaneOf, readAuthorityKey } from './o11-lane.mjs';
 import { laneEnvironment, createAnvilRunner } from './anvil-cli.mjs';
-import { hostedContext } from './executor.mjs';
+import { hostedContext, hostedSpawnEnv, onHostedContextClose, usesWorkspace } from './executor.mjs';
 
 export const WORKER_PROTOCOL = 'anvil-worker-1';
 const MAX_REPLY_BYTES = 256 * 1024 * 1024;
@@ -48,8 +51,9 @@ const portOf = (value, fallback) => { const n = Number(value); return Number.isI
 const readJson = file => { try { return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, '')); } catch { return null; } };
 const sameDir = (a, b) => { const n = p => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p)); return n(a) === n(b); };
 
-// Hosted (executor.mjs), the O11 worker is off: its process would keep this server's environment and Studio. The ODC
-// worker is a shared process of the server that never talks to a Studio, so it stays.
+// Hosted (executor.mjs), the O11 lane's worker is off: its process would keep this server's environment and Studio (a
+// customer's calls go to that customer's own worker instead, hostedWorkerClient). The ODC worker is a shared process of
+// the server that never talks to a Studio, so it stays.
 export const workerDisabled = (lane, env = process.env) => env.ANVIL_WORKER === '0' || (lane === 'odc' && Boolean(env.ANVIL_ODC_NO_WORKER))
   || (lane === 'o11' && hostedContext() !== null);
 const odcPort = workspace => portOf(readJson(path.join(workspace, '.ssam-workspace.json'))?.workers?.odc, 4547);
@@ -338,11 +342,14 @@ function defaultOdcWorker() { return workerDisabled('odc') ? null : createWorker
 // loading the Studio assemblies again (the ~17 s of a cold `dotnet anvil.dll` per call). Nothing executed there
 // (disabled, other Studio, not startable, unreachable before the write) runs cold; a request written with no reply
 // is an unknown outcome, reported as timedOut so callers treat it as uncertain and never replay it.
+// Hosted, the command goes to the calling customer's own worker (hostedWorkerClient; deps.hostedWorkers in tests).
 export function createWorkerFirstRunner({ root = anvilRoot, env = process.env, o11 = o11Lane.lane, cold, worker } = {}, deps = {}) {
   const fallback = cold ?? createAnvilRunner({ lane: o11, root, env });
   let client = worker ?? null;
-  // Hosted, checked per call: a runner never hands a hosted command to the worker it may have used before.
-  const resolve = () => (hostedContext() ? false : client ?? (client = workerDisabled('o11', env) ? false : createWorkerClient('o11', { root, env, o11 }, deps)));
+  // Hosted, checked per call: a runner never hands a hosted command to the worker it may have used before, only to the
+  // worker of the customer of this call.
+  const resolve = () => (hostedContext() ? hostedWorkerClient({ root, env, o11, pool: deps.hostedWorkers }) ?? false
+    : client ?? (client = workerDisabled('o11', env) ? false : createWorkerClient('o11', { root, env, o11 }, deps)));
   return async function runAnvil(args, options = {}) {
     const verb = String(args[0] ?? '');
     const usable = resolve();
@@ -363,5 +370,346 @@ export function createWorkerFirstRunner({ root = anvilRoot, env = process.env, o
     const envelope = w.envelope;
     return { ok: envelope?.ok === true, exitCode: envelope?.ok === true ? 0 : 1, envelope, stderr: w.warning ? [w.warning] : [],
       wallMs: Date.now() - started, line, via: 'worker' };
+  };
+}
+
+// ---- Hosted: one resident O11 worker per customer -------------------------------------------------------------------
+// Hosted, the O11 lane's worker stays off (workerDisabled): its process would keep this server's environment. A customer
+// gets a worker of its own instead: `dotnet <cli> serve` started with exactly the environment and folder that customer's
+// cold process gets (hostedSpawnEnv('o11'): its relay port and relay authority, TEMP and cwd in its workspace), plus
+// ANVIL_WORKER_IDLE_MINUTES (read only by the serve loop), on a loopback port of its own. Its trusted-controller key is
+// that customer's relay key (<ws>/state/relay-authority/bridge.key, read by the worker when it starts, as every kernel
+// process with that environment reads it): a request with any other key runs nothing there (executed:false).
+//   - Keyed by the tokenId of the hosted call and reused only by that token; every request carries that token's key.
+//   - The fingerprint (environment, folder, CLI path and time, key) is checked at every call. Another one (a new hosted
+//     context brings a new relay port and a new relay key; a rebuilt CLI) stops the idle worker and starts one for the new
+//     environment; a busy one is left to finish and the call runs cold.
+//   - One call at a time: a worker busy with another call, or starting for one, sends this call cold.
+//   - SSAM_O11_WORKERS_MAX (default 2, the KVM 2; 0 is off) processes at most, stopping ones included: another customer
+//     takes the place of the least recently used idle worker (stopped before the new one starts), else runs cold.
+//     SSAM_O11_WORKER_IDLE_MS (default 10 min) without a call stops a worker; ANVIL_WORKER_IDLE_MINUTES makes it exit by
+//     itself 5 min after that, should this process lose it. A closed hosted context stops its worker.
+//   - Cold, the call as today: the cap is reached, the worker does not start (CLI or Studio missing, exit, deadline, a ping
+//     of another pid or Studio), refuses the connection before the write, recycles, or answers its ping other than idle.
+//     A request written with no reply is an unknown outcome, never replayed (here or cold), and its worker is retired:
+//     asked to shut down, terminated when it does not exit.
+//   - ANVIL_WORKER=0 keeps every hosted call cold, as locally. The startup lock and the records of the lane worker are not
+//     used: this process alone starts these workers and holds their ChildProcess (no pid is ever guessed).
+export const HOSTED_O11_WORKERS_MAX = 2;
+export const HOSTED_O11_WORKER_IDLE_MS = 10 * 60 * 1000;
+const SELF_EXIT_MARGIN_MS = 5 * 60 * 1000;
+const THE_WORKER = "the customer's O11 worker";
+const UNKNOWN = 'worker connection failed after submission; execution outcome is unknown, command was not replayed';
+
+const settingOf = (value, fallback, min) => {
+  if (value === undefined || value === null || String(value).trim() === '') return fallback;
+  const n = Number(value);
+  return Number.isSafeInteger(n) && n >= min ? n : fallback;
+};
+// The cap and the idle time of the customers' workers, and whether they are off. Invalid values keep the defaults.
+export function hostedWorkerSettings(env = process.env) {
+  const max = settingOf(env.SSAM_O11_WORKERS_MAX, HOSTED_O11_WORKERS_MAX, 0);
+  return { max, idleMs: settingOf(env.SSAM_O11_WORKER_IDLE_MS, HOSTED_O11_WORKER_IDLE_MS, 1000), disabled: env.ANVIL_WORKER === '0' || max === 0 };
+}
+
+const sha256 = text => createHash('sha256').update(String(text), 'utf8').digest('hex');
+// What a customer's worker is started with: the same value means the same environment, folder, kernel build and key.
+export function hostedFingerprint({ env, cwd, cli, key }) {
+  let built = null;
+  try { built = fs.statSync(cli).mtimeMs; } catch { built = null; }
+  return sha256(JSON.stringify({ cli, built, cwd, env: Object.keys(env).sort().map(name => [name, env[name]]), key: sha256(key) }));
+}
+
+// The worker the hosted call in progress may use: the customer's spawn environment and folder (hostedSpawnEnv, which
+// throws what it throws for the cold process too), the server's CLI, the customer's relay key and the folder of the
+// worker's logs (<ws>/o11/tmp/o11-worker).
+export function hostedWorkerSpec({ root = anvilRoot, env = process.env, o11 = o11Lane.lane } = {}) {
+  const context = hostedContext();
+  if (!context) throw new Error('a hosted O11 worker exists only inside a hosted call');
+  const { env: childEnv, cwd } = hostedSpawnEnv('o11');
+  if (!childEnv.ANVIL_AUTHORITY_DIR) throw new Error('the hosted environment names no relay authority');
+  const key = fs.readFileSync(path.join(childEnv.ANVIL_AUTHORITY_DIR, 'bridge.key'), 'ascii').trim();
+  if (!key) throw new Error("this customer's relay key is empty");
+  const cli = o11LaneOf(o11, { root, env }).cli;
+  return { tokenId: context.tokenId, contextId: context.id ?? null, env: childEnv, cwd, cli, key, studioDir: childEnv.ANVIL_STUDIO_DIR ?? null,
+    local: path.join(cwd, 'tmp', 'o11-worker'), fingerprint: hostedFingerprint({ env: childEnv, cwd, cli, key }) };
+}
+
+// A loopback port nothing listens on now (asked from the system and released), none of the ports in use here.
+export async function loopbackPort(taken = new Set()) {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const server = net.createServer();
+    await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+    const { port } = server.address();
+    await new Promise(resolve => server.close(resolve));
+    if (!taken.has(port)) return port;
+  }
+  throw new Error('the system kept handing out ports of other workers');
+}
+
+// The newest logs of a customer's workers stay (a running worker's file among them); the older ones go.
+function pruneLogs(folder, keep = 4) {
+  let files = [];
+  try {
+    files = fs.readdirSync(folder).filter(name => /^worker-\d+-(?:\d+|startup)\.log$/.test(name))
+      .map(name => { const file = path.join(folder, name); return { file, at: fs.statSync(file).mtimeMs }; });
+  } catch { return; }
+  for (const { file } of files.sort((a, b) => b.at - a.at).slice(keep)) { try { fs.unlinkSync(file); } catch { /* still open */ } }
+}
+
+// Not detached: the worker belongs to this process, which terminates it on exit (hookExit).
+function launchHosted(entry, spawnFn, selfExitMinutes) {
+  fs.mkdirSync(entry.local, { recursive: true });
+  pruneLogs(entry.local);
+  const log = fs.openSync(path.join(entry.local, `worker-${entry.port}-startup.log`), 'a');
+  try {
+    const child = spawnFn('dotnet', [entry.cli, 'serve', '--port', String(entry.port), '--log-dir', entry.local],
+      { cwd: entry.cwd, env: { ...entry.env, ANVIL_WORKER_IDLE_MINUTES: String(selfExitMinutes) }, stdio: ['ignore', log, log], windowsHide: true });
+    child.unref?.();
+    return child;
+  } finally { fs.closeSync(log); }
+}
+
+// True when the promise settles within ms; the timer never outlives it.
+const settlesWithin = (promise, ms) => new Promise(resolve => {
+  const timer = setTimeout(() => resolve(false), ms);
+  promise.then(() => { clearTimeout(timer); resolve(true); });
+});
+
+// On this process's exit every customer worker still running is terminated (the exit event allows only synchronous work).
+const pools = new Set();
+let exitHooked = false;
+function hookExit(pool) {
+  pools.add(pool);
+  if (exitHooked) return;
+  exitHooked = true;
+  process.once('exit', () => { for (const each of pools) each.terminateAll(); });
+}
+
+// The customers' workers of this process. run(spec, argv) has the answer shape of runOnWorker: {used:false, note} (nothing
+// ran there: the caller runs cold), {used:true, envelope}, or {used:true, unknown:true, code, error} (never replayed).
+// deps (tests): spawnFn, now, freePort, waitMs (startup deadline), pingMs, stopMs (shutdown, then terminate).
+export class HostedO11Workers {
+  constructor({ max = HOSTED_O11_WORKERS_MAX, idleMs = HOSTED_O11_WORKER_IDLE_MS, waitMs = 25000, pingMs = 3000, stopMs = 10000,
+    spawnFn = spawn, now = Date.now, freePort = loopbackPort } = {}) {
+    Object.assign(this, { max, idleMs, waitMs, pingMs, stopMs, spawnFn, now, freePort });
+    this.entries = new Map(); // tokenId -> that customer's worker, starting or ready
+    this.stopping = new Set(); // asked to stop, process not gone yet
+    this.closed = false;
+  }
+
+  // What the cap counts: workers starting or ready, and those whose process has not exited yet.
+  get size() { return this.entries.size + this.stopping.size; }
+  workerOf(tokenId) { return this.entries.get(tokenId) ?? null; }
+  processes(except = null) {
+    return [...this.entries.values()].filter(e => e !== except && e.child && e.exitCode === undefined).length + this.stopping.size;
+  }
+  ports() { return new Set([...this.entries.values(), ...this.stopping].map(e => e.port).filter(Number.isInteger)); }
+
+  async run(spec, argv, { timeoutMs = 900000 } = {}) {
+    const claim = this.claim(spec);
+    if (!claim.entry) return { used: false, note: claim.note };
+    const entry = claim.entry;
+    let written = false; // from the request on, a failure is an unknown outcome
+    try {
+      const ready = claim.start ? await this.start(entry, claim.waits) : await this.check(entry);
+      if (!ready.ok) return { used: false, note: ready.note };
+      written = true;
+      let r;
+      try { r = await workerRequest({ port: entry.port, authorization: entry.key, timeoutMs }, argv.map(String)); }
+      catch (error) { r = { sent: false, error: error.message }; } // the socket never opened: nothing was written
+      if (!r.sent) {
+        written = false;
+        this.stop(entry, 'unreachable');
+        return { used: false, note: `${THE_WORKER} was unreachable before the request was written (${r.error}); ran cold` };
+      }
+      if (!r.reply) { this.stop(entry, 'outcome unknown'); return { used: true, unknown: true, code: 'WORKER_OUTCOME_UNKNOWN', detail: r.error, error: UNKNOWN }; }
+      // A worker that drains after this request (its command limit, its heap) or ran nothing (recycling, a key it does not
+      // take) serves no other call.
+      if (r.reply.recycling === true || r.reply.executed === false) this.stop(entry, 'recycling or refused');
+      if (r.reply.retryable === true && r.reply.executed === false) return { used: false, note: `${THE_WORKER} was recycling before executing the request; ran cold` };
+      return { used: true, envelope: r.reply };
+    } catch (error) {
+      return written ? { used: true, unknown: true, code: 'WORKER_OUTCOME_UNKNOWN', detail: error.message, error: UNKNOWN }
+        : { used: false, note: `${THE_WORKER} failed before the request was written (${error.message}); ran cold` };
+    } finally { this.release(entry); }
+  }
+
+  // Synchronous, so two calls never take one worker: the entry this call uses (busy from now on), or why it runs cold.
+  claim(spec) {
+    if (this.closed) return { note: 'the hosted O11 workers are closed; ran cold' };
+    const waits = []; let freeing = 0;
+    const free = (victim, why) => { waits.push(this.stop(victim, why)); if (this.stopping.has(victim)) freeing++; };
+    let entry = this.entries.get(spec.tokenId) ?? null;
+    if (entry && entry.fingerprint !== spec.fingerprint) {
+      if (entry.busy) return { note: `${THE_WORKER} still serves its earlier environment (relay, key or kernel changed) and is busy; ran cold` };
+      free(entry, 'environment changed');
+      entry = null;
+    }
+    if (entry) {
+      if (entry.busy) return { note: entry.state === 'starting' ? `${THE_WORKER} is starting for another call; ran cold` : `${THE_WORKER} is busy with another call; ran cold` };
+      entry.busy = true; clearTimeout(entry.idleTimer); entry.idleTimer = null;
+      return { entry };
+    }
+    // A new worker: a free place, or the place of the least recently used idle worker (another customer's).
+    if (this.size - freeing >= this.max) {
+      const idle = [...this.entries.values()].filter(e => !e.busy).sort((a, b) => a.lastUsed - b.lastUsed)[0];
+      if (!idle) return { note: `the ${this.max} hosted O11 worker(s) of this server are busy; ran cold` };
+      free(idle, 'least recently used');
+    }
+    entry = { tokenId: spec.tokenId, contextId: spec.contextId ?? null, fingerprint: spec.fingerprint, env: spec.env, cwd: spec.cwd, cli: spec.cli,
+      key: spec.key, studioDir: spec.studioDir ?? null, local: spec.local, state: 'starting', busy: true, lastUsed: this.now(), port: null,
+      child: null, pid: null, instanceId: null, exitCode: undefined, exited: null, idleTimer: null, stopped: null, closeAfter: false };
+    this.entries.set(spec.tokenId, entry);
+    return { entry, start: true, waits };
+  }
+
+  // The worker of a new entry, once the workers it replaces are gone: {ok:true} when its ping answers as this entry's.
+  async start(entry, waits = []) {
+    await Promise.all(waits);
+    const fail = note => { this.forget(entry); return { ok: false, note }; };
+    if (this.entries.get(entry.tokenId) !== entry) return { ok: false, note: `${THE_WORKER} was stopped before it started; ran cold` };
+    // A worker that did not exit yet keeps its place: never a process beyond the cap.
+    if (this.processes(entry) >= this.max) return fail(`the ${this.max} hosted O11 worker(s) of this server are still running; ran cold`);
+    if (!fs.existsSync(entry.cli)) return fail(`the o11 worker CLI is not built: ${entry.cli}`);
+    if (!entry.studioDir || !fs.existsSync(path.join(entry.studioDir, 'ServiceStudio.Framework.dll')))
+      return fail('the kernel Studio installation has no ServiceStudio.Framework.dll; ran cold');
+    try { entry.port = await this.freePort(this.ports()); }
+    catch (error) { return fail(`no loopback port for ${THE_WORKER} (${error.message}); ran cold`); }
+    if (this.entries.get(entry.tokenId) !== entry) return { ok: false, note: `${THE_WORKER} was stopped before it started; ran cold` };
+    let child;
+    try { child = launchHosted(entry, this.spawnFn, Math.ceil((this.idleMs + SELF_EXIT_MARGIN_MS) / 60000)); }
+    catch (error) { return fail(`${THE_WORKER} could not be started (${error.message}); ran cold`); }
+    entry.child = child;
+    entry.pid = Number.isSafeInteger(child.pid) && child.pid > 0 ? child.pid : null;
+    entry.exited = new Promise(resolve => {
+      child.once?.('exit', (code, signal) => { if (entry.exitCode === undefined) entry.exitCode = code ?? signal ?? 'signal'; resolve(); });
+      child.once?.('error', error => { if (entry.exitCode === undefined) entry.exitCode = error.message; resolve(); });
+    });
+    entry.exited.then(() => this.gone(entry));
+    hookExit(this);
+    let status = null;
+    await until(async () => { status = await ping(entry, 500); return Boolean(status) || entry.exitCode !== undefined; }, this.waitMs, { now: this.now, wake: entry.exited });
+    const why = !status ? (entry.exitCode !== undefined
+      ? `exited during startup (exit ${entry.exitCode}); see ${path.join(entry.local, `worker-${entry.port}-startup.log`)}`
+      : `did not start within ${Math.round(this.waitMs / 1000)} s`) : this.foreign(entry, status);
+    if (why) { this.stop(entry, 'startup failed'); return { ok: false, note: `${THE_WORKER} ${why}; ran cold` }; }
+    if (this.entries.get(entry.tokenId) !== entry) return { ok: false, note: `${THE_WORKER} was stopped while it started; ran cold` };
+    entry.instanceId = status.instanceId ?? null; entry.state = 'ready';
+    return { ok: true, started: true };
+  }
+
+  // An entry ready from an earlier call: its process is alive and its ping still names it, idle.
+  async check(entry) {
+    if (entry.exitCode !== undefined) { this.forget(entry); return { ok: false, note: `${THE_WORKER} has exited; ran cold` }; }
+    const status = await ping(entry, this.pingMs);
+    const why = status ? this.foreign(entry, status) : 'does not answer its ping';
+    if (why) { this.stop(entry, why); return { ok: false, note: `${THE_WORKER} ${why}; ran cold` }; }
+    return { ok: true };
+  }
+
+  // Why the worker that answered is not this entry's, idle (null when it is).
+  foreign(entry, status) {
+    if (status?.protocol !== WORKER_PROTOCOL) return 'answers its ping with another protocol';
+    if (entry.pid !== null && status.pid !== entry.pid) return `is answered on its port by pid ${status.pid}, not ${entry.pid}`;
+    if (entry.instanceId !== null && status.instanceId !== entry.instanceId) return 'is answered on its port by another instance';
+    if (!studioMatches(status, entry.studioDir)) return `serves ${status.studio ?? 'an unknown installation'}, not ${entry.studioDir}`;
+    if (status.recycling) return 'is recycling';
+    if (status.busy || status.queued) return 'is busy with a request this server did not send';
+    return null;
+  }
+
+  // The call is over: the worker is idle again, stopped after idleMs without another call (or now, when its context closed).
+  release(entry) {
+    entry.busy = false; entry.lastUsed = this.now();
+    if (this.entries.get(entry.tokenId) !== entry || entry.state !== 'ready') return;
+    if (entry.closeAfter) { this.stop(entry, 'its hosted context closed'); return; }
+    clearTimeout(entry.idleTimer);
+    entry.idleTimer = setTimeout(() => { if (!entry.busy && this.entries.get(entry.tokenId) === entry) this.stop(entry, 'idle'); }, this.idleMs);
+    entry.idleTimer.unref?.();
+  }
+
+  // An entry that never got a process.
+  forget(entry) {
+    clearTimeout(entry.idleTimer); entry.idleTimer = null;
+    if (this.entries.get(entry.tokenId) === entry) this.entries.delete(entry.tokenId);
+    if (entry.state !== 'stopping') entry.state = 'gone';
+  }
+
+  // Its process exited: whatever it was, it serves no one now.
+  gone(entry) {
+    clearTimeout(entry.idleTimer); entry.idleTimer = null;
+    this.stopping.delete(entry);
+    if (this.entries.get(entry.tokenId) === entry) this.entries.delete(entry.tokenId);
+    if (entry.state !== 'stopping') entry.state = 'gone';
+  }
+
+  // No call reaches it from now on; the worker finishes what it runs and exits, terminated when it does not. Resolves when
+  // its process is gone (or the last attempt is over); never rejects.
+  stop(entry, why) {
+    clearTimeout(entry.idleTimer); entry.idleTimer = null;
+    if (this.entries.get(entry.tokenId) === entry) this.entries.delete(entry.tokenId);
+    entry.state = 'stopping'; entry.why ??= why;
+    if (entry.stopped) return entry.stopped;
+    if (!entry.child || entry.exitCode !== undefined) return (entry.stopped = Promise.resolve());
+    this.stopping.add(entry);
+    entry.stopped = (async () => {
+      await workerRequest({ port: entry.port, authorization: entry.key, timeoutMs: this.stopMs }, ['shutdown']).catch(() => null);
+      if (await settlesWithin(entry.exited, this.stopMs)) return;
+      try { entry.child.kill(); } catch { /* exited meanwhile */ }
+      if (await settlesWithin(entry.exited, this.stopMs)) return;
+      try { entry.child.kill('SIGKILL'); } catch { /* idem */ }
+      await settlesWithin(entry.exited, this.stopMs);
+    })().catch(() => {});
+    return entry.stopped;
+  }
+
+  // A closed hosted context: its relay is gone, so its worker serves nothing more (stopped now, or after the call it runs).
+  contextClosed(tokenId, contextId) {
+    const entry = this.entries.get(tokenId);
+    if (!entry || entry.contextId !== contextId) return;
+    if (entry.busy) entry.closeAfter = true; else this.stop(entry, 'its hosted context closed');
+  }
+
+  async close() {
+    this.closed = true;
+    await Promise.all([...this.entries.values(), ...this.stopping].map(entry => this.stop(entry, 'closed')));
+    pools.delete(this);
+  }
+
+  terminateAll() {
+    for (const entry of [...this.entries.values(), ...this.stopping])
+      if (entry.child && entry.exitCode === undefined) { try { entry.child.kill(); } catch { /* exited */ } }
+  }
+}
+
+let processWorkers = null;
+// The customers' workers of this process, with the settings of its environment, stopped when their context closes.
+export function hostedO11Workers() {
+  if (!processWorkers) {
+    const { max, idleMs } = hostedWorkerSettings(process.env);
+    processWorkers = new HostedO11Workers({ max, idleMs });
+    onHostedContextClose(context => processWorkers.contextClosed(context.tokenId, context.id));
+  }
+  return processWorkers;
+}
+
+// The O11 worker client of the hosted call in progress, with the run shape of runOnWorker: that customer's worker, its
+// environment computed again at each call. null outside a hosted call, with a data root passed on purpose (tests, the
+// bench: their cold process does not get the hosted environment either) and when off (ANVIL_WORKER=0,
+// SSAM_O11_WORKERS_MAX=0). pool: tests.
+export function hostedWorkerClient({ root = anvilRoot, env = process.env, o11 = o11Lane.lane, pool = null } = {}) {
+  const context = hostedContext();
+  if (!context || hostedWorkerSettings(env).disabled || !usesWorkspace(root, anvilRoot)) return null;
+  const workers = pool ?? hostedO11Workers();
+  return {
+    hosted: true, tokenId: context.tokenId,
+    run: async (argv, { timeoutMs } = {}) => {
+      if (hostedContext() !== context) return { used: false, note: 'the hosted O11 worker client left the call it was made for; ran cold' };
+      let spec;
+      try { spec = hostedWorkerSpec({ root, env, o11 }); }
+      catch (error) { return { used: false, note: `no hosted O11 worker (${error.message}); ran cold` }; }
+      return workers.run(spec, argv, timeoutMs ? { timeoutMs } : {});
+    },
   };
 }

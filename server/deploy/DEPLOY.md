@@ -172,6 +172,9 @@ No `.env`:
   | 8 vCPU, 16 GB | 7 | 13g | 4 |
 
   Os valores de memória são estimativa e ainda não foram medidos. O `SSAM_CPUS` não pode passar do número de vCPUs.
+- `SSAM_O11_WORKERS_MAX` (padrão 2) e `SSAM_O11_WORKER_IDLE_MS` (padrão 600000): os workers O11 residentes dos clientes,
+  um por token, com o ambiente daquele cliente. Acima do teto, ou com o worker ocupado, a chamada O11 roda no processo
+  frio de antes. `SSAM_O11_WORKERS_MAX=0` desliga. A memória de cada worker ainda não foi medida na VPS.
 - Só para o build na VPS: `ODC_STUDIO_BUNDLE_SHA256` e `SERVICE_STUDIO_BUNDLE_SHA256`.
 - `BACKUP_DIR`: fora do repositório, de preferência num volume de bloco só para ele (seção 9).
 - Para testar DNS e firewall sem gastar o limite do Let's Encrypt, use `SSAM_ACME_CA` com a URL de staging. Tire depois.

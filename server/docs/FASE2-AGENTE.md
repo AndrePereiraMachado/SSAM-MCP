@@ -570,8 +570,16 @@ hospedado a partir de uma lista fechada, nunca de `process.env` inteiro:
 Usam `hostedSpawnEnv`: `anvil-cli.mjs createAnvilRunner` (faixa ODC quando o assembly é `anvil-odc.dll`),
 `lanes.mjs run` (inclusive `data`), `job-runner.mjs`, `kernel-delivery.mjs applyKernel`, `studio-create-app.mjs`,
 `ssam-reference.mjs` e `lib.mjs builder`. Os processos compartilhados do servidor (leitores residentes, worker ODC,
-índice de módulos) continuam com o ambiente do servidor e nunca falam com um Studio. O worker O11 fica desligado no
-hospedado.
+índice de módulos) continuam com o ambiente do servidor e nunca falam com um Studio. O worker O11 da faixa fica
+desligado no hospedado (`workerDisabled('o11')`). No lugar dele, cada cliente pode ter um worker O11 só seu
+(`anvil-worker.mjs HostedO11Workers`, `hostedWorkerClient`): `dotnet <cli> serve` com exatamente o `hostedSpawnEnv('o11')`
+e o `cwd` do processo frio daquele cliente (mais `ANVIL_WORKER_IDLE_MINUTES`), numa porta de loopback própria, com a
+chave do relay do cliente como chave de controlador (`<ws>/state/relay-authority/bridge.key`, lida pelo worker na
+partida). Chave por `tokenId`, nunca compartilhado; impressão digital (ambiente, pasta, CLI, chave) conferida a cada
+chamada: um contexto novo (porta e chave de relay novas) reinicia o worker ocioso. Teto `SSAM_O11_WORKERS_MAX` (padrão
+2; 0 desliga), troca do ocioso usado há mais tempo, reciclagem após `SSAM_O11_WORKER_IDLE_MS` (padrão 10 min) e parada
+quando o contexto fecha. Ocupado, partindo, teto cheio, falha na partida ou qualquer dúvida: o processo frio de hoje.
+Pedido escrito sem resposta é resultado desconhecido, nunca repetido. Logs em `<ws>/o11/tmp/o11-worker`.
 
 ### 4.8 Listas e conferências do agente
 

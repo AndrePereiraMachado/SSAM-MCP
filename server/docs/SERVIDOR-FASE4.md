@@ -90,6 +90,17 @@ Servidor:
 - Nunca compila nada. `SSAM_NO_WARM=1` desliga. O log mostra a linha `warm`.
 - Para o worker ODC servir as entregas, o servidor sobe SEM `ANVIL_WORKER=0` e SEM `ANVIL_ODC_NO_WORKER`.
 
+### Worker O11 por cliente
+
+- Cada cliente ganha um worker O11 residente só dele na primeira chamada O11 que vai ao kernel (`o11_job`/`ssam_job`
+  lane o11, `o11_deliver` e os outros verbos do `createWorkerFirstRunner`). Ele sobe com o mesmo ambiente do processo
+  frio daquele cliente (porta e chave do relay, `TEMP` e pasta no workspace) e atende só o `tokenId` dele.
+- `SSAM_O11_WORKERS_MAX` (padrão 2, para a KVM 2; 0 desliga): acima disso, o ocioso usado há mais tempo sai; se todos
+  estão ocupados, a chamada roda no processo frio. `SSAM_O11_WORKER_IDLE_MS` (padrão 600000): ocioso esse tempo, para.
+- A resposta mostra `via: "worker"`; quando rodou frio, o campo `worker` (ou `workerNote`) diz por quê.
+- Primeira chamada de cada cliente (e a primeira depois de 10 min parado): espera a partida do worker (até 25 s);
+  as seguintes vão direto ao worker. `ANVIL_WORKER=0` deixa tudo frio, como antes.
+
 ### Pool de build no servidor (faixa wp)
 
 - Um pool só para o servidor inteiro (`SSAM_BUILD_WORKERS`, padrão `min(4, núcleos - 1)`).

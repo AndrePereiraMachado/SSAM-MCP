@@ -286,6 +286,16 @@ export function prepareWorkspace(workspace) {
   return relayAuthorityDir;
 }
 
+// Told when a hosted context has closed (anvil-worker.mjs stops that customer's O11 worker, whose relay is gone). A
+// listener never changes the close; returns the function that removes it.
+const closeListeners = new Set();
+export function onHostedContextClose(listener) {
+  if (typeof listener !== 'function') throw new TypeError('onHostedContextClose needs a function.');
+  closeListeners.add(listener);
+  return () => closeListeners.delete(listener);
+}
+const closedContext = context => { for (const listener of closeListeners) { try { listener(context); } catch { /* never changes the close */ } } };
+
 // deps.loadExecutor (tests): resolves to {AgentExecutor}; by default hosted/agent-executor.mjs, imported only here.
 export async function createHostedContext({ tokenId, customer, lanes = [], agent, workspace }, { loadExecutor } = {}) {
   if (typeof tokenId !== 'string' || !/^[A-Za-z0-9_-]+$/.test(tokenId)) throw new Error('createHostedContext needs the tokenId of the session.');
@@ -299,6 +309,7 @@ export async function createHostedContext({ tokenId, customer, lanes = [], agent
   const executor = new AgentExecutor({ link: agent, workspace: root, relayAuthorityDir, o11 });
   await executor.start();
   let closed = null;
-  return Object.freeze({ id: randomUUID(), hosted: true, tokenId, customer, lanes: Object.freeze([...lanes]), workspace: root, agent, executor, o11,
-    close: () => (closed ??= Promise.resolve().then(() => executor.close())) });
+  const context = Object.freeze({ id: randomUUID(), hosted: true, tokenId, customer, lanes: Object.freeze([...lanes]), workspace: root, agent, executor, o11,
+    close: () => (closed ??= Promise.resolve().then(() => executor.close()).finally(() => closedContext(context))) });
+  return context;
 }

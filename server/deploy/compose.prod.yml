@@ -46,6 +46,10 @@ services:
       # The build pool (one resident O11 and ODC worker per slot). Set it explicitly: inside a container the default
       # min(4, cores - 1) counts the host's cores, not the CPU limit below.
       SSAM_BUILD_WORKERS: ${SSAM_BUILD_WORKERS:-2}
+      # The resident O11 worker of each customer (one per token, started with that customer's environment): at most
+      # SSAM_O11_WORKERS_MAX at once (0 runs every O11 call cold), each stopped after SSAM_O11_WORKER_IDLE_MS without a call.
+      SSAM_O11_WORKERS_MAX: ${SSAM_O11_WORKERS_MAX:-2}
+      SSAM_O11_WORKER_IDLE_MS: ${SSAM_O11_WORKER_IDLE_MS:-600000}
     volumes:
       - server-state:/data/server
       - friction:/data/friction
