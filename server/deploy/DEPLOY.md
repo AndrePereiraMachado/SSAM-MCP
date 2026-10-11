@@ -11,6 +11,7 @@ automático. Estes arquivos são do monorepo SSAM-MCP e não vêm da linha do se
 | `server/deploy/.env.prod.example` | Modelo do `.env` (sem segredo). |
 | `server/deploy/build.sh` | A guarda de nomes de cliente e depois o build da imagem (seção 6). |
 | `server/deploy/backup.sh`, `restore.sh` | Cópia e volta do estado (volumes). |
+| `server/deploy/rotate-logs.sh` | Rotação do `server.log` e retenção da auditoria e do índice de módulos (seção 10). |
 | `server/deploy/odc-features-export.ps1` | No Windows: decifra o cache de features do ODC Studio para a VPS (7.2). |
 
 Todos os comandos `docker compose` e `sh` abaixo rodam **dentro da pasta `deploy`** da VPS (seção 5), onde fica o `.env`.
@@ -35,8 +36,8 @@ agente do cliente (https://<domínio>/agent) ─┤
   auditoria, `server.log`, atritos e o cache de features do ODC (`Features.plain.xml`, 7.2). A imagem não guarda estado.
 - O volume `cache` guarda o índice de módulos do `ssam_map` (com resumos das capturas dos clientes) e a cópia dos
   leitores. Ele passa por recriações do container (um upgrade não começa frio) e fica fora do backup: o servidor o refaz.
-- `ssam-admin` emite, lista e revoga tokens. `ssam-ops` faz backup, restore e grava arquivos nos volumes. Os dois rodam
-  sem rede e só quando chamados.
+- `ssam-admin` emite, lista e revoga tokens. `ssam-ops` faz backup, restore, rotação de logs e grava arquivos nos
+  volumes. Os dois rodam sem rede e só quando chamados.
 
 ## 2. Aviso de licença
 
@@ -395,16 +396,68 @@ C:\SSAM-Agent\agent\node\node.exe C:\SSAM-Agent\agent\ssam-agent.mjs doctor --ro
 - Depois, `ssam_connect` com o Studio aberto.
 - No servidor, o log mostra `agent-connected`.
 
+### 7.6 Migração do servidor Windows no ar
+
+Hoje os clientes usam o servidor do Windows do dono. A virada para a VPS mantém os tokens e as credenciais dos agentes:
+o `tokens.json` só tem hashes e é portátil.
+
+1. **Antes**: a VPS no ar e provada com um token de teste (7.3 a 7.5), o backup e o heartbeat funcionando (seção 9).
+2. **Janela**: anuncie aos clientes. Daqui até o fim, não emita nem revogue tokens no Windows.
+3. **Estado**: da pasta de estado do servidor do Windows (`SSAM_SERVER_DIR`), copie para a VPS só estes arquivos:
+   - `tokens.json` (hashes dos tokens e das credenciais dos agentes, com cliente, faixas e validade);
+   - `kernel.json` (com `odcBridgeAccepted`, 7.1);
+   - `machine-pins.json`, se existir (a máquina de cada agente; sem ele, o primeiro acesso de cada um vira a referência).
+
+   **Não** copie `customers/` (os espaços de trabalho têm caminhos do Windows; o servidor refaz as capturas sob demanda),
+   `server.log` nem as auditorias (arquive-as no Windows).
+4. Na VPS, grave cada um no volume e reinicie:
+
+   ```bash
+   for f in tokens.json kernel.json machine-pins.json; do
+     [ -f "$f" ] && docker compose -f compose.prod.yml run --rm -T ssam-ops sh -c "cat > /data/server/$f" < "$f"
+   done
+   docker compose -f compose.prod.yml restart ssam-server
+   docker compose -f compose.prod.yml run --rm ssam-admin server-token list     # os mesmos tokens do Windows
+   shred -u tokens.json kernel.json machine-pins.json 2>/dev/null || rm -f tokens.json kernel.json machine-pins.json
+   ```
+
+5. **Clientes**, um por um:
+   - o cliente MCP troca só a URL para `https://ssam.seudominio.com/mcp` (o token é o mesmo);
+   - o agente refaz o `setup --server https://ssam.seudominio.com --root C:\SSAM-Agent` (7.5) com a mesma credencial e
+     reinicia (`ssam-agent.ps1 stop` e `start`);
+   - confira no log da VPS o `agent-connected` daquele token e um `ssam_doctor` do cliente.
+6. **Fim**: quando todos estiverem na VPS, pare o servidor do Windows. Enquanto os dois estiverem no ar, um revoke num
+   não vale no outro: faça os dois, ou não revogue nada durante a janela.
+
+
 ## 8. Upgrade e rollback (por tag)
+
+Recriar o `ssam-server` **interrompe** toda chamada em curso (um `o11_deliver` leva até 60 min; o cliente recebe erro e
+repete depois) e fecha as sessões MCP e os canais dos agentes. Os agentes reconectam sozinhos em segundos; os clientes MCP
+abrem sessão nova. Não há drenagem automática: escolha a hora.
+
+**Antes**: anuncie a janela aos clientes e veja se há trabalho em curso. As últimas chamadas e o horário delas:
+
+```bash
+docker compose -f compose.prod.yml run --rm -T ssam-ops sh -c \
+  'grep -hE "\"event\":\"(session-opened|agent-call|mcp-response-flushed)\"" /data/server/server.log | tail -n 5 | cut -c1-160'
+docker stats --no-stream "$(docker compose -f compose.prod.yml ps -q ssam-server)"    # CPU alta = trabalho em curso
+```
+
+Um `agent-call` ou `mcp-response-flushed` de poucos minutos atrás, ou CPU alta, quer dizer que alguém está trabalhando:
+espere ou combine.
 
 **Upgrade**
 
-1. Faça um backup: `sh backup.sh --online` (a pasta já existe desde a seção 5).
-2. Gere a imagem nova com uma tag nova (seção 6).
-3. Troque `SSAM_IMAGE_TAG` no `.env`.
+1. Faça um backup: `sh backup.sh --online` (a pasta já existe desde a seção 5). O `.info` grava a tag, o id, a revisão
+   (commit) e os digests da imagem que está no ar: é o que o rollback usa.
+2. Gere a imagem nova com uma tag nova (seção 6). Nos caminhos B e C, atualize também a pasta `deploy` (seção 5).
+3. Troque `SSAM_IMAGE_TAG` no `.env` (no caminho B, com o digest).
 4. Recrie só o servidor: `docker compose -f compose.prod.yml up -d ssam-server`.
-   - As sessões caem por alguns segundos e os agentes reconectam sozinhos.
    - O Caddy espera até 15 s pelo servidor antes de responder 502.
+   - Opcional, para não acumular no volume `cache` as cópias de leitores das versões antigas: antes do `up -d`, pare o
+     servidor (`stop ssam-server`) e esvazie a pasta dos leitores com
+     `docker compose -f compose.prod.yml run --rm -T ssam-ops find /data/cache/readers -mindepth 1 -delete`.
 5. Confira `ps` (healthy), `/health` e o log (`listening`, `kernel`, `warm`).
 6. Se mudou a versão de um Studio ou da bridge ODC, atualize o `kernel.json` (7.1) e mande o pacote novo do agente aos
    clientes. Num salto de bridge, a anterior entra em `odcBridgeAccepted` até todos os clientes trocarem de pacote.
@@ -414,12 +467,19 @@ Para o Caddy, troque a imagem fixada em `compose.prod.yml` (tag e digest, resolv
 
 **Rollback**
 
-1. Volte `SSAM_IMAGE_TAG` no `.env` para a tag anterior e rode `docker compose -f compose.prod.yml up -d ssam-server`.
-   Se o upgrade mudou o `kernel.json`, grave de novo o da versão anterior (7.1) antes do `up -d`.
-2. A imagem anterior tem de existir na VPS ou no registro. Não rode `docker image prune -a` enquanto um rollback puder ser
+O rollback volta a imagem **e** os arquivos que andam com ela: `compose.prod.yml`, `Caddyfile`, scripts e `kernel.json`.
+
+1. Descubra o commit da versão anterior: está no `.info` do backup do passo 1 (`revision`), ou nos rótulos da imagem:
+   `docker image inspect <imagem>:<tag anterior> --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'`.
+2. Volte a pasta `deploy` para esse commit: no caminho A, `git checkout <commit>` no repositório; nos caminhos B e C, o
+   `git archive` desse commit (seção 5). O `.env` fica.
+3. Volte `SSAM_IMAGE_TAG` no `.env` para a tag anterior (no caminho B, com o digest anterior).
+4. Se o upgrade mudou o `kernel.json`, grave de novo o da versão anterior (7.1).
+5. `docker compose -f compose.prod.yml up -d`: recria o servidor e, se o compose ou o Caddyfile mudaram, o Caddy.
+6. A imagem anterior tem de existir na VPS ou no registro. Não rode `docker image prune -a` enquanto um rollback puder ser
    preciso.
-3. Se a versão nova mudou o formato do estado, volte também o backup do passo 1 do upgrade:
-   `sh restore.sh <arquivo>`.
+7. Se a versão nova mudou o formato do estado, volte também o backup do passo 1 do upgrade: `sh restore.sh <arquivo>`.
+
 
 ## 9. Backup e restore
 
@@ -490,43 +550,62 @@ Teste um restore de tempos em tempos numa VPS de ensaio, com um arquivo vindo de
 - **Saúde**: `docker compose -f compose.prod.yml ps` (coluna STATUS `healthy`). Um monitor externo deve fazer
   `GET https://<domínio>/health` a cada minuto e alertar na falha. O Docker não reinicia um container `unhealthy`:
   investigue e rode `docker compose -f compose.prod.yml restart ssam-server`.
+- **O `/health` só prova que o HTTP responde.** Ele continua 200 com o `kernel.json` faltando ou com os workers mortos.
+  Alerte também, pelos logs do Docker (ou pelo `server.log`), quando aparecer:
+  - `"event":"kernel"` com `"o11":null` ou `"odcBridge":null`: o `kernel.json` não foi lido (7.1);
+  - `"event":"warm"` com `failed` ou `error`: um worker não subiu;
+  - `"event":"agent-machine-changed"` (também em `access-alerts.jsonl`): a credencial de um agente foi usada de outra
+    máquina. No Windows o servidor avisa o dono na tela; na VPS só fica a linha, então o alerta tem de vir do monitor.
+
+  ```bash
+  docker compose -f compose.prod.yml logs --since 24h ssam-server \
+    | grep -E '"event":"(agent-machine-changed|tokens-unreadable|audit-failed)"|"event":"kernel".*"o11":null|"event":"warm".*(fail|error)'
+  ```
+
+  Qualquer linha é alerta. Ponha esse comando num cron com aviso (ou num agente de logs) junto com o monitor externo.
 - **Logs**: `docker compose -f compose.prod.yml logs -f --since 1h ssam-server caddy`.
   - O servidor escreve eventos JSON: `listening`, `kernel`, `warm`, `session-opened` e `session-closed`,
     `agent-connected`, `agent-call` e `mcp-response-flushed`.
   - O Caddy escreve o log de acesso em JSON, com o `Authorization` tapado.
-  - Os dois rodam em `json-file` com rotação (5 arquivos de 20 MB).
+  - Os dois rodam em `json-file` com rotação (5 arquivos de 20 MB). O `ssam-admin` não guarda log (mostra tokens).
 - **Arquivos no volume** (`/data/server`):
   - `server.log`;
   - `audit-AAAAMMDD.jsonl`: uma linha por chamada de ferramenta, com token, cliente, ferramenta, duração e resultado;
   - `access-alerts.jsonl` e `machine-pins.json`: credencial usada de outra máquina.
 
   Para ler: `docker compose -f compose.prod.yml run --rm ssam-ops sh -c 'tail -n 50 /data/server/server.log'`.
-- **Rotação do `server.log`**: o servidor anexa cada evento a esse arquivo e nunca o gira. Ele reabre o arquivo a cada
-  linha, então renomear é seguro. Use o logrotate do host, em `/etc/logrotate.d/ssam-server`:
+- **Rotação e retenção** (`rotate-logs.sh`). O servidor anexa cada evento ao `server.log` e nunca o gira, e grava um
+  `audit-AAAAMMDD.jsonl` por dia. O script roda dentro do `ssam-ops`, com o dono e o caminho certos (um logrotate do host
+  como uid 10001 não atravessa `/var/lib/docker`, que é do root). Ele:
+  - gira o `server.log` para `server.log.<data>.gz` (o servidor reabre o arquivo a cada linha, então renomear é seguro);
+  - apaga os girados com mais de `LOG_KEEP_DAYS` (padrão 56);
+  - comprime as auditorias dos dias anteriores e, com `AUDIT_KEEP_DAYS` maior que 0, apaga as mais velhas que isso;
+  - com `INDEX_KEEP_DAYS` maior que 0, apaga do volume `cache` os arquivos do índice de módulos sem uso há esse tempo.
 
-  ```
-  /var/lib/docker/volumes/ssam-prod_server-state/_data/server.log {
-    su 10001 10001
-    weekly
-    rotate 8
-    compress
-    missingok
-    notifempty
-    nocreate
-  }
+  Agende uma vez por semana, como o seu usuário, na pasta `deploy`, e rode uma vez na mão antes de ir ao ar:
+
+  ```bash
+  echo "15 4 * * 0 $USER cd $PWD && sh rotate-logs.sh >> /var/backups/ssam-server/cron.log 2>&1" \
+    | sudo tee /etc/cron.d/ssam-rotate
+  sh rotate-logs.sh; echo "exit $?"
   ```
 
-  O caminho usa o nome do projeto: confira com `docker volume inspect ssam-prod_server-state`.
+  A retenção da auditoria é uma decisão do dono e dos contratos dos clientes: o padrão guarda tudo. Arquive as antigas
+  fora da VPS antes de apagar, se o contrato pedir.
 - **Disco**:
   - `df -h /var/lib/docker` e `docker system df`;
-  - por volume: `docker compose -f compose.prod.yml run --rm ssam-ops`, que mostra o `du` dos três;
-  - os `audit-*.jsonl` acumulam (um por dia). Arquive os antigos fora da VPS conforme a sua política.
-- **Recursos**: `docker stats`. Se o container morrer por memória (`docker inspect --format '{{.State.OOMKilled}}'`),
-  suba `SSAM_MEMORY` ou baixe `SSAM_BUILD_WORKERS`.
+  - por volume: `docker compose -f compose.prod.yml run --rm ssam-ops`, que mostra o `du` dos quatro.
+- **Recursos**: `docker stats`. Os 6 GB de `SSAM_MEMORY` são uma estimativa: meça com duas entregas ao mesmo tempo
+  (`docker stats` durante dois `o11_deliver`). Cada processo .NET vê o limite inteiro do container, e um estouro derruba
+  todos os workers e as sessões. Alerte quando `docker inspect --format '{{.State.OOMKilled}}'` der `true` ou quando o
+  `RestartCount` subir. Se acontecer, suba `SSAM_MEMORY` ou baixe `SSAM_BUILD_WORKERS`.
+- **Tentativas de acesso**: o limite do servidor é por token (o token tem 256 bits), não por IP. Rajadas de 401 ou de
+  conexões ociosas não têm teto. Use o firewall do provedor (limite de conexões) ou um `fail2ban` sobre o log JSON do
+  Caddy (`status` 401/403 por `request.remote_ip`).
 - **Certificado**: o Caddy renova sozinho, cerca de 30 dias antes de vencer. Procure erros com
   `docker compose -f compose.prod.yml logs caddy | grep -i error`.
 
-## 11. Corte remoto
+## 11. Corte remoto e desligamento de cliente
 
 - **Um cliente**: `docker compose -f compose.prod.yml run --rm ssam-admin server-token revoke --id tok_...`.
   - Vale sem reinício.
@@ -536,6 +615,21 @@ Teste um restore de tempos em tempos numa VPS de ensaio, com um arquivo vindo de
 - **Todos de uma vez**: `docker compose -f compose.prod.yml stop caddy`. Ninguém de fora chega ao servidor, e o estado
   fica. Para voltar: `start caddy`.
 - Tokens emitidos com `--days` vencem sozinhos.
+
+**Desligamento de um cliente** (fim de contrato). O revoke corta o acesso, mas as capturas do cliente continuam no disco:
+
+1. `server-token revoke --id tok_...` e confira com `server-token list`.
+2. Apague o espaço de trabalho dele (capturas, jornais, transferências):
+   `docker compose -f compose.prod.yml run --rm -T ssam-ops rm -rf /data/server/customers/tok_...`
+3. O volume `cache` guarda o índice de módulos de todos os clientes junto, sem separação por cliente. Esvazie-o com o
+   servidor parado (`stop ssam-server`, depois
+   `docker compose -f compose.prod.yml run --rm -T ssam-ops find /data/cache -mindepth 1 -delete`, depois
+   `start ssam-server`). O servidor o refaz.
+4. Os backups (locais e fora da VPS) ainda têm os dados dele até saírem pela retenção (`BACKUP_KEEP_DAYS` e a regra do
+   bucket). Diga ao cliente esse prazo. A auditoria dele fica pela retenção da seção 10.
+5. Os dados dos clientes ficam sem cifra dentro dos volumes. Use um provedor com disco cifrado em repouso (ou cifre o
+   volume de bloco) e trate o acesso SSH à VPS como acesso aos dados de todos os clientes.
+
 
 ## 12. Ensaio local (Docker Desktop)
 
@@ -618,7 +712,8 @@ as camadas entre versões.
 ## 14. Limitações conhecidas
 
 - A imagem foi construída e provada no Docker Desktop (seção 12), mas ainda não numa VPS: o certificado do
-  Let's Encrypt, o DNS e o firewall da VPS não foram provados. Os bundles dos Studios não estão neste repositório.
+  Let's Encrypt, o DNS, o firewall, o IPv6 da rede `edge` com um cliente IPv6 real e o cron como usuário comum não foram
+  provados lá. Os bundles dos Studios não estão neste repositório.
   - No ensaio não apareceu `EACCES`, `EROFS`, `EPERM` nem `HOSTED_CONTEXT_LOST`. Numa VPS, procure de novo no log.
 - Quatro correções do ensaio mexem em arquivos de produto copiados da linha do servidor
   (`platforms/odc/facade/hosted/agent-executor.mjs`, `hosted/policy.mjs`, `executor.mjs` e
@@ -632,6 +727,14 @@ as camadas entre versões.
   - A imagem libera só esses lugares, `/tmp` e os volumes. O resto de `/app` e `/studio` é do root.
   - Esses caches ficam na camada do container e se perdem ao recriá-lo. São reconstruídos depois.
 - O `kernel.json` é manual (7.1) e precisa ser revisto a cada troca de versão de Studio ou bridge.
-- O `server.log` não gira sozinho (seção 10).
+- O `Features.plain.xml` (7.2) vem do tenant do dono e vale para todos os clientes. Um tenant de cliente com outras flags
+  de features pode ver outro comportamento do modelo ODC. Ainda não há um cache por cliente.
+- Não há drenagem: upgrade, restart e backup parado interrompem as chamadas em curso (seção 8).
+- O build depende do estado do apt (o `libsqlite3-0` não tem versão fixada) e do nuget.org na hora (sem `nuget.config` nem
+  lock do NuGet nos projetos da linha do servidor). As imagens base e os Studios são fixados por digest e SHA-256.
+- O Caddy roda como uid 0 dentro do container, só com `NET_BIND_SERVICE`, sem as outras capabilities e com
+  `no-new-privileges`.
 - O painel do dono (`scripts/dashboard.mjs`) escuta só em loopback e ainda não foi adaptado ao Docker.
+- O `server.log` mostra o IP que o Caddy viu. No Docker Desktop é sempre o gateway da rede (o encaminhamento de portas
+  dele não preserva a origem); numa VPS Linux, o IPv4 do cliente.
 - Uma VPS só: sem alta disponibilidade. O tempo fora do ar de um upgrade é o de recriar o container.
