@@ -24,8 +24,6 @@ here=$(cd "$(dirname "$0")" && pwd)
 server=$(cd "$here/.." && pwd)
 ENV_FILE=${SSAM_ENV_FILE:-$here/.env}
 DOCKER=${DOCKER:-docker}
-# Git Bash on Windows rewrites arguments that look like POSIX paths (-w /src/...); keep them as written.
-export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
 envval() { [ -f "$ENV_FILE" ] && sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1 | sed 's/^"\(.*\)"$/\1/' || true; }
 setting() { eval "v=\${$1:-}"; [ -n "$v" ] && printf '%s' "$v" || envval "$1"; }
 
@@ -69,7 +67,9 @@ if command -v cygpath >/dev/null 2>&1; then host_server=$(cygpath -m "$server");
 node_image=$(sed -n 's/^ARG NODE_IMAGE=//p' "$server/Dockerfile" | head -n 1)
 [ -n "$node_image" ] || { echo "build: no ARG NODE_IMAGE in $server/Dockerfile" >&2; exit 2; }
 echo "build: client-name guard (hosted-image-denylist.test.mjs, $node_image, no network, read-only)"
-$DOCKER run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges:true \
+# MSYS_NO_PATHCONV: Git Bash on Windows would rewrite the container paths (-w /src/...) into Windows paths; only for this
+# command, since git and the build need the usual conversion of host paths.
+MSYS_NO_PATHCONV=1 $DOCKER run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges:true \
   -v "$host_server:/src:ro" -w /src/platforms/odc/facade "$node_image" \
   node --test --test-reporter=dot tests/hosted-image-denylist.test.mjs \
   || { echo "build: the client-name guard FAILED: a client name would ship; nothing was built" >&2; exit 1; }
