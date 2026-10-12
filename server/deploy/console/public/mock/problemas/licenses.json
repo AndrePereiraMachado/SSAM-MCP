@@ -1,0 +1,694 @@
+{
+  "ok": true,
+  "now": "2026-10-13T02:51:08Z",
+  "capabilities": {
+    "issue": true,
+    "revoke": true,
+    "agentRotate": true,
+    "renew": true,
+    "lanes": true,
+    "readOnly": null
+  },
+  "licenses": [
+    {
+      "id": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "state": "active",
+      "createdAt": "2026-07-14T03:00:00Z",
+      "expiresAt": "2026-10-13T02:58:00Z",
+      "revokedAt": null,
+      "daysLeft": 0.0048,
+      "lanes": [
+        "odc",
+        "o11"
+      ],
+      "agentCredentialIssuedAt": "2026-07-14T03:00:00Z",
+      "machine": {
+        "id": "m-3f2a9c",
+        "name": "PC-TESTE-01",
+        "user": "teste",
+        "at": "2026-07-14T12:00:00Z"
+      },
+      "accessAlerts": 0,
+      "agent": {
+        "state": "connected",
+        "since": "2026-10-12T17:51:08Z",
+        "lastSignalAt": "2026-10-13T02:51:04Z",
+        "version": "0.4.2",
+        "closedReason": null
+      },
+      "sessionsOpen": 2,
+      "today": {
+        "calls": 1234,
+        "failures": 41
+      },
+      "daily14": [
+        579,
+        676,
+        796,
+        777,
+        983,
+        527,
+        997,
+        977,
+        818,
+        1244,
+        1205,
+        1169,
+        718,
+        1234
+      ],
+      "lastActivity": {
+        "at": "2026-10-13T02:50:28Z",
+        "tool": "ssam_map",
+        "kind": "call"
+      },
+      "workspace": {
+        "bytes": 1825361101,
+        "files": 18342,
+        "truncated": false,
+        "measuredAt": "2026-10-13T02:47:08Z",
+        "quotaBytes": 5368709120
+      },
+      "actions": {
+        "renew": {
+          "allowed": true,
+          "reason": null
+        },
+        "lanes": {
+          "allowed": true,
+          "reason": null
+        },
+        "agentRotate": {
+          "allowed": true,
+          "reason": null
+        },
+        "revoke": {
+          "allowed": true,
+          "reason": null
+        }
+      },
+      "history": [
+        {
+          "time": "2026-07-14T03:00:00Z",
+          "action": "issue",
+          "actor": "externo",
+          "token": "tok_0000000a1fa0",
+          "customer": "Cliente Alfa",
+          "result": "ok",
+          "code": null,
+          "detail": {
+            "days": 91,
+            "lanes": [
+              "odc",
+              "o11"
+            ],
+            "expiresAt": "2026-10-13T02:58:00Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "state": "active",
+      "createdAt": "2026-09-14T20:00:00Z",
+      "expiresAt": "2026-10-14T20:00:00Z",
+      "revokedAt": null,
+      "daysLeft": 1.7145,
+      "lanes": [
+        "odc"
+      ],
+      "agentCredentialIssuedAt": "2026-09-14T20:00:00Z",
+      "machine": {
+        "id": "m-77aa01",
+        "name": "PC-TESTE-01",
+        "user": "teste",
+        "at": "2026-09-15T13:02:00Z"
+      },
+      "accessAlerts": 2,
+      "agent": {
+        "state": "connected",
+        "since": "2026-10-13T01:14:08Z",
+        "lastSignalAt": "2026-10-13T02:51:06Z",
+        "version": "0.4.1",
+        "closedReason": null
+      },
+      "sessionsOpen": 8,
+      "today": {
+        "calls": 63,
+        "failures": 41
+      },
+      "daily14": [
+        67,
+        130,
+        178,
+        39,
+        118,
+        72,
+        129,
+        114,
+        48,
+        150,
+        175,
+        192,
+        147,
+        63
+      ],
+      "lastActivity": {
+        "at": "2026-10-13T02:51:00Z",
+        "tool": "odc_read",
+        "kind": "call"
+      },
+      "workspace": {
+        "bytes": 5153960755,
+        "files": 412004,
+        "truncated": true,
+        "measuredAt": "2026-10-13T02:47:08Z",
+        "quotaBytes": 5368709120
+      },
+      "actions": {
+        "renew": {
+          "allowed": true,
+          "reason": null
+        },
+        "lanes": {
+          "allowed": true,
+          "reason": null
+        },
+        "agentRotate": {
+          "allowed": true,
+          "reason": null
+        },
+        "revoke": {
+          "allowed": true,
+          "reason": null
+        }
+      },
+      "history": [
+        {
+          "time": "2026-10-12T00:51:08Z",
+          "action": "agent-rotate",
+          "actor": "painel",
+          "token": "tok_00000000be7a",
+          "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+          "result": "error",
+          "code": "STORE_WRITE_FAILED",
+          "detail": {}
+        },
+        {
+          "time": "2026-09-14T20:00:00Z",
+          "action": "issue",
+          "actor": "painel",
+          "token": "tok_00000000be7a",
+          "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+          "result": "ok",
+          "code": null,
+          "detail": {
+            "days": 30,
+            "lanes": [
+              "odc"
+            ],
+            "expiresAt": "2026-10-14T20:00:00Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "state": "expired",
+      "createdAt": "2026-09-09T15:00:00Z",
+      "expiresAt": "2026-10-09T15:00:00Z",
+      "revokedAt": null,
+      "daysLeft": -3.4938,
+      "lanes": [
+        "odc",
+        "o11"
+      ],
+      "agentCredentialIssuedAt": "2026-09-09T15:00:00Z",
+      "machine": {
+        "id": "m-0c11aa",
+        "name": "PC-TESTE-03",
+        "user": "teste",
+        "at": "2026-09-09T18:00:00Z"
+      },
+      "accessAlerts": 0,
+      "agent": {
+        "state": "disconnected",
+        "since": "2026-10-09T15:00:01Z",
+        "lastSignalAt": "2026-10-09T14:59:40Z",
+        "version": "0.4.0",
+        "closedReason": "expired"
+      },
+      "sessionsOpen": 0,
+      "today": {
+        "calls": 0,
+        "failures": 0
+      },
+      "daily14": [
+        77,
+        81,
+        88,
+        43,
+        0,
+        87,
+        82,
+        84,
+        97,
+        72,
+        71,
+        0,
+        0,
+        0
+      ],
+      "lastActivity": {
+        "at": "2026-10-09T14:10:00Z",
+        "tool": "o11_job",
+        "kind": "call"
+      },
+      "workspace": {
+        "bytes": 429496730,
+        "files": 9120,
+        "truncated": false,
+        "measuredAt": "2026-10-13T02:47:08Z",
+        "quotaBytes": 5368709120
+      },
+      "actions": {
+        "renew": {
+          "allowed": true,
+          "reason": null
+        },
+        "lanes": {
+          "allowed": true,
+          "reason": null
+        },
+        "agentRotate": {
+          "allowed": false,
+          "reason": "Só para licença ativa."
+        },
+        "revoke": {
+          "allowed": true,
+          "reason": null
+        }
+      },
+      "history": [
+        {
+          "time": "2026-09-09T15:00:00Z",
+          "action": "issue",
+          "actor": "painel",
+          "token": "tok_000000006a3a",
+          "customer": "Cliente Gama",
+          "result": "ok",
+          "code": null,
+          "detail": {
+            "days": 30,
+            "lanes": [
+              "odc",
+              "o11"
+            ],
+            "expiresAt": "2026-10-09T15:00:00Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "state": "active",
+      "createdAt": "2026-09-17T21:00:00Z",
+      "expiresAt": "2026-10-17T21:00:00Z",
+      "revokedAt": null,
+      "daysLeft": 4.7562,
+      "lanes": [
+        "odc"
+      ],
+      "agentCredentialIssuedAt": "2026-09-17T21:00:00Z",
+      "machine": {
+        "id": "m-9d00e1",
+        "name": "PC-TESTE-04",
+        "user": "teste",
+        "at": "2026-09-18T11:30:00Z"
+      },
+      "accessAlerts": 1,
+      "agent": {
+        "state": "disconnected",
+        "since": "2026-10-12T23:51:08Z",
+        "lastSignalAt": "2026-10-12T23:50:23Z",
+        "version": "0.4.2",
+        "closedReason": "sem sinal"
+      },
+      "sessionsOpen": 0,
+      "today": {
+        "calls": 22,
+        "failures": 4
+      },
+      "daily14": [
+        26,
+        53,
+        59,
+        29,
+        26,
+        42,
+        23,
+        33,
+        19,
+        39,
+        28,
+        12,
+        61,
+        22
+      ],
+      "lastActivity": {
+        "at": "2026-10-13T00:46:08Z",
+        "tool": "odc_read",
+        "kind": "call"
+      },
+      "workspace": {
+        "bytes": 214748365,
+        "files": 2210,
+        "truncated": false,
+        "measuredAt": "2026-10-13T02:47:08Z",
+        "quotaBytes": 5368709120
+      },
+      "actions": {
+        "renew": {
+          "allowed": true,
+          "reason": null
+        },
+        "lanes": {
+          "allowed": true,
+          "reason": null
+        },
+        "agentRotate": {
+          "allowed": true,
+          "reason": null
+        },
+        "revoke": {
+          "allowed": true,
+          "reason": null
+        }
+      },
+      "history": [
+        {
+          "time": "2026-10-02T13:20:00Z",
+          "action": "lanes",
+          "actor": "painel",
+          "token": "tok_00000000de17",
+          "customer": "Cliente Delta",
+          "result": "ok",
+          "code": null,
+          "detail": {
+            "previousLanes": [
+              "odc",
+              "o11"
+            ],
+            "lanes": [
+              "odc"
+            ]
+          }
+        },
+        {
+          "time": "2026-09-17T21:00:00Z",
+          "action": "issue",
+          "actor": "painel",
+          "token": "tok_00000000de17",
+          "customer": "Cliente Delta",
+          "result": "ok",
+          "code": null,
+          "detail": {
+            "days": 30,
+            "lanes": [
+              "odc",
+              "o11"
+            ],
+            "expiresAt": "2026-10-17T21:00:00Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "tok_00000006a3a0",
+      "customer": "Cliente Gama",
+      "state": "revoked",
+      "createdAt": "2026-06-01T12:00:00Z",
+      "expiresAt": "2026-08-30T12:00:00Z",
+      "revokedAt": "2026-08-01T16:45:00Z",
+      "daysLeft": -43.6188,
+      "lanes": [
+        "odc"
+      ],
+      "agentCredentialIssuedAt": "2026-06-01T12:00:00Z",
+      "machine": null,
+      "accessAlerts": 0,
+      "agent": {
+        "state": "disconnected",
+        "since": "2026-08-01T16:45:01Z",
+        "lastSignalAt": "2026-08-01T16:44:30Z",
+        "version": "0.3.9",
+        "closedReason": "revoked"
+      },
+      "sessionsOpen": 0,
+      "today": {
+        "calls": 0,
+        "failures": 0
+      },
+      "daily14": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "lastActivity": {
+        "at": "2026-08-01T16:40:00Z",
+        "tool": null,
+        "kind": "session"
+      },
+      "workspace": null,
+      "actions": {
+        "renew": {
+          "allowed": false,
+          "reason": "Licença revogada."
+        },
+        "lanes": {
+          "allowed": false,
+          "reason": "Licença revogada."
+        },
+        "agentRotate": {
+          "allowed": false,
+          "reason": "Licença revogada."
+        },
+        "revoke": {
+          "allowed": false,
+          "reason": "Licença revogada."
+        }
+      },
+      "history": [
+        {
+          "time": "2026-08-01T16:45:00Z",
+          "action": "revoke",
+          "actor": "externo",
+          "token": "tok_00000006a3a0",
+          "customer": "Cliente Gama",
+          "result": "ok",
+          "code": null,
+          "detail": {}
+        }
+      ]
+    },
+    {
+      "id": "tok_000000002e7a",
+      "customer": "Cliente Zeta",
+      "state": "active",
+      "createdAt": "2026-05-02T10:00:00Z",
+      "expiresAt": null,
+      "revokedAt": null,
+      "daysLeft": null,
+      "lanes": [
+        "o11"
+      ],
+      "agentCredentialIssuedAt": "2026-05-02T10:00:00Z",
+      "machine": null,
+      "accessAlerts": 0,
+      "agent": {
+        "state": "never",
+        "since": null,
+        "lastSignalAt": null,
+        "version": null,
+        "closedReason": null
+      },
+      "sessionsOpen": 0,
+      "today": {
+        "calls": 0,
+        "failures": 0
+      },
+      "daily14": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "lastActivity": null,
+      "workspace": {
+        "bytes": 0,
+        "files": 0,
+        "truncated": false,
+        "measuredAt": "2026-10-13T02:47:08Z",
+        "quotaBytes": 5368709120
+      },
+      "actions": {
+        "renew": {
+          "allowed": false,
+          "reason": "Licença sem validade: não há o que renovar."
+        },
+        "lanes": {
+          "allowed": true,
+          "reason": null
+        },
+        "agentRotate": {
+          "allowed": true,
+          "reason": null
+        },
+        "revoke": {
+          "allowed": true,
+          "reason": null
+        }
+      },
+      "history": [
+        {
+          "time": "2026-05-02T10:00:00Z",
+          "action": "issue",
+          "actor": "externo",
+          "token": "tok_000000002e7a",
+          "customer": "Cliente Zeta",
+          "result": "ok",
+          "code": null,
+          "detail": {
+            "days": null,
+            "lanes": [
+              "o11"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "state": "active",
+      "createdAt": "2026-09-22T12:00:00Z",
+      "expiresAt": "2027-09-22T12:00:00Z",
+      "revokedAt": null,
+      "daysLeft": 344.3812,
+      "lanes": [
+        "odc",
+        "o11"
+      ],
+      "agentCredentialIssuedAt": "2026-09-22T12:00:00Z",
+      "machine": {
+        "id": "m-<img>",
+        "name": "<img src=x onerror=alert(1)>",
+        "user": "teste<script>alert(2)</script>",
+        "at": "2026-09-23T09:00:00Z"
+      },
+      "accessAlerts": 0,
+      "agent": {
+        "state": "connected",
+        "since": "2026-10-12T00:51:08Z",
+        "lastSignalAt": "2026-10-13T02:50:59Z",
+        "version": "0.4.2",
+        "closedReason": null
+      },
+      "sessionsOpen": 1,
+      "today": {
+        "calls": 3,
+        "failures": 0
+      },
+      "daily14": [
+        14,
+        10,
+        28,
+        29,
+        9,
+        29,
+        20,
+        3,
+        2,
+        6,
+        26,
+        14,
+        3,
+        3
+      ],
+      "lastActivity": {
+        "at": "2026-10-12T21:51:08Z",
+        "tool": "studio_inspect",
+        "kind": "call"
+      },
+      "workspace": {
+        "bytes": 4563402752,
+        "files": 51870,
+        "truncated": false,
+        "measuredAt": "2026-10-13T02:47:08Z",
+        "quotaBytes": 5368709120
+      },
+      "actions": {
+        "renew": {
+          "allowed": true,
+          "reason": null
+        },
+        "lanes": {
+          "allowed": true,
+          "reason": null
+        },
+        "agentRotate": {
+          "allowed": true,
+          "reason": null
+        },
+        "revoke": {
+          "allowed": true,
+          "reason": null
+        }
+      },
+      "history": [
+        {
+          "time": "2026-09-22T12:00:00Z",
+          "action": "issue",
+          "actor": "painel",
+          "token": "tok_0000000000e7",
+          "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+          "result": "ok",
+          "code": null,
+          "detail": {
+            "days": 365,
+            "lanes": [
+              "odc",
+              "o11"
+            ],
+            "expiresAt": "2027-09-22T12:00:00Z"
+          }
+        }
+      ]
+    }
+  ]
+}

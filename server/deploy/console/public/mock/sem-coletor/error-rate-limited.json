@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "code": "RATE_LIMITED",
+    "message": "Muitas ações seguidas. Tente de novo em 42 s."
+  }
+}

@@ -1,0 +1,113 @@
+{
+  "ok": true,
+  "license": {
+    "id": "tok_00000000be7a",
+    "customer": "Cliente Beta",
+    "state": "active",
+    "createdAt": "2026-10-05T02:58:00Z",
+    "expiresAt": "2026-11-14T02:58:00Z",
+    "revokedAt": null,
+    "daysLeft": 32.0048,
+    "lanes": [
+      "odc"
+    ],
+    "agentCredentialIssuedAt": "2026-10-05T02:58:00Z",
+    "machine": null,
+    "accessAlerts": 0,
+    "agent": {
+      "state": "never",
+      "since": null,
+      "lastSignalAt": null,
+      "version": null,
+      "closedReason": null
+    },
+    "sessionsOpen": 0,
+    "today": {
+      "calls": 0,
+      "failures": 0
+    },
+    "daily14": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      4,
+      0,
+      1,
+      0,
+      0,
+      0
+    ],
+    "lastActivity": {
+      "at": "2026-10-09T22:20:00Z",
+      "tool": "odc_read",
+      "kind": "call"
+    },
+    "workspace": {
+      "bytes": 220160,
+      "files": 31,
+      "truncated": false,
+      "measuredAt": "2026-10-13T02:47:08Z",
+      "quotaBytes": 5368709120
+    },
+    "actions": {
+      "renew": {
+        "allowed": false,
+        "reason": "Indisponível nesta imagem (chega com o 24º envio)."
+      },
+      "lanes": {
+        "allowed": false,
+        "reason": "Indisponível nesta imagem (chega com o 24º envio)."
+      },
+      "agentRotate": {
+        "allowed": true,
+        "reason": null
+      },
+      "revoke": {
+        "allowed": true,
+        "reason": null
+      }
+    },
+    "history": [
+      {
+        "time": "2026-10-13T02:51:08Z",
+        "action": "renew",
+        "actor": "painel",
+        "token": "tok_00000000be7a",
+        "customer": "Cliente Beta",
+        "result": "ok",
+        "code": null,
+        "detail": {
+          "days": 30,
+          "previousExpiresAt": "2026-10-15T02:58:00Z",
+          "expiresAt": "2026-11-14T02:58:00Z"
+        }
+      },
+      {
+        "time": "2026-10-05T02:58:00Z",
+        "action": "issue",
+        "actor": "externo",
+        "token": "tok_00000000be7a",
+        "customer": "Cliente Beta",
+        "result": "ok",
+        "code": null,
+        "detail": {
+          "days": 10,
+          "lanes": [
+            "odc"
+          ],
+          "expiresAt": "2026-10-15T02:58:00Z"
+        }
+      }
+    ]
+  },
+  "previousExpiresAt": "2026-10-15T02:58:00Z",
+  "expiresAt": "2026-11-14T02:58:00Z",
+  "audit": {
+    "written": true
+  }
+}

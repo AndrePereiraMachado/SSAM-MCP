@@ -1,0 +1,101 @@
+{
+  "ok": true,
+  "license": {
+    "id": "tok_0000000a1fa0",
+    "customer": "Cliente Beta",
+    "state": "active",
+    "createdAt": "2026-10-13T02:51:08Z",
+    "expiresAt": "2026-10-23T02:51:08Z",
+    "revokedAt": null,
+    "daysLeft": 10,
+    "lanes": [
+      "odc"
+    ],
+    "agentCredentialIssuedAt": "2026-10-13T02:51:08Z",
+    "machine": null,
+    "accessAlerts": 0,
+    "agent": {
+      "state": "disconnected",
+      "since": "2026-10-13T02:51:08Z",
+      "lastSignalAt": null,
+      "version": null,
+      "closedReason": "rotated"
+    },
+    "sessionsOpen": 0,
+    "today": {
+      "calls": 0,
+      "failures": 0
+    },
+    "daily14": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "lastActivity": null,
+    "workspace": null,
+    "actions": {
+      "renew": {
+        "allowed": true,
+        "reason": null
+      },
+      "lanes": {
+        "allowed": true,
+        "reason": null
+      },
+      "agentRotate": {
+        "allowed": true,
+        "reason": null
+      },
+      "revoke": {
+        "allowed": true,
+        "reason": null
+      }
+    },
+    "history": [
+      {
+        "time": "2026-10-13T02:51:08Z",
+        "action": "agent-rotate",
+        "actor": "painel",
+        "token": "tok_0000000a1fa0",
+        "customer": "Cliente Beta",
+        "result": "ok",
+        "code": null,
+        "detail": {}
+      },
+      {
+        "time": "2026-10-13T02:51:08Z",
+        "action": "issue",
+        "actor": "painel",
+        "token": "tok_0000000a1fa0",
+        "customer": "Cliente Beta",
+        "result": "ok",
+        "code": null,
+        "detail": {
+          "days": 10,
+          "lanes": [
+            "odc"
+          ],
+          "expiresAt": "2026-10-23T02:51:08Z"
+        }
+      }
+    ]
+  },
+  "secret": {
+    "agentCredential": "ssam_agent_EXEMPLO_NAO_E_UMA_CREDENCIAL_ALFA_0002"
+  },
+  "serverUrl": "https://ssam.example.com",
+  "audit": {
+    "written": true
+  }
+}

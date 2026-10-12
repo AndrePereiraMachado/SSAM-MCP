@@ -1,0 +1,378 @@
+{
+  "ok": true,
+  "now": "2026-10-13T02:51:08Z",
+  "status": {
+    "server": {
+      "state": "up",
+      "since": "2026-10-12T21:39:08Z",
+      "pid": 7,
+      "imageTag": "prod-20261011-ed0f94b",
+      "health": "healthy",
+      "warm": "warm",
+      "warmDetail": "O worker ODC falhou no aquecimento e subiu sob demanda."
+    },
+    "sessionsOpen": 1,
+    "agentsConnected": 1,
+    "licenses": {
+      "active": 2,
+      "expired": 0,
+      "revoked": 1
+    },
+    "alerts": {
+      "critical": 1,
+      "warning": 5,
+      "info": 1,
+      "acked": 0
+    },
+    "collector": {
+      "state": "fresh",
+      "collectedAt": "2026-10-13T02:50:56Z",
+      "ageS": 12
+    },
+    "host": {
+      "cpuPct": 1.2,
+      "memUsedPct": 12.8,
+      "diskUsedPct": 6
+    },
+    "publicHost": "ssam.example.com"
+  },
+  "alerts": [
+    {
+      "id": "backup-ausente:host",
+      "rule": "backup-ausente",
+      "severity": "critical",
+      "area": "backup",
+      "title": "Nenhum backup do estado em /var/backups/ssam-server.",
+      "detail": "DEPLOY.md seção 9; o cron diário instala com host/install.sh --with-crons.",
+      "since": "2026-10-12T21:41:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "backup-sem-cron:host",
+      "rule": "backup-sem-cron",
+      "severity": "warning",
+      "area": "backup",
+      "title": "O backup diário não está agendado (falta /etc/cron.d/ssam-backup).",
+      "detail": null,
+      "since": "2026-10-12T21:41:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "licenca-vence:tok_00000000be7a",
+      "rule": "licenca-vence",
+      "severity": "warning",
+      "area": "licencas",
+      "title": "Licença de Cliente Beta vence em 2 dias (14/10/2026).",
+      "detail": "Renove em Licenças. Ao vencer, as sessões e o canal do agente dele são fechados.",
+      "since": "2026-10-12T21:41:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {
+        "token": "tok_00000000be7a",
+        "customer": "Cliente Beta"
+      },
+      "view": "licencas",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "reinicio-pendente:host",
+      "rule": "reinicio-pendente",
+      "severity": "warning",
+      "area": "vps",
+      "title": "Reinício da VPS pendente desde 07/10/2026 (linux-image-7.0.0-38-generic, linux-base).",
+      "detail": "Reiniciar derruba sessões e chamadas em curso: escolha uma janela.",
+      "since": "2026-10-12T21:41:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "rotacao-sem-cron:host",
+      "rule": "rotacao-sem-cron",
+      "severity": "warning",
+      "area": "backup",
+      "title": "A rotação de logs não está agendada: o server.log tem 7,2 KiB e só cresce.",
+      "detail": null,
+      "since": "2026-10-12T21:41:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "ssh-senha:host",
+      "rule": "ssh-senha",
+      "severity": "warning",
+      "area": "seguranca",
+      "title": "SSH aceita login por senha e root com senha; 40 tentativas falhas em 24 h, sem fail2ban.",
+      "detail": "Com acesso só por chave: PasswordAuthentication no e PermitRootLogin prohibit-password.",
+      "since": "2026-10-12T21:41:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "aquecimento-parcial:ssam-server",
+      "rule": "aquecimento-parcial",
+      "severity": "info",
+      "area": "servidor",
+      "title": "O worker ODC falhou no aquecimento, mas está rodando agora (subiu sob demanda).",
+      "detail": null,
+      "since": "2026-10-12T21:41:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    }
+  ],
+  "acked": [],
+  "summary": [
+    {
+      "area": "servidor",
+      "state": "ok",
+      "facts": {
+        "since": "2026-10-12T21:39:08Z",
+        "pid": 7,
+        "imageTag": "prod-20261011-ed0f94b",
+        "warm": "warm",
+        "health": "healthy",
+        "probeMs": 3
+      },
+      "view": "vps"
+    },
+    {
+      "area": "licencas",
+      "state": "warning",
+      "facts": {
+        "active": 2,
+        "expired": 0,
+        "revoked": 1,
+        "nextExpiry": {
+          "customer": "Cliente Beta",
+          "token": "tok_00000000be7a",
+          "expiresAt": "2026-10-15T02:58:00Z"
+        }
+      },
+      "view": "licencas"
+    },
+    {
+      "area": "uso",
+      "state": "ok",
+      "facts": {
+        "calls": 14,
+        "failures": 1,
+        "p90Ms": 2100,
+        "customersActive": 1
+      },
+      "view": "uso"
+    },
+    {
+      "area": "agentes",
+      "state": "ok",
+      "facts": {
+        "connected": 1,
+        "activeLicenses": 2,
+        "lastSignalAt": "2026-10-13T02:50:56Z"
+      },
+      "view": "agentes"
+    },
+    {
+      "area": "sessoes",
+      "state": "ok",
+      "facts": {
+        "open": 1,
+        "top": [
+          {
+            "customer": "Cliente Alfa",
+            "client": "claude-code 2.1.281"
+          }
+        ]
+      },
+      "view": "agentes"
+    },
+    {
+      "area": "vps",
+      "state": "warning",
+      "facts": {
+        "cpuPct": 1.2,
+        "memUsedPct": 12.8,
+        "diskUsedPct": 6,
+        "rebootRequired": true,
+        "rebootSince": "2026-10-07T15:50:20Z"
+      },
+      "view": "vps"
+    },
+    {
+      "area": "containers",
+      "state": "ok",
+      "facts": {
+        "running": 2,
+        "total": 2,
+        "unhealthy": [],
+        "restarts24h": 0
+      },
+      "view": "vps"
+    },
+    {
+      "area": "backup",
+      "state": "critical",
+      "facts": {
+        "newestAt": null,
+        "ageH": null,
+        "cron": {
+          "backup": false,
+          "rotate": false
+        }
+      },
+      "view": "vps"
+    },
+    {
+      "area": "tls",
+      "state": "ok",
+      "facts": {
+        "name": "ssam.example.com",
+        "notAfter": "2027-01-09T21:49:58Z",
+        "daysLeft": 88.7909
+      },
+      "view": "vps"
+    },
+    {
+      "area": "coletor",
+      "state": "ok",
+      "facts": {
+        "collectedAt": "2026-10-13T02:50:56Z",
+        "ageS": 12,
+        "sectionErrors": []
+      },
+      "view": "vps"
+    }
+  ],
+  "recentEvents": [
+    {
+      "seq": 126,
+      "time": "2026-10-13T02:48:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 125,
+      "time": "2026-10-13T02:34:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 124,
+      "time": "2026-10-13T02:26:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou ssam_map: ok em 900 ms.",
+      "code": null
+    },
+    {
+      "seq": 123,
+      "time": "2026-10-13T02:18:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou studio_inspect: ok em 700 ms.",
+      "code": null
+    },
+    {
+      "seq": 122,
+      "time": "2026-10-13T02:10:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou odc_read: ok em 410 ms.",
+      "code": null
+    },
+    {
+      "seq": 121,
+      "time": "2026-10-13T02:04:08Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: iniciando → saudável.",
+      "code": null
+    },
+    {
+      "seq": 120,
+      "time": "2026-10-13T02:02:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou ssam_doctor: ok em 300 ms.",
+      "code": null
+    },
+    {
+      "seq": 119,
+      "time": "2026-10-13T01:54:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou studio_inspect: ok em 1,9 s.",
+      "code": null
+    },
+    {
+      "seq": 118,
+      "time": "2026-10-13T01:46:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou odc_read: ok em 380 ms.",
+      "code": null
+    },
+    {
+      "seq": 117,
+      "time": "2026-10-13T01:38:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou ssam_map: ok em 2,1 s.",
+      "code": null
+    }
+  ],
+  "indexing": {
+    "state": "ready",
+    "progress": 1,
+    "detail": null
+  }
+}

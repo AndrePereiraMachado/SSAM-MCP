@@ -1,0 +1,96 @@
+{
+  "ok": true,
+  "license": {
+    "id": "tok_00000000de17",
+    "customer": "Cliente Delta",
+    "state": "active",
+    "createdAt": "2026-10-13T02:51:08Z",
+    "expiresAt": "2026-11-12T02:51:08Z",
+    "revokedAt": null,
+    "daysLeft": 30,
+    "lanes": [
+      "odc",
+      "o11"
+    ],
+    "agentCredentialIssuedAt": "2026-10-13T02:51:08Z",
+    "machine": null,
+    "accessAlerts": 0,
+    "agent": {
+      "state": "never",
+      "since": null,
+      "lastSignalAt": null,
+      "version": null,
+      "closedReason": null
+    },
+    "sessionsOpen": 0,
+    "today": {
+      "calls": 0,
+      "failures": 0
+    },
+    "daily14": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "lastActivity": null,
+    "workspace": null,
+    "actions": {
+      "renew": {
+        "allowed": false,
+        "reason": "Indisponível nesta imagem (chega com o 24º envio)."
+      },
+      "lanes": {
+        "allowed": false,
+        "reason": "Indisponível nesta imagem (chega com o 24º envio)."
+      },
+      "agentRotate": {
+        "allowed": true,
+        "reason": null
+      },
+      "revoke": {
+        "allowed": true,
+        "reason": null
+      }
+    },
+    "history": [
+      {
+        "time": "2026-10-13T02:51:08Z",
+        "action": "issue",
+        "actor": "painel",
+        "token": "tok_00000000de17",
+        "customer": "Cliente Delta",
+        "result": "ok",
+        "code": null,
+        "detail": {
+          "days": 30,
+          "lanes": [
+            "odc",
+            "o11"
+          ],
+          "expiresAt": "2026-11-12T02:51:08Z"
+        }
+      }
+    ]
+  },
+  "secret": {
+    "token": "ssam_EXEMPLO_NAO_E_UM_TOKEN_DELTA_0001",
+    "agentCredential": "ssam_agent_EXEMPLO_NAO_E_UMA_CREDENCIAL_DELTA_0001"
+  },
+  "publicUrl": "https://ssam.example.com/mcp",
+  "serverUrl": "https://ssam.example.com",
+  "duplicates": [],
+  "audit": {
+    "written": true
+  }
+}

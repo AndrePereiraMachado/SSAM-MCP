@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "code": "KEY_REQUIRED",
+    "message": "Falta a chave de acesso. Abra o painel pelo painel-ssam.ps1."
+  }
+}

@@ -1,0 +1,117 @@
+{
+  "ok": true,
+  "range": {
+    "kind": "today",
+    "from": "2026-10-12",
+    "to": "2026-10-12",
+    "days": 1,
+    "timeZone": "America/Sao_Paulo"
+  },
+  "indexing": {
+    "state": "ready",
+    "progress": 1,
+    "detail": null
+  },
+  "totals": {
+    "calls": 14,
+    "failures": 1,
+    "p50Ms": 520,
+    "p90Ms": 2100,
+    "maxMs": 2300,
+    "customersActive": 1,
+    "sessionsOpened": 3,
+    "agentCalls": 6,
+    "agentFailures": 0
+  },
+  "byCustomer": [
+    {
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "calls": 14,
+      "failures": 1,
+      "p50Ms": 520,
+      "p90Ms": 2100,
+      "topTool": "studio_inspect",
+      "sessionsOpened": 3,
+      "agentCalls": 6,
+      "agentFailures": 0,
+      "lastAt": "2026-10-13T02:48:08Z",
+      "workspaceBytes": 1153434,
+      "daily": [
+        14
+      ]
+    }
+  ],
+  "byTool": [
+    {
+      "tool": "studio_inspect",
+      "calls": 5,
+      "failures": 0,
+      "p50Ms": 640,
+      "p90Ms": 1900,
+      "maxMs": 2100,
+      "customers": 1,
+      "topCode": null
+    },
+    {
+      "tool": "odc_read",
+      "calls": 4,
+      "failures": 1,
+      "p50Ms": 380,
+      "p90Ms": 1200,
+      "maxMs": 1500,
+      "customers": 1,
+      "topCode": "AGENT_NOT_CONNECTED"
+    },
+    {
+      "tool": "ssam_doctor",
+      "calls": 3,
+      "failures": 0,
+      "p50Ms": 120,
+      "p90Ms": 300,
+      "maxMs": 410,
+      "customers": 1,
+      "topCode": null
+    },
+    {
+      "tool": "ssam_map",
+      "calls": 2,
+      "failures": 0,
+      "p50Ms": 900,
+      "p90Ms": 2100,
+      "maxMs": 2300,
+      "customers": 1,
+      "topCode": null
+    }
+  ],
+  "byCode": [
+    {
+      "code": "AGENT_NOT_CONNECTED",
+      "count": 1,
+      "tools": [
+        {
+          "tool": "odc_read",
+          "count": 1
+        }
+      ],
+      "customers": 1,
+      "lastAt": "2026-10-13T02:48:08Z"
+    }
+  ],
+  "byDay": [
+    {
+      "day": "2026-10-12",
+      "calls": 14,
+      "failures": 1,
+      "p50Ms": 520,
+      "p90Ms": 2100,
+      "customers": 1
+    }
+  ],
+  "denied": {
+    "available": false,
+    "since": null,
+    "byStatus": {},
+    "rows": []
+  }
+}

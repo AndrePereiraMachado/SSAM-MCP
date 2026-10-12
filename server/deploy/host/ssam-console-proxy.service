@@ -1,0 +1,23 @@
+# SSAM owner console: forwards the connections of ssam-console-proxy.socket to the console's unix socket. The console
+# container has no network at all (network_mode: none); it listens on /var/lib/ssam-console/sock/console.sock (0600,
+# uid 10001). Started on demand by the socket, exits after 10 min without connections.
+# If this systemd refuses PrivateNetwork= or RestrictAddressFamilies= with the inherited socket (install.sh says so when
+# /healthz fails), remove those two lines here and in /etc/systemd/system, then systemctl daemon-reload (DEPLOY.md 15).
+[Unit]
+Description=SSAM owner console - 127.0.0.1:7320 to the console unix socket
+Requires=ssam-console-proxy.socket
+After=ssam-console-proxy.socket
+
+[Service]
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd --exit-idle-time=10min /var/lib/ssam-console/sock/console.sock
+User=10001
+Group=10001
+PrivateNetwork=yes
+PrivateTmp=yes
+PrivateDevices=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/ssam-console/sock
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=

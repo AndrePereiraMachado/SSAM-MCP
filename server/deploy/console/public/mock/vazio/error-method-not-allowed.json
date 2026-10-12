@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "code": "METHOD_NOT_ALLOWED",
+    "message": "Método não permitido."
+  }
+}

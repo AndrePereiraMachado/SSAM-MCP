@@ -1,0 +1,266 @@
+{
+  "ok": true,
+  "lastSeq": 126,
+  "events": [
+    {
+      "seq": 101,
+      "time": "2026-10-11T14:12:00Z",
+      "level": "info",
+      "group": "licenca",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Licença de Cliente Gama revogada.",
+      "code": null
+    },
+    {
+      "seq": 102,
+      "time": "2026-10-11T14:12:01Z",
+      "level": "info",
+      "group": "agente",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Agente de Cliente Gama desconectou (licença revogada).",
+      "code": null
+    },
+    {
+      "seq": 103,
+      "time": "2026-10-12T05:30:00Z",
+      "level": "info",
+      "group": "licenca",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Credencial do agente de Cliente Alfa trocada.",
+      "code": null
+    },
+    {
+      "seq": 104,
+      "time": "2026-10-12T05:35:00Z",
+      "level": "info",
+      "group": "agente",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Máquina registrada para Cliente Alfa: PC-TESTE-01 (teste).",
+      "code": null
+    },
+    {
+      "seq": 105,
+      "time": "2026-10-12T21:39:08Z",
+      "level": "info",
+      "group": "servidor",
+      "token": null,
+      "customer": null,
+      "text": "Servidor iniciado (pid 7, modo hosted).",
+      "code": null
+    },
+    {
+      "seq": 106,
+      "time": "2026-10-12T21:42:08Z",
+      "level": "info",
+      "group": "painel",
+      "token": null,
+      "customer": null,
+      "text": "Resolvido: O coletor da VPS não está instalado ou nunca rodou (host/install.sh).",
+      "code": null
+    },
+    {
+      "seq": 107,
+      "time": "2026-10-12T23:39:08Z",
+      "level": "info",
+      "group": "agente",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Agente de Cliente Alfa conectou (versão 0.4.2, PC-TESTE-01, IP 198.51.100.23).",
+      "code": null
+    },
+    {
+      "seq": 108,
+      "time": "2026-10-13T00:10:08Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa abriu sessão MCP (claude-code 2.1.281, IP 203.0.113.24).",
+      "code": null
+    },
+    {
+      "seq": 109,
+      "time": "2026-10-13T00:11:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou ssam_doctor: ok em 120 ms.",
+      "code": null
+    },
+    {
+      "seq": 110,
+      "time": "2026-10-13T00:13:08Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou odc_read: falhou com AGENT_NOT_CONNECTED em 41 ms.",
+      "code": "AGENT_NOT_CONNECTED"
+    },
+    {
+      "seq": 111,
+      "time": "2026-10-13T00:21:08Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa: sessão MCP encerrada (o cliente encerrou).",
+      "code": null
+    },
+    {
+      "seq": 112,
+      "time": "2026-10-13T01:01:08Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa abriu sessão MCP (claude-code 2.1.281, IP 203.0.113.24).",
+      "code": null
+    },
+    {
+      "seq": 113,
+      "time": "2026-10-13T01:06:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 114,
+      "time": "2026-10-13T01:14:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou odc_read: ok em 1,2 s.",
+      "code": null
+    },
+    {
+      "seq": 115,
+      "time": "2026-10-13T01:22:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou ssam_doctor: ok em 120 ms.",
+      "code": null
+    },
+    {
+      "seq": 116,
+      "time": "2026-10-13T01:30:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou studio_inspect: ok em 640 ms.",
+      "code": null
+    },
+    {
+      "seq": 117,
+      "time": "2026-10-13T01:38:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou ssam_map: ok em 2,1 s.",
+      "code": null
+    },
+    {
+      "seq": 118,
+      "time": "2026-10-13T01:46:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou odc_read: ok em 380 ms.",
+      "code": null
+    },
+    {
+      "seq": 119,
+      "time": "2026-10-13T01:54:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou studio_inspect: ok em 1,9 s.",
+      "code": null
+    },
+    {
+      "seq": 120,
+      "time": "2026-10-13T02:02:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou ssam_doctor: ok em 300 ms.",
+      "code": null
+    },
+    {
+      "seq": 121,
+      "time": "2026-10-13T02:04:08Z",
+      "level": "warning",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Coletor da VPS parou.",
+      "code": null
+    },
+    {
+      "seq": 122,
+      "time": "2026-10-13T02:10:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou odc_read: ok em 410 ms.",
+      "code": null
+    },
+    {
+      "seq": 123,
+      "time": "2026-10-13T02:18:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou studio_inspect: ok em 700 ms.",
+      "code": null
+    },
+    {
+      "seq": 124,
+      "time": "2026-10-13T02:26:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou ssam_map: ok em 900 ms.",
+      "code": null
+    },
+    {
+      "seq": 125,
+      "time": "2026-10-13T02:34:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 126,
+      "time": "2026-10-13T02:48:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    }
+  ]
+}

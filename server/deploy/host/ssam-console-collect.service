@@ -1,0 +1,20 @@
+# SSAM owner console: one run of the host collector (DEPLOY.md section 15). Installed by host/install.sh into
+# /etc/systemd/system; started every 30 s by ssam-console-collect.timer. Runs as root (docker, ufw, sshd -T, journalctl)
+# and writes only under /var/lib/ssam-console (host.json 0640 root:10001, its own state in collector/).
+[Unit]
+Description=SSAM owner console - host collector (/var/lib/ssam-console/host/host.json)
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -I /usr/local/lib/ssam-console/collect.py --config /etc/ssam-console/collector.conf
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=25s
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectSystem=full
+ReadWritePaths=/var/lib/ssam-console
+UMask=0027

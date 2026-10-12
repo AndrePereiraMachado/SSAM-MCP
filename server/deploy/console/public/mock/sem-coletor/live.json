@@ -1,0 +1,85 @@
+{
+  "ok": true,
+  "now": "2026-10-13T02:51:08Z",
+  "server": {
+    "since": "2026-10-12T21:39:08Z",
+    "pid": 7,
+    "mode": "hosted",
+    "ratePerMinute": 120,
+    "maxSessionsPerToken": 8,
+    "publicHosts": [
+      "ssam.example.com"
+    ]
+  },
+  "sessions": [
+    {
+      "session": "3f9c2a1b",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "client": "claude-code 2.1.281",
+      "ip": "203.0.113.24",
+      "ua": "claude-code/2.1.281 (Windows)",
+      "openedAt": "2026-10-13T01:01:08Z",
+      "lastAt": "2026-10-13T02:48:08Z",
+      "calls": 13,
+      "lastTool": "studio_inspect",
+      "bytes": 482000
+    }
+  ],
+  "agents": [
+    {
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "state": "connected",
+      "since": "2026-10-12T23:39:08Z",
+      "lastSignalAt": "2026-10-13T02:50:56Z",
+      "version": "0.4.2",
+      "pack": null,
+      "studioO11": {
+        "version": "11.55.91",
+        "port": 50123,
+        "pid": 18244
+      },
+      "ip": "198.51.100.23",
+      "machine": {
+        "name": "PC-TESTE-01",
+        "user": "teste"
+      },
+      "calls1h": 6,
+      "failures1h": 0,
+      "lastCode": null,
+      "closedReason": null,
+      "closedAt": null
+    },
+    {
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "state": "disconnected",
+      "since": "2026-10-11T09:00:00Z",
+      "lastSignalAt": "2026-10-11T14:11:50Z",
+      "version": "0.4.1",
+      "pack": null,
+      "studioO11": null,
+      "ip": "198.51.100.31",
+      "machine": {
+        "name": "PC-TESTE-03",
+        "user": "teste"
+      },
+      "calls1h": 0,
+      "failures1h": 0,
+      "lastCode": null,
+      "closedReason": "revoked",
+      "closedAt": "2026-10-11T14:12:01Z"
+    }
+  ],
+  "workers": {
+    "available": false,
+    "rows": []
+  },
+  "closedToday": [
+    {
+      "reason": "client-delete",
+      "count": 1
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "code": "KEY_INVALID",
+    "message": "Chave de acesso inválida ou trocada. Rode painel-ssam.ps1 de novo."
+  }
+}

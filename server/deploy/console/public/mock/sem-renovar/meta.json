@@ -1,0 +1,25 @@
+{
+  "ok": true,
+  "console": {
+    "version": "1",
+    "startedAt": "2026-10-12T21:40:08Z"
+  },
+  "now": "2026-10-13T02:51:08Z",
+  "timeZone": "America/Sao_Paulo",
+  "publicHost": "ssam.example.com",
+  "publicUrl": "https://ssam.example.com/mcp",
+  "serverUrl": "https://ssam.example.com",
+  "capabilities": {
+    "issue": true,
+    "revoke": true,
+    "agentRotate": true,
+    "renew": false,
+    "lanes": false,
+    "readOnly": null
+  },
+  "indexing": {
+    "state": "ready",
+    "progress": 1,
+    "detail": null
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "code": "STALE",
+    "message": "A licença mudou desde que a página foi carregada. Recarregue e confira."
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "code": "ALREADY_REVOKED",
+    "message": "A licença já estava revogada."
+  }
+}

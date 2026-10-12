@@ -1,0 +1,740 @@
+{
+  "ok": true,
+  "range": {
+    "kind": "7d",
+    "from": "2026-10-06",
+    "to": "2026-10-12",
+    "days": 7,
+    "timeZone": "America/Sao_Paulo"
+  },
+  "indexing": {
+    "state": "running",
+    "progress": 0.42,
+    "detail": "server.log.20261005T041500Z.gz"
+  },
+  "totals": {
+    "calls": 8849,
+    "failures": 188,
+    "p50Ms": 1100,
+    "p90Ms": 19000,
+    "maxMs": 61000,
+    "customersActive": 5,
+    "sessionsOpened": 1477,
+    "agentCalls": 3541,
+    "agentFailures": 159
+  },
+  "byCustomer": [
+    {
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "calls": 7365,
+      "failures": 107,
+      "p50Ms": 1100,
+      "p90Ms": 9800,
+      "topTool": "studio_inspect",
+      "sessionsOpened": 1228,
+      "agentCalls": 2946,
+      "agentFailures": 0,
+      "lastAt": "2026-10-13T02:50:28Z",
+      "workspaceBytes": 1825361101,
+      "daily": [
+        977,
+        818,
+        1244,
+        1205,
+        1169,
+        718,
+        1234
+      ]
+    },
+    {
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "calls": 889,
+      "failures": 63,
+      "p50Ms": 450,
+      "p90Ms": 3100,
+      "topTool": "odc_read",
+      "sessionsOpened": 149,
+      "agentCalls": 356,
+      "agentFailures": 107,
+      "lastAt": "2026-10-13T02:51:00Z",
+      "workspaceBytes": 5153960755,
+      "daily": [
+        114,
+        48,
+        150,
+        175,
+        192,
+        147,
+        63
+      ]
+    },
+    {
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "calls": 324,
+      "failures": 9,
+      "p50Ms": 3200,
+      "p90Ms": 19000,
+      "topTool": "o11_job",
+      "sessionsOpened": 54,
+      "agentCalls": 130,
+      "agentFailures": 0,
+      "lastAt": "2026-10-09T14:10:00Z",
+      "workspaceBytes": 429496730,
+      "daily": [
+        84,
+        97,
+        72,
+        71,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "calls": 214,
+      "failures": 8,
+      "p50Ms": 700,
+      "p90Ms": 15000,
+      "topTool": "odc_read",
+      "sessionsOpened": 36,
+      "agentCalls": 86,
+      "agentFailures": 52,
+      "lastAt": "2026-10-13T00:46:08Z",
+      "workspaceBytes": 214748365,
+      "daily": [
+        33,
+        19,
+        39,
+        28,
+        12,
+        61,
+        22
+      ]
+    },
+    {
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "calls": 57,
+      "failures": 1,
+      "p50Ms": 800,
+      "p90Ms": 2400,
+      "topTool": "studio_inspect",
+      "sessionsOpened": 10,
+      "agentCalls": 23,
+      "agentFailures": 0,
+      "lastAt": "2026-10-12T21:51:08Z",
+      "workspaceBytes": 4563402752,
+      "daily": [
+        3,
+        2,
+        6,
+        26,
+        14,
+        3,
+        3
+      ]
+    }
+  ],
+  "byTool": [
+    {
+      "tool": "studio_inspect",
+      "calls": 2763,
+      "failures": 0,
+      "p50Ms": 640,
+      "p90Ms": 1900,
+      "maxMs": 2100,
+      "customers": 4,
+      "topCode": null
+    },
+    {
+      "tool": "odc_read",
+      "calls": 2010,
+      "failures": 53,
+      "p50Ms": 380,
+      "p90Ms": 1200,
+      "maxMs": 1500,
+      "customers": 3,
+      "topCode": "AGENT_NOT_CONNECTED"
+    },
+    {
+      "tool": "ssam_map",
+      "calls": 1656,
+      "failures": 1,
+      "p50Ms": 900,
+      "p90Ms": 2100,
+      "maxMs": 2300,
+      "customers": 2,
+      "topCode": "TOOL_ERROR"
+    },
+    {
+      "tool": "ssam_job",
+      "calls": 1091,
+      "failures": 80,
+      "p50Ms": 7400,
+      "p90Ms": 21000,
+      "maxMs": 38000,
+      "customers": 1,
+      "topCode": "JOB_REFUSED"
+    },
+    {
+      "tool": "studio_build",
+      "calls": 545,
+      "failures": 27,
+      "p50Ms": 18500,
+      "p90Ms": 42000,
+      "maxMs": 61000,
+      "customers": 1,
+      "topCode": "BUILD_FAILED"
+    },
+    {
+      "tool": "ssam_doctor",
+      "calls": 326,
+      "failures": 0,
+      "p50Ms": 120,
+      "p90Ms": 300,
+      "maxMs": 410,
+      "customers": 2,
+      "topCode": null
+    },
+    {
+      "tool": "odc_write",
+      "calls": 242,
+      "failures": 18,
+      "p50Ms": 2600,
+      "p90Ms": 7400,
+      "maxMs": 9900,
+      "customers": 1,
+      "topCode": "WORKSPACE_FULL"
+    },
+    {
+      "tool": "o11_job",
+      "calls": 144,
+      "failures": 9,
+      "p50Ms": 9200,
+      "p90Ms": 26000,
+      "maxMs": 44000,
+      "customers": 1,
+      "topCode": "O11_WORKER_BUSY"
+    },
+    {
+      "tool": "ssam_discover",
+      "calls": 72,
+      "failures": 0,
+      "p50Ms": 520,
+      "p90Ms": 1400,
+      "maxMs": 1900,
+      "customers": 1,
+      "topCode": null
+    }
+  ],
+  "byCode": [
+    {
+      "code": "JOB_REFUSED",
+      "count": 80,
+      "tools": [
+        {
+          "tool": "ssam_job",
+          "count": 80
+        }
+      ],
+      "customers": 1,
+      "lastAt": "2026-10-13T02:50:28Z"
+    },
+    {
+      "code": "AGENT_NOT_CONNECTED",
+      "count": 45,
+      "tools": [
+        {
+          "tool": "odc_read",
+          "count": 45
+        }
+      ],
+      "customers": 1,
+      "lastAt": "2026-10-13T02:51:00Z"
+    },
+    {
+      "code": "BUILD_FAILED",
+      "count": 27,
+      "tools": [
+        {
+          "tool": "studio_build",
+          "count": 27
+        }
+      ],
+      "customers": 1,
+      "lastAt": "2026-10-13T02:50:28Z"
+    },
+    {
+      "code": "WORKSPACE_FULL",
+      "count": 18,
+      "tools": [
+        {
+          "tool": "odc_write",
+          "count": 18
+        }
+      ],
+      "customers": 1,
+      "lastAt": "2026-10-13T02:51:00Z"
+    },
+    {
+      "code": "O11_WORKER_BUSY",
+      "count": 9,
+      "tools": [
+        {
+          "tool": "o11_job",
+          "count": 9
+        }
+      ],
+      "customers": 1,
+      "lastAt": "2026-10-09T14:10:00Z"
+    },
+    {
+      "code": "AGENT_TIMEOUT",
+      "count": 8,
+      "tools": [
+        {
+          "tool": "odc_read",
+          "count": 8
+        }
+      ],
+      "customers": 1,
+      "lastAt": "2026-10-13T00:46:08Z"
+    },
+    {
+      "code": "TOOL_ERROR",
+      "count": 1,
+      "tools": [
+        {
+          "tool": "ssam_map",
+          "count": 1
+        }
+      ],
+      "customers": 1,
+      "lastAt": "2026-10-12T21:51:08Z"
+    }
+  ],
+  "byDay": [
+    {
+      "day": "2026-10-12",
+      "calls": 1322,
+      "failures": 86,
+      "p50Ms": 1062,
+      "p90Ms": 15000,
+      "customers": 4
+    },
+    {
+      "day": "2026-10-11",
+      "calls": 929,
+      "failures": 15,
+      "p50Ms": 970,
+      "p90Ms": 15000,
+      "customers": 4
+    },
+    {
+      "day": "2026-10-10",
+      "calls": 1387,
+      "failures": 12,
+      "p50Ms": 1004,
+      "p90Ms": 15000,
+      "customers": 4
+    },
+    {
+      "day": "2026-10-09",
+      "calls": 1505,
+      "failures": 25,
+      "p50Ms": 1111,
+      "p90Ms": 19000,
+      "customers": 5
+    },
+    {
+      "day": "2026-10-08",
+      "calls": 1511,
+      "failures": 10,
+      "p50Ms": 1124,
+      "p90Ms": 19000,
+      "customers": 5
+    },
+    {
+      "day": "2026-10-07",
+      "calls": 984,
+      "failures": 14,
+      "p50Ms": 1267,
+      "p90Ms": 19000,
+      "customers": 5
+    },
+    {
+      "day": "2026-10-06",
+      "calls": 1211,
+      "failures": 26,
+      "p50Ms": 1173,
+      "p90Ms": 19000,
+      "customers": 5
+    }
+  ],
+  "denied": {
+    "available": true,
+    "since": "2026-10-12T21:40:08Z",
+    "byStatus": {
+      "401": 1185,
+      "403": 507,
+      "429": 391
+    },
+    "rows": [
+      {
+        "ip": "192.0.2.10",
+        "status": 429,
+        "path": "/mcp",
+        "count": 312,
+        "lastAt": "2026-10-12T18:20:24.702Z"
+      },
+      {
+        "ip": "198.51.100.59",
+        "status": 401,
+        "path": "/mcp",
+        "count": 119,
+        "lastAt": "2026-10-12T12:27:03.751Z"
+      },
+      {
+        "ip": "198.51.100.14",
+        "status": 403,
+        "path": "/.env",
+        "count": 106,
+        "lastAt": "2026-10-12T16:56:02.217Z"
+      },
+      {
+        "ip": "198.51.100.17",
+        "status": 401,
+        "path": "/mcp",
+        "count": 99,
+        "lastAt": "2026-10-13T01:42:06.311Z"
+      },
+      {
+        "ip": "192.0.2.49",
+        "status": 401,
+        "path": "/.env",
+        "count": 98,
+        "lastAt": "2026-10-12T10:29:36.178Z"
+      },
+      {
+        "ip": "198.51.100.20",
+        "status": 401,
+        "path": "/mcp?session=abc",
+        "count": 85,
+        "lastAt": "2026-10-12T17:19:53.396Z"
+      },
+      {
+        "ip": "192.0.2.40",
+        "status": 401,
+        "path": "/agent/v1/stream",
+        "count": 74,
+        "lastAt": "2026-10-12T14:58:51.138Z"
+      },
+      {
+        "ip": "198.51.100.32",
+        "status": 401,
+        "path": "/agent/v1/hello",
+        "count": 69,
+        "lastAt": "2026-10-12T10:41:12.808Z"
+      },
+      {
+        "ip": "192.0.2.52",
+        "status": 401,
+        "path": "/mcp",
+        "count": 68,
+        "lastAt": "2026-10-12T11:31:34.111Z"
+      },
+      {
+        "ip": "198.51.100.50",
+        "status": 403,
+        "path": "/wp-login.php",
+        "count": 63,
+        "lastAt": "2026-10-12T22:12:25.419Z"
+      },
+      {
+        "ip": "192.0.2.58",
+        "status": 403,
+        "path": "/agent/v1/blob/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/parte-muito-longa-para-testar-reticencia",
+        "count": 62,
+        "lastAt": "2026-10-12T21:12:55.439Z"
+      },
+      {
+        "ip": "203.0.113.15",
+        "status": 401,
+        "path": "/wp-login.php",
+        "count": 58,
+        "lastAt": "2026-10-13T01:46:42.381Z"
+      },
+      {
+        "ip": "203.0.113.42",
+        "status": 403,
+        "path": "/.env",
+        "count": 58,
+        "lastAt": "2026-10-13T02:39:20.337Z"
+      },
+      {
+        "ip": "198.51.100.23",
+        "status": 401,
+        "path": "/agent/v1/blob/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/parte-muito-longa-para-testar-reticencia",
+        "count": 55,
+        "lastAt": "2026-10-12T15:04:57.074Z"
+      },
+      {
+        "ip": "203.0.113.54",
+        "status": 403,
+        "path": "/agent/v1/stream",
+        "count": 54,
+        "lastAt": "2026-10-12T15:56:18.176Z"
+      },
+      {
+        "ip": "203.0.113.33",
+        "status": 401,
+        "path": "/agent/v1/stream",
+        "count": 53,
+        "lastAt": "2026-10-12T16:28:43.575Z"
+      },
+      {
+        "ip": "203.0.113.27",
+        "status": 401,
+        "path": "/mcp?session=abc",
+        "count": 52,
+        "lastAt": "2026-10-12T19:19:06.046Z"
+      },
+      {
+        "ip": "198.51.100.41",
+        "status": 401,
+        "path": "/mcp?session=abc",
+        "count": 51,
+        "lastAt": "2026-10-12T16:19:34.042Z"
+      },
+      {
+        "ip": "203.0.113.30",
+        "status": 403,
+        "path": "/agent/v1/blob/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/parte-muito-longa-para-testar-reticencia",
+        "count": 45,
+        "lastAt": "2026-10-12T19:21:41.568Z"
+      },
+      {
+        "ip": "198.51.100.35",
+        "status": 401,
+        "path": "/.env",
+        "count": 42,
+        "lastAt": "2026-10-12T17:44:50.349Z"
+      },
+      {
+        "ip": "203.0.113.21",
+        "status": 401,
+        "path": "/.env",
+        "count": 37,
+        "lastAt": "2026-10-12T21:40:15.479Z"
+      },
+      {
+        "ip": "192.0.2.28",
+        "status": 429,
+        "path": "/.env",
+        "count": 36,
+        "lastAt": "2026-10-12T09:54:12.720Z"
+      },
+      {
+        "ip": "192.0.2.34",
+        "status": 403,
+        "path": "/mcp?session=abc",
+        "count": 34,
+        "lastAt": "2026-10-12T14:40:15.639Z"
+      },
+      {
+        "ip": "192.0.2.22",
+        "status": 403,
+        "path": "/wp-login.php",
+        "count": 33,
+        "lastAt": "2026-10-12T12:39:26.627Z"
+      },
+      {
+        "ip": "198.51.100.29",
+        "status": 401,
+        "path": "/wp-login.php",
+        "count": 32,
+        "lastAt": "2026-10-12T15:30:48.030Z"
+      },
+      {
+        "ip": "192.0.2.31",
+        "status": 401,
+        "path": "/mcp",
+        "count": 28,
+        "lastAt": "2026-10-12T17:21:31.734Z"
+      },
+      {
+        "ip": "192.0.2.37",
+        "status": 429,
+        "path": "/agent/v1/blob/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/parte-muito-longa-para-testar-reticencia",
+        "count": 25,
+        "lastAt": "2026-10-12T18:07:55.953Z"
+      },
+      {
+        "ip": "203.0.113.48",
+        "status": 401,
+        "path": "/mcp?session=abc",
+        "count": 25,
+        "lastAt": "2026-10-12T16:42:17.529Z"
+      },
+      {
+        "ip": "192.0.2.43",
+        "status": 401,
+        "path": "/wp-login.php",
+        "count": 24,
+        "lastAt": "2026-10-13T02:08:41.802Z"
+      },
+      {
+        "ip": "198.51.100.26",
+        "status": 403,
+        "path": "/agent/v1/stream",
+        "count": 23,
+        "lastAt": "2026-10-12T17:04:25.504Z"
+      },
+      {
+        "ip": "203.0.113.12",
+        "status": 401,
+        "path": "/agent/v1/stream",
+        "count": 19,
+        "lastAt": "2026-10-12T09:11:21.308Z"
+      },
+      {
+        "ip": "203.0.113.57",
+        "status": 401,
+        "path": "/wp-login.php",
+        "count": 19,
+        "lastAt": "2026-10-12T08:43:58.385Z"
+      },
+      {
+        "ip": "198.51.100.56",
+        "status": 401,
+        "path": "/.env",
+        "count": 17,
+        "lastAt": "2026-10-12T10:54:39.465Z"
+      },
+      {
+        "ip": "198.51.100.38",
+        "status": 403,
+        "path": "/mcp",
+        "count": 15,
+        "lastAt": "2026-10-12T14:27:40.764Z"
+      },
+      {
+        "ip": "203.0.113.18",
+        "status": 403,
+        "path": "/agent/v1/hello",
+        "count": 14,
+        "lastAt": "2026-10-13T00:07:48.296Z"
+      },
+      {
+        "ip": "198.51.100.53",
+        "status": 401,
+        "path": "/agent/v1/hello",
+        "count": 12,
+        "lastAt": "2026-10-12T22:58:50.143Z"
+      },
+      {
+        "ip": "192.0.2.13",
+        "status": 401,
+        "path": "/mcp?session=abc",
+        "count": 9,
+        "lastAt": "2026-10-12T23:14:14.225Z"
+      },
+      {
+        "ip": "192.0.2.19",
+        "status": 429,
+        "path": "/agent/v1/stream",
+        "count": 9,
+        "lastAt": "2026-10-13T02:41:13.438Z"
+      },
+      {
+        "ip": "203.0.113.24",
+        "status": 401,
+        "path": "/mcp",
+        "count": 9,
+        "lastAt": "2026-10-12T20:44:15.906Z"
+      },
+      {
+        "ip": "203.0.113.45",
+        "status": 401,
+        "path": "/mcp",
+        "count": 8,
+        "lastAt": "2026-10-12T13:38:01.057Z"
+      },
+      {
+        "ip": "192.0.2.46",
+        "status": 429,
+        "path": "/agent/v1/hello",
+        "count": 7,
+        "lastAt": "2026-10-12T22:33:03.308Z"
+      },
+      {
+        "ip": "198.51.100.11",
+        "status": 401,
+        "path": "/agent/v1/hello",
+        "count": 6,
+        "lastAt": "2026-10-12T17:08:03.327Z"
+      },
+      {
+        "ip": "198.51.100.47",
+        "status": 401,
+        "path": "/agent/v1/stream",
+        "count": 5,
+        "lastAt": "2026-10-12T10:36:46.888Z"
+      },
+      {
+        "ip": "203.0.113.39",
+        "status": 401,
+        "path": "/agent/v1/hello",
+        "count": 5,
+        "lastAt": "2026-10-12T10:32:58.954Z"
+      },
+      {
+        "ip": "192.0.2.16",
+        "status": 401,
+        "path": "/agent/v1/blob/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/parte-muito-longa-para-testar-reticencia",
+        "count": 2,
+        "lastAt": "2026-10-12T18:31:13.964Z"
+      },
+      {
+        "ip": "192.0.2.55",
+        "status": 429,
+        "path": "/mcp?session=abc",
+        "count": 2,
+        "lastAt": "2026-10-12T08:22:26.270Z"
+      },
+      {
+        "ip": "203.0.113.36",
+        "status": 401,
+        "path": "/wp-login.php",
+        "count": 2,
+        "lastAt": "2026-10-13T02:08:44.706Z"
+      },
+      {
+        "ip": "192.0.2.25",
+        "status": 401,
+        "path": "/agent/v1/hello",
+        "count": 1,
+        "lastAt": "2026-10-12T08:14:16.612Z"
+      },
+      {
+        "ip": "198.51.100.44",
+        "status": 401,
+        "path": "/agent/v1/blob/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/parte-muito-longa-para-testar-reticencia",
+        "count": 1,
+        "lastAt": "2026-10-12T10:28:53.215Z"
+      },
+      {
+        "ip": "203.0.113.51",
+        "status": 401,
+        "path": "/agent/v1/blob/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/parte-muito-longa-para-testar-reticencia",
+        "count": 1,
+        "lastAt": "2026-10-12T23:00:26.601Z"
+      }
+    ]
+  }
+}

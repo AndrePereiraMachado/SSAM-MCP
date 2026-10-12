@@ -6,13 +6,15 @@ automático. Estes arquivos são do monorepo SSAM-MCP e não vêm da linha do se
 | Arquivo | Papel |
 | --- | --- |
 | `server/Dockerfile` | Imagem de produção (contexto = `server/`). Derivada de `docker/ssam-server/Dockerfile`, que continua sendo a de desenvolvimento. |
-| `server/deploy/compose.prod.yml` | Serviços `ssam-server`, `caddy`, `ssam-admin` (perfil `admin`) e `ssam-ops` (perfil `ops`). |
+| `server/deploy/compose.prod.yml` | Serviços `ssam-server`, `caddy`, `ssam-admin` (perfil `admin`), `ssam-ops` (perfil `ops`) e `ssam-console` (perfil `console`, seção 15). |
 | `server/deploy/Caddyfile` | HTTPS automático e proxy reverso sem buffer. |
 | `server/deploy/.env.prod.example` | Modelo do `.env` (sem segredo). |
 | `server/deploy/build.sh` | A guarda de nomes de cliente e depois o build da imagem (seção 6). |
 | `server/deploy/backup.sh`, `restore.sh` | Cópia e volta do estado (volumes). |
 | `server/deploy/rotate-logs.sh` | Rotação do `server.log` e retenção da auditoria e do índice de módulos (seção 10). |
 | `server/deploy/odc-features-export.ps1` | No Windows: decifra o cache de features do ODC Studio para a VPS (7.2). |
+| `server/deploy/host/` | Painel do dono, parte do host: coletor (`collect.py`), unidades do systemd, `install.sh` e `uninstall.sh` (seção 15). |
+| `server/deploy/console/` | Painel do dono: o servidor (Node, sem dependências) e as páginas, montados no container `ssam-console`; `painel-ssam.ps1` abre o túnel SSH no Windows do dono (seção 15). |
 
 Todos os comandos `docker compose` e `sh` abaixo rodam **dentro da pasta `deploy`** da VPS (seção 5), onde fica o `.env`.
 
@@ -38,6 +40,8 @@ agente do cliente (https://<domínio>/agent) ─┤
   leitores. Ele passa por recriações do container (um upgrade não começa frio) e fica fora do backup: o servidor o refaz.
 - `ssam-admin` emite, lista e revoga tokens. `ssam-ops` faz backup, restore, rotação de logs e grava arquivos nos
   volumes. Os dois rodam sem rede e só quando chamados.
+- `ssam-console` (perfil `console`) é o painel do dono: licenças e monitoração, sem rede nenhuma, alcançado só por um
+  túnel SSH a partir do PC do dono (seção 15).
 
 ## 2. Aviso de licença
 
@@ -463,6 +467,8 @@ espere ou combine.
 2. Gere a imagem nova com uma tag nova (seção 6). Nos caminhos B e C, atualize também a pasta `deploy` (seção 5).
 3. Troque `SSAM_IMAGE_TAG` no `.env` (no caminho B, com o digest).
 4. Recrie só o servidor: `docker compose -f compose.prod.yml up -d ssam-server`.
+   - Com o painel do dono ligado (seção 15), recrie os dois: `up -d ssam-server ssam-console`. O painel usa o módulo de
+     tokens da imagem e anda com a mesma tag.
    - O Caddy espera até 15 s pelo servidor antes de responder 502.
    - Opcional, para não acumular no volume `cache` as cópias de leitores das versões antigas: antes do `up -d`, pare o
      servidor (`stop ssam-server`) e esvazie a pasta dos leitores com
@@ -517,19 +523,28 @@ sh restore.sh /var/backups/ssam-server/ssam-state-<data>.tar.gz
     (o estado está pela metade) e a mensagem diz qual arquivo de `pre-restore` restaurar para voltar.
   - Restaure com a tag que fez o backup (o `.info` diz qual) ou uma mais nova.
   - Tokens revogados depois do backup voltam a valer: revogue-os de novo.
+  - Com o painel do dono ligado, pare-o antes do restore e reindexe depois (15.6).
 
-**Agendamento diário**, como o seu usuário (grupo docker), com o log na pasta dos backups:
+**Agendamento diário.** Nesta VPS o operador é o root, e o cron vem do `sh host/install.sh --with-crons` do painel do
+dono (seção 15). Ele grava `/etc/cron.d/ssam-backup` só quando o arquivo ainda não existe (um arquivo diferente fica
+como está e o script mostra a diferença), cria a pasta dos backups (0700) e o `cron.log` (0600) se faltarem:
+
+```
+30 3 * * * root cd /opt/ssam/deploy && sh backup.sh --online >> /var/backups/ssam-server/cron.log 2>&1
+```
+
+Antes de ir ao ar, rode o mesmo comando do cron uma vez, de verdade, na pasta `deploy`:
 
 ```bash
-echo "30 3 * * * $USER cd $PWD && sh backup.sh --online >> /var/backups/ssam-server/cron.log 2>&1" \
-  | sudo tee /etc/cron.d/ssam-backup
-sudo -u "$USER" sh -c "cd $PWD && sh backup.sh --online >> /var/backups/ssam-server/cron.log 2>&1"; echo "exit $?"
+sh backup.sh --online >> /var/backups/ssam-server/cron.log 2>&1; echo "exit $?"
 tail -n 5 /var/backups/ssam-server/cron.log
 ```
 
-- Rode o `echo` dentro da pasta `deploy` (o `$PWD` vira o caminho dela).
-- A segunda linha roda o mesmo comando do cron uma vez, de verdade, antes de ir ao ar: tem de dar `exit 0`, e o log tem
-  de mostrar `backup: ... sha256 ...`.
+- Tem de dar `exit 0`, e o log tem de mostrar `backup: ... sha256 ...`.
+- Com um operador sem root (grupo docker, pasta dos backups com o dono dele, seção 5), grave a mesma linha com o
+  usuário dele no lugar de `root` (`sudo tee /etc/cron.d/ssam-backup`) em vez de usar o `--with-crons`.
+- O painel (aba VPS) mostra o último backup, a idade dele e as últimas linhas `backup:` do `cron.log`, e alerta quando
+  não há backup, quando o mais novo tem mais de 26 h, quando a última linha diz `FAILED` e quando falta o cron.
 
 **Aviso quando o backup não roda.** Um backup que falha no cron não avisa ninguém. Use um monitor do tipo "dead man's
 switch" (healthchecks.io, Uptime Kuma em modo push, Better Stack heartbeat): crie uma verificação diária com tolerância de
@@ -572,6 +587,11 @@ Teste um restore de tempos em tempos numa VPS de ensaio, com um arquivo vindo de
   ```
 
   Qualquer linha é alerta. Ponha esse comando num cron com aviso (ou num agente de logs) junto com o monitor externo.
+- **O painel do dono (seção 15) cobre essa lista** sem cron: `kernel` com `o11` ou `odcBridge` nulos, aquecimento com
+  falha, credencial de agente usada de outra máquina, `tokens-unreadable`, `audit-failed` e `request-failed`, container
+  parado, unhealthy, reiniciado ou morto por falta de memória, disco, memória, certificado, backup, rotação e recusas de
+  acesso no Caddy. Ele só avisa quem o abre: o monitor externo do `/health` e o heartbeat do backup continuam valendo
+  para o aviso fora dele.
 - **Logs**: `docker compose -f compose.prod.yml logs -f --since 1h ssam-server caddy`.
   - O servidor escreve eventos JSON: `listening`, `kernel`, `warm`, `session-opened` e `session-closed`,
     `agent-connected`, `agent-call` e `mcp-response-flushed`.
@@ -591,11 +611,14 @@ Teste um restore de tempos em tempos numa VPS de ensaio, com um arquivo vindo de
   - comprime as auditorias dos dias anteriores e, com `AUDIT_KEEP_DAYS` maior que 0, apaga as mais velhas que isso;
   - com `INDEX_KEEP_DAYS` maior que 0, apaga do volume `cache` os arquivos do índice de módulos sem uso há esse tempo.
 
-  Agende uma vez por semana, como o seu usuário, na pasta `deploy`, e rode uma vez na mão antes de ir ao ar:
+  Uma vez por semana, pelo cron que o `sh host/install.sh --with-crons` grava (seção 15; com outro operador, a mesma
+  linha com o usuário dele no lugar de `root`). Rode uma vez na mão antes de ir ao ar, na pasta `deploy`:
+
+  ```
+  15 4 * * 0 root cd /opt/ssam/deploy && sh rotate-logs.sh >> /var/backups/ssam-server/cron.log 2>&1
+  ```
 
   ```bash
-  echo "15 4 * * 0 $USER cd $PWD && sh rotate-logs.sh >> /var/backups/ssam-server/cron.log 2>&1" \
-    | sudo tee /etc/cron.d/ssam-rotate
   sh rotate-logs.sh; echo "exit $?"
   ```
 
@@ -785,7 +808,276 @@ A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensai
   lock do NuGet nos projetos da linha do servidor). As imagens base e os Studios são fixados por digest e SHA-256.
 - O Caddy roda como uid 0 dentro do container, só com `NET_BIND_SERVICE`, sem as outras capabilities e com
   `no-new-privileges`.
-- O painel do dono (`scripts/dashboard.mjs`) escuta só em loopback e ainda não foi adaptado ao Docker.
+- O painel do dono da VPS é o da seção 15 (o `scripts/dashboard.mjs` da linha do servidor é só do servidor Windows). Ele
+  só avisa quem o abre: não manda e-mail nem push. Renovar e mudar faixas pelo painel dependem da imagem do 24º envio.
+  O servidor não registra o pacote do agente nem as respostas 401, 403 e 429: o painel mostra `—` no pacote e tira as
+  recusas do log do Caddy, só por IP.
 - O `server.log` mostra o IP que o Caddy viu. No Docker Desktop é sempre o gateway da rede (o encaminhamento de portas
   dele não preserva a origem); numa VPS Linux, o IPv4 do cliente.
 - Uma VPS só: sem alta disponibilidade. O tempo fora do ar de um upgrade é o de recriar o container.
+
+## 15. Painel do dono
+
+Uma página só para o dono, com as licenças (emitir, renovar, mudar faixas, trocar a credencial do agente, revogar) e a
+monitoração da VPS, dos containers, do servidor SSAM e do uso. Não tem rota pública: só se chega a ela por um túnel SSH
+a partir do PC do dono.
+
+```
+PC do dono (Windows)                          VPS
+painel-ssam.ps1                               sshd :22
+  ssh -L 127.0.0.1:7320:127.0.0.1:7320  ==>     127.0.0.1:7320  ssam-console-proxy.socket (systemd, só loopback)
+  navegador http://localhost:7320                 -> systemd-socket-proxyd (uid 10001, sem rede)
+                                                  -> /var/lib/ssam-console/sock/console.sock
+                                                container ssam-console (mesma imagem do servidor, network_mode: none)
+                                                  lê o volume de estado e /var/lib/ssam-console/host/host.json
+                                                ssam-console-collect.timer (a cada 30 s, root) -> collect.py -> host.json
+```
+
+- O container `ssam-console` não tem rede nenhuma: escuta num socket unix. O Caddy, o ufw e as portas públicas não
+  mudam; a única porta nova é `127.0.0.1:7320`, no loopback do host.
+- O coletor do host (`host/collect.py`, o Python 3 do sistema, só biblioteca padrão) roda como root a cada 30 s e grava
+  `/var/lib/ssam-console/host/host.json` (0640 root:10001): Docker, `/proc`, discos, ufw, sshd, atualizações, o
+  certificado do Caddy e os backups. Ele roda só comandos fixos, sem shell, e nunca lê o `.env`, o `tokens.json`, o
+  `kernel.json`, os espaços dos clientes, chaves nem cabeçalhos HTTP.
+- O painel grava o `tokens.json` só pelo módulo de tokens da própria imagem (o mesmo do `ssam-admin`), registra cada ação
+  em `/data/server/console-audit.jsonl` (no volume de estado: vai no backup junto com as licenças) e guarda o resto em
+  `/var/lib/ssam-console/state`.
+- Um segredo novo (token e credencial do agente) aparece uma vez só, na tela da ação. O painel não o guarda, não o
+  registra e não o manda de novo.
+
+### 15.1 Instalação
+
+Na VPS, como root, na pasta `deploy` do commit aprovado (seção 5):
+
+```bash
+cd /opt/ssam/deploy
+sh host/install.sh --dry-run --with-crons     # mostra cada verificação e cada mudança, sem mudar nada
+sh host/install.sh --with-crons
+```
+
+- O `install.sh` confere root, python3 3.10 ou mais novo, docker, systemd, `systemd-socket-proxyd`, a porta
+  127.0.0.1:7320 livre e os containers do projeto. Se algo falhar, não muda nada.
+- Cria `/var/lib/ssam-console/{host,collector,state,sock}` com os donos certos (o painel roda como uid 10001), copia o
+  `collect.py` para `/usr/local/lib/ssam-console`, grava `/etc/ssam-console/collector.conf` (só se não existir; um
+  re-install nunca o sobrescreve), instala e liga `ssam-console-collect.timer` e `ssam-console-proxy.socket`, roda o
+  coletor uma vez e confere o `host.json`.
+- `--with-crons` grava `/etc/cron.d/ssam-backup` (backup online diário, 03:30 UTC) e `/etc/cron.d/ssam-rotate`
+  (rotação semanal, domingo 04:15 UTC), com o log em `/var/backups/ssam-server/cron.log` (seções 9 e 10).
+- Nunca edita o `.env`, nunca reinicia o `ssam-server` nem o Caddy e não sobe o painel. Pode rodar de novo a qualquer
+  hora. `--port N` troca a porta do loopback (padrão 7320; no PC, `painel-ssam.ps1 -RemotePort N`).
+
+Confira as unidades na VPS (o `systemd-analyze` não roda no Windows, então esta verificação é só aqui):
+
+```bash
+systemd-analyze verify /etc/systemd/system/ssam-console-collect.service /etc/systemd/system/ssam-console-collect.timer \
+  /etc/systemd/system/ssam-console-proxy.socket /etc/systemd/system/ssam-console-proxy.service
+systemctl list-timers ssam-console-collect.timer
+```
+
+Rode o primeiro backup à mão, com o mesmo comando do cron (seção 9):
+
+```bash
+sh backup.sh --online >> /var/backups/ssam-server/cron.log 2>&1; echo "exit $?"     # tem de dar exit 0
+tail -n 3 /var/backups/ssam-server/cron.log
+```
+
+Ligue o painel: no `.env`, descomente (ou acrescente) a linha `COMPOSE_PROFILES=console` e suba só ele:
+
+```bash
+nano .env                                                    # COMPOSE_PROFILES=console
+docker compose -f compose.prod.yml up -d ssam-console
+docker compose -f compose.prod.yml ps ssam-console           # "healthy" em até ~30 s
+curl -fsS http://127.0.0.1:7320/healthz                      # {"ok":true}
+```
+
+- Com `COMPOSE_PROFILES=console`, todo `docker compose up -d` também sobe o painel.
+- Sem as pastas do `install.sh`, o container não sobe (`create_host_path: false` no compose): é de propósito, para o
+  Docker não criar pastas do root que o uid 10001 não consegue usar.
+- O painel usa a mesma imagem e a mesma tag do servidor: nada é construído.
+
+### 15.2 Uso no dia a dia
+
+No PC do dono, na raiz do SSAM-MCP:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File server\deploy\console\painel-ssam.ps1
+```
+
+1. O script lê por SSH a chave de acesso atual do painel (sem mostrá-la).
+2. Abre o túnel `127.0.0.1:7320` do PC para `127.0.0.1:7320` da VPS e espera o `/healthz`.
+3. Troca a chave para esta sessão e abre o navegador em `http://localhost:7320/#k=...`. A página tira a chave do
+   endereço na hora.
+4. Enter (ou `q`) fecha: o script troca a chave de novo e derruba o túnel. Uma chave que ficou no histórico do navegador
+   já não vale.
+
+- Parâmetros: `-VpsHost` (padrão `$env:SSAM_VPS_HOST`, senão o IP da VPS de produção), `-User` (`root`), `-Key`
+  (`$env:USERPROFILE\.ssh\ssam_vps`), `-LocalPort` (7320; se estiver ocupada, a próxima livre até 7339), `-RemotePort`
+  (7320, a do `install.sh --port`), `-NoBrowser` e `-DryRun` (mostra os dois comandos ssh e não roda nada).
+- **Uma sessão por vez**: rodar o script de novo troca a chave, e a aba anterior mostra "Chave de acesso inválida ou
+  trocada".
+- Códigos de saída: 2 = painel parado na VPS (sem chave), 3 = SSH ou túnel falhou, 4 = o painel respondeu com erro.
+
+### 15.3 O que cada aba mostra
+
+| Aba | Conteúdo |
+| --- | --- |
+| Visão geral | Alertas (gravidade, desde quando; silenciar por 24 h ou 7 dias, ou marcar como visto; um alerta silenciado que piora, de atenção para crítico, ou que acontece de novo volta na hora, com um evento), o resumo por área (servidor, licenças, uso de hoje, agentes, sessões, VPS, containers, backup, TLS, coletor) e os 10 últimos eventos. |
+| Licenças | Cada licença com estado, faixas, validade, agente, máquina registrada, sessões abertas, chamadas e falhas de hoje, uso de 14 dias, espaço em disco e última atividade; detalhes e ações por linha; Emitir licença. |
+| Uso | Chamadas por cliente e por ferramenta, falhas por código, por dia (com p50 e p90) e os acessos recusados (401, 403, 429) do log do Caddy, por IP; hoje, 7 dias, 30 dias ou um dia. |
+| Agentes e sessões | Agentes (estado, versão, Studio O11, máquina, IP, chamadas e falhas da última hora, motivo do fechamento), sessões MCP abertas, processos do servidor (worker ODC; workers O11 quando a imagem os tiver) e sessões encerradas hoje por motivo. |
+| VPS | Host (CPU, memória, discos, rede, carga, relógio, unidades com falha), atualizações e reinício pendente, segurança (ufw, SSH, falhas de login), servidor SSAM (imagem, kernel em uso e `kernel.json`, aquecimento, `/health`, tamanho dos logs), containers, volumes, certificados TLS, backups e o fim do `cron.log`. |
+| Eventos | O fluxo de eventos (sessões, agentes, chamadas, licenças, servidor e VPS), com filtros e pausa. |
+| Histórico | Toda ação de licença, feita pelo painel ou fora dele (`ssam-admin`), com o resultado. |
+
+### 15.4 Ações de licença
+
+| Ação | Efeito |
+| --- | --- |
+| Emitir | Cria o token e a credencial do agente (aparecem uma vez, com a configuração pronta do cliente MCP e do agente). Validade de 30, 90 ou 365 dias, outra ou sem validade; faixas ODC e O11. Uma licença nova não revoga a antiga do mesmo cliente. |
+| Renovar | Estende a validade a partir da validade atual (ou de hoje, se já venceu). Vale na hora: uma licença vencida volta a valer, o agente reconecta sozinho e o cliente abre sessões novas. |
+| Faixas | Muda ODC e O11. Vale para sessões **novas**: as abertas mantêm as faixas antigas até fecharem (60 min sem uso ou reconexão do cliente). |
+| Credencial do agente | A credencial atual para na hora e o canal do agente fecha em até 1 s. O cliente refaz o `setup` do agente com a nova (7.5). |
+| Revogar | Definitivo: o token e a credencial param na hora (403), e as sessões e o canal do agente fecham em até 1 s. O espaço de trabalho fica no disco (seção 11). |
+
+- Toda ação pede o nome do cliente digitado como confirmação e entra no Histórico.
+- **As ações de licença precisam da imagem do 24º envio.** O módulo de tokens dela trava o `tokens.json` entre o painel
+  e o `ssam-admin` (`tokens.json.lock`) e traz `renew` e `setLanes`. O da imagem `prod-20261011-ed0f94b` não trava: um
+  `ssam-admin` que grava no mesmo instante que o painel pode apagar a mudança do outro (um `revoke` que o CLI disse ok e
+  não valeu) ou publicar um `tokens.json` pela metade (o servidor responde 500 e fecha as sessões abertas). Quem decide
+  é `CONSOLE_LICENSE_WRITES`, no `.env`:
+
+  | Valor | Efeito |
+  | --- | --- |
+  | `auto` (padrão) | Ações só com um módulo que trava (o do 24º envio). Na imagem `prod-20261011-ed0f94b` as licenças ficam só leitura: o painel diz isso numa linha, esconde Emitir e recusa as ações com 501. Emita, renove e revogue pelo `ssam-admin` (7.4 e 11). Depois do upgrade da imagem (seção 8), as ações aparecem sozinhas. |
+  | `on` | Ações com qualquer módulo. Só em ensaio ou com a garantia de que ninguém roda `ssam-admin` enquanto o painel grava. Na imagem atual: Emitir, Credencial do agente e Revogar (Renovar e Faixas continuam esperando o 24º). |
+  | `off` | Licenças só leitura, com qualquer imagem. |
+
+  Depois de mudar o valor: `docker compose -f compose.prod.yml up -d ssam-console`.
+- Em produção, troque a imagem pela do 24º envio antes de usar Emitir e Revogar no painel. Montar o módulo novo só no
+  painel (como no ensaio, 15.11) não basta: o `ssam-admin` da imagem antiga continua sem a trava.
+- Depois de cada gravação o painel relê o `tokens.json` por uma instância nova do módulo. Se a mudança não está lá (ou o
+  arquivo não abre), a resposta é "A gravação não se confirmou no arquivo de licenças" (409), nenhum segredo aparece, a
+  tentativa entra no Histórico como erro `WRITE_NOT_CONFIRMED` e sobe o alerta crítico "... não se confirmou no
+  tokens.json". Confira a licença e repita a ação.
+- Mudanças feitas fora do painel (`ssam-admin server-token ...`, um restore, o arquivo editado à mão) entram no Histórico
+  como "fora do painel" em até 5 s: emissão, revogação, revogação desfeita (alerta crítico "A revogação da licença de ...
+  foi desfeita"), licença removida do arquivo (alerta), validade estendida ou encurtada, faixas, credencial do agente e
+  nome do cliente.
+
+### 15.5 Upgrade
+
+- **Imagem nova** (troca de `SSAM_IMAGE_TAG`, seção 8): `docker compose -f compose.prod.yml up -d ssam-server ssam-console`.
+  O painel anda com a mesma tag do servidor e usa o módulo de tokens dela.
+- **Código do painel novo** (pasta `deploy` de um commit novo, seção 5):
+  `docker compose -f compose.prod.yml up -d --force-recreate ssam-console`. O código é montado da pasta `console`: sem
+  recriar, o processo continua com o código antigo.
+- **Coletor ou unidades novos**: `sh host/install.sh` de novo. Ele copia o `collect.py` e as unidades e mantém o
+  `collector.conf`.
+- Cada partida do painel gera chave nova: rode o `painel-ssam.ps1` de novo. As posições de leitura dos logs ficam no
+  checkpoint, então nada é contado duas vezes.
+
+### 15.6 Depois de um restore
+
+O `restore.sh` troca os arquivos do volume de estado por baixo do painel, e as posições de leitura deixam de valer. Pare
+o painel antes e reindexe depois:
+
+```bash
+docker compose -f compose.prod.yml stop ssam-console
+sh restore.sh /var/backups/ssam-server/ssam-state-<data>.tar.gz
+rm -rf /var/lib/ssam-console/state/checkpoint.json /var/lib/ssam-console/state/agg
+docker compose -f compose.prod.yml start ssam-console
+```
+
+- Ao subir, o painel relê em segundo plano tudo o que o restore trouxe (`server.log`, os girados e as auditorias). A
+  linha de status mostra "indexando histórico" até terminar.
+- O Histórico volta ao do backup: o `console-audit.jsonl` está no volume de estado, junto com as licenças.
+- **Não apague o `/var/lib/ssam-console/state/tokens-snapshot.json`**: ele fica de propósito com as licenças de antes do
+  restore. Ao subir, o painel compara e registra no Histórico, como "fora do painel", tudo o que o restore mudou: uma
+  licença revogada depois do backup volta a valer (alerta crítico "A revogação da licença de ... foi desfeita"; revogue
+  de novo em Licenças), uma emitida depois do backup some (alerta "A licença de ... sumiu do tokens.json"), validades e
+  faixas voltam às do backup.
+
+### 15.7 Chave de acesso
+
+- 32 bytes aleatórios, nova a cada partida do painel e trocada pelo `painel-ssam.ps1` ao abrir e ao fechar. Fica em
+  `/var/lib/ssam-console/state/access.key` (0600, uid 10001), lida só pelo script, por SSH.
+- Uma sessão por vez: a segunda execução derruba a aba da primeira.
+- 10 chaves erradas em 1 minuto bloqueiam o painel por 60 s (429).
+- Para matar a sessão atual sem abrir outra: `docker compose -f compose.prod.yml restart ssam-console`.
+
+### 15.8 Caminho de emergência (sem as unidades do proxy)
+
+Se o `ssam-console-proxy.socket` não subir, o OpenSSH encaminha direto para o socket unix (o sshd da VPS permite
+encaminhamento de socket):
+
+```powershell
+ssh -i $env:USERPROFILE\.ssh\ssam_vps -N -L 7320:/var/lib/ssam-console/sock/console.sock root@<vps>
+```
+
+Em outro terminal, leia a chave com `ssh -i $env:USERPROFILE\.ssh\ssam_vps root@<vps> cat /var/lib/ssam-console/state/access.key`
+e abra `http://localhost:7320/#k=<chave>`. Esse caminho não troca a chave: no fim, rode
+`docker compose -f compose.prod.yml restart ssam-console` na VPS.
+
+Se o `install.sh` disser que o `/healthz` falhou e o `journalctl -u ssam-console-proxy` mostrar o systemd recusando
+`PrivateNetwork=` ou `RestrictAddressFamilies=` com o socket herdado: tire essas duas linhas de
+`/etc/systemd/system/ssam-console-proxy.service` e rode `systemctl daemon-reload` e
+`systemctl restart ssam-console-proxy.socket`. Um `install.sh` novo regrava a unidade: repita depois de cada um (ou
+tire as linhas também de `host/ssam-console-proxy.service` no repositório).
+
+### 15.9 Remoção
+
+```bash
+nano .env                                              # tire (ou comente) COMPOSE_PROFILES=console
+docker compose -f compose.prod.yml rm -sf ssam-console
+sh host/uninstall.sh                                   # unidades do systemd e /usr/local/lib/ssam-console
+sh host/uninstall.sh --purge                           # também /var/lib/ssam-console e /etc/ssam-console
+sh host/uninstall.sh --crons                           # também os crons de backup e rotação (o backup diário para)
+```
+
+- `--dry-run` mostra o que faria. O `--purge` recusa enquanto o container `ssam-console` roda.
+- O `console-audit.jsonl` fica no volume de estado, e os backups ficam onde estão.
+
+### 15.10 Problemas
+
+| Sintoma | O que olhar |
+| --- | --- |
+| `painel-ssam.ps1`: "chave ausente" | O container não está rodando: `docker compose -f compose.prod.yml ps ssam-console` e `docker compose -f compose.prod.yml logs --tail 50 ssam-console`. |
+| "O tunel SSH nao abriu" | A porta local ou a 7320 da VPS está ocupada: `systemctl status ssam-console-proxy.socket` e `ss -ltn 'sport = :7320'` na VPS. |
+| "O painel nao respondeu em 15 s" | Na VPS: `curl -fsS http://127.0.0.1:7320/healthz`, `ls -l /var/lib/ssam-console/sock` (tem de ter `console.sock` do uid 10001) e `journalctl -u ssam-console-proxy -n 30 --no-pager`. |
+| Container não sobe: `bind source path does not exist` | Faltou o `sh host/install.sh` (as pastas não existem). |
+| Container reinicia com `EACCES` | `state` ou `sock` não são do uid 10001: rode `sh host/install.sh` de novo. |
+| Aba VPS: "coletor parado" ou dados velhos | `systemctl status ssam-console-collect.timer`, `journalctl -u ssam-console-collect -n 30 --no-pager` e `ls -l /var/lib/ssam-console/host`. |
+| "Coleta parcial" | A seção com erro está em `collector.errors` do `host.json`: `python3 -c 'import json; print(json.load(open("/var/lib/ssam-console/host/host.json"))["collector"]["errors"])'`. |
+| A aba mostra "Chave de acesso inválida ou trocada" | Outra sessão abriu ou o painel reiniciou: rode o `painel-ssam.ps1` de novo. |
+| Renovar e Faixas não aparecem | Imagem anterior ao 24º envio (15.4). |
+| Nenhuma ação de licença, "Ações de licença desligadas" | `CONSOLE_LICENSE_WRITES=auto` numa imagem sem a trava do `tokens.json`, ou `off` (15.4). |
+| "A gravação não se confirmou no arquivo de licenças" | Outro processo (um `ssam-admin`) gravou o `tokens.json` ao mesmo tempo. Confira a licença e repita; o alerta some quando marcado como visto (15.4). |
+
+### 15.11 Ensaio local (Docker Desktop, 2026-10-12)
+
+Projeto `ssam-painel-ensaio` só local, imagem `ssam-server:prod-20261011-ed0f94b`, o código do painel montado da árvore
+de trabalho, portas só em 127.0.0.1 (Caddy 28180/28543, painel 27320). No lugar do `host/install.sh`, um container de
+uma vez (uid 0) deu as pastas `state` e `sock` ao uid 10001; no lugar do `systemd-socket-proxyd`, um repasse TCP para o
+socket unix na mesma imagem. O coletor rodou a cada 30 s com a parte Linux do host vinda das fixtures (`--fixture-host`)
+e a parte Docker real (`--docker docker`). Nada tocou a VPS. A pilha foi derrubada com `down -v` e os tokens do ensaio
+foram apagados.
+
+| Item | Resultado |
+| --- | --- |
+| Pilha | `ssam-console` healthy, `NetworkMode: none`, nenhuma porta; capacidades `renew:false, lanes:false` com o módulo da imagem. |
+| Leitura | Todos os GET do painel batem com os formatos da seção 4 do desenho (25 de 25 em cada uma das 7 leituras). Chamadas e falhas iguais às linhas da auditoria (29/27 e, no fim, 37/34), `AGENT_NOT_CONNECTED` igual, 5 recusas 401 do Caddy em `/mcp`, filtro por licença, dia e faixas de 7 e 30 dias. |
+| Alertas | Os do host do ensaio (`backup-ausente`, `backup-sem-cron`, `rotacao-sem-cron`, `reinicio-pendente`, `ssh-senha`), `nao-aquecido:worker` (o worker ODC não sobe no Docker Desktop), `licenca-vence` crítico para a licença de 2 dias, `acesso-outra-maquina` depois do segundo PC e `pico-falhas` (as falhas foram de propósito). Nada além. |
+| Ações na imagem atual | Renovar e Faixas recusados com 501 e a linha da seção 15.4; Emitir (segredos uma vez só, `no-store`, nenhuma outra resposta os devolve, o token novo abre sessão); Credencial do agente (evento em 3 ms, canal fechado com "credencial trocada" em 1,8 s); Revogar (sessão aberta fechada com "licença revogada" em 1,9 s, o token passa a 403, revogar de novo dá 409). 33 de 33. |
+| Ações com o módulo do 24º envio | Montado sobre o da imagem: Renovar (+30 dias a partir da validade, o alerta some depois de 2 avaliações com o evento "Resolvido"), Faixas (ODC, O11 → ODC com 1 sessão aberta avisada), recusas `STALE`, `NO_CHANGE`, `NO_EXPIRY`, `TOKEN_REVOKED`, `EXPIRY_TOO_FAR`; o `server-token list` da imagem lê o arquivo gravado pelo módulo novo; um `revoke` pelo `ssam-admin` entra no Histórico como "fora do painel" em 2 s. 26 de 26. |
+| Segurança | Sem chave 401, chave errada 401, `Host: evil.example` 403, `Origin` de outro site 403, `Sec-Fetch-Site: cross-site` 403, `text/plain` 415, 9 KiB 413, JSON ruim 400, campo a mais 400, confirmação errada 400, `OPTIONS` 405 sem `Access-Control-*`, `/mock/*` e caminhos com `..` 404, cabeçalhos (CSP, `no-store` etc.). 10 chaves erradas em 60 s: a 11ª e as seguintes, mesmo com a chave certa, recebem 429 com `Retry-After: 60`. |
+| Robustez | Reiniciar o painel: contagens iguais e chave nova (a aba velha mostra a mensagem da chave). `rotate-logs.sh` com o `.env` do ensaio: nada contado duas vezes, sessões abertas mantidas, nenhum trecho perdido. Coletor parado: aviso depois de 120 s; `host.json` apagado: alerta crítico, aviso na aba VPS e os alertas do host somem; túnel caído: linha "Sem conexão" e volta sozinho. `docker compose restart ssam-server`: evento "ssam-server reiniciou." |
+| Navegador | As 7 abas a 1440x900 e a 375x812, claro e escuro; a 360 px nenhuma rola de lado. Sem erro de JavaScript nem de CSP. Painel de segredos mascarado, `Fechar` só depois da caixa marcada, nada do segredo no DOM depois de fechar. |
+| Segredos | Nenhum token nem credencial na saída do painel, nos logs do servidor, do Caddy e do repasse, no volume de estado do painel, no `console-audit.jsonl`, no volume de estado do servidor nem nos arquivos do ensaio fora da pasta dos segredos. |
+
+Correções do ensaio, no mesmo commit: dias restantes contados em dias de calendário local (o alerta dizia "2 dias" e a
+tabela "1 dia" para a mesma data); trocar o período ou o cliente no Uso enquanto uma leitura estava a caminho deixava a
+resposta antiga na tela; a coluna Imagem mostrava o digest (`2.11.7-alpine@sha256:...`); o Histórico mostrava só as
+faixas numa licença sem validade e "11/11/2026 → —" numa renovação recusada; um reinício feito à mão não gerava evento.
+
+Fica do lado do servidor: um `DELETE /mcp` é registrado como `transport-closed`, então "o cliente encerrou" não aparece
+(o painel mostra "a conexão caiu").
