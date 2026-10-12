@@ -1,0 +1,2 @@
+2026-10-12T02:50:45.000000000Z {"level":"info","ts":1791773445.0,"logger":"tls.cache.maintenance","msg":"started background certificate maintenance"}
+2026-10-12T02:50:47.000000000Z {"level":"error","ts":1791773447.0,"logger":"http.handlers.reverse_proxy","msg":"aborting with incomplete response","error":"writing: http2: stream closed"}

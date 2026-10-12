@@ -1,0 +1,25 @@
+# SSAM owner console - host collector settings (DEPLOY.md section 15). host/install.sh copies this file to
+# /etc/ssam-console/collector.conf only when that file does not exist yet; a re-install never overwrites it.
+# key=value, one per line; `#` starts a comment. collect.py parses it (it is never sourced by a shell) and refuses unknown
+# keys. The values below are the built-in defaults.
+
+# Compose project and the services the collector looks for (docker ps label com.docker.compose.project / .service).
+COMPOSE_PROJECT=ssam-prod
+SERVER_SERVICE=ssam-server
+CADDY_SERVICE=caddy
+CONSOLE_SERVICE=ssam-console
+# Port of the server's /health on its backend address (the host reaches the internal network directly).
+SERVER_PORT=7310
+
+# The folder of backup.sh (BACKUP_DIR of the deploy .env): archives, .sha256, .info and cron.log.
+BACKUP_DIR=/var/backups/ssam-server
+# Network interface of the rates on the VPS page.
+NET_IFACE=eth0
+
+# Output (host.json, 0640 root:CONSOLE_GID, mounted read-only into the console) and the collector's private state.
+OUT_DIR=/var/lib/ssam-console/host
+STATE_DIR=/var/lib/ssam-console/collector
+# Group of host.json: the console runs as uid/gid 10001.
+CONSOLE_GID=10001
+# Day boundary of the Caddy "today" counts (the console shows the same zone).
+DISPLAY_TZ=America/Sao_Paulo

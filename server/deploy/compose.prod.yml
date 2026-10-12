@@ -8,6 +8,10 @@
 #                ssam-server:7310, without buffering (SSE on /mcp, NDJSON on /agent/v1/stream).
 #   ssam-admin   profile admin: issue, list, revoke and rotate tokens (state volume only, no network).
 #   ssam-ops     profile ops: backup.sh, restore.sh and file drops into the state volumes (no network, read-only).
+#   ssam-console profile console: the owner console (licenses and monitoring, DEPLOY.md section 15). No network at all:
+#                a unix socket in /var/lib/ssam-console/sock, forwarded from the host's 127.0.0.1:7320 by the systemd
+#                units of host/install.sh and reached only through the owner's SSH tunnel. Enabled with
+#                COMPOSE_PROFILES=console in .env, after host/install.sh.
 #
 # Every command runs from this folder, with the .env made from .env.prod.example:
 #   sh build.sh                                                # the image (guard first), or pull it from the private registry
@@ -146,6 +150,76 @@ services:
       - friction:/data/friction
       - odc-features:/data/odc-features
       - cache:/data/cache
+
+  # Owner console (DEPLOY.md section 15): licenses and monitoring, reachable only through the owner's SSH tunnel.
+  # No network at all; a unix socket in /var/lib/ssam-console/sock, forwarded from 127.0.0.1:7320 by the host unit
+  # ssam-console-proxy.socket. Same image as the server (node + the token store module); code bind-mounted from ./console.
+  # It writes tokens.json only through the image's token module, appends /data/server/console-audit.jsonl and keeps its
+  # own state in /state. The host folders must exist with their owners first (host/install.sh): create_host_path false
+  # makes a missing one an error instead of a root-owned empty folder.
+  ssam-console:
+    <<: *hardening
+    image: ${SSAM_IMAGE:-ssam-server}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG in .env}
+    platform: linux/amd64
+    profiles: [console]
+    restart: unless-stopped
+    user: "10001:10001"
+    entrypoint: ["node", "/console/server.mjs"]
+    command: []
+    working_dir: /console
+    environment:
+      SSAM_SERVER_DIR: /data/server
+      CONSOLE_SOCKET: /run/console/console.sock
+      CONSOLE_STATE_DIR: /state
+      CONSOLE_HOST_JSON: /host/host.json
+      CONSOLE_PUBLIC_DIR: /console/public
+      CONSOLE_TOKEN_MODULE: /app/platforms/odc/facade/server-tokens.mjs
+      CONSOLE_DOMAIN: ${SSAM_DOMAIN:?set SSAM_DOMAIN in .env}
+      TZ: UTC
+    volumes:
+      - server-state:/data/server
+      - type: bind
+        source: ./console
+        target: /console
+        read_only: true
+      - type: bind
+        source: ${SSAM_CONSOLE_DIR:-/var/lib/ssam-console}/host
+        target: /host
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${SSAM_CONSOLE_DIR:-/var/lib/ssam-console}/state
+        target: /state
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${SSAM_CONSOLE_DIR:-/var/lib/ssam-console}/sock
+        target: /run/console
+        bind:
+          create_host_path: false
+    # The image declares VOLUME for these; small read-only tmpfs mounts stop Docker from creating anonymous volumes.
+    tmpfs:
+      - /tmp:size=16m
+      - /data/friction:size=64k,mode=0555
+      - /data/odc-features:size=64k,mode=0555
+      - /data/cache:size=64k,mode=0555
+    network_mode: none
+    read_only: true
+    # Overrides the image's HEALTHCHECK (the server's /health on 7310): /healthz over the unix socket.
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get({socketPath:'/run/console/console.sock',path:'/healthz',timeout:3000},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    stop_grace_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256m
+          pids: 64
 
 volumes:
   server-state:

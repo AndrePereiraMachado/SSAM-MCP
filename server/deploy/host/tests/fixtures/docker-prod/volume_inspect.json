@@ -1,0 +1,68 @@
+[
+  {
+    "CreatedAt": "2026-10-11T22:35:58Z",
+    "Driver": "local",
+    "Labels": {
+      "com.docker.compose.project": "ssam-prod"
+    },
+    "Mountpoint": "/var/lib/docker/volumes/ssam-prod_cache/_data",
+    "Name": "ssam-prod_cache",
+    "Options": null,
+    "Scope": "local"
+  },
+  {
+    "CreatedAt": "2026-10-11T22:35:58Z",
+    "Driver": "local",
+    "Labels": {
+      "com.docker.compose.project": "ssam-prod"
+    },
+    "Mountpoint": "/var/lib/docker/volumes/ssam-prod_caddy-config/_data",
+    "Name": "ssam-prod_caddy-config",
+    "Options": null,
+    "Scope": "local"
+  },
+  {
+    "CreatedAt": "2026-10-11T22:35:58Z",
+    "Driver": "local",
+    "Labels": {
+      "com.docker.compose.project": "ssam-prod"
+    },
+    "Mountpoint": "/var/lib/docker/volumes/ssam-prod_caddy-data/_data",
+    "Name": "ssam-prod_caddy-data",
+    "Options": null,
+    "Scope": "local"
+  },
+  {
+    "CreatedAt": "2026-10-11T22:35:58Z",
+    "Driver": "local",
+    "Labels": {
+      "com.docker.compose.project": "ssam-prod"
+    },
+    "Mountpoint": "/var/lib/docker/volumes/ssam-prod_friction/_data",
+    "Name": "ssam-prod_friction",
+    "Options": null,
+    "Scope": "local"
+  },
+  {
+    "CreatedAt": "2026-10-11T22:35:58Z",
+    "Driver": "local",
+    "Labels": {
+      "com.docker.compose.project": "ssam-prod"
+    },
+    "Mountpoint": "/var/lib/docker/volumes/ssam-prod_odc-features/_data",
+    "Name": "ssam-prod_odc-features",
+    "Options": null,
+    "Scope": "local"
+  },
+  {
+    "CreatedAt": "2026-10-11T22:35:58Z",
+    "Driver": "local",
+    "Labels": {
+      "com.docker.compose.project": "ssam-prod"
+    },
+    "Mountpoint": "/var/lib/docker/volumes/ssam-prod_server-state/_data",
+    "Name": "ssam-prod_server-state",
+    "Options": null,
+    "Scope": "local"
+  }
+]

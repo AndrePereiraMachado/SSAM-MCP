@@ -1,0 +1,499 @@
+{
+  "schema": "ssam-console-host/1",
+  "collectedAt": "2026-10-12T02:51:00Z",
+  "collector": {
+    "version": "1",
+    "durationMs": 0,
+    "intervalS": 30,
+    "project": "ssam-prod",
+    "errors": []
+  },
+  "host": {
+    "ok": true,
+    "at": "2026-10-12T02:51:00Z",
+    "hostname": "vps-exemplo",
+    "os": "Ubuntu 26.04.1 LTS",
+    "kernel": "7.0.0-34-generic",
+    "nproc": 2,
+    "uptimeS": 385750,
+    "bootAt": "2026-10-07T15:41:50Z",
+    "load": [
+      0.09,
+      0.04,
+      0.01
+    ],
+    "cpu": {
+      "pct": 1.2,
+      "iowaitPct": 0.0,
+      "stealPct": 0.5,
+      "windowS": 30
+    },
+    "mem": {
+      "totalB": 8321208320,
+      "availableB": 7257579520,
+      "swapTotalB": 0,
+      "swapUsedB": 0
+    },
+    "psi": {
+      "cpuSome10": 0.02,
+      "memSome10": 0.0,
+      "ioSome10": 0.0
+    },
+    "disks": [
+      {
+        "mount": "/",
+        "fs": "ext4",
+        "sizeB": 103079215104,
+        "usedB": 5905580032,
+        "availB": 97173635072,
+        "usedPct": 6,
+        "inodesPct": 1
+      },
+      {
+        "mount": "/boot",
+        "fs": "ext4",
+        "sizeB": 1037041664,
+        "usedB": 157286400,
+        "availB": 810549248,
+        "usedPct": 17,
+        "inodesPct": 1
+      },
+      {
+        "mount": "/boot/efi",
+        "fs": "vfat",
+        "sizeB": 109576192,
+        "usedB": 6656000,
+        "availB": 102920192,
+        "usedPct": 7,
+        "inodesPct": null
+      }
+    ],
+    "net": {
+      "iface": "eth0",
+      "rxB": 1857536347,
+      "txB": 85979134,
+      "rxBps": 1830,
+      "txBps": 410
+    },
+    "time": {
+      "ntpSynced": true,
+      "tz": "Etc/UTC"
+    },
+    "failedUnits": 0
+  },
+  "updates": {
+    "ok": true,
+    "at": "2026-10-12T02:50:30Z",
+    "upgradable": 10,
+    "security": 0,
+    "packages": [
+      "containerd.io",
+      "docker-buildx-plugin",
+      "docker-ce-cli",
+      "docker-ce-rootless-extras",
+      "docker-ce",
+      "openssh-client",
+      "openssh-server",
+      "openssh-sftp-server",
+      "python3-distupgrade",
+      "ubuntu-release-upgrader-core"
+    ],
+    "rebootRequired": true,
+    "rebootSince": "2026-10-07T15:50:20Z",
+    "rebootPkgs": [
+      "linux-image-7.0.0-38-generic",
+      "linux-base"
+    ],
+    "unattended": {
+      "enabled": true,
+      "lastRunAt": "2026-10-11T06:30:24Z",
+      "lastSuccessAt": "2026-10-11T04:00:16Z"
+    }
+  },
+  "security": {
+    "ok": true,
+    "at": "2026-10-12T02:50:30Z",
+    "ufw": {
+      "active": true,
+      "defaultIncoming": "deny",
+      "defaultOutgoing": "allow",
+      "defaultRouted": "deny",
+      "allowIn": [
+        "22/tcp",
+        "80/tcp",
+        "443/tcp"
+      ],
+      "rules": [
+        "22/tcp ALLOW IN Anywhere",
+        "80/tcp ALLOW IN Anywhere",
+        "443/tcp ALLOW IN Anywhere",
+        "22/tcp (v6) ALLOW IN Anywhere (v6)",
+        "80/tcp (v6) ALLOW IN Anywhere (v6)",
+        "443/tcp (v6) ALLOW IN Anywhere (v6)"
+      ]
+    },
+    "ssh": {
+      "passwordAuth": true,
+      "permitRootLogin": "yes",
+      "port": 22,
+      "fail2ban": "absent",
+      "failures24h": 40,
+      "topSources": [
+        {
+          "ip": "198.51.100.7",
+          "count": 12
+        },
+        {
+          "ip": "203.0.113.50",
+          "count": 9
+        },
+        {
+          "ip": "203.0.113.51",
+          "count": 8
+        },
+        {
+          "ip": "192.0.2.10",
+          "count": 6
+        },
+        {
+          "ip": "192.0.2.11",
+          "count": 3
+        }
+      ]
+    }
+  },
+  "tls": {
+    "ok": true,
+    "at": "2026-10-12T02:50:30Z",
+    "certs": [
+      {
+        "name": "ssam.example.com",
+        "notBefore": "2026-10-11T21:49:59Z",
+        "notAfter": "2027-01-09T21:49:58Z",
+        "issuer": "Let's Encrypt YE2"
+      }
+    ]
+  },
+  "backups": {
+    "ok": true,
+    "at": "2026-10-12T02:50:30Z",
+    "dir": "/var/backups/ssam-server",
+    "exists": true,
+    "count": 0,
+    "totalB": 0,
+    "newest": null,
+    "cron": {
+      "backup": false,
+      "rotate": false
+    },
+    "cronLogTail": []
+  },
+  "docker": {
+    "ok": true,
+    "at": "2026-10-12T02:51:00Z",
+    "engine": "29.8.2",
+    "containers": [
+      {
+        "name": "ssam-prod-caddy-1",
+        "service": "caddy",
+        "project": "ssam-prod",
+        "image": "caddy:2.11.7-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f",
+        "imageId": "sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f",
+        "state": "running",
+        "health": null,
+        "failingStreak": null,
+        "lastHealth": [],
+        "startedAt": "2026-10-11T22:48:25Z",
+        "restartCount": 0,
+        "oomKilled": false,
+        "restartPolicy": "unless-stopped",
+        "cpuPct": 0.01,
+        "memB": 12928942,
+        "memLimitB": 268435456,
+        "netRxB": 2020000,
+        "netTxB": 2290000,
+        "blkReadB": 0,
+        "blkWriteB": 69600,
+        "pids": 8
+      },
+      {
+        "name": "ssam-prod-ssam-server-1",
+        "service": "ssam-server",
+        "project": "ssam-prod",
+        "image": "ssam-server:prod-20261011-ed0f94b",
+        "imageId": "sha256:232e6a22dec2788d2964fd87b617ac54ca120906517557b1a0a9616b7b57f174",
+        "state": "running",
+        "health": "healthy",
+        "failingStreak": 0,
+        "lastHealth": [
+          {
+            "at": "2026-10-12T02:48:36Z",
+            "exit": 0
+          },
+          {
+            "at": "2026-10-12T02:49:06Z",
+            "exit": 0
+          },
+          {
+            "at": "2026-10-12T02:49:36Z",
+            "exit": 0
+          },
+          {
+            "at": "2026-10-12T02:50:06Z",
+            "exit": 0
+          },
+          {
+            "at": "2026-10-12T02:50:37Z",
+            "exit": 0
+          }
+        ],
+        "startedAt": "2026-10-11T22:36:14Z",
+        "restartCount": 0,
+        "oomKilled": false,
+        "restartPolicy": "unless-stopped",
+        "cpuPct": 0.06,
+        "memB": 394579149,
+        "memLimitB": 6442450944,
+        "netRxB": 126000,
+        "netTxB": 1260000,
+        "blkReadB": 0,
+        "blkWriteB": 6680000,
+        "pids": 18
+      }
+    ],
+    "volumes": [
+      {
+        "name": "ssam-prod_cache",
+        "sizeB": 634880
+      },
+      {
+        "name": "ssam-prod_caddy-config",
+        "sizeB": 12288
+      },
+      {
+        "name": "ssam-prod_caddy-data",
+        "sizeB": 77824
+      },
+      {
+        "name": "ssam-prod_friction",
+        "sizeB": 4096
+      },
+      {
+        "name": "ssam-prod_odc-features",
+        "sizeB": 49152
+      },
+      {
+        "name": "ssam-prod_server-state",
+        "sizeB": 1781760
+      }
+    ],
+    "systemDf": {
+      "imagesB": 3489000000,
+      "imagesReclaimableB": 651600000,
+      "volumesB": 74040000,
+      "buildCacheB": 0
+    }
+  },
+  "server": {
+    "ok": true,
+    "at": "2026-10-12T02:51:00Z",
+    "health": {
+      "probe": {
+        "available": true,
+        "ok": true,
+        "pid": 7,
+        "ms": 3,
+        "error": null
+      }
+    },
+    "image": {
+      "tag": "prod-20261011-ed0f94b",
+      "version": "prod-20261011-ed0f94b",
+      "revision": "ed0f94ba986867ae132dc72ca97c84e7cb2c4d78",
+      "created": "2026-10-11T21:17:53Z"
+    },
+    "startup": {
+      "containerId": "5f2c0e7b9a1d4c3e8f6a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e",
+      "startedAt": "2026-10-11T22:36:14Z",
+      "complete": true,
+      "kernel": {
+        "time": "2026-10-11T22:36:14.542Z",
+        "kernel": {
+          "o11": "11.55.91",
+          "odc": "1.7.27",
+          "odcBridge": "v48",
+          "o11Hook": null,
+          "odcBridgeAccepted": [
+            "v45"
+          ]
+        }
+      },
+      "warm": {
+        "time": "2026-10-11T22:38:42.454Z",
+        "indexes": {
+          "ok": true,
+          "lanes": {
+            "odc": {
+              "ok": true,
+              "cache": "hit",
+              "ms": 900
+            },
+            "o11": {
+              "ok": true,
+              "cache": "built",
+              "ms": 4000
+            }
+          }
+        },
+        "delivery": {
+          "builder": {
+            "ok": true,
+            "pid": 41
+          },
+          "worker": {
+            "ok": false,
+            "note": "the resident ODC worker did not answer in time"
+          }
+        },
+        "ms": 148000
+      },
+      "warmFailures": []
+    },
+    "processes": [
+      {
+        "kind": "server",
+        "pid": 2817978,
+        "elapsedS": 15286,
+        "rssB": 173998080,
+        "cpuPct": 0.1,
+        "port": 7310,
+        "token": null
+      },
+      {
+        "kind": "odc-worker",
+        "pid": 2823018,
+        "elapsedS": 14277,
+        "rssB": 368365568,
+        "cpuPct": 0.1,
+        "port": 18547,
+        "token": null
+      }
+    ],
+    "stderr": {
+      "windowS": 30,
+      "friction": 1,
+      "warmFailures": 0
+    }
+  },
+  "caddy": {
+    "ok": true,
+    "at": "2026-10-12T02:51:00Z",
+    "window": {
+      "from": "2026-10-12T02:50:30Z",
+      "to": "2026-10-12T02:51:00Z",
+      "byStatus": {
+        "200": 1,
+        "204": 4,
+        "401": 2,
+        "403": 1,
+        "404": 1
+      },
+      "denied": [
+        {
+          "ip": "203.0.113.9",
+          "status": 401,
+          "path": "/mcp",
+          "count": 2
+        },
+        {
+          "ip": "203.0.113.77",
+          "status": 403,
+          "path": "/mcp",
+          "count": 1
+        }
+      ],
+      "errors": 1,
+      "lastErrors": [
+        "aborting with incomplete response"
+      ]
+    },
+    "last15m": {
+      "byStatus": {
+        "200": 2,
+        "204": 7,
+        "401": 3,
+        "403": 1,
+        "404": 2
+      },
+      "denied": [
+        {
+          "ip": "203.0.113.9",
+          "status": 401,
+          "path": "/mcp",
+          "count": 3
+        },
+        {
+          "ip": "203.0.113.77",
+          "status": 403,
+          "path": "/mcp",
+          "count": 1
+        }
+      ]
+    },
+    "today": {
+      "date": "2026-10-11",
+      "byStatus": {
+        "200": 2,
+        "204": 7,
+        "401": 3,
+        "403": 1,
+        "404": 2
+      },
+      "denied": [
+        {
+          "ip": "203.0.113.9",
+          "status": 401,
+          "path": "/mcp",
+          "count": 3
+        },
+        {
+          "ip": "203.0.113.77",
+          "status": 403,
+          "path": "/mcp",
+          "count": 1
+        }
+      ]
+    }
+  },
+  "coolify": {
+    "ok": true,
+    "at": "2026-10-12T02:51:00Z",
+    "containers": [
+      {
+        "name": "coolify",
+        "state": "exited",
+        "restartPolicy": "no"
+      },
+      {
+        "name": "coolify-db",
+        "state": "exited",
+        "restartPolicy": "no"
+      },
+      {
+        "name": "coolify-proxy",
+        "state": "exited",
+        "restartPolicy": "no"
+      },
+      {
+        "name": "coolify-redis",
+        "state": "exited",
+        "restartPolicy": "no"
+      },
+      {
+        "name": "coolify-sentinel",
+        "state": "exited",
+        "restartPolicy": "no"
+      }
+    ]
+  }
+}

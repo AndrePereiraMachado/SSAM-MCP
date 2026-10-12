@@ -1,0 +1,6 @@
+1781760	/var/lib/docker/volumes/ssam-prod_server-state/_data
+634880	/var/lib/docker/volumes/ssam-prod_cache/_data
+49152	/var/lib/docker/volumes/ssam-prod_odc-features/_data
+4096	/var/lib/docker/volumes/ssam-prod_friction/_data
+77824	/var/lib/docker/volumes/ssam-prod_caddy-data/_data
+12288	/var/lib/docker/volumes/ssam-prod_caddy-config/_data

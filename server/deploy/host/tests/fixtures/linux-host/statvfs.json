@@ -1,0 +1,38 @@
+{
+  "/": {
+    "dev": 2049,
+    "frsize": 4096,
+    "blocks": 25165824,
+    "bfree": 23724032,
+    "bavail": 23724032,
+    "files": 12418560,
+    "ffree": 12295712
+  },
+  "/boot": {
+    "dev": 2061,
+    "frsize": 4096,
+    "blocks": 253184,
+    "bfree": 214784,
+    "bavail": 197888,
+    "files": 65536,
+    "ffree": 65200
+  },
+  "/boot/efi": {
+    "dev": 2063,
+    "frsize": 512,
+    "blocks": 214016,
+    "bfree": 201016,
+    "bavail": 201016,
+    "files": 0,
+    "ffree": 0
+  },
+  "/var/lib/docker": {
+    "dev": 2049,
+    "frsize": 4096,
+    "blocks": 25165824,
+    "bfree": 23724032,
+    "bavail": 23724032,
+    "files": 12418560,
+    "ffree": 12295712
+  }
+}

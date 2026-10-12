@@ -1,0 +1,23 @@
+[
+  {
+    "Id": "sha256:232e6a22dec2788d2964fd87b617ac54ca120906517557b1a0a9616b7b57f174",
+    "RepoTags": [
+      "ssam-server:prod-20261011-ed0f94b"
+    ],
+    "Created": "2026-10-11T21:18:03.913052203Z",
+    "Config": {
+      "User": "10001:10001",
+      "Env": [
+        "SSAM_FIXTURE_SECRET=ssam_EXEMPLO_NAO_E_UM_TOKEN_SENTINEL_ENV_0000000000"
+      ],
+      "Labels": {
+        "org.opencontainers.image.created": "2026-10-11T21:17:53Z",
+        "org.opencontainers.image.description": "SSAM hosted MCP server (production).",
+        "org.opencontainers.image.licenses": "LicenseRef-Proprietary",
+        "org.opencontainers.image.revision": "ed0f94ba986867ae132dc72ca97c84e7cb2c4d78",
+        "org.opencontainers.image.title": "ssam-server",
+        "org.opencontainers.image.version": "prod-20261011-ed0f94b"
+      }
+    }
+  }
+]

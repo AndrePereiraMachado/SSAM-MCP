@@ -1,0 +1,11 @@
+# SSAM owner console: the host collector every 30 s (DEPLOY.md section 15). Installed and enabled by host/install.sh.
+[Unit]
+Description=SSAM owner console - collector every 30 s
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=30s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
