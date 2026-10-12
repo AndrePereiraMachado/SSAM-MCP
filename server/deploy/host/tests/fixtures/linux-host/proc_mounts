@@ -1,0 +1,5 @@
+/dev/sda1 / ext4 rw,relatime,discard,errors=remount-ro 0 0
+/dev/sda13 /boot ext4 rw,relatime 0 0
+/dev/sda15 /boot/efi vfat rw,relatime,fmask=0077,dmask=0077 0 0
+tmpfs /run tmpfs rw,nosuid,nodev,size=812620k,mode=755 0 0
+overlay /var/lib/docker/rootfs/overlayfs/0a1b2c3d overlay rw,relatime 0 0

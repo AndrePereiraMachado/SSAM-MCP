@@ -1,0 +1,4 @@
+notBefore=Oct 11 21:49:59 2026 GMT
+notAfter=Jan  9 21:49:58 2027 GMT
+issuer=C=US, O=Let's Encrypt, CN=YE2
+subject=CN=ssam.example.com

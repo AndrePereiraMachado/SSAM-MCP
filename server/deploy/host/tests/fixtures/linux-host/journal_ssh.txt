@@ -1,0 +1,57 @@
+Failed password for root from 198.51.100.7 port 40007 ssh2
+Failed password for root from 198.51.100.7 port 40014 ssh2
+Failed password for root from 198.51.100.7 port 40021 ssh2
+Accepted publickey for root from 192.0.2.200 port 50000 ssh2: ED25519 SHA256:EXEMPLO
+Failed password for root from 198.51.100.7 port 40028 ssh2
+Received disconnect from 203.0.113.50 port 40020:11: Bye Bye [preauth]
+Failed password for root from 198.51.100.7 port 40035 ssh2
+Failed password for root from 198.51.100.7 port 40042 ssh2
+Failed password for root from 198.51.100.7 port 40049 ssh2
+Failed password for root from 198.51.100.7 port 40056 ssh2
+Failed password for root from 198.51.100.7 port 40063 ssh2
+Failed password for root from 198.51.100.7 port 40070 ssh2
+Failed password for root from 198.51.100.7 port 40077 ssh2
+Failed password for root from 198.51.100.7 port 40084 ssh2
+Invalid user admin from 203.0.113.50 port 40091
+Connection closed by invalid user admin 203.0.113.50 port 40091 [preauth]
+Invalid user admin from 203.0.113.50 port 40098
+Connection closed by invalid user admin 203.0.113.50 port 40098 [preauth]
+Invalid user admin from 203.0.113.50 port 40105
+Connection closed by invalid user admin 203.0.113.50 port 40105 [preauth]
+Invalid user admin from 203.0.113.50 port 40112
+Connection closed by invalid user admin 203.0.113.50 port 40112 [preauth]
+Invalid user admin from 203.0.113.50 port 40119
+Connection closed by invalid user admin 203.0.113.50 port 40119 [preauth]
+Invalid user admin from 203.0.113.50 port 40126
+Connection closed by invalid user admin 203.0.113.50 port 40126 [preauth]
+Invalid user admin from 203.0.113.50 port 40133
+Connection closed by invalid user admin 203.0.113.50 port 40133 [preauth]
+Invalid user admin from 203.0.113.50 port 40140
+Connection closed by invalid user admin 203.0.113.50 port 40140 [preauth]
+Invalid user admin from 203.0.113.50 port 40147
+Connection closed by invalid user admin 203.0.113.50 port 40147 [preauth]
+Failed password for invalid user teste from 203.0.113.51 port 40154 ssh2
+Failed password for invalid user teste from 203.0.113.51 port 40161 ssh2
+Failed password for invalid user teste from 203.0.113.51 port 40168 ssh2
+Failed password for invalid user teste from 203.0.113.51 port 40175 ssh2
+Failed password for invalid user teste from 203.0.113.51 port 40182 ssh2
+Failed password for invalid user teste from 203.0.113.51 port 40189 ssh2
+Failed password for invalid user teste from 203.0.113.51 port 40196 ssh2
+Failed password for invalid user teste from 203.0.113.51 port 40203 ssh2
+Invalid user admin from 192.0.2.10 port 40210
+Connection closed by invalid user admin 192.0.2.10 port 40210 [preauth]
+Invalid user admin from 192.0.2.10 port 40217
+Connection closed by invalid user admin 192.0.2.10 port 40217 [preauth]
+Invalid user admin from 192.0.2.10 port 40224
+Connection closed by invalid user admin 192.0.2.10 port 40224 [preauth]
+Invalid user admin from 192.0.2.10 port 40231
+Connection closed by invalid user admin 192.0.2.10 port 40231 [preauth]
+Invalid user admin from 192.0.2.10 port 40238
+Connection closed by invalid user admin 192.0.2.10 port 40238 [preauth]
+Invalid user admin from 192.0.2.10 port 40245
+Connection closed by invalid user admin 192.0.2.10 port 40245 [preauth]
+Failed password for root from 192.0.2.11 port 40252 ssh2
+Failed password for root from 192.0.2.11 port 40259 ssh2
+Failed password for root from 192.0.2.11 port 40266 ssh2
+pam_unix(sshd:auth): authentication failure; logname= uid=0 euid=0 tty=ssh ruser= rhost=198.51.100.7  user=root
+pam_unix(sshd:auth): authentication failure; logname= uid=0 euid=0 tty=ssh ruser= rhost=198.51.100.7  user=root

@@ -1,0 +1,4 @@
+PID                 ELAPSED             RSS                 %CPU                COMMAND
+2817946             15286               788                 0.0                 /sbin/docker-init -- ssam-server-start
+2817978             15286               169920              0.1                 node facade/ssam.mjs serve --host 0.0.0.0 --allow-remote --port 7310 --log-file /data/server/server.log --public-host ssam.example.com
+2823018             14277               359732              0.1                 dotnet /app/kernel/.local/lane-odc/cli/anvil-odc.dll serve --port 18547 --log-dir /app/kernel/.local/lane-odc

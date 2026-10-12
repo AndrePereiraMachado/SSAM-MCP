@@ -1,0 +1,11 @@
+# SSAM owner console: the only way in, 127.0.0.1:7320 on the host loopback, reached through the owner's SSH tunnel
+# (console/painel-ssam.ps1). No public port: Caddy and ufw are unchanged. host/install.sh --port N writes N here.
+[Unit]
+Description=SSAM owner console on 127.0.0.1:7320 (SSH tunnel only)
+
+[Socket]
+ListenStream=127.0.0.1:7320
+NoDelay=yes
+
+[Install]
+WantedBy=sockets.target
