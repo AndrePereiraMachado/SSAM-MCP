@@ -73,6 +73,22 @@ Os arquivos que existem nas duas caixas estão em [`SHARED.md`](SHARED.md), com 
     novo, nenhum apagado, nenhum compartilhado; o `SHARED.md` não muda), copiados com os blobs da revisão
     (`C:\t\qual\priv\copy-priv.cjs`). O painel ganhou a mesma cópia do contrato, das fixtures e da paridade. As quatro
     cópias de `quality-line.mjs` têm agora o sha256 LF `200f74ce…ec6c8`.
+  - Depois, `01795e52..c24d468d` de `fase4-24/qualidade` (`c24d468d97b9e5216725f75581482547e9485039`, 1 commit, os três
+    achados baixos da mesma revisão de privacidade): (1) os códigos, os códigos de problema e as regras das normalizações só
+    ficam quando estão nos registros `CODES` e `RULES` do contrato, gerados das fontes do produto
+    (`platforms/odc/scripts/quality-registry.mjs`, com teste de deriva); fora deles viram `CODE_UNLISTED` ou
+    `RULE_UNLISTED`, contados, nunca o texto; o `debug_<x>` do texto de uma resposta só vira código no depurador, que o
+    servidor hospedado não serve; a auditoria usa o mesmo registro; (2) a seção "Privacidade" de
+    `docs/AGENTE-CLIENTE.md` diz exatamente o que é gravado, por categoria, com a retenção configurável, quem vê (só o
+    dono) e os fatos do `server.log` sobre a máquina do agente; (3) uma expressão mudada por duas regras conta nas duas
+    em `norm.byRule`. 22 caminhos (3 novos, 19 alterados, nenhum apagado), 22 entradas: 21 em `server/` e
+    `docs/AGENTE-CLIENTE.md` só em `agent/`; nenhum compartilhado (o `SHARED.md` só cita a revisão). Copiados com os blobs
+    da revisão (`C:	qualaixoscopy-baixos.cjs`, que também põe os caminhos novos em `server/`). O painel ganhou a
+    mesma cópia do contrato e das fixtures, a paridade nova, os testes do dia hostil com as palavras do cliente em campos
+    de código e os mocks do cenário `problemas` sem códigos fora do registro. As quatro cópias de `quality-line.mjs` têm
+    agora o sha256 LF `cc4440f9…ad239`.
+  - Conferido: os 6222 arquivos das duas caixas que vêm da linha têm o blob de `c24d468d`. Contagem: `server/` 6078,
+    `agent/` 145, 76 nas duas.
 
 ## Aviso: o servidor no ar não mudou
 

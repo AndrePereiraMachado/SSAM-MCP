@@ -8,7 +8,7 @@
 //   - timesFromSpans splits the call's time over the spans the meter attributed to it (2.7).
 //   - buildCallLine / buildSessionLine assemble the frame; the contract decides what of it stays.
 import { createHash } from 'node:crypto';
-import { SCHEMA, LANES, STEPS, CLIENTS, REASONS, UNTIL, MAX_TOP, codeOf, verbOf, agentLabel } from './quality-line.mjs';
+import { SCHEMA, LANES, STEPS, CLIENTS, REASONS, UNTIL, MAX_TOP, RULE_UNLISTED, codeOf, ruleOf, verbOf, agentLabel } from './quality-line.mjs';
 
 const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const count = v => (Number.isInteger(v) && v >= 0 ? v : null);
@@ -158,15 +158,18 @@ function problemsSummary(s, nativeIds) {
   return { n: Math.max(sum, total ?? 0) + checked, err, warn, ...kept('byCode', byCode), ...kept('withPatch', withPatch), ...kept('byPhase', byPhase),
     cut: (total ?? 0) > sum || entries.length > MAX_PROBLEMS_READ || (validation?.length ?? 0) > MAX_VALIDATION_READ };
 }
-function normSummary(s, nativeIds) {
+// The normalizations (n = how many expressions or properties the kernel rewrote). byRule counts each rule that acted: the
+// kernel joins the rules of one expression with "+" (JobNormalizer: LIST_ENTITY_SEGMENT_DROPPED+NULL_FUNCTION_REWRITTEN),
+// and that entry counts under each of them, so the sum of byRule may exceed n. A rule outside the registry is RULE_UNLISTED.
+function normSummary(s) {
   const norm = s.normalizations;
   if (!isObj(norm)) return null;
   const n = count(norm.total);
   if (!n) return null;
   const byRule = Object.create(null);
-  if (isObj(norm.byRule)) for (const [rule, v] of Object.entries(norm.byRule)) {
-    const key = codeOf(rule, { nativeIds });
-    if (key && Number.isInteger(v) && v > 0) byRule[key] = (byRule[key] ?? 0) + v;
+  if (isObj(norm.byRule)) for (const [rules, v] of Object.entries(norm.byRule)) {
+    if (!Number.isInteger(v) || v <= 0) continue;
+    for (const rule of new Set(rules.split('+'))) { const key = ruleOf(rule) ?? RULE_UNLISTED; byRule[key] = (byRule[key] ?? 0) + v; }
   }
   return { n, byRule: { ...byRule } };
 }
@@ -190,7 +193,7 @@ export function summarizeAnswer(tool, args, result, { scan = 'wire', nativeIds =
       result: typeof s.result === 'string' && Object.hasOwn(RESULTS, s.result) ? RESULTS[s.result] : null,
       outcome: OUTCOMES.includes(s.outcome) ? s.outcome : null,
       stepText: stepText !== null, step: stepText !== null && STEPS.includes(stepText) ? stepText : null,
-      problems, norm: normSummary(s, nativeIds), warn: warnSummary(s), queue: queueOf(s), paged: isObj(s.paged) };
+      problems, norm: normSummary(s), warn: warnSummary(s), queue: queueOf(s), paged: isObj(s.paged) };
   } catch { return { scan: 'error' }; }
 }
 // The characters the client reads: the texts of the wire message (the structuredContent copy is not counted).

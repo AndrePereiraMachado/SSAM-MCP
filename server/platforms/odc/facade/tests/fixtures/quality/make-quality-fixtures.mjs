@@ -21,7 +21,7 @@ import zlib from 'node:zlib';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { sanitizeQualityLine, fitLine, loadNativeIds, SCHEMA } from './quality-line.mjs';
+import { sanitizeQualityLine, fitLine, loadNativeIds, codeOf, SCHEMA } from './quality-line.mjs';
 import { aggregate } from './reference-aggregate.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -196,7 +196,7 @@ const normalize = line => {
   // The fixture is written in the sanitizer's own key order, so a byte comparison of a reader's output is meaningful.
   assert.deepEqual(clean, Object.fromEntries(Object.entries(clean)), 'not stable');
   for (const k of Object.keys(line)) if (!(k in clean) && line[k] !== null && line[k] !== undefined) assert.fail('field dropped by the contract: ' + k);
-  const text = fitLine(clean);
+  const text = fitLine(clean, { nativeIds: NATIVE_IDS });
   assert.equal(text, JSON.stringify(clean), 'a fixture line must fit whole: ' + text.length);
   return clean;
 };
@@ -205,6 +205,15 @@ const day11 = linesOf(prev).sort(byTime).map(normalize);
 
 // ---- hostile lines (2026-10-13): what a broken or tampered writer could leave; the reader keeps only the contract
 const H = '2026-10-13T12:00:00.000Z';
+// 40 codes of the registry (the html op's and the importer's refusals and warnings, then six of the kernel and the hub).
+const LISTED_40 = ['HTML_INVALID', 'HTML_ARGUMENT_INVALID', 'HTML_ATTRIBUTE_SCRIPT', 'HTML_BINDING_INVALID', 'HTML_BINDING_ORPHAN', 'HTML_CALL_ORDER',
+  'HTML_CALL_OTHER_SCREEN', 'HTML_CONTENT_EMPTY', 'HTML_CONTROL_DEAD', 'HTML_CSS_ID_SELECTOR', 'HTML_CSS_INVALID', 'HTML_ID_DUPLICATE', 'HTML_KEY_UNBOUND',
+  'HTML_KIND_TAG', 'HTML_LIST_TEMPLATE', 'HTML_REFERENCE_UNRESOLVED', 'HTML_TAG_NOT_ALLOWED', 'CSS_RULES_DROPPED', 'CSS_IMPORT_HOISTED', 'CSS_REWRITTEN',
+  'CSS_VAR_UNDEFINED', 'HTML_ATTRIBUTE_EXTENDED', 'HTML_CLICKABLE_ELEMENT', 'HTML_CONTROL_LABELLED', 'HTML_KEY_SHARED', 'HTML_LABEL_CHILDREN',
+  'HTML_SCREEN_ACTION_SAME_JOB', 'HTML_TABLE_STATIC', 'HTML_VISIBLE_IF', 'PROTOTYPE_SOURCE_INVALID', 'PROTOTYPE_RENDER_FAILED', 'PROTOTYPE_AMBIGUOUS',
+  'PROTOTYPE_NAME_COLLISION', 'PROTOTYPE_IR_INVALID', 'PREFLIGHT_REFUSED', 'EXPR_UNKNOWN_IDENTIFIER', 'EXPRESSION_SYNTAX', 'FUNCTION_UNKNOWN',
+  'PROPERTY_NOT_WRITABLE', 'AGENT_NOT_CONNECTED'];
+for (const c of LISTED_40) assert.equal(codeOf(c), c, 'not in the registry: ' + c);
 const frame = { schema: SCHEMA, kind: 'call', time: H, token: 'tok_0000000a1fa0', customer: 'Cliente Alfa', session: 'abcdef012345', call: 1, tool: 'o11_deliver', op: null, lane: 'o11', ms: 1000, gapMs: null, inFlight: 0 };
 const hostile = [
   { ...frame, ok: false, code: 'GetColaboradorAtual', class: 'refused', problems: { n: 2, byCode: { 'Batidas.Current.BatidaPonto.X': 1, GetColaboradorAtual: 1, EXPRESSION_SYNTAX: 1 } } },
@@ -221,8 +230,17 @@ const hostile = [
   { ...frame, ok: false, code: 'PREFLIGHT_REFUSED', class: 'refused', agent: { n: 1, top: [['o11.bridge:Snapshot Module', 1, 10], ['file.get:/home/joao/x', 1, 5], ['o11.bridge:open_module', 1, 7],
     ['odc.pipe:acme-folha-sntl', 1, 4], ['o11.bridge:sntl_method', 1, 3], ['file.put:sntl', 1, 2]] },
     args: { job: 'C:\\Users\\joao\\job.json', patch: [1, 2], until: 'merge', basedOn: 'sim' } },
+  // 40 UPPER_SNAKE words outside the registry: one CODE_UNLISTED with their sum (privacy review of 2026-10-12).
   { ...frame, ok: false, code: 'PREFLIGHT_REFUSED', class: 'refused',
     problems: { n: 60, byCode: Object.fromEntries(Array.from({ length: 40 }, (_, i) => ['CODE_' + String(i).padStart(2, '0'), 40 - i])) } },
+  // 40 listed codes: the 31 biggest stay, the rest folds into OTHER_CODES.
+  { ...frame, ok: false, code: 'PREFLIGHT_REFUSED', class: 'refused',
+    problems: { n: 820, byCode: Object.fromEntries(LISTED_40.map((c, i) => [c, 40 - i])) } },
+  // The review's probe: a table name and a debug_-shaped object name of the customer in code fields, a rule key of the
+  // customer, two rules joined by "+" (a writer splits them; the reader drops the joined key) and a free op word.
+  { ...frame, op: 'folha-pagamento', ok: false, code: 'OSUSR_K3X_FOLHA_SNTL', class: 'refused',
+    problems: { n: 4, byCode: { OSUSR_K3X_FOLHA_SNTL: 1, DEBUG_FOLHA_PAGAMENTO_SNTL: 2, EXPRESSION_SYNTAX: 1 }, withPatch: { CLIENTE_ACME_SNTL: 1 } },
+    norm: { n: 3, byRule: { CLIENTE_ACME_SNTL: 1, SORT_KEYS_SPLIT: 2, 'LIST_ENTITY_SEGMENT_DROPPED+NULL_FUNCTION_REWRITTEN': 1 } } },
 ];
 const hostileExpected = hostile.map(h => sanitizeQualityLine(h, { nativeIds: NATIVE_IDS }));
 const oversized = JSON.stringify({ ...frame, ok: true, class: 'ok', pad: 'x'.repeat(5000) });

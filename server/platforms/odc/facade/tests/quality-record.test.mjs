@@ -4,7 +4,8 @@
 // (hosted/policy.mjs), a JSON-RPC error, normalizations with items, phases as object and as array, grouped problems
 // (fitProblems: count, patchOmitted), native ids in and out of the catalog. Every line is checked against the contract
 // (sanitize changes nothing, <= 4096 bytes) and no sentinel of the answers (names, paths, expressions, URLs, texts)
-// reaches it. Plus: VERB_FIELDS against tools/list and the module constants, and the 5 ms soft bound of 2.6.
+// reaches it. Plus: VERB_FIELDS against tools/list and the module constants, and the 5 ms soft bound of 2.6. Privacy review of
+// 2026-10-12: codes and rules only from the registries (CODE_UNLISTED / RULE_UNLISTED), joined rules counted under each.
 import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -14,14 +15,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
-import { sanitizeQualityLine, fitLine, loadNativeIds, MAX_LINE_BYTES, NATIVE_UNLISTED, O11_METHODS } from '../quality-line.mjs';
+import { sanitizeQualityLine, fitLine, loadNativeIds, MAX_LINE_BYTES, NATIVE_UNLISTED, CODE_UNLISTED, RULE_UNLISTED, OPS, O11_METHODS } from '../quality-line.mjs';
 import { summarizeAnswer, summarizeMessage, buildCallLine, buildSessionLine, argsSummary, opOf, laneOf, clientFamily, closeReason, classify,
   timesFromSpans, categoryOf, sessionHash, VERB_FIELDS, CREATE_OPS } from '../quality-record.mjs';
 import { outcomeOf } from '../http-server.mjs';
 import { deliverOutcome } from '../o11-cycle.mjs';
 import { compactDelivery, shapeToolResult } from '../responses.mjs';
 import { interpretKernelResult, requiredFlowLayoutEngine } from '../kernel-delivery.mjs';
-import { refusalFields } from '../refusal-problems.mjs';
+import { refusalFields, normalizationsOf } from '../refusal-problems.mjs';
 import { agentNotConnected } from '../hosted/policy.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -99,7 +100,7 @@ test('a native id outside the catalog is NATIVE_UNLISTED; without the catalog ev
 });
 
 test('compactDelivery: an ODC refusal with validation errors, grouped problems and normalization items; then entregue', () => {
-  const problems = Array.from({ length: 60 }, (_, i) => ({ phase: i < 50 ? 'apply' : 'base', op: i, pointer: '/ops/' + i + '/' + S.screen, code: i < 50 ? 'LIST_ENTITY_SEGMENT' : 'BASE_MISSING_ELEMENT',
+  const problems = Array.from({ length: 60 }, (_, i) => ({ phase: i < 50 ? 'apply' : 'base', op: i, pointer: '/ops/' + i + '/' + S.screen, code: i < 50 ? 'LIST_CURRENT_UNGUARDED' : 'BASE_NOT_FOUND',
     severity: i % 10 === 9 ? 'warning' : 'error', message: S.msg.repeat(8), fix: 'replace ' + S.expr + ' by ' + S.attr, patch: [{ op: 'replace', path: '/ops/' + i + '/' + S.attr, value: S.expr.repeat(20) }] }));
   const fitted = refusalFields(problems, {}, { budget: 3000 });
   assert.equal(fitted.grouped, true);
@@ -121,7 +122,7 @@ test('compactDelivery: an ODC refusal with validation errors, grouped problems a
   assert.equal(line.problems.byCode.VALIDATION_UNCODED, 1);
   assert.equal(line.problems.byPhase.verify, 3);
   assert.ok(line.problems.warn > 0 || fitted.problemsTotal, 'warning problems counted apart');
-  assert.deepEqual(line.norm, { n: 5, byRule: { SORT_KEYS_SPLIT: 3, NULL_FUNCTION_REWRITTEN: 1, [NATIVE_UNLISTED]: 1 } });
+  assert.deepEqual(line.norm, { n: 5, byRule: { SORT_KEYS_SPLIT: 3, NULL_FUNCTION_REWRITTEN: 1, [RULE_UNLISTED]: 1 } });
   assert.deepEqual(line.warn, { n: 3, high: 1 });
   assert.deepEqual(line.args, { job: 'inline', basedOn: true, partial: true, patch: 2, until: 'merge' });
 
@@ -146,11 +147,11 @@ test('compactDelivery: an ODC refusal with validation errors, grouped problems a
 test('interpretKernelResult: a kernel refusal with data problems and an accepted candidate with normalizations', () => {
   const output = path.join(tmp, 'kernel-' + S.module);
   const refused = interpretKernelResult({ ok: false, code: 'PREFLIGHT_REFUSED', error: S.msg + '\n   at Sntl.Stack()', data: { problems: [
-    { phase: 'apply', code: 'DELETE_HAS_CONSUMERS', message: S.msg, element: S.entity, patch: [] }, { phase: 'base', code: 'BASE_MISSING_ELEMENT', message: S.url }], verifyRan: false, verifyReason: S.msg } },
+    { phase: 'apply', code: 'DELETE_HAS_CONSUMERS', message: S.msg, element: S.entity, patch: [] }, { phase: 'base', code: 'BASE_NOT_FOUND', message: S.url }], verifyRan: false, verifyReason: S.msg } },
   { output, exitCode: 1 });
   assert.equal(refused.ok, false);
   const line = lineOf('studio_deliver', { module: S.module }, result(mcp({ ...refused, failed: 'build' })));
-  assert.deepEqual(line.problems.byCode, { BASE_MISSING_ELEMENT: 1, DELETE_HAS_CONSUMERS: 1 });
+  assert.deepEqual(line.problems.byCode, { BASE_NOT_FOUND: 1, DELETE_HAS_CONSUMERS: 1 });
   assert.deepEqual(line.problems.byPhase, { apply: 1, base: 1 });
   assert.equal(line.problems.withPatch, undefined, 'an empty patch is no patch');
   const accepted = interpretKernelResult({ ok: true, data: { accepted: true, isValid: true, flowLayoutEngine: requiredFlowLayoutEngine,
@@ -160,6 +161,35 @@ test('interpretKernelResult: a kernel refusal with data problems and an accepted
   const ok = lineOf('studio_deliver', { module: S.module }, result(mcp(accepted)));
   assert.deepEqual(ok.norm, { n: 2, byRule: { LIST_ENTITY_SEGMENT_DROPPED: 1, NULL_FUNCTION_REWRITTEN: 1 } });
   assert.equal(ok.class, 'ok');
+});
+
+// Privacy review of 2026-10-12 (findings 1 and 3). A customer's UPPER_SNAKE word in a code field (a table name, the debug_
+// object name of an error text) is CODE_UNLISTED / RULE_UNLISTED, counted, never the text; the shaper names an odc_read
+// failure by its tool, not by a word of its text. An expression two rules changed counts under each rule.
+test('codes and rules only from the registries; an expression two rules changed counts under each rule', () => {
+  const norm = normalizationsOf({ normalizations: [
+    { rule: 'LIST_ENTITY_SEGMENT_DROPPED+NULL_FUNCTION_REWRITTEN', path: S.path, from: S.expr, to: S.attr },
+    { rule: 'LIST_ENTITY_SEGMENT_DROPPED+NULL_FUNCTION_REWRITTEN', path: S.path, from: S.expr, to: S.attr },
+    { rule: 'SORT_KEYS_SPLIT', path: S.path, from: S.expr, to: S.attr }] }).normalizations;
+  assert.deepEqual(norm.byRule, { 'LIST_ENTITY_SEGMENT_DROPPED+NULL_FUNCTION_REWRITTEN': 2, SORT_KEYS_SPLIT: 1 }, 'the answer keeps the joined key of the kernel');
+  const joined = lineOf('studio_deliver', { module: S.module }, result(mcp({ ok: true, result: 'entregue', normalizations: norm })));
+  assert.deepEqual(joined.norm, { n: 3, byRule: { LIST_ENTITY_SEGMENT_DROPPED: 2, NULL_FUNCTION_REWRITTEN: 2, SORT_KEYS_SPLIT: 1 } });
+  // a rule repeated inside one joined key counts once; a rule of the customer and a text are RULE_UNLISTED
+  const odd = summarizeAnswer('studio_deliver', {}, mcp({ ok: true, normalizations: { total: 4, byRule: { 'SORT_KEYS_SPLIT+SORT_KEYS_SPLIT': 1, CLIENTE_ACME_SNTL: 1, [S.msg]: 2 } } }));
+  assert.deepEqual(odd.norm, { n: 4, byRule: { SORT_KEYS_SPLIT: 1, [RULE_UNLISTED]: 3 } });
+  // a table name of the customer as the refusal's code and as problem codes
+  const value = { ok: false, code: 'OSUSR_K3X_FOLHA_SNTL', failed: 'build', problems: [{ code: 'OSUSR_K3X_FOLHA_SNTL', phase: 'apply' }, { code: 'DEBUG_FOLHA_PAGAMENTO_SNTL', patch: [{}] },
+    { code: 'EXPRESSION_SYNTAX' }], normalizations: { total: 1, byRule: { CLIENTE_ACME_SNTL: 1 } } };
+  const line = lineOf('studio_deliver', { module: S.module }, result(mcp(value)));
+  assert.equal(line.code, CODE_UNLISTED);
+  assert.deepEqual(line.problems.byCode, { [CODE_UNLISTED]: 2, EXPRESSION_SYNTAX: 1 });
+  assert.deepEqual(line.problems.withPatch, { [CODE_UNLISTED]: 1 });
+  assert.deepEqual(line.norm, { n: 1, byRule: { [RULE_UNLISTED]: 1 } });
+  assert.deepEqual(outcomeOf(result(mcp({ ok: false, reason: 'CLIENTE_ACME_SNTL' }))), { ok: false, error: CODE_UNLISTED }, 'the audit too');
+  // the shaper: a debug_-shaped word in an odc_read error text is the customer's object, never a code
+  const shaped = shapeToolResult('odc_read', {}, mcp({ ok: false, error: "Invalid object name 'debug_folha_pagamento_sntl'." }), { lane: 'odc' });
+  assert.equal(shaped.structuredContent.code, 'ODC_READ_FAILED');
+  assert.equal(lineOf('odc_read', {}, result(shaped), { catalogLane: 'odc' }).code, 'ODC_READ_FAILED');
 });
 
 test('a paged refusal: the wire keeps only its small fields; the summary noted before paging keeps every problem (scan full)', async () => {
@@ -300,6 +330,8 @@ test('VERB_FIELDS are the enums of tools/list and the module constants', { timeo
   assert.deepEqual(VERB_FIELDS.o11_environment.values, [...ENVIRONMENT_READS, ...ENVIRONMENT_WRITES]);
   assert.deepEqual(VERB_FIELDS.o11_studio.values, COMMANDS);
   assert.deepEqual(VERB_FIELDS.studio_create_app.values, CREATE_APP_ACTIONS);
+  // the contract's OPS (what a reader keeps as op) are exactly these enums and o11_deliver's close and resume
+  assert.deepEqual([...OPS].sort(), [...new Set([...Object.values(VERB_FIELDS).flatMap(s => s.values), 'close', 'resume'])].sort());
 });
 
 test('cost: summarizing a 40 KB refusal with 2000 problems stays under 5 ms (soft bound, reported)', t => {

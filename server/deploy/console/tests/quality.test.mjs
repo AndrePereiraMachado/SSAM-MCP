@@ -23,9 +23,10 @@ const expectedAlfa = () => JSON.parse(fs.readFileSync(path.join(FIX, 'expected-a
 const DAY12 = '/api/quality?range=day&day=2026-10-12';
 // What the hostile lines carry and the contract keeps out (quality-line.test.mjs), plus the raw MCP client name. "sntl":
 // verb-shaped agent labels outside the agent's lists (odc.pipe:acme-folha-sntl, o11.bridge:sntl_method, file.put:sntl), the
-// model's own studio_command text of the privacy finding of 2026-10-12.
+// model's own studio_command text of the privacy finding of 2026-10-12. "SNTL", "FOLHA", "ACME", "folha": UPPER_SNAKE words of the
+// customer in code fields, problem codes and rule keys, and a free op word (the three low findings of the same review).
 const LEAKS = ['Batidas', 'GetColaboradorAtual', 'joao', 'João', 'Abrir', 'passwd', 'texto do cliente', 'Snapshot Module', '__proto__', 'constructor',
-  'máquina do', 'Claude Code 2.1.281', 'job.json', 'ssam-quality/2', 'não é json', 'xxxxxxxxxx', 'sntl', 'acme-folha'];
+  'máquina do', 'Claude Code 2.1.281', 'job.json', 'ssam-quality/2', 'não é json', 'xxxxxxxxxx', 'sntl', 'acme-folha', 'SNTL', 'FOLHA', 'ACME', 'folha'];
 
 // The fake token store of the design: the three fixture tokens named as the golden payloads expect.
 function writeTokens(serverDir) {
@@ -121,10 +122,15 @@ test('the hostile file leaves no name, path or text in /state, the payloads or t
   texts.push(['export linhas', lines.text]);
   const found = texts.map(([where, text]) => [where, leaksIn(text)]).filter(([, l]) => l.length);
   assert.deepEqual(found, []);
-  // the problem codes that are names became NATIVE_UNLISTED, the 40 codes folded into OTHER_CODES
+  // the problem codes that are names became NATIVE_UNLISTED, the 40 listed codes folded into OTHER_CODES, and the UPPER_SNAKE
+  // words outside the registry (40 invented codes, a customer's table name, a debug_ object name) became CODE_UNLISTED, the
+  // customer's rule key RULE_UNLISTED: counted, never written
   const d13 = (await c.get('/api/quality?range=day&day=2026-10-13')).body;
   assert.ok(d13.problems.some(p => p.code === 'NATIVE_UNLISTED'));
   assert.ok(d13.problems.some(p => p.code === 'OTHER_CODES'));
+  assert.ok(d13.problems.some(p => p.code === 'CODE_UNLISTED'));
+  assert.ok(d13.errors.some(e => e.code === 'CODE_UNLISTED'));
+  assert.deepEqual(d13.rules.map(r => r.rule).sort(), ['RULE_UNLISTED', 'SORT_KEYS_SPLIT']);
   assert.ok(d13.errors.every(e => /^[A-Z][A-Za-z0-9_]*$/.test(e.code)));
   // the lines export of that day is exactly what the contract keeps of each hostile line, in file order
   const expected = fs.readFileSync(path.join(FIX, 'hostile-expected.jsonl'), 'utf8').split('\n').filter(Boolean)

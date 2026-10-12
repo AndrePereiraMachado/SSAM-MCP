@@ -179,7 +179,7 @@
       "customers": 3
     },
     {
-      "code": "ENTITY_UNKNOWN",
+      "code": "CODE_UNLISTED",
       "count": 10,
       "refusals": 3,
       "withPatch": 6,
@@ -230,7 +230,7 @@
       "customers": 3
     },
     {
-      "code": "TYPE_MISMATCH",
+      "code": "INPUT_TYPE_MISMATCH",
       "count": 4,
       "refusals": 2,
       "withPatch": 2,
@@ -1085,7 +1085,7 @@
       "extraMsP50": 61365
     },
     {
-      "code": "TYPE_MISMATCH",
+      "code": "INPUT_TYPE_MISMATCH",
       "refusals": 2,
       "chains": 1,
       "extraCallsSum": 5,
@@ -1101,7 +1101,7 @@
       "extraMsP50": 31490
     },
     {
-      "code": "ENTITY_UNKNOWN",
+      "code": "CODE_UNLISTED",
       "refusals": 3,
       "chains": 3,
       "extraCallsSum": 3,
@@ -1182,7 +1182,7 @@
       "refusals": 3,
       "delivered": 1,
       "topError": "PREFLIGHT_REFUSED",
-      "topProblem": "TYPE_MISMATCH",
+      "topProblem": "INPUT_TYPE_MISMATCH",
       "topRule": "LIST_ENTITY_SEGMENT_DROPPED",
       "slowestPhase": "transfer"
     },
@@ -1194,7 +1194,7 @@
       "refusals": 2,
       "delivered": 1,
       "topError": "PREFLIGHT_REFUSED",
-      "topProblem": "ENTITY_UNKNOWN",
+      "topProblem": "CODE_UNLISTED",
       "topRule": "LIST_ENTITY_SEGMENT_DROPPED",
       "slowestPhase": "transfer"
     },
@@ -1206,7 +1206,7 @@
       "refusals": 2,
       "delivered": 1,
       "topError": "PREFLIGHT_REFUSED",
-      "topProblem": "ENTITY_UNKNOWN",
+      "topProblem": "CODE_UNLISTED",
       "topRule": "LIST_ENTITY_SEGMENT_DROPPED",
       "slowestPhase": "transfer"
     },

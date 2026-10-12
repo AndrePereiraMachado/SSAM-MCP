@@ -93,5 +93,8 @@ test('a refusal recorded without a code takes the code of its text before OPERAT
   const issue = store.issues().issues[0];
   assert.equal(issue.code, 'INPUT_INVALID');
   assert.doesNotMatch(fs.readdirSync(path.join(directory, 'operations')).map(f => fs.readFileSync(path.join(directory, 'operations', f), 'utf8')).join(), /budgetBytes/, 'the text is never stored');
-  assert.equal(outcomeOf({ ok: false, error: 'debug_o11_native_execution_failed' }).code, 'DEBUG_O11_NATIVE_EXECUTION_FAILED');
+  assert.equal(outcomeOf({ ok: false, error: 'debug_o11_native_execution_failed' }, {}, { tool: 'debug-run' }).code, 'DEBUG_O11_NATIVE_EXECUTION_FAILED');
+  // only the debugger's own operations turn a debug_<x> word into a code (privacy review of 2026-10-12)
+  assert.equal(outcomeOf({ ok: false, error: 'debug_o11_native_execution_failed' }).code, 'OPERATION_FAILED');
+  assert.equal(outcomeOf({ ok: false, error: "Invalid object name 'debug_folha_pagamento_sntl'." }, {}, { tool: 'read' }).code, 'OPERATION_FAILED');
 });

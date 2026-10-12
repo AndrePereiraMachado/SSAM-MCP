@@ -6,9 +6,11 @@
 //     a protocol error, a CLI line) is classified the same way before falling back to OPERATION_FAILED.
 // Pure: no I/O, no clock, no state. The texts are matched, never stored. Order matters: the first rule that matches wins.
 //
-//   codeFromText(text)                 -> code | null       the text rules alone
+//   codeFromText(text, {tool})         -> code | null       the text rules alone (a rule bound to some tools needs the tool)
 //   refusalCode({tool, value, texts})  -> code | null       text rules, then the stage the answer names, then the tool
 //   isCode(value)                      -> boolean           an UPPER_SNAKE code (OK is never a failure code)
+// A rule never turns a word of the text into a code, except the debugger's own reasons in the debugger's own answers
+// (isDebugTool): any other answer may quote a customer's name (privacy review of 2026-10-12).
 
 export const CODE_PATTERN = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$|^[A-Z]{3,}$/;
 export const isCode = value => typeof value === 'string' && CODE_PATTERN.test(value) && value !== 'OK';
@@ -31,7 +33,12 @@ export const HTML_WARNING_CODES = Object.freeze(['CSS_IMPORT_HOISTED', 'CSS_REWR
   'HTML_CLICKABLE_ELEMENT', 'HTML_CONTROL_LABELLED', 'HTML_KEY_SHARED', 'HTML_LABEL_CHILDREN', 'HTML_SCREEN_ACTION_SAME_JOB',
   'HTML_TABLE_STATIC', 'HTML_VISIBLE_IF']);
 
-// [pattern, code | (match) => code]. Each pattern is linear (no nested quantifiers) and anchored on literal words.
+// The debugger's tools (ssam_debug, ssam_debug_run, ...) and the friction store's names of them (debug, debug-run,
+// debug-invoke). None of them is served by the hosted server (hosted/tools.json: unavailable).
+export const isDebugTool = tool => typeof tool === 'string' && /^(?:ssam_debug(?:_[a-z]+)*|debug(?:-[a-z]+)*)$/.test(tool);
+
+// [pattern, code | (match) => code, only?]. Each pattern is linear (no nested quantifiers) and anchored on literal words.
+// only(tool): the rule applies to the answers of these tools alone (codeFromText without a tool skips it).
 export const TEXT_RULES = Object.freeze([
   // A text that names a prototype code keeps it (a relayed refusal of the importer that lost its object); a capture engine
   // that is not in the release is an SSAM defect of the bundle.
@@ -45,8 +52,9 @@ export const TEXT_RULES = Object.freeze([
   // fromJsonSchema ("data/budgetBytes must be >= 4096").
   [/Input validation error|Invalid arguments for tool|Unrecognized keys?\b|\bToo (?:big|small): expected\b|\bInvalid input(?::| expected)|\bdata(?:\/[\w$.-]+)* must (?:be|NOT|have|match|equal)\b|"code"\s*:\s*"(?:custom|invalid_type|too_big|too_small|unrecognized_keys|invalid_union|invalid_value|invalid_format|invalid_enum_value)"/, 'INPUT_INVALID'],
   // The debugger answers snake_case reasons (debug_o11_native_execution_failed, debug_odc_native_action_not_found:@k):
-  // the reason itself in UPPER_SNAKE, without touching the debugger's files.
-  [/\b(debug_[a-z0-9]+(?:_[a-z0-9]+)+)\b/, m => m[1].toUpperCase()],
+  // the reason itself in UPPER_SNAKE, without touching the debugger's files. Only in a debugger tool's answer: in any other
+  // ("Invalid object name 'debug_folha_pagamento'.") the word is the customer's, never a code.
+  [/\b(debug_[a-z0-9]+(?:_[a-z0-9]+)+)\b/, m => m[1].toUpperCase(), isDebugTool],
   [/dead code: no public entry reaches\b/, 'DEBUG_NO_PUBLIC_ENTRY'],
   // discovery.mjs: a capability pointer that no longer resolves in the extracted sources.
   [/discovery descriptor does not match/, 'DISCOVERY_INDEX_INVALID'],
@@ -80,10 +88,11 @@ export const TEXT_RULES = Object.freeze([
 
 const MAX_TEXT = 4000; // the rules look at the head of a text; a long answer is never scanned whole
 
-export function codeFromText(text) {
+export function codeFromText(text, { tool = null } = {}) {
   if (typeof text !== 'string' || !text) return null;
   const head = text.length > MAX_TEXT ? text.slice(0, MAX_TEXT) : text;
-  for (const [pattern, code] of TEXT_RULES) {
+  for (const [pattern, code, only] of TEXT_RULES) {
+    if (only && !only(tool)) continue;
     const m = pattern.exec(head);
     if (m) { const value = typeof code === 'function' ? code(m) : code; if (isCode(value)) return value; }
   }
@@ -136,6 +145,6 @@ export function refusalCode({ tool, value, texts = [] } = {}) {
   // refusal, whatever step it came from: every problem is in it, and patch + basedOn applies them.
   if (value && typeof value === 'object' && Array.isArray(value.problems) && value.problems.some(p => p && typeof p === 'object' && typeof p.code === 'string' && p.severity !== 'warning'))
     return 'PREFLIGHT_REFUSED';
-  for (const text of textsOf(value, texts)) { const code = codeFromText(text); if (code) return code; }
+  for (const text of textsOf(value, texts)) { const code = codeFromText(text, { tool }); if (code) return code; }
   return stepCode(value) ?? toolCode(tool);
 }

@@ -33,7 +33,7 @@ async function fakeServer() {
   server.registerTool('echo_tool', { description: 'echo', inputSchema: fromJsonSchema({ type: 'object', properties: { text: { type: 'string' } } }) },
     async ({ text }) => ({ content: [{ type: 'text', text: 'got ' + text }] }));
   server.registerTool('fail_tool', { description: 'fails', inputSchema: fromJsonSchema({ type: 'object', properties: { text: { type: 'string' } } }) },
-    async ({ text }) => ({ content: [{ type: 'text', text: 'no ' + text }], structuredContent: { ok: false, code: 'SOME_CODE', error: 'no ' + text }, isError: true }));
+    async ({ text }) => ({ content: [{ type: 'text', text: 'no ' + text }], structuredContent: { ok: false, code: 'PREFLIGHT_REFUSED', error: 'no ' + text }, isError: true }));
   return server;
 }
 async function start(options = {}) {
@@ -172,11 +172,16 @@ test('one audit line per tool call, with token, customer, tool, duration and out
     assert.equal(lines.length, 2);
     assert.deepEqual(Object.keys(lines[0]).sort(), ['customer', 'ms', 'ok', 'time', 'token', 'tool']);
     assert.deepEqual({ token: lines[0].token, customer: lines[0].customer, tool: lines[0].tool, ok: lines[0].ok }, { token: issued.id, customer: 'Auditado', tool: 'echo_tool', ok: true });
-    assert.deepEqual({ tool: lines[1].tool, ok: lines[1].ok, error: lines[1].error }, { tool: 'fail_tool', ok: false, error: 'SOME_CODE' });
+    assert.deepEqual({ tool: lines[1].tool, ok: lines[1].ok, error: lines[1].error }, { tool: 'fail_tool', ok: false, error: 'PREFLIGHT_REFUSED' });
     assert.equal(typeof lines[0].ms, 'number');
     // A free-text error never becomes the code.
     assert.deepEqual(outcomeOf({ result: { isError: true, structuredContent: { code: 'path C:\\x\\Cliente.oml' } } }), { ok: false, error: 'TOOL_ERROR' });
     assert.deepEqual(outcomeOf({ error: { code: -32602, message: SECRET } }), { ok: false, error: 'RPC_32602' });
+    // An UPPER_SNAKE word the product never declared (a customer's table name in a code field) is CODE_UNLISTED, never the word
+    // (privacy review of 2026-10-12); a declared code stays.
+    assert.deepEqual(outcomeOf({ result: { isError: true, structuredContent: { code: 'OSUSR_K3X_FOLHA_SNTL' } } }), { ok: false, error: 'CODE_UNLISTED' });
+    assert.deepEqual(outcomeOf({ result: { structuredContent: { ok: false, reason: 'DEBUG_FOLHA_PAGAMENTO_SNTL' } } }), { ok: false, error: 'CODE_UNLISTED' });
+    assert.deepEqual(outcomeOf({ result: { structuredContent: { ok: false, errorCode: 'AGENT_NOT_CONNECTED' } } }), { ok: false, error: 'AGENT_NOT_CONNECTED' });
   } finally { await handle.close(); }
 });
 

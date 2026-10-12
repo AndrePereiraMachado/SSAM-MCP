@@ -6,7 +6,9 @@ responde às cinco perguntas do dono:
 1. **O motivo de cada recusa**: os códigos dos problemas que vieram e quantos de cada (por exemplo, 12
    `EXPR_UNKNOWN_IDENTIFIER`, 3 `EXPRESSION_SYNTAX`, 1 `FUNCTION_UNKNOWN`), em que fase e quantos já vinham com a correção
    pronta (`problems`).
-2. **As correções automáticas do motor**, contadas por regra (`norm.byRule`, por exemplo `SORT_KEYS_SPLIT`).
+2. **As correções automáticas do motor**, contadas por regra (`norm.byRule`, por exemplo `SORT_KEYS_SPLIT`). Uma expressão
+   que duas regras mudaram (o kernel junta as duas com `+`) conta nas duas; por isso a soma de `byRule` pode passar de
+   `norm.n`, que conta as expressões.
 3. **O tempo de cada fase da entrega**: fila, captura, compilação, Studio, verificação, publicação, ambiente,
    transferência e o próprio servidor (`t`, `agent`, `kernel`).
 4. **A sequência de chamadas de cada sessão MCP**: a ordem de cada chamada, quanto tempo ficou parado desde a resposta
@@ -34,6 +36,18 @@ e HTML; a mensagem, a correção, o ponteiro, o elemento e o caminho de um probl
 nomes de host; IPs; o nome e a versão do cliente MCP; o id da sessão (só um hash curto); texto livre de qualquer tipo.
 Um código com cara de nome (`GetColaboradorAtual`) só fica quando é um id de verificação dos catálogos do kernel
 (`kernel/catalog/verify-*.json`); senão vira `NATIVE_UNLISTED`.
+A forma `UPPER_SNAKE` também não basta (achado de privacidade de 2026-10-12: um nome de tabela do cliente, como
+`OSUSR_K3X_FOLHA`, chegava como código). O código da linha, os códigos dos problemas e as regras das normalizações só
+ficam quando estão nos registros do contrato, gerados das fontes do produto: `CODES` (toda string `UPPER_SNAKE` da
+fachada, do portal, da bridge e do builder ODC, do lançador, do agente e de `kernel/src`, mais `<FERRAMENTA>_FAILED` de
+cada ferramenta hospedada e `<PASSO>_FAILED` de cada passo) e `RULES` (as regras do `JobNormalizer` do kernel). Fora da
+lista, o valor vira `CODE_UNLISTED` ou `RULE_UNLISTED` e é contado, nunca escrito. `RPC_<número>` fica pela forma (só
+dígitos). O `op` só fica quando está nos valores das próprias ferramentas (`OPS`). O gravador e o leitor do painel aplicam
+as mesmas listas. A auditoria (`audit-*.jsonl`) usa o mesmo registro para o código de erro.
+O texto de uma resposta nunca vira código: a regra que transformava `debug_<x>` em `DEBUG_<X>` vale só nas respostas do
+depurador (`ssam_debug*`, que o servidor hospedado não serve); em `odc_read` ou qualquer outra ferramenta, um nome
+`debug_folha_pagamento` citado por um erro do banco fica no texto, e a recusa recebe o código da ferramenta
+(`ODC_READ_FAILED`).
 O verbo de uma chamada ao agente (o comando do pipe do ODC Studio, o método da ponte O11) só fica quando está na lista
 fechada que o próprio agente aplica (`AGENT_VERBS` do contrato, cópia de `ODC_COMMANDS` e `O11_METHODS` de
 `agent/lib/kinds.mjs`); a forma de verbo não basta. O `command` de `studio_command` é texto do modelo: fora da lista, a
@@ -43,10 +57,15 @@ operação de `environment_session` no log segue a lista do kernel (`ENVIRONMENT
 ## O contrato e os testes
 
 - `platforms/odc/facade/quality-line.mjs`: o contrato (sanitizador, limite de 4096 bytes por linha, catálogo dos ids
-  nativos), cópia idêntica da que o painel usa para ler; o teste de paridade confere o sha256.
+  nativos, os registros `CODES` e `RULES`), cópia idêntica da que o painel usa para ler; o teste de paridade confere o
+  sha256.
+- `platforms/odc/scripts/quality-registry.mjs`: gera o bloco dos registros a partir das fontes. Um código ou uma regra nova
+  no produto faz `quality-registry.test.mjs` falhar até rodar `node platforms/odc/scripts/quality-registry.mjs --write`;
+  depois, o sha256 novo vai para o teste de paridade, e o contrato e as fixtures vão para as cópias do painel.
 - `quality-record.mjs` (monta a linha, sem I/O), `quality-meter.mjs` (contexto da chamada e atribuição do tempo das
   chamadas ao agente e das execuções do kernel), `quality-recorder.mjs` (grava).
 - Testes: `tests/quality-line.test.mjs`, `quality-record.test.mjs`, `quality-meter.test.mjs`,
+  `quality-registry.test.mjs` (deriva dos registros contra as fontes e as sentinelas de uma constante nova),
   `http-server-quality.test.mjs` (inclusive uma resposta hostil cujos nomes, caminhos e expressões nunca chegam ao arquivo)
   e o teste de `onCallSettled` em `agent-hub.test.mjs` (com um `command` livre com forma de verbo, que não chega à linha
   nem ao log), mais os testes de deriva das listas fechadas contra `agent/lib/kinds.mjs` e o kernel

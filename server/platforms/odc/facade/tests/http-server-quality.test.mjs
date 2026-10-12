@@ -227,7 +227,8 @@ test('hosted: session lines, sequence, spans and attribution, a paged refusal, a
   assert.deepEqual([h.tool, h.ok, h.code, h.class, h.step, h.deliv, h.lane], ['o11_deliver', false, 'TOOL_ERROR', 'refused', null, null, 'o11']);
   assert.deepEqual(h.problems.byCode, { EXPR_UNKNOWN_IDENTIFIER: 2, ExpressionUnknownObject: 2, NATIVE_UNLISTED: 1, PROBLEM_UNCODED: 1 });
   assert.equal(h.problems.n, 6); assert.equal(h.problems.warn, 1);
-  assert.deepEqual(h.norm, { n: 3, byRule: { SORT_KEYS_SPLIT: 2 } });
+  // the free-text rule key is counted as RULE_UNLISTED, never written (privacy review of 2026-10-12)
+  assert.deepEqual(h.norm, { n: 3, byRule: { SORT_KEYS_SPLIT: 2, RULE_UNLISTED: 1 } });
   assert.deepEqual(h.warn, { n: 1, high: 1 });
   assert.deepEqual(h.args, { job: 'inline', basedOn: true, closePrevious: true, patch: 1, bytes: h.args.bytes });
   assert.ok(h.args.bytes > 200, 'the POST body size');

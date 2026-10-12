@@ -14,7 +14,8 @@
 //     expired; a revoke closes the open sessions of that token. A session belongs to the token that opened it. An agent
 //     credential never opens /mcp, an MCP token never opens /agent.
 //   - Audit: one JSON line per tool call (time, token id, customer, tool, duration, ok/error code), never the
-//     arguments nor the results. Rate limit per token with 429.
+//     arguments nor the results; the error code only from the product's registry (else CODE_UNLISTED). Rate limit per
+//     token with 429.
 //   - Quality (docs/QUALIDADE.md): with a recorder (quality-recorder.mjs, hosted mode only) one line of codes, counts and
 //     times per tool call, written at the instant of the audit line, and one per MCP session opened and closed. Every
 //     hook is wrapped: the recorder never changes a request, an answer or the audit.
@@ -25,6 +26,7 @@ import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { createTokenStore, AGENT_PREFIX } from './server-tokens.mjs';
 import { createAgentHub } from './agent-hub.mjs';
+import { SNAKE, CODE_UNLISTED, isListedCode } from './quality-line.mjs';
 
 export const DEFAULTS = Object.freeze({ host: '127.0.0.1', port: 7300, ratePerMinute: 240, maxSessionsPerToken: 8,
   maxBodyBytes: 16 * 1024 * 1024, idleMs: 60 * 60 * 1000, sweepMs: 500, keepaliveMs: 25000 });
@@ -38,7 +40,9 @@ export const OWNER_ONLY_REFUSAL = 'o modo --local-studios dirige os Studios do P
 export const FORWARDED_HEADERS = Object.freeze(['forwarded', 'x-forwarded-for', 'x-forwarded-host', 'cf-connecting-ip', 'cf-ray']);
 
 const toolName = name => typeof name === 'string' && /^[A-Za-z0-9_.-]{1,64}$/.test(name) ? name : '?';
-const errorCode = value => typeof value === 'string' && /^[A-Z][A-Z0-9_]{1,63}$/.test(value) ? value : null;
+// An UPPER_SNAKE value of the answer, kept only when the product declares it (the registry of quality-line.mjs); another
+// word of that shape (a customer's table or app name in a code field) is CODE_UNLISTED in the audit and the quality line.
+const errorCode = value => typeof value === 'string' && /^[A-Z][A-Z0-9_]{1,63}$/.test(value) && SNAKE.test(value) ? (isListedCode(value) ? value : CODE_UNLISTED) : null;
 // The outcome of a tool call without any of its content: ok, or a symbolic error code.
 export function outcomeOf(message) {
   if (message.error) return { ok: false, error: 'RPC_' + String(Math.abs(Number(message.error.code) || 0)) };

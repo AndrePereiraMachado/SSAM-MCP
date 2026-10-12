@@ -12,8 +12,9 @@ export const digest = value => createHash('sha256').update(value).digest('hex');
 // The refusal table the ssam response shaper uses (platforms/odc/facade/refusal-codes.mjs, A20): a failure without a code
 // whose text it knows (an SDK validation error, debug_<x>, a discovery index mismatch...) is recorded with that code, never
 // OPERATION_FAILED. Loaded once; a layout without the facade (a copied launcher) classifies nothing and keeps the rest.
+// tool: the operation (debug_<x> becomes a code only in the debugger's own operations, refusal-codes.mjs isDebugTool).
 const REFUSALS = await import(pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'platforms', 'odc', 'facade', 'refusal-codes.mjs')).href).catch(() => null);
-export const codeOfText = text => REFUSALS?.codeFromText?.(text) ?? null;
+export const codeOfText = (text, tool = null) => REFUSALS?.codeFromText?.(text, { tool }) ?? null;
 const id = value => typeof value === 'string' && /^[a-f0-9-]{36}$/i.test(value) ? value.toLowerCase() : null;
 // C33 (atritos 3): the session of an MCP transport that serves several (the hosted server's mcp-session-id) keys its
 // operations; a UUID stays as it is, any other id becomes a UUID-shaped digest (never the id itself).
@@ -48,8 +49,9 @@ const codeName = value => (typeof value === 'string' && CODE.test(value) && valu
 const STEP_OF_CODE = [[/^PREFLIGHT_/, 'preflight'], [/^PUBLISH_/, 'publish'], [/^VERIFY_/, 'verify'], [/^VALIDATION_/, 'validation'], [/^MERGE_/, 'merge'], [/^DATA_/, 'data'], [/^DEBUG_/, 'debug']];
 const stepOfCode = code => (code ? STEP_OF_CODE.find(([pattern]) => pattern.test(code))?.[1] ?? null : null);
 
-// Only inspect documented wrapper fields; do not walk arbitrary model/record properties.
-export function outcomeOf(input, transport = {}) {
+// Only inspect documented wrapper fields; do not walk arbitrary model/record properties. tool: the operation's name
+// (operationName), for the text rules bound to some tools.
+export function outcomeOf(input, transport = {}, { tool = null } = {}) {
   // plain: the text blocks that are not JSON (an SDK "Input validation error ..." answer); only classified, never stored.
   const values = [], plain = []; const add = (value, depth = 0) => {
     if (!value || typeof value !== 'object' || depth > 4) return;
@@ -79,7 +81,7 @@ export function outcomeOf(input, transport = {}) {
   // uncertainty: 89 of 89 o11/job failures used to be recorded as OPERATION_FAILED with no step (C44).
   const explicit = values.map(v => codeName(v.code) ?? codeName(v.error?.code)).find(Boolean) ?? null;
   // Before the generic OPERATION_FAILED: the code the refusal table gives the answer's texts (A20).
-  const classified = () => [...errorTexts, ...(failed ? plain : [])].map(codeOfText).find(Boolean) ?? null;
+  const classified = () => [...errorTexts, ...(failed ? plain : [])].map(text => codeOfText(text, tool)).find(Boolean) ?? null;
   const code = interrupted ? 'INTERRUPTED'
     : declaredUncertain ? (equivalenceUncertain ? 'EQUIVALENCE_UNCERTAIN' : explicit ?? 'OUTCOME_UNCERTAIN')
     : author ? 'SNAPSHOT_AUTHOR_MISSING'
@@ -279,7 +281,7 @@ export function createStore({ root, directory, env = process.env, warning = code
     } else if (recorded === true) appendIndex(event, false);
     return { operationId, finish(value, transport = {}) {
       if (done) return; done = true;
-      const result = outcomeOf(value, transport);
+      const result = outcomeOf(value, transport, { tool: event.operation });
       const evidence = transport.evidence && /^[a-f0-9]{64}$/.test(transport.evidence.sha256 ?? '')
         ? { sha256: transport.evidence.sha256, kind: 'receipt', locatorSha256: /^[a-f0-9]{64}$/.test(transport.evidence.locatorSha256 ?? '') ? transport.evidence.locatorSha256 : null } : null;
       const end = { ...event, ...result, lane: result.lane === 'unknown' ? event.lane : result.lane,
@@ -454,7 +456,7 @@ export function auditOutcome(result) {
   const failed = result?.isError === true || value?.ok === false;
   if (!failed) return { ok: true, code: null };
   const code = codeName(value?.code) ?? codeName(value?.error?.code)
-    ?? [typeof value?.error === 'string' ? value.error : null, ...texts].filter(Boolean).map(codeOfText).find(Boolean) ?? 'TOOL_ERROR';
+    ?? [typeof value?.error === 'string' ? value.error : null, ...texts].filter(Boolean).map(text => codeOfText(text)).find(Boolean) ?? 'TOOL_ERROR';
   return { ok: false, code };
 }
 

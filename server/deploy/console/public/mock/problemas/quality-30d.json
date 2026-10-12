@@ -230,7 +230,7 @@
       "customers": 3
     },
     {
-      "code": "ENTITY_UNKNOWN",
+      "code": "CODE_UNLISTED",
       "count": 39,
       "refusals": 15,
       "withPatch": 22,
@@ -242,6 +242,23 @@
         {
           "tool": "studio_deliver",
           "count": 17
+        }
+      ],
+      "customers": 3
+    },
+    {
+      "code": "INPUT_TYPE_MISMATCH",
+      "count": 35,
+      "refusals": 17,
+      "withPatch": 18,
+      "tools": [
+        {
+          "tool": "o11_deliver",
+          "count": 24
+        },
+        {
+          "tool": "studio_deliver",
+          "count": 11
         }
       ],
       "customers": 3
@@ -264,24 +281,7 @@
       "customers": 3
     },
     {
-      "code": "TYPE_MISMATCH",
-      "count": 35,
-      "refusals": 17,
-      "withPatch": 18,
-      "tools": [
-        {
-          "tool": "o11_deliver",
-          "count": 24
-        },
-        {
-          "tool": "studio_deliver",
-          "count": 11
-        }
-      ],
-      "customers": 3
-    },
-    {
-      "code": "ATTRIBUTE_UNKNOWN",
+      "code": "FIELD_UNKNOWN",
       "count": 33,
       "refusals": 17,
       "withPatch": 14,
@@ -1114,7 +1114,7 @@
       "extraMsP50": 98830
     },
     {
-      "code": "TYPE_MISMATCH",
+      "code": "INPUT_TYPE_MISMATCH",
       "refusals": 17,
       "chains": 11,
       "extraCallsSum": 50,
@@ -1122,7 +1122,7 @@
       "extraMsP50": 159166
     },
     {
-      "code": "ATTRIBUTE_UNKNOWN",
+      "code": "FIELD_UNKNOWN",
       "refusals": 17,
       "chains": 13,
       "extraCallsSum": 46,
@@ -1154,7 +1154,7 @@
       "extraMsP50": 192591
     },
     {
-      "code": "ENTITY_UNKNOWN",
+      "code": "CODE_UNLISTED",
       "refusals": 15,
       "chains": 12,
       "extraCallsSum": 31,
@@ -1231,7 +1231,7 @@
       "refusals": 24,
       "delivered": 7,
       "topError": "PREFLIGHT_REFUSED",
-      "topProblem": "ATTRIBUTE_UNKNOWN",
+      "topProblem": "FIELD_UNKNOWN",
       "topRule": "LIST_ENTITY_SEGMENT_DROPPED",
       "slowestPhase": "transfer"
     },

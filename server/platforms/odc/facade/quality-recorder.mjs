@@ -2,8 +2,8 @@
 // http-server.mjs calls, the per-session state (call index, arrivals, calls in flight, the last answer that left) and
 // the writer of <dir>/quality-YYYYMMDD.jsonl (UTC day of the line's time, mode 0600, one append per line, like the
 // audit). Every line is built by quality-record.mjs, passed through sanitizeQualityLine (native ids of the kernel's
-// verify catalogs, the hosted tool names) and fitLine (4096 bytes): codes, counts, times, the token id and the customer
-// label only. Only the hosted mode creates a recorder (ssam.mjs runServed, unless SSAM_QUALITY=0); every hook is called
+// verify catalogs, the hosted tool names; codes and rules only from the contract's registries) and fitLine (4096 bytes):
+// codes, counts, times, the token id and the customer label only. Only the hosted mode creates a recorder (ssam.mjs runServed, unless SSAM_QUALITY=0); every hook is called
 // inside try/catch and never changes a request, an answer or the audit. A failure is logged as
 // {event:"quality-failed", stage, error} at most once a minute per stage (summary, write, span).
 import fs from 'node:fs';
@@ -42,7 +42,7 @@ export function createQualityRecorder({ dir, log = () => {}, nativeIds = new Set
     try {
       const clean = sanitizeQualityLine(line, { nativeIds, tools: toolSet });
       if (!clean) { failed('summary', 'FRAME_INVALID'); return false; }
-      text = fitLine(clean);
+      text = fitLine(clean, { nativeIds });
     } catch (error) { failed('summary', error); return false; }
     try {
       const file = path.join(dir, 'quality-' + JSON.parse(text).time.slice(0, 10).replaceAll('-', '') + '.jsonl');

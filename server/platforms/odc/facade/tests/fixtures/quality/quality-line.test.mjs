@@ -8,7 +8,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
-import { sanitizeQualityLine, fitLine, loadNativeIds, codeOf, agentLabel, agentVerbOf, AGENT_VERBS, ODC_COMMANDS, O11_METHODS, MAX_LINE_BYTES, NATIVE_UNLISTED } from './quality-line.mjs';
+import { sanitizeQualityLine, fitLine, loadNativeIds, codeOf, ruleOf, opWordOf, agentLabel, agentVerbOf, AGENT_VERBS, ODC_COMMANDS, O11_METHODS, MAX_LINE_BYTES, NATIVE_UNLISTED,
+  CODE_UNLISTED, RULE_UNLISTED, CODES, RULES, OPS, PLACEHOLDER_CODES } from './quality-line.mjs';
 
 const FIXTURES = process.env.QUALITY_FIXTURES ?? path.dirname(fileURLToPath(import.meta.url));
 const native = loadNativeIds(path.join(FIXTURES, 'catalog'), { readDir: fs.readdirSync, readFile: fs.readFileSync, join: path.join });
@@ -36,7 +37,7 @@ test('hostile lines: content never passes, frames that do not hold are dropped',
     assert.deepEqual(got, expected[i], 'line ' + (i + 1));
   });
   const text = JSON.stringify(expected);
-  for (const leak of ['Batidas', 'GetColaboradorAtual', 'joao', 'Abrir', 'passwd', 'texto do cliente', 'Snapshot Module', '__proto__', 'constructor', 'sntl'])
+  for (const leak of ['Batidas', 'GetColaboradorAtual', 'joao', 'Abrir', 'passwd', 'texto do cliente', 'Snapshot Module', '__proto__', 'constructor', 'sntl', 'SNTL', 'ACME', 'acme', 'FOLHA', 'folha'])
     assert.ok(!text.includes(leak), 'leaked: ' + leak);
 });
 
@@ -46,6 +47,38 @@ test('native ids: only the catalog keeps a CamelCase code; no catalog fails clos
   assert.equal(codeOf('ExpressionUnknownObject'), NATIVE_UNLISTED);
   assert.equal(codeOf('PREFLIGHT_REFUSED'), 'PREFLIGHT_REFUSED');
   for (const bad of ['a', 'preflight', 'X'.repeat(65), 'A.B', 'FOO BAR', '_X', 'Foo.Bar']) assert.equal(codeOf(bad, { nativeIds: native }), null, bad);
+});
+
+// Privacy review of 2026-10-12: the UPPER_SNAKE shape is not a code. A customer's table or app name in a code field, a
+// problem code or a rule key is CODE_UNLISTED / RULE_UNLISTED, counted, never the text: only the registries generated from
+// the product sources (CODES, RULES) and the placeholders pass, in the writer and in the reader.
+test('codes and rules: only the registries pass; an UPPER_SNAKE word of the customer is CODE_UNLISTED / RULE_UNLISTED', () => {
+  for (const code of ['PREFLIGHT_REFUSED', 'EXPR_UNKNOWN_IDENTIFIER', 'AGENT_NOT_CONNECTED', 'DOCTOR_LANE_UNUSABLE', 'O11_STUDIO_FAILED', 'BUILD_FAILED', 'RPC_32602', ...PLACEHOLDER_CODES])
+    assert.equal(codeOf(code), code, code);
+  for (const word of ['OSUSR_K3X_FOLHA_SNTL', 'DEBUG_FOLHA_PAGAMENTO_SNTL', 'CLIENTE_ACME_SNTL', 'ACME', 'RPC_X1', 'CODE_00', 'OK_CODE'])
+    assert.equal(codeOf(word, { nativeIds: native }), CODE_UNLISTED, word);
+  for (const rule of [...RULES, 'OTHER_RULES', RULE_UNLISTED]) assert.equal(ruleOf(rule), rule, rule);
+  for (const word of ['CLIENTE_ACME_SNTL', 'PREFLIGHT_REFUSED', 'OSUSR_K3X_FOLHA_SNTL']) assert.equal(ruleOf(word), RULE_UNLISTED, word);
+  for (const bad of ['LIST_ENTITY_SEGMENT_DROPPED+NULL_FUNCTION_REWRITTEN', 'sort_keys_split', 'ExpressionUnknownObject', '__proto__', '', 'X'.repeat(65)])
+    assert.equal(ruleOf(bad), null, bad);
+  assert.deepEqual([...RULES], ['LIST_ENTITY_SEGMENT_DROPPED', 'NULL_FUNCTION_REWRITTEN', 'PROPERTY_SET_DROPPED', 'SORT_KEYS_SPLIT']);
+  assert.ok(CODES.length > 1000 && CODES.every(c => /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/.test(c) && c.length <= 64));
+  assert.ok(!CODES.some(c => /SNTL|ACME|FOLHA/.test(c)));
+  assert.ok(Object.isFrozen(CODES) && Object.isFrozen(RULES) && Object.isFrozen(OPS) && Object.isFrozen(PLACEHOLDER_CODES));
+  // the op of a call: only the tools' own enum values, whatever the shape
+  assert.equal(opWordOf('digest'), 'digest');
+  for (const bad of ['acme-folha-sntl', 'folha', 'Digest', 'constructor']) assert.equal(opWordOf(bad), null, bad);
+  // the line of the review's probe: nothing of the customer survives the contract
+  const probe = { schema: 'ssam-quality/1', kind: 'call', time: '2026-10-12T16:03:07.794Z', token: 'tok_0123456789ab', session: '0123456789ab', call: 1, tool: 'o11_deliver',
+    op: 'folha-pagamento', ms: 1, gapMs: null, ok: false, code: 'OSUSR_K3X_FOLHA_SNTL', problems: { n: 3, byCode: { OSUSR_K3X_FOLHA_SNTL: 1, DEBUG_FOLHA_PAGAMENTO_SNTL: 1, PREFLIGHT_REFUSED: 1 },
+      withPatch: { OSUSR_K3X_FOLHA_SNTL: 1 } }, norm: { n: 2, byRule: { CLIENTE_ACME_SNTL: 1, SORT_KEYS_SPLIT: 1 } } };
+  const kept = sanitizeQualityLine(probe, { nativeIds: native });
+  assert.equal(kept.code, CODE_UNLISTED);
+  assert.equal(kept.op, null);
+  assert.deepEqual(kept.problems.byCode, { CODE_UNLISTED: 2, PREFLIGHT_REFUSED: 1 });
+  assert.deepEqual(kept.problems.withPatch, { CODE_UNLISTED: 1 });
+  assert.deepEqual(kept.norm, { n: 2, byRule: { RULE_UNLISTED: 1, SORT_KEYS_SPLIT: 1 } });
+  assert.doesNotMatch(JSON.stringify(kept), /SNTL|ACME|FOLHA|folha/);
 });
 
 // The verb of an agent label comes only from its kind's closed list, the one the customer's agent enforces: a word that only
@@ -67,10 +100,13 @@ test('agent labels: a verb only from the closed list of its kind, never a verb-s
 });
 
 test('fitLine: a line above the cap loses detail in the fixed order and keeps its frame', () => {
+  // 64 listed codes, the longest of the registry (a writer never leaves more than 32: this checks the fold alone)
+  const long = [...CODES].sort((a, b) => b.length - a.length || (a < b ? -1 : 1)).slice(0, 64);
   const big = { schema: 'ssam-quality/1', kind: 'call', time: '2026-10-12T18:00:00.000Z', token: 'tok_0000000a1fa0', session: 'abcdef012345', call: 1,
     tool: 'o11_deliver', op: null, lane: 'o11', ms: 1, gapMs: null, inFlight: 0, ok: false, code: 'PREFLIGHT_REFUSED', class: 'refused', step: 'preflight', deliv: null,
-    problems: { n: 999, err: 999, warn: 0, byCode: Object.fromEntries(Array.from({ length: 32 }, (_, i) => ['A_VERY_LONG_PROBLEM_CODE_NAME_NUMBER_' + String(i).padStart(4, '0') + '_' + 'X'.repeat(20), 32 - i])),
-      withPatch: Object.fromEntries(Array.from({ length: 32 }, (_, i) => ['A_VERY_LONG_PROBLEM_CODE_NAME_NUMBER_' + String(i).padStart(4, '0') + '_' + 'X'.repeat(20), 1])), cut: false },
+    problems: { n: 999, err: 999, warn: 0, byCode: Object.fromEntries(long.map((c, i) => [c, 64 - i])),
+      withPatch: Object.fromEntries(long.map(c => [c, 1])), cut: false },
+    norm: { n: 3, byRule: { SORT_KEYS_SPLIT: 2, NULL_FUNCTION_REWRITTEN: 1 } },
     agent: { n: 1, failed: 0, shared: false, top: [['file.get', 1, 1]] } };
   const text = fitLine(big);
   assert.ok(Buffer.byteLength(text) + 1 <= MAX_LINE_BYTES);
@@ -79,4 +115,6 @@ test('fitLine: a line above the cap loses detail in the fixed order and keeps it
   assert.equal(back.agent.top, undefined);
   assert.equal(Object.keys(back.problems.byCode).length, 8);
   assert.ok(back.problems.byCode.OTHER_CODES > 0);
+  assert.deepEqual(Object.keys(back.problems.byCode).filter(k => k !== 'OTHER_CODES'), long.slice(0, 7), 'the biggest stay, by name');
+  assert.deepEqual(back.norm.byRule, { SORT_KEYS_SPLIT: 2, NULL_FUNCTION_REWRITTEN: 1 });
 });

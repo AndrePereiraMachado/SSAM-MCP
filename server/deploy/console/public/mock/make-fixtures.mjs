@@ -1379,12 +1379,13 @@ function normalQualityLines() {
 }
 
 // problemas: on top of normal, three customers with many refusals before each delivery, pauses above 10 min, a code that
-// is not in the catalog (NATIVE_UNLISTED), codes folded by the writer (OTHER_CODES), parallel calls, failures.
+// is not in the catalog (NATIVE_UNLISTED), a code outside the registry (CODE_UNLISTED), codes folded by the writer
+// (OTHER_CODES), parallel calls, failures. Every other code is in the contract's registry (CODES).
 function problemQualityLines() {
   const r = rng(4242);
   const out = normalQualityLines();
-  const codes = ['EXPR_UNKNOWN_IDENTIFIER', 'EXPRESSION_SYNTAX', 'FUNCTION_UNKNOWN', 'ATTRIBUTE_UNKNOWN', 'TYPE_MISMATCH', 'NATIVE_UNLISTED',
-    'OTHER_CODES', 'ENTITY_UNKNOWN', 'ExpressionUnknownObject'];
+  const codes = ['EXPR_UNKNOWN_IDENTIFIER', 'EXPRESSION_SYNTAX', 'FUNCTION_UNKNOWN', 'FIELD_UNKNOWN', 'INPUT_TYPE_MISMATCH', 'NATIVE_UNLISTED',
+    'OTHER_CODES', 'CODE_UNLISTED', 'ExpressionUnknownObject'];
   const people = [[TOK.delta, 'codex'], [TOK.zeta, 'claude-code'], [TOK.eta, 'cursor']];
   let n = 0;
   for (let k = 6; k >= 0; k -= 1) {
