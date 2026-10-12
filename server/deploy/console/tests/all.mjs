@@ -5,6 +5,7 @@ import './host.test.mjs';
 import './licenses.test.mjs';
 import './live.test.mjs';
 import './misc.test.mjs';
+import './quality-line.test.mjs';
 import './readers.test.mjs';
 import './secrets.test.mjs';
 import './security.test.mjs';
