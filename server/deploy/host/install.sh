@@ -5,8 +5,12 @@
 #   sh host/install.sh [--port 7320] [--with-crons] [--dry-run]
 #
 # Idempotent: run it again after a new `git archive` to update collect.py and the units. It
-#   - checks root, python3 >= 3.10, docker, systemd, systemd-socket-proxyd, the port free on 127.0.0.1 and the
-#     project's containers (nothing is changed when a check fails);
+#   - checks root, python3 >= 3.10, docker, systemd, systemd-socket-proxyd, the proxy account, the port free on
+#     127.0.0.1 and the project's containers (nothing is changed when a check fails);
+#   - makes sure uid and gid 10001 exist on the host: ssam-console-proxy.service runs as User=10001 Group=10001 and
+#     systemd refuses an id the host does not know (status 217/USER). An existing uid or gid 10001 is used under any
+#     name; a missing one is created as the system group and user ssam-console (no home, nologin, password locked).
+#     The name ssam-console already taken by another id fails the checks. No other account is ever changed;
 #   - creates /var/lib/ssam-console/{host,collector,state,sock} with their owners and modes (the console runs as 10001);
 #   - copies collect.py to /usr/local/lib/ssam-console (a root-run script never changes silently with an archive) and
 #     collector.conf.example to /etc/ssam-console/collector.conf only when that file is absent;
@@ -47,6 +51,10 @@ case "$PORT" in ''|*[!0-9]*) echo "install: --port precisa ser um numero" >&2; e
 if [ "$PORT" -lt 1024 ] || [ "$PORT" -gt 65535 ]; then echo "install: --port fora de 1024..65535" >&2; exit 2; fi
 
 CONSOLE_UID=10001
+# The account of the proxy unit: User=10001 Group=10001 in ssam-console-proxy.service (CONSOLE_GID of collector.conf is
+# only the group of host.json and of the host folders).
+ACCOUNT=ssam-console
+ACCOUNT_GID=10001
 CONSOLE_DIR=/var/lib/ssam-console
 LIB_DIR=/usr/local/lib/ssam-console
 CONF_DIR=/etc/ssam-console
@@ -116,11 +124,33 @@ containers_ok() {
     [ -n "$(docker ps -a -q --filter "label=com.docker.compose.project=$PROJECT" \
         --filter "label=com.docker.compose.service=$SERVER_SERVICE")" ]
 }
+# dbent DB KEY FIELD: one field of the getent entry (a number is looked up as an id, a name as a name); empty if none.
+dbent() { getent "$1" "$2" 2>/dev/null | head -n 1 | cut -d: -f"$3"; }
+GROUP_NAME=$(dbent group "$ACCOUNT_GID" 1)   # the group that has gid 10001, under any name
+USER_NAME=$(dbent passwd "$CONSOLE_UID" 1)   # the user that has uid 10001, under any name
+GROUP_TAKEN=""
+USER_TAKEN=""
+[ -n "$GROUP_NAME" ] || GROUP_TAKEN=$(dbent group "$ACCOUNT" 3)   # gid of a group already named ssam-console
+[ -n "$USER_NAME" ] || USER_TAKEN=$(dbent passwd "$ACCOUNT" 3)    # uid of a user already named ssam-console
+account_problems() {
+    if ! command -v getent >/dev/null 2>&1; then echo "getent nao encontrado (pacote libc-bin)"; return; fi
+    [ -z "$GROUP_TAKEN" ] || echo "o grupo $ACCOUNT ja existe com o gid $GROUP_TAKEN (o proxy roda com o gid $ACCOUNT_GID)"
+    [ -z "$USER_TAKEN" ] || echo "o usuario $ACCOUNT ja existe com o uid $USER_TAKEN (o proxy roda com o uid $CONSOLE_UID)"
+    [ -n "$GROUP_NAME" ] || command -v groupadd >/dev/null 2>&1 || echo "groupadd nao encontrado (pacote passwd)"
+    [ -n "$USER_NAME" ] || command -v useradd >/dev/null 2>&1 || echo "useradd nao encontrado (pacote passwd)"
+}
+ACCOUNT_PROBLEMS=$(account_problems)
+account_ok() { [ -z "$ACCOUNT_PROBLEMS" ]; }
 check "root" is_root
 check "python3 >= 3.10 em $PYTHON" python_ok
 check "docker (cliente e daemon)" docker_ok
 check "systemd" systemd_ok
 check "systemd-socket-proxyd em $PROXYD" proxyd_ok
+check "uid $CONSOLE_UID e gid $ACCOUNT_GID do ssam-console-proxy (existem ou podem ser criados)" account_ok
+if [ -n "$ACCOUNT_PROBLEMS" ]; then
+    printf '%s\n' "$ACCOUNT_PROBLEMS" | sed 's/^/         - /'
+    say "         o install.sh nunca muda outro usuario ou grupo: resolva a mao (DEPLOY.md secao 15.10)"
+fi
 check "porta 127.0.0.1:$PORT livre (ou ja do ssam-console-proxy.socket)" port_free
 check "containers do projeto $PROJECT ($SERVER_SERVICE)" containers_ok
 [ -f "$deploy/console/server.mjs" ] || say "  aviso  $deploy/console/server.mjs nao existe: o container ssam-console nao vai subir com esta pasta deploy"
@@ -132,6 +162,35 @@ if [ "$FAILED" -gt 0 ]; then
         say "install: $FAILED verificacao(oes) falharam; nada foi alterado."
         exit 1
     fi
+fi
+
+# --------------------------------------------------------------------------------------------------- proxy account
+step "Conta do proxy (User=$CONSOLE_UID e Group=$ACCOUNT_GID do ssam-console-proxy.service)"
+ACCOUNT_CREATED=0
+if [ -n "$GROUP_NAME" ]; then
+    say "  existe  grupo $GROUP_NAME (gid $ACCOUNT_GID)"
+elif [ -n "$GROUP_TAKEN" ]; then
+    say "  FALHA   grupo $ACCOUNT ja existe com o gid $GROUP_TAKEN: nada criado"
+else
+    run groupadd -r -g "$ACCOUNT_GID" "$ACCOUNT"
+    ACCOUNT_CREATED=1
+fi
+if [ -n "$USER_NAME" ]; then
+    say "  existe  usuario $USER_NAME (uid $CONSOLE_UID)"
+elif [ -n "$USER_TAKEN" ]; then
+    say "  FALHA   usuario $ACCOUNT ja existe com o uid $USER_TAKEN: nada criado"
+else
+    # System user without home or login shell; useradd leaves the password locked ("!"). It warns that 10001 is above
+    # SYS_UID_MAX: expected, the id is the one of the units and of the image.
+    run useradd -r -u "$CONSOLE_UID" -g "$ACCOUNT_GID" -M -d /nonexistent -s /usr/sbin/nologin -c ssam-console-proxy "$ACCOUNT"
+    ACCOUNT_CREATED=1
+fi
+if [ "$ACCOUNT_CREATED" = 1 ] && [ "$DRY" != 1 ]; then
+    if [ -z "$(dbent passwd "$CONSOLE_UID" 1)" ] || [ -z "$(dbent group "$ACCOUNT_GID" 1)" ]; then
+        say "install: o uid $CONSOLE_UID ou o gid $ACCOUNT_GID ainda nao aparece no getent; veja getent passwd $CONSOLE_UID"
+        exit 1
+    fi
+    say "  ok     getent passwd $CONSOLE_UID -> $(getent passwd "$CONSOLE_UID")"
 fi
 
 # ----------------------------------------------------------------------------------------------------- directories
@@ -173,9 +232,13 @@ for u in $UNITS; do
     fi
 done
 run systemctl daemon-reload
-if [ "$PROXY_CHANGED" = 1 ]; then
-    # A new port or new proxy settings take effect only on a fresh socket (no-op on a first install).
+if [ "$PROXY_CHANGED" = 1 ] || [ "$ACCOUNT_CREATED" = 1 ]; then
+    # A new port, new proxy settings or a new account take effect only on a fresh socket (no-op on a first install).
     run_ok systemctl stop ssam-console-proxy.service ssam-console-proxy.socket
+fi
+if [ "$ACCOUNT_CREATED" = 1 ]; then
+    # A proxy that failed before the account existed (status 217/USER) stays failed until this (DEPLOY.md 15.10).
+    run_ok systemctl reset-failed ssam-console-proxy.service ssam-console-proxy.socket
 fi
 run systemctl enable --now ssam-console-collect.timer ssam-console-proxy.socket
 

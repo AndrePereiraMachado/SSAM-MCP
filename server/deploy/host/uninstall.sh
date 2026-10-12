@@ -7,7 +7,11 @@
 # Stops and disables the collector timer and the proxy socket, removes the four units and /usr/local/lib/ssam-console.
 #   --purge  also removes /var/lib/ssam-console (host.json, the console's access key, checkpoint and aggregates) and
 #            /etc/ssam-console; refused while the ssam-console container runs (remove it first, DEPLOY.md 15). The
-#            license history (console-audit.jsonl) lives in the state volume and stays.
+#            license history (console-audit.jsonl) lives in the state volume and stays. It also removes the system
+#            user and group of the proxy, only when they are the ones install.sh creates (name ssam-console with
+#            uid/gid 10001) and no process runs as uid 10001 once the units are stopped (ssam-server and the console
+#            run as 10001 in their containers: with them up the account stays and the script says so).
+#            Without --purge the account stays; another name on uid/gid 10001 is never touched.
 #   --crons  also removes /etc/cron.d/ssam-backup and /etc/cron.d/ssam-rotate (the daily backup and the weekly rotation
 #            stop: schedule them again some other way).
 # Never touches .env, the backups, the Docker volumes, ssam-server or caddy. --dry-run prints and changes nothing.
@@ -50,6 +54,22 @@ confval() {
 }
 PROJECT=$(confval COMPOSE_PROJECT); PROJECT=${PROJECT:-ssam-prod}
 CONSOLE_SERVICE=$(confval CONSOLE_SERVICE); CONSOLE_SERVICE=${CONSOLE_SERVICE:-ssam-console}
+
+# The account install.sh creates for ssam-console-proxy.service (User=10001 Group=10001).
+ACCOUNT=ssam-console
+ACCOUNT_ID=10001
+dbent() { getent "$1" "$2" 2>/dev/null | head -n 1 | cut -d: -f"$3"; }
+USER_NAME=$(dbent passwd "$ACCOUNT_ID" 1)
+GROUP_NAME=$(dbent group "$ACCOUNT_ID" 1)
+# uid_busy: says why the user cannot go now (processes with uid 10001, or no pgrep to tell); empty when it can.
+uid_busy() {
+    if ! command -v pgrep >/dev/null 2>&1; then
+        echo "pgrep nao encontrado (pacote procps): nao deu para conferir os processos do uid $ACCOUNT_ID"
+        return
+    fi
+    n=$(pgrep -u "$ACCOUNT_ID" | wc -l | tr -d ' ')
+    [ "$n" = 0 ] || echo "$n processo(s) rodam como uid $ACCOUNT_ID (o ssam-server e o painel rodam com esse uid nos containers)"
+}
 
 say() { printf '%s\n' "$*"; }
 run() {
@@ -103,10 +123,62 @@ if [ "$CRONS" = 1 ]; then
 fi
 
 say ""
+say "== Conta do proxy (uid e gid $ACCOUNT_ID)"
+ACCOUNT_FAILED=0
+if ! command -v getent >/dev/null 2>&1; then
+    say "  getent nao encontrado: usuario e grupo nao conferidos (mantidos)"
+elif [ -z "$USER_NAME$GROUP_NAME" ]; then
+    say "  nenhum usuario com o uid $ACCOUNT_ID e nenhum grupo com o gid $ACCOUNT_ID"
+elif [ "$PURGE" != 1 ]; then
+    say "  mantidos usuario ${USER_NAME:-(nenhum)} e grupo ${GROUP_NAME:-(nenhum)} (--purge apaga o $ACCOUNT criado pelo install.sh)"
+else
+    USER_GONE=0
+    if [ "$USER_NAME" = "$ACCOUNT" ]; then
+        busy=$(uid_busy)
+        if [ -n "$busy" ]; then
+            say "  mantido o usuario $ACCOUNT: $busy"
+            say "          com eles parados: sh host/uninstall.sh --purge de novo"
+        elif run userdel "$ACCOUNT"; then
+            USER_GONE=1
+        else
+            say "    (userdel falhou; usuario mantido)"
+            ACCOUNT_FAILED=1
+        fi
+    elif [ -n "$USER_NAME" ]; then
+        say "  mantido o usuario $USER_NAME (uid $ACCOUNT_ID): nao e o $ACCOUNT do install.sh"
+    fi
+    if [ "$DRY" = 1 ]; then
+        if [ "$USER_GONE" = 1 ] && [ "$GROUP_NAME" = "$ACCOUNT" ]; then
+            say "          (o userdel do Ubuntu ja apaga o grupo $ACCOUNT junto; o groupdel abaixo so roda se o grupo sobrar)"
+        fi
+    else
+        before=$GROUP_NAME
+        GROUP_NAME=$(dbent group "$ACCOUNT_ID" 1)   # read again: userdel removes the user's own group (USERGROUPS_ENAB)
+        if [ "$before" = "$ACCOUNT" ] && [ -z "$GROUP_NAME" ]; then
+            say "  o grupo $ACCOUNT saiu junto com o usuario (userdel)"
+        fi
+    fi
+    if [ "$GROUP_NAME" = "$ACCOUNT" ]; then
+        skip=""
+        if [ "$USER_GONE" = 1 ]; then skip=$ACCOUNT; fi
+        members=$(getent passwd 2>/dev/null | awk -F: -v gid="$ACCOUNT_ID" -v skip="$skip" \
+            '$4 == gid && $1 != skip { printf "%s ", $1 }')
+        if [ -n "$members" ]; then
+            say "  mantido o grupo $ACCOUNT: e o grupo principal de ${members% }"
+        elif ! run groupdel "$ACCOUNT"; then
+            say "    (groupdel falhou; grupo mantido)"
+            ACCOUNT_FAILED=1
+        fi
+    elif [ -n "$GROUP_NAME" ]; then
+        say "  mantido o grupo $GROUP_NAME (gid $ACCOUNT_ID): nao e o $ACCOUNT do install.sh"
+    fi
+fi
+
+say ""
 if [ -n "$running" ]; then
     say "Falta o container: tire COMPOSE_PROFILES=console do .env e rode docker compose -f compose.prod.yml rm -sf $CONSOLE_SERVICE"
 else
     say "Se o .env ainda tiver COMPOSE_PROFILES=console, tire a linha (sem as pastas o container nao sobe)."
 fi
 [ "$DRY" = 1 ] && say "dry-run: nada foi alterado."
-exit 0
+exit "$ACCOUNT_FAILED"
