@@ -27,6 +27,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { AGENT_PREFIX } from './server-tokens.mjs';
 import { spawn } from 'node:child_process';
 import { currentCall } from './quality-meter.mjs';
+import { agentVerbOf } from './quality-line.mjs';
 
 // A Windows balloon on the server machine (owner test, 2026-10-08); off with SSAM_ACCESS_NOTIFY=0, never fails a call.
 function notifyOwner(title, text) {
@@ -58,14 +59,27 @@ const SIZE = /^(0|[1-9][0-9]{0,15})$/;
 const INSTANCE = /^[A-Za-z0-9-]{1,64}$/;
 const CODE = /^[A-Z][A-Z0-9_]{1,63}$/;
 const sha256Of = bytes => createHash('sha256').update(bytes).digest('hex');
-// prazos B: the bridge method of an o11.bridge call and the operation of an environment_session, only when they are verbs.
-// Quality (2.7): the command of an odc.pipe call (params.args[0]), only when it is a verb.
-const VERB = /^[a-z][a-z0-9_-]{0,47}$/;
-export const callVerbs = (kind, params) => !params ? {}
-  : kind === 'odc.pipe' ? (VERB.test(String(Array.isArray(params.args) ? params.args[0] ?? '' : '')) ? { command: params.args[0] } : {})
-  : kind !== 'o11.bridge' ? {} : {
-  ...(VERB.test(String(params.method ?? '')) ? { method: params.method } : {}),
-  ...(params.method === 'environment_session' && VERB.test(String(params.operation ?? '')) ? { operation: params.operation } : {}) };
+// prazos B: the bridge method of an o11.bridge call and the operation of an environment_session; quality (2.7): the command
+// of an odc.pipe call (params.args[0]). Each only from its closed list, never by its shape: the command of studio_command is
+// the model's own text, and a lowercase app or module name looks like a verb (privacy finding of 2026-10-12). The pipe
+// commands and bridge methods are the lists the customer's agent enforces, kept in the ssam-quality/1 contract
+// (quality-line.mjs AGENT_VERBS); the environment operations are the kernel's (connect and close of the lease, then
+// Anvil.Core EnvironmentOperations.Names, of which the thin bridge's EnvironmentPrimitives.Names is a part). Drift tests in
+// agent-hub.test.mjs compare both with their sources.
+export const ENVIRONMENT_OPERATIONS = Object.freeze(['connect', 'close', 'applications', 'modules', 'application-icon', 'catalogs', 'referenceable',
+  'extensions', 'extension-download', 'versions', 'templates', 'template-module', 'template-download', 'signature', 'template-user-provider',
+  'download', 'application-save', 'module-associate', 'application-delete', 'module-delete', 'publish-start', 'publish-check', 'data-read',
+  'data-write', 'users-read']);
+// params: the call's own params (odc.pipe {args}; o11.bridge {method, params: {operation}}). Only listed words come back.
+export const callVerbs = (kind, params) => {
+  if (!params || typeof params !== 'object') return {};
+  if (kind === 'odc.pipe') { const command = agentVerbOf(kind, Array.isArray(params.args) ? params.args[0] : null); return command ? { command } : {}; }
+  if (kind !== 'o11.bridge') return {};
+  const method = agentVerbOf(kind, params.method);
+  const operation = method === 'environment_session' && typeof params.params?.operation === 'string' && ENVIRONMENT_OPERATIONS.includes(params.params.operation)
+    ? params.params.operation : null;
+  return { ...(method ? { method } : {}), ...(operation ? { operation } : {}) };
+};
 // The bytes a call moves when they are known before it runs: the file of a file.put, the files of a file.sync, a params blob.
 const sizeOf = ref => (Number.isFinite(ref?.size) && ref.size > 0 ? ref.size : 0);
 const bytesDown = (kind, params, blob) => sizeOf(blob?.ref) + (kind === 'file.put' ? sizeOf(params?.blob)
@@ -271,7 +285,7 @@ export function createAgentHub({ dir, store, kernel, log = () => {}, now = () =>
     state.pending.delete(pending.id);
     clearTimeout(pending.timer); clearTimeout(pending.acceptTimer);
     if (pending.blob) dropTransfer(state, pending.blob);
-    const verbs = callVerbs(pending.kind, pending.params);
+    const verbs = pending.verbs;
     const ms = nowMs() - pending.startedAt;
     log({ event: 'agent-call', token: state.tokenId, kind: pending.kind, ...verbs, ms, ...outcome });
     try {
@@ -435,7 +449,7 @@ export function createAgentHub({ dir, store, kernel, log = () => {}, now = () =>
         }
         return new Promise((resolve, reject) => {
           const pending = { id, kind, line, written: false, accepted: false, blob, resolve, reject, timer: null, acceptTimer: null, deadline, graced: false, startedAt: nowMs(),
-            params: kind === 'o11.bridge' ? { method: params?.method, operation: params?.params?.operation } : kind === 'odc.pipe' ? { args: [params?.args?.[0]] } : null,
+            verbs: callVerbs(kind, params),
             callKey: currentCall(), bytes: bytesDown(kind, params, blob) };
           pending.timer = setTimeout(() => fail(state, pending, 'AGENT_TIMEOUT', 'The agent did not answer ' + kind + ' before the deadline.'),
             Math.min(2147483647, Math.max(0, deadline - nowMs())));

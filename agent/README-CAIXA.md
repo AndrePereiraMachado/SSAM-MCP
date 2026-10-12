@@ -6,7 +6,8 @@ Cópia de `servidor/fase4` (`e7b2119b`) de `C:\Users\andre\SSAM-Hybrid-servidor`
 `servidor/fase4-24` (`a415531d`, 24º envio, branch `server/r24`): bridge ODC `v96`, bridge O11 fina com `sc_http`
 (`ScHttpHandler.cs`) e agente `0.3.1` (`reference-producers`, `sc_http`, transporte novo e `net.probe`). Na branch
 `server/r24-qualidade` (`fase4-24/qualidade`, `3262c49f`) só o guia do cliente muda: `docs/AGENTE-CLIENTE.md` ganha o
-parágrafo do registro de qualidade (o agente e o pacote não mudam).
+parágrafo do registro de qualidade (o agente e o pacote não mudam); `01795e52` não muda nada desta caixa (o servidor
+passou a usar uma cópia das listas `ODC_COMMANDS` e `O11_METHODS` de `lib/kinds.mjs`, com teste de deriva).
 Esta pasta guarda os caminhos relativos do repositório antigo: os `.csproj` e os scripts resolvem daqui.
 
 ## Compilar e montar o pacote

@@ -8,8 +8,10 @@
 //   - Delivered with no result (the agent dropped, the deadline passed): the socket closes with NO reply, which the
 //     kernel already treats as an unknown outcome and never repeats.
 //   - A reply that arrives after the kernel gave up (socket closed) is dropped and logged as relay-late.
+//   - The log names the method only when the agent's closed list has it (quality-line.mjs AGENT_VERBS), never by its shape.
 import net from 'node:net';
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { agentVerbOf } from '../quality-line.mjs';
 
 const MAX_LINE_BYTES = 16 * 1024 * 1024;
 const digest = text => createHash('sha256').update(String(text), 'utf8').digest();
@@ -50,18 +52,19 @@ export async function startRelay({ key, call, log = () => {}, host = '127.0.0.1'
         return;
       }
       const method = typeof request.method === 'string' ? request.method : '';
+      const named = agentVerbOf('o11.bridge', method);
       try {
         const budget = Object.hasOwn(RELAY_BUDGET_MS, method) ? RELAY_BUDGET_MS[method] : null;
         const value = await call('o11.bridge', { method, params: request.params ?? {}, ...(budget ? { timeoutMs: budget } : {}) });
         const reply = value?.reply;
         // A delivered call without a bridge reply is an unknown outcome, never a made-up answer.
-        if (!reply || typeof reply !== 'object') { log({ event: 'relay-unknown', method, code: 'NO_REPLY' }); socket.destroy(); return; }
-        if (!answer(reply)) log({ event: 'relay-late', method });
+        if (!reply || typeof reply !== 'object') { log({ event: 'relay-unknown', method: named, code: 'NO_REPLY' }); socket.destroy(); return; }
+        if (!answer(reply)) log({ event: 'relay-late', method: named });
       } catch (error) {
         if (error?.executed === false) {
-          if (!answer({ success: false, executed: false, error: (error.code ?? 'AGENT_ERROR') + ': ' + error.message })) log({ event: 'relay-late', method });
+          if (!answer({ success: false, executed: false, error: (error.code ?? 'AGENT_ERROR') + ': ' + error.message })) log({ event: 'relay-late', method: named });
         } else {
-          log({ event: 'relay-unknown', method, code: error?.code ?? null });
+          log({ event: 'relay-unknown', method: named, code: error?.code ?? null });
           socket.destroy();
         }
       }

@@ -217,7 +217,9 @@ const hostile = [
   { ...frame, ms: -1, ok: true, class: 'ok' },
   { ...frame, schema: 'ssam-quality/2', ok: true, class: 'ok' },
   { ...frame, kind: 'session', event: 'opened', client: 'Claude Code 2.1.281 (máquina do João)' },
-  { ...frame, ok: false, code: 'PREFLIGHT_REFUSED', class: 'refused', agent: { n: 1, top: [['o11.bridge:Snapshot Module', 1, 10], ['file.get:/home/joao/x', 1, 5], ['o11.bridge:open_module', 1, 7]] },
+  // Verb-shaped words outside the agent's closed lists (a studio_command whose command was the model's own text) never pass.
+  { ...frame, ok: false, code: 'PREFLIGHT_REFUSED', class: 'refused', agent: { n: 1, top: [['o11.bridge:Snapshot Module', 1, 10], ['file.get:/home/joao/x', 1, 5], ['o11.bridge:open_module', 1, 7],
+    ['odc.pipe:acme-folha-sntl', 1, 4], ['o11.bridge:sntl_method', 1, 3], ['file.put:sntl', 1, 2]] },
     args: { job: 'C:\\Users\\joao\\job.json', patch: [1, 2], until: 'merge', basedOn: 'sim' } },
   { ...frame, ok: false, code: 'PREFLIGHT_REFUSED', class: 'refused',
     problems: { n: 60, byCode: Object.fromEntries(Array.from({ length: 40 }, (_, i) => ['CODE_' + String(i).padStart(2, '0'), 40 - i])) } },

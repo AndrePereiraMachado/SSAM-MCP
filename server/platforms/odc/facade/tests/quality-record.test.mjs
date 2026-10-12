@@ -14,7 +14,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
-import { sanitizeQualityLine, fitLine, loadNativeIds, MAX_LINE_BYTES, NATIVE_UNLISTED } from '../quality-line.mjs';
+import { sanitizeQualityLine, fitLine, loadNativeIds, MAX_LINE_BYTES, NATIVE_UNLISTED, O11_METHODS } from '../quality-line.mjs';
 import { summarizeAnswer, summarizeMessage, buildCallLine, buildSessionLine, argsSummary, opOf, laneOf, clientFamily, closeReason, classify,
   timesFromSpans, categoryOf, sessionHash, VERB_FIELDS, CREATE_OPS } from '../quality-record.mjs';
 import { outcomeOf } from '../http-server.mjs';
@@ -263,8 +263,15 @@ test('spans: category per kind and verb, unions, kernelOwn, rest, top and approx
   assert.deepEqual(approx.t, { studio: 3000, kernel: 10000, kernelOwn: 10000, rest: 1000 });
   assert.equal(approx.agent.approx, true);
   assert.deepEqual(timesFromSpans([], { ms: 5, shared: true }).agent, { n: 0, failed: 0, shared: true });
-  const many = Array.from({ length: 9 }, (_, i) => ({ cat: 'studio', label: 'o11.bridge:m' + i, startMs: i * 10, ms: 10 - i }));
+  const many = Array.from({ length: 9 }, (_, i) => ({ cat: 'studio', label: 'o11.bridge:' + O11_METHODS[i], startMs: i * 10, ms: 10 - i }));
   assert.equal(timesFromSpans(many, { ms: 100 }).agent.top.length, 6);
+  // A verb-shaped word outside the agent's lists (the model's text as a studio_command command) never becomes a label; its
+  // time stays in its category and its count in n.
+  const free = timesFromSpans([{ cat: 'studio', label: 'odc.pipe:acme-folha-sntl', startMs: 0, ms: 50 }, { cat: 'studio', label: 'o11.bridge:sntl_method', startMs: 50, ms: 20 },
+    { cat: 'transfer', label: 'file.put:sntl', startMs: 70, ms: 5 }, { cat: 'studio', label: 'odc.pipe:module-info', startMs: 75, ms: 7 }], { ms: 100 });
+  assert.deepEqual(free.t, { studio: 77, transfer: 5, rest: 18 });
+  assert.deepEqual(free.agent, { n: 4, failed: 0, shared: false, top: [['odc.pipe:module-info', 1, 7]] });
+  assert.ok(!JSON.stringify(free).includes('sntl'));
 });
 
 test('VERB_FIELDS are the enums of tools/list and the module constants', { timeout: 120000 }, async () => {

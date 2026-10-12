@@ -66,6 +66,13 @@ Os arquivos que existem nas duas caixas estão em [`SHARED.md`](SHARED.md), com 
   - Conferido: os 6219 arquivos das duas caixas que vêm da linha têm o blob de `3262c49f`. As quatro cópias do contrato
     `quality-line.mjs` (fachada, painel e as duas pastas de fixtures) têm o sha256 LF `95d2962a…557d` do desenho.
   - Contagem: `server/` 6075, `agent/` 145, 76 nas duas.
+  - Depois, `3262c49f..01795e52` de `fase4-24/qualidade` (`01795e523aa9ba1d4f9c5aa34059cb6aa9819385`, 1 commit, achado de
+    privacidade de 2026-10-12): o `command` de `studio_command`, texto do modelo com forma de verbo, chegava ao registro
+    (`agent.top`), ao `server.log` e à exportação `linhas` do painel. Os verbos das chamadas ao agente agora saem só das
+    listas fechadas que o agente aplica (`AGENT_VERBS` do contrato). 14 caminhos alterados, todos em `server/` (nenhum
+    novo, nenhum apagado, nenhum compartilhado; o `SHARED.md` não muda), copiados com os blobs da revisão
+    (`C:\t\qual\priv\copy-priv.cjs`). O painel ganhou a mesma cópia do contrato, das fixtures e da paridade. As quatro
+    cópias de `quality-line.mjs` têm agora o sha256 LF `200f74ce…ec6c8`.
 
 ## Aviso: o servidor no ar não mudou
 

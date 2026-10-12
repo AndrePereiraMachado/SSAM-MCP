@@ -21,9 +21,11 @@ const TOKENS = { 'tok_0000000a1fa0': 'Cliente Alfa', 'tok_0000000b2fb1': 'Client
 const expectedAll = () => JSON.parse(fs.readFileSync(path.join(FIX, 'expected-api-day-20261012.json'), 'utf8'));
 const expectedAlfa = () => JSON.parse(fs.readFileSync(path.join(FIX, 'expected-api-day-20261012-alfa.json'), 'utf8'));
 const DAY12 = '/api/quality?range=day&day=2026-10-12';
-// What the hostile lines carry and the contract keeps out (quality-line.test.mjs), plus the raw MCP client name.
+// What the hostile lines carry and the contract keeps out (quality-line.test.mjs), plus the raw MCP client name. "sntl":
+// verb-shaped agent labels outside the agent's lists (odc.pipe:acme-folha-sntl, o11.bridge:sntl_method, file.put:sntl), the
+// model's own studio_command text of the privacy finding of 2026-10-12.
 const LEAKS = ['Batidas', 'GetColaboradorAtual', 'joao', 'João', 'Abrir', 'passwd', 'texto do cliente', 'Snapshot Module', '__proto__', 'constructor',
-  'máquina do', 'Claude Code 2.1.281', 'job.json', 'ssam-quality/2', 'não é json', 'xxxxxxxxxx'];
+  'máquina do', 'Claude Code 2.1.281', 'job.json', 'ssam-quality/2', 'não é json', 'xxxxxxxxxx', 'sntl', 'acme-folha'];
 
 // The fake token store of the design: the three fixture tokens named as the golden payloads expect.
 function writeTokens(serverDir) {
@@ -128,6 +130,10 @@ test('the hostile file leaves no name, path or text in /state, the payloads or t
   const expected = fs.readFileSync(path.join(FIX, 'hostile-expected.jsonl'), 'utf8').split('\n').filter(Boolean)
     .map(l => JSON.parse(l)).filter(Boolean).map(l => JSON.stringify(l));
   assert.deepEqual(lines.text.split('\n').filter(Boolean), expected);
+  // the raw file does carry the verb-shaped free words; the lines export keeps only the listed verb of that agent.top
+  assert.ok(fs.readFileSync(path.join(FIX, 'server-dir', 'quality-20261013.jsonl'), 'utf8').includes('odc.pipe:acme-folha-sntl'));
+  const tops = lines.text.split('\n').filter(Boolean).map(l => JSON.parse(l)).filter(l => l.agent?.top).map(l => l.agent.top.map(([label]) => label));
+  assert.deepEqual(tops, [['o11.bridge:open_module']]);
 });
 
 test('a restart from the checkpoint in the middle of a file counts nothing twice', async t => {

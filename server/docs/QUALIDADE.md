@@ -34,6 +34,11 @@ e HTML; a mensagem, a correção, o ponteiro, o elemento e o caminho de um probl
 nomes de host; IPs; o nome e a versão do cliente MCP; o id da sessão (só um hash curto); texto livre de qualquer tipo.
 Um código com cara de nome (`GetColaboradorAtual`) só fica quando é um id de verificação dos catálogos do kernel
 (`kernel/catalog/verify-*.json`); senão vira `NATIVE_UNLISTED`.
+O verbo de uma chamada ao agente (o comando do pipe do ODC Studio, o método da ponte O11) só fica quando está na lista
+fechada que o próprio agente aplica (`AGENT_VERBS` do contrato, cópia de `ODC_COMMANDS` e `O11_METHODS` de
+`agent/lib/kinds.mjs`); a forma de verbo não basta. O `command` de `studio_command` é texto do modelo: fora da lista, a
+chamada fica só com o tipo (`odc.pipe`), no registro, no painel e no `server.log` (eventos `agent-call` e `relay-*`); a
+operação de `environment_session` no log segue a lista do kernel (`ENVIRONMENT_OPERATIONS` de `agent-hub.mjs`).
 
 ## O contrato e os testes
 
@@ -43,7 +48,9 @@ Um código com cara de nome (`GetColaboradorAtual`) só fica quando é um id de 
   chamadas ao agente e das execuções do kernel), `quality-recorder.mjs` (grava).
 - Testes: `tests/quality-line.test.mjs`, `quality-record.test.mjs`, `quality-meter.test.mjs`,
   `http-server-quality.test.mjs` (inclusive uma resposta hostil cujos nomes, caminhos e expressões nunca chegam ao arquivo)
-  e o teste de `onCallSettled` em `agent-hub.test.mjs`. Os exemplos ficam em `tests/fixtures/quality/`.
+  e o teste de `onCallSettled` em `agent-hub.test.mjs` (com um `command` livre com forma de verbo, que não chega à linha
+  nem ao log), mais os testes de deriva das listas fechadas contra `agent/lib/kinds.mjs` e o kernel
+  (`EnvironmentOperations.Names`). Os exemplos ficam em `tests/fixtures/quality/`.
 
 ## Onde o dono lê
 

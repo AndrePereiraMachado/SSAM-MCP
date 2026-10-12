@@ -9,7 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import * as meter from './quality-meter.mjs';
-import { sanitizeQualityLine, fitLine } from './quality-line.mjs';
+import { sanitizeQualityLine, fitLine, agentVerbOf } from './quality-line.mjs';
 import { summarizeMessage, buildCallLine, buildSessionLine, argsSummary, opOf, laneOf, clientFamily, timesFromSpans, categoryOf, frameOf } from './quality-record.mjs';
 
 const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -145,11 +145,12 @@ export function createQualityRecorder({ dir, log = () => {}, nativeIds = new Set
       }
       write(line);
     },
-    // agent-hub.mjs onCallSettled: one settled agent call as a span of the call that made it (2.7).
+    // agent-hub.mjs onCallSettled: one settled agent call as a span of the call that made it (2.7). The verb only from its
+    // kind's closed list (the hub already sends no other; a span of an unlisted verb keeps its kind and its time).
     agentSpan(span) {
       try {
         if (!isObj(span) || typeof span.tokenId !== 'string') return;
-        const verb = typeof span.verb === 'string' ? span.verb : null;
+        const verb = agentVerbOf(span.kind, span.verb);
         meter.addSpan(span.tokenId, { cat: categoryOf(span.kind, verb) ?? 'studio', label: span.kind + (verb ? ':' + verb : ''), startMs: span.startMs, ms: span.ms,
           ok: span.ok !== false, ...(Number.isFinite(span.bytes) && span.bytes > 0 ? { bytes: span.bytes } : {}), callKey: span.callKey ?? null });
       } catch (error) { failed('span', error); }

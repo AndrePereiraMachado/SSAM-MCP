@@ -11,7 +11,8 @@
 //      without a recorder.
 //   3. SSAM_QUALITY=0, a hosted server without a recorder and the real `ssam serve --local-studios` write no quality file.
 //   4. The real hosted server (runServed) with the real agent and a fake ODC Studio: real answers through the real shaper,
-//      gate and hub, sentinels in arguments and answers, none of them in the file.
+//      gate and hub, sentinels in arguments and answers, none of them in the file. A studio_command whose command is a
+//      verb-shaped free word (the agent refuses it) names nothing in the quality file nor in server.log; a listed one does.
 // With QUALITY_SAMPLE_OUT=<file> the lines of 1 and 4 are also copied there (the sample of the report).
 import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
@@ -375,7 +376,8 @@ test('the real hosted server: real answers through the shaper, gate and hub; spa
   delete process.env.SSAM_QUALITY;
   process.env.SSAM_NO_WARM = '1';
   const port = await freePort();
-  const handle = await ssam.runServed(['--port', String(port)]);
+  const logFile = path.join(dir, 'server.log');
+  const handle = await ssam.runServed(['--port', String(port), '--log-file', logFile]);
   t.after(() => handle.close());
   const store = createTokenStore(dir);
   const issued = store.issue({ customer: 'Cliente Gama' });
@@ -384,8 +386,10 @@ test('the real hosted server: real answers through the shaper, gate and hub; spa
   const odcPid = 900000 + Math.floor(Math.random() * 90000), o11Pid = odcPid + 1;
   const agentRoot = path.join(base, 'SSAM-Agent');
   const sha = bytes => createHash('sha256').update(bytes).digest('hex');
+  const pipeSeen = [];
   const pipe = await fakeOdcPipe(odcPid, line => {
     const [command, ...args] = line.split(' ');
+    pipeSeen.push(command);
     if (command === 'status') return { ok: true, bridge: ODC_BRIDGE, busy: null, modules: Array.from({ length: 60 }, (_, i) => ({ name: S.module + i, path: S.path, key: S.key + i })) };
     if (command === 'snapshot') {
       const bytes = Buffer.from('fake capture of ' + args[0] + ' ' + S.expr);
@@ -436,6 +440,12 @@ test('the real hosted server: real answers through the shaper, gate and hub; spa
   assert.equal(o11.structuredContent?.code, 'O11_NOT_CONNECTED');
   const job = await call('o11_deliver', { module: S.module, job: { ops: [{ op: 'set', target: S.entity, value: S.expr }] }, authorize: S.msg });
   assert.equal(job.isError, true);
+  // The model's own text as the command (privacy finding of 2026-10-12): verb-shaped, refused by the agent before the pipe.
+  const free = await call('studio_command', { command: 'sntl-cmd', args: [] });
+  assert.equal(free.structuredContent?.code, 'COMMAND_NOT_ALLOWED', JSON.stringify(free).slice(0, 400));
+  const listed = await call('studio_command', { command: 'module-info', args: [S.module] });
+  assert.equal(listed.isError, true, JSON.stringify(listed).slice(0, 400));
+  assert.ok(!pipeSeen.includes('sntl-cmd') && pipeSeen.includes('module-info'), 'the agent refused the free word before the pipe: ' + pipeSeen.join(','));
   await transport.terminateSession();
   await client.close();
   assert.ok(await waitFor(() => linesOf(dir).some(l => l.includes('"event":"closed"')), 5000), 'the closed line');
@@ -465,6 +475,16 @@ test('the real hosted server: real answers through the shaper, gate and hub; spa
   const doctors = of('ssam_doctor');
   assert.ok(doctors.length >= 1 && doctors[0].call === 1 && doctors[0].gapMs === null);
   assert.ok(lines.filter(l => l.kind === 'call').every((l, i, all) => i === 0 || l.call > all[i - 1].call), 'call numbers grow');
+  const [freeLine, listedLine] = of('studio_command');
+  assert.deepEqual([freeLine.ok, freeLine.code, listedLine.ok], [false, 'COMMAND_NOT_ALLOWED', false]);
+  assert.deepEqual(freeLine.agent?.top?.map(([label]) => label).filter(label => label.startsWith('odc.pipe')), ['odc.pipe'], 'the refused pipe call keeps only its kind: ' + JSON.stringify(freeLine.agent));
+  assert.ok(listedLine.agent?.top?.some(([label]) => label === 'odc.pipe:module-info'), 'a listed command is still named: ' + JSON.stringify(listedLine.agent));
+  // server.log: the agent-call lines name listed commands only; no sentinel of any argument or answer anywhere in the log.
+  const log = fs.readFileSync(logFile, 'utf8');
+  const calls = log.split('\n').filter(Boolean).map(l => JSON.parse(l)).filter(e => e.event === 'agent-call');
+  assert.ok(calls.some(e => e.kind === 'odc.pipe' && e.code === 'COMMAND_NOT_ALLOWED' && !Object.hasOwn(e, 'command')), 'the refused call is logged without its command');
+  assert.ok(calls.some(e => e.kind === 'odc.pipe' && e.command === 'module-info'), 'a listed command is logged');
+  assert.equal(SENTINEL.test(log), false, 'a sentinel reached server.log: ' + log.split('\n').filter(l => SENTINEL.test(l)).join('\n').slice(0, 800));
 });
 
 test.after(() => {

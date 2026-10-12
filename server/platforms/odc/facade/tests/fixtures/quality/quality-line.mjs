@@ -33,6 +33,18 @@ export const NATIVE = /^[A-Z][a-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)*$/;
 export const VERB = /^[a-z][a-z0-9_-]{0,47}$/;
 export const AGENT_KINDS = ['studio.processes', 'odc.pipe', 'odc.attach', 'o11.bridge', 'o11.connect', 'o11.selected',
   'file.put', 'file.get', 'file.list', 'file.sync', 'net.probe', 'kernel'];
+// The protocol verbs an agent label may name, closed per kind: the lists the customer's agent enforces (agent/lib/kinds.mjs
+// ODC_COMMANDS and O11_METHODS; the server lane's drift test compares them). The shape (VERB) is not enough: the command of
+// studio_command is the model's own text, and a lowercase app or module name is a verb by shape. Any other kind has no verb.
+export const ODC_COMMANDS = Object.freeze(['status', 'wait', 'authorize', 'open', 'snapshot', 'latest', 'check-base', 'preview', 'merge',
+  'publish', 'publish-status', 'publish-log', 'dismiss-dialog', 'close', 'module-info', 'assets', 'consumers', 'create', 'create-app',
+  'templates', 'template-download', 'refresh-references', 'reference-snapshot', 'reference-producers', 'data', 'data-insert', 'data-update',
+  'data-delete', 'portal-call', 'portal-session', 'auth-status', 'stop', 'query-test']);
+export const O11_METHODS = Object.freeze(['ping', 'bridge_manifest', 'get_active_module', 'list_open_modules', 'get_errors', 'open_module',
+  'close_module', 'publish', 'windows', 'ui_alive', 'close_dialog', 'snapshot_module', 'merge_from_oml', 'merge_status',
+  'environment_session', 'sc_api', 'sc_web', 'sc_http', 'studio_login', 'sc_session', 'publish_log', 'refresh_references',
+  'answer_dependencies_dialog']);
+export const AGENT_VERBS = Object.freeze({ 'odc.pipe': ODC_COMMANDS, 'o11.bridge': O11_METHODS });
 
 // ---- closed word lists
 export const KINDS = ['call', 'session'];
@@ -86,11 +98,14 @@ export function loadNativeIds(catalogDir, { readDir, readFile, join = (...p) => 
   return ids;
 }
 export const verbOf = value => (typeof value === 'string' && VERB.test(value) ? value : null);
+// The verb of an agent call when its kind's closed list (AGENT_VERBS) has it, else null.
+export const agentVerbOf = (kind, value) => (typeof value === 'string' && Object.hasOwn(AGENT_VERBS, kind) && AGENT_VERBS[kind].includes(value) ? value : null);
+// "kind" or "kind:verb" (the verb from AGENT_VERBS only); anything else null.
 export function agentLabel(value) {
   if (typeof value !== 'string' || value.length > 64) return null;
   const [kind, verb, extra] = value.split(':');
   if (extra !== undefined || !AGENT_KINDS.includes(kind)) return null;
-  return verb === undefined ? kind : verbOf(verb) ? kind + ':' + verb : null;
+  return verb === undefined ? kind : agentVerbOf(kind, verb) ? kind + ':' + verb : null;
 }
 
 // A {code: count} map: valid codes only, counts clamped, at most max keys (the biggest stay; the rest folds into other).
