@@ -83,11 +83,27 @@ Os arquivos que existem nas duas caixas estão em [`SHARED.md`](SHARED.md), com 
     dono) e os fatos do `server.log` sobre a máquina do agente; (3) uma expressão mudada por duas regras conta nas duas
     em `norm.byRule`. 22 caminhos (3 novos, 19 alterados, nenhum apagado), 22 entradas: 21 em `server/` e
     `docs/AGENTE-CLIENTE.md` só em `agent/`; nenhum compartilhado (o `SHARED.md` só cita a revisão). Copiados com os blobs
-    da revisão (`C:	qualaixoscopy-baixos.cjs`, que também põe os caminhos novos em `server/`). O painel ganhou a
+    da revisão (`C:\t\qual\baixos\copy-baixos.cjs`, que também põe os caminhos novos em `server/`). O painel ganhou a
     mesma cópia do contrato e das fixtures, a paridade nova, os testes do dia hostil com as palavras do cliente em campos
     de código e os mocks do cenário `problemas` sem códigos fora do registro. As quatro cópias de `quality-line.mjs` têm
     agora o sha256 LF `cc4440f9…ad239`.
   - Conferido: os 6222 arquivos das duas caixas que vêm da linha têm o blob de `c24d468d`. Contagem: `server/` 6078,
+    `agent/` 145, 76 nas duas.
+  - Depois, `c24d468d..1b2ce8fe` de `fase4-24/qualidade` (`1b2ce8feadc3a964ddd8611ad2f5dff71d8ef7c1`, 1 commit, os dois
+    achados médios da reconferência da mesma revisão de privacidade): (1) os códigos que o produto compõe em tempo de
+    execução viravam `CODE_UNLISTED` (uma recusa de preflight com `SET_INVALID` e `SPEC_INVALID` ficava
+    `{CODE_UNLISTED: 2}`); o gerador `platforms/odc/scripts/quality-registry.mjs` agora compõe cada família da própria
+    fonte, pela regra de quem a compõe: `<VERBO>_INVALID` de cada verbo e operação do kernel e `OP_INVALID`,
+    `<OP>_REFUSED` de `rest`, `rest-expose` e `soap`, o código que o formatador dá a cada palavra de `failed`, `stage` e
+    `gate` das fontes e `PUBLISH_<GATE>`; (2) `kernel/query-test`, compilado nas duas bridges, não era lido, e os 18
+    `QUERY_TEST_*` do `ssam_query_test` hospedado viravam `CODE_UNLISTED`; a pasta entrou nas raízes, e o teste de deriva
+    agora também falha quando um fonte compilado nas bridges, no kernel ou no builder ODC, ou o arquivo que registra uma
+    ferramenta hospedada, fica fora delas. O registro passa de 1847 para 2004 códigos. 9 caminhos alterados, todos em
+    `server/` (nenhum novo, nenhum apagado, nenhum compartilhado; o `SHARED.md` só cita a revisão), copiados com os blobs
+    da revisão (`C:\t\qual\baixos\fix\copy-fix.cjs`). O painel ganhou a mesma cópia do contrato e do teste
+    compartilhado, o teste novo na sua cópia e a paridade nova. As quatro cópias de `quality-line.mjs` têm agora o
+    sha256 LF `a21d9c1e…5157f`.
+  - Conferido: os 6222 arquivos das duas caixas que vêm da linha têm o blob de `1b2ce8fe`. Contagem: `server/` 6078,
     `agent/` 145, 76 nas duas.
 
 ## Aviso: o servidor no ar não mudou

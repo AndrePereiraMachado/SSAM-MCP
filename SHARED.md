@@ -2,7 +2,7 @@
 
 Estes 76 arquivos existem em `server/` e em `agent/`, no mesmo caminho relativo dentro de cada caixa.
 Hoje as duas cópias são iguais byte a byte. Vieram de `servidor/fase4` (`e7b2119b`) e estão na revisão de
-`servidor/fase4-24` (`a415531d`), o 24º envio, e na de `fase4-24/qualidade` (`3262c49f`, `01795e52` e `c24d468d`, que não mudam nenhum deles). O
+`servidor/fase4-24` (`a415531d`), o 24º envio, e na de `fase4-24/qualidade` (`3262c49f`, `01795e52`, `c24d468d` e `1b2ce8fe`, que não mudam nenhum deles). O
 24º acrescentou 8: `PrivateHttpContext.cs` e `ScHttpHandler.cs` do
 kernel e 6 fontes novas da bridge ODC (`Portal*.cs`).
 

@@ -192,6 +192,46 @@ test('codes and rules only from the registries; an expression two rules changed 
   assert.equal(lineOf('odc_read', {}, result(shaped), { catalogLane: 'odc' }).code, 'ODC_READ_FAILED');
 });
 
+// Re-check of 2026-10-12: the codes the product composes at runtime (JobPreflight <VERB>_INVALID, IntegrationRefusalException
+// <OP>_REFUSED, the shaper's <STAGE>_FAILED, publishOutcomeOf PUBLISH_<GATE>) and the codes of ssam_query_test
+// (kernel/query-test) are in the registry: a real refusal keeps each of them, never CODE_UNLISTED.
+test('composed codes and the query-test codes stay distinguishable: a preflight refusal keeps SET_INVALID and REST_REFUSED', async () => {
+  const problem = (code, i) => ({ phase: 'preflight', op: i, pointer: '/ops/' + i + '/' + S.attr, code, severity: 'error', message: S.msg + ' ' + S.expr,
+    fix: 'use ' + S.expr, element: S.module + '.' + S.action });
+  const envelope = { ok: false, code: 'PREFLIGHT_REFUSED', error: S.msg + ' at ' + S.path, verifyRan: false, phases: ['preflight'],
+    problems: [problem('SET_INVALID', 0), problem('SPEC_INVALID', 1), problem('REST_REFUSED', 2), problem('REST_EXPOSE_REFUSED', 3), problem('SOAP_REFUSED', 4),
+      problem('OP_INVALID', 5), problem('EXPR_UNKNOWN_IDENTIFIER', 6)] };
+  const value = deliverOutcome({ envelope }, { trackId: 'x', work: tmp, job: S.path, taskId: null, since: 0, input: { module: S.module } });
+  const shaped = shapeToolResult('o11_deliver', {}, mcp(value), { lane: 'o11' });
+  const noted = summarizeAnswer('o11_deliver', {}, shaped, { scan: 'full', nativeIds });
+  const line = lineOf('o11_deliver', {}, result(shaped), { noted, catalogLane: 'o11' });
+  assert.equal(line.code, 'PREFLIGHT_REFUSED');
+  assert.deepEqual(line.problems.byCode, { SET_INVALID: 1, SPEC_INVALID: 1, REST_REFUSED: 1, REST_EXPOSE_REFUSED: 1, SOAP_REFUSED: 1, OP_INVALID: 1, EXPR_UNKNOWN_IDENTIFIER: 1 });
+  // the integration op's own refusal as the code of an ODC kernel answer
+  const soap = interpretKernelResult({ ok: false, code: 'SOAP_REFUSED', error: S.msg, data: { problems: [{ phase: 'preflight', code: 'SOAP_LANE_UNSUPPORTED', message: S.msg }] } },
+    { output: path.join(tmp, 'kernel-soap'), exitCode: 1 });
+  const odc = lineOf('studio_deliver', { module: S.module }, result(mcp({ ...soap, failed: 'build' })));
+  assert.equal(odc.code, 'SOAP_REFUSED'); assert.deepEqual(odc.problems.byCode, { SOAP_LANE_UNSUPPORTED: 1 });
+  // the shaper's <STAGE>_FAILED of a stage word, and publishOutcomeOf's PUBLISH_<GATE>
+  for (const [stage, code] of [['kernel', 'KERNEL_FAILED'], ['publish-wait', 'PUBLISH_WAIT_FAILED'], ['upload-request', 'UPLOAD_REQUEST_FAILED'], ['runner', 'RUNNER_FAILED']]) {
+    const staged = shapeToolResult('studio_deliver', {}, mcp({ ok: false, stage, error: S.msg }), { lane: 'odc' });
+    assert.equal(staged.structuredContent.code, code, stage);
+    assert.equal(lineOf('studio_deliver', {}, result(staged)).code, code, stage);
+  }
+  const { publishOutcomeOf } = await import('../kernel-delivery.mjs');
+  for (const [gate, code] of [['authorship', 'PUBLISH_AUTHORSHIP'], ['vault_unavailable', 'PUBLISH_VAULT_UNAVAILABLE'], ['secret_not_found', 'PUBLISH_SECRET_NOT_FOUND']]) {
+    const publish = publishOutcomeOf({ ok: false, outcome: 'gate_refused', gate, error: S.msg });
+    assert.equal(publish.code, code, gate);
+    assert.equal(lineOf('studio_deliver', { module: S.module, publish: true }, result(mcp({ ok: false, code: publish.code, result: 'entregue', publish }))).code, code, gate);
+  }
+  // the hosted ssam_query_test (kernel/query-test, compiled into both bridges)
+  for (const code of ['QUERY_TEST_DATABASE_ERROR', 'QUERY_TEST_LOGIN_REQUIRED', 'QUERY_TEST_SOURCE_CHANGED', 'QUERY_TEST_NOT_QUERY', 'QUERY_TEST_MODULE_MISMATCH',
+    'QUERY_TEST_NATIVE_ERROR', 'QUERY_TEST_PENDING'])
+    assert.equal(lineOf('ssam_query_test', {}, result(mcp({ ok: false, code, execution: 'native-query', error: S.msg + ' ' + S.expr }))).code, code, code);
+  // a code of the customer in the same slots is still CODE_UNLISTED
+  assert.equal(lineOf('ssam_query_test', {}, result(mcp({ ok: false, code: 'OSUSR_K3X_FOLHA_SNTL', error: S.msg }))).code, CODE_UNLISTED);
+});
+
 test('a paged refusal: the wire keeps only its small fields; the summary noted before paging keeps every problem (scan full)', async () => {
   const { pageAnswer } = await import('../ssam.mjs');
   const value = deliverOutcome({ envelope: o11Envelope() }, { trackId: 'x', work: tmp, job: S.path, taskId: null, since: 0, input: {} });

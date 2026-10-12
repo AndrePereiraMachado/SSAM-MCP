@@ -81,6 +81,23 @@ test('codes and rules: only the registries pass; an UPPER_SNAKE word of the cust
   assert.doesNotMatch(JSON.stringify(kept), /SNTL|ACME|FOLHA|folha/);
 });
 
+// Re-check of the review (2026-10-12): the codes the product composes at runtime (<VERB>_INVALID of the kernel's preflight,
+// <OP>_REFUSED of the integration ops, <STAGE>_FAILED and the gates of the shaper, PUBLISH_<GATE>) and the codes of
+// ssam_query_test are in the registry, so a refusal keeps them apart instead of folding them into CODE_UNLISTED.
+test('composed codes and the query-test codes are listed: a refusal keeps SET_INVALID and REST_REFUSED apart', () => {
+  for (const code of ['SET_INVALID', 'CREATE_INVALID', 'SPEC_INVALID', 'SCREEN_INVALID', 'REST_INVALID', 'PROTOTYPE_INVALID', 'AGENT_INVALID', 'DELETE_INVALID',
+    'HTML_VISUAL_INVALID', 'OP_INVALID', 'REST_REFUSED', 'REST_EXPOSE_REFUSED', 'SOAP_REFUSED', 'KERNEL_FAILED', 'RUNNER_FAILED', 'PUBLISH_WAIT_FAILED',
+    'UPLOAD_REQUEST_FAILED', 'CREATE_REVISION_FAILED', 'PUBLISH_VAULT_UNAVAILABLE', 'PUBLISH_SECRET_NOT_FOUND', 'PUBLISH_AUTHORSHIP', 'QUERY_TEST_DATABASE_ERROR',
+    'QUERY_TEST_LOGIN_REQUIRED', 'QUERY_TEST_SOURCE_CHANGED', 'QUERY_TEST_NOT_QUERY', 'QUERY_TEST_MODULE_MISMATCH', 'QUERY_TEST_NATIVE_ERROR', 'QUERY_TEST_PENDING'])
+    assert.equal(codeOf(code), code, code);
+  const line = { schema: 'ssam-quality/1', kind: 'call', time: '2026-10-12T20:00:00.000Z', token: 'tok_0123456789ab', session: '0123456789ab', call: 1, tool: 'o11_deliver',
+    ms: 5, gapMs: null, ok: false, code: 'PREFLIGHT_REFUSED', class: 'refused', problems: { n: 3, byCode: { SET_INVALID: 1, SPEC_INVALID: 1, REST_REFUSED: 1 } } };
+  assert.deepEqual(sanitizeQualityLine(line, { nativeIds: native }).problems.byCode, { SET_INVALID: 1, SPEC_INVALID: 1, REST_REFUSED: 1 });
+  const query = sanitizeQualityLine({ ...line, tool: 'ssam_query_test', code: 'QUERY_TEST_DATABASE_ERROR', problems: undefined }, { nativeIds: native });
+  assert.equal(query.code, 'QUERY_TEST_DATABASE_ERROR');
+  for (const word of ['FOLHA_SNTL_INVALID', 'OSUSR_K3X_FOLHA_REFUSED', 'PUBLISH_ACME_SNTL', 'QUERY_TEST_SNTL']) assert.equal(codeOf(word), CODE_UNLISTED, word);
+});
+
 // The verb of an agent label comes only from its kind's closed list, the one the customer's agent enforces: a word that only
 // looks like a verb (the model's own text as a studio_command command) never passes, in the writer or in the reader.
 test('agent labels: a verb only from the closed list of its kind, never a verb-shaped word of the customer', () => {

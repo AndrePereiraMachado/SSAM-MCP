@@ -8,7 +8,8 @@ Cópia de `servidor/fase4` (`e7b2119b`) de `C:\Users\andre\SSAM-Hybrid-servidor`
 `server/r24-qualidade` (`fase4-24/qualidade`, `3262c49f`) só o guia do cliente muda: `docs/AGENTE-CLIENTE.md` ganha o
 parágrafo do registro de qualidade (o agente e o pacote não mudam); `01795e52` não muda nada desta caixa (o servidor
 passou a usar uma cópia das listas `ODC_COMMANDS` e `O11_METHODS` de `lib/kinds.mjs`, com teste de deriva); em `c24d468d`
-só a seção "Privacidade" do guia muda: diz exatamente o que o servidor grava (o agente e o pacote não mudam).
+só a seção "Privacidade" do guia muda: diz exatamente o que o servidor grava (o agente e o pacote não mudam);
+`1b2ce8fe` não muda nada desta caixa (só os registros do contrato no servidor).
 Esta pasta guarda os caminhos relativos do repositório antigo: os `.csproj` e os scripts resolvem daqui.
 
 ## Compilar e montar o pacote

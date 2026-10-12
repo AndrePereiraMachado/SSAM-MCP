@@ -99,9 +99,10 @@ export function codeFromText(text, { tool = null } = {}) {
   return null;
 }
 
-// The step an answer names (failed, stage, gate): BUILD_FAILED, MERGE_FAILED, BASE_DRIFT, STUDIO_BUSY.
+// The step an answer names (failed, stage, gate): BUILD_FAILED, MERGE_FAILED, BASE_DRIFT, STUDIO_BUSY. The quality registry
+// (platforms/odc/scripts/quality-registry.mjs) composes the same codes from the step and gate words of the sources with it.
 const upper = value => String(value).trim().replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '').toUpperCase();
-function stepCode(value) {
+export function stepCode(value) {
   if (!value || typeof value !== 'object') return null;
   if (typeof value.gate === 'string' && /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/.test(value.gate)) return upper(value.gate);
   for (const key of ['failed', 'stage', 'gate']) {

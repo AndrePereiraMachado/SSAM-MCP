@@ -16,7 +16,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = process.env.QUALITY_FIXTURES ?? path.join(HERE, 'fixtures', 'quality');
 const native = loadNativeIds(path.join(FIXTURES, 'catalog'), { readDir: fs.readdirSync, readFile: fs.readFileSync, join: path.join });
 const lines = text => text.split('\n').filter(Boolean);
-export const CONTRACT_SHA256 = 'cc4440f9215cec657afcd351308da55e9d66c0a60c56ba145588aba9932ad239';
+export const CONTRACT_SHA256 = 'a21d9c1efa71ece175fb5248cdb92d5a564bcd19390cded2ed9675337255157f';
 const lfSha = file => createHash('sha256').update(fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n'), 'utf8').digest('hex');
 
 test('parity (D9): the console copy of quality-line.mjs is the shared contract, byte for byte (CRLF read as LF)', () => {
@@ -88,6 +88,23 @@ test('codes and rules: only the registries pass; an UPPER_SNAKE word of the cust
   assert.deepEqual(kept.problems.withPatch, { CODE_UNLISTED: 1 });
   assert.deepEqual(kept.norm, { n: 2, byRule: { RULE_UNLISTED: 1, SORT_KEYS_SPLIT: 1 } });
   assert.doesNotMatch(JSON.stringify(kept), /SNTL|ACME|FOLHA|folha/);
+});
+
+// Re-check of the review (2026-10-12): the codes the product composes at runtime (<VERB>_INVALID of the kernel's preflight,
+// <OP>_REFUSED of the integration ops, <STAGE>_FAILED and the gates of the shaper, PUBLISH_<GATE>) and the codes of
+// ssam_query_test are in the registry, so a refusal keeps them apart instead of folding them into CODE_UNLISTED.
+test('composed codes and the query-test codes are listed: a refusal keeps SET_INVALID and REST_REFUSED apart', () => {
+  for (const code of ['SET_INVALID', 'CREATE_INVALID', 'SPEC_INVALID', 'SCREEN_INVALID', 'REST_INVALID', 'PROTOTYPE_INVALID', 'AGENT_INVALID', 'DELETE_INVALID',
+    'HTML_VISUAL_INVALID', 'OP_INVALID', 'REST_REFUSED', 'REST_EXPOSE_REFUSED', 'SOAP_REFUSED', 'KERNEL_FAILED', 'RUNNER_FAILED', 'PUBLISH_WAIT_FAILED',
+    'UPLOAD_REQUEST_FAILED', 'CREATE_REVISION_FAILED', 'PUBLISH_VAULT_UNAVAILABLE', 'PUBLISH_SECRET_NOT_FOUND', 'PUBLISH_AUTHORSHIP', 'QUERY_TEST_DATABASE_ERROR',
+    'QUERY_TEST_LOGIN_REQUIRED', 'QUERY_TEST_SOURCE_CHANGED', 'QUERY_TEST_NOT_QUERY', 'QUERY_TEST_MODULE_MISMATCH', 'QUERY_TEST_NATIVE_ERROR', 'QUERY_TEST_PENDING'])
+    assert.equal(codeOf(code), code, code);
+  const line = { schema: 'ssam-quality/1', kind: 'call', time: '2026-10-12T20:00:00.000Z', token: 'tok_0123456789ab', session: '0123456789ab', call: 1, tool: 'o11_deliver',
+    ms: 5, gapMs: null, ok: false, code: 'PREFLIGHT_REFUSED', class: 'refused', problems: { n: 3, byCode: { SET_INVALID: 1, SPEC_INVALID: 1, REST_REFUSED: 1 } } };
+  assert.deepEqual(sanitizeQualityLine(line, { nativeIds: native }).problems.byCode, { SET_INVALID: 1, SPEC_INVALID: 1, REST_REFUSED: 1 });
+  const query = sanitizeQualityLine({ ...line, tool: 'ssam_query_test', code: 'QUERY_TEST_DATABASE_ERROR', problems: undefined }, { nativeIds: native });
+  assert.equal(query.code, 'QUERY_TEST_DATABASE_ERROR');
+  for (const word of ['FOLHA_SNTL_INVALID', 'OSUSR_K3X_FOLHA_REFUSED', 'PUBLISH_ACME_SNTL', 'QUERY_TEST_SNTL']) assert.equal(codeOf(word), CODE_UNLISTED, word);
 });
 
 // The verb of an agent label comes only from its kind's closed list, the one the customer's agent enforces: a word that only

@@ -4,8 +4,8 @@ Servidor MCP hospedado do SSAM: `ssam serve`, hub do agente, tokens, kernels O11
 painel do dono. Cópia de `servidor/fase4` (`e7b2119b`) de `C:\Users\andre\SSAM-Hybrid-servidor`, sem edição,
 atualizada para `servidor/fase4-24` (`a415531d`, 24º envio, branch `server/r24`; antes, `fase4-22` `1fbfa377` e
 `fase4-23` `e589be22`). Na branch `server/r24-qualidade`, `fase4-24/qualidade` (`3262c49f`, depois `01795e52` com os
-verbos das chamadas ao agente só de listas fechadas e `c24d468d` com os códigos e as regras só dos registros gerados das
-fontes): o registro de qualidade `ssam-quality/1` (`docs/QUALIDADE.md`). Cada arquivo que vem da linha tem o blob da revisão (`README.md` da raiz, "De
+verbos das chamadas ao agente só de listas fechadas, `c24d468d` com os códigos e as regras só dos registros gerados das
+fontes e `1b2ce8fe` com os códigos compostos pelo produto e os de `kernel/query-test` nesses registros): o registro de qualidade `ssam-quality/1` (`docs/QUALIDADE.md`). Cada arquivo que vem da linha tem o blob da revisão (`README.md` da raiz, "De
 onde veio").
 Esta pasta é a raiz do repositório antigo: caminhos relativos, Dockerfile e compose funcionam daqui.
 

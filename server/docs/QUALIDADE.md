@@ -38,11 +38,20 @@ Um código com cara de nome (`GetColaboradorAtual`) só fica quando é um id de 
 (`kernel/catalog/verify-*.json`); senão vira `NATIVE_UNLISTED`.
 A forma `UPPER_SNAKE` também não basta (achado de privacidade de 2026-10-12: um nome de tabela do cliente, como
 `OSUSR_K3X_FOLHA`, chegava como código). O código da linha, os códigos dos problemas e as regras das normalizações só
-ficam quando estão nos registros do contrato, gerados das fontes do produto: `CODES` (toda string `UPPER_SNAKE` da
-fachada, do portal, da bridge e do builder ODC, do lançador, do agente e de `kernel/src`, mais `<FERRAMENTA>_FAILED` de
-cada ferramenta hospedada e `<PASSO>_FAILED` de cada passo) e `RULES` (as regras do `JobNormalizer` do kernel). Fora da
-lista, o valor vira `CODE_UNLISTED` ou `RULE_UNLISTED` e é contado, nunca escrito. `RPC_<número>` fica pela forma (só
-dígitos). O `op` só fica quando está nos valores das próprias ferramentas (`OPS`). O gravador e o leitor do painel aplicam
+ficam quando estão nos registros do contrato, gerados das fontes do produto: `CODES` e `RULES` (as regras do
+`JobNormalizer` do kernel). `CODES` tem:
+
+- toda string `UPPER_SNAKE` da fachada, do portal, da bridge e do builder ODC, do lançador, do agente, de `kernel/src` e
+  de `kernel/query-test` (os códigos do `ssam_query_test`, compilados nas duas bridges);
+- os códigos que o produto compõe em tempo de execução a partir de uma palavra das próprias fontes, cada um pela regra de
+  quem o compõe: `<FERRAMENTA>_FAILED` de cada ferramenta hospedada, `<PASSO>_FAILED` de cada passo, `<VERBO>_INVALID` de
+  cada verbo e operação do kernel e `OP_INVALID` (o problema genérico do preflight, `JobPreflight.cs`), `<OP>_REFUSED` das
+  operações de integração (`rest`, `rest-expose`, `soap`), o código que o formatador de respostas dá a cada palavra de
+  `failed`, `stage` e `gate` das fontes (`<PALAVRA>_FAILED`; um gate `snake_case` em maiúsculas) e `PUBLISH_<GATE>` de cada
+  gate (a publicação recusada).
+
+Fora da lista, o valor vira `CODE_UNLISTED` ou `RULE_UNLISTED` e é contado, nunca escrito. `RPC_<número>` fica pela forma
+(só dígitos). O `op` só fica quando está nos valores das próprias ferramentas (`OPS`). O gravador e o leitor do painel aplicam
 as mesmas listas. A auditoria (`audit-*.jsonl`) usa o mesmo registro para o código de erro.
 O texto de uma resposta nunca vira código: a regra que transformava `debug_<x>` em `DEBUG_<X>` vale só nas respostas do
 depurador (`ssam_debug*`, que o servidor hospedado não serve); em `odc_read` ou qualquer outra ferramenta, um nome
@@ -60,12 +69,16 @@ operação de `environment_session` no log segue a lista do kernel (`ENVIRONMENT
   nativos, os registros `CODES` e `RULES`), cópia idêntica da que o painel usa para ler; o teste de paridade confere o
   sha256.
 - `platforms/odc/scripts/quality-registry.mjs`: gera o bloco dos registros a partir das fontes. Um código ou uma regra nova
-  no produto faz `quality-registry.test.mjs` falhar até rodar `node platforms/odc/scripts/quality-registry.mjs --write`;
-  depois, o sha256 novo vai para o teste de paridade, e o contrato e as fixtures vão para as cópias do painel.
+  no produto (uma constante, um verbo, uma operação de integração, um `stage` ou um `gate`) faz `quality-registry.test.mjs`
+  falhar até rodar `node platforms/odc/scripts/quality-registry.mjs --write`; depois, o sha256 novo vai para o teste de
+  paridade, e o contrato e as fixtures vão para as cópias do painel. O mesmo teste falha quando um fonte C# compilado nas
+  bridges, no kernel ou no builder ODC (os `<Compile Include>`, os itens padrão e as referências de projeto) ou o arquivo
+  que registra uma ferramenta hospedada fica fora das pastas lidas pelo gerador.
 - `quality-record.mjs` (monta a linha, sem I/O), `quality-meter.mjs` (contexto da chamada e atribuição do tempo das
   chamadas ao agente e das execuções do kernel), `quality-recorder.mjs` (grava).
 - Testes: `tests/quality-line.test.mjs`, `quality-record.test.mjs`, `quality-meter.test.mjs`,
-  `quality-registry.test.mjs` (deriva dos registros contra as fontes e as sentinelas de uma constante nova),
+  `quality-registry.test.mjs` (deriva dos registros contra as fontes, as famílias compostas, a cobertura das pastas e as
+  sentinelas de uma constante, um verbo, um `stage` ou um `gate` novo),
   `http-server-quality.test.mjs` (inclusive uma resposta hostil cujos nomes, caminhos e expressões nunca chegam ao arquivo)
   e o teste de `onCallSettled` em `agent-hub.test.mjs` (com um `command` livre com forma de verbo, que não chega à linha
   nem ao log), mais os testes de deriva das listas fechadas contra `agent/lib/kinds.mjs` e o kernel

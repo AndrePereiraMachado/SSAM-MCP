@@ -817,8 +817,9 @@ A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensai
     `servidor/fase4-23-linux` (`b37715e1`). Conferido blob a blob: os quatro arquivos, os do worker O11 e todos os outros
     arquivos das duas caixas (fora os do SSAM-MCP) são iguais aos da linha.
   - **Registro de qualidade** (`server/r24-qualidade`): mais `fase4-24/qualidade` (`3262c49f`, sobre `a415531d`; depois
-    `01795e52`, os verbos das chamadas ao agente só de listas fechadas; e `c24d468d`, os códigos e as regras só dos
-    registros gerados das fontes), conferido do mesmo jeito: os quatro arquivos de
+    `01795e52`, os verbos das chamadas ao agente só de listas fechadas; `c24d468d`, os códigos e as regras só dos
+    registros gerados das fontes; e `1b2ce8fe`, os códigos compostos pelo produto e os de `kernel/query-test` nesses
+    registros), conferido do mesmo jeito: os quatro arquivos de
     Linux continuam iguais aos da linha.
 - O índice do `ssam_discover` e os outros caches de `/app` se perdem a cada container novo: 1 a 2 min de aquecimento
   (7.3). O índice de módulos e a cópia dos leitores ficam no volume `cache` e passam pela recriação.
