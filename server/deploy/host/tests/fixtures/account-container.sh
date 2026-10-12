@@ -4,7 +4,7 @@
 # are fakes that record their calls, python3 is a fake (the image has none) and systemd-socket-proxyd an empty file.
 #
 #   docker run --rm --network none -v <SSAM-MCP>/server/deploy:/opt/ssam/deploy:ro ubuntu:26.04 \
-#       sh /opt/ssam/deploy/host/tests/fixtures/account-container.sh fresh|collision|reuse
+#       sh /opt/ssam/deploy/host/tests/fixtures/account-container.sh fresh|collision|reuse|members|primary
 #
 # Prints every script output and one "ok" line per assertion; exits 1 at the first failed assertion.
 set -u
@@ -180,8 +180,44 @@ reuse)
     [ "$(snap)" = "$base" ] || fail "uninstall --purge mexeu na conta app"
     ok "uninstall --purge nao tocou na conta app"
     ;;
+members)
+    # An operator in the group ssam-console (to read host.json): --purge removes the user, never the operator's group.
+    useradd -M -s /usr/sbin/nologin operador 2>&1 || fail "preparo"
+    sh_run install "$D/host/install.sh"
+    [ "$RC" = 0 ] || fail "install saiu com $RC"
+    usermod -aG ssam-console operador || fail "usermod"
+    sh_run purge "$D/host/uninstall.sh" --purge
+    [ "$RC" = 0 ] || fail "uninstall --purge saiu com $RC"
+    has purge "+ userdel ssam-console"
+    has purge "mantido o grupo ssam-console: tem outros membros (operador)"
+    hasnt purge "groupdel"
+    [ -z "$(getent passwd 10001)" ] || fail "o usuario ssam-console ficou"
+    [ "$(getent group 10001)" = "ssam-console:x:10001:operador" ] || fail "getent group 10001: $(getent group 10001)"
+    id -nG operador | tr ' ' '\n' | grep -qx ssam-console || fail "operador saiu do grupo: $(id -nG operador)"
+    ok "--purge apagou o usuario e manteve o grupo com o operador dentro"
+    ;;
+primary)
+    # ssam-console on uid 10001 whose primary group is another ssam-console (gid 999): install.sh reuses it, and
+    # --purge must not run userdel (shadow's userdel would take the group of gid 999 along).
+    { groupadd -g 999 ssam-console && groupadd -g 10001 app \
+        && useradd -u 10001 -g 999 -M -s /usr/sbin/nologin ssam-console; } 2>&1 || fail "preparo"
+    base=$(snap)
+    sh_run install "$D/host/install.sh"
+    [ "$RC" = 0 ] || fail "install saiu com $RC"
+    has install "existe  grupo app (gid 10001)"
+    has install "existe  usuario ssam-console (uid 10001)"
+    [ "$(snap)" = "$base" ] || fail "install mudou as contas"
+    sh_run purge "$D/host/uninstall.sh" --purge
+    [ "$RC" = 0 ] || fail "uninstall --purge saiu com $RC"
+    has purge "mantido o usuario ssam-console (uid 10001): no /etc/passwd tem uid 10001 e grupo principal 999"
+    has purge "mantido o grupo app (gid 10001): nao e o ssam-console do install.sh"
+    hasnt purge "userdel"
+    hasnt purge "groupdel"
+    [ "$(snap)" = "$base" ] || fail "uninstall --purge mexeu nas contas"
+    ok "--purge nao tocou no ssam-console de outro grupo principal nem no grupo ssam-console 999"
+    ;;
 *)
-    fail "cenario desconhecido: ${1:-} (fresh, collision ou reuse)"
+    fail "cenario desconhecido: ${1:-} (fresh, collision, reuse, members ou primary)"
     ;;
 esac
 echo "OK cenario $1"

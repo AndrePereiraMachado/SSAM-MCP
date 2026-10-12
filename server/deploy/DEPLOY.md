@@ -882,9 +882,11 @@ sh host/install.sh --with-crons
   useradd -r -u 10001 -g 10001 -M -d /nonexistent -s /usr/sbin/nologin -c ssam-console-proxy ssam-console
   ```
 
-  O `useradd` avisa que 10001 passa de `SYS_UID_MAX` (999): é esperado. Se o nome `ssam-console` já existe com outro
-  uid ou gid, a verificação falha e nada muda. Nenhum outro usuário ou grupo é tocado. Quando cria a conta, o
-  `install.sh` também roda `systemctl reset-failed` no proxy antes de ligar o socket. Rodar de novo não muda a conta.
+  O `useradd` avisa que 10001 passa de `SYS_UID_MAX` (999): é esperado. As consultas passam pelo `getent`, então
+  contam também contas de LDAP, sssd ou userdb. Se for preciso criar o grupo (ou o usuário) e o nome `ssam-console` já
+  existir com outro gid (ou uid), a verificação falha e nada muda. Nenhum outro usuário ou grupo é tocado. Quando cria
+  a conta, o `install.sh` também roda `systemctl reset-failed` no proxy antes de ligar o socket. Rodar de novo não
+  muda a conta.
 - Cria `/var/lib/ssam-console/{host,collector,state,sock}` com os donos certos (o painel roda como uid 10001), copia o
   `collect.py` para `/usr/local/lib/ssam-console`, grava `/etc/ssam-console/collector.conf` (só se não existir; um
   re-install nunca o sobrescreve), instala e liga `ssam-console-collect.timer` e `ssam-console-proxy.socket`, roda o
@@ -1064,10 +1066,14 @@ sh host/uninstall.sh --crons                           # também os crons de bac
 
 - `--dry-run` mostra o que faria. O `--purge` recusa enquanto o container `ssam-console` roda.
 - O `console-audit.jsonl` fica no volume de estado, e os backups ficam onde estão.
-- Sem `--purge`, o usuário e o grupo `ssam-console` ficam. O `--purge` apaga os dois só se forem os do `install.sh`
-  (nome `ssam-console` com uid e gid 10001) e se nenhum processo rodar como uid 10001 depois de parar o proxy. O
-  `ssam-server` e o painel rodam como 10001 nos containers: com eles no ar, a conta fica e o script diz por quê. Um
-  uid ou gid 10001 com outro nome nunca é apagado. No Ubuntu, o `userdel` já leva o grupo de mesmo nome.
+- Sem `--purge`, o usuário e o grupo `ssam-console` ficam. O `--purge` apaga só os do `install.sh`: o usuário
+  `ssam-console` do `/etc/passwd` com uid 10001 e grupo principal 10001, e o grupo `ssam-console` do `/etc/group` com
+  gid 10001. Um `ssam-console` de LDAP, sssd ou userdb, ou com outro grupo principal, fica. Um uid ou gid 10001 com
+  outro nome nunca é apagado.
+- O usuário fica se algum processo rodar como uid 10001 depois de parar o proxy. O `ssam-server` e o painel rodam como
+  10001 nos containers: com eles no ar, a conta fica e o script diz por quê.
+- O grupo fica se tiver outros membros (por exemplo, um operador posto nele para ler o `host.json`) ou se for o grupo
+  principal de outro usuário. No Ubuntu, o `userdel` já leva o grupo junto quando ninguém mais o usa.
 
 ### 15.10 Problemas
 

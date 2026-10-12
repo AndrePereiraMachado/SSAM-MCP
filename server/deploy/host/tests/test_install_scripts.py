@@ -2,7 +2,8 @@
 #   - DryRunTests: --dry-run runs the read-only checks, prints every change with the SSAM_CONSOLE_ROOT prefix, changes
 #     nothing and runs no mutating command (systemctl, chown, install, curl are stubs that record their calls).
 #   - AccountTests: the proxy account (ssam-console-proxy.service runs as User=10001 Group=10001; DEPLOY.md 15.1, 15.9,
-#     15.10). getent reads a fake passwd/group; groupadd, useradd, userdel and groupdel record their calls and change
+#     15.10). getent reads a fake passwd/group (plus *.remote, another NSS source that "getent -s files" skips);
+#     groupadd, useradd, userdel (with shadow's USERGROUPS_ENAB rules) and groupdel record their calls and change
 #     those files; pgrep reports $FAKE_PROCS processes; id -u says 0 where a test runs as "root".
 #   - ContainerTests (opt-in, Docker): install.sh and uninstall.sh run for real as root in an Ubuntu container
 #     (fixtures/account-container.sh): SSAM_TEST_DOCKER_IMAGE=ubuntu:26.04, SSAM_TEST_DOCKER_LOG=<dir> keeps the outputs.
@@ -33,12 +34,18 @@ exit 0
 '''
 # The account tools, on a fake passwd and group in $FAKE_ETC. getent and pgrep only read and record nothing.
 FAKES = {
+    # The local files are $FAKE_ETC/passwd and group; passwd.remote and group.remote are another NSS source (LDAP,
+    # sssd or userdb on a real host), seen by a plain lookup and not by "getent -s files".
     'getent': '''#!/bin/sh
+files_only=0
+if [ "$1" = -s ]; then [ "$2" = files ] || exit 1; files_only=1; shift 2; fi
 f="$FAKE_ETC/$1"
 [ -f "$f" ] || exit 2
-if [ $# -lt 2 ]; then cat "$f"; exit 0; fi
+src=$f
+if [ "$files_only" = 0 ] && [ -f "$f.remote" ]; then src="$f $f.remote"; fi
+if [ $# -lt 2 ]; then cat $src; exit 0; fi
 case "$2" in ''|*[!0-9]*) col=1 ;; *) col=3 ;; esac
-awk -F: -v k="$2" -v c="$col" '$c == k { print; found = 1; exit } END { exit !found }' "$f" || exit 2
+awk -F: -v k="$2" -v c="$col" '$c == k { print; found = 1; exit } END { exit !found }' $src || exit 2
 ''',
     'groupadd': '''#!/bin/sh
 echo "groupadd $*" >> "$STUB_LOG"
@@ -69,12 +76,24 @@ echo "$name:x:$uid:$gid:$comment:$home:$shell" >> "$FAKE_ETC/passwd"
 ''',
     'userdel': '''#!/bin/sh
 echo "userdel $*" >> "$STUB_LOG"
-awk -F: -v n="$1" '$1 == n { f = 1 } END { exit !f }' "$FAKE_ETC/passwd" \\
+if [ -n "${FAKE_USERDEL_FAIL:-}" ]; then
+    echo "userdel: user $1 is currently used by process 4000" >&2; exit "$FAKE_USERDEL_FAIL"
+fi
+P="$FAKE_ETC/passwd"; G="$FAKE_ETC/group"
+ugid=$(awk -F: -v n="$1" '$1 == n { print $4; f = 1 } END { exit !f }' "$P") \\
     || { echo "userdel: user '$1' does not exist" >&2; exit 6; }
-awk -F: -v n="$1" '$1 != n' "$FAKE_ETC/passwd" > "$FAKE_ETC/passwd.new" && mv "$FAKE_ETC/passwd.new" "$FAKE_ETC/passwd"
-# USERGROUPS_ENAB yes (Ubuntu's default): the group with the user's name goes too. FAKE_USERGROUPS=0 keeps it.
+awk -F: -v n="$1" '$1 != n' "$P" > "$P.new" && mv "$P.new" "$P"
+# The user leaves every member list.
+awk -F: -v OFS=: -v n="$1" '{ k = split($4, m, ","); s = ""
+    for (i = 1; i <= k; i++) if (m[i] != n) s = s (s == "" ? "" : ",") m[i]
+    $4 = s; print }' "$G" > "$G.new" && mv "$G.new" "$G"
+# USERGROUPS_ENAB yes (Ubuntu's default), as shadow's userdel does it: the group named like the user goes too, only
+# when it is the user's primary group, has no other member and is no other user's primary group. FAKE_USERGROUPS=0
+# keeps it.
 [ "${FAKE_USERGROUPS:-1}" = 1 ] || exit 0
-awk -F: -v n="$1" '$1 != n' "$FAKE_ETC/group" > "$FAKE_ETC/group.new" && mv "$FAKE_ETC/group.new" "$FAKE_ETC/group"
+awk -F: -v n="$1" -v g="$ugid" '$1 == n && $3 == g && $4 == "" { f = 1 } END { exit !f }' "$G" || exit 0
+if awk -F: -v g="$ugid" '$4 == g { f = 1 } END { exit !f }' "$P"; then exit 0; fi
+awk -F: -v n="$1" '$1 != n' "$G" > "$G.new" && mv "$G.new" "$G"
 ''',
     'groupdel': '''#!/bin/sh
 echo "groupdel $*" >> "$STUB_LOG"
@@ -197,6 +216,11 @@ class ScriptCase(unittest.TestCase):
         self.write(os.path.join(self.etc, 'passwd'), BASE_PASSWD + passwd)
         self.write(os.path.join(self.etc, 'group'), BASE_GROUP + group)
 
+    def set_remote_accounts(self, passwd='', group=''):
+        """Entries of another NSS source (LDAP, sssd, userdb): getent sees them, the local files do not have them."""
+        self.write(os.path.join(self.etc, 'passwd.remote'), passwd)
+        self.write(os.path.join(self.etc, 'group.remote'), group)
+
     def accounts(self):
         result = []
         for name in ('passwd', 'group'):
@@ -218,10 +242,12 @@ class ScriptCase(unittest.TestCase):
         else:
             full.pop('SSAM_CONSOLE_ROOT', None)
         full.update(env or {})
-        # /usr/bin:/bin: Git for Windows' sh started from a Windows process does not have its own tools on PATH.
-        wrapper = 'PATH="$1:/usr/bin:/bin:$PATH"; export PATH; chmod +x "$1"/*; shift; exec sh "$@"'
-        proc = subprocess.run([SH, '-c', wrapper, '_', self.posix(self.stubs), script] + list(args), env=full,
-                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120, check=False)
+        # /usr/bin:/bin: Git for Windows' sh started from a Windows process does not have its own tools on PATH. The
+        # scripts run under SH itself (SSAM_TEST_SH=<Git>\usr\bin\dash.exe tests them with dash on Windows too).
+        wrapper = 'PATH="$1:/usr/bin:/bin:$PATH"; export PATH; chmod +x "$1"/*; sh_bin=$2; shift 2; exec "$sh_bin" "$@"'
+        sh_posix = self.posix(os.path.dirname(SH)) + '/' + os.path.basename(SH)
+        proc = subprocess.run([SH, '-c', wrapper, '_', self.posix(self.stubs), sh_posix, script] + list(args),
+                              env=full, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120, check=False)
         return proc.returncode, proc.stdout.decode('utf-8', 'replace')
 
     def stub_calls(self):
@@ -508,7 +534,112 @@ class AccountTests(ScriptCase):
         self.assertEqual(code, 0, out)
         self.assertIn('mantido o usuario ssam-console: 3 processo(s) rodam como uid 10001', out)
         self.assertIn('mantido o grupo ssam-console: e o grupo principal de ssam-console', out)
+        self.assertNotIn('(dry-run: as unidades nao foram paradas', out)
         self.assertEqual(self.account_calls(), [])
+        self.assertEqual(self.accounts(), before)
+        # The dry-run counts before the units stop: it says that the proxy still running counts too.
+        code, out = self.run_script(UNINSTALL, '--purge', '--dry-run', env={'FAKE_PROCS': '1'})
+        self.assertEqual(code, 0, out)
+        self.assertIn('mantido o usuario ssam-console: 1 processo(s) rodam como uid 10001', out)
+        self.assertIn('(dry-run: as unidades nao foram paradas, entao o ssam-console-proxy no ar conta aqui)', out)
+        self.assertEqual(self.account_calls(), [])
+        self.assertEqual(self.accounts(), before)
+
+    def test_uninstall_purge_keeps_a_group_with_other_members(self):
+        # An operator added to ssam-console (to read host.json, 0640 root:10001) stays in it: shadow's userdel leaves
+        # a group with other members, and groupdel must not take it either (that would change the operator too).
+        self.as_root()
+        group = 'ssam-console:x:10001:ssam-console,ubuntu\n'
+        self.set_accounts(CREATED_USER, group)
+        code, out = self.run_script(UNINSTALL, '--purge', '--dry-run')
+        self.assertEqual(code, 0, out)
+        self.assertIn('(dry-run) userdel ssam-console', out)
+        self.assertIn('mantido o grupo ssam-console: tem outros membros (ubuntu)', out)
+        self.assertNotIn('groupdel', out)
+        self.assertEqual(self.account_calls(), [])
+        code, out = self.run_script(UNINSTALL, '--purge')
+        self.assertEqual(code, 0, out)
+        self.assertIn('+ userdel ssam-console', out)
+        self.assertIn('mantido o grupo ssam-console: tem outros membros (ubuntu)', out)
+        self.assertEqual(self.account_calls(), ['userdel ssam-console'])
+        self.assertEqual(self.accounts(), (BASE_PASSWD, BASE_GROUP + 'ssam-console:x:10001:ubuntu\n'))
+
+    def test_uninstall_purge_keeps_a_ssam_console_install_did_not_make(self):
+        self.as_root()
+        cases = (
+            # ssam-console on uid 10001 with another primary group (install.sh reused it): userdel would take the
+            # group ssam-console of gid 999 along.
+            ('ssam-console:x:10001:999::/home/ssam-console:/usr/sbin/nologin\n', 'ssam-console:x:999:\napp:x:10001:\n',
+             '', '',
+             ('mantido o usuario ssam-console (uid 10001): no /etc/passwd tem uid 10001 e grupo principal 999',
+              'mantido o grupo app (gid 10001): nao e o ssam-console do install.sh')),
+            # the user and the group of another NSS source (LDAP, sssd, userdb): install.sh never wrote them.
+            ('', '', CREATED_USER, CREATED_GROUP,
+             ('mantido o usuario ssam-console (uid 10001): nao esta no /etc/passwd (vem de outra fonte do NSS)',
+              'mantido o grupo ssam-console: nao esta no /etc/group (vem de outra fonte do NSS)')),
+            # a local group ssam-console of gid 10001 next to a user ssam-console of gid 10001 that is not local.
+            ('', CREATED_GROUP, CREATED_USER, '',
+             ('mantido o usuario ssam-console (uid 10001): nao esta no /etc/passwd (vem de outra fonte do NSS)',
+              'mantido o grupo ssam-console: e o grupo principal de ssam-console')),
+        )
+        for passwd, group, remote_passwd, remote_group, expected in cases:
+            self.set_accounts(passwd, group)
+            self.set_remote_accounts(remote_passwd, remote_group)
+            before = self.accounts()
+            for args in (('--purge', '--dry-run'), ('--purge',)):
+                code, out = self.run_script(UNINSTALL, *args)
+                self.assertEqual(code, 0, out)
+                for line in expected:
+                    self.assertIn(line, out)
+                self.assertNotIn('userdel', out)
+                self.assertNotIn('groupdel', out)
+                self.assertEqual(self.account_calls(), [], out)
+                self.assertEqual(self.accounts(), before)
+
+    def test_uninstall_purge_reports_a_failed_userdel(self):
+        self.as_root()
+        self.set_accounts(CREATED_USER, CREATED_GROUP)
+        before = self.accounts()
+        code, out = self.run_script(UNINSTALL, '--purge', env={'FAKE_USERDEL_FAIL': '8'})
+        self.assertEqual(code, 1, out)
+        self.assertIn('(userdel falhou; usuario mantido)', out)
+        self.assertIn('mantido o grupo ssam-console: e o grupo principal de ssam-console', out)
+        self.assertEqual(self.account_calls(), ['userdel ssam-console'])
+        self.assertEqual(self.accounts(), before)
+
+    def test_uninstall_purge_without_pgrep_keeps_the_user(self):
+        os.remove(os.path.join(self.stubs, 'pgrep'))
+        self.as_root()
+        self.set_accounts(CREATED_USER, CREATED_GROUP)
+        code, out = self.run_script(UNINSTALL, '--purge')
+        if 'pgrep nao encontrado' not in out:
+            self.skipTest('this sh has its own pgrep')  # Git for Windows ships none; a Linux host does
+        self.assertEqual(code, 0, out)
+        self.assertIn('mantido o usuario ssam-console: pgrep nao encontrado', out)
+        self.assertEqual(self.account_calls(), [])
+
+    def test_install_sees_the_accounts_of_other_nss_sources(self):
+        # uid and gid 10001 only in another NSS source: systemd resolves them through NSS too, so they are reused.
+        self.set_remote_accounts(CREATED_USER, CREATED_GROUP)
+        code, out = self.run_script(INSTALL, '--dry-run')
+        self.assertEqual(code, 0, out)
+        self.assertIn('ok     ' + CHECK, out)
+        self.assertIn('existe  grupo ssam-console (gid 10001)', out)
+        self.assertIn('existe  usuario ssam-console (uid 10001)', out)
+        self.assertNotIn('groupadd', out)
+        self.assertNotIn('useradd', out)
+        # The name ssam-console taken there by another id: useradd and groupadd would refuse it, so the check fails
+        # before any change.
+        self.as_root()
+        self.set_remote_accounts('ssam-console:x:5000:5000::/home/x:/bin/sh\n', 'ssam-console:x:5000:\n')
+        before = self.accounts()
+        code, out = self.run_script(INSTALL)
+        self.assertEqual(code, 1, out)
+        self.assertIn('FALHA  ' + CHECK, out)
+        self.assertIn('- o grupo ssam-console ja existe com o gid 5000', out)
+        self.assertIn('- o usuario ssam-console ja existe com o uid 5000', out)
+        self.assertIn('nada foi alterado', out)
+        self.assert_no_mutation()
         self.assertEqual(self.accounts(), before)
 
 
@@ -542,6 +673,12 @@ class ContainerTests(unittest.TestCase):
 
     def test_existing_uid_is_reused_and_kept(self):
         self.scenario('reuse')
+
+    def test_purge_keeps_a_group_with_other_members(self):
+        self.scenario('members')
+
+    def test_purge_keeps_a_ssam_console_of_another_primary_group(self):
+        self.scenario('primary')
 
 
 if __name__ == '__main__':

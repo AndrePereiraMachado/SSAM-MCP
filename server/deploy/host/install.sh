@@ -10,7 +10,8 @@
 #   - makes sure uid and gid 10001 exist on the host: ssam-console-proxy.service runs as User=10001 Group=10001 and
 #     systemd refuses an id the host does not know (status 217/USER). An existing uid or gid 10001 is used under any
 #     name; a missing one is created as the system group and user ssam-console (no home, nologin, password locked).
-#     The name ssam-console already taken by another id fails the checks. No other account is ever changed;
+#     Lookups go through getent (NSS: LDAP, sssd and userdb count too). The name ssam-console already taken by another
+#     id, when that id has to be created, fails the checks. No other account is ever changed;
 #   - creates /var/lib/ssam-console/{host,collector,state,sock} with their owners and modes (the console runs as 10001);
 #   - copies collect.py to /usr/local/lib/ssam-console (a root-run script never changes silently with an archive) and
 #     collector.conf.example to /etc/ssam-console/collector.conf only when that file is absent;
