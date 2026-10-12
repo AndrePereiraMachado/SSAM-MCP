@@ -3,6 +3,9 @@
 // cadences (server.log 2 s; audit, access alerts, host.json and the token store 5 s; alerts 10 s; checkpoint 10 s when
 // dirty; usage day files 30 s; workspaces 10 min) and writes the checkpoint atomically on stop. server.mjs owns the
 // process (listening, signals); tests drive an instance directly with an injected clock.
+// The quality records (DESIGN-QUALIDADE 4.1) have their own reader (quality-YYYYMMDD.jsonl, with the audit every 5 s),
+// their own day files (/state/agg-quality) and their own cold start: an older checkpoint without them, or a missing
+// agg-quality folder, replays only the quality files and never rebuilds the usage.
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -14,7 +17,9 @@ import { createHost } from './host.mjs';
 import { createGate, createHttp } from './http.mjs';
 import { createLicenses } from './licenses.mjs';
 import { createLive } from './live.mjs';
-import { createAccessAlertsReader, createAuditReader, createServerLogReader, rotatedFiles } from './readers.mjs';
+import { loadNativeIds, MAX_LINE_BYTES as QUALITY_LINE_BYTES } from './quality-line.mjs';
+import { createQuality, QUALITY_DIR } from './quality.mjs';
+import { createAccessAlertsReader, createAuditReader, createDailyReader, createServerLogReader, rotatedFiles } from './readers.mjs';
 import { createMinutes } from './recent.mjs';
 import { createRoutes } from './routes.mjs';
 import { createSources } from './sources.mjs';
@@ -24,7 +29,9 @@ import { createTz } from './tz.mjs';
 import { createUsage } from './usage.mjs';
 import { createViews } from './views.mjs';
 import { createDataViews } from './views-data.mjs';
+import { createQualityViews } from './views-quality.mjs';
 import { createWorkspaces } from './workspaces.mjs';
+import { DEFAULT_KERNEL_CATALOG } from './config.mjs';
 
 export const CHECKPOINT_SCHEMA = 'ssam-console-checkpoint/1';
 const CHECKPOINT = 'checkpoint.json';
@@ -55,6 +62,12 @@ export async function createConsole({ config, now = Date.now, log = () => {}, wo
   let lossAt = null;
   const progress = { total: 0, done: 0, file: null };
   let indexing = 'ready';
+  // Quality records: the native verification ids of the image's kernel catalogs (fail closed: none -> NATIVE_UNLISTED),
+  // the aggregates and their own progress while their cold start replays.
+  const nativeIds = loadNativeIds(config.kernelCatalog ?? DEFAULT_KERNEL_CATALOG, { readDir: fs.readdirSync, readFile: fs.readFileSync, join: path.join });
+  const quality = createQuality({ tz, state, now, nativeIds });
+  const qProgress = { total: 0, done: 0, file: null };
+  let qIndexing = 'ready';
 
   // ---- readers
   function problem(file, code) {
@@ -63,7 +76,8 @@ export async function createConsole({ config, now = Date.now, log = () => {}, wo
     log({ console: 'reader-problem', file: cap(file, 80), code: cap(code, 20) });
   }
   function ok(name) {
-    for (const k of Object.keys(readProblems)) if (k === name || (name === 'audit' && k.startsWith('audit')) || (name === 'server.log' && k.startsWith('server.log'))) delete readProblems[k];
+    const family = name === 'audit' || name === 'quality' || name === 'server.log';
+    for (const k of Object.keys(readProblems)) if (k === name || (family && k.startsWith(name))) delete readProblems[k];
   }
   function onLoss() {
     lossAt = iso(now());
@@ -85,12 +99,19 @@ export async function createConsole({ config, now = Date.now, log = () => {}, wo
   const serverLog = createServerLogReader({ dir, onRecord: e => live.apply(e), onLoss, onProblem: problem, onOk: ok, progress });
   const audit = createAuditReader({ dir, onRecord: onAudit, onProblem: problem, onOk: ok, now, progress });
   const access = createAccessAlertsReader({ dir, onRecord: l => sources.addAccess(l), onReset: () => sources.resetAccess(), onProblem: problem, progress });
+  // quality-YYYYMMDD.jsonl: lines above 4096 bytes are skipped before any parse; every parsed line goes through the
+  // contract (quality.addRecord: sanitizeQualityLine with the native ids; what returns null is dropped and counted).
+  const qualityReader = createDailyReader({ dir, prefix: 'quality', maxLineBytes: QUALITY_LINE_BYTES, onRecord: r => quality.addRecord(r),
+    onProblem: problem, onOk: ok, now, progress: qProgress });
 
   // ---- checkpoint
+  // The quality part (its reader's files, the open chains and the dirty quality days) is left out while its cold start
+  // replays: a restart in the middle replays it again instead of resuming from half a rebuild.
+  const qualityReady = () => qIndexing !== 'running';
   const value = () => ({ schema: CHECKPOINT_SCHEMA,
-    readers: { serverLog: serverLog.checkpoint(), audit: audit.checkpoint(), access: access.checkpoint() },
+    readers: { serverLog: serverLog.checkpoint(), audit: audit.checkpoint(), access: access.checkpoint(), ...(qualityReady() ? { quality: qualityReader.checkpoint() } : {}) },
     live: live.toJSON(), events: events.toJSON(), host: host.toJSON(), sources: sources.toJSON(), auditMinutes: auditMinutes.toJSON(),
-    usagePending: usage.pending(), lossAt });
+    usagePending: usage.pending(), ...(qualityReady() ? { quality: quality.toJSON() } : {}), lossAt });
   let written = null;
   function writeCheckpoint(force = false) {
     if (indexing === 'running') return false;
@@ -101,14 +122,26 @@ export async function createConsole({ config, now = Date.now, log = () => {}, wo
     written = text;
     return true;
   }
-  function flushDays() { if (indexing !== 'running') { usage.flushDays(); writeCheckpoint(); } }
+  // Day files and the checkpoint go together, so the positions in the checkpoint always match what the day files hold.
+  function flushDays() {
+    if (indexing === 'running') return;
+    usage.flushDays();
+    if (qualityReady()) quality.flushDays();
+    writeCheckpoint();
+  }
 
   const saved = state.readJson(CHECKPOINT);
   const validSaved = saved && saved.schema === CHECKPOINT_SCHEMA;
   const cold = !validSaved || !state.exists('agg');
+  const qualityCold = !validSaved || !saved.readers?.quality || !saved.quality || !state.exists(QUALITY_DIR);
   state.ensureDir('agg');
+  state.ensureDir(QUALITY_DIR);
   state.ensureDir('series');
   if (validSaved) host.restore(saved.host);
+  if (!qualityCold) {
+    qualityReader.restore(saved.readers.quality);
+    quality.restore(saved.quality);
+  }
   if (!cold) {
     serverLog.restore(saved.readers?.serverLog);
     audit.restore(saved.readers?.audit);
@@ -131,23 +164,23 @@ export async function createConsole({ config, now = Date.now, log = () => {}, wo
     for (const n of names) if (/^audit-\d{8}\.jsonl(\.gz)?$/.test(n)) total += size(n);
     return total;
   }
-  async function untilCaughtUp(tick) {
+  async function untilCaughtUp(tick, prog = progress) {
     for (let i = 0; i < 1000000; i++) {
-      const before = progress.done;
+      const before = prog.done;
       if (await tick()) return;
-      if (progress.done === before) return;
+      if (prog.done === before) return;
     }
   }
+  // Each phase on its own: a file that cannot be read in one never skips the replay of the others.
+  const phase = async (name, fn) => {
+    try { await fn(); } catch (error) { log({ console: 'cold-start-error', phase: name, code: cap(error?.code ?? error?.name ?? 'ERRO', 40) }); }
+  };
   // Cold start (3.2): every retained file through the same dispatchers, in the background, views answer meanwhile.
   async function coldStart() {
     indexing = 'running';
     progress.total = retainedBytes(); progress.done = 0; progress.file = null;
     usage.beginRebuild();
     replay = { log: createEvents(), audit: createEvents() };
-    // Each phase on its own: a file that cannot be read in one never skips the replay of the others.
-    const phase = async (name, fn) => {
-      try { await fn(); } catch (error) { log({ console: 'cold-start-error', phase: name, code: cap(error?.code ?? error?.name ?? 'ERRO', 40) }); }
-    };
     try {
       await phase('server.log', () => serverLog.coldStart());
       progress.file = 'auditoria';
@@ -161,11 +194,48 @@ export async function createConsole({ config, now = Date.now, log = () => {}, wo
       indexing = 'ready';
       progress.file = null;
       usage.flushDays();
+      if (qualityReady()) quality.flushDays();
       writeCheckpoint(true);
     }
   }
   const indexingView = () => (indexing === 'running'
     ? { state: 'running', progress: progress.total ? Math.min(0.99, Math.round((progress.done / progress.total) * 100) / 100) : 0, detail: progress.file }
+    : { state: 'ready', progress: 1, detail: null });
+
+  // ---- quality (DESIGN-QUALIDADE 4.1, 4.2)
+  const qualityFiles = () => { let names = []; try { names = fs.readdirSync(dir); } catch { /* none */ } return names.filter(n => /^quality-\d{8}\.jsonl(\.gz)?$/.test(n)); };
+  const qualityBytes = () => qualityFiles().reduce((s, n) => { try { return s + fs.statSync(path.join(dir, n)).size; } catch { return s; } }, 0);
+  // The idle close needs a clock: the console's own once the reader is at the end of every file, else the newest line
+  // read (a backlog never closes a session whose next lines are still unread), and never ahead of the console's clock.
+  const sweepClock = caughtUp => (caughtUp ? now() : Math.min(quality.lineClock, now()));
+  async function tickQuality() {
+    if (!qualityReady()) return;
+    const caughtUp = await qualityReader.tick();
+    quality.sweep(sweepClock(caughtUp));
+  }
+  // The quality cold start: every retained quality-* file replayed as its own phase; each day is emptied the first time
+  // a line reaches it; the usage is not touched.
+  async function coldStartQuality() {
+    qIndexing = 'running';
+    qProgress.total = qualityBytes(); qProgress.done = 0; qProgress.file = 'registros de qualidade';
+    quality.beginRebuild();
+    qualityReader.restore(null);
+    try {
+      await phase('quality', () => untilCaughtUp(async () => {
+        const caughtUp = await qualityReader.tick();
+        quality.sweep(Math.min(quality.lineClock, now()));
+        return caughtUp;
+      }, qProgress));
+    } finally {
+      quality.endRebuild();
+      qIndexing = 'ready';
+      qProgress.file = null;
+      quality.sweep(now());
+      if (indexing !== 'running') { quality.flushDays(); writeCheckpoint(true); }
+    }
+  }
+  const qualityIndexingView = () => (qIndexing === 'running'
+    ? { state: 'running', progress: qProgress.total ? Math.min(0.99, Math.round((qProgress.done / qProgress.total) * 100) / 100) : 0, detail: qProgress.file }
     : { state: 'ready', progress: 1, detail: null });
 
   // ---- alert context (section 5)
@@ -207,6 +277,7 @@ export async function createConsole({ config, now = Date.now, log = () => {}, wo
   const tickLog = safe('server.log', async () => { if (indexing !== 'running') await serverLog.tick(); });
   const tickFiles = safe('files', async () => {
     if (indexing !== 'running') { await audit.tick(); await access.tick(); }
+    await tickQuality();
     host.poll();
     licenses.detectExternal();
   });
@@ -218,7 +289,9 @@ export async function createConsole({ config, now = Date.now, log = () => {}, wo
   // ---- HTTP
   const views = createViews({ config, tz, now, startedAt, licenses, live, usage, host, sources, workspaces, history, events, alerts, indexing: indexingView });
   const data = createDataViews({ tz, now, licenses, live, usage, host, sources, workspaces, indexing: indexingView });
-  const routes = createRoutes({ views, data, licenses, live, alerts, auth, history, gate, log, now });
+  const qualityViews = createQualityViews({ tz, now, quality, serverDir: dir, nativeIds, nameOf, indexing: qualityIndexingView,
+    qualityFileCount: () => sources.statFiles().qualityFiles });
+  const routes = createRoutes({ views, data, quality: qualityViews, licenses, live, alerts, auth, history, gate, log, now });
   const server = http.createServer(createHttp({ auth, routes, publicDir: config.publicDir, log, now }));
   server.keepAliveTimeout = 5000;
   server.headersTimeout = 10000;
@@ -231,7 +304,9 @@ export async function createConsole({ config, now = Date.now, log = () => {}, wo
     try { licenses.tryList(); } catch { /* reported by the alerts */ }
     host.poll();
     sources.statFiles(true);
-    indexed = cold ? coldStart() : Promise.resolve();
+    // The quality cold start runs after the main one (when there is one); its reader waits from now on.
+    if (qualityCold) qIndexing = 'running';
+    indexed = (cold ? coldStart() : Promise.resolve()).then(() => (qualityCold ? coldStartQuality() : undefined));
     indexed.then(() => tickAlerts());
     return indexed;
   }
@@ -248,15 +323,18 @@ export async function createConsole({ config, now = Date.now, log = () => {}, wo
   function stop() {
     for (const h of timers) clearInterval(h);
     timers = [];
-    try { if (indexing !== 'running') { usage.flushDays(); writeCheckpoint(true); } } catch (error) { log({ console: 'checkpoint-failed', code: cap(error?.code ?? 'ERRO', 20) }); }
+    try {
+      if (indexing !== 'running') { usage.flushDays(); if (qualityReady()) quality.flushDays(); writeCheckpoint(true); }
+    } catch (error) { log({ console: 'checkpoint-failed', code: cap(error?.code ?? 'ERRO', 20) }); }
   }
   // Runs every reader and poll once, in order (tests and the first pass).
   async function tickAll() { await tickLog(); await tickFiles(); await tickAlerts(); }
 
   return {
     server, auth, begin, startTimers, stop, tickAll, tickAlerts, writeCheckpoint, flushDays, alertContext,
-    get indexed() { return indexed; }, get cold() { return cold; },
+    get indexed() { return indexed; }, get cold() { return cold; }, get qualityCold() { return qualityCold; },
     capabilities: licenses.caps, startedAt,
-    parts: { state, tz, events, history, usage, licenses, sources, live, host, workspaces, alerts, serverLog, audit, access, auditMinutes, gate, views, data, readProblems },
+    parts: { state, tz, events, history, usage, licenses, sources, live, host, workspaces, alerts, serverLog, audit, access, auditMinutes, gate, views, data,
+      readProblems, quality, qualityReader, qualityViews, nativeIds },
   };
 }

@@ -273,10 +273,48 @@ export const Vps = {
       delivery: nul({ builder: nul({ ok: bool, pid: nul(int) }), worker: nul({ ok: bool, note: nul(str) }) }),
       ms: nul(int), workerRunning: bool,
     }),
-    logs: { serverLogB: int, rotatedCount: int, rotatedB: int, auditFiles: int, auditB: int, consoleAuditB: int },
+    logs: { serverLogB: int, rotatedCount: int, rotatedB: int, auditFiles: int, auditB: int, qualityFiles: int, qualityB: int, consoleAuditB: int },
   },
   coolify: nul(arr({ name: str, state: str, restartPolicy: str })),
   series: nul({ stepS: enumOf(900), points: arr(SERIES_POINT, { len: 96 }) }),
+};
+
+// /api/quality (DESIGN-QUALIDADE 4.4); token only in a one-license answer
+const Q2 = { p50: nul(num), p90: nul(num) };
+const QPHASES = ['queue', 'capture', 'compile', 'studio', 'verify', 'publish', 'environment', 'transfer', 'rest'];
+const CODE_RE = /^[A-Z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)*$/;
+const code = T('code', (v) => typeof v === 'string' && CODE_RE.test(v) && v.length <= 64);
+const toolName = T('tool', (v) => typeof v === 'string' && (v === '?' || /^[a-z][a-z0-9_]{0,63}$/.test(v)));
+const QTOOLS3 = arr({ tool: toolName, count: int }, { max: 3 });
+export const Quality = {
+  ok: enumOf(true), now: iso,
+  range: { kind: enumOf('today', '7d', '30d', 'day'), from: day, to: day, days: int, timeZone: enumOf('America/Sao_Paulo') },
+  indexing: INDEXING, available: bool, firstDay: nul(day), token: opt(tok),
+  totals: {
+    calls: int, failures: int, refusals: int, delivered: int, uncertain: int, problems: int, withPatch: int,
+    problemPhases: rec(int), normalizations: int, normalizedCalls: int, sharedCalls: int, chains: int, chainsOpen: int,
+    turnsPerChainP50: nul(int), turnsPerChainP90: nul(int), callsPerChainP50: nul(int), callsPerChainP90: nul(int),
+    refusalsBeforeP50: nul(int), refusalsBeforeMax: nul(int), wallP50Ms: nul(num), wallP90Ms: nul(num), idlePct: nul(num),
+    gapP50Ms: nul(num), gapP90Ms: nul(num), gaps: int, longGaps: int,
+  },
+  errors: arr({ code, count: int, pctOfFailures: nul(num), tools: QTOOLS3, customers: int, lastAt: nul(iso) }),
+  problems: arr({ code, count: int, refusals: int, withPatch: int, tools: QTOOLS3, customers: int }),
+  rules: arr({ rule: code, count: int, calls: int, tools: QTOOLS3, customers: int }),
+  phases: arr({ tool: toolName, calls: int, shared: int, total: Q2, ...Object.fromEntries(QPHASES.map((c) => [c, Q2])), transferBytesAvg: nul(int), kernelRuns: int, kernelCold: int }),
+  timeShare: arr({ tool: toolName, sumMs: int, ...Object.fromEntries(QPHASES.map((c) => [`${c}Pct`, nul(num)])) }),
+  rounds: arr({
+    token: tok, customer: str, chains: int, open: int, turnsP50: nul(int), turnsP90: nul(int), callsP50: nul(int), callsP90: nul(int),
+    refusalsBeforeP50: nul(int), refusalsBeforeMax: nul(int), wallP50Ms: nul(num), wallP90Ms: nul(num), gapP50Ms: nul(num), gapP90Ms: nul(num), idlePct: nul(num),
+  }),
+  causes: arr({ code, refusals: int, chains: int, extraCallsSum: int, extraCallsP50: nul(int), extraMsP50: nul(num) }),
+  byCustomer: arr({
+    token: tok, customer: str, calls: int, failures: int, refusals: int, delivered: int, topError: nul(code), topProblem: nul(code), topRule: nul(code),
+    slowestPhase: nul(enumOf(...QPHASES)),
+  }),
+  byClient: arr({
+    client: enumOf('claude-code', 'claude-ai', 'claude-desktop', 'codex', 'cursor', 'vscode', 'windsurf', 'other', 'unknown'),
+    sessions: int, chains: int, turnsP50: nul(int), callsP50: nul(int), refusalsBeforeAvg: nul(num), gapP50Ms: nul(num),
+  }),
 };
 
 export const Events = { ok: enumOf(true), lastSeq: int, events: arr(Event) };

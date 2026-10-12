@@ -514,6 +514,8 @@ sh restore.sh /var/backups/ssam-server/ssam-state-<data>.tar.gz
   a tag, o id da imagem, a revisão (commit), os digests de registro, o projeto e o modo.
   Leva os três volumes de estado. Não leva o volume `cache` (o servidor o refaz), os certificados do Caddy (são emitidos
   de novo) nem a imagem.
+- O backup leva também os registros de qualidade (`quality-AAAAMMDD.jsonl`), que ficam em `/data/server` junto da
+  auditoria.
 - **Parar ou não**: o modo padrão para o servidor, e isso corta toda chamada em curso (um `o11_deliver` leva até 60 min)
   e fecha as sessões e os canais dos agentes. Por isso o cron usa `--online`. O `tokens.json` é gravado por troca atômica
   de nome e os logs só crescem, então numa cópia online o pior caso é a última linha de um log cortada. Faça uma cópia
@@ -606,6 +608,10 @@ Teste um restore de tempos em tempos numa VPS de ensaio, com um arquivo vindo de
 - **Arquivos no volume** (`/data/server`):
   - `server.log`;
   - `audit-AAAAMMDD.jsonl`: uma linha por chamada de ferramenta, com token, cliente, ferramenta, duração e resultado;
+  - `quality-AAAAMMDD.jsonl`: uma linha por chamada de ferramenta só com códigos, contagens e tempos (o motivo de cada
+    recusa por código, as correções automáticas por regra, as fases da entrega e o intervalo entre chamadas) e uma
+    por sessão MCP aberta e fechada. Nenhum conteúdo dos clientes. Só o modo hospedado grava; `SSAM_QUALITY=0` no
+    `.env` desliga.
   - `access-alerts.jsonl` e `machine-pins.json`: credencial usada de outra máquina.
 
   Para ler: `docker compose -f compose.prod.yml run --rm ssam-ops sh -c 'tail -n 50 /data/server/server.log'`.
@@ -615,6 +621,8 @@ Teste um restore de tempos em tempos numa VPS de ensaio, com um arquivo vindo de
   - gira o `server.log` para `server.log.<data>.gz` (o servidor reabre o arquivo a cada linha, então renomear é seguro);
   - apaga os girados com mais de `LOG_KEEP_DAYS` (padrão 56);
   - comprime as auditorias dos dias anteriores e, com `AUDIT_KEEP_DAYS` maior que 0, apaga as mais velhas que isso;
+  - comprime os registros de qualidade dos dias anteriores e, com `QUALITY_KEEP_DAYS` maior que 0, apaga os mais
+    velhos que isso (padrão 0: guarda tudo, como a auditoria);
   - com `INDEX_KEEP_DAYS` maior que 0, apaga do volume `cache` os arquivos do índice de módulos sem uso há esse tempo.
 
   Uma vez por semana, pelo cron que o `sh host/install.sh --with-crons` grava (seção 15; com outro operador, a mesma
@@ -830,6 +838,8 @@ A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensai
 - O `server.log` mostra o IP que o Caddy viu. No Docker Desktop é sempre o gateway da rede (o encaminhamento de portas
   dele não preserva a origem); numa VPS Linux, o IPv4 do cliente.
 - Uma VPS só: sem alta disponibilidade. O tempo fora do ar de um upgrade é o de recriar o container.
+- A aba Qualidade do painel aproxima o pedido do usuário pela cadeia de chamadas de uma sessão MCP até "entregue", e o
+  tempo parado entre chamadas inclui a rede e o próprio cliente MCP: o servidor não vê as mensagens do usuário.
 
 ## 15. Painel do dono
 
@@ -939,6 +949,7 @@ powershell -ExecutionPolicy Bypass -File server\deploy\console\painel-ssam.ps1
 | Visão geral | Alertas (gravidade, desde quando; silenciar por 24 h ou 7 dias, ou marcar como visto; um alerta silenciado que piora, de atenção para crítico, ou que acontece de novo volta na hora, com um evento), o resumo por área (servidor, licenças, uso de hoje, agentes, sessões, VPS, containers, backup, TLS, coletor) e os 10 últimos eventos. |
 | Licenças | Cada licença com estado, faixas, validade, agente, máquina registrada, sessões abertas, chamadas e falhas de hoje, uso de 14 dias, espaço em disco e última atividade; detalhes e ações por linha; Emitir licença. |
 | Uso | Chamadas por cliente e por ferramenta, falhas por código, por dia (com p50 e p90) e os acessos recusados (401, 403, 429) do log do Caddy, por IP; hoje, 7 dias, 30 dias ou um dia. |
+| Qualidade | Os códigos de erro mais comuns, os problemas das recusas por código (e quantos o motor já sabia corrigir), as correções automáticas por regra, as fases da entrega (p50/p90 por ferramenta), as voltas até entregar e o que mais gera voltas, por cliente ou de todos os clientes; exporta CSV e JSON. Só códigos, contagens e tempos. |
 | Agentes e sessões | Agentes (estado, versão, Studio O11, máquina, IP, chamadas e falhas da última hora, motivo do fechamento), sessões MCP abertas, processos do servidor (worker ODC; workers O11 quando a imagem os tiver) e sessões encerradas hoje por motivo. |
 | VPS | Host (CPU, memória, discos, rede, carga, relógio, unidades com falha), atualizações e reinício pendente, segurança (ufw, SSH, falhas de login), servidor SSAM (imagem, kernel em uso e `kernel.json`, aquecimento, `/health`, tamanho dos logs), containers, volumes, certificados TLS, backups e o fim do `cron.log`. |
 | Eventos | O fluxo de eventos (sessões, agentes, chamadas, licenças, servidor e VPS), com filtros e pausa. |
@@ -999,12 +1010,13 @@ o painel antes e reindexe depois:
 ```bash
 docker compose -f compose.prod.yml stop ssam-console
 sh restore.sh /var/backups/ssam-server/ssam-state-<data>.tar.gz
-rm -rf /var/lib/ssam-console/state/checkpoint.json /var/lib/ssam-console/state/agg
+rm -rf /var/lib/ssam-console/state/checkpoint.json /var/lib/ssam-console/state/agg /var/lib/ssam-console/state/agg-quality
 docker compose -f compose.prod.yml start ssam-console
 ```
 
 - Ao subir, o painel relê em segundo plano tudo o que o restore trouxe (`server.log`, os girados e as auditorias). A
   linha de status mostra "indexando histórico" até terminar.
+- Os registros de qualidade voltam com o backup e o painel os reindexa sozinho (a aba Qualidade mostra o progresso).
 - O Histórico volta ao do backup: o `console-audit.jsonl` está no volume de estado, junto com as licenças.
 - **Não apague o `/var/lib/ssam-console/state/tokens-snapshot.json`**: ele fica de propósito com as licenças de antes do
   restore. Ao subir, o painel compara e registra no Histórico, como "fora do painel", tudo o que o restore mudou: uma

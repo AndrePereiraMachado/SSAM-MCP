@@ -1,5 +1,6 @@
 // Incremental readers of the server's files (DESIGN 3.2). server.log with its rotations (rotate-logs.sh renames it to
-// server.log.<stamp> and gzips that file 2 s later into a NEW inode), audit-YYYYMMDD.jsonl (+ .jsonl.gz) per UTC day, and
+// server.log.<stamp> and gzips that file 2 s later into a NEW inode), the daily files <prefix>-YYYYMMDD.jsonl (+ .jsonl.gz)
+// per UTC day (audit-*, and quality-* of DESIGN-QUALIDADE 4.1 with lines capped at 4096 bytes), and
 // access-alerts.jsonl. Positions are byte offsets at a line boundary: a checkpoint taken between two awaits matches the
 // records already applied, so a restart re-reads only a partial last line and never applies a complete line twice.
 import fs from 'node:fs';
@@ -14,7 +15,7 @@ export const MAX_LINE_BYTES = 1024 * 1024;
 const YIELD_EVERY = 2000;
 const EMPTY = Buffer.alloc(0);
 const ROTATED = /^server\.log\.(\d{8}T\d{6}Z)(\.gz)?$/;
-const AUDIT = /^audit-(\d{8})\.jsonl(\.gz)?$/;
+const PREFIX = /^[a-z]{1,16}$/;
 const breathe = () => new Promise(resolve => setImmediate(resolve));
 
 // A JSON object with a string `time` that parses as a date, or null.
@@ -261,8 +262,15 @@ export function createServerLogReader({ dir, onRecord, onLoss = () => {}, onProb
   };
 }
 
-// ---- audit-YYYYMMDD.jsonl (+ .gz), keyed by the UTC day of the file name
-export function createAuditReader({ dir, onRecord, onProblem = () => {}, onOk = () => {}, now = Date.now, progress = null, chunkBytes = CHUNK_BYTES }) {
+// ---- <prefix>-YYYYMMDD.jsonl (+ .gz), keyed by the UTC day of the file name
+// maxLineBytes caps a line with its newline (the quality contract: 4096 bytes); a longer line is skipped and counted
+// before any parse. The default is the audit's cap: 1 MiB without the newline, as before the daily reader existed.
+export function createDailyReader({ dir, prefix, maxLineBytes = MAX_LINE_BYTES + 1, onRecord, onProblem = () => {}, onOk = () => {}, now = Date.now,
+  progress = null, chunkBytes = CHUNK_BYTES }) {
+  if (typeof prefix !== 'string' || !PREFIX.test(prefix)) throw new Error('daily reader: the prefix is a lowercase word');
+  if (!Number.isInteger(maxLineBytes) || maxLineBytes < 2) throw new Error('daily reader: maxLineBytes is an integer above 1');
+  const NAME = new RegExp('^' + prefix + '-(\\d{8})\\.jsonl(\\.gz)?$');
+  const lineBuffer = () => new LineBuffer(maxLineBytes - 1);
   let files = {};              // key -> { offset, complete }
   const open = new Map();      // key -> { lb, pos }
   const stats = { lines: 0, skipped: 0, failed: 0 };
@@ -270,10 +278,10 @@ export function createAuditReader({ dir, onRecord, onProblem = () => {}, onOk = 
 
   function listing() {
     let names;
-    try { names = fs.readdirSync(dir); } catch (error) { onProblem('audit', error.code ?? 'READ'); return []; }
+    try { names = fs.readdirSync(dir); } catch (error) { onProblem(prefix, error.code ?? 'READ'); return []; }
     const keys = new Map();
     for (const name of names) {
-      const m = AUDIT.exec(name);
+      const m = NAME.exec(name);
       if (!m) continue;
       const k = keys.get(m[1]) ?? { key: m[1], plain: false, gz: false };
       if (m[2]) k.gz = true; else k.plain = true;
@@ -293,10 +301,10 @@ export function createAuditReader({ dir, onRecord, onProblem = () => {}, onOk = 
         const f = files[entry.key] ??= { offset: 0, complete: false };
         if (f.complete) continue;
         let o = open.get(entry.key);
-        if (!o) { o = { lb: new LineBuffer(), pos: f.offset }; open.set(entry.key, o); }
+        if (!o) { o = { lb: lineBuffer(), pos: f.offset }; open.set(entry.key, o); }
         const mark = at => { f.offset = at; };
         if (entry.plain) {
-          const name = `audit-${entry.key}.jsonl`;
+          const name = `${prefix}-${entry.key}.jsonl`;
           let size;
           try {
             size = (await fsp.stat(path.join(dir, name))).size;
@@ -313,7 +321,7 @@ export function createAuditReader({ dir, onRecord, onProblem = () => {}, onOk = 
             caughtUp = false;
             continue;
           }
-          onOk('audit');
+          onOk(prefix);
           if (o.pos < size) { caughtUp = false; continue; }
           if (entry.key < today && now() >= endOfUtcKey(entry.key) + 60000) {
             const last = o.lb.take();
@@ -322,7 +330,7 @@ export function createAuditReader({ dir, onRecord, onProblem = () => {}, onOk = 
             open.delete(entry.key);
           }
         } else if (entry.gz) {
-          const name = `audit-${entry.key}.jsonl.gz`;
+          const name = `${prefix}-${entry.key}.jsonl.gz`;
           o.lb.reset();
           try {
             await readGzip(path.join(dir, name), f.offset, async (chunk, at) => { await feed(o.lb, chunk, at, onRecord, mark, stats); },
@@ -348,7 +356,7 @@ export function createAuditReader({ dir, onRecord, onProblem = () => {}, onOk = 
       let total = 0;
       for (const e of listing()) {
         if (files[e.key]?.complete) continue;
-        const name = e.plain ? `audit-${e.key}.jsonl` : `audit-${e.key}.jsonl.gz`;
+        const name = e.plain ? `${prefix}-${e.key}.jsonl` : `${prefix}-${e.key}.jsonl.gz`;
         try { total += fs.statSync(path.join(dir, name)).size; } catch { /* gone */ }
       }
       return total;
@@ -357,6 +365,8 @@ export function createAuditReader({ dir, onRecord, onProblem = () => {}, onOk = 
     restore(saved) { files = structuredClone(saved?.files ?? {}); open.clear(); },
   };
 }
+// The audit reader of DESIGN 3.2, unchanged: the daily reader with the audit prefix and the 1 MiB line cap.
+export const createAuditReader = opts => createDailyReader({ ...opts, prefix: 'audit' });
 
 // ---- access-alerts.jsonl (offset + inode; never rotated)
 export function createAccessAlertsReader({ dir, onRecord, onReset = () => {}, onProblem = () => {}, progress = null, chunkBytes = CHUNK_BYTES }) {

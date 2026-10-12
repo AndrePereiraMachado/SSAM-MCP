@@ -393,6 +393,8 @@
       "rotatedB": 0,
       "auditFiles": 31,
       "auditB": 48234496,
+      "qualityFiles": 31,
+      "qualityB": 9437184,
       "consoleAuditB": 18432
     }
   },

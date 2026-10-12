@@ -48,6 +48,7 @@ const SPEC_BY_FILE = {
   meta: SH.Meta, overview: SH.Overview, licenses: SH.Licenses, 'usage-today': SH.Usage, 'usage-7d': SH.Usage,
   'usage-30d': SH.Usage, live: SH.Live, vps: SH.Vps, 'vps-missing': SH.Vps, events: SH.Events, history: SH.HistoryResponse,
   issue: SH.IssueAnswer, renew: SH.RenewAnswer, lanes: SH.LanesAnswer, 'agent-rotate': SH.RotateAnswer, revoke: SH.RevokeAnswer,
+  'quality-today': SH.Quality, 'quality-7d': SH.Quality, 'quality-30d': SH.Quality, 'quality-unavailable': SH.Quality,
 };
 
 for (const s of SCENARIOS) {
@@ -65,7 +66,7 @@ for (const s of SCENARIOS) {
       if (n === 'overview') problems.push(...SH.summaryRowsProblems(v.summary).map((x) => `${s}/overview ${x}`));
     }
     for (const need of ['meta', 'overview', 'licenses', 'usage-today', 'usage-7d', 'usage-30d', 'live', 'events', 'history',
-      'issue', 'renew', 'lanes', 'agent-rotate', 'revoke']) {
+      'issue', 'renew', 'lanes', 'agent-rotate', 'revoke', 'quality-today', 'quality-7d', 'quality-30d']) {
       if (!names.includes(need)) problems.push(`${need}.json missing`);
     }
     if (!names.includes('vps') && !names.includes('vps-missing')) problems.push('vps.json or vps-missing.json missing');
@@ -222,4 +223,45 @@ test('neutral data only: documentation IPs, example domain, PC-TESTE machines, f
     }
   }
   assert.deepEqual(problems.slice(0, 30), []);
+});
+
+// DESIGN-QUALIDADE 4.6: the Qualidade payloads of every scenario (computed by the console's own aggregation).
+test('quality fixtures: the fixture day today, the week, the empty and the unavailable answers, the problems scenario', () => {
+  for (const s of SCENARIOS) {
+    const meta = fixture(s, 'meta');
+    for (const range of ['today', '7d', '30d']) {
+      const q = fixture(s, `quality-${range}`);
+      assert.equal(q.now, meta.now, `${s} ${range}: same clock`);
+      assert.equal(q.range.kind, range);
+      assert.equal(q.range.days, { today: 1, '7d': 7, '30d': 30 }[range]);
+      assert.equal(q.available, true, `${s} ${range}: available`);
+      assert.equal(q.totals.calls, q.byCustomer.reduce((a, c) => a + c.calls, 0), `${s} ${range}: calls by customer`);
+      assert.equal(q.totals.failures, q.errors.reduce((a, e) => a + e.count, 0), `${s} ${range}: failures by code`);
+      assert.equal(q.totals.chains, q.rounds.reduce((a, r) => a + r.chains, 0), `${s} ${range}: chains by customer`);
+      assert.equal(q.totals.problems, q.problems.reduce((a, p) => a + p.count, 0), `${s} ${range}: problems by code`);
+      for (const r of q.byCustomer) assert.ok(r.customer.startsWith('Cliente '), `${s}: ${r.customer}`);
+    }
+  }
+  // normal today is the fixture day of the design (DESIGN-QUALIDADE section 6)
+  const today = fixture('normal', 'quality-today');
+  assert.deepEqual([today.totals.calls, today.totals.failures, today.totals.refusals, today.totals.delivered, today.totals.problems, today.totals.withPatch],
+    [54, 10, 4, 8, 23, 15]);
+  assert.deepEqual(today.totals.problemPhases, { preflight: 20, verify: 3 });
+  assert.equal(today.totals.idlePct, 52.7);
+  assert.equal(fixture('normal', 'quality-7d').firstDay, '2026-10-06');
+  // vazio: zeros, and 30 dias answers an image that does not record yet
+  const empty = fixture('vazio', 'quality-7d');
+  assert.equal(empty.totals.calls, 0);
+  assert.deepEqual([empty.errors, empty.rounds, empty.byClient], [[], [], []]);
+  const off = fixture('vazio', 'quality-unavailable');
+  assert.equal(off.available, false);
+  assert.equal(off.range.kind, '30d');
+  assert.equal(off.firstDay, null);
+  // problemas: refusals and long pauses, the indexing line, a code outside the catalog
+  const p = fixture('problemas', 'quality-7d');
+  assert.ok(p.totals.refusals >= 50 && p.totals.longGaps >= 20, JSON.stringify(p.totals));
+  assert.equal(p.indexing.state, 'running');
+  assert.ok(p.problems.some((x) => x.code === 'NATIVE_UNLISTED'));
+  assert.ok(p.causes.length >= 8);
+  assert.ok(p.rounds.some((r) => r.customer.length >= 60), 'the long customer name reaches the tables');
 });

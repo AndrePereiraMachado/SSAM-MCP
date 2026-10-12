@@ -55,7 +55,7 @@ export function createDataViews(app) {
     const c = host.collector();
     const collector = { state: c.state, collectedAt: c.collectedAt, ageS: c.ageS, durationMs: c.durationMs, errors: c.errors, version: c.version };
     const logs = (() => { const s = sources.statFiles(); return { serverLogB: s.serverLogB, rotatedCount: s.rotatedCount, rotatedB: s.rotatedB,
-      auditFiles: s.auditFiles, auditB: s.auditB, consoleAuditB: s.consoleAuditB }; })();
+      auditFiles: s.auditFiles, auditB: s.auditB, qualityFiles: s.qualityFiles, qualityB: s.qualityB, consoleAuditB: s.consoleAuditB }; })();
     const kernelFile = sources.kernel();
     if (!host.doc) {
       return { ok: true, now: new Date(t).toISOString(), collector, host: null, updates: null, security: null, tls: null, backups: null,

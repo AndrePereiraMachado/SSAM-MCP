@@ -13,6 +13,8 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+// The quality exports are built from the fixture payloads with the console's own CSV rules (DESIGN-QUALIDADE 4.4).
+import { TABLES, csvText, totalsRows } from '../../views-quality.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.resolve(here, '..');
@@ -121,6 +123,56 @@ function liveEvents(scenario, base, after, limit) {
   return out.slice(0, limit);
 }
 
+// /api/quality (DESIGN-QUALIDADE 4.6): quality-today/7d/30d.json of the scenario; vazio answers 30 dias with
+// quality-unavailable.json (the notice); one day reuses today's file with that day as the range; one license keeps the
+// rows of that license in the per-customer tables.
+function qualityFixture(scenario, sp) {
+  const range = sp.get('range') || '7d';
+  const file = range === 'today' || range === 'day' ? 'quality-today' : range === '30d' ? 'quality-30d' : 'quality-7d';
+  const q = (scenario === 'vazio' && range === '30d' && readFixture(scenario, 'quality-unavailable')) || readFixture(scenario, file);
+  if (range === 'day') {
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(sp.get('day') || '') ? sp.get('day') : q.range.to;
+    q.range = { ...q.range, kind: 'day', from: day, to: day, days: 1 };
+  }
+  const token = sp.get('token');
+  if (token && TOKEN_RE.test(token)) {
+    q.token = token;
+    q.byCustomer = q.byCustomer.filter((r) => r.token === token);
+    q.rounds = q.rounds.filter((r) => r.token === token);
+  }
+  return q;
+}
+
+const EXPORT_TYPES = { csv: 'text/csv; charset=utf-8', json: 'application/json; charset=utf-8', jsonl: 'application/x-ndjson; charset=utf-8' };
+function qualityExport(res, scenario, sp) {
+  const table = sp.get('table') || '';
+  if (!Object.hasOwn(TABLES, table)) {
+    send(res, 400, { ok: false, error: { code: 'INVALID_FIELD', message: 'Campo inválido: table (tabela da Qualidade).', field: 'table' } });
+    return;
+  }
+  const format = sp.get('format') || (table === 'tudo' ? 'json' : table === 'linhas' ? 'jsonl' : 'csv');
+  if (table === 'linhas' && sp.get('range') === '30d') {
+    send(res, 400, { ok: false, error: { code: 'INVALID_FIELD', message: 'Campo inválido: range (linhas: até 7 dias).', field: 'range' } });
+    return;
+  }
+  const q = qualityFixture(scenario, sp);
+  const token = sp.get('token');
+  const name = `ssam-qualidade-${table}-${q.range.from}-${q.range.to}${token && TOKEN_RE.test(token) ? `-${token}` : ''}.${format}`;
+  let text;
+  if (table === 'tudo') text = `${JSON.stringify(q, null, 2)}\n`;
+  else if (table === 'linhas') text = '';      // the mock has no lines: an empty JSONL file
+  else {
+    const rows = table === 'resumo' ? totalsRows(q.totals) : q[TABLES[table].key] || [];
+    if (format === 'json') text = `${JSON.stringify(rows, null, 2)}\n`;
+    else if (table === 'resumo') text = csvText(['Campo', 'Valor'], rows.map((r) => [r.campo, r.valor]));
+    else text = csvText(TABLES[table].columns.map((c) => c[0]), rows.map((r) => TABLES[table].columns.map((c) => c[1](r))));
+  }
+  const body = Buffer.from(text, 'utf8');
+  res.writeHead(200, { ...COMMON, 'Content-Security-Policy': CSP, 'Content-Type': EXPORT_TYPES[format] || EXPORT_TYPES.json,
+    'Content-Disposition': `attachment; filename="${name}"`, 'Content-Length': body.length });
+  res.end(body);
+}
+
 function intParam(sp, name, def, min, max) {
   const v = sp.get(name);
   if (v == null || v === '') return def;
@@ -174,6 +226,14 @@ async function handleApi(req, res, url, scenario) {
         }
       }
       send(res, 200, u);
+      return;
+    }
+    if (p === '/api/quality') {
+      send(res, 200, qualityFixture(scenario, sp));
+      return;
+    }
+    if (p === '/api/quality/export') {
+      qualityExport(res, scenario, sp);
       return;
     }
     if (p === '/api/events') {
