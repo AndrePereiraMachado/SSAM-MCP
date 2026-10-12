@@ -1,0 +1,99 @@
+{
+  "ok": true,
+  "license": {
+    "id": "tok_0000000a1fa0",
+    "customer": "Cliente Beta",
+    "state": "revoked",
+    "createdAt": "2026-10-13T02:51:08Z",
+    "expiresAt": "2026-10-23T02:51:08Z",
+    "revokedAt": "2026-10-13T02:51:08Z",
+    "daysLeft": 10,
+    "lanes": [
+      "odc"
+    ],
+    "agentCredentialIssuedAt": "2026-10-13T02:51:08Z",
+    "machine": null,
+    "accessAlerts": 0,
+    "agent": {
+      "state": "never",
+      "since": null,
+      "lastSignalAt": null,
+      "version": null,
+      "closedReason": null
+    },
+    "sessionsOpen": 0,
+    "today": {
+      "calls": 0,
+      "failures": 0
+    },
+    "daily14": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "lastActivity": null,
+    "workspace": null,
+    "actions": {
+      "renew": {
+        "allowed": false,
+        "reason": "Licença revogada."
+      },
+      "lanes": {
+        "allowed": false,
+        "reason": "Licença revogada."
+      },
+      "agentRotate": {
+        "allowed": false,
+        "reason": "Licença revogada."
+      },
+      "revoke": {
+        "allowed": false,
+        "reason": "Licença revogada."
+      }
+    },
+    "history": [
+      {
+        "time": "2026-10-13T02:51:08Z",
+        "action": "revoke",
+        "actor": "painel",
+        "token": "tok_0000000a1fa0",
+        "customer": "Cliente Beta",
+        "result": "ok",
+        "code": null,
+        "detail": {}
+      },
+      {
+        "time": "2026-10-13T02:51:08Z",
+        "action": "issue",
+        "actor": "painel",
+        "token": "tok_0000000a1fa0",
+        "customer": "Cliente Beta",
+        "result": "ok",
+        "code": null,
+        "detail": {
+          "days": 10,
+          "lanes": [
+            "odc"
+          ],
+          "expiresAt": "2026-10-23T02:51:08Z"
+        }
+      }
+    ]
+  },
+  "openSessions": 0,
+  "agentConnected": false,
+  "audit": {
+    "written": true
+  }
+}

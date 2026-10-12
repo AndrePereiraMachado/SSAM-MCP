@@ -1,0 +1,128 @@
+{
+  "ok": true,
+  "license": {
+    "id": "tok_00000000be7a",
+    "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+    "state": "active",
+    "createdAt": "2026-09-14T20:00:00Z",
+    "expiresAt": "2026-11-13T20:00:00Z",
+    "revokedAt": null,
+    "daysLeft": 31.7145,
+    "lanes": [
+      "odc"
+    ],
+    "agentCredentialIssuedAt": "2026-09-14T20:00:00Z",
+    "machine": {
+      "id": "m-77aa01",
+      "name": "PC-TESTE-01",
+      "user": "teste",
+      "at": "2026-09-15T13:02:00Z"
+    },
+    "accessAlerts": 2,
+    "agent": {
+      "state": "connected",
+      "since": "2026-10-13T01:14:08Z",
+      "lastSignalAt": "2026-10-13T02:51:06Z",
+      "version": "0.4.1",
+      "closedReason": null
+    },
+    "sessionsOpen": 8,
+    "today": {
+      "calls": 63,
+      "failures": 41
+    },
+    "daily14": [
+      67,
+      130,
+      178,
+      39,
+      118,
+      72,
+      129,
+      114,
+      48,
+      150,
+      175,
+      192,
+      147,
+      63
+    ],
+    "lastActivity": {
+      "at": "2026-10-13T02:51:00Z",
+      "tool": "odc_read",
+      "kind": "call"
+    },
+    "workspace": {
+      "bytes": 5153960755,
+      "files": 412004,
+      "truncated": true,
+      "measuredAt": "2026-10-13T02:47:08Z",
+      "quotaBytes": 5368709120
+    },
+    "actions": {
+      "renew": {
+        "allowed": true,
+        "reason": null
+      },
+      "lanes": {
+        "allowed": true,
+        "reason": null
+      },
+      "agentRotate": {
+        "allowed": true,
+        "reason": null
+      },
+      "revoke": {
+        "allowed": true,
+        "reason": null
+      }
+    },
+    "history": [
+      {
+        "time": "2026-10-13T02:51:08Z",
+        "action": "renew",
+        "actor": "painel",
+        "token": "tok_00000000be7a",
+        "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+        "result": "ok",
+        "code": null,
+        "detail": {
+          "days": 30,
+          "previousExpiresAt": "2026-10-14T20:00:00Z",
+          "expiresAt": "2026-11-13T20:00:00Z"
+        }
+      },
+      {
+        "time": "2026-10-12T00:51:08Z",
+        "action": "agent-rotate",
+        "actor": "painel",
+        "token": "tok_00000000be7a",
+        "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+        "result": "error",
+        "code": "STORE_WRITE_FAILED",
+        "detail": {}
+      },
+      {
+        "time": "2026-09-14T20:00:00Z",
+        "action": "issue",
+        "actor": "painel",
+        "token": "tok_00000000be7a",
+        "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+        "result": "ok",
+        "code": null,
+        "detail": {
+          "days": 30,
+          "lanes": [
+            "odc"
+          ],
+          "expiresAt": "2026-10-14T20:00:00Z"
+        }
+      }
+    ]
+  },
+  "previousExpiresAt": "2026-10-14T20:00:00Z",
+  "expiresAt": "2026-11-13T20:00:00Z",
+  "audit": {
+    "written": true
+  }
+}

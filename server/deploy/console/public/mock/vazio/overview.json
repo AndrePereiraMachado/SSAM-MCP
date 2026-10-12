@@ -1,0 +1,159 @@
+{
+  "ok": true,
+  "now": "2026-10-13T02:51:08Z",
+  "status": {
+    "server": {
+      "state": "up",
+      "since": "2026-10-13T02:32:08Z",
+      "pid": 7,
+      "imageTag": "prod-20261011-ed0f94b",
+      "health": "healthy",
+      "warm": "warm",
+      "warmDetail": null
+    },
+    "sessionsOpen": 0,
+    "agentsConnected": 0,
+    "licenses": {
+      "active": 0,
+      "expired": 0,
+      "revoked": 0
+    },
+    "alerts": {
+      "critical": 0,
+      "warning": 0,
+      "info": 0,
+      "acked": 0
+    },
+    "collector": {
+      "state": "fresh",
+      "collectedAt": "2026-10-13T02:50:56Z",
+      "ageS": 12
+    },
+    "host": {
+      "cpuPct": 1.2,
+      "memUsedPct": 12.8,
+      "diskUsedPct": 4
+    },
+    "publicHost": "ssam.example.com"
+  },
+  "alerts": [],
+  "acked": [],
+  "summary": [
+    {
+      "area": "servidor",
+      "state": "ok",
+      "facts": {
+        "since": "2026-10-13T02:32:08Z",
+        "pid": 7,
+        "imageTag": "prod-20261011-ed0f94b",
+        "warm": "warm",
+        "health": "healthy",
+        "probeMs": 3
+      },
+      "view": "vps"
+    },
+    {
+      "area": "licencas",
+      "state": "ok",
+      "facts": {
+        "active": 0,
+        "expired": 0,
+        "revoked": 0,
+        "nextExpiry": null
+      },
+      "view": "licencas"
+    },
+    {
+      "area": "uso",
+      "state": "ok",
+      "facts": {
+        "calls": 0,
+        "failures": 0,
+        "p90Ms": null,
+        "customersActive": 0
+      },
+      "view": "uso"
+    },
+    {
+      "area": "agentes",
+      "state": "ok",
+      "facts": {
+        "connected": 0,
+        "activeLicenses": 0,
+        "lastSignalAt": null
+      },
+      "view": "agentes"
+    },
+    {
+      "area": "sessoes",
+      "state": "ok",
+      "facts": {
+        "open": 0,
+        "top": []
+      },
+      "view": "agentes"
+    },
+    {
+      "area": "vps",
+      "state": "ok",
+      "facts": {
+        "cpuPct": 1.2,
+        "memUsedPct": 12.8,
+        "diskUsedPct": 4,
+        "rebootRequired": false,
+        "rebootSince": null
+      },
+      "view": "vps"
+    },
+    {
+      "area": "containers",
+      "state": "ok",
+      "facts": {
+        "running": 2,
+        "total": 2,
+        "unhealthy": [],
+        "restarts24h": 0
+      },
+      "view": "vps"
+    },
+    {
+      "area": "backup",
+      "state": "ok",
+      "facts": {
+        "newestAt": "2026-10-12T23:45:20Z",
+        "ageH": 3.1,
+        "cron": {
+          "backup": true,
+          "rotate": true
+        }
+      },
+      "view": "vps"
+    },
+    {
+      "area": "tls",
+      "state": "ok",
+      "facts": {
+        "name": "ssam.example.com",
+        "notAfter": "2027-01-09T21:49:58Z",
+        "daysLeft": 88.7909
+      },
+      "view": "vps"
+    },
+    {
+      "area": "coletor",
+      "state": "ok",
+      "facts": {
+        "collectedAt": "2026-10-13T02:50:56Z",
+        "ageS": 12,
+        "sectionErrors": []
+      },
+      "view": "vps"
+    }
+  ],
+  "recentEvents": [],
+  "indexing": {
+    "state": "ready",
+    "progress": 1,
+    "detail": null
+  }
+}

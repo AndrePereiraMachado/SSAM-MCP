@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "code": "TOKEN_NOT_ACTIVE",
+    "message": "Só uma licença ativa pode trocar a credencial do agente."
+  }
+}

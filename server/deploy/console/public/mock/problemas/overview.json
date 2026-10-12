@@ -1,0 +1,1058 @@
+{
+  "ok": true,
+  "now": "2026-10-13T02:51:08Z",
+  "status": {
+    "server": {
+      "state": "down",
+      "since": null,
+      "pid": null,
+      "imageTag": "prod-20261011-ed0f94b",
+      "health": "unhealthy",
+      "warm": "cold",
+      "warmDetail": "Aquecimento: o índice O11 falhou (EACCES ao abrir o cache do índice)."
+    },
+    "sessionsOpen": 11,
+    "agentsConnected": 3,
+    "licenses": {
+      "active": 5,
+      "expired": 1,
+      "revoked": 1
+    },
+    "alerts": {
+      "critical": 19,
+      "warning": 22,
+      "info": 5,
+      "acked": 2
+    },
+    "collector": {
+      "state": "stale",
+      "collectedAt": "2026-10-13T02:45:28Z",
+      "ageS": 340
+    },
+    "host": {
+      "cpuPct": 91.4,
+      "memUsedPct": 95,
+      "diskUsedPct": 92
+    },
+    "publicHost": "ssam.example.com"
+  },
+  "alerts": [
+    {
+      "id": "certificado:ssam.example.com",
+      "rule": "certificado",
+      "severity": "critical",
+      "area": "tls",
+      "title": "Certificado TLS de ssam.example.com vence em 5 dias (18/10/2026); o Caddy renova com 30 dias, veja o log dele.",
+      "detail": null,
+      "since": "2026-09-26T10:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "licenca-vence:tok_00000000be7a",
+      "rule": "licenca-vence",
+      "severity": "critical",
+      "area": "licencas",
+      "title": "Licença de Cliente Beta Engenharia de Software e Integrações Corporativas vence em 1 dia (14/10/2026).",
+      "detail": "Renove em Licenças. Ao vencer, as sessões e o canal do agente dele são fechados.",
+      "since": "2026-10-08T02:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {
+        "token": "tok_00000000be7a",
+        "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas"
+      },
+      "view": "licencas",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "licenca-vence:tok_0000000a1fa0",
+      "rule": "licenca-vence",
+      "severity": "critical",
+      "area": "licencas",
+      "title": "Licença de Cliente Alfa vence hoje às 23:58.",
+      "detail": "Renove em Licenças. Ao vencer, as sessões e o canal do agente dele são fechados.",
+      "since": "2026-10-11T04:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {
+        "token": "tok_0000000a1fa0",
+        "customer": "Cliente Alfa"
+      },
+      "view": "licencas",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "espaco-cliente:tok_00000000be7a",
+      "rule": "espaco-cliente",
+      "severity": "critical",
+      "area": "licencas",
+      "title": "Espaço de trabalho de Cliente Beta Engenharia de Software e Integrações Corporativas em 96% da cota de 5 GiB (4,8 GiB).",
+      "detail": "Acima da cota as chamadas recebem WORKSPACE_FULL.",
+      "since": "2026-10-11T20:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {
+        "token": "tok_00000000be7a",
+        "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas"
+      },
+      "view": "licencas",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "backup-falhou:host",
+      "rule": "backup-falhou",
+      "severity": "critical",
+      "area": "backup",
+      "title": "O último backup falhou: backup: FAILED 2026-10-12T06:30:02Z tar: /data/server: Cannot open: Permission denied.",
+      "detail": null,
+      "since": "2026-10-12T06:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "backup-velho:host",
+      "rule": "backup-velho",
+      "severity": "critical",
+      "area": "backup",
+      "title": "O último backup tem 40 h (limite 26 h): ssam-state-20261011T103000Z.tar.gz.",
+      "detail": null,
+      "since": "2026-10-12T12:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "disco:/",
+      "rule": "disco",
+      "severity": "critical",
+      "area": "vps",
+      "title": "Disco / em 92% (86 GiB de 94 GiB).",
+      "detail": null,
+      "since": "2026-10-12T12:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {
+        "mount": "/"
+      },
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "acesso-outra-maquina:tok_00000000be7a:m-77aa02",
+      "rule": "acesso-outra-maquina",
+      "severity": "critical",
+      "area": "licencas",
+      "title": "Credencial do agente de Cliente Beta Engenharia de Software e Integrações Corporativas usada em outra máquina: PC-TESTE-02 (teste) em vez de PC-TESTE-01 (teste), IP 198.51.100.44, 12/10/2026 21:14.",
+      "detail": "Se não foi o cliente, troque a credencial do agente ou revogue a licença.",
+      "since": "2026-10-13T00:14:00Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {
+        "token": "tok_00000000be7a",
+        "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+        "machine": "PC-TESTE-02 (teste)",
+        "ip": "198.51.100.44"
+      },
+      "view": "licencas",
+      "event": true,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "backup-ausente:host",
+      "rule": "backup-ausente",
+      "severity": "critical",
+      "area": "backup",
+      "title": "Nenhum backup do estado em /var/backups/ssam-server.",
+      "detail": "DEPLOY.md seção 9; o cron diário instala com host/install.sh --with-crons.",
+      "since": "2026-10-13T00:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "kernel-ausente:ssam-server",
+      "rule": "kernel-ausente",
+      "severity": "critical",
+      "area": "servidor",
+      "title": "O servidor partiu sem kernel.json válido (o11 ou odcBridge nulos): as faixas hospedadas recusam chamadas.",
+      "detail": "DEPLOY.md seção 7.1.",
+      "since": "2026-10-13T01:53:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "pico-falhas:global",
+      "rule": "pico-falhas",
+      "severity": "critical",
+      "area": "uso",
+      "title": "Pico de falhas: 41 de 63 chamadas falharam nos últimos 15 min (mais comum: AGENT_NOT_CONNECTED em odc_read).",
+      "detail": null,
+      "since": "2026-10-13T02:40:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "uso",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "memoria-container:ssam-server",
+      "rule": "memoria-container",
+      "severity": "critical",
+      "area": "vps",
+      "title": "ssam-server usa 96% do limite de memória (5,8 GiB de 6 GiB).",
+      "detail": null,
+      "since": "2026-10-13T02:42:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {
+        "container": "ssam-prod-ssam-server-1"
+      },
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "memoria:host",
+      "rule": "memoria",
+      "severity": "critical",
+      "area": "vps",
+      "title": "Memória disponível da VPS em 5% (397 MiB); sem swap, um pico pode derrubar o servidor.",
+      "detail": null,
+      "since": "2026-10-13T02:42:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "caddy-fora:caddy",
+      "rule": "caddy-fora",
+      "severity": "critical",
+      "area": "servidor",
+      "title": "O Caddy está parado: ninguém de fora alcança o servidor.",
+      "detail": null,
+      "since": "2026-10-13T02:44:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {
+        "container": "ssam-prod-caddy-1"
+      },
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "certificado-ausente:caddy",
+      "rule": "certificado-ausente",
+      "severity": "critical",
+      "area": "tls",
+      "title": "Nenhum certificado TLS encontrado no volume do Caddy.",
+      "detail": null,
+      "since": "2026-10-13T02:44:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "licencas-ilegiveis:tokens",
+      "rule": "licencas-ilegiveis",
+      "severity": "critical",
+      "area": "licencas",
+      "title": "O arquivo de licenças (tokens.json) não pode ser lido: o servidor responde 500 e fecha as sessões abertas.",
+      "detail": "EACCES",
+      "since": "2026-10-13T02:47:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "licencas",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "container-oom:ssam-server",
+      "rule": "container-oom",
+      "severity": "critical",
+      "area": "servidor",
+      "title": "ssam-server foi encerrado por falta de memória (OOM).",
+      "detail": "Suba SSAM_MEMORY ou baixe SSAM_BUILD_WORKERS (DEPLOY.md seção 10).",
+      "since": "2026-10-13T02:48:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {
+        "container": "ssam-prod-ssam-server-1"
+      },
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "servidor-fora:ssam-server",
+      "rule": "servidor-fora",
+      "severity": "critical",
+      "area": "servidor",
+      "title": "O container ssam-server está reiniciando.",
+      "detail": null,
+      "since": "2026-10-13T02:48:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {
+        "container": "ssam-prod-ssam-server-1"
+      },
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "painel-leitura:audit",
+      "rule": "painel-leitura",
+      "severity": "critical",
+      "area": "painel",
+      "title": "O painel não consegue ler audit-20261013.jsonl (EIO).",
+      "detail": null,
+      "since": "2026-10-13T02:49:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "eventos",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "rotacao-sem-cron:host",
+      "rule": "rotacao-sem-cron",
+      "severity": "warning",
+      "area": "backup",
+      "title": "A rotação de logs não está agendada: o server.log tem 620 MiB e só cresce.",
+      "detail": null,
+      "since": "2026-09-26T10:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "ssh-senha:host",
+      "rule": "ssh-senha",
+      "severity": "warning",
+      "area": "seguranca",
+      "title": "SSH aceita login por senha e root com senha; 1.284 tentativas falhas em 24 h, sem fail2ban.",
+      "detail": "Com acesso só por chave: PasswordAuthentication no e PermitRootLogin prohibit-password.",
+      "since": "2026-09-26T10:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "reinicio-pendente:host",
+      "rule": "reinicio-pendente",
+      "severity": "warning",
+      "area": "vps",
+      "title": "Reinício da VPS pendente desde 07/10/2026 (linux-image-7.0.0-38-generic, linux-base, libc6, systemd, openssl, docker-ce).",
+      "detail": "Reiniciar derruba sessões e chamadas em curso: escolha uma janela.",
+      "since": "2026-10-08T14:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "licenca-venceu:tok_000000006a3a",
+      "rule": "licenca-venceu",
+      "severity": "warning",
+      "area": "licencas",
+      "title": "Licença de Cliente Gama venceu em 09/10/2026 e ele usou o SSAM nos 14 dias anteriores.",
+      "detail": "Renove se o contrato continua.",
+      "since": "2026-10-09T15:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {
+        "token": "tok_000000006a3a",
+        "customer": "Cliente Gama"
+      },
+      "view": "licencas",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "atualizacoes-seguranca:host",
+      "rule": "atualizacoes-seguranca",
+      "severity": "warning",
+      "area": "vps",
+      "title": "7 atualização(ões) de segurança pendente(s) há 3 dias.",
+      "detail": null,
+      "since": "2026-10-10T02:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "log-grande:ssam-server",
+      "rule": "log-grande",
+      "severity": "warning",
+      "area": "servidor",
+      "title": "server.log com 620 MiB: rode a rotação (DEPLOY.md seção 10).",
+      "detail": null,
+      "since": "2026-10-10T02:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "espaco-cliente:tok_0000000000e7",
+      "rule": "espaco-cliente",
+      "severity": "warning",
+      "area": "licencas",
+      "title": "Espaço de trabalho de Cliente Eta com nome comprido para testar reticências na tabela em 85% da cota de 5 GiB (4,3 GiB).",
+      "detail": "Acima da cota as chamadas recebem WORKSPACE_FULL.",
+      "since": "2026-10-10T04:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {
+        "token": "tok_0000000000e7",
+        "customer": "Cliente Eta com nome comprido para testar reticências na tabela"
+      },
+      "view": "licencas",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "licenca-vence:tok_00000000de17",
+      "rule": "licenca-vence",
+      "severity": "warning",
+      "area": "licencas",
+      "title": "Licença de Cliente Delta vence em 5 dias (17/10/2026).",
+      "detail": "Renove em Licenças. Ao vencer, as sessões e o canal do agente dele são fechados.",
+      "since": "2026-10-11T00:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {
+        "token": "tok_00000000de17",
+        "customer": "Cliente Delta"
+      },
+      "view": "licencas",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "firewall:host",
+      "rule": "firewall",
+      "severity": "warning",
+      "area": "seguranca",
+      "title": "Firewall libera portas além de 22, 80 e 443: 3000/tcp, 8080/tcp.",
+      "detail": null,
+      "since": "2026-10-11T22:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "disco:/var/lib/docker",
+      "rule": "disco",
+      "severity": "warning",
+      "area": "vps",
+      "title": "Inodes de /var/lib/docker em 81%.",
+      "detail": null,
+      "since": "2026-10-12T06:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {
+        "mount": "/var/lib/docker"
+      },
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "container-reiniciou:ssam-server",
+      "rule": "container-reiniciou",
+      "severity": "warning",
+      "area": "servidor",
+      "title": "ssam-server reiniciou 4 vez(es) nas últimas 24 h.",
+      "detail": null,
+      "since": "2026-10-12T17:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {
+        "container": "ssam-prod-ssam-server-1"
+      },
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "relogio:host",
+      "rule": "relogio",
+      "severity": "warning",
+      "area": "vps",
+      "title": "O relógio da VPS não está sincronizado (NTP).",
+      "detail": null,
+      "since": "2026-10-12T21:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "unidades-falhas:host",
+      "rule": "unidades-falhas",
+      "severity": "warning",
+      "area": "vps",
+      "title": "2 unidade(s) do systemd com falha.",
+      "detail": null,
+      "since": "2026-10-12T21:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "backup-sem-cron:host",
+      "rule": "backup-sem-cron",
+      "severity": "warning",
+      "area": "backup",
+      "title": "O backup diário não está agendado (falta /etc/cron.d/ssam-backup).",
+      "detail": null,
+      "since": "2026-10-13T00:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "nao-aquecido:ssam-server",
+      "rule": "nao-aquecido",
+      "severity": "warning",
+      "area": "servidor",
+      "title": "Aquecimento: o índice O11 falhou (EACCES ao abrir o cache do índice).",
+      "detail": null,
+      "since": "2026-10-13T01:59:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "erro-servidor:ssam-server",
+      "rule": "erro-servidor",
+      "severity": "warning",
+      "area": "servidor",
+      "title": "O servidor registrou 3 erro(s) interno(s) na última hora (request-failed: ECONNRESET).",
+      "detail": null,
+      "since": "2026-10-13T02:13:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "eventos",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "kernel-mudou:ssam-server",
+      "rule": "kernel-mudou",
+      "severity": "warning",
+      "area": "servidor",
+      "title": "kernel.json mudou depois da partida (odcBridge: nulo → v49); só vale depois de reiniciar o ssam-server.",
+      "detail": null,
+      "since": "2026-10-13T02:20:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "falhas-agente:tok_00000000de17",
+      "rule": "falhas-agente",
+      "severity": "warning",
+      "area": "agentes",
+      "title": "12 chamadas ao agente de Cliente Delta falharam nos últimos 15 min (mais comum: AGENT_TIMEOUT).",
+      "detail": null,
+      "since": "2026-10-13T02:38:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {
+        "token": "tok_00000000de17",
+        "customer": "Cliente Delta"
+      },
+      "view": "agentes",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "recusas-acesso:203.0.113.10",
+      "rule": "recusas-acesso",
+      "severity": "warning",
+      "area": "seguranca",
+      "title": "312 acessos recusados (401/403) vindos de 203.0.113.10 nos últimos 15 min.",
+      "detail": "O servidor não registra 401/403; o dado vem do log do Caddy, só por IP.",
+      "since": "2026-10-13T02:39:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {
+        "ip": "203.0.113.10"
+      },
+      "view": "uso",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "coolify-rodando:coolify-proxy",
+      "rule": "coolify-rodando",
+      "severity": "warning",
+      "area": "servidor",
+      "title": "Container do Coolify coolify-proxy está rodando (foi parado de propósito; o coolify-proxy disputa as portas 80 e 443).",
+      "detail": null,
+      "since": "2026-10-13T02:44:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {
+        "container": "coolify-proxy"
+      },
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "carga:host",
+      "rule": "carga",
+      "severity": "warning",
+      "area": "vps",
+      "title": "Carga da VPS em 4,8 com 2 vCPU há 5 min.",
+      "detail": null,
+      "since": "2026-10-13T02:45:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "coletor:host",
+      "rule": "coletor",
+      "severity": "warning",
+      "area": "coletor",
+      "title": "O coletor da VPS parou: últimos dados às 23:45 (há 5 min 40 s).",
+      "detail": null,
+      "since": "2026-10-13T02:47:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "eventos-perdidos:server.log",
+      "rule": "eventos-perdidos",
+      "severity": "info",
+      "area": "painel",
+      "title": "Parte do server.log girado não pôde ser lida; a contagem desse trecho pode faltar.",
+      "detail": null,
+      "since": "2026-10-12T23:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "eventos",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "aquecimento-parcial:ssam-server",
+      "rule": "aquecimento-parcial",
+      "severity": "info",
+      "area": "servidor",
+      "title": "O worker ODC falhou no aquecimento, mas está rodando agora (subiu sob demanda).",
+      "detail": null,
+      "since": "2026-10-13T01:59:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "coleta-parcial:host",
+      "rule": "coleta-parcial",
+      "severity": "info",
+      "area": "coletor",
+      "title": "Coleta parcial: updates, tls falharam (TIMEOUT).",
+      "detail": null,
+      "since": "2026-10-13T02:21:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "sessoes-limite:tok_00000000be7a",
+      "rule": "sessoes-limite",
+      "severity": "info",
+      "area": "agentes",
+      "title": "Cliente Beta Engenharia de Software e Integrações Corporativas está no limite de 8 sessões MCP abertas.",
+      "detail": "A próxima sessão substitui a mais antiga sem fluxo aberto.",
+      "since": "2026-10-13T02:26:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {
+        "token": "tok_00000000be7a",
+        "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas"
+      },
+      "view": "agentes",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "limite-taxa:global",
+      "rule": "limite-taxa",
+      "severity": "info",
+      "area": "uso",
+      "title": "17 resposta(s) 429 (limite de taxa) nos últimos 15 min.",
+      "detail": null,
+      "since": "2026-10-13T02:41:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "uso",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    }
+  ],
+  "acked": [
+    {
+      "id": "acesso-outra-maquina:tok_00000000de17:m-9d00e2",
+      "rule": "acesso-outra-maquina",
+      "severity": "critical",
+      "area": "licencas",
+      "title": "Credencial do agente de Cliente Delta usada em outra máquina: PC-TESTE-05 (teste) em vez de PC-TESTE-04 (teste), IP 192.0.2.61, 10/10/2026 09:12.",
+      "detail": "Se não foi o cliente, troque a credencial do agente ou revogue a licença.",
+      "since": "2026-10-10T12:12:00Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {
+        "token": "tok_00000000de17",
+        "customer": "Cliente Delta",
+        "machine": "PC-TESTE-05 (teste)",
+        "ip": "192.0.2.61"
+      },
+      "view": "licencas",
+      "event": true,
+      "acked": true,
+      "ackedUntil": null
+    },
+    {
+      "id": "container-reiniciou:caddy",
+      "rule": "container-reiniciou",
+      "severity": "warning",
+      "area": "servidor",
+      "title": "caddy reiniciou 1 vez(es) nas últimas 24 h.",
+      "detail": null,
+      "since": "2026-10-12T06:51:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {
+        "container": "ssam-prod-caddy-1"
+      },
+      "view": "vps",
+      "event": false,
+      "acked": true,
+      "ackedUntil": "2026-10-18T05:51:08Z"
+    }
+  ],
+  "summary": [
+    {
+      "area": "servidor",
+      "state": "critical",
+      "facts": {
+        "since": null,
+        "pid": null,
+        "imageTag": "prod-20261011-ed0f94b",
+        "warm": "cold",
+        "health": "unhealthy",
+        "probeMs": null
+      },
+      "view": "vps"
+    },
+    {
+      "area": "licencas",
+      "state": "critical",
+      "facts": {
+        "active": 5,
+        "expired": 1,
+        "revoked": 1,
+        "nextExpiry": {
+          "customer": "Cliente Alfa",
+          "token": "tok_0000000a1fa0",
+          "expiresAt": "2026-10-13T02:58:00Z"
+        }
+      },
+      "view": "licencas"
+    },
+    {
+      "area": "uso",
+      "state": "critical",
+      "facts": {
+        "calls": 1322,
+        "failures": 86,
+        "p90Ms": 15000,
+        "customersActive": 4
+      },
+      "view": "uso"
+    },
+    {
+      "area": "agentes",
+      "state": "warning",
+      "facts": {
+        "connected": 3,
+        "activeLicenses": 5,
+        "lastSignalAt": "2026-10-13T02:51:06Z"
+      },
+      "view": "agentes"
+    },
+    {
+      "area": "sessoes",
+      "state": "ok",
+      "facts": {
+        "open": 11,
+        "top": [
+          {
+            "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+            "client": "claude-code 2.1.281"
+          },
+          {
+            "customer": "Cliente Alfa",
+            "client": "claude-code 2.1.281"
+          },
+          {
+            "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+            "client": "codex 0.48.0"
+          }
+        ]
+      },
+      "view": "agentes"
+    },
+    {
+      "area": "vps",
+      "state": "critical",
+      "facts": {
+        "cpuPct": 91.4,
+        "memUsedPct": 95,
+        "diskUsedPct": 92,
+        "rebootRequired": null,
+        "rebootSince": null
+      },
+      "view": "vps"
+    },
+    {
+      "area": "containers",
+      "state": "critical",
+      "facts": {
+        "running": 1,
+        "total": 3,
+        "unhealthy": [
+          "ssam-server"
+        ],
+        "restarts24h": 5
+      },
+      "view": "vps"
+    },
+    {
+      "area": "backup",
+      "state": "critical",
+      "facts": {
+        "newestAt": "2026-10-11T10:30:41Z",
+        "ageH": 40.3,
+        "cron": {
+          "backup": true,
+          "rotate": false
+        }
+      },
+      "view": "vps"
+    },
+    {
+      "area": "tls",
+      "state": "critical",
+      "facts": {
+        "name": "ssam.example.com",
+        "notAfter": "2026-10-18T21:49:58Z",
+        "daysLeft": 5.7909
+      },
+      "view": "vps"
+    },
+    {
+      "area": "coletor",
+      "state": "warning",
+      "facts": {
+        "collectedAt": "2026-10-13T02:45:28Z",
+        "ageS": 340,
+        "sectionErrors": [
+          "updates: TIMEOUT",
+          "tls: TIMEOUT"
+        ]
+      },
+      "view": "vps"
+    }
+  ],
+  "recentEvents": [
+    {
+      "seq": 5200,
+      "time": "2026-10-13T02:37:09.802Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 5199,
+      "time": "2026-10-13T02:31:41.791Z",
+      "level": "error",
+      "group": "servidor",
+      "token": null,
+      "customer": null,
+      "text": "Erro interno do servidor (request-failed: ECONNRESET).",
+      "code": "ECONNRESET"
+    },
+    {
+      "seq": 5198,
+      "time": "2026-10-13T02:20:34.283Z",
+      "level": "info",
+      "group": "painel",
+      "token": null,
+      "customer": null,
+      "text": "Resolvido: Carga da VPS em 2,4 com 2 vCPU há 5 min.",
+      "code": null
+    },
+    {
+      "seq": 5197,
+      "time": "2026-10-13T02:14:00.769Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 5196,
+      "time": "2026-10-13T02:00:27.737Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Agente de Cliente Beta Engenharia de Software e Integrações Corporativas ficou 45 s sem sinal.",
+      "code": null
+    },
+    {
+      "seq": 5195,
+      "time": "2026-10-13T01:53:45.948Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Agente de Cliente Alfa ficou 45 s sem sinal.",
+      "code": null
+    },
+    {
+      "seq": 5194,
+      "time": "2026-10-13T01:43:02.190Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Cliente Gama chamou ssam_job: falhou com JOB_REFUSED em 7,4 s. Esta descrição é longa de propósito para mostrar as reticências na coluna e o texto inteiro no título da célula.",
+      "code": "JOB_REFUSED"
+    },
+    {
+      "seq": 5193,
+      "time": "2026-10-13T01:34:49.577Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5192,
+      "time": "2026-10-13T01:21:38.359Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Chamada blob-get ao agente de Cliente Eta com nome comprido para testar reticências na tabela falhou: AGENT_TIMEOUT.",
+      "code": "AGENT_TIMEOUT"
+    },
+    {
+      "seq": 5191,
+      "time": "2026-10-13T01:10:02.453Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Cliente Eta com nome comprido para testar reticências na tabela chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    }
+  ],
+  "indexing": {
+    "state": "running",
+    "progress": 0.42,
+    "detail": "server.log.20261005T041500Z.gz"
+  }
+}

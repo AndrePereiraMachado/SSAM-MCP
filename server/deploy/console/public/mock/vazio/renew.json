@@ -1,0 +1,103 @@
+{
+  "ok": true,
+  "license": {
+    "id": "tok_00000000be7a",
+    "customer": "Cliente Beta",
+    "state": "active",
+    "createdAt": "2026-10-13T02:51:08Z",
+    "expiresAt": "2026-11-22T02:51:08Z",
+    "revokedAt": null,
+    "daysLeft": 40,
+    "lanes": [
+      "odc"
+    ],
+    "agentCredentialIssuedAt": "2026-10-13T02:51:08Z",
+    "machine": null,
+    "accessAlerts": 0,
+    "agent": {
+      "state": "never",
+      "since": null,
+      "lastSignalAt": null,
+      "version": null,
+      "closedReason": null
+    },
+    "sessionsOpen": 0,
+    "today": {
+      "calls": 0,
+      "failures": 0
+    },
+    "daily14": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "lastActivity": null,
+    "workspace": null,
+    "actions": {
+      "renew": {
+        "allowed": true,
+        "reason": null
+      },
+      "lanes": {
+        "allowed": true,
+        "reason": null
+      },
+      "agentRotate": {
+        "allowed": true,
+        "reason": null
+      },
+      "revoke": {
+        "allowed": true,
+        "reason": null
+      }
+    },
+    "history": [
+      {
+        "time": "2026-10-13T02:51:08Z",
+        "action": "renew",
+        "actor": "painel",
+        "token": "tok_00000000be7a",
+        "customer": "Cliente Beta",
+        "result": "ok",
+        "code": null,
+        "detail": {
+          "days": 30,
+          "previousExpiresAt": "2026-10-23T02:51:08Z",
+          "expiresAt": "2026-11-22T02:51:08Z"
+        }
+      },
+      {
+        "time": "2026-10-13T02:51:08Z",
+        "action": "issue",
+        "actor": "painel",
+        "token": "tok_00000000be7a",
+        "customer": "Cliente Beta",
+        "result": "ok",
+        "code": null,
+        "detail": {
+          "days": 10,
+          "lanes": [
+            "odc"
+          ],
+          "expiresAt": "2026-10-23T02:51:08Z"
+        }
+      }
+    ]
+  },
+  "previousExpiresAt": "2026-10-23T02:51:08Z",
+  "expiresAt": "2026-11-22T02:51:08Z",
+  "audit": {
+    "written": true
+  }
+}

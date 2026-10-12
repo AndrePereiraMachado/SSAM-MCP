@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "code": "TOKEN_REVOKED",
+    "message": "A licença está revogada; emita uma nova."
+  }
+}

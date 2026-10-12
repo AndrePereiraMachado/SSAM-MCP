@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "code": "CONFIRM_MISMATCH",
+    "message": "A confirmação não confere: digite exatamente o nome do cliente."
+  }
+}

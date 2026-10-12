@@ -1,0 +1,1330 @@
+{
+  "ok": true,
+  "now": "2026-10-13T02:51:08Z",
+  "collector": {
+    "state": "fresh",
+    "collectedAt": "2026-10-13T02:50:56Z",
+    "ageS": 12,
+    "durationMs": 2400,
+    "errors": [],
+    "version": "1"
+  },
+  "host": {
+    "ok": true,
+    "at": "2026-10-13T02:50:56Z",
+    "hostname": "vps-exemplo",
+    "os": "Ubuntu 26.04.1 LTS",
+    "kernel": "7.0.0-34-generic",
+    "nproc": 2,
+    "uptimeS": 472158,
+    "bootAt": "2026-10-07T15:41:50Z",
+    "load": [
+      0.09,
+      0.04,
+      0.01
+    ],
+    "cpu": {
+      "pct": 1.2,
+      "iowaitPct": 0,
+      "stealPct": 0.5,
+      "windowS": 30
+    },
+    "mem": {
+      "totalB": 8320450560,
+      "availableB": 7257169920,
+      "swapTotalB": 0,
+      "swapUsedB": 0
+    },
+    "psi": {
+      "cpuSome10": 0,
+      "memSome10": 0,
+      "ioSome10": 0
+    },
+    "disks": [
+      {
+        "mount": "/",
+        "fs": "ext4",
+        "sizeB": 101000000000,
+        "usedB": 5900000000,
+        "availB": 95100000000,
+        "usedPct": 6,
+        "inodesPct": 1
+      }
+    ],
+    "net": {
+      "iface": "eth0",
+      "rxB": 1860000000,
+      "txB": 86000000,
+      "rxBps": 1830,
+      "txBps": 410
+    },
+    "time": {
+      "ntpSynced": true,
+      "tz": "Etc/UTC"
+    },
+    "failedUnits": 0
+  },
+  "updates": {
+    "ok": true,
+    "at": "2026-10-13T02:50:56Z",
+    "upgradable": 10,
+    "security": 0,
+    "packages": [
+      "containerd.io",
+      "docker-ce",
+      "docker-ce-cli",
+      "docker-compose-plugin",
+      "docker-buildx-plugin",
+      "curl",
+      "libcurl4t64",
+      "python3-urllib3",
+      "tzdata",
+      "ubuntu-pro-client"
+    ],
+    "rebootRequired": true,
+    "rebootSince": "2026-10-07T15:50:20Z",
+    "rebootPkgs": [
+      "linux-image-7.0.0-38-generic",
+      "linux-base"
+    ],
+    "unattended": {
+      "enabled": true,
+      "lastRunAt": "2026-10-11T06:30:00Z",
+      "lastSuccessAt": "2026-10-11T04:00:00Z"
+    }
+  },
+  "security": {
+    "ok": true,
+    "at": "2026-10-13T02:50:56Z",
+    "ufw": {
+      "active": true,
+      "defaultIncoming": "deny",
+      "defaultOutgoing": "allow",
+      "defaultRouted": "deny",
+      "allowIn": [
+        "22/tcp",
+        "80/tcp",
+        "443/tcp"
+      ],
+      "rules": [
+        "22/tcp ALLOW IN Anywhere",
+        "80/tcp ALLOW IN Anywhere",
+        "443/tcp ALLOW IN Anywhere",
+        "22/tcp (v6) ALLOW IN Anywhere (v6)",
+        "80/tcp (v6) ALLOW IN Anywhere (v6)",
+        "443/tcp (v6) ALLOW IN Anywhere (v6)"
+      ]
+    },
+    "ssh": {
+      "passwordAuth": true,
+      "permitRootLogin": "yes",
+      "fail2ban": "absent",
+      "failures24h": 40,
+      "topSources": [
+        {
+          "ip": "198.51.100.7",
+          "count": 12
+        },
+        {
+          "ip": "203.0.113.50",
+          "count": 9
+        },
+        {
+          "ip": "192.0.2.77",
+          "count": 6
+        }
+      ]
+    }
+  },
+  "tls": {
+    "certs": [
+      {
+        "name": "ssam.example.com",
+        "notBefore": "2026-10-11T21:49:59Z",
+        "notAfter": "2027-01-09T21:49:58Z",
+        "daysLeft": 88.7909,
+        "issuer": "Let's Encrypt YE2"
+      }
+    ]
+  },
+  "backups": {
+    "ok": true,
+    "at": "2026-10-13T02:50:56Z",
+    "dir": "/var/backups/ssam-server",
+    "exists": true,
+    "count": 0,
+    "totalB": 0,
+    "newest": null,
+    "cron": {
+      "backup": false,
+      "rotate": false
+    },
+    "cronLogTail": []
+  },
+  "containers": [
+    {
+      "name": "ssam-prod-ssam-server-1",
+      "service": "ssam-server",
+      "project": "ssam-prod",
+      "image": "ssam-server:prod-20261011-ed0f94b",
+      "imageId": "sha256:232e6a22dec2a1f0b5c7d9e8f6a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6",
+      "state": "running",
+      "health": "healthy",
+      "failingStreak": 0,
+      "lastHealth": [
+        {
+          "at": "2026-10-13T02:50:38Z",
+          "exit": 0
+        },
+        {
+          "at": "2026-10-13T02:50:08Z",
+          "exit": 0
+        },
+        {
+          "at": "2026-10-13T02:49:38Z",
+          "exit": 0
+        }
+      ],
+      "startedAt": "2026-10-12T21:39:08Z",
+      "restartCount": 0,
+      "oomKilled": false,
+      "restartPolicy": "unless-stopped",
+      "cpuPct": 0.06,
+      "memB": 394543104,
+      "memLimitB": 6442450944,
+      "netRxB": 126000,
+      "netTxB": 1260000,
+      "blkReadB": 0,
+      "blkWriteB": 6680000,
+      "pids": 18,
+      "sinceS": 18720
+    },
+    {
+      "name": "ssam-prod-caddy-1",
+      "service": "caddy",
+      "project": "ssam-prod",
+      "image": "caddy:2.10.2-alpine",
+      "imageId": "sha256:5b1e8f0c6d7a9b2c3d4e5f60718293a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0",
+      "state": "running",
+      "health": null,
+      "failingStreak": 0,
+      "lastHealth": [],
+      "startedAt": "2026-10-11T22:30:00Z",
+      "restartCount": 0,
+      "oomKilled": false,
+      "restartPolicy": "unless-stopped",
+      "cpuPct": 0.01,
+      "memB": 31457280,
+      "memLimitB": 268435456,
+      "netRxB": 2100000,
+      "netTxB": 2600000,
+      "blkReadB": 0,
+      "blkWriteB": 0,
+      "pids": 9,
+      "sinceS": 102068
+    }
+  ],
+  "volumes": [
+    {
+      "name": "ssam-prod_caddy-config",
+      "sizeB": 12288
+    },
+    {
+      "name": "ssam-prod_caddy-data",
+      "sizeB": 61440
+    },
+    {
+      "name": "ssam-prod_cache",
+      "sizeB": 72000000
+    },
+    {
+      "name": "ssam-prod_friction",
+      "sizeB": 4096
+    },
+    {
+      "name": "ssam-prod_odc-features",
+      "sizeB": 180000
+    },
+    {
+      "name": "ssam-prod_server-state",
+      "sizeB": 1700000
+    }
+  ],
+  "systemDf": {
+    "imagesB": 3489000000,
+    "imagesReclaimableB": 651600000,
+    "volumesB": 74040000,
+    "buildCacheB": 0
+  },
+  "server": {
+    "health": {
+      "docker": "healthy",
+      "probe": {
+        "available": true,
+        "ok": true,
+        "pid": 7,
+        "ms": 3,
+        "error": null
+      }
+    },
+    "image": {
+      "tag": "prod-20261011-ed0f94b",
+      "version": "prod-20261011-ed0f94b",
+      "revision": "ed0f94ba986867ae132dc72ca97c84e7cb2c4d78",
+      "created": "2026-10-11T21:17:53Z"
+    },
+    "kernel": {
+      "running": {
+        "o11": "11.55.91",
+        "odc": "1.7.27",
+        "odcBridge": "v48",
+        "o11Hook": null,
+        "odcBridgeAccepted": [
+          "v45"
+        ]
+      },
+      "file": {
+        "o11": "11.55.91",
+        "odc": "1.7.27",
+        "odcBridge": "v48",
+        "o11Hook": null,
+        "odcBridgeAccepted": [
+          "v45"
+        ]
+      },
+      "drift": false,
+      "driftFields": []
+    },
+    "warm": {
+      "state": "warm",
+      "time": "2026-10-12T21:42:08Z",
+      "indexes": {
+        "ok": true,
+        "lanes": {
+          "odc": {
+            "ok": true,
+            "cache": "hit",
+            "ms": 900
+          },
+          "o11": {
+            "ok": true,
+            "cache": "built",
+            "ms": 4000
+          }
+        }
+      },
+      "delivery": {
+        "builder": {
+          "ok": true,
+          "pid": 41
+        },
+        "worker": {
+          "ok": false,
+          "note": "o worker ODC não respondeu no aquecimento"
+        }
+      },
+      "ms": 148000,
+      "workerRunning": true
+    },
+    "logs": {
+      "serverLogB": 7372,
+      "rotatedCount": 0,
+      "rotatedB": 0,
+      "auditFiles": 1,
+      "auditB": 2150,
+      "consoleAuditB": 1240
+    }
+  },
+  "coolify": [
+    {
+      "name": "coolify",
+      "state": "exited",
+      "restartPolicy": "no"
+    },
+    {
+      "name": "coolify-db",
+      "state": "exited",
+      "restartPolicy": "no"
+    },
+    {
+      "name": "coolify-proxy",
+      "state": "exited",
+      "restartPolicy": "no"
+    },
+    {
+      "name": "coolify-realtime",
+      "state": "exited",
+      "restartPolicy": "no"
+    },
+    {
+      "name": "coolify-redis",
+      "state": "exited",
+      "restartPolicy": "no"
+    }
+  ],
+  "series": {
+    "stepS": 900,
+    "points": [
+      {
+        "t": "2026-10-12T03:06:08Z",
+        "cpuPct": 1.8,
+        "memUsedPct": 12.6,
+        "load1": 0.08,
+        "rxBps": 1911,
+        "txBps": 389,
+        "srvCpuPct": 0.21,
+        "srvMemB": 390000000
+      },
+      {
+        "t": "2026-10-12T03:21:08Z",
+        "cpuPct": 1.6,
+        "memUsedPct": 12.6,
+        "load1": 0.11,
+        "rxBps": 1646,
+        "txBps": 412,
+        "srvCpuPct": 0.17,
+        "srvMemB": 390392419
+      },
+      {
+        "t": "2026-10-12T03:36:08Z",
+        "cpuPct": 1.4,
+        "memUsedPct": 12.6,
+        "load1": 0.1,
+        "rxBps": 2142,
+        "txBps": 437,
+        "srvCpuPct": 0.22,
+        "srvMemB": 390783157
+      },
+      {
+        "t": "2026-10-12T03:51:08Z",
+        "cpuPct": 2,
+        "memUsedPct": 12.7,
+        "load1": 0.12,
+        "rxBps": 2122,
+        "txBps": 414,
+        "srvCpuPct": 0.19,
+        "srvMemB": 391170542
+      },
+      {
+        "t": "2026-10-12T04:06:08Z",
+        "cpuPct": 1.8,
+        "memUsedPct": 12.7,
+        "load1": 0.15,
+        "rxBps": 1986,
+        "txBps": 381,
+        "srvCpuPct": 0.24,
+        "srvMemB": 391552914
+      },
+      {
+        "t": "2026-10-12T04:21:08Z",
+        "cpuPct": 1.6,
+        "memUsedPct": 12.7,
+        "load1": 0.16,
+        "rxBps": 2192,
+        "txBps": 430,
+        "srvCpuPct": 0.2,
+        "srvMemB": 391928637
+      },
+      {
+        "t": "2026-10-12T04:36:08Z",
+        "cpuPct": 1.6,
+        "memUsedPct": 12.7,
+        "load1": 0.14,
+        "rxBps": 2150,
+        "txBps": 380,
+        "srvCpuPct": 0.06,
+        "srvMemB": 392296101
+      },
+      {
+        "t": "2026-10-12T04:51:08Z",
+        "cpuPct": 1.8,
+        "memUsedPct": 12.7,
+        "load1": 0.17,
+        "rxBps": 2043,
+        "txBps": 462,
+        "srvCpuPct": 0.22,
+        "srvMemB": 392653732
+      },
+      {
+        "t": "2026-10-12T05:06:08Z",
+        "cpuPct": 2,
+        "memUsedPct": 12.8,
+        "load1": 0.16,
+        "rxBps": 1564,
+        "txBps": 425,
+        "srvCpuPct": 0.17,
+        "srvMemB": 393000000
+      },
+      {
+        "t": "2026-10-12T05:21:08Z",
+        "cpuPct": 2.2,
+        "memUsedPct": 12.8,
+        "load1": 0.16,
+        "rxBps": 1918,
+        "txBps": 440,
+        "srvCpuPct": 0.17,
+        "srvMemB": 393333421
+      },
+      {
+        "t": "2026-10-12T05:36:08Z",
+        "cpuPct": 2.2,
+        "memUsedPct": 12.8,
+        "load1": 0.18,
+        "rxBps": 2098,
+        "txBps": 425,
+        "srvCpuPct": 0.2,
+        "srvMemB": 393652569
+      },
+      {
+        "t": "2026-10-12T05:51:08Z",
+        "cpuPct": 2.2,
+        "memUsedPct": 12.8,
+        "load1": 0.17,
+        "rxBps": 2381,
+        "txBps": 486,
+        "srvCpuPct": 0.2,
+        "srvMemB": 393956075
+      },
+      {
+        "t": "2026-10-12T06:06:08Z",
+        "cpuPct": 2.2,
+        "memUsedPct": 12.8,
+        "load1": 0.2,
+        "rxBps": 2189,
+        "txBps": 387,
+        "srvCpuPct": 0.07,
+        "srvMemB": 394242641
+      },
+      {
+        "t": "2026-10-12T06:21:08Z",
+        "cpuPct": 2.1,
+        "memUsedPct": 12.8,
+        "load1": 0.2,
+        "rxBps": 1810,
+        "txBps": 445,
+        "srvCpuPct": 0.12,
+        "srvMemB": 394511039
+      },
+      {
+        "t": "2026-10-12T06:36:08Z",
+        "cpuPct": 2,
+        "memUsedPct": 12.8,
+        "load1": 0.19,
+        "rxBps": 2020,
+        "txBps": 427,
+        "srvCpuPct": 0.21,
+        "srvMemB": 394760120
+      },
+      {
+        "t": "2026-10-12T06:51:08Z",
+        "cpuPct": 1.8,
+        "memUsedPct": 12.8,
+        "load1": 0.21,
+        "rxBps": 2079,
+        "txBps": 470,
+        "srvCpuPct": 0.21,
+        "srvMemB": 394988818
+      },
+      {
+        "t": "2026-10-12T07:06:08Z",
+        "cpuPct": 1.8,
+        "memUsedPct": 12.9,
+        "load1": 0.19,
+        "rxBps": 1639,
+        "txBps": 463,
+        "srvCpuPct": 0.21,
+        "srvMemB": 395196152
+      },
+      {
+        "t": "2026-10-12T07:21:08Z",
+        "cpuPct": 2.2,
+        "memUsedPct": 12.9,
+        "load1": 0.22,
+        "rxBps": 2391,
+        "txBps": 498,
+        "srvCpuPct": 0.18,
+        "srvMemB": 395381236
+      },
+      {
+        "t": "2026-10-12T07:36:08Z",
+        "cpuPct": 2.5,
+        "memUsedPct": 12.9,
+        "load1": 0.22,
+        "rxBps": 2232,
+        "txBps": 418,
+        "srvCpuPct": 0.19,
+        "srvMemB": 395543277
+      },
+      {
+        "t": "2026-10-12T07:51:08Z",
+        "cpuPct": 2.5,
+        "memUsedPct": 12.9,
+        "load1": 0.19,
+        "rxBps": 2039,
+        "txBps": 397,
+        "srvCpuPct": 0.19,
+        "srvMemB": 395681581
+      },
+      {
+        "t": "2026-10-12T08:06:08Z",
+        "cpuPct": 2.2,
+        "memUsedPct": 12.9,
+        "load1": 0.19,
+        "rxBps": 2293,
+        "txBps": 386,
+        "srvCpuPct": 0.23,
+        "srvMemB": 395795555
+      },
+      {
+        "t": "2026-10-12T08:21:08Z",
+        "cpuPct": 1.9,
+        "memUsedPct": 12.9,
+        "load1": 0.2,
+        "rxBps": 2301,
+        "txBps": 383,
+        "srvCpuPct": 0.19,
+        "srvMemB": 395884712
+      },
+      {
+        "t": "2026-10-12T08:36:08Z",
+        "cpuPct": 1.9,
+        "memUsedPct": 12.9,
+        "load1": 0.19,
+        "rxBps": 2394,
+        "txBps": 443,
+        "srvCpuPct": 0.1,
+        "srvMemB": 395948669
+      },
+      {
+        "t": "2026-10-12T08:51:08Z",
+        "cpuPct": 1.8,
+        "memUsedPct": 12.9,
+        "load1": 0.19,
+        "rxBps": 2084,
+        "txBps": 456,
+        "srvCpuPct": 0.23,
+        "srvMemB": 395987154
+      },
+      {
+        "t": "2026-10-12T09:06:08Z",
+        "cpuPct": 2.4,
+        "memUsedPct": 12.9,
+        "load1": 0.22,
+        "rxBps": 1613,
+        "txBps": 403,
+        "srvCpuPct": 0.09,
+        "srvMemB": 396000000
+      },
+      {
+        "t": "2026-10-12T09:21:08Z",
+        "cpuPct": 2.3,
+        "memUsedPct": 12.9,
+        "load1": 0.21,
+        "rxBps": 2020,
+        "txBps": 467,
+        "srvCpuPct": 0.12,
+        "srvMemB": 395987154
+      },
+      {
+        "t": "2026-10-12T09:36:08Z",
+        "cpuPct": 2.6,
+        "memUsedPct": 12.9,
+        "load1": 0.18,
+        "rxBps": 2368,
+        "txBps": 403,
+        "srvCpuPct": 0.14,
+        "srvMemB": 395948669
+      },
+      {
+        "t": "2026-10-12T09:51:08Z",
+        "cpuPct": 2.2,
+        "memUsedPct": 12.9,
+        "load1": 0.2,
+        "rxBps": 1996,
+        "txBps": 413,
+        "srvCpuPct": 0.19,
+        "srvMemB": 395884712
+      },
+      {
+        "t": "2026-10-12T10:06:08Z",
+        "cpuPct": 1.8,
+        "memUsedPct": 12.9,
+        "load1": 0.2,
+        "rxBps": 2201,
+        "txBps": 420,
+        "srvCpuPct": 0.15,
+        "srvMemB": 395795555
+      },
+      {
+        "t": "2026-10-12T10:21:08Z",
+        "cpuPct": 2.1,
+        "memUsedPct": 12.9,
+        "load1": 0.22,
+        "rxBps": 1571,
+        "txBps": 392,
+        "srvCpuPct": 0.1,
+        "srvMemB": 395681581
+      },
+      {
+        "t": "2026-10-12T10:36:08Z",
+        "cpuPct": 1.9,
+        "memUsedPct": 12.9,
+        "load1": 0.22,
+        "rxBps": 2194,
+        "txBps": 481,
+        "srvCpuPct": 0.14,
+        "srvMemB": 395543277
+      },
+      {
+        "t": "2026-10-12T10:51:08Z",
+        "cpuPct": 1.8,
+        "memUsedPct": 12.9,
+        "load1": 0.19,
+        "rxBps": 1734,
+        "txBps": 396,
+        "srvCpuPct": 0.09,
+        "srvMemB": 395381236
+      },
+      {
+        "t": "2026-10-12T11:06:08Z",
+        "cpuPct": 2,
+        "memUsedPct": 12.9,
+        "load1": 0.18,
+        "rxBps": 1517,
+        "txBps": 446,
+        "srvCpuPct": 0.15,
+        "srvMemB": 395196152
+      },
+      {
+        "t": "2026-10-12T11:21:08Z",
+        "cpuPct": 2,
+        "memUsedPct": 12.8,
+        "load1": 0.21,
+        "rxBps": 2305,
+        "txBps": 488,
+        "srvCpuPct": 0.12,
+        "srvMemB": 394988818
+      },
+      {
+        "t": "2026-10-12T11:36:08Z",
+        "cpuPct": 1.9,
+        "memUsedPct": 12.8,
+        "load1": 0.17,
+        "rxBps": 1683,
+        "txBps": 472,
+        "srvCpuPct": 0.06,
+        "srvMemB": 394760120
+      },
+      {
+        "t": "2026-10-12T11:51:08Z",
+        "cpuPct": 1.8,
+        "memUsedPct": 12.8,
+        "load1": 0.17,
+        "rxBps": 2387,
+        "txBps": 417,
+        "srvCpuPct": 0.17,
+        "srvMemB": 394511039
+      },
+      {
+        "t": "2026-10-12T12:06:08Z",
+        "cpuPct": 1.8,
+        "memUsedPct": 12.8,
+        "load1": 0.18,
+        "rxBps": 2232,
+        "txBps": 383,
+        "srvCpuPct": 0.26,
+        "srvMemB": 394242641
+      },
+      {
+        "t": "2026-10-12T12:21:08Z",
+        "cpuPct": 1.8,
+        "memUsedPct": 12.8,
+        "load1": 0.15,
+        "rxBps": 1513,
+        "txBps": 437,
+        "srvCpuPct": 0.2,
+        "srvMemB": 393956075
+      },
+      {
+        "t": "2026-10-12T12:36:08Z",
+        "cpuPct": 2.3,
+        "memUsedPct": 12.8,
+        "load1": 0.17,
+        "rxBps": 2013,
+        "txBps": 485,
+        "srvCpuPct": 0.19,
+        "srvMemB": 393652569
+      },
+      {
+        "t": "2026-10-12T12:51:08Z",
+        "cpuPct": 2.2,
+        "memUsedPct": 12.8,
+        "load1": 0.18,
+        "rxBps": 2041,
+        "txBps": 412,
+        "srvCpuPct": 0.18,
+        "srvMemB": 393333421
+      },
+      {
+        "t": "2026-10-12T13:06:08Z",
+        "cpuPct": 2.3,
+        "memUsedPct": 12.8,
+        "load1": 0.16,
+        "rxBps": 1679,
+        "txBps": 400,
+        "srvCpuPct": 0.17,
+        "srvMemB": 393000000
+      },
+      {
+        "t": "2026-10-12T13:21:08Z",
+        "cpuPct": 1.6,
+        "memUsedPct": 12.7,
+        "load1": 0.16,
+        "rxBps": 2274,
+        "txBps": 401,
+        "srvCpuPct": 0.22,
+        "srvMemB": 392653732
+      },
+      {
+        "t": "2026-10-12T13:36:08Z",
+        "cpuPct": 2,
+        "memUsedPct": 12.7,
+        "load1": 0.13,
+        "rxBps": 1708,
+        "txBps": 490,
+        "srvCpuPct": 0.21,
+        "srvMemB": 392296101
+      },
+      {
+        "t": "2026-10-12T13:51:08Z",
+        "cpuPct": 1.8,
+        "memUsedPct": 12.7,
+        "load1": 0.16,
+        "rxBps": 1879,
+        "txBps": 479,
+        "srvCpuPct": 0.15,
+        "srvMemB": 391928637
+      },
+      {
+        "t": "2026-10-12T14:06:08Z",
+        "cpuPct": 1.6,
+        "memUsedPct": 12.7,
+        "load1": 0.14,
+        "rxBps": 1844,
+        "txBps": 460,
+        "srvCpuPct": 0.11,
+        "srvMemB": 391552914
+      },
+      {
+        "t": "2026-10-12T14:21:08Z",
+        "cpuPct": 1.9,
+        "memUsedPct": 12.7,
+        "load1": 0.12,
+        "rxBps": 2118,
+        "txBps": 492,
+        "srvCpuPct": 0.24,
+        "srvMemB": 391170542
+      },
+      {
+        "t": "2026-10-12T14:36:08Z",
+        "cpuPct": 2,
+        "memUsedPct": 12.6,
+        "load1": 0.11,
+        "rxBps": 1693,
+        "txBps": 387,
+        "srvCpuPct": 0.1,
+        "srvMemB": 390783157
+      },
+      {
+        "t": "2026-10-12T14:51:08Z",
+        "cpuPct": 1.8,
+        "memUsedPct": 12.6,
+        "load1": 0.12,
+        "rxBps": 2357,
+        "txBps": 411,
+        "srvCpuPct": 0.2,
+        "srvMemB": 390392419
+      },
+      {
+        "t": "2026-10-12T15:06:08Z",
+        "cpuPct": 1.4,
+        "memUsedPct": 12.6,
+        "load1": 0.12,
+        "rxBps": 1710,
+        "txBps": 436,
+        "srvCpuPct": 0.19,
+        "srvMemB": 390000000
+      },
+      {
+        "t": "2026-10-12T15:21:08Z",
+        "cpuPct": 1.8,
+        "memUsedPct": 12.6,
+        "load1": 0.12,
+        "rxBps": 1565,
+        "txBps": 481,
+        "srvCpuPct": 0.11,
+        "srvMemB": 389607581
+      },
+      {
+        "t": "2026-10-12T15:36:08Z",
+        "cpuPct": 1.8,
+        "memUsedPct": 12.6,
+        "load1": 0.12,
+        "rxBps": 2141,
+        "txBps": 467,
+        "srvCpuPct": 0.14,
+        "srvMemB": 389216843
+      },
+      {
+        "t": "2026-10-12T15:51:08Z",
+        "cpuPct": 1.1,
+        "memUsedPct": 12.5,
+        "load1": 0.09,
+        "rxBps": 2026,
+        "txBps": 445,
+        "srvCpuPct": 0.17,
+        "srvMemB": 388829458
+      },
+      {
+        "t": "2026-10-12T16:06:08Z",
+        "cpuPct": 1.5,
+        "memUsedPct": 12.5,
+        "load1": 0.08,
+        "rxBps": 2305,
+        "txBps": 464,
+        "srvCpuPct": 0.18,
+        "srvMemB": 388447086
+      },
+      {
+        "t": "2026-10-12T16:21:08Z",
+        "cpuPct": 1.7,
+        "memUsedPct": 12.5,
+        "load1": 0.13,
+        "rxBps": 2379,
+        "txBps": 499,
+        "srvCpuPct": 0.23,
+        "srvMemB": 388071363
+      },
+      {
+        "t": "2026-10-12T16:36:08Z",
+        "cpuPct": 1,
+        "memUsedPct": 12.5,
+        "load1": 0.1,
+        "rxBps": 1987,
+        "txBps": 392,
+        "srvCpuPct": 0.18,
+        "srvMemB": 387703899
+      },
+      {
+        "t": "2026-10-12T16:51:08Z",
+        "cpuPct": 1.4,
+        "memUsedPct": 12.5,
+        "load1": 0.12,
+        "rxBps": 2170,
+        "txBps": 410,
+        "srvCpuPct": 0.17,
+        "srvMemB": 387346268
+      },
+      {
+        "t": "2026-10-12T17:06:08Z",
+        "cpuPct": 1.3,
+        "memUsedPct": 12.5,
+        "load1": 0.09,
+        "rxBps": 1583,
+        "txBps": 423,
+        "srvCpuPct": 0.21,
+        "srvMemB": 387000000
+      },
+      {
+        "t": "2026-10-12T17:21:08Z",
+        "cpuPct": 1.1,
+        "memUsedPct": 12.4,
+        "load1": 0.1,
+        "rxBps": 2026,
+        "txBps": 442,
+        "srvCpuPct": 0.09,
+        "srvMemB": 386666579
+      },
+      {
+        "t": "2026-10-12T17:36:08Z",
+        "cpuPct": 0.9,
+        "memUsedPct": 12.4,
+        "load1": 0.1,
+        "rxBps": 1534,
+        "txBps": 419,
+        "srvCpuPct": 0.08,
+        "srvMemB": 386347431
+      },
+      {
+        "t": "2026-10-12T17:51:08Z",
+        "cpuPct": 1.1,
+        "memUsedPct": 12.4,
+        "load1": 0.1,
+        "rxBps": 2195,
+        "txBps": 429,
+        "srvCpuPct": 0.21,
+        "srvMemB": 386043925
+      },
+      {
+        "t": "2026-10-12T18:06:08Z",
+        "cpuPct": 1.1,
+        "memUsedPct": 12.4,
+        "load1": 0.13,
+        "rxBps": 2354,
+        "txBps": 458,
+        "srvCpuPct": 0.22,
+        "srvMemB": 385757359
+      },
+      {
+        "t": "2026-10-12T18:21:08Z",
+        "cpuPct": 1.4,
+        "memUsedPct": 12.4,
+        "load1": 0.12,
+        "rxBps": 2195,
+        "txBps": 433,
+        "srvCpuPct": 0.25,
+        "srvMemB": 385488961
+      },
+      {
+        "t": "2026-10-12T18:36:08Z",
+        "cpuPct": 6.9,
+        "memUsedPct": 12.4,
+        "load1": 0.1,
+        "rxBps": 41834,
+        "txBps": 413,
+        "srvCpuPct": 0.21,
+        "srvMemB": 385239880
+      },
+      {
+        "t": "2026-10-12T18:51:08Z",
+        "cpuPct": 1.3,
+        "memUsedPct": 12.4,
+        "load1": 0.1,
+        "rxBps": 1994,
+        "txBps": 428,
+        "srvCpuPct": 0.14,
+        "srvMemB": 385011182
+      },
+      {
+        "t": "2026-10-12T19:06:08Z",
+        "cpuPct": 0.7,
+        "memUsedPct": 12.3,
+        "load1": 0.09,
+        "rxBps": 1896,
+        "txBps": 472,
+        "srvCpuPct": 0.2,
+        "srvMemB": 384803848
+      },
+      {
+        "t": "2026-10-12T19:21:08Z",
+        "cpuPct": 1.4,
+        "memUsedPct": 12.3,
+        "load1": 0.11,
+        "rxBps": 1573,
+        "txBps": 473,
+        "srvCpuPct": 0.1,
+        "srvMemB": 384618764
+      },
+      {
+        "t": "2026-10-12T19:36:08Z",
+        "cpuPct": 1,
+        "memUsedPct": 12.3,
+        "load1": 0.1,
+        "rxBps": 2048,
+        "txBps": 445,
+        "srvCpuPct": 0.18,
+        "srvMemB": 384456723
+      },
+      {
+        "t": "2026-10-12T19:51:08Z",
+        "cpuPct": 0.8,
+        "memUsedPct": 12.3,
+        "load1": 0.12,
+        "rxBps": 1794,
+        "txBps": 420,
+        "srvCpuPct": 0.2,
+        "srvMemB": 384318419
+      },
+      {
+        "t": "2026-10-12T20:06:08Z",
+        "cpuPct": 0.7,
+        "memUsedPct": 12.3,
+        "load1": 0.09,
+        "rxBps": 2276,
+        "txBps": 414,
+        "srvCpuPct": 0.23,
+        "srvMemB": 384204445
+      },
+      {
+        "t": "2026-10-12T20:21:08Z",
+        "cpuPct": 0.9,
+        "memUsedPct": 12.3,
+        "load1": 0.11,
+        "rxBps": 1509,
+        "txBps": 396,
+        "srvCpuPct": 0.09,
+        "srvMemB": 384115288
+      },
+      {
+        "t": "2026-10-12T20:36:08Z",
+        "cpuPct": 1,
+        "memUsedPct": 12.3,
+        "load1": 0.11,
+        "rxBps": 1542,
+        "txBps": 412,
+        "srvCpuPct": 0.19,
+        "srvMemB": 384051331
+      },
+      {
+        "t": "2026-10-12T20:51:08Z",
+        "cpuPct": 1.2,
+        "memUsedPct": 12.3,
+        "load1": 0.1,
+        "rxBps": 1756,
+        "txBps": 413,
+        "srvCpuPct": 0.07,
+        "srvMemB": 384012846
+      },
+      {
+        "t": "2026-10-12T21:06:08Z",
+        "cpuPct": 0.6,
+        "memUsedPct": 12.3,
+        "load1": 0.1,
+        "rxBps": 2353,
+        "txBps": 414,
+        "srvCpuPct": 0.07,
+        "srvMemB": 384000000
+      },
+      {
+        "t": "2026-10-12T21:21:08Z",
+        "cpuPct": 0.7,
+        "memUsedPct": 12.3,
+        "load1": 0.09,
+        "rxBps": 2091,
+        "txBps": 444,
+        "srvCpuPct": 0.1,
+        "srvMemB": 384012846
+      },
+      {
+        "t": "2026-10-12T21:36:08Z",
+        "cpuPct": 1,
+        "memUsedPct": 12.3,
+        "load1": 0.09,
+        "rxBps": 1539,
+        "txBps": 390,
+        "srvCpuPct": 0.06,
+        "srvMemB": 384051331
+      },
+      {
+        "t": "2026-10-12T21:51:08Z",
+        "cpuPct": 0.9,
+        "memUsedPct": 12.3,
+        "load1": 0.12,
+        "rxBps": 1579,
+        "txBps": 455,
+        "srvCpuPct": 0.09,
+        "srvMemB": 384115288
+      },
+      {
+        "t": "2026-10-12T22:06:08Z",
+        "cpuPct": 1.2,
+        "memUsedPct": 12.3,
+        "load1": 0.09,
+        "rxBps": 1570,
+        "txBps": 481,
+        "srvCpuPct": 0.13,
+        "srvMemB": 384204445
+      },
+      {
+        "t": "2026-10-12T22:21:08Z",
+        "cpuPct": 0.9,
+        "memUsedPct": 12.3,
+        "load1": 0.12,
+        "rxBps": 2264,
+        "txBps": 476,
+        "srvCpuPct": 0.12,
+        "srvMemB": 384318419
+      },
+      {
+        "t": "2026-10-12T22:36:08Z",
+        "cpuPct": 1.2,
+        "memUsedPct": 12.3,
+        "load1": 0.12,
+        "rxBps": 1671,
+        "txBps": 410,
+        "srvCpuPct": 0.25,
+        "srvMemB": 384456723
+      },
+      {
+        "t": "2026-10-12T22:51:08Z",
+        "cpuPct": 1.2,
+        "memUsedPct": 12.3,
+        "load1": 0.12,
+        "rxBps": 2129,
+        "txBps": 428,
+        "srvCpuPct": 0.19,
+        "srvMemB": 384618764
+      },
+      {
+        "t": "2026-10-12T23:06:08Z",
+        "cpuPct": 1,
+        "memUsedPct": 12.3,
+        "load1": 0.1,
+        "rxBps": 1719,
+        "txBps": 486,
+        "srvCpuPct": 0.18,
+        "srvMemB": 384803848
+      },
+      {
+        "t": "2026-10-12T23:21:08Z",
+        "cpuPct": 0.7,
+        "memUsedPct": 12.4,
+        "load1": 0.09,
+        "rxBps": 1906,
+        "txBps": 464,
+        "srvCpuPct": 0.2,
+        "srvMemB": 385011182
+      },
+      {
+        "t": "2026-10-12T23:36:08Z",
+        "cpuPct": 1.1,
+        "memUsedPct": 12.4,
+        "load1": 0.12,
+        "rxBps": 1698,
+        "txBps": 473,
+        "srvCpuPct": 0.14,
+        "srvMemB": 385239880
+      },
+      {
+        "t": "2026-10-12T23:51:08Z",
+        "cpuPct": 0.8,
+        "memUsedPct": 12.4,
+        "load1": 0.12,
+        "rxBps": 1634,
+        "txBps": 444,
+        "srvCpuPct": 0.24,
+        "srvMemB": 385488961
+      },
+      {
+        "t": "2026-10-13T00:06:08Z",
+        "cpuPct": 1.2,
+        "memUsedPct": 12.4,
+        "load1": 0.1,
+        "rxBps": 1946,
+        "txBps": 499,
+        "srvCpuPct": 0.14,
+        "srvMemB": 385757359
+      },
+      {
+        "t": "2026-10-13T00:21:08Z",
+        "cpuPct": 0.9,
+        "memUsedPct": 12.4,
+        "load1": 0.1,
+        "rxBps": 1667,
+        "txBps": 385,
+        "srvCpuPct": 0.18,
+        "srvMemB": 386043925
+      },
+      {
+        "t": "2026-10-13T00:36:08Z",
+        "cpuPct": 0.9,
+        "memUsedPct": 12.4,
+        "load1": 0.11,
+        "rxBps": 1595,
+        "txBps": 457,
+        "srvCpuPct": 0.15,
+        "srvMemB": 386347431
+      },
+      {
+        "t": "2026-10-13T00:51:08Z",
+        "cpuPct": 1.4,
+        "memUsedPct": 12.4,
+        "load1": 0.1,
+        "rxBps": 1871,
+        "txBps": 443,
+        "srvCpuPct": 0.2,
+        "srvMemB": 386666579
+      },
+      {
+        "t": "2026-10-13T01:06:08Z",
+        "cpuPct": 1.6,
+        "memUsedPct": 12.5,
+        "load1": 0.08,
+        "rxBps": 1655,
+        "txBps": 469,
+        "srvCpuPct": 0.15,
+        "srvMemB": 387000000
+      },
+      {
+        "t": "2026-10-13T01:21:08Z",
+        "cpuPct": 1.3,
+        "memUsedPct": 12.5,
+        "load1": 0.11,
+        "rxBps": 1915,
+        "txBps": 446,
+        "srvCpuPct": 0.23,
+        "srvMemB": 387346268
+      },
+      {
+        "t": "2026-10-13T01:36:08Z",
+        "cpuPct": 1.1,
+        "memUsedPct": 12.5,
+        "load1": 0.12,
+        "rxBps": 2000,
+        "txBps": 401,
+        "srvCpuPct": 0.24,
+        "srvMemB": 387703899
+      },
+      {
+        "t": "2026-10-13T01:51:08Z",
+        "cpuPct": 1.8,
+        "memUsedPct": 12.5,
+        "load1": 0.12,
+        "rxBps": 1934,
+        "txBps": 446,
+        "srvCpuPct": 0.11,
+        "srvMemB": 388071363
+      },
+      {
+        "t": "2026-10-13T02:06:08Z",
+        "cpuPct": 1.3,
+        "memUsedPct": 12.5,
+        "load1": 0.09,
+        "rxBps": 1636,
+        "txBps": 449,
+        "srvCpuPct": 0.19,
+        "srvMemB": 388447086
+      },
+      {
+        "t": "2026-10-13T02:21:08Z",
+        "cpuPct": 1.8,
+        "memUsedPct": 12.5,
+        "load1": 0.12,
+        "rxBps": 1587,
+        "txBps": 467,
+        "srvCpuPct": 0.15,
+        "srvMemB": 388829458
+      },
+      {
+        "t": "2026-10-13T02:36:08Z",
+        "cpuPct": 1.4,
+        "memUsedPct": 12.6,
+        "load1": 0.09,
+        "rxBps": 1992,
+        "txBps": 484,
+        "srvCpuPct": 0.15,
+        "srvMemB": 389216843
+      },
+      {
+        "t": "2026-10-13T02:51:08Z",
+        "cpuPct": 1.5,
+        "memUsedPct": 12.6,
+        "load1": 0.08,
+        "rxBps": 2317,
+        "txBps": 467,
+        "srvCpuPct": 0.23,
+        "srvMemB": 389607581
+      }
+    ]
+  }
+}

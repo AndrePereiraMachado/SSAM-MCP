@@ -1,0 +1,217 @@
+{
+  "ok": true,
+  "range": {
+    "kind": "7d",
+    "from": "2026-10-06",
+    "to": "2026-10-12",
+    "days": 7,
+    "timeZone": "America/Sao_Paulo"
+  },
+  "indexing": {
+    "state": "ready",
+    "progress": 1,
+    "detail": null
+  },
+  "totals": {
+    "calls": 42,
+    "failures": 1,
+    "p50Ms": 488,
+    "p90Ms": 2100,
+    "maxMs": 2300,
+    "customersActive": 3,
+    "sessionsOpened": 9,
+    "agentCalls": 17,
+    "agentFailures": 0
+  },
+  "byCustomer": [
+    {
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "calls": 33,
+      "failures": 1,
+      "p50Ms": 520,
+      "p90Ms": 2100,
+      "topTool": "studio_inspect",
+      "sessionsOpened": 6,
+      "agentCalls": 13,
+      "agentFailures": 0,
+      "lastAt": "2026-10-13T02:48:08Z",
+      "workspaceBytes": 1153434,
+      "daily": [
+        0,
+        2,
+        10,
+        0,
+        0,
+        7,
+        14
+      ]
+    },
+    {
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta",
+      "calls": 7,
+      "failures": 0,
+      "p50Ms": 300,
+      "p90Ms": 900,
+      "topTool": "odc_read",
+      "sessionsOpened": 2,
+      "agentCalls": 3,
+      "agentFailures": 0,
+      "lastAt": "2026-10-09T22:20:00Z",
+      "workspaceBytes": 220160,
+      "daily": [
+        2,
+        4,
+        0,
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "calls": 2,
+      "failures": 0,
+      "p50Ms": 610,
+      "p90Ms": 1700,
+      "topTool": "studio_inspect",
+      "sessionsOpened": 1,
+      "agentCalls": 1,
+      "agentFailures": 0,
+      "lastAt": "2026-10-07T18:40:00Z",
+      "workspaceBytes": 482304,
+      "daily": [
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "byTool": [
+    {
+      "tool": "odc_read",
+      "calls": 14,
+      "failures": 1,
+      "p50Ms": 380,
+      "p90Ms": 1200,
+      "maxMs": 1500,
+      "customers": 2,
+      "topCode": "AGENT_NOT_CONNECTED"
+    },
+    {
+      "tool": "studio_inspect",
+      "calls": 13,
+      "failures": 0,
+      "p50Ms": 640,
+      "p90Ms": 1900,
+      "maxMs": 2100,
+      "customers": 2,
+      "topCode": null
+    },
+    {
+      "tool": "ssam_doctor",
+      "calls": 10,
+      "failures": 0,
+      "p50Ms": 120,
+      "p90Ms": 300,
+      "maxMs": 410,
+      "customers": 3,
+      "topCode": null
+    },
+    {
+      "tool": "ssam_map",
+      "calls": 5,
+      "failures": 0,
+      "p50Ms": 900,
+      "p90Ms": 2100,
+      "maxMs": 2300,
+      "customers": 1,
+      "topCode": null
+    }
+  ],
+  "byCode": [
+    {
+      "code": "AGENT_NOT_CONNECTED",
+      "count": 1,
+      "tools": [
+        {
+          "tool": "odc_read",
+          "count": 1
+        }
+      ],
+      "customers": 1,
+      "lastAt": "2026-10-13T02:48:08Z"
+    }
+  ],
+  "byDay": [
+    {
+      "day": "2026-10-12",
+      "calls": 14,
+      "failures": 1,
+      "p50Ms": 520,
+      "p90Ms": 2100,
+      "customers": 1
+    },
+    {
+      "day": "2026-10-11",
+      "calls": 7,
+      "failures": 0,
+      "p50Ms": 520,
+      "p90Ms": 2100,
+      "customers": 1
+    },
+    {
+      "day": "2026-10-10",
+      "calls": 0,
+      "failures": 0,
+      "p50Ms": null,
+      "p90Ms": null,
+      "customers": 0
+    },
+    {
+      "day": "2026-10-09",
+      "calls": 1,
+      "failures": 0,
+      "p50Ms": 300,
+      "p90Ms": 900,
+      "customers": 1
+    },
+    {
+      "day": "2026-10-08",
+      "calls": 10,
+      "failures": 0,
+      "p50Ms": 520,
+      "p90Ms": 2100,
+      "customers": 1
+    },
+    {
+      "day": "2026-10-07",
+      "calls": 6,
+      "failures": 0,
+      "p50Ms": 373,
+      "p90Ms": 2100,
+      "customers": 2
+    },
+    {
+      "day": "2026-10-06",
+      "calls": 4,
+      "failures": 0,
+      "p50Ms": 455,
+      "p90Ms": 1700,
+      "customers": 2
+    }
+  ],
+  "denied": {
+    "available": false,
+    "since": null,
+    "byStatus": {},
+    "rows": []
+  }
+}

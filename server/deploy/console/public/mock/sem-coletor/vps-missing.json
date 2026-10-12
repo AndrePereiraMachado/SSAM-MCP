@@ -1,0 +1,49 @@
+{
+  "ok": true,
+  "now": "2026-10-13T02:51:08Z",
+  "collector": {
+    "state": "missing",
+    "collectedAt": null,
+    "ageS": null,
+    "durationMs": null,
+    "errors": [],
+    "version": null
+  },
+  "host": null,
+  "updates": null,
+  "security": null,
+  "tls": null,
+  "backups": null,
+  "containers": null,
+  "volumes": null,
+  "systemDf": null,
+  "server": {
+    "health": null,
+    "image": null,
+    "kernel": {
+      "running": null,
+      "file": {
+        "o11": "11.55.91",
+        "odc": "1.7.27",
+        "odcBridge": "v48",
+        "o11Hook": null,
+        "odcBridgeAccepted": [
+          "v45"
+        ]
+      },
+      "drift": false,
+      "driftFields": []
+    },
+    "warm": null,
+    "logs": {
+      "serverLogB": 7372,
+      "rotatedCount": 0,
+      "rotatedB": 0,
+      "auditFiles": 1,
+      "auditB": 2150,
+      "consoleAuditB": 1240
+    }
+  },
+  "coolify": null,
+  "series": null
+}

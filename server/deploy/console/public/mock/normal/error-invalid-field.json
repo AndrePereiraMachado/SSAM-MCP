@@ -1,0 +1,8 @@
+{
+  "ok": false,
+  "error": {
+    "code": "INVALID_FIELD",
+    "message": "Campo inválido: customer (1 a 64 caracteres: letras, números, espaço, ponto, hífen ou sublinhado).",
+    "field": "customer"
+  }
+}

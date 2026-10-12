@@ -1,0 +1,2006 @@
+{
+  "ok": true,
+  "lastSeq": 5200,
+  "events": [
+    {
+      "seq": 5001,
+      "time": "2026-10-11T20:57:32.782Z",
+      "level": "error",
+      "group": "servidor",
+      "token": null,
+      "customer": null,
+      "text": "Erro interno do servidor (request-failed: ECONNRESET).",
+      "code": "ECONNRESET"
+    },
+    {
+      "seq": 5002,
+      "time": "2026-10-11T21:08:36.060Z",
+      "level": "info",
+      "group": "licenca",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Faixas de Cliente Alfa: ODC, O11 → ODC (fora do painel).",
+      "code": null
+    },
+    {
+      "seq": 5003,
+      "time": "2026-10-11T21:12:19.415Z",
+      "level": "error",
+      "group": "agente",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Credencial do agente de Cliente Alfa usada em outra máquina: PC-TESTE-02 (teste).",
+      "code": null
+    },
+    {
+      "seq": 5004,
+      "time": "2026-10-11T21:23:10.185Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Cliente Beta Engenharia de Software e Integrações Corporativas chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 5005,
+      "time": "2026-10-11T21:30:25.765Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Cliente Eta com nome comprido para testar reticências na tabela: sessão MCP encerrada (substituída (limite de 8 sessões)).",
+      "code": null
+    },
+    {
+      "seq": 5006,
+      "time": "2026-10-11T21:36:03.286Z",
+      "level": "warning",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Coletor da VPS parou.",
+      "code": null
+    },
+    {
+      "seq": 5007,
+      "time": "2026-10-11T21:44:57.954Z",
+      "level": "error",
+      "group": "servidor",
+      "token": null,
+      "customer": null,
+      "text": "Erro interno do servidor (request-failed: ECONNRESET).",
+      "code": "ECONNRESET"
+    },
+    {
+      "seq": 5008,
+      "time": "2026-10-11T21:56:47.894Z",
+      "level": "warning",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Coletor da VPS parou.",
+      "code": null
+    },
+    {
+      "seq": 5009,
+      "time": "2026-10-11T22:10:53.341Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Cliente Delta: sessão MCP encerrada (substituída (limite de 8 sessões)).",
+      "code": null
+    },
+    {
+      "seq": 5010,
+      "time": "2026-10-11T22:24:52.795Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Chamada blob-get ao agente de Cliente Beta Engenharia de Software e Integrações Corporativas falhou: AGENT_TIMEOUT.",
+      "code": "AGENT_TIMEOUT"
+    },
+    {
+      "seq": 5011,
+      "time": "2026-10-11T22:35:54.742Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Agente de Cliente Beta Engenharia de Software e Integrações Corporativas ficou 45 s sem sinal.",
+      "code": null
+    },
+    {
+      "seq": 5012,
+      "time": "2026-10-11T22:42:07.719Z",
+      "level": "error",
+      "group": "agente",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Credencial do agente de Cliente Eta com nome comprido para testar reticências na tabela usada em outra máquina: PC-TESTE-02 (teste).",
+      "code": null
+    },
+    {
+      "seq": 5013,
+      "time": "2026-10-11T22:55:28.819Z",
+      "level": "info",
+      "group": "licenca",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Faixas de Cliente Alfa: ODC, O11 → ODC (fora do painel).",
+      "code": null
+    },
+    {
+      "seq": 5014,
+      "time": "2026-10-11T23:04:19.613Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5015,
+      "time": "2026-10-11T23:16:07.331Z",
+      "level": "error",
+      "group": "servidor",
+      "token": null,
+      "customer": null,
+      "text": "Erro interno do servidor (request-failed: ECONNRESET).",
+      "code": "ECONNRESET"
+    },
+    {
+      "seq": 5016,
+      "time": "2026-10-11T23:28:01.218Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Cliente Delta abriu sessão MCP (<img src=x onerror=alert(1)>, IP 203.0.113.77).",
+      "code": null
+    },
+    {
+      "seq": 5017,
+      "time": "2026-10-11T23:31:50.739Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Cliente Eta com nome comprido para testar reticências na tabela chamou ssam_job: falhou com JOB_REFUSED em 7,4 s. Esta descrição é longa de propósito para mostrar as reticências na coluna e o texto inteiro no título da célula.",
+      "code": "JOB_REFUSED"
+    },
+    {
+      "seq": 5018,
+      "time": "2026-10-11T23:41:19.474Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5019,
+      "time": "2026-10-11T23:53:47.426Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5020,
+      "time": "2026-10-12T00:00:08.304Z",
+      "level": "warning",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "ssam-server reiniciou.",
+      "code": null
+    },
+    {
+      "seq": 5021,
+      "time": "2026-10-12T00:12:01.834Z",
+      "level": "warning",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Coletor da VPS parou.",
+      "code": null
+    },
+    {
+      "seq": 5022,
+      "time": "2026-10-12T00:16:33.823Z",
+      "level": "warning",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "ssam-server reiniciou.",
+      "code": null
+    },
+    {
+      "seq": 5023,
+      "time": "2026-10-12T00:24:12.403Z",
+      "level": "info",
+      "group": "licenca",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Faixas de Cliente Beta Engenharia de Software e Integrações Corporativas: ODC, O11 → ODC (fora do painel).",
+      "code": null
+    },
+    {
+      "seq": 5024,
+      "time": "2026-10-12T00:28:31.740Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Cliente Eta com nome comprido para testar reticências na tabela chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 5025,
+      "time": "2026-10-12T00:38:14.372Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5026,
+      "time": "2026-10-12T00:41:57.269Z",
+      "level": "info",
+      "group": "licenca",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Faixas de Cliente Gama: ODC, O11 → ODC (fora do painel).",
+      "code": null
+    },
+    {
+      "seq": 5027,
+      "time": "2026-10-12T00:47:32.167Z",
+      "level": "warning",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Coletor da VPS parou.",
+      "code": null
+    },
+    {
+      "seq": 5028,
+      "time": "2026-10-12T01:01:17.553Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou odc_read: falhou com AGENT_NOT_CONNECTED em 41 ms.",
+      "code": "AGENT_NOT_CONNECTED"
+    },
+    {
+      "seq": 5029,
+      "time": "2026-10-12T01:09:19.003Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "O agente de Cliente Eta com nome comprido para testar reticências na tabela não aceitou studio-open em 15 s.",
+      "code": null
+    },
+    {
+      "seq": 5030,
+      "time": "2026-10-12T01:22:18.035Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Chamada blob-get ao agente de Cliente Beta Engenharia de Software e Integrações Corporativas falhou: AGENT_TIMEOUT.",
+      "code": "AGENT_TIMEOUT"
+    },
+    {
+      "seq": 5031,
+      "time": "2026-10-12T01:26:45.175Z",
+      "level": "info",
+      "group": "licenca",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Faixas de Cliente Alfa: ODC, O11 → ODC (fora do painel).",
+      "code": null
+    },
+    {
+      "seq": 5032,
+      "time": "2026-10-12T01:34:15.587Z",
+      "level": "info",
+      "group": "painel",
+      "token": null,
+      "customer": null,
+      "text": "Resolvido: Carga da VPS em 2,4 com 2 vCPU há 5 min.",
+      "code": null
+    },
+    {
+      "seq": 5033,
+      "time": "2026-10-12T01:45:53.905Z",
+      "level": "info",
+      "group": "painel",
+      "token": null,
+      "customer": null,
+      "text": "Resolvido: Carga da VPS em 2,4 com 2 vCPU há 5 min.",
+      "code": null
+    },
+    {
+      "seq": 5034,
+      "time": "2026-10-12T01:53:03.543Z",
+      "level": "info",
+      "group": "licenca",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Faixas de Cliente Alfa: ODC, O11 → ODC (fora do painel).",
+      "code": null
+    },
+    {
+      "seq": 5035,
+      "time": "2026-10-12T02:03:09.448Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Cliente Gama abriu sessão MCP (<img src=x onerror=alert(1)>, IP 203.0.113.77).",
+      "code": null
+    },
+    {
+      "seq": 5036,
+      "time": "2026-10-12T02:17:28.203Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Cliente Beta Engenharia de Software e Integrações Corporativas chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 5037,
+      "time": "2026-10-12T02:26:52.003Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Chamada blob-get ao agente de Cliente Beta Engenharia de Software e Integrações Corporativas falhou: AGENT_TIMEOUT.",
+      "code": "AGENT_TIMEOUT"
+    },
+    {
+      "seq": 5038,
+      "time": "2026-10-12T02:34:03.791Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "O agente de Cliente Alfa não aceitou studio-open em 15 s.",
+      "code": null
+    },
+    {
+      "seq": 5039,
+      "time": "2026-10-12T02:45:18.261Z",
+      "level": "error",
+      "group": "servidor",
+      "token": null,
+      "customer": null,
+      "text": "Erro interno do servidor (request-failed: ECONNRESET).",
+      "code": "ECONNRESET"
+    },
+    {
+      "seq": 5040,
+      "time": "2026-10-12T02:54:18.300Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5041,
+      "time": "2026-10-12T03:04:29.470Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Cliente Beta Engenharia de Software e Integrações Corporativas chamou odc_read: falhou com AGENT_NOT_CONNECTED em 41 ms.",
+      "code": "AGENT_NOT_CONNECTED"
+    },
+    {
+      "seq": 5042,
+      "time": "2026-10-12T03:18:48.836Z",
+      "level": "error",
+      "group": "servidor",
+      "token": null,
+      "customer": null,
+      "text": "Erro interno do servidor (request-failed: ECONNRESET).",
+      "code": "ECONNRESET"
+    },
+    {
+      "seq": 5043,
+      "time": "2026-10-12T03:29:39.988Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5044,
+      "time": "2026-10-12T03:36:08.791Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Agente de Cliente Eta com nome comprido para testar reticências na tabela ficou 45 s sem sinal.",
+      "code": null
+    },
+    {
+      "seq": 5045,
+      "time": "2026-10-12T03:49:51.838Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Cliente Eta com nome comprido para testar reticências na tabela chamou ssam_job: falhou com JOB_REFUSED em 7,4 s. Esta descrição é longa de propósito para mostrar as reticências na coluna e o texto inteiro no título da célula.",
+      "code": "JOB_REFUSED"
+    },
+    {
+      "seq": 5046,
+      "time": "2026-10-12T04:03:40.842Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Cliente Delta: sessão MCP encerrada (substituída (limite de 8 sessões)).",
+      "code": null
+    },
+    {
+      "seq": 5047,
+      "time": "2026-10-12T04:11:07.263Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5048,
+      "time": "2026-10-12T04:16:22.615Z",
+      "level": "info",
+      "group": "painel",
+      "token": null,
+      "customer": null,
+      "text": "Resolvido: Carga da VPS em 2,4 com 2 vCPU há 5 min.",
+      "code": null
+    },
+    {
+      "seq": 5049,
+      "time": "2026-10-12T04:23:09.142Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5050,
+      "time": "2026-10-12T04:27:55.844Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Chamada blob-get ao agente de Cliente Gama falhou: AGENT_TIMEOUT.",
+      "code": "AGENT_TIMEOUT"
+    },
+    {
+      "seq": 5051,
+      "time": "2026-10-12T04:35:43.766Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Cliente Gama chamou ssam_job: falhou com JOB_REFUSED em 7,4 s. Esta descrição é longa de propósito para mostrar as reticências na coluna e o texto inteiro no título da célula.",
+      "code": "JOB_REFUSED"
+    },
+    {
+      "seq": 5052,
+      "time": "2026-10-12T04:48:18.249Z",
+      "level": "error",
+      "group": "agente",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Credencial do agente de Cliente Gama usada em outra máquina: PC-TESTE-02 (teste).",
+      "code": null
+    },
+    {
+      "seq": 5053,
+      "time": "2026-10-12T04:53:18.829Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Cliente Beta Engenharia de Software e Integrações Corporativas abriu sessão MCP (<img src=x onerror=alert(1)>, IP 203.0.113.77).",
+      "code": null
+    },
+    {
+      "seq": 5054,
+      "time": "2026-10-12T04:57:42.182Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "O agente de Cliente Eta com nome comprido para testar reticências na tabela não aceitou studio-open em 15 s.",
+      "code": null
+    },
+    {
+      "seq": 5055,
+      "time": "2026-10-12T05:03:03.724Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Chamada blob-get ao agente de Cliente Eta com nome comprido para testar reticências na tabela falhou: AGENT_TIMEOUT.",
+      "code": "AGENT_TIMEOUT"
+    },
+    {
+      "seq": 5056,
+      "time": "2026-10-12T05:11:14.182Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Cliente Delta chamou odc_read: falhou com AGENT_NOT_CONNECTED em 41 ms.",
+      "code": "AGENT_NOT_CONNECTED"
+    },
+    {
+      "seq": 5057,
+      "time": "2026-10-12T05:23:27.497Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Cliente Delta: sessão MCP encerrada (substituída (limite de 8 sessões)).",
+      "code": null
+    },
+    {
+      "seq": 5058,
+      "time": "2026-10-12T05:30:29.450Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou odc_read: falhou com AGENT_NOT_CONNECTED em 41 ms.",
+      "code": "AGENT_NOT_CONNECTED"
+    },
+    {
+      "seq": 5059,
+      "time": "2026-10-12T05:34:44.806Z",
+      "level": "info",
+      "group": "licenca",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Faixas de Cliente Delta: ODC, O11 → ODC (fora do painel).",
+      "code": null
+    },
+    {
+      "seq": 5060,
+      "time": "2026-10-12T05:44:26.908Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Chamada blob-get ao agente de Cliente Gama falhou: AGENT_TIMEOUT.",
+      "code": "AGENT_TIMEOUT"
+    },
+    {
+      "seq": 5061,
+      "time": "2026-10-12T05:51:42.286Z",
+      "level": "error",
+      "group": "servidor",
+      "token": null,
+      "customer": null,
+      "text": "Erro interno do servidor (request-failed: ECONNRESET).",
+      "code": "ECONNRESET"
+    },
+    {
+      "seq": 5062,
+      "time": "2026-10-12T06:04:40.508Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Chamada blob-get ao agente de Cliente Beta Engenharia de Software e Integrações Corporativas falhou: AGENT_TIMEOUT.",
+      "code": "AGENT_TIMEOUT"
+    },
+    {
+      "seq": 5063,
+      "time": "2026-10-12T06:15:02.046Z",
+      "level": "error",
+      "group": "servidor",
+      "token": null,
+      "customer": null,
+      "text": "Erro interno do servidor (request-failed: ECONNRESET).",
+      "code": "ECONNRESET"
+    },
+    {
+      "seq": 5064,
+      "time": "2026-10-12T06:19:11.339Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5065,
+      "time": "2026-10-12T06:28:20.415Z",
+      "level": "error",
+      "group": "agente",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Credencial do agente de Cliente Beta Engenharia de Software e Integrações Corporativas usada em outra máquina: PC-TESTE-02 (teste).",
+      "code": null
+    },
+    {
+      "seq": 5066,
+      "time": "2026-10-12T06:37:29.056Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5067,
+      "time": "2026-10-12T06:46:43.939Z",
+      "level": "info",
+      "group": "licenca",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Faixas de Cliente Gama: ODC, O11 → ODC (fora do painel).",
+      "code": null
+    },
+    {
+      "seq": 5068,
+      "time": "2026-10-12T06:57:12.932Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "O agente de Cliente Delta não aceitou studio-open em 15 s.",
+      "code": null
+    },
+    {
+      "seq": 5069,
+      "time": "2026-10-12T07:10:22.960Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Cliente Beta Engenharia de Software e Integrações Corporativas: sessão MCP encerrada (substituída (limite de 8 sessões)).",
+      "code": null
+    },
+    {
+      "seq": 5070,
+      "time": "2026-10-12T07:18:02.545Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Chamada blob-get ao agente de Cliente Gama falhou: AGENT_TIMEOUT.",
+      "code": "AGENT_TIMEOUT"
+    },
+    {
+      "seq": 5071,
+      "time": "2026-10-12T07:27:40.970Z",
+      "level": "info",
+      "group": "licenca",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Faixas de Cliente Eta com nome comprido para testar reticências na tabela: ODC, O11 → ODC (fora do painel).",
+      "code": null
+    },
+    {
+      "seq": 5072,
+      "time": "2026-10-12T07:39:01.512Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Cliente Gama chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 5073,
+      "time": "2026-10-12T07:43:24.772Z",
+      "level": "warning",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Coletor da VPS parou.",
+      "code": null
+    },
+    {
+      "seq": 5074,
+      "time": "2026-10-12T07:56:01.896Z",
+      "level": "error",
+      "group": "agente",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Credencial do agente de Cliente Delta usada em outra máquina: PC-TESTE-02 (teste).",
+      "code": null
+    },
+    {
+      "seq": 5075,
+      "time": "2026-10-12T08:05:14.444Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa abriu sessão MCP (<img src=x onerror=alert(1)>, IP 203.0.113.77).",
+      "code": null
+    },
+    {
+      "seq": 5076,
+      "time": "2026-10-12T08:14:17.441Z",
+      "level": "error",
+      "group": "servidor",
+      "token": null,
+      "customer": null,
+      "text": "Erro interno do servidor (request-failed: ECONNRESET).",
+      "code": "ECONNRESET"
+    },
+    {
+      "seq": 5077,
+      "time": "2026-10-12T08:18:30.366Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Cliente Eta com nome comprido para testar reticências na tabela chamou odc_read: falhou com AGENT_NOT_CONNECTED em 41 ms.",
+      "code": "AGENT_NOT_CONNECTED"
+    },
+    {
+      "seq": 5078,
+      "time": "2026-10-12T08:28:36.363Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5079,
+      "time": "2026-10-12T08:35:31.206Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Chamada blob-get ao agente de Cliente Alfa falhou: AGENT_TIMEOUT.",
+      "code": "AGENT_TIMEOUT"
+    },
+    {
+      "seq": 5080,
+      "time": "2026-10-12T08:46:10.756Z",
+      "level": "error",
+      "group": "servidor",
+      "token": null,
+      "customer": null,
+      "text": "Erro interno do servidor (request-failed: ECONNRESET).",
+      "code": "ECONNRESET"
+    },
+    {
+      "seq": 5081,
+      "time": "2026-10-12T08:53:19.273Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Cliente Delta chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 5082,
+      "time": "2026-10-12T09:02:48.797Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Cliente Delta abriu sessão MCP (<img src=x onerror=alert(1)>, IP 203.0.113.77).",
+      "code": null
+    },
+    {
+      "seq": 5083,
+      "time": "2026-10-12T09:09:02.452Z",
+      "level": "warning",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "ssam-server reiniciou.",
+      "code": null
+    },
+    {
+      "seq": 5084,
+      "time": "2026-10-12T09:13:12.390Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Cliente Gama chamou odc_read: falhou com AGENT_NOT_CONNECTED em 41 ms.",
+      "code": "AGENT_NOT_CONNECTED"
+    },
+    {
+      "seq": 5085,
+      "time": "2026-10-12T09:22:43.765Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Cliente Beta Engenharia de Software e Integrações Corporativas chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 5086,
+      "time": "2026-10-12T09:35:36.733Z",
+      "level": "warning",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Coletor da VPS parou.",
+      "code": null
+    },
+    {
+      "seq": 5087,
+      "time": "2026-10-12T09:47:57.131Z",
+      "level": "info",
+      "group": "licenca",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Faixas de Cliente Beta Engenharia de Software e Integrações Corporativas: ODC, O11 → ODC (fora do painel).",
+      "code": null
+    },
+    {
+      "seq": 5088,
+      "time": "2026-10-12T09:58:18.776Z",
+      "level": "error",
+      "group": "agente",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Credencial do agente de Cliente Gama usada em outra máquina: PC-TESTE-02 (teste).",
+      "code": null
+    },
+    {
+      "seq": 5089,
+      "time": "2026-10-12T10:03:36.323Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Cliente Gama abriu sessão MCP (<img src=x onerror=alert(1)>, IP 203.0.113.77).",
+      "code": null
+    },
+    {
+      "seq": 5090,
+      "time": "2026-10-12T10:09:49.917Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Cliente Eta com nome comprido para testar reticências na tabela: sessão MCP encerrada (substituída (limite de 8 sessões)).",
+      "code": null
+    },
+    {
+      "seq": 5091,
+      "time": "2026-10-12T10:16:11.181Z",
+      "level": "info",
+      "group": "painel",
+      "token": null,
+      "customer": null,
+      "text": "Resolvido: Carga da VPS em 2,4 com 2 vCPU há 5 min.",
+      "code": null
+    },
+    {
+      "seq": 5092,
+      "time": "2026-10-12T10:26:58.080Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Cliente Beta Engenharia de Software e Integrações Corporativas chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 5093,
+      "time": "2026-10-12T10:37:46.872Z",
+      "level": "info",
+      "group": "licenca",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Faixas de Cliente Beta Engenharia de Software e Integrações Corporativas: ODC, O11 → ODC (fora do painel).",
+      "code": null
+    },
+    {
+      "seq": 5094,
+      "time": "2026-10-12T10:46:31.455Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Agente de Cliente Delta ficou 45 s sem sinal.",
+      "code": null
+    },
+    {
+      "seq": 5095,
+      "time": "2026-10-12T11:00:00.684Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Cliente Beta Engenharia de Software e Integrações Corporativas abriu sessão MCP (<img src=x onerror=alert(1)>, IP 203.0.113.77).",
+      "code": null
+    },
+    {
+      "seq": 5096,
+      "time": "2026-10-12T11:11:39.287Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Cliente Eta com nome comprido para testar reticências na tabela chamou ssam_job: falhou com JOB_REFUSED em 7,4 s. Esta descrição é longa de propósito para mostrar as reticências na coluna e o texto inteiro no título da célula.",
+      "code": "JOB_REFUSED"
+    },
+    {
+      "seq": 5097,
+      "time": "2026-10-12T11:23:23.982Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5098,
+      "time": "2026-10-12T11:30:53.349Z",
+      "level": "warning",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Coletor da VPS parou.",
+      "code": null
+    },
+    {
+      "seq": 5099,
+      "time": "2026-10-12T11:39:19.128Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5100,
+      "time": "2026-10-12T11:51:31.938Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Cliente Beta Engenharia de Software e Integrações Corporativas chamou odc_read: falhou com AGENT_NOT_CONNECTED em 41 ms.",
+      "code": "AGENT_NOT_CONNECTED"
+    },
+    {
+      "seq": 5101,
+      "time": "2026-10-12T12:01:09.003Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Cliente Delta chamou odc_read: falhou com AGENT_NOT_CONNECTED em 41 ms.",
+      "code": "AGENT_NOT_CONNECTED"
+    },
+    {
+      "seq": 5102,
+      "time": "2026-10-12T12:05:17.153Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Chamada blob-get ao agente de Cliente Gama falhou: AGENT_TIMEOUT.",
+      "code": "AGENT_TIMEOUT"
+    },
+    {
+      "seq": 5103,
+      "time": "2026-10-12T12:09:45.290Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "O agente de Cliente Gama não aceitou studio-open em 15 s.",
+      "code": null
+    },
+    {
+      "seq": 5104,
+      "time": "2026-10-12T12:18:22.843Z",
+      "level": "error",
+      "group": "agente",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Credencial do agente de Cliente Beta Engenharia de Software e Integrações Corporativas usada em outra máquina: PC-TESTE-02 (teste).",
+      "code": null
+    },
+    {
+      "seq": 5105,
+      "time": "2026-10-12T12:31:47.691Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Cliente Eta com nome comprido para testar reticências na tabela: sessão MCP encerrada (substituída (limite de 8 sessões)).",
+      "code": null
+    },
+    {
+      "seq": 5106,
+      "time": "2026-10-12T12:41:11.322Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Chamada blob-get ao agente de Cliente Eta com nome comprido para testar reticências na tabela falhou: AGENT_TIMEOUT.",
+      "code": "AGENT_TIMEOUT"
+    },
+    {
+      "seq": 5107,
+      "time": "2026-10-12T12:54:16.950Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5108,
+      "time": "2026-10-12T13:08:32.217Z",
+      "level": "warning",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Coletor da VPS parou.",
+      "code": null
+    },
+    {
+      "seq": 5109,
+      "time": "2026-10-12T13:16:13.232Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "O agente de Cliente Delta não aceitou studio-open em 15 s.",
+      "code": null
+    },
+    {
+      "seq": 5110,
+      "time": "2026-10-12T13:28:35.263Z",
+      "level": "info",
+      "group": "painel",
+      "token": null,
+      "customer": null,
+      "text": "Resolvido: Carga da VPS em 2,4 com 2 vCPU há 5 min.",
+      "code": null
+    },
+    {
+      "seq": 5111,
+      "time": "2026-10-12T13:40:54.935Z",
+      "level": "error",
+      "group": "servidor",
+      "token": null,
+      "customer": null,
+      "text": "Erro interno do servidor (request-failed: ECONNRESET).",
+      "code": "ECONNRESET"
+    },
+    {
+      "seq": 5112,
+      "time": "2026-10-12T13:52:26.968Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Cliente Beta Engenharia de Software e Integrações Corporativas chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 5113,
+      "time": "2026-10-12T13:58:30.919Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Chamada blob-get ao agente de Cliente Delta falhou: AGENT_TIMEOUT.",
+      "code": "AGENT_TIMEOUT"
+    },
+    {
+      "seq": 5114,
+      "time": "2026-10-12T14:07:36.835Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Cliente Delta chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 5115,
+      "time": "2026-10-12T14:20:37.013Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Cliente Gama abriu sessão MCP (<img src=x onerror=alert(1)>, IP 203.0.113.77).",
+      "code": null
+    },
+    {
+      "seq": 5116,
+      "time": "2026-10-12T14:25:25.459Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Cliente Eta com nome comprido para testar reticências na tabela chamou odc_read: falhou com AGENT_NOT_CONNECTED em 41 ms.",
+      "code": "AGENT_NOT_CONNECTED"
+    },
+    {
+      "seq": 5117,
+      "time": "2026-10-12T14:34:44.186Z",
+      "level": "warning",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Coletor da VPS parou.",
+      "code": null
+    },
+    {
+      "seq": 5118,
+      "time": "2026-10-12T14:39:46.128Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5119,
+      "time": "2026-10-12T14:50:56.364Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "O agente de Cliente Gama não aceitou studio-open em 15 s.",
+      "code": null
+    },
+    {
+      "seq": 5120,
+      "time": "2026-10-12T15:03:15.200Z",
+      "level": "error",
+      "group": "servidor",
+      "token": null,
+      "customer": null,
+      "text": "Erro interno do servidor (request-failed: ECONNRESET).",
+      "code": "ECONNRESET"
+    },
+    {
+      "seq": 5121,
+      "time": "2026-10-12T15:16:11.176Z",
+      "level": "warning",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "ssam-server reiniciou.",
+      "code": null
+    },
+    {
+      "seq": 5122,
+      "time": "2026-10-12T15:20:28.523Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5123,
+      "time": "2026-10-12T15:27:43.722Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Agente de Cliente Gama ficou 45 s sem sinal.",
+      "code": null
+    },
+    {
+      "seq": 5124,
+      "time": "2026-10-12T15:41:02.564Z",
+      "level": "warning",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Coletor da VPS parou.",
+      "code": null
+    },
+    {
+      "seq": 5125,
+      "time": "2026-10-12T15:50:18.316Z",
+      "level": "info",
+      "group": "licenca",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Faixas de Cliente Alfa: ODC, O11 → ODC (fora do painel).",
+      "code": null
+    },
+    {
+      "seq": 5126,
+      "time": "2026-10-12T15:56:42.239Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Cliente Gama chamou ssam_job: falhou com JOB_REFUSED em 7,4 s. Esta descrição é longa de propósito para mostrar as reticências na coluna e o texto inteiro no título da célula.",
+      "code": "JOB_REFUSED"
+    },
+    {
+      "seq": 5127,
+      "time": "2026-10-12T16:05:00.370Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5128,
+      "time": "2026-10-12T16:09:43.213Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Chamada blob-get ao agente de Cliente Alfa falhou: AGENT_TIMEOUT.",
+      "code": "AGENT_TIMEOUT"
+    },
+    {
+      "seq": 5129,
+      "time": "2026-10-12T16:18:09.986Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Cliente Beta Engenharia de Software e Integrações Corporativas chamou odc_read: falhou com AGENT_NOT_CONNECTED em 41 ms.",
+      "code": "AGENT_NOT_CONNECTED"
+    },
+    {
+      "seq": 5130,
+      "time": "2026-10-12T16:30:13.178Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou ssam_job: falhou com JOB_REFUSED em 7,4 s. Esta descrição é longa de propósito para mostrar as reticências na coluna e o texto inteiro no título da célula.",
+      "code": "JOB_REFUSED"
+    },
+    {
+      "seq": 5131,
+      "time": "2026-10-12T16:41:29.051Z",
+      "level": "info",
+      "group": "licenca",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Faixas de Cliente Gama: ODC, O11 → ODC (fora do painel).",
+      "code": null
+    },
+    {
+      "seq": 5132,
+      "time": "2026-10-12T16:53:38.433Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Chamada blob-get ao agente de Cliente Gama falhou: AGENT_TIMEOUT.",
+      "code": "AGENT_TIMEOUT"
+    },
+    {
+      "seq": 5133,
+      "time": "2026-10-12T16:58:29.840Z",
+      "level": "warning",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "ssam-server reiniciou.",
+      "code": null
+    },
+    {
+      "seq": 5134,
+      "time": "2026-10-12T17:12:43.956Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Cliente Gama chamou odc_read: falhou com AGENT_NOT_CONNECTED em 41 ms.",
+      "code": "AGENT_NOT_CONNECTED"
+    },
+    {
+      "seq": 5135,
+      "time": "2026-10-12T17:25:01.588Z",
+      "level": "error",
+      "group": "servidor",
+      "token": null,
+      "customer": null,
+      "text": "Erro interno do servidor (request-failed: ECONNRESET).",
+      "code": "ECONNRESET"
+    },
+    {
+      "seq": 5136,
+      "time": "2026-10-12T17:36:48.802Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Cliente Eta com nome comprido para testar reticências na tabela chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 5137,
+      "time": "2026-10-12T17:43:01.396Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 5138,
+      "time": "2026-10-12T17:50:22.040Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Cliente Delta: sessão MCP encerrada (substituída (limite de 8 sessões)).",
+      "code": null
+    },
+    {
+      "seq": 5139,
+      "time": "2026-10-12T17:57:39.161Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "O agente de Cliente Delta não aceitou studio-open em 15 s.",
+      "code": null
+    },
+    {
+      "seq": 5140,
+      "time": "2026-10-12T18:01:30.264Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Cliente Delta abriu sessão MCP (<img src=x onerror=alert(1)>, IP 203.0.113.77).",
+      "code": null
+    },
+    {
+      "seq": 5141,
+      "time": "2026-10-12T18:06:41.597Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5142,
+      "time": "2026-10-12T18:14:47.495Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Cliente Delta chamou odc_read: falhou com AGENT_NOT_CONNECTED em 41 ms.",
+      "code": "AGENT_NOT_CONNECTED"
+    },
+    {
+      "seq": 5143,
+      "time": "2026-10-12T18:28:36.386Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5144,
+      "time": "2026-10-12T18:33:31.691Z",
+      "level": "error",
+      "group": "servidor",
+      "token": null,
+      "customer": null,
+      "text": "Erro interno do servidor (request-failed: ECONNRESET).",
+      "code": "ECONNRESET"
+    },
+    {
+      "seq": 5145,
+      "time": "2026-10-12T18:40:27.251Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Cliente Delta abriu sessão MCP (<img src=x onerror=alert(1)>, IP 203.0.113.77).",
+      "code": null
+    },
+    {
+      "seq": 5146,
+      "time": "2026-10-12T18:47:37.082Z",
+      "level": "info",
+      "group": "licenca",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Faixas de Cliente Alfa: ODC, O11 → ODC (fora do painel).",
+      "code": null
+    },
+    {
+      "seq": 5147,
+      "time": "2026-10-12T18:56:23.174Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Cliente Delta chamou ssam_job: falhou com JOB_REFUSED em 7,4 s. Esta descrição é longa de propósito para mostrar as reticências na coluna e o texto inteiro no título da célula.",
+      "code": "JOB_REFUSED"
+    },
+    {
+      "seq": 5148,
+      "time": "2026-10-12T19:02:57.225Z",
+      "level": "error",
+      "group": "agente",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Credencial do agente de Cliente Eta com nome comprido para testar reticências na tabela usada em outra máquina: PC-TESTE-02 (teste).",
+      "code": null
+    },
+    {
+      "seq": 5149,
+      "time": "2026-10-12T19:06:47.607Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Agente de Cliente Gama ficou 45 s sem sinal.",
+      "code": null
+    },
+    {
+      "seq": 5150,
+      "time": "2026-10-12T19:13:13.706Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5151,
+      "time": "2026-10-12T19:18:08.995Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "O agente de Cliente Beta Engenharia de Software e Integrações Corporativas não aceitou studio-open em 15 s.",
+      "code": null
+    },
+    {
+      "seq": 5152,
+      "time": "2026-10-12T19:29:42.030Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Cliente Beta Engenharia de Software e Integrações Corporativas chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 5153,
+      "time": "2026-10-12T19:35:06.187Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5154,
+      "time": "2026-10-12T19:43:23.351Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5155,
+      "time": "2026-10-12T19:48:44.002Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5156,
+      "time": "2026-10-12T19:52:47.948Z",
+      "level": "error",
+      "group": "agente",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Credencial do agente de Cliente Delta usada em outra máquina: PC-TESTE-02 (teste).",
+      "code": null
+    },
+    {
+      "seq": 5157,
+      "time": "2026-10-12T20:03:10.030Z",
+      "level": "info",
+      "group": "licenca",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Faixas de Cliente Eta com nome comprido para testar reticências na tabela: ODC, O11 → ODC (fora do painel).",
+      "code": null
+    },
+    {
+      "seq": 5158,
+      "time": "2026-10-12T20:09:47.172Z",
+      "level": "error",
+      "group": "servidor",
+      "token": null,
+      "customer": null,
+      "text": "Erro interno do servidor (request-failed: ECONNRESET).",
+      "code": "ECONNRESET"
+    },
+    {
+      "seq": 5159,
+      "time": "2026-10-12T20:20:45.755Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5160,
+      "time": "2026-10-12T20:26:35.752Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Cliente Eta com nome comprido para testar reticências na tabela abriu sessão MCP (<img src=x onerror=alert(1)>, IP 203.0.113.77).",
+      "code": null
+    },
+    {
+      "seq": 5161,
+      "time": "2026-10-12T20:40:01.241Z",
+      "level": "error",
+      "group": "servidor",
+      "token": null,
+      "customer": null,
+      "text": "Erro interno do servidor (request-failed: ECONNRESET).",
+      "code": "ECONNRESET"
+    },
+    {
+      "seq": 5162,
+      "time": "2026-10-12T20:54:07.030Z",
+      "level": "error",
+      "group": "servidor",
+      "token": null,
+      "customer": null,
+      "text": "Erro interno do servidor (request-failed: ECONNRESET).",
+      "code": "ECONNRESET"
+    },
+    {
+      "seq": 5163,
+      "time": "2026-10-12T21:03:16.985Z",
+      "level": "error",
+      "group": "servidor",
+      "token": null,
+      "customer": null,
+      "text": "Erro interno do servidor (request-failed: ECONNRESET).",
+      "code": "ECONNRESET"
+    },
+    {
+      "seq": 5164,
+      "time": "2026-10-12T21:17:05.273Z",
+      "level": "info",
+      "group": "painel",
+      "token": null,
+      "customer": null,
+      "text": "Resolvido: Carga da VPS em 2,4 com 2 vCPU há 5 min.",
+      "code": null
+    },
+    {
+      "seq": 5165,
+      "time": "2026-10-12T21:24:54.919Z",
+      "level": "info",
+      "group": "painel",
+      "token": null,
+      "customer": null,
+      "text": "Resolvido: Carga da VPS em 2,4 com 2 vCPU há 5 min.",
+      "code": null
+    },
+    {
+      "seq": 5166,
+      "time": "2026-10-12T21:35:35.744Z",
+      "level": "info",
+      "group": "licenca",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Faixas de Cliente Alfa: ODC, O11 → ODC (fora do painel).",
+      "code": null
+    },
+    {
+      "seq": 5167,
+      "time": "2026-10-12T21:49:56.112Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 5168,
+      "time": "2026-10-12T21:54:28.031Z",
+      "level": "error",
+      "group": "servidor",
+      "token": null,
+      "customer": null,
+      "text": "Erro interno do servidor (request-failed: ECONNRESET).",
+      "code": "ECONNRESET"
+    },
+    {
+      "seq": 5169,
+      "time": "2026-10-12T22:08:09.046Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Cliente Delta: sessão MCP encerrada (substituída (limite de 8 sessões)).",
+      "code": null
+    },
+    {
+      "seq": 5170,
+      "time": "2026-10-12T22:19:09.818Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Cliente Eta com nome comprido para testar reticências na tabela chamou odc_read: falhou com AGENT_NOT_CONNECTED em 41 ms.",
+      "code": "AGENT_NOT_CONNECTED"
+    },
+    {
+      "seq": 5171,
+      "time": "2026-10-12T22:33:04.798Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Cliente Gama abriu sessão MCP (<img src=x onerror=alert(1)>, IP 203.0.113.77).",
+      "code": null
+    },
+    {
+      "seq": 5172,
+      "time": "2026-10-12T22:43:38.837Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Chamada blob-get ao agente de Cliente Gama falhou: AGENT_TIMEOUT.",
+      "code": "AGENT_TIMEOUT"
+    },
+    {
+      "seq": 5173,
+      "time": "2026-10-12T22:47:43.258Z",
+      "level": "warning",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "ssam-server reiniciou.",
+      "code": null
+    },
+    {
+      "seq": 5174,
+      "time": "2026-10-12T22:54:12.715Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Cliente Eta com nome comprido para testar reticências na tabela chamou odc_read: falhou com AGENT_NOT_CONNECTED em 41 ms.",
+      "code": "AGENT_NOT_CONNECTED"
+    },
+    {
+      "seq": 5175,
+      "time": "2026-10-12T23:01:45.871Z",
+      "level": "info",
+      "group": "licenca",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Faixas de Cliente Beta Engenharia de Software e Integrações Corporativas: ODC, O11 → ODC (fora do painel).",
+      "code": null
+    },
+    {
+      "seq": 5176,
+      "time": "2026-10-12T23:09:04.238Z",
+      "level": "info",
+      "group": "painel",
+      "token": null,
+      "customer": null,
+      "text": "Resolvido: Carga da VPS em 2,4 com 2 vCPU há 5 min.",
+      "code": null
+    },
+    {
+      "seq": 5177,
+      "time": "2026-10-12T23:13:02.099Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Agente de Cliente Beta Engenharia de Software e Integrações Corporativas ficou 45 s sem sinal.",
+      "code": null
+    },
+    {
+      "seq": 5178,
+      "time": "2026-10-12T23:18:00.619Z",
+      "level": "error",
+      "group": "agente",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Credencial do agente de Cliente Delta usada em outra máquina: PC-TESTE-02 (teste).",
+      "code": null
+    },
+    {
+      "seq": 5179,
+      "time": "2026-10-12T23:28:07.884Z",
+      "level": "info",
+      "group": "sessao",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Cliente Delta: sessão MCP encerrada (substituída (limite de 8 sessões)).",
+      "code": null
+    },
+    {
+      "seq": 5180,
+      "time": "2026-10-12T23:33:24.380Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Agente de Cliente Gama ficou 45 s sem sinal.",
+      "code": null
+    },
+    {
+      "seq": 5181,
+      "time": "2026-10-12T23:40:36.628Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Chamada blob-get ao agente de Cliente Alfa falhou: AGENT_TIMEOUT.",
+      "code": "AGENT_TIMEOUT"
+    },
+    {
+      "seq": 5182,
+      "time": "2026-10-12T23:44:31.432Z",
+      "level": "error",
+      "group": "agente",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Credencial do agente de Cliente Beta Engenharia de Software e Integrações Corporativas usada em outra máquina: PC-TESTE-02 (teste).",
+      "code": null
+    },
+    {
+      "seq": 5183,
+      "time": "2026-10-12T23:57:15.510Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Agente de Cliente Delta ficou 45 s sem sinal.",
+      "code": null
+    },
+    {
+      "seq": 5184,
+      "time": "2026-10-13T00:04:03.063Z",
+      "level": "warning",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Coletor da VPS parou.",
+      "code": null
+    },
+    {
+      "seq": 5185,
+      "time": "2026-10-13T00:13:34.004Z",
+      "level": "info",
+      "group": "licenca",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Faixas de Cliente Delta: ODC, O11 → ODC (fora do painel).",
+      "code": null
+    },
+    {
+      "seq": 5186,
+      "time": "2026-10-13T00:24:35.579Z",
+      "level": "error",
+      "group": "servidor",
+      "token": null,
+      "customer": null,
+      "text": "Erro interno do servidor (request-failed: ECONNRESET).",
+      "code": "ECONNRESET"
+    },
+    {
+      "seq": 5187,
+      "time": "2026-10-13T00:34:01.956Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5188,
+      "time": "2026-10-13T00:46:11.935Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Chamada blob-get ao agente de Cliente Alfa falhou: AGENT_TIMEOUT.",
+      "code": "AGENT_TIMEOUT"
+    },
+    {
+      "seq": 5189,
+      "time": "2026-10-13T00:55:59.042Z",
+      "level": "warning",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "ssam-server reiniciou.",
+      "code": null
+    },
+    {
+      "seq": 5190,
+      "time": "2026-10-13T01:05:26.624Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "text": "Cliente Delta chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 5191,
+      "time": "2026-10-13T01:10:02.453Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Cliente Eta com nome comprido para testar reticências na tabela chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 5192,
+      "time": "2026-10-13T01:21:38.359Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "text": "Chamada blob-get ao agente de Cliente Eta com nome comprido para testar reticências na tabela falhou: AGENT_TIMEOUT.",
+      "code": "AGENT_TIMEOUT"
+    },
+    {
+      "seq": 5193,
+      "time": "2026-10-13T01:34:49.577Z",
+      "level": "info",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Saúde do ssam-server: saudável → com falha.",
+      "code": null
+    },
+    {
+      "seq": 5194,
+      "time": "2026-10-13T01:43:02.190Z",
+      "level": "warning",
+      "group": "chamada",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "text": "Cliente Gama chamou ssam_job: falhou com JOB_REFUSED em 7,4 s. Esta descrição é longa de propósito para mostrar as reticências na coluna e o texto inteiro no título da célula.",
+      "code": "JOB_REFUSED"
+    },
+    {
+      "seq": 5195,
+      "time": "2026-10-13T01:53:45.948Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Agente de Cliente Alfa ficou 45 s sem sinal.",
+      "code": null
+    },
+    {
+      "seq": 5196,
+      "time": "2026-10-13T02:00:27.737Z",
+      "level": "warning",
+      "group": "agente",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "text": "Agente de Cliente Beta Engenharia de Software e Integrações Corporativas ficou 45 s sem sinal.",
+      "code": null
+    },
+    {
+      "seq": 5197,
+      "time": "2026-10-13T02:14:00.769Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 5198,
+      "time": "2026-10-13T02:20:34.283Z",
+      "level": "info",
+      "group": "painel",
+      "token": null,
+      "customer": null,
+      "text": "Resolvido: Carga da VPS em 2,4 com 2 vCPU há 5 min.",
+      "code": null
+    },
+    {
+      "seq": 5199,
+      "time": "2026-10-13T02:31:41.791Z",
+      "level": "error",
+      "group": "servidor",
+      "token": null,
+      "customer": null,
+      "text": "Erro interno do servidor (request-failed: ECONNRESET).",
+      "code": "ECONNRESET"
+    },
+    {
+      "seq": 5200,
+      "time": "2026-10-13T02:37:09.802Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    }
+  ]
+}

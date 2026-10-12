@@ -1,0 +1,108 @@
+{
+  "ok": true,
+  "license": {
+    "id": "tok_0000000a1fa0",
+    "customer": "Cliente Beta",
+    "state": "active",
+    "createdAt": "2026-10-13T02:51:08Z",
+    "expiresAt": "2026-10-23T02:51:08Z",
+    "revokedAt": null,
+    "daysLeft": 10,
+    "lanes": [
+      "odc"
+    ],
+    "agentCredentialIssuedAt": "2026-10-13T02:51:08Z",
+    "machine": null,
+    "accessAlerts": 0,
+    "agent": {
+      "state": "never",
+      "since": null,
+      "lastSignalAt": null,
+      "version": null,
+      "closedReason": null
+    },
+    "sessionsOpen": 0,
+    "today": {
+      "calls": 0,
+      "failures": 0
+    },
+    "daily14": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "lastActivity": null,
+    "workspace": null,
+    "actions": {
+      "renew": {
+        "allowed": true,
+        "reason": null
+      },
+      "lanes": {
+        "allowed": true,
+        "reason": null
+      },
+      "agentRotate": {
+        "allowed": true,
+        "reason": null
+      },
+      "revoke": {
+        "allowed": true,
+        "reason": null
+      }
+    },
+    "history": [
+      {
+        "time": "2026-10-13T02:51:08Z",
+        "action": "lanes",
+        "actor": "painel",
+        "token": "tok_0000000a1fa0",
+        "customer": "Cliente Beta",
+        "result": "ok",
+        "code": null,
+        "detail": {
+          "previousLanes": [
+            "odc"
+          ],
+          "lanes": [
+            "odc"
+          ]
+        }
+      },
+      {
+        "time": "2026-10-13T02:51:08Z",
+        "action": "issue",
+        "actor": "painel",
+        "token": "tok_0000000a1fa0",
+        "customer": "Cliente Beta",
+        "result": "ok",
+        "code": null,
+        "detail": {
+          "days": 10,
+          "lanes": [
+            "odc"
+          ],
+          "expiresAt": "2026-10-23T02:51:08Z"
+        }
+      }
+    ]
+  },
+  "previousLanes": [
+    "odc"
+  ],
+  "openSessions": 0,
+  "audit": {
+    "written": true
+  }
+}
