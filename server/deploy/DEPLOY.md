@@ -912,7 +912,7 @@ powershell -ExecutionPolicy Bypass -File server\deploy\console\painel-ssam.ps1
 
 | Aba | Conteúdo |
 | --- | --- |
-| Visão geral | Alertas (gravidade, desde quando; silenciar por 24 h ou 7 dias), o resumo por área (servidor, licenças, uso de hoje, agentes, sessões, VPS, containers, backup, TLS, coletor) e os 10 últimos eventos. |
+| Visão geral | Alertas (gravidade, desde quando; silenciar por 24 h ou 7 dias, ou marcar como visto; um alerta silenciado que piora, de atenção para crítico, ou que acontece de novo volta na hora, com um evento), o resumo por área (servidor, licenças, uso de hoje, agentes, sessões, VPS, containers, backup, TLS, coletor) e os 10 últimos eventos. |
 | Licenças | Cada licença com estado, faixas, validade, agente, máquina registrada, sessões abertas, chamadas e falhas de hoje, uso de 14 dias, espaço em disco e última atividade; detalhes e ações por linha; Emitir licença. |
 | Uso | Chamadas por cliente e por ferramenta, falhas por código, por dia (com p50 e p90) e os acessos recusados (401, 403, 429) do log do Caddy, por IP; hoje, 7 dias, 30 dias ou um dia. |
 | Agentes e sessões | Agentes (estado, versão, Studio O11, máquina, IP, chamadas e falhas da última hora, motivo do fechamento), sessões MCP abertas, processos do servidor (worker ODC; workers O11 quando a imagem os tiver) e sessões encerradas hoje por motivo. |
@@ -931,12 +931,29 @@ powershell -ExecutionPolicy Bypass -File server\deploy\console\painel-ssam.ps1
 | Revogar | Definitivo: o token e a credencial param na hora (403), e as sessões e o canal do agente fecham em até 1 s. O espaço de trabalho fica no disco (seção 11). |
 
 - Toda ação pede o nome do cliente digitado como confirmação e entra no Histórico.
-- **Renovar e Faixas precisam da imagem do 24º envio** (módulo de tokens com `renew` e `setLanes`). Na imagem
-  `prod-20261011-ed0f94b` o painel oferece Emitir, Credencial do agente e Revogar, e diz isso numa linha. Depois do
-  upgrade da imagem (seção 8), os dois aparecem sozinhos.
-- Mudanças feitas fora do painel (`ssam-admin server-token ...`) entram no Histórico como "fora do painel" em até 5 s.
-- Até a imagem do 24º envio (que trava o `tokens.json` entre escritores), não rode um `ssam-admin` que grava token no
-  mesmo instante em que confirma uma ação no painel.
+- **As ações de licença precisam da imagem do 24º envio.** O módulo de tokens dela trava o `tokens.json` entre o painel
+  e o `ssam-admin` (`tokens.json.lock`) e traz `renew` e `setLanes`. O da imagem `prod-20261011-ed0f94b` não trava: um
+  `ssam-admin` que grava no mesmo instante que o painel pode apagar a mudança do outro (um `revoke` que o CLI disse ok e
+  não valeu) ou publicar um `tokens.json` pela metade (o servidor responde 500 e fecha as sessões abertas). Quem decide
+  é `CONSOLE_LICENSE_WRITES`, no `.env`:
+
+  | Valor | Efeito |
+  | --- | --- |
+  | `auto` (padrão) | Ações só com um módulo que trava (o do 24º envio). Na imagem `prod-20261011-ed0f94b` as licenças ficam só leitura: o painel diz isso numa linha, esconde Emitir e recusa as ações com 501. Emita, renove e revogue pelo `ssam-admin` (7.4 e 11). Depois do upgrade da imagem (seção 8), as ações aparecem sozinhas. |
+  | `on` | Ações com qualquer módulo. Só em ensaio ou com a garantia de que ninguém roda `ssam-admin` enquanto o painel grava. Na imagem atual: Emitir, Credencial do agente e Revogar (Renovar e Faixas continuam esperando o 24º). |
+  | `off` | Licenças só leitura, com qualquer imagem. |
+
+  Depois de mudar o valor: `docker compose -f compose.prod.yml up -d ssam-console`.
+- Em produção, troque a imagem pela do 24º envio antes de usar Emitir e Revogar no painel. Montar o módulo novo só no
+  painel (como no ensaio, 15.11) não basta: o `ssam-admin` da imagem antiga continua sem a trava.
+- Depois de cada gravação o painel relê o `tokens.json` por uma instância nova do módulo. Se a mudança não está lá (ou o
+  arquivo não abre), a resposta é "A gravação não se confirmou no arquivo de licenças" (409), nenhum segredo aparece, a
+  tentativa entra no Histórico como erro `WRITE_NOT_CONFIRMED` e sobe o alerta crítico "... não se confirmou no
+  tokens.json". Confira a licença e repita a ação.
+- Mudanças feitas fora do painel (`ssam-admin server-token ...`, um restore, o arquivo editado à mão) entram no Histórico
+  como "fora do painel" em até 5 s: emissão, revogação, revogação desfeita (alerta crítico "A revogação da licença de ...
+  foi desfeita"), licença removida do arquivo (alerta), validade estendida ou encurtada, faixas, credencial do agente e
+  nome do cliente.
 
 ### 15.5 Upgrade
 
@@ -965,6 +982,11 @@ docker compose -f compose.prod.yml start ssam-console
 - Ao subir, o painel relê em segundo plano tudo o que o restore trouxe (`server.log`, os girados e as auditorias). A
   linha de status mostra "indexando histórico" até terminar.
 - O Histórico volta ao do backup: o `console-audit.jsonl` está no volume de estado, junto com as licenças.
+- **Não apague o `/var/lib/ssam-console/state/tokens-snapshot.json`**: ele fica de propósito com as licenças de antes do
+  restore. Ao subir, o painel compara e registra no Histórico, como "fora do painel", tudo o que o restore mudou: uma
+  licença revogada depois do backup volta a valer (alerta crítico "A revogação da licença de ... foi desfeita"; revogue
+  de novo em Licenças), uma emitida depois do backup some (alerta "A licença de ... sumiu do tokens.json"), validades e
+  faixas voltam às do backup.
 
 ### 15.7 Chave de acesso
 
@@ -1019,6 +1041,8 @@ sh host/uninstall.sh --crons                           # também os crons de bac
 | "Coleta parcial" | A seção com erro está em `collector.errors` do `host.json`: `python3 -c 'import json; print(json.load(open("/var/lib/ssam-console/host/host.json"))["collector"]["errors"])'`. |
 | A aba mostra "Chave de acesso inválida ou trocada" | Outra sessão abriu ou o painel reiniciou: rode o `painel-ssam.ps1` de novo. |
 | Renovar e Faixas não aparecem | Imagem anterior ao 24º envio (15.4). |
+| Nenhuma ação de licença, "Ações de licença desligadas" | `CONSOLE_LICENSE_WRITES=auto` numa imagem sem a trava do `tokens.json`, ou `off` (15.4). |
+| "A gravação não se confirmou no arquivo de licenças" | Outro processo (um `ssam-admin`) gravou o `tokens.json` ao mesmo tempo. Confira a licença e repita; o alerta some quando marcado como visto (15.4). |
 
 ### 15.11 Ensaio local (Docker Desktop, 2026-10-12)
 

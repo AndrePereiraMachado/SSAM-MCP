@@ -2,6 +2,8 @@
 // code, local hours, MCP sessions and agent calls (from server.log) and Caddy denials (from host.json windows). Day files
 // /state/agg/usage-YYYY-MM-DD.json are rewritten every 30 s while dirty; the checkpoint carries the days changed since
 // the last write, so offsets and aggregates always match after a restart.
+import { inc, own, put, slot } from './keys.mjs';
+
 const LN11 = Math.log(1.1);
 const TOKEN = /^tok_[0-9a-f]{12}$/;
 export const USAGE_SCHEMA = 'ssam-console-usage/1';
@@ -35,8 +37,9 @@ const stat = () => ({ calls: 0, failures: 0, hist: {}, maxMs: 0 });
 function bump(s, ms, failed) { s.calls++; if (failed) s.failures++; addHist(s.hist, ms); if (ms > s.maxMs) s.maxMs = ms; }
 export const emptyDay = day => ({ schema: USAGE_SCHEMA, day, total: stat(), byToken: {}, byTool: {}, byCode: {}, hours: Array(24).fill(0),
   denied: { byStatus: {}, byIp: {} } });
-const tokenStat = (agg, token) => (agg.byToken[token] ??= { ...stat(), byTool: {}, byCode: {}, codeLast: {}, firstAt: null, lastAt: null,
-  sessionsOpened: 0, agentCalls: 0, agentFailures: 0, agentCodes: {} });
+// Tool names and codes are customer data: every map keyed by them goes through keys.mjs (own properties only).
+const tokenStat = (agg, token) => slot(agg.byToken, token, () => ({ ...stat(), byTool: {}, byCode: {}, codeLast: {}, firstAt: null, lastAt: null,
+  sessionsOpened: 0, agentCalls: 0, agentFailures: 0, agentCodes: {} }));
 function seen(t, at) { if (!t.firstAt || at < t.firstAt) t.firstAt = at; if (!t.lastAt || at > t.lastAt) t.lastAt = at; }
 const maxAt = (a, b) => (!a || (b && b > a) ? b : a);
 const top = counts => { let best = null, n = -1; for (const [k, v] of Object.entries(counts ?? {})) if (v > n || (v === n && k < best)) { best = k; n = v; } return best; };
@@ -84,19 +87,19 @@ export function createUsage({ tz, state, now = Date.now }) {
     const t = tokenStat(agg, token);
     bump(t, ms, failed);
     seen(t, line.time);
-    const tt = (t.byTool[tool] ??= { ...stat(), byCode: {} });
+    const tt = slot(t.byTool, tool, () => ({ ...stat(), byCode: {} }));
     bump(tt, ms, failed);
-    const bt = (agg.byTool[tool] ??= { ...stat(), byCode: {}, tokens: [] });
+    const bt = slot(agg.byTool, tool, () => ({ ...stat(), byCode: {}, tokens: [] }));
     bump(bt, ms, failed);
     if (!bt.tokens.includes(token)) bt.tokens.push(token);
     if (code) {
-      tt.byCode[code] = (tt.byCode[code] ?? 0) + 1;
-      t.byCode[code] = (t.byCode[code] ?? 0) + 1;
-      t.codeLast[code] = maxAt(t.codeLast[code], line.time);
-      bt.byCode[code] = (bt.byCode[code] ?? 0) + 1;
-      const bc = (agg.byCode[code] ??= { count: 0, tools: {}, tokens: [], lastAt: null });
+      inc(tt.byCode, code);
+      inc(t.byCode, code);
+      put(t.codeLast, code, maxAt(own(t.codeLast, code), line.time));
+      inc(bt.byCode, code);
+      const bc = slot(agg.byCode, code, () => ({ count: 0, tools: {}, tokens: [], lastAt: null }));
       bc.count++;
-      bc.tools[tool] = (bc.tools[tool] ?? 0) + 1;
+      inc(bc.tools, tool);
       if (!bc.tokens.includes(token)) bc.tokens.push(token);
       bc.lastAt = maxAt(bc.lastAt, line.time);
     }
@@ -115,7 +118,7 @@ export function createUsage({ tz, state, now = Date.now }) {
     const day = tz.day(time);
     const t = tokenStat(dayAgg(day), token);
     t.agentCalls++;
-    if (!ok) { t.agentFailures++; t.agentCodes[code] = (t.agentCodes[code] ?? 0) + 1; }
+    if (!ok) { t.agentFailures++; inc(t.agentCodes, code ?? 'AGENT_ERROR'); }
     touched(day);
   }
   // One Caddy window of host.json (deduplicated by collectedAt by the caller): 401/403/429 by ip|status|path.
@@ -165,7 +168,7 @@ export function createUsage({ tz, state, now = Date.now }) {
         c.calls += t.calls; c.failures += t.failures; mergeHist(c.hist, t.hist); c.maxMs = Math.max(c.maxMs, t.maxMs);
         c.sessionsOpened += t.sessionsOpened; c.agentCalls += t.agentCalls; c.agentFailures += t.agentFailures;
         c.lastAt = maxAt(c.lastAt, t.lastAt); c.daily[i] += t.calls;
-        for (const [tool, s] of Object.entries(t.byTool)) c.tools[tool] = (c.tools[tool] ?? 0) + s.calls;
+        for (const [tool, s] of Object.entries(t.byTool)) inc(c.tools, tool, s.calls);
         totals.sessionsOpened += t.sessionsOpened; totals.agentCalls += t.agentCalls; totals.agentFailures += t.agentFailures;
         if (t.calls) { totals.active.add(tok); dayRow.customers++; }
         dayRow.calls += t.calls; dayRow.failures += t.failures; mergeHist(dayRow.hist, t.hist); dayRow.maxMs = Math.max(dayRow.maxMs, t.maxMs);
@@ -177,19 +180,19 @@ export function createUsage({ tz, state, now = Date.now }) {
         const r = tools.get(tool) ?? { tool, calls: 0, failures: 0, hist: {}, maxMs: 0, byCode: {}, tokens: new Set() };
         tools.set(tool, r);
         r.calls += s.calls; r.failures += s.failures; mergeHist(r.hist, s.hist); r.maxMs = Math.max(r.maxMs, s.maxMs);
-        for (const [code, n] of Object.entries(s.byCode ?? {})) r.byCode[code] = (r.byCode[code] ?? 0) + n;
+        for (const [code, n] of Object.entries(s.byCode ?? {})) inc(r.byCode, code, n);
         for (const tok of token ? (s.calls ? [token] : []) : s.tokens ?? []) r.tokens.add(tok);
         if (token) for (const [code, n] of Object.entries(s.byCode ?? {})) {
           const c = codes.get(code) ?? { code, count: 0, tools: {}, tokens: new Set(), lastAt: null };
           codes.set(code, c);
-          c.count += n; c.tools[tool] = (c.tools[tool] ?? 0) + n; c.tokens.add(token);
-          c.lastAt = maxAt(c.lastAt, agg.byToken[token]?.codeLast?.[code] ?? null);
+          c.count += n; inc(c.tools, tool, n); c.tokens.add(token);
+          c.lastAt = maxAt(c.lastAt, own(agg.byToken[token]?.codeLast, code) ?? null);
         }
       }
       if (!token) for (const [code, s] of Object.entries(agg.byCode)) {
         const c = codes.get(code) ?? { code, count: 0, tools: {}, tokens: new Set(), lastAt: null };
         codes.set(code, c);
-        c.count += s.count; for (const [tool, n] of Object.entries(s.tools)) c.tools[tool] = (c.tools[tool] ?? 0) + n;
+        c.count += s.count; for (const [tool, n] of Object.entries(s.tools)) inc(c.tools, tool, n);
         for (const tok of s.tokens) c.tokens.add(tok);
         c.lastAt = maxAt(c.lastAt, s.lastAt);
       }

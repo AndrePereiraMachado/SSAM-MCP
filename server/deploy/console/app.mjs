@@ -144,14 +144,16 @@ export async function createConsole({ config, now = Date.now, log = () => {}, wo
     progress.total = retainedBytes(); progress.done = 0; progress.file = null;
     usage.beginRebuild();
     replay = { log: createEvents(), audit: createEvents() };
+    // Each phase on its own: a file that cannot be read in one never skips the replay of the others.
+    const phase = async (name, fn) => {
+      try { await fn(); } catch (error) { log({ console: 'cold-start-error', phase: name, code: cap(error?.code ?? error?.name ?? 'ERRO', 40) }); }
+    };
     try {
-      await serverLog.coldStart();
+      await phase('server.log', () => serverLog.coldStart());
       progress.file = 'auditoria';
-      await untilCaughtUp(() => audit.tick());
+      await phase('audit', () => untilCaughtUp(() => audit.tick()));
       progress.file = 'access-alerts.jsonl';
-      await untilCaughtUp(() => access.tick());
-    } catch (error) {
-      log({ console: 'cold-start-error', code: cap(error?.code ?? error?.name ?? 'ERRO', 40) });
+      await phase('access-alerts', () => untilCaughtUp(() => access.tick()));
     } finally {
       usage.endRebuild();
       events.adopt(replay.log.ring, replay.audit.ring);
@@ -186,6 +188,7 @@ export async function createConsole({ config, now = Date.now, log = () => {}, wo
     const c = host.collector();
     return {
       tz, licenses: tokens, licensesError: error ? (licenses.listError?.code ?? error.apiCode) : null, tokensUnreadableAt: live.tokensUnreadableAt,
+      licenseNotices: licenses.notices(),
       nameOf, sessionsByToken, maxSessions: live.server?.maxSessionsPerToken ?? 8,
       calls15: auditMinutes.window(t, 15),
       agentFailures15: live.agentTokens().map(token => ({ token, ...live.agentWindow(token, 15) })).filter(a => a.failures > 0),

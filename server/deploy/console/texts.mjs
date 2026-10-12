@@ -1,6 +1,8 @@
 // pt-BR texts of the owner console (DESIGN 4.1 errors, 4.4 event texts, 6.6 number formats). Every string the owner sees
 // that the API builds comes from here or from alerts.mjs. Values that a customer controls (MCP client, user agent,
-// machine name and user, customer names, warm notes) are capped with cap() before they reach a text.
+// machine name and user, customer names, warm notes) are capped with cap() before they reach a text, and a word table is
+// looked up with pick() (own entries only: a reason named "constructor" is shown as it is, never as Object).
+import { pick } from './keys.mjs';
 
 const nf = (min, max) => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: min, maximumFractionDigits: max });
 const NF0 = nf(0, 0), NF1 = nf(1, 1), NF01 = nf(0, 1), NF2 = nf(2, 2);
@@ -56,10 +58,13 @@ export const ERRORS = {
   TOKEN_NOT_ACTIVE: [409, 'Só uma licença ativa pode trocar a credencial do agente.'],
   NO_EXPIRY: [409, 'Licença sem validade: não há o que renovar.'],
   EXPIRY_TOO_FAR: [409, 'A validade passaria de 3650 dias a partir de hoje.'],
+  WRITE_NOT_CONFIRMED: [409, 'A gravação não se confirmou no arquivo de licenças: outro processo gravou ao mesmo tempo. Confira a licença e repita a ação.'],
   BODY_TOO_LARGE: [413, 'Requisição grande demais.'],
   CONTENT_TYPE: [415, 'Use Content-Type: application/json.'],
   RATE_LIMITED: [429, 'Muitas ações seguidas. Tente de novo em {n} s.'],
   NOT_SUPPORTED: [501, 'Indisponível nesta imagem do servidor (chega com o 24º envio).'],
+  WRITES_UNLOCKED: [501, 'Ações de licença desligadas: esta imagem não trava o tokens.json entre o painel e o ssam-admin (DEPLOY.md 15.4).'],
+  WRITES_OFF: [501, 'Ações de licença desligadas neste painel (CONSOLE_LICENSE_WRITES=off).'],
   STORE_UNREADABLE: [503, 'O arquivo de licenças não pode ser lido agora ({código}).'],
   STORE_WRITE_FAILED: [500, 'Não foi possível gravar a licença ({código}). Nada foi alterado.'],
   INTERNAL: [500, 'Erro interno do painel ({código}).'],
@@ -91,14 +96,16 @@ export const AGENT_CLOSE = {
 };
 export const AGENT_DERIVED = { dead: 'sem sinal', unaccepted: 'chamada não aceita' };
 const CONTEXT_CLOSE = { revoked: 'licença revogada', expired: 'licença vencida', 'server-stop': 'servidor parou' };
-export const sessionReason = r => SESSION_CLOSE[r] ?? cap(r ?? 'motivo desconhecido', 40);
-export const agentReason = r => AGENT_CLOSE[r] ?? cap(r ?? 'motivo desconhecido', 40);
+export const sessionReason = r => pick(SESSION_CLOSE, r) ?? cap(r ?? 'motivo desconhecido', 40);
+export const agentReason = r => pick(AGENT_CLOSE, r) ?? cap(r ?? 'motivo desconhecido', 40);
 
 const machineText = m => m && m.name ? `${m.name} (${m.user ?? '?'})` : 'máquina desconhecida';
 const OTHER_FIELD = {
   'agent-blob-mismatch': e => e.transfer, 'agent-unknown-message': () => null, 'agent-unknown-id': e => e.type,
   'agent-route-refused': e => e.route, 'agent-transfers-expired': e => e.count,
 };
+
+const SEVERITY_WORD = { critical: 'crítico', warning: 'atenção', info: 'info' };
 
 // ---- event texts (4.4); c = customer name (or token id when unknown)
 export const eventText = {
@@ -117,33 +124,39 @@ export const eventText = {
   machinePinned: (c, m) => `Máquina registrada para ${c}: ${m?.name ?? '?'} (${m?.user ?? '?'}).`,
   machineChanged: (c, m) => `Credencial do agente de ${c} usada em outra máquina: ${m?.name ?? '?'} (${m?.user ?? '?'}).`,
   agentOther(c, e) {
-    const field = OTHER_FIELD[e.event]?.(e);
+    const field = pick(OTHER_FIELD, e.event)?.(e);
     return field == null ? `Agente de ${c}: ${e.event}.` : `Agente de ${c}: ${e.event} (${cap(field, 40)}).`;
   },
   tokensUnreadable: () => 'O servidor não conseguiu ler o arquivo de licenças.',
   serverError: e => `Erro interno do servidor (${e.event}: ${cap(e.error ?? '?', 64)}).`,
-  contextClosed: (c, e) => `Contexto hospedado de ${c} fechado (${CONTEXT_CLOSE[e.reason] ?? cap(e.reason ?? '?', 40)}).`,
+  contextClosed: (c, e) => `Contexto hospedado de ${c} fechado (${pick(CONTEXT_CLOSE, e.reason) ?? cap(e.reason ?? '?', 40)}).`,
   restarted: service => `${service} reiniciou.`,
   health: (before, after) => `Saúde do ssam-server: ${before} → ${after}.`,
   collectorBack: () => 'Coletor da VPS voltou.',
   collectorStopped: () => 'Coletor da VPS parou.',
   resolved: title => `Resolvido: ${title}`,
+  ackEscalated: (title, severity) => `Silêncio desfeito (agora ${pick(SEVERITY_WORD, severity) ?? severity}): ${title}`,
+  ackRecurred: title => `Aconteceu de novo depois de visto: ${title}`,
   rotatedLost: () => 'Parte do server.log girado não pôde ser lida.',
 };
 
 export const HEALTH_WORD = { healthy: 'saudável', unhealthy: 'com falha', starting: 'iniciando' };
-export const healthWord = h => HEALTH_WORD[h] ?? (h ? cap(h, 20) : 'sem verificação');
+export const healthWord = h => pick(HEALTH_WORD, h) ?? (h ? cap(h, 20) : 'sem verificação');
 export const DOCKER_STATE = { running: 'rodando', exited: 'parado', restarting: 'reiniciando', paused: 'pausado', created: 'criado', dead: 'morto', removing: 'sendo removido' };
-export const dockerState = s => DOCKER_STATE[s] ?? (s ? cap(s, 20) : 'ausente');
+export const dockerState = s => pick(DOCKER_STATE, s) ?? (s ? cap(s, 20) : 'ausente');
 
 // License texts (console action or external change). dmy formats a date as dd/mm/aaaa in the display time zone.
-const ACTION_NOUN = { issue: 'Emissão', renew: 'Renovação', lanes: 'Mudança de faixas', 'agent-rotate': 'Troca da credencial do agente', revoke: 'Revogação' };
+export const ACTION_NOUN = { issue: 'Emissão', renew: 'Renovação', lanes: 'Mudança de faixas', 'agent-rotate': 'Troca da credencial do agente', revoke: 'Revogação' };
 export function licenseText({ action, customer, result, code, detail = {}, external = false }, dmy) {
   const c = customer ?? '?';
   let text;
-  if (result === 'error') text = `${ACTION_NOUN[action] ?? action} de ${c} falhou (${code ?? 'ERRO'}).`;
+  if (result === 'error') text = `${pick(ACTION_NOUN, action) ?? action} de ${c} falhou (${code ?? 'ERRO'}).`;
   else if (action === 'issue') text = `Licença emitida para ${c} (${fmt.lanes(detail.lanes)}, ${detail.expiresAt ? 'até ' + dmy(detail.expiresAt) : 'sem validade'}).`;
-  else if (action === 'renew') text = `Validade de ${c} estendida até ${detail.expiresAt ? dmy(detail.expiresAt) : 'sem validade'}.`;
+  else if (action === 'renew') text = detail.expiresAt ? `Validade de ${c} estendida até ${dmy(detail.expiresAt)}.` : `Validade de ${c} retirada: agora sem validade.`;
+  else if (action === 'expiry-shortened') text = `Validade de ${c} encurtada para ${dmy(detail.expiresAt)}.`;
+  else if (action === 'unrevoke') text = `Revogação da licença de ${c} desfeita: o token e a credencial do agente voltaram a valer.`;
+  else if (action === 'removed') text = `Licença de ${c} removida do arquivo de licenças.`;
+  else if (action === 'rename') text = `Nome do cliente mudou: ${detail.previousCustomer ?? '?'} → ${c}.`;
   else if (action === 'lanes') text = `Faixas de ${c}: ${fmt.lanes(detail.previousLanes)} → ${fmt.lanes(detail.lanes)}.`;
   else if (action === 'agent-rotate') text = `Credencial do agente de ${c} trocada.`;
   else if (action === 'revoke') text = `Licença de ${c} revogada.`;

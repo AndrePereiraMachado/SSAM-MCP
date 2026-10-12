@@ -1,13 +1,29 @@
 // Alert engine (DESIGN section 5, 3.4 alert state): the rules of alert-rules.mjs run every 10 s; `since` is the first
 // evaluation that found the alert (persisted), an alert clears after 2 consecutive false evaluations and then emits
 // "Resolvido: <título>". Acks: a state alert can be silenced for 24 h or 7 days (a critical one for 24 h only); an event
-// alert (acesso-outra-maquina) is marked "visto" for good. State in /state/alerts.json:
-// {firstSeen, falseCount, acks, last} (`last` keeps the alerts being cleared, so hysteresis survives a restart).
+// alert (acesso-outra-maquina, revogacao-desfeita, ...) is marked "visto". An ack keeps the severity it silenced and, for
+// an event alert, the occurrence it saw: when the alert becomes more severe (warning -> critical) or a newer occurrence
+// arrives, the ack is dropped at once and an event says so, so a silence never hides an escalation. State in
+// /state/alerts.json: {firstSeen, falseCount, acks: {id: {until, at, severity, occurredAt?}}, last} (`last` keeps the
+// alerts being cleared, so hysteresis survives a restart).
 import { evaluateRules } from './alert-rules.mjs';
 import { ApiError, eventText } from './texts.mjs';
 
 const FILE = 'alerts.json';
 export const SEVERITY_ORDER = { critical: 0, warning: 1, info: 2 };
+const HOUR = 3600000;
+// The severity an ack silenced. An ack saved before acks kept it: one longer than 24 h was not critical (critical
+// alerts can be silenced for 24 h only); a shorter one is taken as critical, so it never comes back by mistake.
+const ackedSeverity = ack => (Object.hasOwn(SEVERITY_ORDER, String(ack.severity)) ? ack.severity
+  : ack.until && ack.at && Date.parse(ack.until) - Date.parse(ack.at) > 24 * HOUR ? 'warning' : 'critical');
+// Why an ack no longer holds for the alert as it is now: 'escalated', 'recurred' or null.
+export function ackBroken(ack, a) {
+  if (!ack || !a) return null;
+  if (SEVERITY_ORDER[a.severity] < SEVERITY_ORDER[ackedSeverity(ack)]) return 'escalated';
+  const seen = ack.occurredAt ?? ack.at;
+  if (a.event && a.occurredAt && seen && Date.parse(a.occurredAt) > Date.parse(seen)) return 'recurred';
+  return null;
+}
 const bySeverity = (a, b) => (SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]) || (a.since < b.since ? -1 : a.since > b.since ? 1 : a.id.localeCompare(b.id));
 
 export function createAlerts({ state, now = Date.now, emit = () => {}, rules = evaluateRules }) {
@@ -48,6 +64,14 @@ export function createAlerts({ state, now = Date.now, emit = () => {}, rules = e
         emit({ time: at, level: 'info', group: 'painel', text: eventText.resolved(a.title) });
       }
     }
+    for (const [id, ack] of Object.entries(acks)) {
+      const a = current.get(id);
+      const broken = ackBroken(ack, a);
+      if (!broken || (ack.until && Date.parse(ack.until) <= t)) continue;
+      delete acks[id];
+      emit({ time: at, level: a.severity === 'critical' ? 'error' : 'warning', group: 'painel',
+        text: broken === 'escalated' ? eventText.ackEscalated(a.title, a.severity) : eventText.ackRecurred(a.title) });
+    }
     for (const id of Object.keys(firstSeen)) if (!current.has(id)) delete firstSeen[id];
     for (const [id, ack] of Object.entries(acks)) if (!current.has(id) || (ack.until && Date.parse(ack.until) <= t)) delete acks[id];
     save();
@@ -55,7 +79,7 @@ export function createAlerts({ state, now = Date.now, emit = () => {}, rules = e
 
   function view(a) {
     const ack = acks[a.id];
-    const acked = !!ack && (ack.until === null || Date.parse(ack.until) > now());
+    const acked = !!ack && (ack.until === null || Date.parse(ack.until) > now()) && !ackBroken(ack, a);
     return { id: a.id, rule: a.rule, severity: a.severity, area: a.area, title: a.title, detail: a.detail ?? null, since: a.since,
       lastSeen: a.lastSeen ?? a.since, subject: a.subject ?? {}, view: a.view, event: !!a.event, acked, ackedUntil: acked ? ack.until ?? null : null };
   }
@@ -76,7 +100,7 @@ export function createAlerts({ state, now = Date.now, emit = () => {}, rules = e
     }
     const t = now();
     const until = hours === null ? null : new Date(t + hours * 3600000).toISOString();
-    acks[id] = { until, at: new Date(t).toISOString() };
+    acks[id] = { until, at: new Date(t).toISOString(), severity: a.severity, ...(a.occurredAt ? { occurredAt: a.occurredAt } : {}) };
     save();
     return { id, until, alert: view(a) };
   }

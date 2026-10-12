@@ -51,10 +51,19 @@ export class LineBuffer {
   take() { const line = this.skipping ? null : this.carry; this.reset(); return line && line.length ? line : null; }
 }
 
+// One complete line: its record goes to apply. A line that does not parse, or whose apply throws (a record the
+// aggregates cannot take), is counted as skipped and never stops the reader: the caller marks the position past it, so
+// the rest of the chunk is applied now and a restart from the checkpoint never meets that line again.
+export function applyLine(line, apply, stats) {
+  const record = parseLine(line);
+  if (!record) { stats.skipped++; return; }
+  try { apply(record); } catch { stats.skipped++; stats.failed++; }
+}
+
 // Feeds one chunk read at file offset `base`; `mark(offset)` is called after each complete line with the boundary.
 async function feed(lb, chunk, base, apply, mark, stats) {
   for (const [line, end] of lb.split(chunk)) {
-    if (line) { const record = parseLine(line); if (record) apply(record); else stats.skipped++; }
+    if (line) applyLine(line, apply, stats);
     else stats.skipped++;
     mark(base + end);
     if (++stats.lines % YIELD_EVERY === 0) await breathe();
@@ -127,7 +136,7 @@ export async function headHash(file, len) {
 export function createServerLogReader({ dir, onRecord, onLoss = () => {}, onProblem = () => {}, onOk = () => {}, progress = null, chunkBytes = CHUNK_BYTES }) {
   const file = path.join(dir, 'server.log');
   const lb = new LineBuffer();
-  const stats = { lines: 0, skipped: 0 };
+  const stats = { lines: 0, skipped: 0, failed: 0 };
   let pos = 0;                 // read position in the current file
   let boundary = 0;            // offset just past the last complete line applied
   const cp = { ino: null, size: 0, mtimeMs: 0, lastRotatedStamp: null, head: null };
@@ -136,7 +145,7 @@ export function createServerLogReader({ dir, onRecord, onLoss = () => {}, onProb
   const apply = record => { if (typeof record.event === 'string') onRecord(record); else stats.skipped++; };
   const mark = at => { boundary = at; };
   const restart = () => { pos = 0; boundary = 0; lb.reset(); };
-  function closeFile() { const line = lb.take(); if (line) { const r = parseLine(line); if (r) apply(r); else stats.skipped++; } restart(); }
+  function closeFile() { const line = lb.take(); if (line) applyLine(line, apply, stats); restart(); }
   // The fingerprint grows with the file up to HEAD_BYTES.
   async function noteHead(size) {
     const len = Math.min(HEAD_BYTES, size);
@@ -256,7 +265,7 @@ export function createServerLogReader({ dir, onRecord, onLoss = () => {}, onProb
 export function createAuditReader({ dir, onRecord, onProblem = () => {}, onOk = () => {}, now = Date.now, progress = null, chunkBytes = CHUNK_BYTES }) {
   let files = {};              // key -> { offset, complete }
   const open = new Map();      // key -> { lb, pos }
-  const stats = { lines: 0, skipped: 0 };
+  const stats = { lines: 0, skipped: 0, failed: 0 };
   let busy = false;
 
   function listing() {
@@ -308,7 +317,7 @@ export function createAuditReader({ dir, onRecord, onProblem = () => {}, onOk = 
           if (o.pos < size) { caughtUp = false; continue; }
           if (entry.key < today && now() >= endOfUtcKey(entry.key) + 60000) {
             const last = o.lb.take();
-            if (last) { const r = parseLine(last); if (r) onRecord(r); else stats.skipped++; f.offset = o.pos; }
+            if (last) { applyLine(last, onRecord, stats); f.offset = o.pos; }
             f.complete = true;
             open.delete(entry.key);
           }
@@ -319,7 +328,7 @@ export function createAuditReader({ dir, onRecord, onProblem = () => {}, onOk = 
             await readGzip(path.join(dir, name), f.offset, async (chunk, at) => { await feed(o.lb, chunk, at, onRecord, mark, stats); },
               n => { if (progress) progress.done += n; });
             const last = o.lb.take();
-            if (last) { const r = parseLine(last); if (r) onRecord(r); else stats.skipped++; }
+            if (last) applyLine(last, onRecord, stats);
           } catch (error) {
             onProblem(name, error.code ?? 'READ');
           }
@@ -353,7 +362,7 @@ export function createAuditReader({ dir, onRecord, onProblem = () => {}, onOk = 
 export function createAccessAlertsReader({ dir, onRecord, onReset = () => {}, onProblem = () => {}, progress = null, chunkBytes = CHUNK_BYTES }) {
   const file = path.join(dir, 'access-alerts.jsonl');
   const lb = new LineBuffer();
-  const stats = { lines: 0, skipped: 0 };
+  const stats = { lines: 0, skipped: 0, failed: 0 };
   const cp = { ino: null, offset: 0, head: null };
   let pos = 0;
   let busy = false;

@@ -12,6 +12,7 @@ export const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const CONSOLE_DIR = path.resolve(HERE, '..');
 export const REAL_MODULE = path.resolve(HERE, '..', '..', '..', 'platforms', 'odc', 'facade', 'server-tokens.mjs');
 export const FAKE_MODULE = path.join(HERE, 'fixtures', 'fake-tokens.mjs');
+export const RACING_MODULE = path.join(HERE, 'fixtures', 'racing-tokens.mjs');
 export const SECRET = /ssam_[A-Za-z0-9_-]{20,}/;
 export const HOST_PROD = JSON.parse(fs.readFileSync(path.join(HERE, 'fixtures', 'host-prod.json'), 'utf8'));
 export const KERNEL_JSON = { o11: '11.55.91', odc: '1.7.27', odcBridge: 'v48', odcBridgeAccepted: ['v45'] };
@@ -28,8 +29,10 @@ export function tempDir(prefix = 'c') {
   return d;
 }
 
-// serverDir, stateDir, publicDir (index.html, app.css, js/main.js, favicon.svg and a mock fixture that must never be served)
-export function makeEnv({ tokenModule = REAL_MODULE, domain = 'ssam.example.com', kernel = KERNEL_JSON } = {}) {
+// serverDir, stateDir, publicDir (index.html, app.css, js/main.js, favicon.svg and a mock fixture that must never be served).
+// licenseWrites defaults to 'on' here so the tests drive every action with the image's module; production defaults to
+// 'auto' (licenses.mjs, DEPLOY.md 15.4), which the license tests cover on their own.
+export function makeEnv({ tokenModule = REAL_MODULE, domain = 'ssam.example.com', kernel = KERNEL_JSON, licenseWrites = 'on' } = {}) {
   const root = tempDir('env');
   const env = { root, serverDir: path.join(root, 'server'), stateDir: path.join(root, 'state'), publicDir: path.join(root, 'public'),
     hostJson: path.join(root, 'host', 'host.json') };
@@ -42,7 +45,7 @@ export function makeEnv({ tokenModule = REAL_MODULE, domain = 'ssam.example.com'
   fs.writeFileSync(path.join(env.publicDir, 'notes.txt'), 'not whitelisted');
   if (kernel) fs.writeFileSync(path.join(env.serverDir, 'kernel.json'), JSON.stringify(kernel));
   env.config = { serverDir: env.serverDir, socket: null, tcp: { host: '127.0.0.1', port: 0 }, stateDir: env.stateDir, hostJson: env.hostJson,
-    publicDir: env.publicDir, tokenModule, domain, timeZone: 'America/Sao_Paulo' };
+    publicDir: env.publicDir, tokenModule, domain, timeZone: 'America/Sao_Paulo', licenseWrites };
   return env;
 }
 

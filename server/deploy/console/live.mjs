@@ -4,6 +4,7 @@
 // `listening` resets sessions and agents: after a cold start the result is the state of the running process even when its
 // `listening` line already sits in a rotated .gz. Agents seen by an earlier process stay known (disconnected) for the
 // license view, so only tokens never seen in the retained logs show "sem registro".
+import { inc } from './keys.mjs';
 import { createMinutes } from './recent.mjs';
 import { AGENT_DERIVED, agentReason, cap, eventText } from './texts.mjs';
 
@@ -100,7 +101,7 @@ export function createLive({ tz, now = Date.now, nameOf = () => null, emit = () 
       case 'session-closed': {
         if (typeof e.session === 'string') sessions.delete(e.session.slice(0, 64));
         const reason = cap(e.reason ?? 'desconhecido', 40);
-        if (tz.day(e.time) === rollDay()) closedToday.counts[reason] = (closedToday.counts[reason] ?? 0) + 1;
+        if (tz.day(e.time) === rollDay()) inc(closedToday.counts, reason);     // a reason is data: own-property map (keys.mjs)
         event(e, token, 'info', 'sessao', eventText.sessionClosed(who(token), e));
         return;
       }

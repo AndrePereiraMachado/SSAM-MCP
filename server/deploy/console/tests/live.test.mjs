@@ -163,3 +163,28 @@ test('server errors of the last hour, tokens-unreadable, hosted context and the 
   assert.deepEqual(copy.live.toJSON(), JSON.parse(JSON.stringify(live.toJSON())));
   assert.equal(copy.live.agentWindow(TOK, 60).failures, 1);
 });
+
+test('close reasons and agent codes named __proto__ or constructor are plain keys and plain words', () => {
+  const before = Object.getOwnPropertyNames(Object.prototype).sort();
+  try { closeReasonsAsKeys(before); } finally {
+    for (const k of Object.getOwnPropertyNames(Object.prototype)) if (!before.includes(k)) delete Object.prototype[k];
+  }
+});
+function closeReasonsAsKeys(before) {
+  const { live, apply, texts } = setup('2026-10-12T14:01:00Z');
+  apply({ event: 'listening', pid: 7, mode: 'hosted' });
+  for (const [i, reason] of ['__proto__', 'constructor', 'constructor', 'toString'].entries()) {
+    apply({ event: 'session-opened', session: `p-${i}`, token: TOK, ip: '192.0.2.1' });
+    apply({ event: 'session-closed', session: `p-${i}`, token: TOK, reason });
+  }
+  apply({ event: 'agent-call', token: TOK, kind: 'constructor', ok: false, code: '__proto__' });
+  const counts = live.closedToday();
+  assert.deepEqual(Object.entries(counts).sort(), [['__proto__', 1], ['constructor', 2], ['toString', 1]]);
+  assert.ok(texts().includes('Cliente Alfa: sessão MCP encerrada (constructor).'));
+  assert.ok(texts().includes('Cliente Alfa: sessão MCP encerrada (__proto__).'));
+  assert.deepEqual(live.agentWindow(TOK, 15), { calls: 1, failures: 1, topCode: '__proto__', topTool: 'constructor' });
+  const again = setup('2026-10-12T14:01:00Z').live;
+  again.restore(JSON.parse(JSON.stringify(live.toJSON())));
+  assert.deepEqual(Object.entries(again.closedToday()).sort(), [['__proto__', 1], ['constructor', 2], ['toString', 1]]);
+  assert.deepEqual(Object.getOwnPropertyNames(Object.prototype).sort(), before);
+}

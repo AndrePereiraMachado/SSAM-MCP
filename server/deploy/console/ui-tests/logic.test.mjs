@@ -225,3 +225,29 @@ test('VPS containers: the image column shows the tag only (no digest, no registr
   assert.equal(vps.imageTag('registry.example.com:5000/ssam-server:prod-1'), 'prod-1');
   assert.equal(vps.imageTag('ssam-server'), 'ssam-server');
 });
+
+test('Histórico: changes seen outside the console (revocation undone, record removed, earlier expiry, rename)', () => {
+  assert.equal(historico.historyDetail({ action: 'unrevoke', detail: { previousRevokedAt: '2026-10-01T15:00:00Z' } }), 'revogada em 01/10/2026, voltou a valer');
+  assert.equal(historico.historyDetail({ action: 'removed', detail: { previousState: 'active' } }), 'estava ativa');
+  assert.equal(historico.historyDetail({ action: 'removed', detail: { previousState: 'constructor' } }), '—');
+  assert.equal(historico.historyDetail({ action: 'expiry-shortened', detail: { previousExpiresAt: '2027-01-10T12:00:00Z', expiresAt: '2026-12-10T12:00:00Z' } }), '10/01/2027 → 10/12/2026');
+  assert.equal(historico.historyDetail({ action: 'expiry-shortened', detail: { previousExpiresAt: null, expiresAt: '2026-12-10T12:00:00Z' } }), 'sem validade → 10/12/2026');
+  assert.equal(historico.historyDetail({ action: 'renew', detail: { previousExpiresAt: '2026-11-11T21:00:00Z', expiresAt: null } }), '11/11/2026 → sem validade');
+  assert.equal(historico.historyDetail({ action: 'rename', detail: { previousCustomer: 'Cliente Alfa Ltda' } }), 'antes: Cliente Alfa Ltda');
+  assert.equal(labels.HISTORY_ACTION.unrevoke, 'Revogação desfeita');
+  assert.equal(labels.HISTORY_ACTION['expiry-shortened'], 'Validade encurtada');
+  // a word table looked up by data never answers with an inherited member
+  assert.equal(labels.sessionCloseWord('constructor'), 'constructor');
+  assert.equal(labels.agentCloseWord('__proto__'), '__proto__');
+  assert.equal(labels.sessionCloseWord('idle'), 'inativa por 60 min');
+});
+
+test('Licenças: the capability line (read-only by CONSOLE_LICENSE_WRITES, or renew/lanes not in the image)', () => {
+  const caps = (over = {}) => ({ issue: true, revoke: true, agentRotate: true, renew: true, lanes: true, readOnly: null, ...over });
+  assert.equal(licencas.capabilityLine(caps()), null);
+  assert.equal(licencas.capabilityLine(null), null);
+  assert.match(licencas.capabilityLine(caps({ renew: false, lanes: false })), /^Renovar e mudar faixas chegam com a imagem do 24º envio/);
+  const off = caps({ issue: false, revoke: false, agentRotate: false, renew: false, lanes: false, readOnly: 'sem-trava' });
+  assert.equal(licencas.capabilityLine(off), 'Ações de licença desligadas: esta imagem não trava o tokens.json entre o painel e o ssam-admin. Até a imagem do 24º envio, emita, renove e revogue pelo ssam-admin (DEPLOY.md 15.4).');
+  assert.equal(licencas.capabilityLine({ ...off, readOnly: 'desligado' }), 'Ações de licença desligadas neste painel (CONSOLE_LICENSE_WRITES=off).');
+});

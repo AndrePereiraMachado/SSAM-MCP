@@ -70,6 +70,11 @@ export const HISTORY_ACTION = {
   'key-rotate': 'Chave do painel trocada',
   'alert-ack': 'Alerta silenciado',
   'alert-unack': 'Alerta reativado',
+  // changes seen outside the console only (actor "externo")
+  unrevoke: 'Revogação desfeita',
+  removed: 'Licença removida',
+  'expiry-shortened': 'Validade encurtada',
+  rename: 'Nome do cliente',
 };
 
 export const SERVER_WORD = {
@@ -111,13 +116,18 @@ export const PROCESS_KIND = {
   other: { word: 'outro', order: 4 },
 };
 
+/** A word of a table by a data key: own entries only (a reason named "constructor" stays as it is). */
+export function wordOf(table, key) {
+  return typeof key === 'string' && Object.prototype.hasOwnProperty.call(table, key) ? table[key] : undefined;
+}
+
 export function sessionCloseWord(reason) {
-  return SESSION_CLOSE[reason] || String(reason ?? '—');
+  return wordOf(SESSION_CLOSE, reason) || String(reason ?? '—');
 }
 
 export function agentCloseWord(reason) {
   if (reason == null) return '—';
-  return AGENT_CLOSE[reason] || String(reason);
+  return wordOf(AGENT_CLOSE, reason) || String(reason);
 }
 
 export const VIEWS = [

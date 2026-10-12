@@ -146,3 +146,11 @@ test('checkpoint: schema, written atomically, no partial file left', async t => 
   assert.equal(key, c.key);
   if (process.platform !== 'win32') assert.equal(fs.statSync(path.join(env.stateDir, 'access.key')).mode & 0o777, 0o600);
 });
+
+test('CONSOLE_LICENSE_WRITES: auto by default, on or off; anything else refuses to start', () => {
+  assert.equal(loadConfig([], {}).licenseWrites, 'auto');
+  assert.equal(loadConfig([], { CONSOLE_LICENSE_WRITES: 'on' }).licenseWrites, 'on');
+  assert.equal(loadConfig([], { CONSOLE_LICENSE_WRITES: ' OFF ' }).licenseWrites, 'off');
+  assert.equal(loadConfig([], { CONSOLE_LICENSE_WRITES: '' }).licenseWrites, 'auto');
+  assert.throws(() => loadConfig([], { CONSOLE_LICENSE_WRITES: 'yes' }), /CONSOLE_LICENSE_WRITES/);
+});

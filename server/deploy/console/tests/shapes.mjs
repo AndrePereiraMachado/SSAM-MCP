@@ -52,7 +52,8 @@ const ok = literal(true);
 
 export const Event = { seq: I, time: T, level: oneOf('info', 'warning', 'error'), group: oneOf('sessao', 'agente', 'chamada', 'licenca', 'servidor', 'vps', 'painel'),
   token: nS, customer: nS, text: S, code: nS };
-export const History = { time: T, action: oneOf('issue', 'renew', 'lanes', 'agent-rotate', 'revoke', 'key-rotate', 'alert-ack', 'alert-unack'),
+export const History = { time: T, action: oneOf('issue', 'renew', 'lanes', 'agent-rotate', 'revoke', 'key-rotate', 'alert-ack', 'alert-unack',
+    'unrevoke', 'removed', 'expiry-shortened', 'rename'),
   actor: oneOf('painel', 'externo'), token: nS, customer: nS, result: oneOf('ok', 'error'), code: nS, detail: 'object' };
 export const Alert = { id: S, rule: S, severity: oneOf('critical', 'warning', 'info'),
   area: oneOf('servidor', 'licencas', 'uso', 'agentes', 'vps', 'backup', 'tls', 'seguranca', 'coletor', 'painel'), title: S, detail: nS, since: T, lastSeen: T,
@@ -66,7 +67,7 @@ export const License = { id: S, customer: S, state: oneOf('active', 'expired', '
   workspace: nullable({ bytes: I, files: I, truncated: B, measuredAt: nT, quotaBytes: literal(5368709120) }),
   actions: { renew: Action, lanes: Action, agentRotate: Action, revoke: Action }, history: arrayOf(History) };
 export const Indexing = { state: oneOf('ready', 'running'), progress: N, detail: nS };
-const Capabilities = { issue: B, revoke: B, agentRotate: B, renew: B, lanes: B };
+const Capabilities = { issue: B, revoke: B, agentRotate: B, renew: B, lanes: B, readOnly: oneOf(null, 'sem-trava', 'desligado') };
 export const Meta = { ok, console: { version: S, startedAt: T }, now: T, timeZone: S, publicHost: nS, publicUrl: nS, serverUrl: nS,
   capabilities: Capabilities, indexing: Indexing };
 const Status = {

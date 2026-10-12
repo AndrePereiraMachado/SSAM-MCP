@@ -175,6 +175,8 @@ services:
       CONSOLE_PUBLIC_DIR: /console/public
       CONSOLE_TOKEN_MODULE: /app/platforms/odc/facade/server-tokens.mjs
       CONSOLE_DOMAIN: ${SSAM_DOMAIN:?set SSAM_DOMAIN in .env}
+      # auto: license actions only with a token module that locks tokens.json between writers (DEPLOY.md 15.4)
+      CONSOLE_LICENSE_WRITES: ${CONSOLE_LICENSE_WRITES:-auto}
       TZ: UTC
     volumes:
       - server-state:/data/server

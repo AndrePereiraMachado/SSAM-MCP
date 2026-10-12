@@ -341,3 +341,89 @@ test('API: acceptance set and acks end to end, history records the acks', async 
   const ev = (await c.get('/api/events?group=painel')).body.events;
   assert.equal(ev[ev.length - 1].text, 'Resolvido: Nenhum backup do estado em /var/backups/ssam-server.');
 });
+
+// Review fix: an ack keeps the severity it silenced and the occurrence it saw.
+test('engine: a silenced warning that becomes critical comes back at once with an event (also after a restart)', () => {
+  const dir = tempDir('al');
+  const now = clock(NOW);
+  const events = [];
+  let severity = 'warning';
+  const id = `licenca-vence:${A}`;
+  const rules = () => [{ id, rule: 'licenca-vence', severity, area: 'licencas', view: 'licencas', title: 'Licença de Cliente Alfa vence em 6 dias (18/10/2026).',
+    subject: { token: A }, event: false }];
+  let engine = createAlerts({ state: createState(dir), now, emit: e => events.push(e), rules });
+  engine.evaluate({});
+  engine.ack(id, 168);
+  now.advance(DAY);
+  engine.evaluate({});
+  assert.deepEqual(engine.list().alerts, [], 'still a warning: still silenced');
+  engine = createAlerts({ state: createState(dir), now, emit: e => events.push(e), rules });   // restart keeps the ack and its severity
+  severity = 'critical';
+  now.advance(3 * DAY);
+  engine.evaluate({});
+  const l = engine.list();
+  assert.deepEqual(l.alerts.map(a => [a.id, a.severity, a.acked]), [[id, 'critical', false]]);
+  assert.deepEqual(l.acked, []);
+  assert.equal(engine.counts().critical, 1);
+  assert.ok(!Object.hasOwn(engine.toJSON().acks, id), 'the ack is gone');
+  assert.deepEqual(events.map(e => [e.group, e.level, e.text]), [['painel', 'error', 'Silêncio desfeito (agora crítico): Licença de Cliente Alfa vence em 6 dias (18/10/2026).']]);
+  // a critical alert can be silenced again for 24 h, and stays silenced while it stays critical
+  engine.ack(id, 24);
+  engine.evaluate({});
+  assert.deepEqual(engine.list().alerts, []);
+  // falling back to a warning keeps the silence
+  severity = 'warning';
+  engine.evaluate({});
+  assert.deepEqual(engine.list().alerts, []);
+  assert.equal(events.length, 1);
+});
+
+test('engine: an event alert marked visto comes back when a newer occurrence arrives', () => {
+  const now = clock(NOW);
+  const events = [];
+  const id = `acesso-outra-maquina:${A}:def456`;
+  let occurredAt = iso(NOW - HOUR);
+  const rules = () => [{ id, rule: 'acesso-outra-maquina', severity: 'critical', area: 'licencas', view: 'licencas', title: 'Credencial do agente de Cliente Alfa usada em outra máquina.',
+    subject: { token: A }, event: true, occurredAt }];
+  const engine = createAlerts({ state: createState(tempDir('al')), now, emit: e => events.push(e), rules });
+  engine.evaluate({});
+  engine.ack(id, null);
+  now.advance(10 * DAY);
+  engine.evaluate({});
+  assert.deepEqual(engine.list().alerts, [], 'the same occurrence stays seen');
+  occurredAt = iso(now() - MIN);
+  engine.evaluate({});
+  assert.deepEqual(engine.list().alerts.map(a => [a.id, a.acked]), [[id, false]]);
+  assert.deepEqual(events.map(e => [e.level, e.text]), [['error', 'Aconteceu de novo depois de visto: Credencial do agente de Cliente Alfa usada em outra máquina.']]);
+  engine.ack(id, null);
+  engine.evaluate({});
+  assert.deepEqual(engine.list().alerts, []);
+  assert.equal(events.length, 1);
+});
+
+test('acesso-outra-maquina carries the time of its newest line (occurredAt)', () => {
+  const line = t => ({ time: iso(t), token: A, customer: 'Cliente Alfa', first: { id: 'abc123', name: 'PC-TESTE-01', user: 'teste' },
+    machine: { id: 'def456', name: 'PC-TESTE-02', user: 'teste' }, ip: '203.0.113.50' });
+  const a = fired({ access: [line(NOW - 2 * DAY), line(NOW - HOUR), line(NOW - DAY)] }, `acesso-outra-maquina:${A}:def456`);
+  assert.equal(a.occurredAt, iso(NOW - HOUR));
+});
+
+test('license notices: revogacao-desfeita, licenca-removida, gravacao-nao-confirmada (30 days, resolved by the license state)', () => {
+  const at = iso(NOW - HOUR);
+  const key = `${A}:${at.replace(/[^A-Za-z0-9_.\-/]/g, '_')}`;
+  const notice = (kind, extra = {}) => ({ licenseNotices: [{ kind, token: A, customer: 'Cliente Alfa', at, ...extra }] });
+  const un = expectFire({ ...notice('unrevoke'), licenses: [lic(NOW + 30 * DAY)] }, `revogacao-desfeita:${key}`, 'critical',
+    'A revogação da licença de Cliente Alfa foi desfeita fora do painel (12/10/2026 11:00): o token e a credencial do agente voltaram a valer.');
+  assert.equal(un.event, true);
+  assert.equal(un.occurredAt, at);
+  expectNone({ ...notice('unrevoke'), licenses: [lic(NOW + 30 * DAY, 'revoked')] }, `revogacao-desfeita:${key}`);
+  expectNone({ ...notice('unrevoke'), licenses: [] }, `revogacao-desfeita:${key}`);
+  expectFire({ ...notice('unrevoke'), licenses: null, licensesError: 'PARSE' }, `revogacao-desfeita:${key}`, 'critical');
+  expectFire({ ...notice('removed'), licenses: [] }, `licenca-removida:${key}`, 'warning',
+    `A licença de Cliente Alfa (${A}) sumiu do tokens.json fora do painel (12/10/2026 11:00).`);
+  expectNone({ ...notice('removed'), licenses: [lic(NOW + 30 * DAY)] }, `licenca-removida:${key}`);
+  expectFire({ ...notice('unconfirmed', { action: 'revoke' }), licenses: [lic(NOW + 30 * DAY)] }, `gravacao-nao-confirmada:${key}`, 'critical',
+    'Revogação da licença de Cliente Alfa não se confirmou no tokens.json (12/10/2026 11:00): outro processo gravou o arquivo ao mesmo tempo.');
+  const old = { licenseNotices: [{ kind: 'removed', token: A, customer: 'Cliente Alfa', at: iso(NOW - 30 * DAY - MIN) }], licenses: [] };
+  assert.equal(run(old).filter(a => a.rule === 'licenca-removida').length, 0, 'older than 30 days');
+});

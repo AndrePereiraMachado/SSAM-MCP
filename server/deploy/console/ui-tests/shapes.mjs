@@ -98,11 +98,13 @@ const LANES = arr(enumOf('odc', 'o11'), { min: 1, max: 2 });
 
 export const History = {
   time: iso,
-  action: enumOf('issue', 'renew', 'lanes', 'agent-rotate', 'revoke', 'key-rotate', 'alert-ack', 'alert-unack'),
+  action: enumOf('issue', 'renew', 'lanes', 'agent-rotate', 'revoke', 'key-rotate', 'alert-ack', 'alert-unack',
+    'unrevoke', 'removed', 'expiry-shortened', 'rename'),
   actor: enumOf('painel', 'externo'), token: nul(tok), customer: nul(str), result: enumOf('ok', 'error'), code: nul(str),
   detail: {
     days: opt(nul(int)), expiresAt: opt(nul(iso)), previousExpiresAt: opt(nul(iso)), lanes: opt(LANES), previousLanes: opt(LANES),
     alert: opt(str), hours: opt(nul(int)),
+    previousRevokedAt: opt(iso), previousState: opt(enumOf('active', 'expired', 'revoked')), previousCustomer: opt(nul(str)),
   },
 };
 
@@ -120,7 +122,7 @@ export const License = {
   history: arr(History, { max: 5 }),
 };
 
-const CAPS = { issue: bool, revoke: bool, agentRotate: bool, renew: bool, lanes: bool };
+const CAPS = { issue: bool, revoke: bool, agentRotate: bool, renew: bool, lanes: bool, readOnly: nul(enumOf('sem-trava', 'desligado')) };
 const INDEXING = { state: enumOf('ready', 'running'), progress: num, detail: nul(str) };
 
 // ---------------------------------------------------------------- section 4.3 endpoints

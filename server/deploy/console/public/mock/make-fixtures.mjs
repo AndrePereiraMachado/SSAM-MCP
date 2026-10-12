@@ -387,7 +387,7 @@ function indexing(name) {
 
 function capabilities(name) {
   const full = name !== 'sem-renovar';
-  return { issue: true, revoke: true, agentRotate: true, renew: full, lanes: full };
+  return { issue: true, revoke: true, agentRotate: true, renew: full, lanes: full, readOnly: null };
 }
 
 function buildMeta(name) {
@@ -785,6 +785,11 @@ function buildHistory(name) {
       hist(ago(3 * H), 'alert-unack', 'painel', null, null, { alert: 'disco:/' }),
       hist(ago(5 * H + 11 * M), 'key-rotate', 'painel', null, null),
       hist('2026-10-11T09:00:00Z', 'renew', 'externo', TOK.eta, 'Cliente Eta com nome comprido para testar reticências na tabela', { days: 30, previousExpiresAt: '2027-08-23T12:00:00Z', expiresAt: '2027-09-22T12:00:00Z' }),
+      // changes seen outside the console (restore of an older backup): a revocation undone, a record gone, an earlier expiry
+      hist(ago(6 * H), 'unrevoke', 'externo', TOK.gamaOld, 'Cliente Gama', { previousRevokedAt: '2026-10-01T15:00:00Z' }),
+      hist(ago(6 * H), 'removed', 'externo', TOK.zeta, 'Cliente Zeta', { previousState: 'active' }),
+      hist(ago(6 * H), 'expiry-shortened', 'externo', TOK.alfa, 'Cliente Alfa', { previousExpiresAt: '2027-01-10T12:00:00Z', expiresAt: '2026-12-10T12:00:00Z' }),
+      hist(ago(6 * H), 'rename', 'externo', TOK.alfa, 'Cliente Alfa', { previousCustomer: 'Cliente Alfa Ltda' }),
     ]
     : [
       hist(ago(5 * H + 11 * M), 'key-rotate', 'painel', null, null),

@@ -320,3 +320,89 @@ test('console: cold start whose listening line sits in a rotated .gz', async t =
   assert.equal(meta.publicUrl, 'https://ssam.example.com/mcp');
 
 });
+
+// Review fix: a record whose apply throws is one skipped line; the position still moves past it, so the rest of the chunk
+// is applied now and a restart never meets that line again.
+test('readers: a line whose apply throws is counted as skipped; the rest of the chunk is applied and the offset moves on', async () => {
+  const dir = tempDir('rd');
+  const boom = n => { if (n === 2) throw new TypeError('bad record'); };
+  // audit
+  const now = clock('2026-10-12T15:00:00Z');
+  const seenA = [];
+  const a = createAuditReader({ dir, now, onRecord: l => { boom(l.n); seenA.push(l.n); } });
+  writeAudit(dir, [1, 2, 3].map(n => ({ time: `2026-10-12T13:00:0${n}.000Z`, n })));
+  assert.equal(await a.tick(), true);
+  assert.deepEqual(seenA, [1, 3]);
+  assert.equal(a.stats.skipped, 1);
+  assert.equal(a.checkpoint().files['20261012'].offset, fs.statSync(path.join(dir, 'audit-20261012.jsonl')).size);
+  // server.log
+  const log = path.join(dir, 'server.log');
+  writeLines(log, [1, 2, 3].map(n => ev(n)));
+  const seenL = [];
+  const l = createServerLogReader({ dir, onRecord: e => { boom(e.n); seenL.push(e.n); } });
+  assert.equal(await l.tick(), true);
+  assert.deepEqual(seenL, [1, 3]);
+  assert.equal(l.stats.skipped, 1);
+  assert.equal(l.checkpoint().offset, fs.statSync(log).size);
+  // access-alerts.jsonl
+  writeLines(path.join(dir, 'access-alerts.jsonl'), [1, 2, 3].map(n => ({ time: `2026-10-12T13:00:0${n}.000Z`, n })));
+  const seenX = [];
+  const x = createAccessAlertsReader({ dir, onRecord: r => { boom(r.n); seenX.push(r.n); } });
+  assert.equal(await x.tick(), true);
+  assert.deepEqual(seenX, [1, 3]);
+  assert.equal(x.checkpoint().offset, fs.statSync(path.join(dir, 'access-alerts.jsonl')).size);
+});
+
+test('console: an audit line for a tool named __proto__ is counted like any other, in a cold start and after a restart', async t => {
+  const before = Object.getOwnPropertyNames(Object.prototype).sort();
+  t.after(() => { for (const k of Object.getOwnPropertyNames(Object.prototype)) if (!before.includes(k)) delete Object.prototype[k]; });
+  const open = new Set();
+  t.after(async () => { for (const x of open) await x.close(); });
+  const env = makeEnv();
+  const t0 = Date.now();
+  const at = s => new Date(t0 - s * 1000).toISOString();
+  const tok = 'tok_0000000a1fa0';
+  writeAudit(env.serverDir, [
+    { time: at(400), token: tok, customer: 'Cliente Alfa', tool: 'ssam_doctor', ms: 50, ok: true },
+    { time: at(390), token: tok, customer: 'Cliente Alfa', tool: '__proto__', ms: 3, ok: false, error: 'RPC_32602' },
+    { time: at(380), token: tok, customer: 'Cliente Alfa', tool: 'constructor', ms: 3, ok: false, error: 'RPC_32602' },
+    { time: at(370), token: tok, customer: 'Cliente Alfa', tool: 'odc_read', ms: 60, ok: true },
+  ]);
+  writeLines(path.join(env.serverDir, 'access-alerts.jsonl'), [{ time: at(300), event: 'agent-machine-changed', token: tok, customer: 'Cliente Alfa',
+    first: { id: 'abc123', name: 'PC-TESTE-01', user: 'teste' }, machine: { id: 'def456', name: 'PC-TESTE-02', user: 'teste' }, ip: '203.0.113.50' }]);
+  let c = await startConsole(env);
+  open.add(c);
+  assert.equal(c.app.cold, true);
+  let u = (await c.get('/api/usage?range=7d')).body;
+  assert.equal(u.totals.calls, 4);
+  assert.equal(u.totals.failures, 2);
+  assert.deepEqual(u.byTool.map(r => r.tool).sort(), ['__proto__', 'constructor', 'odc_read', 'ssam_doctor']);
+  assert.equal(c.app.parts.sources.access().length, 1, 'the access alerts were replayed too');
+  assert.deepEqual(Object.getOwnPropertyNames(Object.prototype).sort(), before);
+  open.delete(c);
+  await c.close();
+  writeAudit(env.serverDir, [{ time: at(100), token: tok, customer: 'Cliente Alfa', tool: '__proto__', ms: 3, ok: false, error: 'RPC_32602' }]);
+  c = await startConsole(env);
+  open.add(c);
+  assert.equal(c.app.cold, false);
+  await c.app.tickAll();
+  u = (await c.get('/api/usage?range=7d')).body;
+  assert.equal(u.totals.calls, 5, 'resumed after the bad line, nothing skipped, nothing twice');
+  assert.equal(u.byTool.find(r => r.tool === '__proto__').calls, 2);
+});
+
+test('console: a cold-start phase that fails does not skip the next ones (server.log unreadable, audit and access still replayed)', async t => {
+  const env = makeEnv();
+  const t0 = Date.now();
+  const at = s => new Date(t0 - s * 1000).toISOString();
+  const tok = 'tok_0000000a1fa0';
+  fs.mkdirSync(path.join(env.serverDir, 'server.log'));     // a directory where the file should be: every read fails
+  writeAudit(env.serverDir, [{ time: at(400), token: tok, customer: 'Cliente Alfa', tool: 'ssam_doctor', ms: 50, ok: true }]);
+  writeLines(path.join(env.serverDir, 'access-alerts.jsonl'), [{ time: at(300), event: 'agent-machine-changed', token: tok, customer: 'Cliente Alfa',
+    first: { id: 'abc123', name: 'PC-TESTE-01', user: 'teste' }, machine: { id: 'def456', name: 'PC-TESTE-02', user: 'teste' }, ip: '203.0.113.50' }]);
+  const c = await startConsole(env);
+  t.after(() => c.close());
+  assert.equal((await c.get('/api/usage?range=7d')).body.totals.calls, 1);
+  assert.equal(c.app.parts.sources.access().length, 1);
+  assert.ok(c.logs.some(l => l.includes('"cold-start-error"') && l.includes('"phase":"server.log"')), c.logs.join('\n'));
+});

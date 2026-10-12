@@ -1,8 +1,9 @@
 // Alert rules of DESIGN section 5, as one pure function of a context snapshot (built by app.mjs every 10 s), so each
 // threshold can be tested without a running console. Ids are `<rule>:<subject>` (`<rule>` alone for a rule with no
 // subject). Titles and details are the pt-BR texts of section 5; {d} = dd/mm/aaaa and {h} = HH:MM in the display zone.
+import { pick } from './keys.mjs';
 import { QUOTA_BYTES } from './workspaces.mjs';
-import { cap, dockerState, fmt } from './texts.mjs';
+import { ACTION_NOUN, cap, dockerState, fmt } from './texts.mjs';
 
 const MIN = 60000, HOUR = 3600000, DAY = 86400000;
 const MIB = 1024 * 1024;
@@ -14,8 +15,9 @@ export const LANE_NAME = { odc: 'ODC', o11: 'O11' };
 export function evaluateRules(ctx) {
   const { now, tz } = ctx;
   const out = [];
-  const add = (rule, key, severity, area, view, title, detail = null, subject = {}, event = false) =>
-    out.push({ id: key ? `${rule}:${key}` : rule, rule, severity, area, view, title, detail, subject, event });
+  // occurredAt (event alerts): the time of the newest occurrence; a "visto" ack holds until a newer one arrives.
+  const add = (rule, key, severity, area, view, title, detail = null, subject = {}, event = false, occurredAt = null) =>
+    out.push({ id: key ? `${rule}:${key}` : rule, rule, severity, area, view, title, detail, subject, event, ...(occurredAt ? { occurredAt } : {}) });
   const nameOf = token => ctx.nameOf(token) ?? token;
   const doc = ctx.hostStatus === 'ok' ? ctx.doc : null;
   const sec = name => (doc && doc[name] && doc[name].ok === true ? doc[name] : null);
@@ -57,7 +59,38 @@ export function evaluateRules(ctx) {
     add('acesso-outra-maquina', key, 'critical', 'licencas', 'licencas',
       `Credencial do agente de ${c} usada em outra máquina: ${m.name ?? '?'} (${m.user ?? '?'}) em vez de ${f.name ?? '?'} (${f.user ?? '?'}), IP ${a.ip ?? '?'}, ${tz.dmy(a.time)} ${tz.hm(a.time)}.`,
       'Se não foi o cliente, troque a credencial do agente ou revogue a licença.',
-      { token: a.token, customer: c, machine: m.name ?? null, ip: a.ip ?? null }, true);
+      { token: a.token, customer: c, machine: m.name ?? null, ip: a.ip ?? null }, true, a.time);
+  }
+  // License notices (licenses.mjs, 30 days): event alerts, "visto" until a newer notice. A revocation undone stops
+  // firing once the license is revoked again; a removed record once it is back in the file. While tokens.json cannot be
+  // read the state is unknown and they keep firing.
+  const known = Array.isArray(ctx.licenses);
+  const byId = new Map((ctx.licenses ?? []).map(t => [t.id, t]));
+  for (const n of ctx.licenseNotices ?? []) {
+    const at = Date.parse(n.at);
+    if (Number.isNaN(at) || now - at > 30 * DAY) continue;
+    const c = cap(n.customer ?? null, 64) ?? n.token;
+    const key = `${n.token}:${safeKey(n.at)}`;
+    const subject = { token: n.token, customer: c };
+    const when = `${tz.dmy(at)} ${tz.hm(at)}`;
+    if (n.kind === 'unrevoke') {
+      const t = byId.get(n.token);
+      if (known && (!t || t.state === 'revoked')) continue;
+      add('revogacao-desfeita', key, 'critical', 'licencas', 'licencas',
+        `A revogação da licença de ${c} foi desfeita fora do painel (${when}): o token e a credencial do agente voltaram a valer.`,
+        'Restore de um backup antigo ou tokens.json editado à mão. Se não foi você, revogue de novo em Licenças.', subject, true, n.at);
+    } else if (n.kind === 'removed') {
+      if (known && byId.has(n.token)) continue;
+      add('licenca-removida', key, 'warning', 'licencas', 'licencas',
+        `A licença de ${c} (${n.token}) sumiu do tokens.json fora do painel (${when}).`,
+        'O token e a credencial do agente dela deixaram de valer. Restore de um backup antigo ou edição à mão; se não foi você, confira o Histórico.',
+        subject, true, n.at);
+    } else if (n.kind === 'unconfirmed') {
+      add('gravacao-nao-confirmada', key, 'critical', 'licencas', 'licencas',
+        `${pick(ACTION_NOUN, n.action) ?? 'Ação'} da licença de ${c} não se confirmou no tokens.json (${when}): outro processo gravou o arquivo ao mesmo tempo.`,
+        'Confira a licença em Licenças e repita a ação. Sem a trava do 24º envio, não rode o ssam-admin enquanto o painel grava (DEPLOY.md 15.4).',
+        subject, true, n.at);
+    }
   }
   const revoked = new Set((ctx.licenses ?? []).filter(t => t.state === 'revoked').map(t => t.id));
   for (const [token, w] of Object.entries(ctx.workspaces ?? {})) {
@@ -144,7 +177,7 @@ export function evaluateRules(ctx) {
     } else {
       if (warm.indexes && warm.indexes.ok === false) {
         const lanes = Object.entries(warm.indexes.lanes ?? {}).filter(([, v]) => v && v.ok === false);
-        const lane = lanes.length ? lanes.map(([k]) => LANE_NAME[k] ?? cap(k, 20)).join(' e ') : 'ODC e O11';
+        const lane = lanes.length ? lanes.map(([k]) => pick(LANE_NAME, k) ?? cap(k, 20)).join(' e ') : 'ODC e O11';
         const error = cap((lanes[0]?.[1]?.error ?? warm.indexes.error) || 'erro', 200);
         add('nao-aquecido', 'indice', 'warning', 'servidor', 'vps', `Aquecimento: o índice ${lane} falhou (${error}).`);
       }

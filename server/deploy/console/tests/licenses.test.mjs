@@ -7,7 +7,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { mapStoreError } from '../licenses.mjs';
-import { FAKE_MODULE, REAL_MODULE, makeEnv, startConsole } from './helpers.mjs';
+import { FAKE_MODULE, RACING_MODULE, REAL_MODULE, SECRET, makeEnv, startConsole } from './helpers.mjs';
+import { createTz } from '../tz.mjs';
 import { buildScenario } from './scenario.mjs';
 
 const load = async m => (await import(pathToFileURL(m).href)).createTokenStore;
@@ -19,7 +20,7 @@ test('current image module: renew and lanes are 501 NOT_SUPPORTED; revoke twice 
   const c = await startConsole(env);
   t.after(() => c.close());
   const lic = (await c.get('/api/licenses')).body;
-  assert.deepEqual(lic.capabilities, { issue: true, revoke: true, agentRotate: true, renew: false, lanes: false });
+  assert.deepEqual(lic.capabilities, { issue: true, revoke: true, agentRotate: true, renew: false, lanes: false, readOnly: null });
   const alfa = lic.licenses.find(l => l.id === sc.alfa.id);
   assert.deepEqual(alfa.actions.lanes, { allowed: false, reason: 'Indisponível nesta imagem (chega com o 24º envio).' });
   let r = await c.post(`/api/licenses/${sc.alfa.id}/renew`, { days: 30, confirm: 'Cliente Alfa', expectExpiresAt: alfa.expiresAt });
@@ -156,7 +157,7 @@ test('a token module that cannot be loaded: every capability off, 501 for mutati
   const c = await startConsole(env);
   t.after(() => c.close());
   const meta = (await c.get('/api/meta')).body;
-  assert.deepEqual(meta.capabilities, { issue: false, revoke: false, agentRotate: false, renew: false, lanes: false });
+  assert.deepEqual(meta.capabilities, { issue: false, revoke: false, agentRotate: false, renew: false, lanes: false, readOnly: null });
   assert.equal((await c.post('/api/licenses', { customer: 'Cliente Alfa', days: 30, lanes: ['odc'], confirm: 'Cliente Alfa' })).status, 501);
   assert.equal((await c.get('/api/licenses')).status, 503);
   assert.ok(c.logs.some(l => l.includes('"console":"token-module-failed"')));
@@ -215,4 +216,156 @@ test('the real token module (current image) also runs issue and agent-rotate end
   const stored = JSON.parse(fs.readFileSync(path.join(env.serverDir, 'tokens.json'), 'utf8'));
   assert.equal(stored.schema, 'ssam-server-tokens/1');
   assert.equal(stored.tokens.length, 1);
+});
+
+// Review fixes: external changes the 5 s diff used to miss, and the writers' race of the image's lock-free module.
+test('external changes: an un-revocation (critical alert), a removed record (warning alert), a shortened expiry and a rename', async t => {
+  const env = makeEnv({ tokenModule: FAKE_MODULE });
+  const sc = await buildScenario(env, { module: FAKE_MODULE });   // alfa 30 d, beta 2 d, gama revoked
+  let c = await startConsole(env);
+  t.after(() => c.close());
+  await c.app.tickAll();
+  // tokens.json as a restore of an older backup (or a hand edit) leaves it
+  const file = path.join(env.serverDir, 'tokens.json');
+  const doc = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const rec = id => doc.tokens.find(x => x.id === id);
+  const revokedAt = rec(sc.gama.id).revokedAt;
+  delete rec(sc.gama.id).revokedAt;
+  const longer = rec(sc.alfa.id).expiresAt;
+  const shorter = new Date(Date.parse(longer) - 20 * 86400000).toISOString();
+  rec(sc.alfa.id).expiresAt = shorter;
+  rec(sc.alfa.id).customer = 'Cliente Alfa Nova';
+  doc.tokens = doc.tokens.filter(x => x.id !== sc.beta.id);
+  fs.writeFileSync(file, JSON.stringify(doc, null, 2));
+  await c.app.tickAll();
+  const h = (await c.get('/api/history')).body.entries;
+  assert.ok(h.every(e => e.actor === 'externo' && e.result === 'ok'));
+  assert.deepEqual(h.map(e => [e.action, e.token]).sort(),
+    [['expiry-shortened', sc.alfa.id], ['removed', sc.beta.id], ['rename', sc.alfa.id], ['unrevoke', sc.gama.id]].sort());
+  const by = a => h.find(e => e.action === a);
+  assert.deepEqual(by('unrevoke').detail, { previousRevokedAt: revokedAt });
+  assert.deepEqual(by('removed').detail, { previousState: 'active' });
+  assert.equal(by('removed').customer, 'Cliente Beta');
+  assert.deepEqual(by('expiry-shortened').detail, { expiresAt: shorter, previousExpiresAt: longer });
+  assert.deepEqual(by('rename').detail, { previousCustomer: 'Cliente Alfa' });
+  assert.equal((await c.get('/api/history?action=unrevoke')).body.entries.length, 1);
+  const tz = createTz('America/Sao_Paulo');
+  const ev = (await c.get('/api/events?group=licenca')).body.events;
+  const level = text => ev.find(e => e.text === text)?.level;
+  assert.equal(level('Revogação da licença de Cliente Gama desfeita: o token e a credencial do agente voltaram a valer (fora do painel).'), 'error');
+  assert.equal(level('Licença de Cliente Beta removida do arquivo de licenças (fora do painel).'), 'warning');
+  assert.equal(level(`Validade de Cliente Alfa Nova encurtada para ${tz.dmy(shorter)} (fora do painel).`), 'warning');
+  assert.equal(level('Nome do cliente mudou: Cliente Alfa → Cliente Alfa Nova (fora do painel).'), 'info');
+  let ov = (await c.get('/api/overview')).body;
+  const un = ov.alerts.find(a => a.rule === 'revogacao-desfeita');
+  assert.equal(un.severity, 'critical');
+  assert.equal(un.event, true);
+  assert.deepEqual(un.subject, { token: sc.gama.id, customer: 'Cliente Gama' });
+  assert.match(un.title, /^A revogação da licença de Cliente Gama foi desfeita fora do painel \(\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}\): o token e a credencial do agente voltaram a valer\.$/);
+  const rm = ov.alerts.find(a => a.rule === 'licenca-removida');
+  assert.equal(rm.severity, 'warning');
+  assert.equal(rm.event, true);
+  assert.ok(rm.title.startsWith(`A licença de Cliente Beta (${sc.beta.id}) sumiu do tokens.json fora do painel`), rm.title);
+  await c.app.tickAll();
+  assert.equal((await c.get('/api/history')).body.entries.length, h.length, 'nothing recorded twice');
+  // a restart keeps both alerts (the notices are in the state dir); revoking again resolves the un-revocation
+  await c.close();
+  c = await startConsole(env);
+  await c.app.tickAll();
+  ov = (await c.get('/api/overview')).body;
+  assert.deepEqual(ov.alerts.filter(a => ['revogacao-desfeita', 'licenca-removida'].includes(a.rule)).map(a => a.rule).sort(), ['licenca-removida', 'revogacao-desfeita']);
+  assert.equal((await c.post(`/api/licenses/${sc.gama.id}/revoke`, { confirm: 'Cliente Gama' })).status, 200);
+  await c.app.tickAll();
+  await c.app.tickAll();
+  ov = (await c.get('/api/overview')).body;
+  assert.ok(!ov.alerts.some(a => a.rule === 'revogacao-desfeita'), 'revoked again: resolved');
+  assert.ok(ov.alerts.some(a => a.rule === 'licenca-removida'));
+});
+
+test('every write is read back: a change lost to another writer, or a torn file, is refused (409), recorded and alerted', async t => {
+  const env = makeEnv({ tokenModule: RACING_MODULE });
+  const sc = await buildScenario(env, { module: FAKE_MODULE });
+  const c = await startConsole(env);
+  t.after(() => { delete globalThis.SSAM_TEST_RACE; return c.close(); });
+  const tokensFile = path.join(env.serverDir, 'tokens.json');
+  const message = 'A gravação não se confirmou no arquivo de licenças: outro processo gravou ao mesmo tempo. Confira a licença e repita a ação.';
+  // revoke lost: the CLI's older copy landed last, the license is still active
+  globalThis.SSAM_TEST_RACE = 'lose:revoke';
+  let r = await c.post(`/api/licenses/${sc.beta.id}/revoke`, { confirm: 'Cliente Beta' });
+  assert.equal(r.status, 409);
+  assert.deepEqual(r.body.error, { code: 'WRITE_NOT_CONFIRMED', message });
+  assert.equal((await c.get('/api/licenses')).body.licenses.find(l => l.id === sc.beta.id).state, 'active');
+  // issue lost: no secret for a license that is not in the file
+  globalThis.SSAM_TEST_RACE = 'lose:issue';
+  r = await c.post('/api/licenses', { customer: 'Cliente Delta', days: 30, lanes: ['odc'], confirm: 'Cliente Delta' });
+  assert.equal(r.status, 409);
+  assert.ok(!SECRET.test(r.text), 'no secret in the refusal');
+  // agent-rotate on a torn file: no secret, and the file is reported unreadable
+  const good = fs.readFileSync(tokensFile);
+  globalThis.SSAM_TEST_RACE = 'tear:agentRotate';
+  r = await c.post(`/api/licenses/${sc.alfa.id}/agent-rotate`, { confirm: 'Cliente Alfa' });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.error.code, 'WRITE_NOT_CONFIRMED');
+  assert.ok(!SECRET.test(r.text));
+  await c.app.tickAll();
+  let ov = (await c.get('/api/overview')).body;
+  assert.ok(ov.alerts.some(a => a.id === 'licencas-ilegiveis'));
+  delete globalThis.SSAM_TEST_RACE;
+  fs.writeFileSync(tokensFile, good);
+  const lines = auditLines(env);
+  assert.deepEqual(lines.map(l => [l.action, l.result, l.code]),
+    [['revoke', 'error', 'WRITE_NOT_CONFIRMED'], ['issue', 'error', 'WRITE_NOT_CONFIRMED'], ['agent-rotate', 'error', 'WRITE_NOT_CONFIRMED']]);
+  assert.equal(lines[0].token, sc.beta.id);
+  assert.match(lines[1].token, /^tok_[0-9a-f]{12}$/, 'the id the module returned');
+  await c.app.tickAll();
+  ov = (await c.get('/api/overview')).body;
+  const lost = ov.alerts.filter(a => a.rule === 'gravacao-nao-confirmada');
+  assert.equal(lost.length, 3);
+  assert.ok(lost.every(a => a.severity === 'critical' && a.event));
+  assert.match(lost.find(a => a.subject.token === sc.beta.id).title,
+    /^Revogação da licença de Cliente Beta não se confirmou no tokens\.json \(\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}\): outro processo gravou o arquivo ao mesmo tempo\.$/);
+  assert.ok(c.logs.some(l => l.includes('"console":"write-not-confirmed"') && l.includes('"action":"revoke"')));
+  // no external change is invented from the console's own (lost) writes
+  assert.ok(!(await c.get('/api/history')).body.entries.some(e => e.actor === 'externo'));
+  // a write that holds is answered as before
+  r = await c.post(`/api/licenses/${sc.beta.id}/revoke`, { confirm: 'Cliente Beta' });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.license.state, 'revoked');
+});
+
+test('license writes: auto is read-only on a module without the writers lock (current image), on with it; off always', async t => {
+  const open = new Set();
+  t.after(async () => { for (const x of open) await x.close(); });
+  const start = async e => { const x = await startConsole(e); open.add(x); return x; };
+  // the current image's module under the production default
+  let env = makeEnv({ licenseWrites: 'auto' });
+  const sc = await buildScenario(env);
+  let c = await start(env);
+  let lic = (await c.get('/api/licenses')).body;
+  assert.deepEqual(lic.capabilities, { issue: false, revoke: false, agentRotate: false, renew: false, lanes: false, readOnly: 'sem-trava' });
+  const reason = 'Desligado: esta imagem não trava o tokens.json entre o painel e o ssam-admin (DEPLOY.md 15.4).';
+  for (const k of ['renew', 'lanes', 'agentRotate', 'revoke']) assert.deepEqual(lic.licenses.find(l => l.id === sc.alfa.id).actions[k], { allowed: false, reason }, k);
+  const before = fs.readFileSync(path.join(env.serverDir, 'tokens.json'), 'utf8');
+  let r = await c.post('/api/licenses', { customer: 'Cliente Delta', days: 30, lanes: ['odc'], confirm: 'Cliente Delta' });
+  assert.equal(r.status, 501);
+  assert.deepEqual(r.body.error, { code: 'WRITES_UNLOCKED', message: 'Ações de licença desligadas: esta imagem não trava o tokens.json entre o painel e o ssam-admin (DEPLOY.md 15.4).' });
+  r = await c.post(`/api/licenses/${sc.alfa.id}/revoke`, { confirm: 'Cliente Alfa' });
+  assert.equal(r.body.error.code, 'WRITES_UNLOCKED');
+  assert.equal(fs.readFileSync(path.join(env.serverDir, 'tokens.json'), 'utf8'), before, 'nothing written');
+  assert.ok(!fs.existsSync(path.join(env.serverDir, 'console-audit.jsonl')), 'a refusal by mode is not an action');
+  assert.equal((await c.get('/api/meta')).body.capabilities.readOnly, 'sem-trava');
+  // a module with renew and setLanes (the 24th image's, which brings the lock): auto writes
+  env = makeEnv({ tokenModule: FAKE_MODULE, licenseWrites: 'auto' });
+  c = await start(env);
+  lic = (await c.get('/api/licenses')).body;
+  assert.deepEqual(lic.capabilities, { issue: true, revoke: true, agentRotate: true, renew: true, lanes: true, readOnly: null });
+  assert.equal((await c.post('/api/licenses', { customer: 'Cliente Delta', days: 30, lanes: ['odc'], confirm: 'Cliente Delta' })).status, 201);
+  // off: read-only whatever the module
+  env = makeEnv({ tokenModule: FAKE_MODULE, licenseWrites: 'off' });
+  c = await start(env);
+  lic = (await c.get('/api/licenses')).body;
+  assert.equal(lic.capabilities.readOnly, 'desligado');
+  r = await c.post('/api/licenses', { customer: 'Cliente Delta', days: 30, lanes: ['odc'], confirm: 'Cliente Delta' });
+  assert.equal(r.status, 501);
+  assert.deepEqual(r.body.error, { code: 'WRITES_OFF', message: 'Ações de licença desligadas neste painel (CONSOLE_LICENSE_WRITES=off).' });
 });

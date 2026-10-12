@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { addHist, bucketOf, createUsage, quantile } from '../usage.mjs';
+import { createMinutes } from '../recent.mjs';
 import { createState } from '../state.mjs';
 import { createTz } from '../tz.mjs';
 import { clock, makeEnv, startConsole, tempDir } from './helpers.mjs';
@@ -136,4 +137,74 @@ test('API: /api/usage ranges in the display time zone; an audit line at 22:30 lo
   assert.equal((await c.get('/api/usage?range=year')).body.error.field, 'range');
   assert.equal((await c.get('/api/usage?range=day&day=2026-13-01')).body.error.field, 'day');
   assert.equal((await c.get('/api/usage?range=7d&token=tok_xyz')).body.error.field, 'token');
+});
+
+// Review fix: tool names and error codes come from customers (the server audits every tools/call, even an unknown tool
+// named "__proto__"). As map keys they must stay plain keys: no throw, Object.prototype untouched, counted, and the same
+// after the day file is read back.
+const PROTO_KEYS = ['__proto__', 'constructor', 'toString', 'valueOf', 'hasOwnProperty'];
+const prototypeNames = () => Object.getOwnPropertyNames(Object.prototype).sort();
+function cleanPrototype(before) {
+  for (const k of Object.getOwnPropertyNames(Object.prototype)) if (!before.includes(k)) delete Object.prototype[k];
+}
+
+test('usage: tools and codes named __proto__, constructor, toString... are plain keys (counted, saved, read back)', () => {
+  const before = prototypeNames();
+  try {
+    const state = createState(tempDir('us'));
+    const now = clock('2026-10-12T15:00:00Z');
+    const usage = createUsage({ tz, state, now });
+    PROTO_KEYS.forEach((tool, i) => {
+      usage.addCall({ time: `2026-10-12T13:0${i}:00.000Z`, token: A, tool, ms: 100, ok: false, error: PROTO_KEYS[(i + 1) % PROTO_KEYS.length] });
+      usage.addCall({ time: `2026-10-12T13:0${i}:30.000Z`, token: A, tool, ms: 50, ok: true });
+    });
+    usage.addAgentCall(A, '2026-10-12T13:10:00.000Z', false, '__proto__');
+    usage.addAgentCall(A, '2026-10-12T13:11:00.000Z', false, 'constructor');
+    assert.deepEqual(prototypeNames(), before, 'Object.prototype unchanged');
+    assert.equal(({}).calls, undefined);
+    const expectTools = PROTO_KEYS.map(n => [n, 2, 1]).sort();
+    const expectCodes = PROTO_KEYS.map(n => [n, 1]).sort();
+    const check = u => {
+      const s = u.summarize(['2026-10-12']);
+      assert.equal(s.totals.calls, 10);
+      assert.equal(s.totals.failures, 5);
+      assert.deepEqual(s.byTool.map(t => [t.tool, t.calls, t.failures]).sort(), expectTools);
+      assert.deepEqual(s.byCode.map(c => [c.code, c.count]).sort(), expectCodes);
+      assert.equal(s.byCode.find(c => c.code === '__proto__').tools[0].tool, 'hasOwnProperty');
+      assert.equal(s.byCustomer[0].agentFailures, 2);
+      const one = u.summarize(['2026-10-12'], { token: A });
+      assert.deepEqual(one.byTool.map(t => [t.tool, t.calls, t.failures]).sort(), expectTools);
+      assert.deepEqual(one.byCode.map(c => [c.code, c.count]).sort(), expectCodes);
+      assert.equal(one.byCode.find(c => c.code === 'constructor').lastAt, '2026-10-12T13:00:00.000Z');
+      assert.ok(PROTO_KEYS.includes(one.byCustomer[0].topTool));
+    };
+    check(usage);
+    usage.flushDays();
+    const again = createUsage({ tz, state, now });
+    check(again);
+    // objects parsed back from the day file keep working as maps
+    again.addCall({ time: '2026-10-12T14:00:00.000Z', token: A, tool: 'constructor', ms: 10, ok: false, error: '__proto__' });
+    const s = again.summarize(['2026-10-12']);
+    assert.deepEqual(s.byTool.find(t => t.tool === 'constructor').calls, 3);
+    assert.deepEqual(s.byCode.find(c => c.code === '__proto__').count, 2);
+    assert.deepEqual(prototypeNames(), before, 'Object.prototype unchanged');
+  } finally { cleanPrototype(before); }
+});
+
+test('per-minute windows: codes and tools named __proto__ or constructor are plain keys, also after a restore', () => {
+  const before = prototypeNames();
+  try {
+    const m = createMinutes();
+    const at = '2026-10-12T13:00:10.000Z';
+    m.add(at, false, '__proto__', 'constructor');
+    m.add(at, false, '__proto__', 'constructor');
+    m.add(at, false, 'constructor', '__proto__');
+    assert.deepEqual(m.window(Date.parse(at), 15), { calls: 3, failures: 3, topCode: '__proto__', topTool: 'constructor' });
+    const again = createMinutes();
+    again.restore(JSON.parse(JSON.stringify(m.toJSON())));
+    again.add(at, false, 'constructor', 'toString');
+    again.add(at, false, 'constructor', 'toString');
+    assert.deepEqual(again.window(Date.parse(at), 15), { calls: 5, failures: 5, topCode: 'constructor', topTool: 'toString' });
+    assert.deepEqual(prototypeNames(), before, 'Object.prototype unchanged');
+  } finally { cleanPrototype(before); }
 });

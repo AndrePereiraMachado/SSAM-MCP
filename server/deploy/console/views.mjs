@@ -5,11 +5,16 @@ import { diskUsedPct, memUsedPct, serverContainer } from './host.mjs';
 import { EVENT_GROUPS, EVENT_LEVELS } from './events.mjs';
 import { invalidField, sessionReason } from './texts.mjs';
 import { CONSOLE_VERSION } from './config.mjs';
+import { HISTORY_ACTIONS as HISTORY_ACTION_LIST } from './history.mjs';
 
 const DAY = 86400000;
 const TOKEN = /^tok_[0-9a-f]{12}$/;
 const NOT_IN_IMAGE = 'Indisponível nesta imagem (chega com o 24º envio).';
-const HISTORY_ACTIONS = new Set(['issue', 'renew', 'lanes', 'agent-rotate', 'revoke', 'key-rotate', 'alert-ack', 'alert-unack']);
+// capabilities.readOnly (licenses.mjs, CONSOLE_LICENSE_WRITES): why every license action is off
+const READ_ONLY = Object.freeze({ __proto__: null,
+  'sem-trava': 'Desligado: esta imagem não trava o tokens.json entre o painel e o ssam-admin (DEPLOY.md 15.4).',
+  desligado: 'Desligado neste painel (CONSOLE_LICENSE_WRITES=off).' });
+const HISTORY_ACTIONS = new Set(HISTORY_ACTION_LIST);
 const SUMMARY_OF = { servidor: 'servidor', licencas: 'licencas', uso: 'uso', agentes: 'agentes', vps: 'vps', seguranca: 'vps', backup: 'backup', tls: 'tls', coletor: 'coletor', painel: 'coletor' };
 const CONTAINER_RULES = new Set(['container-reiniciou', 'container-oom', 'caddy-fora', 'coolify-rodando']);
 const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -45,6 +50,8 @@ export function createViews(app) {
 
   function actionsOf(t) {
     const revoked = t.state === 'revoked';
+    const off = READ_ONLY[licenses.caps.readOnly] ?? null;
+    if (off) return Object.fromEntries(['renew', 'lanes', 'agentRotate', 'revoke'].map(k => [k, { allowed: false, reason: off }]));
     const reasons = {
       renew: !licenses.caps.renew ? NOT_IN_IMAGE : revoked ? 'Licença revogada.' : !t.expiresAt ? 'Licença sem validade: não há o que renovar.' : null,
       lanes: !licenses.caps.lanes ? NOT_IN_IMAGE : revoked ? 'Licença revogada.' : null,

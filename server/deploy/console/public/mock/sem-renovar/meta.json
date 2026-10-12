@@ -14,7 +14,8 @@
     "revoke": true,
     "agentRotate": true,
     "renew": false,
-    "lanes": false
+    "lanes": false,
+    "readOnly": null
   },
   "indexing": {
     "state": "ready",

@@ -5,7 +5,7 @@ import * as F from '../format.js';
 import { h, clear, dot, status, textButton, button, sectionHead, joinDots, select, filterInput } from '../dom.js';
 import { createTable, kvTable, filterRows, compareValues } from '../table.js';
 import { sparkline, sparkLabel } from '../sparkline.js';
-import { LICENSE_STATE, HISTORY_ACTION } from '../labels.js';
+import { LICENSE_STATE, HISTORY_ACTION, wordOf } from '../labels.js';
 import { errorMessage, staleText, muted } from './common.js';
 import { historyDetail } from './historico.js';
 
@@ -43,6 +43,23 @@ export function failuresLevel(today) {
   return f >= 3 && c > 0 && f / c >= 0.25 ? 'bad' : '';
 }
 
+/**
+ * The one line under the head about what this console can do with licenses (DESIGN.md 6.5), or null. capabilities.readOnly
+ * (CONSOLE_LICENSE_WRITES): 'sem-trava' when the image's token module does not lock tokens.json between the console and
+ * ssam-admin, 'desligado' when the owner turned the actions off.
+ */
+export function capabilityLine(caps) {
+  if (!caps) return null;
+  if (caps.readOnly === 'sem-trava') {
+    return 'Ações de licença desligadas: esta imagem não trava o tokens.json entre o painel e o ssam-admin. Até a imagem do 24º envio, emita, renove e revogue pelo ssam-admin (DEPLOY.md 15.4).';
+  }
+  if (caps.readOnly === 'desligado') return 'Ações de licença desligadas neste painel (CONSOLE_LICENSE_WRITES=off).';
+  if (caps.renew === false || caps.lanes === false) {
+    return 'Renovar e mudar faixas chegam com a imagem do 24º envio; hoje dá para emitir, trocar a credencial do agente e revogar.';
+  }
+  return null;
+}
+
 export default function createLicencas(ctx, section) {
   const { clock } = ctx;
   let lastOk = null;
@@ -66,7 +83,7 @@ export default function createLicencas(ctx, section) {
     },
   });
   const head = sectionHead('Licenças', { id: 'h-licencas', controls: [issueBtn, filter, sel] });
-  const capLine = muted('Renovar e mudar faixas chegam com a imagem do 24º envio; hoje dá para emitir, trocar a credencial do agente e revogar.', 'capline');
+  const capLine = muted('', 'capline');
   capLine.hidden = true;
 
   function accessAlertId(lic) {
@@ -144,7 +161,7 @@ export default function createLicencas(ctx, section) {
       {
         label: 'Histórico',
         value: lines(hist.map((e) => [
-          F.fmtDateTime(e.time), HISTORY_ACTION[e.action] || e.action, historyDetail(e), e.actor === 'externo' ? 'fora do painel' : 'painel',
+          F.fmtDateTime(e.time), wordOf(HISTORY_ACTION, e.action) || e.action, historyDetail(e), e.actor === 'externo' ? 'fora do painel' : 'painel',
           e.result === 'error' ? `erro ${e.code || ''}`.trim() : null,
         ].filter((x) => x && x !== F.DASH).join(' · '))),
       },
@@ -285,7 +302,10 @@ export default function createLicencas(ctx, section) {
 
   function render() {
     capabilities = ctx.store.licensesCaps || capabilities;
-    capLine.hidden = !(capabilities && (capabilities.renew === false || capabilities.lanes === false));
+    const line = capabilityLine(capabilities);
+    capLine.textContent = line || '';
+    capLine.hidden = !line;
+    issueBtn.hidden = capabilities?.issue === false;
     table.setRows(licenses || []);
     applyFilter();
     head.setStale('');

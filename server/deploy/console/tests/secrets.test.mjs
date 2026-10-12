@@ -60,7 +60,7 @@ test('the entry point logs no secret and no customer name on stdout', async t =>
   await buildScenario(env);
   const child = spawn(process.execPath, [path.join(CONSOLE_DIR, 'server.mjs'), '--tcp', '127.0.0.1:0'], {
     env: { ...process.env, SSAM_SERVER_DIR: env.serverDir, CONSOLE_STATE_DIR: env.stateDir, CONSOLE_HOST_JSON: env.hostJson,
-      CONSOLE_PUBLIC_DIR: env.publicDir, CONSOLE_TOKEN_MODULE: REAL_MODULE, CONSOLE_DOMAIN: 'ssam.example.com' },
+      CONSOLE_PUBLIC_DIR: env.publicDir, CONSOLE_TOKEN_MODULE: REAL_MODULE, CONSOLE_DOMAIN: 'ssam.example.com', CONSOLE_LICENSE_WRITES: 'on' },
     stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
   let err = '';
@@ -72,7 +72,7 @@ test('the entry point logs no secret and no customer name on stdout', async t =>
   assert.ok(port, 'listening line: ' + out + err);
   const first = JSON.parse(out.trim().split('\n')[0]);
   assert.deepEqual(Object.keys(first), ['console', 'socket', 'capabilities']);
-  assert.deepEqual(first.capabilities, { issue: true, revoke: true, agentRotate: true, renew: false, lanes: false });
+  assert.deepEqual(first.capabilities, { issue: true, revoke: true, agentRotate: true, renew: false, lanes: false, readOnly: null });
   const key = fs.readFileSync(path.join(env.stateDir, 'access.key'), 'utf8');
   assert.match(key, /^[A-Za-z0-9_-]{43}$/);
   const headers = { 'X-SSAM-Console-Key': key, 'Content-Type': 'application/json' };

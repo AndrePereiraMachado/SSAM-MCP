@@ -8,8 +8,12 @@ import path from 'node:path';
 import { cap, redact } from './texts.mjs';
 
 export const AUDIT_FILE = 'console-audit.jsonl';
-const ACTIONS = new Set(['issue', 'renew', 'lanes', 'agent-rotate', 'revoke', 'key-rotate', 'alert-ack', 'alert-unack']);
-const DETAIL_KEYS = ['days', 'expiresAt', 'previousExpiresAt', 'lanes', 'previousLanes', 'alert', 'hours'];
+// The last four exist only as external changes (actor "externo", 3.5): a revocation undone, a record gone, an expiry
+// moved earlier, a customer renamed.
+export const HISTORY_ACTIONS = ['issue', 'renew', 'lanes', 'agent-rotate', 'revoke', 'key-rotate', 'alert-ack', 'alert-unack',
+  'unrevoke', 'removed', 'expiry-shortened', 'rename'];
+const ACTIONS = new Set(HISTORY_ACTIONS);
+const DETAIL_KEYS = ['days', 'expiresAt', 'previousExpiresAt', 'lanes', 'previousLanes', 'alert', 'hours', 'previousRevokedAt', 'previousState', 'previousCustomer'];
 
 function clean(entry) {
   const detail = {};
