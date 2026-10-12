@@ -52,6 +52,16 @@ export function sendJson(res, status, body, extra = {}) {
   res.writeHead(status, { ...SECURITY_HEADERS, 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(text), ...extra });
   res.end(text);
 }
+// A download (DESIGN-QUALIDADE 4.4): {type, name, text} from a route, with the same security headers as every answer.
+// The file name keeps only letters, digits, dot, dash and underscore.
+const FILE_TYPES = new Set(['text/csv; charset=utf-8', 'application/json; charset=utf-8', 'application/x-ndjson; charset=utf-8']);
+export function sendFile(res, status, file) {
+  const type = FILE_TYPES.has(file?.type) ? file.type : 'application/octet-stream';
+  const name = String(file?.name ?? 'arquivo').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 160) || 'arquivo';
+  const body = Buffer.from(String(file?.text ?? ''), 'utf8');
+  res.writeHead(status, { ...SECURITY_HEADERS, 'Content-Type': type, 'Content-Disposition': `attachment; filename="${name}"`, 'Content-Length': body.length });
+  res.end(body);
+}
 export function sendError(res, error, extra = {}) {
   const api = error instanceof ApiError ? error : new ApiError('INTERNAL', { código: 'ERRO' });
   const body = { ok: false, error: { code: api.apiCode, message: api.message, ...(api.apiCode === 'INVALID_FIELD' && api.field ? { field: api.field } : {}) } };
@@ -176,6 +186,7 @@ export function createHttp({ auth, routes, publicDir, log = () => {}, now = Date
         if (!body || typeof body !== 'object' || Array.isArray(body)) return sendError(res, new ApiError('BAD_JSON'));
       }
       const out = await r.handler({ params, query, body, req });
+      if (out?.file) return sendFile(res, out.status ?? 200, out.file);
       return sendJson(res, out?.status ?? 200, out?.body ?? { ok: true });
     }
     return sendError(res, new ApiError(pathMatched ? 'METHOD_NOT_ALLOWED' : 'NOT_FOUND'));

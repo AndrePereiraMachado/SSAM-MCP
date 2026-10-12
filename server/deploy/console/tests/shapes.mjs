@@ -100,6 +100,27 @@ export const Usage = { ok, range: { kind: oneOf('today', '7d', '30d', 'day'), fr
   byCode: arrayOf({ code: S, count: I, tools: arrayOf({ tool: S, count: I }), customers: I, lastAt: nT }),
   byDay: arrayOf({ day: 'day', calls: I, failures: I, p50Ms: nN, p90Ms: nN, customers: I }),
   denied: { available: B, since: nT, byStatus: 'object', rows: arrayOf({ ip: S, status: I, path: S, count: I, lastAt: nT }) } };
+// /api/quality (DESIGN-QUALIDADE 4.4); a one-license answer adds `token`.
+const Q2 = { p50: nN, p90: nN };
+const PHASE_COLUMNS = ['queue', 'capture', 'compile', 'studio', 'verify', 'publish', 'environment', 'transfer', 'rest'];
+const ToolCount = arrayOf({ tool: S, count: I });
+export const Quality = { ok, now: T, range: { kind: oneOf('today', '7d', '30d', 'day'), from: 'day', to: 'day', days: I, timeZone: S }, indexing: Indexing,
+  available: B, firstDay: nullable('day'),
+  totals: { calls: I, failures: I, refusals: I, delivered: I, uncertain: I, problems: I, withPatch: I, problemPhases: 'object', normalizations: I,
+    normalizedCalls: I, sharedCalls: I, chains: I, chainsOpen: I, turnsPerChainP50: nI, turnsPerChainP90: nI, callsPerChainP50: nI, callsPerChainP90: nI,
+    refusalsBeforeP50: nI, refusalsBeforeMax: nI, wallP50Ms: nN, wallP90Ms: nN, idlePct: nN, gapP50Ms: nN, gapP90Ms: nN, gaps: I, longGaps: I },
+  errors: arrayOf({ code: S, count: I, pctOfFailures: nN, tools: ToolCount, customers: I, lastAt: nT }),
+  problems: arrayOf({ code: S, count: I, refusals: I, withPatch: I, tools: ToolCount, customers: I }),
+  rules: arrayOf({ rule: S, count: I, calls: I, tools: ToolCount, customers: I }),
+  phases: arrayOf({ tool: S, calls: I, shared: I, total: Q2, ...Object.fromEntries(PHASE_COLUMNS.map(c => [c, Q2])), transferBytesAvg: nI, kernelRuns: I, kernelCold: I }),
+  timeShare: arrayOf({ tool: S, sumMs: I, ...Object.fromEntries(PHASE_COLUMNS.map(c => [c + 'Pct', nN])) }),
+  rounds: arrayOf({ token: S, customer: S, chains: I, open: I, turnsP50: nI, turnsP90: nI, callsP50: nI, callsP90: nI, refusalsBeforeP50: nI,
+    refusalsBeforeMax: nI, wallP50Ms: nN, wallP90Ms: nN, gapP50Ms: nN, gapP90Ms: nN, idlePct: nN }),
+  causes: arrayOf({ code: S, refusals: I, chains: I, extraCallsSum: I, extraCallsP50: nI, extraMsP50: nN }),
+  byCustomer: arrayOf({ token: S, customer: S, calls: I, failures: I, refusals: I, delivered: I, topError: nS, topProblem: nS, topRule: nS,
+    slowestPhase: nullable(oneOf(...PHASE_COLUMNS)) }),
+  byClient: arrayOf({ client: oneOf('claude-code', 'claude-ai', 'claude-desktop', 'codex', 'cursor', 'vscode', 'windsurf', 'other', 'unknown'),
+    sessions: I, chains: I, turnsP50: nI, callsP50: nI, refusalsBeforeAvg: nN, gapP50Ms: nN }) };
 export const Live = { ok, now: T,
   server: nullable({ since: T, pid: nI, mode: nS, ratePerMinute: nI, maxSessionsPerToken: nI, publicHosts: arrayOf(S) }),
   sessions: arrayOf({ session: S, token: S, customer: nS, client: nS, ip: nS, ua: nS, openedAt: T, lastAt: T, calls: I, lastTool: nS, bytes: I }),
@@ -118,7 +139,7 @@ export const Vps = { ok, now: T,
   server: { health: nullable({ docker: nS, probe: nullable('object') }), image: nullable('object'),
     kernel: { running: nullable('object'), file: nullable('object'), drift: B, driftFields: arrayOf(S) },
     warm: nullable({ state: oneOf('warm', 'partial', 'warming', 'cold', 'unknown'), time: nT, indexes: nullable('object'), delivery: nullable('object'), ms: nN, workerRunning: nullable(B) }),
-    logs: { serverLogB: I, rotatedCount: I, rotatedB: I, auditFiles: I, auditB: I, consoleAuditB: I } },
+    logs: { serverLogB: I, rotatedCount: I, rotatedB: I, auditFiles: I, auditB: I, qualityFiles: I, qualityB: I, consoleAuditB: I } },
   coolify: nullable(arrayOf({ name: nS, state: nS, restartPolicy: nS })),
   series: nullable({ stepS: literal(900), points: arrayOf(Point, 96) }) };
 export const Events = { ok, lastSeq: I, events: arrayOf(Event) };

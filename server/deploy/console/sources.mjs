@@ -1,6 +1,7 @@
 // Small read-only sources of the state volume (DESIGN 3.1): machine-pins.json and kernel.json (re-read on mtime change),
 // the access alert lines of access-alerts.jsonl (kept for 30 days, counted per token) and the sizes of server.log*,
-// audit-* and console-audit.jsonl (stat every 60 s). Customer-controlled fields are capped here.
+// audit-*, quality-* (DESIGN-QUALIDADE 4.1) and console-audit.jsonl (stat every 60 s). Customer-controlled fields are
+// capped here.
 import fs from 'node:fs';
 import path from 'node:path';
 import { cap } from './texts.mjs';
@@ -46,21 +47,22 @@ export function createSources({ serverDir, now = Date.now }) {
   }
   function resetAccess() { access = []; accessCounts = {}; }
 
-  let sizes = { serverLogB: 0, rotatedCount: 0, rotatedB: 0, auditFiles: 0, auditB: 0, consoleAuditB: 0, at: 0 };
+  let sizes = { serverLogB: 0, rotatedCount: 0, rotatedB: 0, auditFiles: 0, auditB: 0, qualityFiles: 0, qualityB: 0, consoleAuditB: 0, at: 0 };
   function statFiles(force = false) {
     if (!force && now() - sizes.at < 60000) return sizes;
-    const next = { serverLogB: 0, rotatedCount: 0, rotatedB: 0, auditFiles: 0, auditB: 0, consoleAuditB: 0, at: now() };
+    const next = { serverLogB: 0, rotatedCount: 0, rotatedB: 0, auditFiles: 0, auditB: 0, qualityFiles: 0, qualityB: 0, consoleAuditB: 0, at: now() };
     let names = [];
     try { names = fs.readdirSync(serverDir); } catch { /* unreadable: zeros */ }
     for (const name of names) {
       let size = 0;
       const kind = name === 'server.log' ? 'log' : /^server\.log\..+/.test(name) ? 'rotated' : /^audit-\d{8}\.jsonl(\.gz)?$/.test(name) ? 'audit'
-        : name === 'console-audit.jsonl' ? 'console' : null;
+        : /^quality-\d{8}\.jsonl(\.gz)?$/.test(name) ? 'quality' : name === 'console-audit.jsonl' ? 'console' : null;
       if (!kind) continue;
       try { size = fs.statSync(path.join(serverDir, name)).size; } catch { continue; }
       if (kind === 'log') next.serverLogB = size;
       else if (kind === 'rotated') { next.rotatedCount++; next.rotatedB += size; }
       else if (kind === 'audit') { next.auditFiles++; next.auditB += size; }
+      else if (kind === 'quality') { next.qualityFiles++; next.qualityB += size; }
       else next.consoleAuditB = size;
     }
     sizes = next;

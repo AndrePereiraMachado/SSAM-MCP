@@ -118,6 +118,10 @@ export function createLive({ tz, now = Date.now, nameOf = () => null, emit = () 
       case 'hosted-context-closed':
         event(e, token, 'info', 'servidor', eventText.contextClosed(who(token), e));
         return;
+      case 'quality-failed':
+        // a quality record the server could not write (DESIGN-QUALIDADE 2.1, 4.1); the answer and the audit were not touched
+        event(e, null, 'warning', 'servidor', eventText.qualityFailed(e), cap(e.error ?? null, 40));
+        return;
       default:
         if (typeof e.event === 'string' && e.event.startsWith('agent-') && token) applyAgent(e, token);
     }
