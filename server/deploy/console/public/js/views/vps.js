@@ -11,6 +11,13 @@ import { errorMessage, staleText, muted } from './common.js';
 const okSection = (s) => s && s.ok !== false;
 const unavailable = (s) => `indisponível (${s?.error || 'sem dados'})`;
 
+/** Tag of an image reference, without a registry port or a digest: caddy:2.11.7-alpine@sha256:... -> 2.11.7-alpine. */
+export function imageTag(ref) {
+  const base = String(ref).split('@')[0];
+  const last = base.slice(base.lastIndexOf('/') + 1);
+  return last.includes(':') ? last.slice(last.indexOf(':') + 1) : last;
+}
+
 function series(points, key) {
   return (points || []).map((p) => (p && p[key] != null ? p[key] : null));
 }
@@ -289,7 +296,7 @@ export default function createVps(ctx, section) {
       { key: 'net', label: 'Rede ↓/↑', num: true, sort: (r) => r.netRxB ?? null, text: (r) => `${F.fmtBytes(r.netRxB)} / ${F.fmtBytes(r.netTxB)}` },
       {
         key: 'image', label: 'Imagem', mono: true, ell: 'code', sort: (r) => r.image,
-        text: (r) => (r.image ? String(r.image).split(':').slice(1).join(':') || r.image : F.DASH), title: (r) => r.image || '',
+        text: (r) => (r.image ? imageTag(r.image) : F.DASH), title: (r) => r.image || '',
       },
     ],
     rowKey: (r) => r.name,

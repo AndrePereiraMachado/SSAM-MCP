@@ -33,6 +33,7 @@ const state = {
   timers: { view: null, status: null, meta: null, tick: null },
   failures: { view: 0, status: 0, meta: 0 },
   inflight: { view: false, status: false, meta: false },
+  rerunView: false,
 };
 
 // ---------------------------------------------------------------- theme
@@ -280,6 +281,12 @@ function scheduleView() {
 async function runView(force = false) {
   if (state.dead || (document.hidden && !force)) return;
   const v = views[state.current];
+  if (v && state.inflight.view && force) {
+    // A filter change, a tab switch or a mutation while a poll is in flight: run again as soon as it ends, with the
+    // view's current parameters (otherwise the older answer would stay on screen until the next poll).
+    state.rerunView = true;
+    return;
+  }
   if (!v || state.inflight.view) {
     scheduleView();
     return;
@@ -297,7 +304,12 @@ async function runView(force = false) {
     if (e?.kind !== 'auth') state.failures.view += 1;
   } finally {
     state.inflight.view = false;
-    scheduleView();
+    if (state.rerunView) {
+      state.rerunView = false;
+      runView(true);
+    } else {
+      scheduleView();
+    }
   }
 }
 

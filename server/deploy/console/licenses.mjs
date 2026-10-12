@@ -149,12 +149,12 @@ export async function createLicenses({ config, state, history, tz, now = Date.no
       detectExternal();
       const current = tryList().tokens ?? [];
       const duplicates = current.filter(t => t.state === 'active' && t.customer.toLowerCase() === name.toLowerCase()).map(t => t.id);
-      const issued = call('issue', 'issue', { id: null, customer: name }, { days, lanes },
+      const issued = call('issue', 'issue', { id: null, customer: name }, { days: days ?? null, lanes },
         () => store.issue({ customer: name, ...(days ? { days } : {}), lanes }));
       const { token, agentCredential, ...rest } = issued;
       afterWrite();
       const view = normalize(rest);
-      const audit = record({ action: 'issue', token: view.id, customer: view.customer, detail: { days, expiresAt: view.expiresAt, lanes: view.lanes } });
+      const audit = record({ action: 'issue', token: view.id, customer: view.customer, detail: { days: days ?? null, expiresAt: view.expiresAt, lanes: view.lanes } });   // null days = sem validade
       return { view, secret: { token, agentCredential }, duplicates, audit };
     });
   }

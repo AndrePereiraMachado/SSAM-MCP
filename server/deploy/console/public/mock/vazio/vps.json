@@ -104,6 +104,7 @@
     "ssh": {
       "passwordAuth": false,
       "permitRootLogin": "prohibit-password",
+      "port": 22,
       "fail2ban": "active",
       "failures24h": 3,
       "topSources": [

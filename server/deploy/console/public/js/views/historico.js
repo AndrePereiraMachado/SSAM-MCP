@@ -29,12 +29,15 @@ export function historyDetail(e) {
   const d = e?.detail || {};
   switch (e?.action) {
     case 'issue': {
-      const days = 'days' in d ? (d.days == null ? 'sem validade' : F.plural(d.days, 'dia', 'dias')) : null;
+      // Console issues carry days (null = sem validade); changes seen outside the console carry only expiresAt.
+      const days = 'days' in d ? (d.days == null ? 'sem validade' : F.plural(d.days, 'dia', 'dias'))
+        : 'expiresAt' in d ? (d.expiresAt ? `até ${F.fmtDate(d.expiresAt)}` : 'sem validade') : null;
       const lanes = Array.isArray(d.lanes) ? F.fmtLanesAnd(d.lanes) : null;
       return [days, lanes].filter(Boolean).join(', ') || F.DASH;
     }
     case 'renew':
-      if (d.previousExpiresAt || d.expiresAt) return `${F.fmtDate(d.previousExpiresAt)} → ${F.fmtDate(d.expiresAt)}`;
+      // A refused renewal has no new expiry: it shows what was asked (+30 dias), not "11/11/2026 → —".
+      if (d.expiresAt) return `${F.fmtDate(d.previousExpiresAt)} → ${F.fmtDate(d.expiresAt)}`;
       return 'days' in d ? `+${F.plural(d.days, 'dia', 'dias')}` : F.DASH;
     case 'lanes':
       return `${F.fmtLanes(d.previousLanes)} → ${F.fmtLanes(d.lanes)}`;

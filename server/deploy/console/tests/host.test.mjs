@@ -131,3 +131,31 @@ test('host transitions: restarts, health changes, series and Caddy windows count
   await c.app.tickAlerts();
   assert.ok(!(await c.get('/api/overview')).body.alerts.some(a => a.id === 'container-reiniciou:caddy'));
 });
+
+test('host transitions: a restart by hand (startedAt moves, RestartCount does not) gives the event but no alert', async t => {
+  const env = makeEnv();
+  const now = clock(T0);
+  const c = await startConsole(env, { now });
+  t.after(() => c.close());
+  writeHost(env, HOST_PROD, '2026-10-12T02:59:30Z');
+  await c.app.tickAll();
+  const next = structuredClone(HOST_PROD);
+  const srv = next.docker.containers.find(x => x.service === 'ssam-server');
+  srv.startedAt = '2026-10-12T02:59:50Z';     // docker compose restart ssam-server: same RestartCount, new start
+  writeHost(env, next, '2026-10-12T03:00:00Z');
+  now.set('2026-10-12T03:00:05Z');
+  await c.app.tickAll();
+  await c.app.tickAlerts();
+  const events = (await c.get('/api/events?group=vps')).body.events;
+  const ev = events.filter(e => e.text === 'ssam-server reiniciou.');
+  assert.equal(ev.length, 1);
+  assert.equal(ev[0].level, 'info');
+  const ov = (await c.get('/api/overview')).body;
+  assert.ok(!ov.alerts.some(a => a.rule === 'container-reiniciou'), 'a restart by hand is not a crash');
+  // the same collection seen again, and a console restart from the checkpoint, emit nothing more
+  await c.app.tickAll();
+  writeHost(env, next, '2026-10-12T03:00:30Z');
+  now.set('2026-10-12T03:00:35Z');
+  await c.app.tickAll();
+  assert.equal((await c.get('/api/events?group=vps')).body.events.filter(e => e.text === 'ssam-server reiniciou.').length, 1);
+});

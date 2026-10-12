@@ -236,7 +236,7 @@ export const UpdatesSection = section({
 });
 export const SecuritySection = section({
   ufw: { active: bool, defaultIncoming: str, defaultOutgoing: str, defaultRouted: str, allowIn: arr(str), rules: arr(str, { max: 30 }) },
-  ssh: { passwordAuth: bool, permitRootLogin: str, fail2ban: str, failures24h: int, topSources: arr({ ip: str, count: int }, { max: 5 }) },
+  ssh: { passwordAuth: bool, permitRootLogin: str, port: opt(nul(int)), fail2ban: str, failures24h: int, topSources: arr({ ip: str, count: int }, { max: 5 }) },
 });
 export const BackupsSection = section({
   dir: str, exists: bool, count: int, totalB: int,

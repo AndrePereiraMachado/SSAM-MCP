@@ -30,7 +30,7 @@ export function createHost({ file, state, tz, now = Date.now, emit = () => {}, u
   let schemaSeen = null;
   let wasFresh = null;
   let series = null;             // cached series lines of the last two local days
-  let facts = { lastCollectedAt: null, lastCaddyWindowAt: null, deniedSince: null, restarts: {}, counts: {}, probeFails: 0,
+  let facts = { lastCollectedAt: null, lastCaddyWindowAt: null, deniedSince: null, restarts: {}, counts: {}, started: {}, probeFails: 0,
     unhealthySince: null, prevHealth: null, healthSeen: false, securitySince: null, rebootSeenAt: null, samples: [] };
 
   const sec = name => (doc && doc[name] && doc[name].ok === true ? doc[name] : null);
@@ -101,17 +101,24 @@ export function createHost({ file, state, tz, now = Date.now, emit = () => {}, u
       facts.deniedSince ??= typeof d.caddy.window.from === 'string' ? d.caddy.window.from : at;
       usage?.addDenied(d.caddy.window, at);
     }
-    // restarts of project containers (a lower count means the container was recreated, not restarted)
+    // restarts of project containers (a lower count means the container was recreated, not restarted). RestartCount
+    // rises only when the restart policy restarts a container (crash: container-reiniciou alert). A restart by hand or a
+    // recreation (docker compose restart, up -d after an upgrade) only moves startedAt: the event, not the alert.
+    facts.started ??= {};
     if (docker) for (const c of Array.isArray(docker.containers) ? docker.containers : []) {
       const key = String(c.service || c.name || '?').slice(0, 64);
       const count = num(c.restartCount);
-      if (count == null) continue;
+      const started = typeof c.startedAt === 'string' && !Number.isNaN(Date.parse(c.startedAt)) ? c.startedAt : null;
+      const prevStarted = facts.started[key];
       const prev = facts.counts[key];
-      if (prev != null && count > prev) {
+      if (count != null && prev != null && count > prev) {
         (facts.restarts[key] ??= []).push({ t: at, n: count - prev });
         emit({ time: at, level: 'warning', group: 'vps', text: eventText.restarted(key) });
+      } else if (started && prevStarted && Date.parse(started) > Date.parse(prevStarted) && c.state === 'running') {
+        emit({ time: at, level: 'info', group: 'vps', text: eventText.restarted(key) });
       }
-      facts.counts[key] = count;
+      if (count != null) facts.counts[key] = count;
+      if (started) facts.started[key] = started;
     }
     for (const key of Object.keys(facts.restarts)) {
       facts.restarts[key] = facts.restarts[key].filter(r => Date.parse(r.t) > t - DAY_MS);

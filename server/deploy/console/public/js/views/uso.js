@@ -259,11 +259,18 @@ export default function createUso(ctx, section) {
   return {
     interval: () => (range === 'today' ? 30000 : 120000),
     async refresh() {
-      const params = { range };
-      if (range === 'day') params.day = day;
-      if (token) params.token = token;
+      const current = () => {
+        const p = { range };
+        if (range === 'day') p.day = day;
+        if (token) p.token = token;
+        return p;
+      };
+      const params = current();
       try {
-        data = await ctx.api.usage(params);
+        const d = await ctx.api.usage(params);
+        // The range or the customer changed while this answer was on its way: the rerun (main.js) paints the new one.
+        if (JSON.stringify(params) !== JSON.stringify(current())) return;
+        data = d;
         lastOk = clock.now();
         render();
       } catch (e) {

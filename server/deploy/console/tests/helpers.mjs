@@ -55,12 +55,18 @@ export function clock(start = Date.now()) {
   return c;
 }
 
+const lastHostMtime = new Map();
 export function writeHost(env, doc, collectedAt) {
   const d = structuredClone(doc);
   if (collectedAt) d.collectedAt = collectedAt;
   fs.writeFileSync(env.hostJson, JSON.stringify(d));
-  const t = new Date(fs.statSync(env.hostJson).mtimeMs + 1000);
-  fs.utimesSync(env.hostJson, t, t);   // a fresh mtime even within the same millisecond
+  // A strictly newer whole-second mtime on every write: two same-size documents written within one millisecond (or with
+  // NTFS keeping the previous explicit mtime) must still give the reader a new mtime+size stamp.
+  const prev = lastHostMtime.get(env.hostJson) ?? 0;
+  const ms = Math.max(Math.ceil(fs.statSync(env.hostJson).mtimeMs / 1000) * 1000 + 1000, prev + 1000);
+  lastHostMtime.set(env.hostJson, ms);
+  const t = new Date(ms);
+  fs.utimesSync(env.hostJson, t, t);
   return d;
 }
 

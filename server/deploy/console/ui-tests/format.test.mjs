@@ -132,8 +132,12 @@ test('bytes base 1024 (IEC) and rates', () => {
 });
 
 test('days left of a license', () => {
-  assert.equal(F.fmtDaysLeft('2026-11-11T21:00:00Z', NOW), '29 dias');
-  assert.equal(F.fmtDaysLeft(NOW + 1.5 * D, NOW), '1 dia');
+  assert.equal(F.fmtDaysLeft('2026-11-11T21:00:00Z', NOW), '30 dias'); // 12/10 -> 11/11: 30 local calendar days (a 30-day license reads 30 right after issue)
+  assert.equal(F.fmtDaysLeft(NOW + 1.5 * D, NOW), '2 dias'); // local calendar days (14/10 seen on 12/10), as the API alert
+  assert.equal(F.localDayDiff(NOW, NOW + 39 * M), 1);
+  assert.equal(F.localDayDiff(NOW, NOW - D), -1);
+  assert.equal(F.fmtExpiresIn(NOW + 1.5 * D, NOW), 'em 2 dias');
+  assert.equal(F.fmtExpiresIn('2026-10-13T02:58:00Z', NOW), 'hoje às 23:58');
   assert.equal(F.fmtDaysLeft('2026-10-13T02:58:00Z', NOW), 'vence hoje às 23:58');
   assert.equal(F.fmtDaysLeft(NOW + 39 * M, NOW), '1 dia'); // after the local midnight: tomorrow, not today
   assert.equal(F.fmtDaysLeft(NOW - 3 * D - H, NOW), 'venceu há 3 dias');
@@ -145,9 +149,10 @@ test('days left of a license', () => {
 
 test('license validity cell: text and warning/critical color', () => {
   const v = (lic) => F.fmtValidity(lic, NOW);
-  assert.deepEqual(v({ state: 'active', expiresAt: '2026-11-11T21:00:00Z' }), { text: 'até 11/11/2026 (29 dias)', level: '' });
+  assert.deepEqual(v({ state: 'active', expiresAt: '2026-11-11T21:00:00Z' }), { text: 'até 11/11/2026 (30 dias)', level: '' });
   assert.deepEqual(v({ state: 'active', expiresAt: '2026-10-15T02:58:00Z' }), { text: 'até 14/10/2026 (2 dias)', level: 'warn' });
-  assert.deepEqual(v({ state: 'active', expiresAt: '2026-10-14T20:00:00Z' }), { text: 'até 14/10/2026 (1 dia)', level: 'bad' });
+  assert.deepEqual(v({ state: 'active', expiresAt: '2026-10-14T20:00:00Z' }), { text: 'até 14/10/2026 (2 dias)', level: 'bad' });
+  assert.deepEqual(v({ state: 'active', expiresAt: '2026-10-14T02:00:00Z' }), { text: 'até 13/10/2026 (1 dia)', level: 'bad' });
   assert.deepEqual(v({ state: 'active', expiresAt: '2026-10-13T02:58:00Z' }), { text: 'vence hoje às 23:58', level: 'bad' });
   assert.equal(v({ state: 'active', expiresAt: new Date(NOW + 7 * D).toISOString() }).level, 'warn');
   assert.equal(v({ state: 'active', expiresAt: new Date(NOW + 7 * D + M).toISOString() }).level, '');

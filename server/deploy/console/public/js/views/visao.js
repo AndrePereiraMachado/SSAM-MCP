@@ -32,7 +32,7 @@ export function summaryTexts(row, ov, now) {
       const nx = f.nextExpiry;
       const soon = nx && F.toMs(nx.expiresAt) - now <= 30 * F.DAY;
       const detalhe = soon
-        ? `próxima a vencer: ${nx.customer} ${F.fmtRelative(nx.expiresAt, now)}`
+        ? `próxima a vencer: ${nx.customer} ${F.fmtExpiresIn(nx.expiresAt, now)}`
         : 'nenhuma vence em 30 dias';
       return { agora, detalhe };
     }

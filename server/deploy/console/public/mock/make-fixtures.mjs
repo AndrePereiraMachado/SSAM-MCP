@@ -983,10 +983,10 @@ function buildVps(name) {
       ? { active: true, defaultIncoming: 'deny', defaultOutgoing: 'allow', defaultRouted: 'deny', allowIn: ['22/tcp', '80/tcp', '443/tcp', '3000/tcp', '8080/tcp'], rules: ['22/tcp ALLOW IN Anywhere', '80/tcp ALLOW IN Anywhere', '443/tcp ALLOW IN Anywhere', '3000/tcp ALLOW IN Anywhere', '8080/tcp ALLOW IN Anywhere'] }
       : { active: true, defaultIncoming: 'deny', defaultOutgoing: 'allow', defaultRouted: 'deny', allowIn: ['22/tcp', '80/tcp', '443/tcp'], rules: ['22/tcp ALLOW IN Anywhere', '80/tcp ALLOW IN Anywhere', '443/tcp ALLOW IN Anywhere', '22/tcp (v6) ALLOW IN Anywhere (v6)', '80/tcp (v6) ALLOW IN Anywhere (v6)', '443/tcp (v6) ALLOW IN Anywhere (v6)'] },
     ssh: fresh
-      ? { passwordAuth: false, permitRootLogin: 'prohibit-password', fail2ban: 'active', failures24h: 3, topSources: [{ ip: '198.51.100.7', count: 3 }] }
+      ? { passwordAuth: false, permitRootLogin: 'prohibit-password', port: 22, fail2ban: 'active', failures24h: 3, topSources: [{ ip: '198.51.100.7', count: 3 }] }
       : problems
-        ? { passwordAuth: true, permitRootLogin: 'yes', fail2ban: 'absent', failures24h: 1284, topSources: [{ ip: '198.51.100.7', count: 512 }, { ip: '203.0.113.50', count: 301 }, { ip: '192.0.2.77', count: 220 }, { ip: '198.51.100.201', count: 140 }, { ip: '203.0.113.199', count: 111 }] }
-        : { passwordAuth: true, permitRootLogin: 'yes', fail2ban: 'absent', failures24h: 40, topSources: [{ ip: '198.51.100.7', count: 12 }, { ip: '203.0.113.50', count: 9 }, { ip: '192.0.2.77', count: 6 }] },
+        ? { passwordAuth: true, permitRootLogin: 'yes', port: 22, fail2ban: 'absent', failures24h: 1284, topSources: [{ ip: '198.51.100.7', count: 512 }, { ip: '203.0.113.50', count: 301 }, { ip: '192.0.2.77', count: 220 }, { ip: '198.51.100.201', count: 140 }, { ip: '203.0.113.199', count: 111 }] }
+        : { passwordAuth: true, permitRootLogin: 'yes', port: 22, fail2ban: 'absent', failures24h: 40, topSources: [{ ip: '198.51.100.7', count: 12 }, { ip: '203.0.113.50', count: 9 }, { ip: '192.0.2.77', count: 6 }] },
   };
   const tls = {
     certs: problems

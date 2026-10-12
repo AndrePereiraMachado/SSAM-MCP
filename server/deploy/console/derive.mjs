@@ -45,7 +45,10 @@ export function serverStatusOf(host, live, now) {
   const running = srv?.state === 'running';
   const health = srv?.health ?? null;
   const state = !running ? 'down' : health === 'starting' ? 'starting' : health === 'unhealthy' ? 'down' : 'up';
-  const imageTag = server?.image?.tag ?? (typeof srv?.image === 'string' && srv.image.includes(':') ? srv.image.slice(srv.image.lastIndexOf(':') + 1) : null);
+  // The collector's tag first; else the container's image reference without a digest (prod-...@sha256:<digest> in .env).
+  const ref = typeof srv?.image === 'string' ? srv.image.split('@')[0] : '';
+  const last = ref.slice(ref.lastIndexOf('/') + 1);
+  const imageTag = server?.image?.tag ?? (last.includes(':') ? last.slice(last.indexOf(':') + 1) : null);
   return { state, since: running ? srv.startedAt ?? live.server?.since ?? null : null, pid: live.server?.pid ?? num(server?.health?.probe?.pid),
     imageTag: imageTag ? String(imageTag).slice(0, 80) : null, health, warm: w.state, warmDetail: w.detail };
 }

@@ -1019,3 +1019,32 @@ sh host/uninstall.sh --crons                           # também os crons de bac
 | "Coleta parcial" | A seção com erro está em `collector.errors` do `host.json`: `python3 -c 'import json; print(json.load(open("/var/lib/ssam-console/host/host.json"))["collector"]["errors"])'`. |
 | A aba mostra "Chave de acesso inválida ou trocada" | Outra sessão abriu ou o painel reiniciou: rode o `painel-ssam.ps1` de novo. |
 | Renovar e Faixas não aparecem | Imagem anterior ao 24º envio (15.4). |
+
+### 15.11 Ensaio local (Docker Desktop, 2026-10-12)
+
+Projeto `ssam-painel-ensaio` só local, imagem `ssam-server:prod-20261011-ed0f94b`, o código do painel montado da árvore
+de trabalho, portas só em 127.0.0.1 (Caddy 28180/28543, painel 27320). No lugar do `host/install.sh`, um container de
+uma vez (uid 0) deu as pastas `state` e `sock` ao uid 10001; no lugar do `systemd-socket-proxyd`, um repasse TCP para o
+socket unix na mesma imagem. O coletor rodou a cada 30 s com a parte Linux do host vinda das fixtures (`--fixture-host`)
+e a parte Docker real (`--docker docker`). Nada tocou a VPS. A pilha foi derrubada com `down -v` e os tokens do ensaio
+foram apagados.
+
+| Item | Resultado |
+| --- | --- |
+| Pilha | `ssam-console` healthy, `NetworkMode: none`, nenhuma porta; capacidades `renew:false, lanes:false` com o módulo da imagem. |
+| Leitura | Todos os GET do painel batem com os formatos da seção 4 do desenho (25 de 25 em cada uma das 7 leituras). Chamadas e falhas iguais às linhas da auditoria (29/27 e, no fim, 37/34), `AGENT_NOT_CONNECTED` igual, 5 recusas 401 do Caddy em `/mcp`, filtro por licença, dia e faixas de 7 e 30 dias. |
+| Alertas | Os do host do ensaio (`backup-ausente`, `backup-sem-cron`, `rotacao-sem-cron`, `reinicio-pendente`, `ssh-senha`), `nao-aquecido:worker` (o worker ODC não sobe no Docker Desktop), `licenca-vence` crítico para a licença de 2 dias, `acesso-outra-maquina` depois do segundo PC e `pico-falhas` (as falhas foram de propósito). Nada além. |
+| Ações na imagem atual | Renovar e Faixas recusados com 501 e a linha da seção 15.4; Emitir (segredos uma vez só, `no-store`, nenhuma outra resposta os devolve, o token novo abre sessão); Credencial do agente (evento em 3 ms, canal fechado com "credencial trocada" em 1,8 s); Revogar (sessão aberta fechada com "licença revogada" em 1,9 s, o token passa a 403, revogar de novo dá 409). 33 de 33. |
+| Ações com o módulo do 24º envio | Montado sobre o da imagem: Renovar (+30 dias a partir da validade, o alerta some depois de 2 avaliações com o evento "Resolvido"), Faixas (ODC, O11 → ODC com 1 sessão aberta avisada), recusas `STALE`, `NO_CHANGE`, `NO_EXPIRY`, `TOKEN_REVOKED`, `EXPIRY_TOO_FAR`; o `server-token list` da imagem lê o arquivo gravado pelo módulo novo; um `revoke` pelo `ssam-admin` entra no Histórico como "fora do painel" em 2 s. 26 de 26. |
+| Segurança | Sem chave 401, chave errada 401, `Host: evil.example` 403, `Origin` de outro site 403, `Sec-Fetch-Site: cross-site` 403, `text/plain` 415, 9 KiB 413, JSON ruim 400, campo a mais 400, confirmação errada 400, `OPTIONS` 405 sem `Access-Control-*`, `/mock/*` e caminhos com `..` 404, cabeçalhos (CSP, `no-store` etc.). 10 chaves erradas em 60 s: a 11ª e as seguintes, mesmo com a chave certa, recebem 429 com `Retry-After: 60`. |
+| Robustez | Reiniciar o painel: contagens iguais e chave nova (a aba velha mostra a mensagem da chave). `rotate-logs.sh` com o `.env` do ensaio: nada contado duas vezes, sessões abertas mantidas, nenhum trecho perdido. Coletor parado: aviso depois de 120 s; `host.json` apagado: alerta crítico, aviso na aba VPS e os alertas do host somem; túnel caído: linha "Sem conexão" e volta sozinho. `docker compose restart ssam-server`: evento "ssam-server reiniciou." |
+| Navegador | As 7 abas a 1440x900 e a 375x812, claro e escuro; a 360 px nenhuma rola de lado. Sem erro de JavaScript nem de CSP. Painel de segredos mascarado, `Fechar` só depois da caixa marcada, nada do segredo no DOM depois de fechar. |
+| Segredos | Nenhum token nem credencial na saída do painel, nos logs do servidor, do Caddy e do repasse, no volume de estado do painel, no `console-audit.jsonl`, no volume de estado do servidor nem nos arquivos do ensaio fora da pasta dos segredos. |
+
+Correções do ensaio, no mesmo commit: dias restantes contados em dias de calendário local (o alerta dizia "2 dias" e a
+tabela "1 dia" para a mesma data); trocar o período ou o cliente no Uso enquanto uma leitura estava a caminho deixava a
+resposta antiga na tela; a coluna Imagem mostrava o digest (`2.11.7-alpine@sha256:...`); o Histórico mostrava só as
+faixas numa licença sem validade e "11/11/2026 → —" numa renovação recusada; um reinício feito à mão não gerava evento.
+
+Fica do lado do servidor: um `DELETE /mcp` é registrado como `transport-closed`, então "o cliente encerrou" não aparece
+(o painel mostra "a conexão caiu").

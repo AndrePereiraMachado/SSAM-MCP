@@ -303,7 +303,25 @@ export function fmtDaysLeft(expiresAt, now) {
     return h >= 1 ? `venceu há ${h} h` : 'venceu agora';
   }
   if (sameLocalDay(ms, now)) return `vence hoje às ${fmtTime(ms)}`;
-  return plural(Math.max(1, Math.floor(diff / DAY)), 'dia', 'dias');
+  // Local calendar days, as the API's licenca-vence alert counts them: "até 14/10/2026 (2 dias)" on 12/10 whatever the hour.
+  return plural(Math.max(1, localDayDiff(now, ms)), 'dia', 'dias');
+}
+
+/** Whole local (America/Sao_Paulo) calendar days from `a` to `b` (negative when `b` is earlier). */
+export function localDayDiff(a, b) {
+  const x = localDay(a);
+  const y = localDay(b);
+  if (!x || !y) return NaN;
+  return Math.round((Date.parse(`${y}T00:00:00Z`) - Date.parse(`${x}T00:00:00Z`)) / DAY);
+}
+
+/** Next expiry in the Resumo: `em 2 dias` / `hoje às 18:00`. */
+export function fmtExpiresIn(expiresAt, now) {
+  const ms = toMs(expiresAt);
+  if (!valid(ms)) return DASH;
+  if (ms <= now) return `venceu em ${fmtDate(ms)}`;
+  if (sameLocalDay(ms, now)) return `hoje às ${fmtTime(ms)}`;
+  return `em ${fmtDaysLeft(ms, now)}`;
 }
 
 /** Licenses table `Validade` cell text and its severity ('', 'warn', 'bad'). */

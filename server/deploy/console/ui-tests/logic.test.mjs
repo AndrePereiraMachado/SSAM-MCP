@@ -211,5 +211,17 @@ test('Histórico: the Detalhe column', () => {
   assert.equal(historico.historyDetail({ action: 'alert-ack', detail: { alert: 'x', hours: 168 } }), '7 dias · x');
   assert.equal(historico.historyDetail({ action: 'alert-ack', detail: { alert: 'x', hours: null } }), 'visto · x');
   assert.equal(historico.historyDetail({ action: 'revoke', detail: {} }), '—');
+  // seen outside the console (CLI): only expiresAt; a refused renewal shows what was asked
+  assert.equal(historico.historyDetail({ action: 'issue', detail: { expiresAt: '2026-11-11T21:00:00Z', lanes: ['odc', 'o11'] } }), 'até 11/11/2026, ODC e O11');
+  assert.equal(historico.historyDetail({ action: 'issue', detail: { expiresAt: null, lanes: ['odc'] } }), 'sem validade, ODC');
+  assert.equal(historico.historyDetail({ action: 'renew', detail: { days: 30, previousExpiresAt: '2026-11-11T21:00:00Z' } }), '+30 dias');
   assert.equal(labels.HISTORY_ACTION['key-rotate'], 'Chave do painel trocada');
+});
+
+test('VPS containers: the image column shows the tag only (no digest, no registry port)', () => {
+  assert.equal(vps.imageTag('caddy:2.11.7-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f'), '2.11.7-alpine');
+  assert.equal(vps.imageTag('ssam-server:prod-20261011-ed0f94b'), 'prod-20261011-ed0f94b');
+  assert.equal(vps.imageTag('ssam-server:prod-20261011-ed0f94b@sha256:232e6a22dec2'), 'prod-20261011-ed0f94b');
+  assert.equal(vps.imageTag('registry.example.com:5000/ssam-server:prod-1'), 'prod-1');
+  assert.equal(vps.imageTag('ssam-server'), 'ssam-server');
 });
