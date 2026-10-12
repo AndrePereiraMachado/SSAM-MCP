@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "type": "module",
+  "main": "run-all.mjs",
+  "description": "UI tests of the owner console: node --test server/deploy/console/ui-tests/ runs run-all.mjs, which imports every *.test.mjs here."
+}

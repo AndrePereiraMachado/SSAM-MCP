@@ -1,0 +1,109 @@
+{
+  "ok": true,
+  "license": {
+    "id": "tok_00000000be7a",
+    "customer": "Cliente Beta",
+    "state": "revoked",
+    "createdAt": "2026-10-05T02:58:00Z",
+    "expiresAt": "2026-10-15T02:58:00Z",
+    "revokedAt": "2026-10-13T02:51:08Z",
+    "daysLeft": 2.0048,
+    "lanes": [
+      "odc"
+    ],
+    "agentCredentialIssuedAt": "2026-10-05T02:58:00Z",
+    "machine": null,
+    "accessAlerts": 0,
+    "agent": {
+      "state": "never",
+      "since": null,
+      "lastSignalAt": null,
+      "version": null,
+      "closedReason": null
+    },
+    "sessionsOpen": 0,
+    "today": {
+      "calls": 0,
+      "failures": 0
+    },
+    "daily14": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      4,
+      0,
+      1,
+      0,
+      0,
+      0
+    ],
+    "lastActivity": {
+      "at": "2026-10-09T22:20:00Z",
+      "tool": "odc_read",
+      "kind": "call"
+    },
+    "workspace": {
+      "bytes": 220160,
+      "files": 31,
+      "truncated": false,
+      "measuredAt": "2026-10-13T02:47:08Z",
+      "quotaBytes": 5368709120
+    },
+    "actions": {
+      "renew": {
+        "allowed": false,
+        "reason": "Licença revogada."
+      },
+      "lanes": {
+        "allowed": false,
+        "reason": "Licença revogada."
+      },
+      "agentRotate": {
+        "allowed": false,
+        "reason": "Licença revogada."
+      },
+      "revoke": {
+        "allowed": false,
+        "reason": "Licença revogada."
+      }
+    },
+    "history": [
+      {
+        "time": "2026-10-13T02:51:08Z",
+        "action": "revoke",
+        "actor": "painel",
+        "token": "tok_00000000be7a",
+        "customer": "Cliente Beta",
+        "result": "ok",
+        "code": null,
+        "detail": {}
+      },
+      {
+        "time": "2026-10-05T02:58:00Z",
+        "action": "issue",
+        "actor": "externo",
+        "token": "tok_00000000be7a",
+        "customer": "Cliente Beta",
+        "result": "ok",
+        "code": null,
+        "detail": {
+          "days": 10,
+          "lanes": [
+            "odc"
+          ],
+          "expiresAt": "2026-10-15T02:58:00Z"
+        }
+      }
+    ]
+  },
+  "openSessions": 0,
+  "agentConnected": false,
+  "audit": {
+    "written": true
+  }
+}

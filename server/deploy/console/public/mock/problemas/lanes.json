@@ -1,0 +1,126 @@
+{
+  "ok": true,
+  "license": {
+    "id": "tok_0000000a1fa0",
+    "customer": "Cliente Alfa",
+    "state": "active",
+    "createdAt": "2026-07-14T03:00:00Z",
+    "expiresAt": "2026-10-13T02:58:00Z",
+    "revokedAt": null,
+    "daysLeft": 0.0048,
+    "lanes": [
+      "odc"
+    ],
+    "agentCredentialIssuedAt": "2026-07-14T03:00:00Z",
+    "machine": {
+      "id": "m-3f2a9c",
+      "name": "PC-TESTE-01",
+      "user": "teste",
+      "at": "2026-07-14T12:00:00Z"
+    },
+    "accessAlerts": 0,
+    "agent": {
+      "state": "connected",
+      "since": "2026-10-12T17:51:08Z",
+      "lastSignalAt": "2026-10-13T02:51:04Z",
+      "version": "0.4.2",
+      "closedReason": null
+    },
+    "sessionsOpen": 2,
+    "today": {
+      "calls": 1234,
+      "failures": 41
+    },
+    "daily14": [
+      579,
+      676,
+      796,
+      777,
+      983,
+      527,
+      997,
+      977,
+      818,
+      1244,
+      1205,
+      1169,
+      718,
+      1234
+    ],
+    "lastActivity": {
+      "at": "2026-10-13T02:50:28Z",
+      "tool": "ssam_map",
+      "kind": "call"
+    },
+    "workspace": {
+      "bytes": 1825361101,
+      "files": 18342,
+      "truncated": false,
+      "measuredAt": "2026-10-13T02:47:08Z",
+      "quotaBytes": 5368709120
+    },
+    "actions": {
+      "renew": {
+        "allowed": true,
+        "reason": null
+      },
+      "lanes": {
+        "allowed": true,
+        "reason": null
+      },
+      "agentRotate": {
+        "allowed": true,
+        "reason": null
+      },
+      "revoke": {
+        "allowed": true,
+        "reason": null
+      }
+    },
+    "history": [
+      {
+        "time": "2026-10-13T02:51:08Z",
+        "action": "lanes",
+        "actor": "painel",
+        "token": "tok_0000000a1fa0",
+        "customer": "Cliente Alfa",
+        "result": "ok",
+        "code": null,
+        "detail": {
+          "previousLanes": [
+            "odc",
+            "o11"
+          ],
+          "lanes": [
+            "odc"
+          ]
+        }
+      },
+      {
+        "time": "2026-07-14T03:00:00Z",
+        "action": "issue",
+        "actor": "externo",
+        "token": "tok_0000000a1fa0",
+        "customer": "Cliente Alfa",
+        "result": "ok",
+        "code": null,
+        "detail": {
+          "days": 91,
+          "lanes": [
+            "odc",
+            "o11"
+          ],
+          "expiresAt": "2026-10-13T02:58:00Z"
+        }
+      }
+    ]
+  },
+  "previousLanes": [
+    "odc",
+    "o11"
+  ],
+  "openSessions": 2,
+  "audit": {
+    "written": true
+  }
+}

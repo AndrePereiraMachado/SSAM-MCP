@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "code": "STORE_UNREADABLE",
+    "message": "O arquivo de licenças não pode ser lido agora (EACCES)."
+  }
+}

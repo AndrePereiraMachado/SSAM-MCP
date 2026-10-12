@@ -1,0 +1,45 @@
+{
+  "ok": true,
+  "range": {
+    "kind": "today",
+    "from": "2026-10-12",
+    "to": "2026-10-12",
+    "days": 1,
+    "timeZone": "America/Sao_Paulo"
+  },
+  "indexing": {
+    "state": "ready",
+    "progress": 1,
+    "detail": null
+  },
+  "totals": {
+    "calls": 0,
+    "failures": 0,
+    "p50Ms": null,
+    "p90Ms": null,
+    "maxMs": null,
+    "customersActive": 0,
+    "sessionsOpened": 0,
+    "agentCalls": 0,
+    "agentFailures": 0
+  },
+  "byCustomer": [],
+  "byTool": [],
+  "byCode": [],
+  "byDay": [
+    {
+      "day": "2026-10-12",
+      "calls": 0,
+      "failures": 0,
+      "p50Ms": null,
+      "p90Ms": null,
+      "customers": 0
+    }
+  ],
+  "denied": {
+    "available": true,
+    "since": "2026-10-13T02:33:08Z",
+    "byStatus": {},
+    "rows": []
+  }
+}

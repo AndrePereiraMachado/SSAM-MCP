@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "code": "UNKNOWN_TOKEN",
+    "message": "Licença tok_ffffffffffff não existe."
+  }
+}

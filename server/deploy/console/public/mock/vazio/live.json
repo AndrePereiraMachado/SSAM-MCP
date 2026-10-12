@@ -1,0 +1,40 @@
+{
+  "ok": true,
+  "now": "2026-10-13T02:51:08Z",
+  "server": {
+    "since": "2026-10-13T02:32:08Z",
+    "pid": 7,
+    "mode": "hosted",
+    "ratePerMinute": 120,
+    "maxSessionsPerToken": 8,
+    "publicHosts": [
+      "ssam.example.com"
+    ]
+  },
+  "sessions": [],
+  "agents": [],
+  "workers": {
+    "available": true,
+    "rows": [
+      {
+        "kind": "server",
+        "token": null,
+        "customer": null,
+        "port": 7310,
+        "rssB": 174000000,
+        "cpuPct": 0.1,
+        "elapsedS": 1140
+      },
+      {
+        "kind": "odc-worker",
+        "token": null,
+        "customer": null,
+        "port": 18547,
+        "rssB": 368000000,
+        "cpuPct": 0.1,
+        "elapsedS": 1140
+      }
+    ]
+  },
+  "closedToday": []
+}

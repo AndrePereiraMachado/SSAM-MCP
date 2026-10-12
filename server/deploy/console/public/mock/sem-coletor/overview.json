@@ -1,0 +1,292 @@
+{
+  "ok": true,
+  "now": "2026-10-13T02:51:08Z",
+  "status": {
+    "server": {
+      "state": "unknown",
+      "since": "2026-10-12T21:39:08Z",
+      "pid": 7,
+      "imageTag": null,
+      "health": null,
+      "warm": "unknown",
+      "warmDetail": null
+    },
+    "sessionsOpen": 1,
+    "agentsConnected": 1,
+    "licenses": {
+      "active": 2,
+      "expired": 0,
+      "revoked": 1
+    },
+    "alerts": {
+      "critical": 1,
+      "warning": 1,
+      "info": 0,
+      "acked": 0
+    },
+    "collector": {
+      "state": "missing",
+      "collectedAt": null,
+      "ageS": null
+    },
+    "host": null,
+    "publicHost": "ssam.example.com"
+  },
+  "alerts": [
+    {
+      "id": "coletor:host",
+      "rule": "coletor",
+      "severity": "critical",
+      "area": "coletor",
+      "title": "O coletor da VPS não está instalado ou nunca rodou (host/install.sh).",
+      "detail": null,
+      "since": "2026-10-12T21:41:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {},
+      "view": "vps",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    },
+    {
+      "id": "licenca-vence:tok_00000000be7a",
+      "rule": "licenca-vence",
+      "severity": "warning",
+      "area": "licencas",
+      "title": "Licença de Cliente Beta vence em 2 dias (14/10/2026).",
+      "detail": "Renove em Licenças. Ao vencer, as sessões e o canal do agente dele são fechados.",
+      "since": "2026-10-12T21:41:08Z",
+      "lastSeen": "2026-10-13T02:51:02Z",
+      "subject": {
+        "token": "tok_00000000be7a",
+        "customer": "Cliente Beta"
+      },
+      "view": "licencas",
+      "event": false,
+      "acked": false,
+      "ackedUntil": null
+    }
+  ],
+  "acked": [],
+  "summary": [
+    {
+      "area": "servidor",
+      "state": "unknown",
+      "facts": {
+        "since": "2026-10-12T21:39:08Z",
+        "pid": 7,
+        "imageTag": null,
+        "warm": "unknown",
+        "health": null,
+        "probeMs": null
+      },
+      "view": "vps"
+    },
+    {
+      "area": "licencas",
+      "state": "warning",
+      "facts": {
+        "active": 2,
+        "expired": 0,
+        "revoked": 1,
+        "nextExpiry": {
+          "customer": "Cliente Beta",
+          "token": "tok_00000000be7a",
+          "expiresAt": "2026-10-15T02:58:00Z"
+        }
+      },
+      "view": "licencas"
+    },
+    {
+      "area": "uso",
+      "state": "ok",
+      "facts": {
+        "calls": 14,
+        "failures": 1,
+        "p90Ms": 2100,
+        "customersActive": 1
+      },
+      "view": "uso"
+    },
+    {
+      "area": "agentes",
+      "state": "ok",
+      "facts": {
+        "connected": 1,
+        "activeLicenses": 2,
+        "lastSignalAt": "2026-10-13T02:50:56Z"
+      },
+      "view": "agentes"
+    },
+    {
+      "area": "sessoes",
+      "state": "ok",
+      "facts": {
+        "open": 1,
+        "top": [
+          {
+            "customer": "Cliente Alfa",
+            "client": "claude-code 2.1.281"
+          }
+        ]
+      },
+      "view": "agentes"
+    },
+    {
+      "area": "vps",
+      "state": "unknown",
+      "facts": {
+        "cpuPct": null,
+        "memUsedPct": null,
+        "diskUsedPct": null,
+        "rebootRequired": null,
+        "rebootSince": null
+      },
+      "view": "vps"
+    },
+    {
+      "area": "containers",
+      "state": "unknown",
+      "facts": {
+        "running": null,
+        "total": null,
+        "unhealthy": [],
+        "restarts24h": null
+      },
+      "view": "vps"
+    },
+    {
+      "area": "backup",
+      "state": "unknown",
+      "facts": {
+        "newestAt": null,
+        "ageH": null,
+        "cron": null
+      },
+      "view": "vps"
+    },
+    {
+      "area": "tls",
+      "state": "unknown",
+      "facts": {},
+      "view": "vps"
+    },
+    {
+      "area": "coletor",
+      "state": "critical",
+      "facts": {
+        "collectedAt": null,
+        "ageS": null,
+        "sectionErrors": []
+      },
+      "view": "vps"
+    }
+  ],
+  "recentEvents": [
+    {
+      "seq": 126,
+      "time": "2026-10-13T02:48:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 125,
+      "time": "2026-10-13T02:34:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou studio_inspect: ok em 850 ms.",
+      "code": null
+    },
+    {
+      "seq": 124,
+      "time": "2026-10-13T02:26:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou ssam_map: ok em 900 ms.",
+      "code": null
+    },
+    {
+      "seq": 123,
+      "time": "2026-10-13T02:18:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou studio_inspect: ok em 700 ms.",
+      "code": null
+    },
+    {
+      "seq": 122,
+      "time": "2026-10-13T02:10:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou odc_read: ok em 410 ms.",
+      "code": null
+    },
+    {
+      "seq": 121,
+      "time": "2026-10-13T02:04:08Z",
+      "level": "warning",
+      "group": "vps",
+      "token": null,
+      "customer": null,
+      "text": "Coletor da VPS parou.",
+      "code": null
+    },
+    {
+      "seq": 120,
+      "time": "2026-10-13T02:02:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou ssam_doctor: ok em 300 ms.",
+      "code": null
+    },
+    {
+      "seq": 119,
+      "time": "2026-10-13T01:54:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou studio_inspect: ok em 1,9 s.",
+      "code": null
+    },
+    {
+      "seq": 118,
+      "time": "2026-10-13T01:46:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou odc_read: ok em 380 ms.",
+      "code": null
+    },
+    {
+      "seq": 117,
+      "time": "2026-10-13T01:38:08Z",
+      "level": "info",
+      "group": "chamada",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "text": "Cliente Alfa chamou ssam_map: ok em 2,1 s.",
+      "code": null
+    }
+  ],
+  "indexing": {
+    "state": "ready",
+    "progress": 1,
+    "detail": null
+  }
+}

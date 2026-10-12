@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "code": "BAD_JSON",
+    "message": "Corpo da requisição não é JSON válido."
+  }
+}

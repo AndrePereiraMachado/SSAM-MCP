@@ -1,0 +1,204 @@
+{
+  "ok": true,
+  "entries": [
+    {
+      "time": "2026-10-13T02:11:08Z",
+      "action": "alert-ack",
+      "actor": "painel",
+      "token": null,
+      "customer": null,
+      "result": "ok",
+      "code": null,
+      "detail": {
+        "alert": "container-reiniciou:caddy",
+        "hours": 168
+      }
+    },
+    {
+      "time": "2026-10-13T00:51:08Z",
+      "action": "alert-ack",
+      "actor": "painel",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "result": "ok",
+      "code": null,
+      "detail": {
+        "alert": "acesso-outra-maquina:tok_00000000de17:m-9d00e2",
+        "hours": null
+      }
+    },
+    {
+      "time": "2026-10-12T23:51:08Z",
+      "action": "alert-unack",
+      "actor": "painel",
+      "token": null,
+      "customer": null,
+      "result": "ok",
+      "code": null,
+      "detail": {
+        "alert": "disco:/"
+      }
+    },
+    {
+      "time": "2026-10-12T21:40:08Z",
+      "action": "key-rotate",
+      "actor": "painel",
+      "token": null,
+      "customer": null,
+      "result": "ok",
+      "code": null,
+      "detail": {}
+    },
+    {
+      "time": "2026-10-12T00:51:08Z",
+      "action": "agent-rotate",
+      "actor": "painel",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "result": "error",
+      "code": "STORE_WRITE_FAILED",
+      "detail": {}
+    },
+    {
+      "time": "2026-10-11T09:00:00Z",
+      "action": "renew",
+      "actor": "externo",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "result": "ok",
+      "code": null,
+      "detail": {
+        "days": 30,
+        "previousExpiresAt": "2027-08-23T12:00:00Z",
+        "expiresAt": "2027-09-22T12:00:00Z"
+      }
+    },
+    {
+      "time": "2026-10-02T13:20:00Z",
+      "action": "lanes",
+      "actor": "painel",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "result": "ok",
+      "code": null,
+      "detail": {
+        "previousLanes": [
+          "odc",
+          "o11"
+        ],
+        "lanes": [
+          "odc"
+        ]
+      }
+    },
+    {
+      "time": "2026-09-22T12:00:00Z",
+      "action": "issue",
+      "actor": "painel",
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "result": "ok",
+      "code": null,
+      "detail": {
+        "days": 365,
+        "lanes": [
+          "odc",
+          "o11"
+        ],
+        "expiresAt": "2027-09-22T12:00:00Z"
+      }
+    },
+    {
+      "time": "2026-09-17T21:00:00Z",
+      "action": "issue",
+      "actor": "painel",
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "result": "ok",
+      "code": null,
+      "detail": {
+        "days": 30,
+        "lanes": [
+          "odc",
+          "o11"
+        ],
+        "expiresAt": "2026-10-17T21:00:00Z"
+      }
+    },
+    {
+      "time": "2026-09-14T20:00:00Z",
+      "action": "issue",
+      "actor": "painel",
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "result": "ok",
+      "code": null,
+      "detail": {
+        "days": 30,
+        "lanes": [
+          "odc"
+        ],
+        "expiresAt": "2026-10-14T20:00:00Z"
+      }
+    },
+    {
+      "time": "2026-09-09T15:00:00Z",
+      "action": "issue",
+      "actor": "painel",
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "result": "ok",
+      "code": null,
+      "detail": {
+        "days": 30,
+        "lanes": [
+          "odc",
+          "o11"
+        ],
+        "expiresAt": "2026-10-09T15:00:00Z"
+      }
+    },
+    {
+      "time": "2026-08-01T16:45:00Z",
+      "action": "revoke",
+      "actor": "externo",
+      "token": "tok_00000006a3a0",
+      "customer": "Cliente Gama",
+      "result": "ok",
+      "code": null,
+      "detail": {}
+    },
+    {
+      "time": "2026-07-14T03:00:00Z",
+      "action": "issue",
+      "actor": "externo",
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "result": "ok",
+      "code": null,
+      "detail": {
+        "days": 91,
+        "lanes": [
+          "odc",
+          "o11"
+        ],
+        "expiresAt": "2026-10-13T02:58:00Z"
+      }
+    },
+    {
+      "time": "2026-05-02T10:00:00Z",
+      "action": "issue",
+      "actor": "externo",
+      "token": "tok_000000002e7a",
+      "customer": "Cliente Zeta",
+      "result": "ok",
+      "code": null,
+      "detail": {
+        "days": null,
+        "lanes": [
+          "o11"
+        ]
+      }
+    }
+  ]
+}

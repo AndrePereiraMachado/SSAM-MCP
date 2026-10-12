@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Painel SSAM</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="app.css">
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <header class="top" id="top">
+    <div class="statusline">
+      <h1>Painel SSAM</h1>
+      <p class="facts" id="facts">Carregando…</p>
+      <p class="conn" id="conn" role="alert" hidden></p>
+      <div class="hbtns" id="hbtns">
+        <button type="button" class="btn" id="btn-theme">Tema: automático</button>
+        <button type="button" class="btn" id="btn-refresh">Atualizar</button>
+      </div>
+    </div>
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Seções do painel">
+      <button type="button" role="tab" id="tab-visao" data-view="visao" aria-controls="view-visao" aria-selected="true" tabindex="0"><span class="tlabel">Visão geral</span><span class="tcount"></span></button>
+      <button type="button" role="tab" id="tab-licencas" data-view="licencas" aria-controls="view-licencas" aria-selected="false" tabindex="-1"><span class="tlabel">Licenças</span><span class="tcount"></span></button>
+      <button type="button" role="tab" id="tab-uso" data-view="uso" aria-controls="view-uso" aria-selected="false" tabindex="-1"><span class="tlabel">Uso</span><span class="tcount"></span></button>
+      <button type="button" role="tab" id="tab-agentes" data-view="agentes" aria-controls="view-agentes" aria-selected="false" tabindex="-1"><span class="tlabel">Agentes e sessões</span><span class="tcount"></span></button>
+      <button type="button" role="tab" id="tab-vps" data-view="vps" aria-controls="view-vps" aria-selected="false" tabindex="-1"><span class="tlabel">VPS</span><span class="tcount"></span></button>
+      <button type="button" role="tab" id="tab-eventos" data-view="eventos" aria-controls="view-eventos" aria-selected="false" tabindex="-1"><span class="tlabel">Eventos</span><span class="tcount"></span></button>
+      <button type="button" role="tab" id="tab-historico" data-view="historico" aria-controls="view-historico" aria-selected="false" tabindex="-1"><span class="tlabel">Histórico</span><span class="tcount"></span></button>
+    </nav>
+  </header>
+  <main id="main">
+    <section class="view" id="view-visao" role="tabpanel" aria-labelledby="tab-visao" tabindex="-1"></section>
+    <section class="view" id="view-licencas" role="tabpanel" aria-labelledby="tab-licencas" tabindex="-1" hidden></section>
+    <section class="view" id="view-uso" role="tabpanel" aria-labelledby="tab-uso" tabindex="-1" hidden></section>
+    <section class="view" id="view-agentes" role="tabpanel" aria-labelledby="tab-agentes" tabindex="-1" hidden></section>
+    <section class="view" id="view-vps" role="tabpanel" aria-labelledby="tab-vps" tabindex="-1" hidden></section>
+    <section class="view" id="view-eventos" role="tabpanel" aria-labelledby="tab-eventos" tabindex="-1" hidden></section>
+    <section class="view" id="view-historico" role="tabpanel" aria-labelledby="tab-historico" tabindex="-1" hidden></section>
+  </main>
+  <div class="fatal" id="fatal" role="alert" hidden></div>
+  <dialog id="dlg" aria-labelledby="dlg-title"></dialog>
+  <noscript><p class="fatal">O painel precisa de JavaScript.</p></noscript>
+</body>
+</html>
