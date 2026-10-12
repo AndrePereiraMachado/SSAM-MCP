@@ -3,7 +3,14 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 namespace Anvil.Core.Delivery;
 
-public interface IBridgeClient { JsonObject Call(string method, JsonObject? parameters = null); }
+public interface IBridgeClient
+{
+    JsonObject Call(string method, JsonObject? parameters = null);
+
+    /// <summary>Releases what the client keeps loaded between calls (the thin bridge's find_element capture); the client
+    /// stays usable. Delivery.Run calls it when it ends. By default a client keeps nothing.</summary>
+    void ReleaseCapture() { }
+}
 
 /// <summary>The merge order (Anvil.Core.MergeOrder) on the task's files. Plan: the defaults the native merge would drop
 /// and, when there are any, the first-pass copy at firstPassPath ({rule, deferred[], firstPass}). Missing: those of the
@@ -654,6 +661,7 @@ public static partial class Delivery
         {
             result["elapsedMs"] = clock.ElapsedMilliseconds;
             CloseOpenedTab();
+            ReleaseCapture();
             try
             {
                 task.Save(stage);
@@ -696,6 +704,14 @@ public static partial class Delivery
                     : new JsonObject { ["closed"] = false, ["reason"] = closed["error"]?.ToString() ?? closed["hint"]?.ToString() ?? "the Studio kept the tab" };
             }
             catch (Exception ex) { result["closedTab"] = new JsonObject { ["closed"] = false, ["reason"] = Errors.Text(ex) }; }
+        }
+        // A resident worker (hosted: one per customer) runs many deliveries in one process. What the bridge client keeps
+        // loaded for this one (the thin bridge's capture of the checks, find_element) is released when it ends, after the
+        // last bridge call, as the exit of a cold process frees it. Never throws: the delivery's answer stands.
+        void ReleaseCapture()
+        {
+            try { bridge.ReleaseCapture(); }
+            catch (Exception ex) { log?.Invoke("deliver: the bridge client's capture was not released: " + Errors.Text(ex)); }
         }
         void RecordMerge(JsonObject merge)
         {

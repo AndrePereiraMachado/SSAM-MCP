@@ -281,6 +281,86 @@ public sealed class ThinBridgeTests : IDisposable
         Assert.False(File.Exists(fake.Calls[0].Parameters!["path"]!.ToString()));
     }
 
+    /// <summary>A resident worker runs many deliveries in one process. The checks of a delivery (find_element) load one
+    /// capture of the module on the server; no later verb of that delivery drops it (no data proof, no tab to close), so
+    /// the delivery itself releases it when it ends, as the exit of a cold process would.</summary>
+    [Fact]
+    public void ADeliveryWithChecksReleasesTheThinCaptureWhenItEnds()
+    {
+        StudioAssemblies.Bind();
+        Environment.SetEnvironmentVariable("ANVIL_BRIDGE_FLAVOR", "thin");
+        Environment.SetEnvironmentVariable("ANVIL_BRIDGE_TIMEOUT_SECONDS", null);
+        UseAuthority();
+        var fixture = Fixture("blank-service.oml");
+        var job = Path.Combine(work, "job.json");
+        File.WriteAllText(job, "{\"ops\":[]}");
+        using var bridge = new LineBridge((method, parameters) => method switch
+        {
+            "open_module" => new() { ["opened"] = true },
+            "get_active_module" => new() { ["name"] = "Probe", ["key"] = "A" },
+            "snapshot_module" => Snapshot(parameters!),
+            "merge_from_oml" => new() { ["merged"] = true, ["newErrors"] = 0, ["has_plan"] = parameters!["reference_plan"] != null },
+            "get_errors" => new() { ["newErrors"] = 0, ["new"] = new JsonArray(), ["fixed"] = new JsonArray(), ["preexisting"] = new JsonArray() },
+            _ => throw new InvalidOperationException("Unexpected call: " + method),
+        });
+        JsonObject Snapshot(JsonObject parameters)
+        {
+            File.Copy(fixture, parameters["path"]!.ToString());
+            return new() { ["key"] = "A", ["snapshot_id"] = "base-id" };
+        }
+        JsonObject Apply(string _, string __, string output) { File.Copy(fixture, output); return new() { ["isValid"] = true, ["accepted"] = true }; }
+        Assert.Equal(0, ModelHost.LoadedModules().Count);
+
+        var client = new BridgeClient(bridge.Port);
+        var result = Delivery.Run(client, new("Probe", job, work, new[] { "User", "CheckRegisteredRole" }), Apply);
+
+        Assert.True(result["delivered"]!.GetValue<bool>(), result.ToJsonString());
+        Assert.True(result["merge"]!["has_plan"]!.GetValue<bool>(), "the merge went through the thin bridge");
+        // Both checks ran over one capture of the server: the snapshot after the merge is the thin bridge's own.
+        Assert.Equal(new[] { "open_module", "get_active_module", "snapshot_module", "merge_from_oml", "get_active_module", "get_errors", "snapshot_module" }, bridge.Methods);
+        Assert.Equal(new[] { 2, 1 }, result["checks"]!.AsArray().Select(c => c!["count"]!.GetValue<int>()));
+        // Nothing stays loaded in this process once the delivery returned.
+        Assert.Equal(0, ModelHost.LoadedModules().Count);
+
+        // The client stays usable after the release: the next find_element takes a capture again; another release frees it.
+        var again = client.Call("find_element", new JsonObject { ["name"] = "Registered", ["module_key"] = "A" });
+        Assert.Equal(1, again["count"]!.GetValue<int>());
+        Assert.Equal(1, ModelHost.LoadedModules().Count);
+        client.ReleaseCapture();
+        client.ReleaseCapture();
+        Assert.Equal(0, ModelHost.LoadedModules().Count);
+    }
+
+    /// <summary>A delivery that fails after its checks loaded the capture releases it too (the finally of Delivery.Run).</summary>
+    [Fact]
+    public void AFailedDeliveryReleasesTheThinCaptureToo()
+    {
+        StudioAssemblies.Bind();
+        var fixture = Fixture("blank-service.oml");
+        var job = Path.Combine(work, "job.json");
+        File.WriteAllText(job, "{\"ops\":[]}");
+        var fake = new FakeBridge
+        {
+            Handler = (method, parameters) => method switch
+            {
+                "open_module" => new() { ["opened"] = true },
+                "get_active_module" => new() { ["name"] = "Probe", ["key"] = "A" },
+                "snapshot_module" => Copied(parameters!),
+                "merge_from_oml" => new() { ["merged"] = true, ["newErrors"] = 0 },
+                "get_errors" => new() { ["newErrors"] = 0, ["new"] = new JsonArray(), ["fixed"] = new JsonArray(), ["preexisting"] = new JsonArray() },
+                _ => throw new InvalidOperationException("Unexpected call: " + method),
+            },
+        };
+        JsonObject Copied(JsonObject parameters) { File.Copy(fixture, parameters["path"]!.ToString()); return new() { ["key"] = "A", ["snapshot_id"] = "base-id" }; }
+        JsonObject Apply(string _, string __, string output) { File.Copy(fixture, output); return new() { ["isValid"] = true, ["accepted"] = true }; }
+        var thin = new ThinBridge(fake.Send);
+        var result = Delivery.Run(new ThinClient(thin), new("Probe", job, work, new[] { "ThinBridgeNoSuchElement" }), Apply);
+        Assert.False(result["delivered"]!.GetValue<bool>());
+        Assert.Contains("requested element 'ThinBridgeNoSuchElement' was not found", result["error"]!.ToString());
+        Assert.Equal(2, fake.Calls.Count(c => c.Method == "snapshot_module"));
+        Assert.Equal(0, ModelHost.LoadedModules().Count);
+    }
+
     [Fact]
     public void TheSocketTimeoutIsTheLargerOfRequestedAndConfigured()
     {
@@ -413,20 +493,24 @@ public sealed class ThinBridgeTests : IDisposable
     private sealed class ThinClient(ThinBridge thin) : IBridgeClient
     {
         public JsonObject Call(string method, JsonObject? parameters = null) => thin.Call(method, parameters);
+        public void ReleaseCapture() => thin.ReleaseCapture();
     }
 
     /// <summary>A bridge stand-in on a free port in 7400-7499: records each request line and answers success with the
-    /// method name.</summary>
+    /// method name, or with what <c>respond</c> returns for the method and its params.</summary>
     private sealed class LineBridge : IDisposable
     {
         private readonly TcpListener listener;
         private readonly Task loop;
         private readonly List<string> lines = [];
+        private readonly Func<string, JsonObject?, JsonObject>? respond;
         public int Port { get; }
         public IReadOnlyList<string> Lines { get { lock (lines) return lines.ToArray(); } }
+        public IReadOnlyList<string> Methods => Lines.Select(l => JsonNode.Parse(l)!["method"]!.ToString()).ToArray();
 
-        public LineBridge()
+        public LineBridge(Func<string, JsonObject?, JsonObject>? respond = null)
         {
+            this.respond = respond;
             TcpListener? found = null;
             for (var port = 7400; port < 7500 && found == null; port++)
             {
@@ -453,7 +537,16 @@ public sealed class ThinBridgeTests : IDisposable
                     var line = reader.ReadLine();
                     if (line == null) continue;
                     lock (lines) lines.Add(line);
-                    writer.WriteLine(new JsonObject { ["success"] = true, ["data"] = new JsonObject { ["method"] = JsonNode.Parse(line)!["method"]!.DeepClone() } }.ToJsonString());
+                    var request = JsonNode.Parse(line)!;
+                    JsonObject reply;
+                    try
+                    {
+                        var data = respond == null ? new JsonObject { ["method"] = request["method"]!.DeepClone() }
+                            : respond(request["method"]!.ToString(), request["params"]?.AsObject());
+                        reply = new JsonObject { ["success"] = true, ["data"] = data };
+                    }
+                    catch (Exception ex) { reply = new JsonObject { ["success"] = false, ["error"] = ex.Message, ["executed"] = false }; }
+                    writer.WriteLine(reply.ToJsonString());
                 }
             }
         }

@@ -574,6 +574,8 @@ cada produtor que passa nele; a fina confere a cobertura sobre os bytes e o esta
   copiado para `ThinBridge.cs` como função pura sobre o `ESpace` carregado.
 - A captura carregada vale enquanto as chamadas seguidas forem `find_element` com o mesmo `module_key` e
   `environment`; qualquer outro verbo a descarta. As verificações de `Delivery.cs:208-217` tiram uma captura só.
+- O fim de cada entrega também a descarta (`Delivery.Run` chama `IBridgeClient.ReleaseCapture` no `finally`): num worker
+  residente o módulo sai dos estáticos do Studio (`ModelHost.Release`) como sairia no fim de um processo frio.
 - `get_flow_nodes` não é emulado: nenhum chamador no kernel nem na fachada (`Delivery.cs:212` só usa `find_element`;
   `get_flow_nodes` aparece só na bridge e em scripts Python do dono, que usam a completa). Recusa `executed:false`.
 - No hospedado `TEMP` é `<ws>/o11/tmp` (FASE2 §4.7), dentro do prefixo gravável do espelho; a cópia do agente fica em
