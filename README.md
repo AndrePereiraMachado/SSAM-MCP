@@ -53,6 +53,19 @@ Os arquivos que existem nas duas caixas estão em [`SHARED.md`](SHARED.md), com 
     de URLs públicas. São 14 caminhos (5 novos, 9 alterados), 15 entradas: todos em `server/`, e `docs/FASE2-AGENTE.md`
     também em `agent/` (hash novo no `SHARED.md`). Conferido de novo: os 6198 arquivos das duas caixas que vêm da linha
     têm o mesmo blob de `a415531d`.
+- Atualizado em 2026-10-12 na branch `server/r24-qualidade` (de `server/r24` em `a857a1e`): o registro de qualidade
+  (`ssam-quality/1`). Para cada cliente hospedado, só códigos, contagens e tempos: o motivo de cada recusa por código de
+  problema, as correções automáticas do motor por regra, o tempo de cada fase da entrega e a sequência de chamadas de cada
+  sessão (com o intervalo parado entre elas), mais a aba Qualidade do painel, que soma tudo de todos os clientes.
+  - Antes da cópia entrou por merge `server/console-qualidade` (`2682709a`): a aba Qualidade em `server/deploy/console`,
+    a rotação e a retenção dos `quality-*.jsonl` e as notas do `DEPLOY.md`.
+  - Depois, `a415531d..3262c49f` de `fase4-24/qualidade` (`3262c49fafabd95b44442f78061392f3ea2ed200`, 6 commits): 32
+    caminhos (21 novos, 11 alterados, nenhum apagado), 32 entradas: 31 em `server/` e `docs/AGENTE-CLIENTE.md` (o
+    parágrafo de privacidade do registro) só em `agent/`, onde o guia do cliente está. Nada ficou fora pela regra da
+    cópia; o `SHARED.md` não muda (nenhum arquivo compartilhado mudou).
+  - Conferido: os 6219 arquivos das duas caixas que vêm da linha têm o blob de `3262c49f`. As quatro cópias do contrato
+    `quality-line.mjs` (fachada, painel e as duas pastas de fixtures) têm o sha256 LF `95d2962a…557d` do desenho.
+  - Contagem: `server/` 6075, `agent/` 145, 76 nas duas.
 
 ## Aviso: o servidor no ar não mudou
 

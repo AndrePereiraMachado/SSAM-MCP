@@ -825,3 +825,57 @@ test('machine alert: the first machine is recorded, another one still connects a
     assert.equal((await agentOf(base, t.agentCredential).hello(helloOf())).status, 200, 'an agent without machine (older pack) passes');
   } finally { await handle.close(); }
 });
+
+// Quality (docs/QUALIDADE.md, design ssam-quality/1 2.7 and 3.4): every settled call reaches onCallSettled (wired by
+// http-server.mjs to the recorder's agentSpan) with its kind, its protocol verb (the bridge method, the pipe command), when
+// it started, how long it took, its outcome, the bytes it moved when known and the tool call that made it (the
+// quality-meter call context; null for a call made outside one, as the O11 relay's). Never an argument or a value.
+test('quality: a settled call reports kind, verb, times, outcome, size and the tool call that made it; the log names the pipe command', async () => {
+  const { withCall } = await import('../quality-meter.mjs');
+  const spans = [];
+  const quality = { agentSpan: span => spans.push(span), arrived() {}, flushed() {}, sessionOpened() {}, sessionClosed() {}, callStarted() {}, callCancelled() {}, callAnswered() {} };
+  const { handle, store, base, events } = await start({}, { quality });
+  try {
+    const t = store.issue({ customer: 'Qualidade' });
+    const a = agentOf(base, t.agentCredential);
+    await a.hello();
+    const s = await a.stream();
+    const link = handle.hub.link(t.id);
+    const key = 'mcp-session\u0000"7"';
+    const pipe = withCall(key, () => link.call('odc.pipe', { args: ['snapshot', 'SntlModuloQx7'], version: 'v35' }));
+    const bridge = link.call('o11.bridge', { method: 'open_module', params: { module: 'SntlModuloQx7' } }).then(() => null, error => error);
+    const put = withCall(key, () => link.call('file.put', { path: 'agent:odc/sntl.oml', blob: { transfer: 'a'.repeat(32), sha256: 'b'.repeat(64), size: 1234, parts: 1 } }));
+    const get = withCall(key, () => link.call('file.get', { path: 'agent:inbox/sntl.json' }));
+    const calls = [];
+    for (let i = 0; i < 4; i++) calls.push(await s.lines.next(m => m.t === 'call'));
+    const of = kind => calls.find(c => c.kind === kind);
+    await sleep(20);
+    assert.equal(await a.post([
+      { t: 'accepted', id: of('odc.pipe').id }, { t: 'result', id: of('odc.pipe').id, ok: true, value: { ok: true, path: 'C:\\sntl\\x.oml' } },
+      { t: 'result', id: of('o11.bridge').id, ok: false, error: { code: 'BRIDGE_ERROR', message: 'sntl message', executed: true } },
+      { t: 'result', id: of('file.put').id, ok: true, value: { path: 'agent:odc/sntl.oml' } },
+      { t: 'result', id: of('file.get').id, ok: true, value: { path: 'agent:inbox/sntl.json', blob: { transfer: 'c'.repeat(32), sha256: 'd'.repeat(64), size: 4567, parts: 1 } } }]), 204);
+    await pipe; await put; await get;
+    assert.equal((await bridge)?.code, 'BRIDGE_ERROR');
+    const byKind = Object.fromEntries(spans.map(sp => [sp.kind, sp]));
+    assert.deepEqual(Object.keys(byKind).sort(), ['file.get', 'file.put', 'o11.bridge', 'odc.pipe']);
+    for (const sp of spans) {
+      assert.equal(sp.tokenId, t.id);
+      assert.ok(Number.isFinite(sp.startMs) && Math.abs(sp.startMs - Date.now()) < 60000, 'epoch start');
+      assert.ok(Number.isFinite(sp.ms) && sp.ms >= 15, 'the time until it settled');
+    }
+    assert.deepEqual({ ...byKind['odc.pipe'], startMs: 0, ms: 0 }, { tokenId: t.id, kind: 'odc.pipe', verb: 'snapshot', startMs: 0, ms: 0, ok: true, code: null, callKey: key });
+    assert.deepEqual({ ...byKind['o11.bridge'], startMs: 0, ms: 0 }, { tokenId: t.id, kind: 'o11.bridge', verb: 'open_module', startMs: 0, ms: 0, ok: false, code: 'BRIDGE_ERROR', callKey: null });
+    assert.equal(byKind['file.put'].bytes, 1234); assert.equal(byKind['file.put'].callKey, key); assert.equal(byKind['file.put'].verb, null);
+    assert.equal(byKind['file.get'].bytes, 4567);
+    assert.ok(events.some(e => e.event === 'agent-call' && e.kind === 'odc.pipe' && e.command === 'snapshot'), 'the log names the pipe command');
+    assert.ok(!JSON.stringify(spans).includes('sntl') && !JSON.stringify(spans).includes('Sntl'), 'no argument or value in a span');
+    assert.ok(!JSON.stringify(events.filter(e => e.event === 'agent-call')).toLowerCase().includes('sntl'), 'nor in the log line');
+    // A failure before any answer (the deadline) is reported too, with its code.
+    const late = withCall(key, () => link.call('studio.processes', {}, { timeoutMs: 100 }));
+    await assert.rejects(late, e => e.code === 'AGENT_TIMEOUT');
+    const timeout = spans.find(sp => sp.kind === 'studio.processes');
+    assert.deepEqual([timeout.ok, timeout.code, timeout.callKey], [false, 'AGENT_TIMEOUT', key]);
+    s.lines.cancel();
+  } finally { await handle.close(); }
+});

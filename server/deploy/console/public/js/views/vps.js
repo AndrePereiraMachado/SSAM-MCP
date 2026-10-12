@@ -207,6 +207,7 @@ export function serverRows(srv) {
       label: 'Auditoria',
       value: `${F.plural(logs.auditFiles ?? 0, 'arquivo', 'arquivos')} · ${F.fmtBytes(logs.auditB ?? 0)}${logs.consoleAuditB != null ? ` · histórico do painel ${F.fmtBytes(logs.consoleAuditB)}` : ''}`,
     },
+    { label: 'Registros de qualidade', value: `${F.plural(logs.qualityFiles ?? 0, 'arquivo', 'arquivos')} · ${F.fmtBytes(logs.qualityB ?? 0)}` },
   ];
 }
 

@@ -26,6 +26,8 @@ Para saber quem usa cada acesso e de onde, o servidor guarda no log dele, em cad
 
 Nada além disso sobre a sua máquina é enviado: nenhum arquivo, nenhum histórico, nenhum outro programa. Esses registros servem só para o dono confirmar que o acesso está sendo usado por você, na sua máquina. Ficam no servidor dele e não são repassados a terceiros. Se você não concordar, não instale o agente e fale com o dono.
 
+**Registro de qualidade.** Para melhorar o SSAM, o servidor também guarda, de cada chamada de ferramenta, só códigos, contagens e tempos: a ferramenta, o resultado (`entregue` ou o código da recusa), quantos problemas de cada código uma recusa trouxe, quantas correções automáticas de cada regra o motor fez, quanto tempo levou cada fase da entrega (fila, captura, compilação, Studio, transferência) e o intervalo entre uma resposta e a chamada seguinte. Nada do seu trabalho entra nesse registro: nenhum nome de módulo, tela, action ou entidade, nenhum job, expressão, mensagem, caminho de arquivo, endereço de ambiente ou texto seu. O dono vê esses números por cliente e somados de todos os clientes, para achar os erros mais comuns e o que deixa o SSAM lento. Eles ficam no servidor dele, com a mesma retenção da auditoria, e não são repassados a terceiros.
+
 ## O que você recebe do dono do servidor
 
 | Item | Para quê |

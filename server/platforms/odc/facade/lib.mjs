@@ -19,6 +19,7 @@ import { readLocalSettings, withLocalTenant } from './local-settings.mjs';
 import { LocalExecutor, bridgeClientPath, contextLost, currentExecutor, hostedContext, hostedSpawnEnv, servedWithoutContext, usesWorkspace,
   workspacePath } from './executor.mjs';
 import { resolveOpenModule } from './studio-module.mjs';
+import { kernelStart } from './quality-meter.mjs';
 export { headlessDebug } from './debug-runtime.mjs';
 
 const run = promisify(execFile);
@@ -446,12 +447,20 @@ export async function prepareManifest({ base, candidate, output, feature, owners
   const args = ['--base', path.resolve(data, base), '--candidate', path.resolve(data, candidate),
     '--output', path.resolve(data, output), '--feature', feature, '--owners', JSON.stringify(owners), '--changes', JSON.stringify(changes)];
   const resident = deps.resident !== undefined ? deps.resident : residentBuilder;
-  if (resident) {
-    let served = null;
-    try { served = await resident(args); } catch { served = null; }
-    if (served?.used) return served.value;
-  }
-  return (deps.builder ?? builder)(['manifest', ...args]);
+  // Quality (docs/QUALIDADE.md): the manifest builder is a kernel leaf, resident or cold (a miss of the resident one and its
+  // cold run are one span); a no-op outside a hosted call.
+  const end = kernelStart({ lane: 'odc', via: 'cold' });
+  let via = 'cold', ok = false;
+  try {
+    if (resident) {
+      let served = null;
+      try { served = await resident(args); } catch { served = null; }
+      if (served?.used) { via = 'resident'; ok = served.value?.ok !== false; return served.value; }
+    }
+    const built = await (deps.builder ?? builder)(['manifest', ...args]);
+    ok = built?.ok === true;
+    return built;
+  } finally { end({ via, ok }); }
 }
 // C04: a delivery whose job has html ops gets preview.html in its evidence: the same markup the kernel turned into widgets,
 // with the job's own CSS (preview/fragment.mjs), to open in a browser; hosted, the page also goes to the agent's copy of

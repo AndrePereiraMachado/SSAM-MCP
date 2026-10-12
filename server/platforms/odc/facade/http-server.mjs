@@ -15,6 +15,9 @@
 //     credential never opens /mcp, an MCP token never opens /agent.
 //   - Audit: one JSON line per tool call (time, token id, customer, tool, duration, ok/error code), never the
 //     arguments nor the results. Rate limit per token with 429.
+//   - Quality (docs/QUALIDADE.md): with a recorder (quality-recorder.mjs, hosted mode only) one line of codes, counts and
+//     times per tool call, written at the instant of the audit line, and one per MCP session opened and closed. Every
+//     hook is wrapped: the recorder never changes a request, an answer or the audit.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -60,7 +63,9 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
   ratePerMinute = DEFAULTS.ratePerMinute, maxSessionsPerToken = DEFAULTS.maxSessionsPerToken, maxBodyBytes = DEFAULTS.maxBodyBytes,
   idleMs = DEFAULTS.idleMs, sweepMs = DEFAULTS.sweepMs, keepaliveMs = DEFAULTS.keepaliveMs, log: sink = () => {}, now = () => new Date(),
   // observeCall(params, session) -> {finish(response)} | null: the friction record of stdio (facade/friction-boundary.mjs), per call.
-  observeCall = null } = {}) {
+  observeCall = null,
+  // quality: a recorder (quality-recorder.mjs) or null (records nothing; --local-studios never passes one).
+  quality = null } = {}) {
   if (typeof createServer !== 'function') throw new Error('createServer is required');
   if (!dir) throw new Error('dir is required');
   const hosts = [...new Set((publicHosts ?? []).map(h => String(h).toLowerCase()))];
@@ -77,12 +82,12 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
     try { fs.appendFileSync(logFile, JSON.stringify({ time: now().toISOString(), ...event }) + '\n'); } catch { /* the log never stops the server */ }
   };
   const store = createTokenStore(dir, { now });
-  const hub = agents ? createAgentHub({ dir, store, kernel: agents.kernel, log, now, limits: agents.limits }) : null;
+  const hub = agents ? createAgentHub({ dir, store, kernel: agents.kernel, log, now, limits: agents.limits,
+    onCallSettled: quality ? span => quality.agentSpan(span) : null }) : null;
   const sessions = new Map(); // sid -> {tokenId, customer, served, server, transport, responses:Set, lastSeen, closing}
   const windows = new Map();  // tokenId -> {start, count}
 
-  const audit = entry => {
-    const time = now();
+  const audit = (entry, time = now()) => {
     const file = path.join(dir, 'audit-' + time.toISOString().slice(0, 10).replaceAll('-', '') + '.jsonl');
     try { fs.appendFileSync(file, JSON.stringify({ time: time.toISOString(), ...entry }) + '\n'); }
     catch (error) { log({ event: 'audit-failed', error: error.code ?? 'EIO' }); }
@@ -93,6 +98,7 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
     if (!session || session.closing) return;
     session.closing = true;
     sessions.delete(sid);
+    try { quality?.sessionClosed(sid, session, reason); } catch { /* the record never changes the close */ }
     log({ event: 'session-closed', session: sid, token: session.tokenId, reason });
     try { await session.server.close(); } catch { /* already closed */ }
     for (const res of session.responses) res.destroy();
@@ -141,17 +147,18 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
   }
 
   // node:http -> Web Request -> transport -> Web Response -> node:http. The Authorization header never reaches the transport.
-  async function relay(session, req, res, body, parsedBody) {
+  async function relay(session, req, res, body, parsedBody, arrivedAt = Date.now()) {
     // C03: when the answer of a tool call left this server (the last byte written to the socket), with its time since the
     // request arrived: a client that waited 60 s for an answer the server flushed at once points at the tunnel, not here.
     const started = performance.now();
     const calls = [parsedBody].flat().filter(m => m?.method === 'tools/call').map(m => toolName(m.params?.name));
     let bytes = 0;
-    const flushed = () => { if (calls.length) log({ event: 'mcp-response-flushed', session: req.headers['mcp-session-id'] ?? null, token: session.tokenId, tools: calls, bytes, ms: Math.round(performance.now() - started) }); };
+    const flushed = () => { try { quality?.flushed(session, parsedBody); } catch { /* idem */ } if (calls.length) log({ event: 'mcp-response-flushed', session: req.headers['mcp-session-id'] ?? null, token: session.tokenId, tools: calls, bytes, ms: Math.round(performance.now() - started) }); };
     const headers = new Headers();
     for (const [k, v] of Object.entries(req.headers)) if (k !== 'authorization') for (const x of [v].flat()) headers.append(k, x);
     const request = new Request('http://' + (req.headers.host ?? 'localhost') + req.url, {
       method: req.method, headers, ...(body && body.length && req.method === 'POST' ? { body } : {}) });
+    try { quality?.arrived(session, parsedBody, arrivedAt, body?.length); } catch { /* the record never changes the request */ }
     const response = await session.transport.handleRequest(request, parsedBody !== undefined ? { parsedBody } : undefined);
     res.writeHead(response.status, Object.fromEntries(response.headers.entries()));
     if (!response.body) { res.end(flushed); return; }
@@ -193,30 +200,37 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
       client: info ? (String(info.name ?? '') + ' ' + String(info.version ?? '')).trim().slice(0, 80) : null };
   }
 
-  async function openSession(auth, access = {}) {
+  async function openSession(auth, access = {}, clientName = null) {
     const pending = new Map(); // JSON-RPC id -> {tool, start}
     let sid;
     const served = { tokenId: auth.id, customer: auth.customer, lanes: auth.lanes ?? [], workspace: path.join(dir, 'customers', auth.id),
       agent: hub ? hub.link(auth.id) : null };
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
-      onsessioninitialized: id => { sid = id; sessions.set(id, session); log({ event: 'session-opened', session: id, token: auth.id, customer: auth.customer, ...access }); },
+      onsessioninitialized: id => {
+        sid = id; sessions.set(id, session); log({ event: 'session-opened', session: id, token: auth.id, customer: auth.customer, ...access });
+        try { quality?.sessionOpened(id, session, clientName); } catch { /* the record never changes the session */ }
+      },
       onsessionclosed: id => { setImmediate(() => closeSession(id, 'client-delete')); },
     });
     const session = { tokenId: auth.id, customer: auth.customer, served, transport, server: null, responses: new Set(), lastSeen: Date.now(), closing: false };
     // Audit hooks, set before connect (Protocol.connect chains them): the request names the tool, the response its outcome.
     transport.onmessage = message => {
+      if (quality && message?.method === 'notifications/cancelled') { try { quality.callCancelled(sid, message.params?.requestId); } catch { /* idem */ } }
       if (message?.method !== 'tools/call' || message.id === undefined) return;
       let observer = null;
       try { observer = observeCall?.(message.params ?? {}, served) ?? null; } catch { /* the observer never changes the call */ }
       pending.set(message.id, { tool: toolName(message.params?.name), start: performance.now(), observer });
+      try { quality?.callStarted(sid, message); } catch { /* the record never changes the call */ }
     };
     transport.onclose = () => { if (sid) closeSession(sid, 'transport-closed'); };
     const send = transport.send.bind(transport);
     transport.send = (message, options) => {
       if (message && message.id !== undefined && pending.has(message.id) && ('result' in message || 'error' in message)) {
         const call = pending.get(message.id); pending.delete(message.id);
-        audit({ token: auth.id, customer: auth.customer, tool: call.tool, ms: Math.round(performance.now() - call.start), ...outcomeOf(message) });
+        const ms = Math.round(performance.now() - call.start), outcome = outcomeOf(message), time = now();
+        audit({ token: auth.id, customer: auth.customer, tool: call.tool, ms, ...outcome }, time);
+        try { quality?.callAnswered(sid, message, { ms, outcome, time }); } catch { /* the record never changes the answer */ }
         try { call.observer?.finish(message); } catch { /* idem */ }
       }
       return send(message, options);
@@ -227,6 +241,7 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
   }
 
   async function handle(req, res) {
+    const arrivedAt = Date.now();
     const actualPort = server.address().port;
     const url = new URL(req.url, 'http://localhost');
     // Routing reads the raw path: no percent-decoding and no dot-segment folding decides where a request goes.
@@ -267,7 +282,7 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
       // A session of another token is as unknown as one that never existed.
       if (!session || session.tokenId !== auth.id) return jsonError(res, 404, -32001, 'Session not found');
       session.lastSeen = Date.now();
-      return relay(session, req, res, read.body, parsedBody);
+      return relay(session, req, res, read.body, parsedBody, arrivedAt);
     }
     const initialize = [parsedBody].flat().some(m => m?.method === 'initialize');
     if (req.method !== 'POST' || !initialize) return jsonError(res, 400, -32000, 'Bad Request: no session id; start with initialize');
@@ -278,8 +293,8 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
       if (!stale) return jsonError(res, 429, -32029, 'Too many open sessions for this token (' + maxSessionsPerToken + ')');
       await closeSession(stale[0], 'replaced');
     }
-    const session = await openSession(auth, accessOf(req, parsedBody));
-    await relay(session, req, res, read.body, parsedBody);
+    const session = await openSession(auth, accessOf(req, parsedBody), [parsedBody].flat().find(m => m?.method === 'initialize')?.params?.clientInfo?.name ?? null);
+    await relay(session, req, res, read.body, parsedBody, arrivedAt);
     // An initialize the transport refused never became a session: its server is released at once.
     if (![...sessions.values()].includes(session)) await session.server.close().catch(() => {});
   }

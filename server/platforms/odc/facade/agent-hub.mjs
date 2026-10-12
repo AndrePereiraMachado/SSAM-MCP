@@ -18,11 +18,15 @@
 //     its Hello instead of failing at once (then AGENT_RECONNECTING with retryAfterSeconds); a POST that left on the previous
 //     channel of the same instance is still taken. deadAfterMs (45 s) stays above the agent's longest POST of messages
 //     (agent/lib/channel.mjs: 10 s plus 1 s per 64 KiB, 26 s for a full batch), and a pong travels in a POST of its own.
+//   - Quality (docs/QUALIDADE.md): a pending call keeps the tool call that made it (quality-meter.mjs currentCall(); null
+//     from the relay socket) and every settled call is reported to onCallSettled {tokenId, kind, verb, startMs, ms, ok,
+//     code, bytes?, callKey}: protocol verbs, times and sizes, never arguments or values.
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { AGENT_PREFIX } from './server-tokens.mjs';
 import { spawn } from 'node:child_process';
+import { currentCall } from './quality-meter.mjs';
 
 // A Windows balloon on the server machine (owner test, 2026-10-08); off with SSAM_ACCESS_NOTIFY=0, never fails a call.
 function notifyOwner(title, text) {
@@ -55,10 +59,17 @@ const INSTANCE = /^[A-Za-z0-9-]{1,64}$/;
 const CODE = /^[A-Z][A-Z0-9_]{1,63}$/;
 const sha256Of = bytes => createHash('sha256').update(bytes).digest('hex');
 // prazos B: the bridge method of an o11.bridge call and the operation of an environment_session, only when they are verbs.
+// Quality (2.7): the command of an odc.pipe call (params.args[0]), only when it is a verb.
 const VERB = /^[a-z][a-z0-9_-]{0,47}$/;
-export const callVerbs = (kind, params) => kind !== 'o11.bridge' || !params ? {} : {
+export const callVerbs = (kind, params) => !params ? {}
+  : kind === 'odc.pipe' ? (VERB.test(String(Array.isArray(params.args) ? params.args[0] ?? '' : '')) ? { command: params.args[0] } : {})
+  : kind !== 'o11.bridge' ? {} : {
   ...(VERB.test(String(params.method ?? '')) ? { method: params.method } : {}),
   ...(params.method === 'environment_session' && VERB.test(String(params.operation ?? '')) ? { operation: params.operation } : {}) };
+// The bytes a call moves when they are known before it runs: the file of a file.put, the files of a file.sync, a params blob.
+const sizeOf = ref => (Number.isFinite(ref?.size) && ref.size > 0 ? ref.size : 0);
+const bytesDown = (kind, params, blob) => sizeOf(blob?.ref) + (kind === 'file.put' ? sizeOf(params?.blob)
+  : kind === 'file.sync' && Array.isArray(params?.files) ? params.files.reduce((s, f) => s + sizeOf(f?.blob), 0) : 0);
 // The public address a request came from: the first X-Forwarded-For hop (Caddy sets it), else the socket's.
 const addressOf = req => (String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() || req.socket?.remoteAddress || '').slice(0, 64);
 // The exit of the customer's internet an address stands for, as the doctor shows it (fase4-24, 2.10): an IPv4 address
@@ -178,7 +189,7 @@ async function hashFile(file) {
   return hash.digest('hex');
 }
 
-export function createAgentHub({ dir, store, kernel, log = () => {}, now = () => new Date(), limits: overrides = {} } = {}) {
+export function createAgentHub({ dir, store, kernel, log = () => {}, now = () => new Date(), limits: overrides = {}, onCallSettled = null } = {}) {
   if (!dir) throw new Error('dir is required');
   if (!store?.verifyAgent || !store?.lookup) throw new Error('store with verifyAgent and lookup is required');
   const limits = { ...LIMITS, ...overrides };
@@ -260,7 +271,13 @@ export function createAgentHub({ dir, store, kernel, log = () => {}, now = () =>
     state.pending.delete(pending.id);
     clearTimeout(pending.timer); clearTimeout(pending.acceptTimer);
     if (pending.blob) dropTransfer(state, pending.blob);
-    log({ event: 'agent-call', token: state.tokenId, kind: pending.kind, ...callVerbs(pending.kind, pending.params), ms: nowMs() - pending.startedAt, ...outcome });
+    const verbs = callVerbs(pending.kind, pending.params);
+    const ms = nowMs() - pending.startedAt;
+    log({ event: 'agent-call', token: state.tokenId, kind: pending.kind, ...verbs, ms, ...outcome });
+    try {
+      onCallSettled?.({ tokenId: state.tokenId, kind: pending.kind, verb: verbs.method ?? verbs.command ?? null, startMs: pending.startedAt, ms, ok: outcome.ok !== false,
+        code: outcome.code ?? null, ...(pending.bytes ? { bytes: pending.bytes } : {}), callKey: pending.callKey ?? null });
+    } catch { /* the quality record never changes a call */ }
     return true;
   }
   // Never written to a stream: nothing can have run (executed:false). Written: the outcome is unknown (executed:null).
@@ -418,7 +435,8 @@ export function createAgentHub({ dir, store, kernel, log = () => {}, now = () =>
         }
         return new Promise((resolve, reject) => {
           const pending = { id, kind, line, written: false, accepted: false, blob, resolve, reject, timer: null, acceptTimer: null, deadline, graced: false, startedAt: nowMs(),
-            params: kind === 'o11.bridge' ? { method: params?.method, operation: params?.params?.operation } : null };
+            params: kind === 'o11.bridge' ? { method: params?.method, operation: params?.params?.operation } : kind === 'odc.pipe' ? { args: [params?.args?.[0]] } : null,
+            callKey: currentCall(), bytes: bytesDown(kind, params, blob) };
           pending.timer = setTimeout(() => fail(state, pending, 'AGENT_TIMEOUT', 'The agent did not answer ' + kind + ' before the deadline.'),
             Math.min(2147483647, Math.max(0, deadline - nowMs())));
           state.pending.set(id, pending);
@@ -566,6 +584,8 @@ export function createAgentHub({ dir, store, kernel, log = () => {}, now = () =>
     }
     pending.written = true;
     if (m.t === 'accepted') { pending.accepted = true; clearTimeout(pending.acceptTimer); return; }
+    // What came back up, when its size is known: the file of a file.get, a value blob.
+    if (m.ok === true) pending.bytes = (pending.bytes ?? 0) + sizeOf(m.valueBlob) + (pending.kind === 'file.get' ? sizeOf(m.value?.blob) : 0);
     if (!settle(state, pending, m.ok === true ? { ok: true } : { ok: false, code: typeof m.error?.code === 'string' && CODE.test(m.error.code) ? m.error.code : 'AGENT_ERROR' })) return;
     if (m.ok === true) {
       if (m.valueBlob === undefined) { pending.resolve(m.value); return; }

@@ -907,8 +907,9 @@ try {
       JSON.stringify(now) === JSON.stringify(before[key]) ? '' : { changed: changed.slice(0, 12), count: changed.length });
   }
   // machine-pins.json and access-alerts.jsonl: the access trail of each token (agent-hub.mjs), as hosted-e2e.test.mjs allows.
-  const top = fs.readdirSync(serverDir).filter(name => !['customers', 'tokens.json', 'kernel.json', 'server.log', 'server.pid', 'server.json', 'machine-pins.json', 'access-alerts.jsonl'].includes(name) && !/^audit-\d{8}\.jsonl$/.test(name));
-  check('the server folder holds only tokens, kernel.json, servidor.ps1 files, audit, the access trail and customers', top.length === 0, top);
+  // The quality record (docs/QUALIDADE.md) lives beside the audit.
+  const top = fs.readdirSync(serverDir).filter(name => !['customers', 'tokens.json', 'kernel.json', 'server.log', 'server.pid', 'server.json', 'machine-pins.json', 'access-alerts.jsonl'].includes(name) && !/^(audit|quality)-\d{8}\.jsonl$/.test(name));
+  check('the server folder holds only tokens, kernel.json, servidor.ps1 files, audit, quality, the access trail and customers', top.length === 0, top);
   const logs = fs.readdirSync(serverDir).filter(n => n.endsWith('.log') || n.endsWith('.jsonl')).map(n => fs.readFileSync(path.join(serverDir, n), 'utf8')).join('\n');
   check('server.log and audit carry no token or agent credential', ![issued.a, issued.b, issued.c].some(x => logs.includes(x.token) || logs.includes(x.credential)));
   check('the customer workspaces are separate folders', fs.existsSync(issued.a.workspace) && fs.existsSync(issued.b.workspace) && !fs.existsSync(path.join(issued.b.workspace, 'odc', 'lab', 'Candidate.oml')));

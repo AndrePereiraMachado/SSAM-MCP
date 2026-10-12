@@ -179,6 +179,7 @@ test('VPS: the key-value texts of 6.5 from the normal host.json facts', () => {
   assert.equal(srv.Aquecimento, 'ok em 148 s · índices ODC e O11 ok · builder ok · worker ODC falhou e subiu depois');
   assert.equal(srv['/health'], 'ok em 3 ms · Docker: saudável');
   assert.equal(srv['server.log'], '7,2 KiB · 0 girados');
+  assert.equal(srv['Registros de qualidade'], '7 arquivos · 40 KiB');
   const bk = vps.backupRows(d.backups, NOW);
   assert.equal(bk[0].value, 'nenhum');
   assert.equal(bk[0].level, 'bad');

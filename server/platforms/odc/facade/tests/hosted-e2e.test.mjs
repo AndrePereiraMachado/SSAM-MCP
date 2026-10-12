@@ -243,6 +243,8 @@ test('hosted end to end: agent, ws: paths, O11 relay, refusals, protocol violati
   // Nothing written outside customers/<tokenId> (and the server's own files).
   for (const [key, take] of Object.entries(guarded)) assert.deepEqual(take(), before[key], key + ' unchanged');
   assert.deepEqual(leaked(), [], 'no file of this run outside the workspace');
-  const top = fs.readdirSync(dir).filter(name => !['customers', 'tokens.json', 'kernel.json', 'machine-pins.json', 'access-alerts.jsonl'].includes(name) && !/^audit-\d{8}\.jsonl$/.test(name) && !/^tokens\.json\..*\.tmp$/.test(name));
-  assert.deepEqual(top, [], 'the server folder holds only tokens, kernel.json, machine pins, audit and customers');
+  // The quality record (docs/QUALIDADE.md) lives beside the audit: codes, counts and times, never this run's module name.
+  const top = fs.readdirSync(dir).filter(name => !['customers', 'tokens.json', 'kernel.json', 'machine-pins.json', 'access-alerts.jsonl'].includes(name) && !/^(audit|quality)-\d{8}\.jsonl$/.test(name) && !/^tokens\.json\..*\.tmp$/.test(name));
+  assert.deepEqual(top, [], 'the server folder holds only tokens, kernel.json, machine pins, audit, quality and customers');
+  for (const name of fs.readdirSync(dir).filter(n => /^quality-\d{8}\.jsonl$/.test(n))) assert.equal(fs.readFileSync(path.join(dir, name), 'utf8').includes(moduleName), false, 'no module name in ' + name);
 });

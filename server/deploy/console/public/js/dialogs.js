@@ -565,7 +565,7 @@ export function createDialogs(ctx) {
   function shortcuts(opener) {
     show(opener);
     const rows = [
-      { label: '1 a 7', value: 'troca de aba (Visão geral … Histórico)' },
+      { label: '1 a 8', value: 'troca de aba (Visão geral … Histórico)' },
       { label: '/', value: 'vai para o filtro da aba' },
       { label: 'r', value: 'atualiza agora' },
       { label: '?', value: 'mostra estes atalhos' },

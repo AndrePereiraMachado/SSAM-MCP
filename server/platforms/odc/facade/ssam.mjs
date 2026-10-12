@@ -46,6 +46,7 @@ import { registerO11Access } from './o11-access.mjs';
 import { registerO11Publish } from './o11-publish.mjs';
 import { registerO11Extension } from './o11-extension.mjs';
 import { readLocalSettings } from './local-settings.mjs';
+import { withCall, noteAnswer } from './quality-meter.mjs';
 import { registerQueryTestTools } from './query-test.mjs';
 
 const print = value => process.stdout.write(JSON.stringify(value, null, 2) + '\n');
@@ -791,7 +792,15 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
     // title when there is one), so the title and annotations.title are the name.
     config = { ...config, title: name, ...(config?.annotations ? { annotations: { ...config.annotations, title: name } } : {}) };
     served.add(name);
-    const shaped = async (...params) => {
+    // Quality (docs/QUALIDADE.md), hosted only: the body runs in the call context of quality-meter.mjs under the key the
+    // HTTP server opened for this request (MCP session id + JSON-RPC id), so every agent call and kernel run it makes is
+    // charged to it; the shaped answer is summarized there before paging (only codes and counts are kept).
+    const shaped = (...params) => {
+      const ctx = params.at(-1);
+      const key = hosted && typeof ctx?.sessionId === 'string' && ctx.mcpReq?.id !== undefined ? ctx.sessionId + '\u0000' + JSON.stringify(ctx.mcpReq.id) : null;
+      return key ? withCall(key, () => shapedCall(key, params)) : shapedCall(null, params);
+    };
+    const shapedCall = async (qualityKey, params) => {
       const hasArgs = Boolean(config?.inputSchema) && params.length > 1;
       const ctx = params.at(-1);
       if (hasArgs && name !== 'ssam_evidence') params[0] = clampBudget(params[0] ?? {}, maxBytes);
@@ -824,6 +833,7 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
       if (bounded && result?.ok === false && !result.content) result = reply(result);
       if (result?.resultType === 'input_required') return result;
       const answer = shapeToolResult(name, args, result, { lane });
+      if (qualityKey) { try { noteAnswer(qualityKey, name, args, answer); } catch { /* the record never changes an answer */ } }
       return name === 'ssam_evidence' ? answer : pageAnswer(answer, { directory: answersDirectory(), maxBytes });
     };
     // R1: the gate reads argsOf, so what it confines is what the tool runs.
@@ -1203,6 +1213,8 @@ export const customerFrictionDirectory = workspace => path.join(workspace, '.loc
 //     customer. The process default is the DenyExecutor: code that loses the context fails closed, never on the
 //     Studios of this machine.
 //   - --local-studios: phase 1, the tools drive the Studios of this machine's owner (loopback only, agents:false).
+//   - Quality (docs/QUALIDADE.md): hosted only, a recorder writes <dir>/quality-YYYYMMDD.jsonl (codes, counts and times per
+//     tool call and per MCP session); SSAM_QUALITY=0 (read once here) turns it off. --local-studios and stdio never record.
 export async function runServed(args) {
   const { startHttpServer, parseServeArguments } = await import('./http-server.mjs');
   const { serverDir } = await import('./server-tokens.mjs');
@@ -1283,10 +1295,24 @@ export async function runServed(args) {
     return server;
   };
   const observeCall = (params, session) => session?.workspace ? observer(storeOf(session.workspace))(params) : null;
-  const handle = served(await startHttpServer({ ...options, agents: { kernel }, dir, createServer, observeCall, log }));
+  const quality = await qualityRecorder({ dir, log });
+  const handle = served(await startHttpServer({ ...options, agents: { kernel }, dir, createServer, observeCall, log, quality }));
   // The server's own warm-up (outside any customer context): discover indexes and the ODC delivery processes.
   scheduleWarm({ lanes: ['odc', 'o11'].filter(l => lanes[l] !== false), warm: ({ lanes: warmLanes }) => warmServer({ lanes: warmLanes, log }) });
   return handle;
+}
+
+// The quality recorder of the hosted server, or null with SSAM_QUALITY=0. The native verify ids come from the kernel's own
+// catalogs (<kernel>/catalog: the image keeps them), the tool names and lanes from hosted/tools.json. Logs once
+// {event:"quality", on, nativeIds}.
+export async function qualityRecorder({ dir, log, env = process.env, catalogDir = path.join(anvilRoot, 'catalog') }) {
+  if (env.SSAM_QUALITY === '0') { log({ event: 'quality', on: false, nativeIds: 0 }); return null; }
+  const [{ createQualityRecorder }, { loadNativeIds }, { hostedTools }] = await Promise.all([import('./quality-recorder.mjs'), import('./quality-line.mjs'), import('./hosted/policy.mjs')]);
+  const nativeIds = loadNativeIds(catalogDir, { readDir: fs.readdirSync, readFile: fs.readFileSync, join: path.join });
+  const catalog = hostedTools();
+  const quality = createQualityRecorder({ dir, log, nativeIds, tools: Object.keys(catalog), lanes: Object.fromEntries(Object.entries(catalog).map(([name, entry]) => [name, entry?.lane ?? null])) });
+  log({ event: 'quality', on: true, nativeIds: nativeIds.size });
+  return quality;
 }
 
 export async function dispatchDebugRunCli(args, explicit, options) {
