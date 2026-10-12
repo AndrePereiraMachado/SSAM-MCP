@@ -1,7 +1,8 @@
 // ssam_debug_run / `ssam debug run`: run an ODC or O11 action with chosen inputs and native app identity.
 // execution=native-entry (both lanes, the path for new work) is dispatched at the end of this file: the code resolves the
-// nearest public entry deterministically and publishes nothing. What follows first is the LEGACY ODC REST wrapper path,
-// kept as it was and not extended:
+// nearest public entry deterministically and publishes nothing. What follows first is the LEGACY ODC REST wrapper path
+// (debug-adapter-registry: interactive 'legacy'; not interactive, live identity combination unproven, not counted in the
+// debugger matrix; only release/reconcile of old leases), kept as it was and not extended:
 // 1. The published revision is downloaded through the public API (no Studio) and the action is read from it.
 // 2. The SSAM Debug REST wrapper (debug-wrapper.mjs) is added by the kernel, uploaded as a new revision with
 //    a unique "SSAM Debug REST Create" comment carrying operationId/source hashes and published to Development.
@@ -21,6 +22,10 @@ import { entryChain } from './debug-entry.mjs';
 import { prepareDebugAppUser, releaseDebugAppUser, appUserWorker, appUserSummary } from './debug-app-user.mjs';
 import { o11RunSchema } from './debug-o11-run.mjs';
 import { DIAGNOSTICS_RULE, signInFailureOf, withSignInFailure } from './debug-guidance.mjs';
+import { nativeScreenContextSchema } from './debug-native-context-schema.mjs';
+import { legacyNotice, legacyPrefix } from './debug-adapter-registry.mjs';
+import { inputCapabilities } from './debug-input-capabilities.mjs';
+import { roleCyclePending, ROLE_CYCLE_UNAVAILABLE } from './debug-foreign-pending.mjs';
 
 const root = path.join(workspaceRoot, '.local', 'debugger', 'wrappers');
 const NAME = /^[A-Za-z_][A-Za-z0-9_]{0,120}$/, KEY = /^[A-Za-z0-9_+]{22}$/;
@@ -68,9 +73,20 @@ export const debugRunSchema = z.union([runSchema, o11RunSchema.safeExtend({ lane
 // without defaults. debugRun then parses the strict lane schema above, which applies the defaults of the chosen lane
 // (ODC keep=true, O11 keep=false) and refuses every field or combination outside it.
 const looseScenario = z.object({ name: z.string().max(80).optional(), inputs: z.record(z.string().regex(NAME), z.json()).optional(), trace: z.boolean().optional(),
+  context: nativeScreenContextSchema.optional(),
   as: z.object({ user: z.string().max(200).nullable().optional(), roles: z.record(z.string().regex(NAME), z.boolean()).optional() }).strict().optional() }).strict();
+// Coordinator-only run fields (ODC): the server/client session starts consume them; ssam_debug_run itself refuses roleCycle.
+const roleCycleSchema = z.object({ roleKey: z.uuid(), words: z.string().trim().min(8).max(500) }).strict();
+const navigateSchema = z.object({ screen: z.string().regex(/^@[A-Za-z0-9_+]{22}$/), back: z.literal(true) }).strict();
+// ODC lifecycle 'mounted' only: one trusted CDP click per entry in the SSAM-owned headless page, after the lifecycle settles.
+const interactionsSchema = z.array(z.object({ target: z.string().regex(/^@[A-Za-z0-9_+]{22}$|^[A-Za-z_][A-Za-z0-9_]{0,120}$/), event: z.literal('click') }).strict()).min(1).max(10);
+// Coordinator-only O11 fields over the (foreign) strict o11RunSchema: the Run Now trigger and the endpoint-credential
+// context reach the native runner only through ssam_debug_server, whose runner takes the parsed request unchanged.
+const o11CoordinatorRunSchema = o11RunSchema.safeExtend({
+  contextMode: z.enum(['app-user', 'anonymous', 'native-background', 'endpoint-credential']).optional(),
+  trigger: z.literal('service-center-run-now').optional() });
 export const debugRunToolSchema = z.object({
-  op: z.enum(['run', 'prepare', 'release', 'status', 'authorize', 'reconcile']),
+  op: z.enum(['run', 'prepare', 'release', 'status', 'authorize', 'reconcile', 'locks']),
   lane: z.enum(['odc', 'o11']).optional(),
   tenant: z.string().min(3).max(200).optional(),
   host: z.string().min(3).max(200).optional(),
@@ -79,11 +95,24 @@ export const debugRunToolSchema = z.object({
   applicationKey: z.string().regex(KEY).optional(),
   runtimeUrl: z.string().url().optional(),
   execution: z.enum(['rest-wrapper', 'native-entry']).optional(),
+  lifecycle: z.enum(['isolated', 'mounted']).optional(),
   nativeEntry: z.object({ sourceContract: z.object({ path: z.string().min(1).max(2000), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict() }).strict().optional(),
   action: z.string().min(1).max(200).optional(),
   operationId: z.uuid().optional(),
   inputs: z.record(z.string().regex(NAME), z.json()).optional(),
+  context: nativeScreenContextSchema.optional(),
   scenarios: z.array(looseScenario).max(50).optional(),
+  contextMode: z.enum(['app-user', 'anonymous', 'native-background', 'endpoint-credential']).optional(),
+  launch: z.object({ inputs: z.record(z.string().regex(NAME), z.json()).optional(),
+    contextMode: z.enum(['app-user', 'anonymous']).optional() }).strict().optional(),
+  // Inside ssam_debug_server start: O11 'service-center-run-now' (one Run Now of a Timer without a REST/SOAP caller);
+  // ODC 'portal-wake' (one original Portal wake of a Timer, no app caller).
+  trigger: z.enum(['service-center-run-now', 'portal-wake']).optional(),
+  // ODC lifecycle 'mounted' only: one original in-app navigation per scenario, then navigateBack.
+  navigate: navigateSchema.optional(),
+  // ODC lifecycle 'mounted' only: one trusted CDP click per entry in the SSAM-owned headless page.
+  interactions: interactionsSchema.optional(),
+  workflow: z.object({ module: z.string().regex(NAME), process: z.string().min(1).max(200).optional() }).strict().optional(),
   // native-entry: none | nodes | full; the legacy wrapper paths take all | none.
   trace: z.enum(['all', 'none', 'nodes', 'full']).optional(),
   // native-entry only: entry is an override that must be a verified caller on the graph (never the model's choice);
@@ -101,6 +130,8 @@ export const debugRunToolSchema = z.object({
   idleMinutes: z.number().int().min(5).max(480).optional(),
   timeoutSeconds: z.number().int().min(5).max(300).optional(),
   words: z.string().min(1).max(2000).optional(),
+  holdBetweenScenarios: z.literal(true).optional(),
+  roleCycle: roleCycleSchema.optional(),
 }).strict();
 
 // Standing authorization for wrapper publications in Development, per tenant, in the user's own words.
@@ -159,14 +190,12 @@ async function actionTree(file, sha, action) {
 
 async function context(input) {
   const portal = await P.connect(input.tenant);
-  const stage = portal.tenant.stages?.Development;
-  if (!stage?.key || !stage?.domain) throw new Error('debug_development_stage_unknown: tenants.json needs stages.Development.key/domain for ' + portal.host);
-  const list = await portal.read('asset-repository-api-v1:get:/assets', { query: { nameContains: input.module, limit: 50 } });
-  const row = (list?.results ?? (Array.isArray(list) ? list : [])).find(a => a.name === input.module);
-  if (!row) throw new Error('debug_asset_not_found: ' + input.module);
-  const assetKey = row.assetKey ?? row.applicationKey ?? row.key; // seen live: {page, results:[{assetKey, name, revision, ...}]}
-  if (!assetKey) throw new Error('debug_asset_key_missing: ' + input.module);
-  return { portal, stage, assetKey, moduleKey: moduleKeyOf(assetKey), runtimeUrl: `https://${stage.domain}/${input.module}/` };
+  const { debugDevelopmentStage, debugAsset, debugApplicationRuntime } = await import('./debug-odc-portal-session.mjs');
+  const stage = await debugDevelopmentStage(portal);
+  const row = await debugAsset(portal, input.module), assetKey = row.assetKey, moduleKey = moduleKeyOf(assetKey);
+  const runtimeUrl = await debugApplicationRuntime(portal, stage, row, moduleKey);
+  if (runtimeUrl && new URL(runtimeUrl).pathname.split('/').filter(Boolean)[0] !== input.module) throw new Error('debug_odc_session_application_name_mismatch');
+  return { portal, stage, assetKey, moduleKey, runtimeUrl };
 }
 
 // Kernel job over a downloaded revision; returns the candidate path (the job never touches a Studio).
@@ -458,59 +487,227 @@ export const nativeEntrySchema = z.object({
   op: z.enum(['prepare', 'run', 'status']),
   lane: z.literal('odc').default('odc'),
   execution: z.literal('native-entry'),
+  lifecycle: z.enum(['isolated', 'mounted']).optional(),
   tenant: z.string().min(3).max(200),
   module: z.string().regex(NAME).optional(),
   action: z.string().min(1).max(200).optional(),
   entry: z.string().min(1).max(200).optional(), // override only; must be a verified caller on the graph
   inputs: z.record(z.string().regex(NAME), z.json()).optional(),
-  scenarios: z.array(z.object({ name: z.string().max(80).optional(), inputs: z.record(z.string().regex(NAME), z.json()).default({}) }).strict()).min(1).max(50).optional(),
+  context: nativeScreenContextSchema.optional(),
+  scenarios: z.array(z.object({ name: z.string().max(80).optional(), inputs: z.record(z.string().regex(NAME), z.json()).default({}),
+    context: nativeScreenContextSchema.optional() }).strict()).min(1).max(50).optional(),
+  contextMode: z.enum(['app-user', 'anonymous', 'native-background', 'endpoint-credential']).optional(),
+  workflow: z.object({ module: z.string().regex(NAME), process: z.string().min(1).max(200).optional() }).strict().optional(),
+  launch: z.object({ inputs: z.record(z.string().regex(NAME), z.json()).default({}),
+    contextMode: z.literal('app-user').default('app-user') }).strict().optional(),
+  // Mounted only: scenarios[].context.screen.inputs are the target screen's inputs, one navigateTo + navigateBack each.
+  navigate: navigateSchema.optional(),
+  // Mounted only: one journaled trusted click per entry after the lifecycle settles (debug-native-browser-interaction.mjs).
+  interactions: interactionsSchema.optional(),
+  // native-background only: the ODC Timer is woken once by the original Portal action (no app caller).
+  trigger: z.literal('portal-wake').optional(),
   trace: z.enum(['none', 'nodes', 'full']).default('none'),
+  depth: z.number().int().min(0).max(4).default(2),
+  words: z.string().trim().min(1).max(2000).optional(),
   window: z.object({ around: z.string().regex(KEY).optional(), before: z.number().int().min(0).max(100).optional(), after: z.number().int().min(1).max(1000).optional() }).strict().optional(),
   acknowledgeEffects: z.array(z.string().max(60)).max(20).optional(),
   timeoutSeconds: z.number().int().min(5).max(300).default(90),
+  // ODC only: the coordinator holds after each answered scenario and renews the native session on resume.
+  holdBetweenScenarios: z.literal(true).optional(),
 }).strict().superRefine((v, ctx) => {
   if (['prepare', 'run'].includes(v.op) && !v.action) ctx.addIssue({ code: 'custom', path: ['action'], message: 'action is required for ' + v.op });
+  if (v.navigate && v.lifecycle !== 'mounted') ctx.addIssue({ code: 'custom', path: ['navigate'], message: 'navigate requires lifecycle mounted (ODC, inside ssam_debug_client start)' });
+  if (v.interactions && v.lifecycle !== 'mounted') ctx.addIssue({ code: 'custom', path: ['interactions'], message: 'interactions require lifecycle mounted (ODC, inside ssam_debug_client start)' });
+  if (v.trigger && (v.contextMode !== 'native-background' || v.lifecycle === 'mounted' || v.launch || v.workflow || v.inputs !== undefined ||
+      v.scenarios !== undefined || v.context !== undefined))
+    ctx.addIssue({ code: 'custom', path: ['trigger'], message: 'portal-wake requires native-background and words; omit launch, workflow, inputs, scenarios and context' });
+  if (v.holdBetweenScenarios && (v.lifecycle === 'mounted' || v.launch || v.workflow || v.contextMode === 'native-background'))
+    ctx.addIssue({ code: 'custom', path: ['holdBetweenScenarios'], message: 'holdBetweenScenarios requires an isolated original-entry run with a server trace' });
   if (!v.module) ctx.addIssue({ code: 'custom', path: ['module'], message: 'module is required for ' + v.op });
   if (v.scenarios?.length && v.inputs) ctx.addIssue({ code: 'custom', path: ['inputs'], message: 'Give either inputs (one scenario) or scenarios (a batch)' });
+  if (v.op === 'run' && v.contextMode === 'native-background' && !v.words)
+    ctx.addIssue({ code: 'custom', path: ['words'], message: 'The user authorization words are required for a native background run' });
+  if (v.workflow && (v.contextMode !== 'native-background' || !v.launch || v.inputs !== undefined || v.scenarios !== undefined || v.context !== undefined))
+    ctx.addIssue({ code: 'custom', path: ['workflow'], message: 'Workflow requires native-background and launch.inputs for the original app-user event emitter; omit target inputs, scenarios and context' });
+  if (v.launch && !v.workflow && (v.contextMode !== 'native-background' || Object.keys(v.launch.inputs).length || v.inputs !== undefined || v.scenarios !== undefined || v.context !== undefined))
+    ctx.addIssue({ code: 'custom', path: ['launch'], message: 'ODC Timer original launch requires native-background and empty launch.inputs; omit target inputs, scenarios and context' });
 });
 
+// ssam_debug_server explicit ODC owners: the consumer's nodes become traceTarget.consumerNodeKeys, used only for the
+// library-reference pair (odcBreakpointOwners refuses anything else before sign-in); a foreign owner is refused here.
+export function withServerScopeOwners(readers, owners) {
+  if (!owners?.length || typeof readers?.traceTarget !== 'function') return readers;
+  return { ...readers, traceTarget: async (...args) => {
+    const target = await readers.traceTarget(...args);
+    if (!target) return target;
+    const consumer = readers.binding?.moduleKey, producer = target.producerTarget?.kind === 'library-reference' ? target.producerTarget.producerModuleKey : null;
+    if (owners.some(o => o.moduleKey !== consumer && o.moduleKey !== producer)) throw new Error('debug_odc_native_breakpoint_owner_unqualified');
+    const consumerNodeKeys = owners.filter(o => o.moduleKey === consumer).flatMap(o => o.nodeKeys);
+    return consumerNodeKeys.length ? { ...target, consumerNodeKeys } : target;
+  } };
+}
 async function dispatchNative(raw, services) {
   const input = nativeEntrySchema.parse(raw);
   const native = await import('./debug-odc-native-run.mjs');
   if (input.op === 'status') return native.statusNativeEntry({ tenant: input.tenant, module: input.module });
-  const readers = services.readers ?? await (services.buildNativeReaders ?? buildNativeReaders)(input);
+  // Port D7: a Workflow event or an original Timer launch needs the SC/Portal timer-background file; refuse before any live read.
+  const pending = (input.workflow || input.launch) && native.odcBackgroundRunnerPending();
+  if (pending) return { ok: false, state: 'entry-unavailable', error: pending };
+  const readers = withServerScopeOwners(services.readers ?? await (services.buildNativeReaders ?? buildNativeReaders)(input), services.serverScopeOwners);
   if (input.op === 'prepare') return native.prepareNativeEntry(input, readers);
-  // run is live: it needs the secure login window and one session per binding (HARD RULES forbid it in this build).
-  return native.runNativeEntry(input, readers, { worker: services.worker, login: services.login });
+  // The default adapter starts the private native-runtime worker after preflight.
+  return native.runNativeEntry(input, readers, services);
 }
 
 // Live model-graph readers from the published revision (Portal download + the lane reader). Live-only: tests inject
 // services.readers. Reads nothing when offline.
 async function buildNativeReaders(input) {
   const ctx = await context(input);
-  const latest = await P.latestRevision(ctx.portal, ctx.assetKey), deployed = await P.deployedRevision(ctx.portal, ctx.assetKey, ctx.stage.key);
-  if (latest.revision !== deployed.revision) throw new Error(`debug_odc_native_development_not_at_latest: latest ${latest.revision}, Development runs ${deployed.revision}`);
+  const deployed = await P.deployedRevision(ctx.portal, ctx.assetKey, ctx.stage.key);
+  if (!Number.isSafeInteger(deployed.revision) || deployed.revision < 1) throw new Error('debug_native_model_not_deployed');
   const dir = path.join(root, 'odc', ctx.portal.host, input.module + '-native-' + Date.now()); fs.mkdirSync(dir, { recursive: true });
-  const base = await P.downloadRevision(ctx.portal, ctx.assetKey, deployed.revision, path.join(dir, `r${deployed.revision}.oml`));
+  const base = await P.downloadRevision(ctx.portal, ctx.assetKey, deployed.revision, path.join(dir, 'r' + deployed.revision + '.oml'));
   const { inspect } = await import('./lib.mjs');
-  const rd = async opts => { const r = await inspect({ target: base.file, expectedSourceSha256: base.sha256, budget: 1000000, ...opts }); return r.entries ? r : (r.ok && r.out ? read(r.out) : r); };
-  const propsOfPath = async p => { const r = await rd({ path: p, depth: 0, all: true }); const t = r.tree ?? null; return t ? { key: t.key, kind: t.kind, public: t.properties?.Public === 'True', properties: t.properties } : null; };
-  const inputsOfPath = async p => { const r = await rd({ path: p, depth: 1, max: 300 }); const t = r.tree; return (t?.children ?? []).filter(c => c.kind === 'InputParameter').map(c => ({ name: c.properties?.Name, key: c.key, dataType: (c.properties?.DataType ?? '').split(':').pop(), mandatory: c.properties?.IsMandatory === 'True' })); };
-  const usagesOfKey = async key => { const r = await rd({ path: '@' + key, usages: true, scope: 'direct', depth: 1, max: 300 }); return (r.entries ?? []).map(e => ({ consumer: e.consumer })); };
-  const resolveTarget = async nameOrKey => {
-    for (const kind of ['ServerAction', 'ServiceAction', 'ClientAction', 'DataAction']) {
-      const selector = /^[A-Za-z0-9_+]{22}$/.test(nameOrKey) ? '@' + nameOrKey : `${kind}:${nameOrKey}`;
-      const r = await rd({ path: selector, depth: 3, max: 500, full: true }); const t = r.tree;
-      if (t) return { key: t.key, name: t.properties?.Name ?? nameOrKey, kind: t.kind, path: t.path ?? selector,
-        inputs: (t.children ?? []).filter(c => c.kind === 'InputParameter').map(c => ({ name: c.properties?.Name, key: c.key, dataType: (c.properties?.DataType ?? '').split(':').pop(), mandatory: c.properties?.IsMandatory === 'True' })),
-        closureCalls: (t.children ?? []).filter(c => c.kind === 'ExecuteServerActionNode').map(c => ({ kind: c.kind, action: c.properties?.Action, actionKind: c.propertyReferences?.Action?.kind, external: /^Reference:/.test(c.properties?.Action ?? '') })) };
+  const { moduleMap } = await import('./module-map.mjs');
+  const { createNativeModelReader } = await import('./debug-native-model.mjs');
+  const { acquireOdcNativeAssets, nativeOdcEntryKind } = await import('./debug-odc-native-assets.mjs');
+  const producers = new Map();
+  const readExternal = async ({ signature, reference }) => {
+    const p = reference.properties ?? {}, key = signature.properties?.OriginalKey;
+    const library = p.ModuleType === 'ReactiveLibrary', service = signature.kind === 'ServiceActionSignature' && !library;
+    const revision = typeof p.Revision === 'string' && /^[1-9][0-9]*$/.test(p.Revision) ? Number(p.Revision) : null;
+    // Native ODC app references are not version-locked: HandleRefreshForSpecificVersion
+    // clears their Revision. Only libraries require an imported revision; service bodies
+    // remain bound to the independently verified deployment below, never an invented import revision.
+    if (!KEY.test(p.ModuleKey ?? '') || !KEY.test(key ?? '') || !library && !service ||
+      library && !Number.isSafeInteger(revision) || service && p.Revision != null && p.Revision !== '' && !Number.isSafeInteger(revision)) return null;
+    // Independently deployed service bodies are never downloaded at the imported
+    // signature revision. Qualify their current deployment and original URL first.
+    if (service) {
+      const id = 'service.' + p.ModuleKey;
+      if (!producers.has(id)) producers.set(id, (async () => {
+        const { debugAsset, debugApplicationRuntime } = await import('./debug-odc-portal-session.mjs');
+        const assetKey = P.assetKeyOf(p.ModuleKey), asset = await debugAsset(ctx.portal, null, { assetKey });
+        const current = await P.deployedRevision(ctx.portal, assetKey, ctx.stage.key, { strict: true });
+        if (!Number.isSafeInteger(current.revision) || current.revision < 1) return null;
+        const runtimeUrl = await debugApplicationRuntime(ctx.portal, ctx.stage, asset, p.ModuleKey,
+          { readApplication: moduleKey => ctx.portal.readApplication(moduleKey) });
+        if (!runtimeUrl) return null;
+        const module = new URL(runtimeUrl).pathname.split('/').filter(Boolean)[0];
+        const producer = await P.downloadRevision(ctx.portal, assetKey, current.revision,
+          path.join(dir, 'services', p.ModuleKey + '.' + current.revision + '.oml'));
+        return { reader: createNativeModelReader({ base: producer, lane: 'odc', inspect, map: moduleMap, readExternal }),
+          binding: { tenant: ctx.portal.host, module, moduleKey: p.ModuleKey, app: module,
+            environmentKey: ctx.stage.key.toLowerCase(), runtimeUrl, revision: current.revision },
+          source: { moduleKey: p.ModuleKey, revision: current.revision, sha256: producer.sha256.toLowerCase(), deployed: true,
+            environmentKey: ctx.stage.key.toLowerCase() },
+          sourceContract: { path: producer.file, sha256: producer.sha256, revision: current.revision },
+          verifyPublication: async () => {
+            const observed = await P.deployedRevision(ctx.portal, assetKey, ctx.stage.key, { strict: true });
+            if (observed.revision !== current.revision) throw new Error('debug_odc_producer_publication_changed');
+          } };
+      })());
+      const producer = await producers.get(id);
+      return producer ? { ...producer, key } : null;
     }
-    return null;
+    const id = p.ModuleKey + '.' + revision;
+    if (!Number.isSafeInteger(revision)) throw new Error('debug_native_model_producer_revision_invalid');
+    if (!producers.has(id)) producers.set(id, (async () => {
+      const directory = path.join(dir, 'libraries'); fs.mkdirSync(directory, { recursive: true });
+      let producer;
+      try { producer = await P.downloadRevision(ctx.portal, P.assetKeyOf(p.ModuleKey), revision, path.join(directory, id + '.oml')); }
+      catch (error) {
+        if (/^debug_portal_(?:http_(?:403|404):|source_unavailable$)/.test(error.message ?? '')) return null;
+        throw error;
+      }
+      return { reader: createNativeModelReader({ base: producer, lane: 'odc', inspect, map: moduleMap, readExternal }),
+        source: { moduleKey: p.ModuleKey, revision, sha256: producer.sha256.toLowerCase() },
+        sourceContract: { path: producer.file, sha256: producer.sha256, revision } };
+    })());
+    const producer = await producers.get(id);
+    return producer ? { ...producer, key } : null;
   };
-  // Synchronous facade over the async readers: the graph BFS is async-unaware, so prefetch lazily via a cache the
-  // readers fill. buildModelGraph calls these as sync; we memoize with a resolved-promise barrier.
-  return { binding: { tenant: ctx.portal.host, module: input.module, app: input.module, runtimeUrl: ctx.runtimeUrl },
-    async: true, resolveTarget, properties: propsOfPath, usages: usagesOfKey, inputs: inputsOfPath, argumentsOf: () => null,
+  const readers = createNativeModelReader({ base, lane: 'odc', inspect, map: moduleMap, readExternal, allowImportedTargets: true });
+  const binding = { tenant: ctx.portal.host, module: input.module, moduleKey: ctx.moduleKey, app: input.module,
+    environmentKey: ctx.stage.key.toLowerCase(), runtimeUrl: ctx.runtimeUrl, revision: deployed.revision };
+  // A service app may expose REST callers for internal server actions without
+  // any client bundle. Complete local model evidence decides asset acquisition.
+  const runtime = await readers.hasClientRuntime() ? await acquireOdcNativeAssets(binding, path.join(dir, 'assets')) : null;
+  let workflow;
+  if (input.workflow) {
+    const workflowContext = await context({ ...input, module: input.workflow.module });
+    if (workflowContext.portal.host !== ctx.portal.host || workflowContext.stage.key.toLowerCase() !== binding.environmentKey)
+      throw new Error('debug_odc_workflow_environment_mismatch');
+    const workflowDeployed = await P.deployedRevision(workflowContext.portal, workflowContext.assetKey, workflowContext.stage.key);
+    if (!Number.isSafeInteger(workflowDeployed.revision) || workflowDeployed.revision < 1) throw new Error('debug_odc_workflow_not_deployed');
+    const workflowBase = await P.downloadRevision(workflowContext.portal, workflowContext.assetKey, workflowDeployed.revision,
+      path.join(dir, 'workflow-r' + workflowDeployed.revision + '.oml'));
+    workflow = { binding: { tenant: workflowContext.portal.host, module: input.workflow.module, moduleKey: workflowContext.moduleKey,
+      environmentKey: binding.environmentKey, revision: workflowDeployed.revision },
+      reader: createNativeModelReader({ base: workflowBase, lane: 'odc', inspect, map: moduleMap }),
+      sourceContract: { path: workflowBase.file, sha256: workflowBase.sha256, revision: workflowDeployed.revision },
+      verifyPublication: async () => {
+        const current = await P.deployedRevision(workflowContext.portal, workflowContext.assetKey, workflowContext.stage.key);
+        if (current.revision !== workflowDeployed.revision) throw new Error('debug_odc_workflow_publication_changed');
+      } };
+  }
+  const selectedProducers = new Map();
+  return { ...readers, binding, runtime, ...(workflow ? { workflow } : {}),
+    clientInspectionModels: async () => {
+      // Only version-locked Libraries execute inside this client runtime.
+      // Services retain their separate deployment and server inspection binding.
+      const libraries = await Promise.all([...producers].filter(([id]) => !id.startsWith('service.')).map(([, value]) => value));
+      return libraries.filter(Boolean).map(producer => ({ moduleKey: producer.source.moduleKey, source: producer.sourceContract }));
+    },
+    inspectionModel: moduleKey => {
+      if (moduleKey === binding.moduleKey) return { reader: readers,
+        source: { path: base.file, sha256: base.sha256.toLowerCase(), revision: deployed.revision } };
+      const target = [...selectedProducers.values()].find(t => t.producerTarget.producerModuleKey === moduleKey);
+      return target ? { reader: target.producerReader, source: target.producerTarget.sourceContract } : null;
+    },
+    resolveTarget: async selector => {
+      const { resolveOdcProducerTarget } = await import('./debug-odc-producer-target.mjs');
+      const target = await resolveOdcProducerTarget(await readers.resolveTarget(selector), { binding, readExternal,
+        sourceContract: { path: base.file, sha256: base.sha256, revision: deployed.revision } });
+      if (target?.producerReader) selectedProducers.set(target.key, target);
+      return target;
+    },
+    properties: async selector => {
+      const node = await readers.properties(selector);
+      return { ...node, nativeEntryKind: runtime ? nativeOdcEntryKind(runtime.index, node.key, node.path) : null };
+    },
+    prepareEndpoint: async entry => {
+      const { acquireNativeRestEntry } = await import('./debug-native-endpoint-acquire.mjs');
+      try {
+        return await acquireNativeRestEntry({ binding: { ...binding, lane: 'odc', sourceSha256: base.sha256 }, entry,
+          readTree: readers.tree, sourceContract: { path: base.file, sha256: base.sha256 } });
+      } catch (error) {
+        // InternalAccess=Yes is refused from the hash-bound model before any GET: a typed refusal, not a raw error.
+        const refusal = (await import('./debug-native-endpoint-worker.mjs')).nativeRestTransportRefusalFromError(error);
+        if (refusal) return { refused: refusal };
+        throw error;
+      }
+    },
+    verifyPublication: async () => {
+      const current = await P.deployedRevision(ctx.portal, ctx.assetKey, ctx.stage.key);
+      if (current.revision !== deployed.revision) throw new Error('debug_native_endpoint_publication_changed');
+      if (P.sha256(fs.readFileSync(base.file)) !== base.sha256) throw new Error('debug_native_model_source_changed');
+      for (const target of selectedProducers.values()) {
+        await target.verifyProducerPublication?.();
+        const source = target.producerTarget.sourceContract;
+        if (P.sha256(fs.readFileSync(source.path)).toLowerCase() !== source.sha256.toLowerCase()) throw new Error('debug_native_model_source_changed');
+      }
+    },
+    traceTarget: async (prepared, window) => {
+      const producer = selectedProducers.get(prepared.action.key);
+      if (prepared.producerTarget && (!producer || prepared.producerTarget.executable !== true))
+        throw new Error(prepared.producerTarget.error ?? 'debug_odc_producer_source_binding_invalid');
+      const key = producer?.producerTarget.actionKey ?? prepared.action.key;
+      const tree = await (producer?.producerReader ?? readers).tree('@' + key);
+      const model = W.actionModel(tree), selected = W.traceWindow(model, window ?? {});
+      return { actionKey: key, nodeKeys: selected.entries, steps: selected.steps, scopes: { [key]: W.scopeRoots(model) },
+        ...(producer ? { binding: producer.producerTarget.traceBinding, producerTarget: producer.producerTarget } : {}) };
+    },
     sourceContract: { path: base.file, sha256: base.sha256, revision: deployed.revision } };
 }
 
@@ -520,23 +717,41 @@ const repeat = raw => ({ tool: 'ssam_debug_run', arguments: raw });
 const signInOf = raw => ({ lane: raw?.lane === 'o11' ? 'o11' : 'odc', runtimeUrl: raw?.runtimeUrl, tenant: raw?.tenant });
 const failureOf = (error, raw) => signInFailureOf(error, signInOf(raw), repeat(raw)) ?? { ok: false, error: error.message };
 
+// prepare/status answers advertise the SSAM-imposed input caps of the lane (never a platform limit).
+const withInputCapabilities = (result, lane, op) => ['prepare', 'status'].includes(op) && result && typeof result === 'object' && !result.inputCapabilities
+  ? { ...result, inputCapabilities: { server: inputCapabilities(lane, 'server'), client: inputCapabilities(lane, 'client') } } : result;
 export async function debugRun(raw, { services = {} } = {}) {
+  // Read-only lock inventory: never writes, renames, opens DPAPI or contacts a tenant.
+  if (raw?.op === 'locks') {
+    try { return (await import('./debug-lock-inventory.mjs')).debugLocks(raw, services.root ? { root: services.root } : {}); }
+    catch (error) { return { ok: false, error: /^debug_[a-z0-9_:.@-]+$/i.test(error?.message ?? '') ? error.message : 'debug_locks_failed' }; }
+  }
+  // New executions never create/publish a compatibility wrapper implicitly.
+  // Old leases remain addressable with execution=rest-wrapper and release/reconcile.
+  if (raw && raw.execution === undefined && ['run', 'prepare', 'status'].includes(raw.op)) raw = { ...raw, execution: 'native-entry' };
   if (raw?.lane !== 'o11' && raw?.execution === 'native-entry') {
     const started = now();
     let result;
-    try { result = withSignInFailure(await dispatchNative(raw, services), signInOf(raw), repeat(raw)); return result; }
+    try { result = withSignInFailure(withInputCapabilities(await dispatchNative(raw, services), 'odc', raw.op), signInOf(raw), repeat(raw)); return result; }
     catch (error) { result = failureOf(error, raw); return result; }
     finally { await (services.journal ?? journal)({ start: started, command: raw.op, module: raw.module, outcome: result?.ok ? 'ok' : 'failed-or-uncertain', note: 'native-entry ' + (raw.action ?? '') }); }
   }
   if (raw?.lane === 'o11') {
-    const input = o11RunSchema.parse(raw);
-    try { return withSignInFailure(await (services.runO11 ?? (await import('./debug-o11-run.mjs')).debugO11Run)(input), signInOf(raw), repeat(raw)); }
+    const input = o11CoordinatorRunSchema.parse(raw);
+    // The public O11 runner re-parses the strict o11RunSchema (foreign); these fields need the server-session runner.
+    if (!services.runO11 && (input.trigger || input.contextMode === 'endpoint-credential'))
+      return { ok: false, error: 'debug_o11_run_coordinator_field_requires_server_session' };
+    try { return withSignInFailure(withInputCapabilities(await (services.runO11 ?? (await import('./debug-o11-run.mjs')).debugO11Run)(input), 'o11', input.op), signInOf(raw), repeat(raw)); }
     catch (error) { const failure = signInFailureOf(error, signInOf(raw), repeat(raw)); if (failure) return failure; throw error; }
   }
-  const input = runSchema.parse(raw), started = now();
+  // LEGACY rest-wrapper: every answer carries the notice; refusal codes stay unchanged for callers matching /^debug_/.
+  const marked = value => ({ ...value, legacy: legacyNotice('rest-wrapper'),
+    ...(value?.ok === false && typeof value.error === 'string' ? { refusal: legacyPrefix('rest-wrapper') + value.error } : {}) });
+  const legacy = raw?.execution === 'rest-wrapper' ? Object.fromEntries(Object.entries(raw).filter(([key]) => key !== 'execution')) : raw;
+  const input = runSchema.parse(legacy), started = now();
   let result;
-  try { result = await dispatch(input, services); return result; }
-  catch (error) { result = failureOf(error, raw); return result; }
+  try { result = await dispatch(input, services); return marked(result); }
+  catch (error) { result = failureOf(error, raw); return marked(result); }
   finally { await (services.journal ?? journal)({ start: started, command: input.op, module: input.module, outcome: result?.ok ? 'ok' : 'failed-or-uncertain', note: input.action ?? null }); }
 }
 
@@ -549,8 +764,8 @@ export function parseRunCli(args) {
 
 export function registerRunTools(server, execute, wrap) {
   server.registerTool('ssam_debug_run', {
-    title: 'Debug an ODC or O11 action with chosen inputs as the app user',
-    description: DIAGNOSTICS_RULE + ' Runs an ODC or O11 action with chosen typed inputs as the signed-in app user. Use execution=native-entry for new work: no wrapper and nothing published; the action is reached through an ORIGINAL entry of the published app. The code chooses that entry deterministically, never the model: a breadth-first search over the callers of the target in the static call graph of the published model (distance = call edges), ties broken by a fixed entry-kind priority and then model key ascending, so the same model and target always give the same entry, call path and bindings. entry is only an override and is refused unless it is a verified caller on that graph. A target no public entry reaches answers "dead code: no public entry reaches <action>" and nothing runs. op=prepare (no login): entry, distance, callPath, path, bindings of each target input (direct/fixed/derived/default/opaque), typed scenario validation, effects and needs. op=run: one native English App User Sign In window, then each scenario through the original entry with typed outputs, a classified exception and the duration; trace=nodes adds visited nodes, trace=full also variables, where the lane observes them; window {around, before, after} bounds a server trace. op=status lists receipts. Fields: action (name or @key; O11 also Module.Name), scenarios 1..50 [{name, inputs}] or inputs, trace none|nodes|full. Typed inputs: Text, Integer, Long Integer and Decimal (as strings), Boolean, Date, Time, Date Time, Identifier, Record, RecordList, null; private names are refused. ODC: tenant and module; acknowledgeEffects must list the effect classes prepare reports (entity-write, external-http, ...) before a run. ODC run answers needs-live with the exact live plan until its live execution worker lands. O11: host/module/moduleKey/applicationKey/runtimeUrl; modules adds producer/consumer modules to the graph; server stubs, data actions and client actions run, REST methods, timers and processes are resolved only; the worker is proven offline, the live run is pending; a server trace is refused on blocked bindings; across modules it runs on the producer only when the target runs in the producer process (reached through a service action), with the consumer app user used only for redaction. Every run assumes a DEV environment: a breakpoint on the entry may also catch another user request on the same action. One live run per binding; uncertain calls are never resent. Credentials only in the sign-in window, never in arguments or chat; private values are filtered. Legacy, kept and not extended: execution=rest-wrapper (the ODC default when execution is omitted; it publishes an SSAM Debug REST wrapper with op=authorize/release/reconcile, keep, idleMinutes, words, around/before/after/depth and trace all|none) and the O11 nativeEntry {sourceContract} single zero-input Refresh entry.',
+    title: 'Debug an ODC or O11 action through its original entry',
+    description: DIAGNOSTICS_RULE + ' ' + "Debug ODC/O11 through original published entries. prepare/run/status default to native-entry without wrappers or publication. Caller search, fixed kind priority and model keys choose the nearest entry; overrides must be reachable. Published model hashes and original runtime contracts are required. prepare reports the entry, inputs, effects and capability gaps without executing application logic. run executes scenarios serially. Server stubs, data actions, client/screen actions and individual lifecycle handlers retain their original inputs; handlers report mounted:false and do not render a complete page. ODC lifecycle:'mounted', only inside ssam_debug_client start, mounts the default screen through the original bootstrap in an owned headless browser with pinned published assets: app-user sign-in, inspector configured and started, then one journaled native mount; it requires words (the user's Development authorization) and acknowledgeEffects, takes screen inputs only as the URL query of navigate:{screen:@key,back:true} (one original SDK navigateTo + navigateBack per scenario, full reload refused, Text/Integer/LongInteger inputs) or of an initial deep link to a qualified named route (exactly one scenario), and keeps staticEffectsQualified:false; it reports handlerCoverage {declared,observed,notObserved,absent} from native stop identities and render evidence from a read-only DOM snapshot compared with the session's own native reads; lifecycleComplete and renderVerified are computed from that evidence (with lifecycleIncompleteReasons) and are never set; OnDestroy counts only after that authorized navigation (a stop at or after report.navigation.functionsBefore with completed true); navigation, deep link and this evidence are implemented, live proof pending; a lost mount reply stays uncertain with its lock. run.interactions [{target:'@<widgetKey>'|'<WidgetName>', event:'click'}] (max 10, lifecycle mounted only): after the lifecycle settles, one trusted CDP Input.dispatchMouseEvent click per entry at the DOM.getBoxModel center of the single element whose id the pinned view's idService produces, in the SSAM-owned headless page; hidden, disabled, ambiguous, obscured or unresolved targets are refused; each click is journaled (interaction-submission/-result, wx; the result proves the dispatch only, handlerInvoked null; handlerObserved needs a native stop on the handler) and a lost reply stays uncertain with its lock; the onClick handler closure effects are added to acknowledgeEffects. The original SDK error path (handleError/navigateToErrorPage) is read-only observed even when the error navigation destroys the ready wait (location, ErrorHandlingStorage key names, Page.getNavigationHistory): with a native exception stop (pauseOnExceptions) it is the known failure debug_odc_native_mount_lifecycle_exception with lifecycleException {phase: ready|lifecycle|interaction}; without an exception stop it is debug_odc_native_mount_error_page_observed. handlerCoverage.exceptionHandlers lists .#FlowExceptionHandler stops (global:true for the global OnException). Implemented, live proof pending. Server/library/service targets require an original consumer route; producer values and identity propagation need separate evidence. context supplies declared screen/block inputs or variables, never identity or roles. REST binds the native model to published OpenAPI. O11 Basic uses the private app-user dialog; O11 Custom (published OnAuthentication request headers) and an O11 SOAP WebServiceMethod whose flow reads a literal request header use contextMode endpoint-credential: a private Endpoint Credential dialog, the header sent once as an HTTP header and redacted, never a SOAP envelope header; this context is accepted inside ssam_debug_server (the standalone O11 path refuses it with debug_o11_run_coordinator_field_requires_server_session); WS-Policy/WS-Security WSDLs are refused with debug_native_endpoint_soap_ws_security_unsupported; ODC Custom stays refused (no qualified request-header API inside ODC OnAuthentication, a documented limit of the SSAM evidence); implemented, live proof pending; ODC Basic is refused by SSAM policy, not a platform limit, with debug_native_endpoint_odc_basic_unqualified before any dialog, lock or send, unless its published OnAuthentication qualifies (exactly two native inputs, no credential reads beyond them): qualified ODC Basic and O11 developer-logic Basic use contextMode endpoint-credential with credentialScheme basic (a private Username plus one masked Password, RFC 7617; one Authorization: Basic header composed once and every form redacted); O11 Basic validated by one platform <provider>.User_Login stays app-user; a REST Authentication=None endpoint whose OnRequest or method reads a literal request header uses endpoint-credential with credentialScheme header; credentialScheme is reported in prepare needs and comes only from the published capability (a caller-supplied credentialScheme, header or credential field is refused by the schema); InternalAccess=Yes is refused before any GET with debug_native_endpoint_internal_access_only and platformRestriction:true; client-certificate HttpSecurity (debug_native_endpoint_client_certificate_unsupported) and exposed OAuth2 (debug_native_endpoint_exposed_oauth2_unqualified) are typed refusals; implemented, live proof pending. contextMode defaults to app-user; unauthenticated endpoints require explicit anonymous context. O11 SOAP uses native WebService/WebServiceMethod identity and its original document/literal WSDL. Traditional O11 runs Preparation by requesting its original published screen after original WebForms login. O11 Timer uses original Service Center Run Now or a published REST/SOAP caller of the native WakeTimerAction; inside ssam_debug_server start, trigger:'service-center-run-now' with native-background and words and no launch, inputs, scenarios or context runs one interactive Run Now (implemented, live proof pending). O11 BPT observes AutomaticActivity/ServerAction reached through its original published REST/SOAP LaunchProcess caller; it never invokes an activity body directly. These original background callers require contextMode:native-background, words with user authorization, and launch:{inputs,contextMode:app-user|anonymous}; launch.inputs belongs only to the caller. ODC Timer uses the original Portal wake operation (inside ssam_debug_server start, trigger:'portal-wake' with native-background, words and trace full and no launch, inputs, scenarios, context or workflow binds the scope before any Portal read, fixes an interactive deadline and sends one reserved POST; implemented, live proof pending), or an existing published native WakeTimerAction caller when launch:{inputs:{},contextMode:app-user} is supplied, with the native developer debugger observing the Timer body. Background scheduling and observed function frames do not prove request ownership, instance correlation or execution completion, and do not validate app-user roles; ODC Timer and Workflow runs report ok only with a ThreadEnd bound to the same native request fingerprint, and ODC Timer runs correlate the instance read-only in a separate Portal developer session after the debugger stop (instanceCorrelation, instanceCorrelationProved, executionCompleted, outcome completed|failed|pending, wakeOwnershipProved); implemented, live proof pending. ODC Workflow uses workflow:{module,process?}, with action selecting the original producer ServiceAction and launch.inputs passed to its original app-user event emitter. The published Event Start -> AutomaticActivity -> End contract and imported OriginalKey/module/revision are checked; other workflow launch contracts remain explicit gaps. Fields: lane odc|o11, action name or @key (O11 also native .#Preparation/.#LaunchProcess), inputs or scenarios, trace none|nodes|full, depth 0..4. ODC needs tenant/module and acknowledgeEffects for reported classes; O11 needs host/module/moduleKey/applicationKey/runtimeUrl, with modules for captured producers. Background runs require explicit native-background context and authorization words. Trace verification needs target frames and their terminal thread. DEV only; login, roles and propagation remain distinct proofs. Uncertain executions stop the batch and retain their lock; status never replays. Credentials stay in the private dialog. prepare and status answers carry inputCapabilities {server, client}: the SSAM-imposed per-lane caps (maxBinaryInputBytes, maxTextBytes, maxScenarioInputBytes) and their refusal codes; these are SSAM limits, not OutSystems limits. holdBetweenScenarios:true (ODC isolated original-entry runs with a server trace, inside ssam_debug_server start only) holds after each answered scenario until resume and renews the native session; implemented, live proof pending. " + (roleCyclePending() ? "roleCycle {roleKey, words} (one ODC application role around ssam_debug_server/ssam_debug_client starts) " + ROLE_CYCLE_UNAVAILABLE + "; " : "roleCycle {roleKey, words} grants one ODC application role around ssam_debug_server/ssam_debug_client starts and restores it; implemented, live proof pending; ") + "ssam_debug_run itself refuses roleCycle. op 'locks' (lane optional) returns the read-only debugger lock inventory: per lock path, sha256, owner fields, receipts with sha256, class, reason, reconciler and missing evidence, plus blockedBindings; it never writes, renames, opens DPAPI or contacts a tenant. " + legacyNotice('rest-wrapper') + " Live coverage and restrictions: docs/DEBUGGER-HEADLESS-FALTA.md.",
     inputSchema: debugRunToolSchema, annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   }, wrap(execute));
 }

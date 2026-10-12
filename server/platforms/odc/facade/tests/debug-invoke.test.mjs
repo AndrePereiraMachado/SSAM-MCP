@@ -9,6 +9,7 @@ import { describeParameters, validateInputs, typeOf, filterOutput, digest } from
 import { executeInvocation, invokeDebug, invokeRoot, writeReceipt, selectNativeEntry } from '../debug-invoke-runtime.mjs';
 import { runHeadlessHttp, checkNativeRequest, loadDebugAppSession } from '../debug-invoke-http.mjs';
 import { isPreviewProfile } from '../debug-invoke-browser.mjs';
+import { ADAPTERS, legacyNotice } from '../debug-adapter-registry.mjs';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { fileURLToPath } from 'node:url';
@@ -186,6 +187,22 @@ test('CLI reads an input file and rejects contradictory op; MCP documents the ca
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   const tools = new Map(); registerInvokeTools({ registerTool(name, config, fn) { tools.set(name, { config, fn }); } }, async () => ({ ok: true }), fn => fn);
   for (const phrase of ['not arbitrary ServerAction', 'private', 'NEVER', 'existing', 'sessionId', 'authorization']) assert.ok(tools.get('ssam_debug_invoke').config.description.includes(phrase));
+});
+test('ssam_debug_invoke is legacy in the registry, its title/description and its refusals', () => {
+  const row = ADAPTERS.find(r => r.adapter === 'ssam_debug_invoke');
+  assert.equal(row.interactive, 'legacy'); assert.equal(row.lane, 'odc'); assert.deepEqual(row.branches, []);
+  const tools = new Map(); registerInvokeTools({ registerTool(name, config) { tools.set(name, config); } }, async () => ({ ok: true }), fn => fn);
+  const { title, description } = tools.get('ssam_debug_invoke');
+  // The legacy notice is the first sentence, optionally preceded only by the cross-tool diagnostics rule (D5).
+  const notice = description.indexOf(legacyNotice('ssam_debug_invoke'));
+  assert.match(title, /^LEGACY/); assert.ok(notice === 0 || notice > 0 && /diagnos/i.test(description.slice(0, notice)), description.slice(0, 200));
+  assert.ok(!/O11 invocation integration is pending/.test(description));
+  for (const bad of [{ ...request, debug: { ...debug, autoContinue: false } }, { ...request, operationId: undefined },
+    { op: 'prepare', tabId: 'b'.repeat(32), origin: 'http://fixture.test', snapshot: 'Fixture.oml', expectedSourceSha256: 'a'.repeat(64), actionKey: debug.moduleKey }]) {
+    const custom = invokeSchema.safeParse(bad).error.issues.filter(i => i.code === 'custom');
+    assert.ok(custom.length > 0 && custom.every(i => i.message.startsWith('legacy ssam_debug_invoke (not interactive): ')), JSON.stringify(custom));
+  }
+  assert.throws(() => parseInvokeCli(['run']), /^Error: Usage \(legacy, not interactive\): ssam debug invoke/);
 });
 test('real stdio MCP discovers invoker and rejects incomplete invocation without runtime access', async () => {
   const client = new Client({ name: 'invoke-test', version: '1' });

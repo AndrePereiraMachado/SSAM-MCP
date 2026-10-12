@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
-import { prepareNativeEntry, runNativeEntry, statusNativeEntry, classifyEffects } from '../debug-odc-native-run.mjs';
+import { prepareNativeEntry, runNativeEntry, statusNativeEntry, classifyEffects, runMountedNativeEntry } from '../debug-odc-native-run.mjs';
 import { debugRun, registerRunTools } from '../debug-run.mjs';
 
 // Readers fixture shaped like the live model adapter: a target resolver plus usages/properties/inputs/arguments.
@@ -39,8 +39,13 @@ test('prepare resolves the deterministic entry and validates scenarios offline',
   assert.equal(r.entry.name, 'Location');
   assert.equal(r.entry.distance, 2);
   assert.equal(r.scenariosValidated, 2);
-  assert.ok(r.effects.includes('entity-write') || r.effects.includes('external-http'));
+  assert.deepEqual(r.effects, ['unknown-call']);
   assert.deepEqual(r.needs.acknowledgeEffects.sort(), [...r.effects].sort());
+  assert.equal(r.callBoundary.schema, 'ssam-odc-native-call-boundary/1');
+  assert.equal(r.callBoundary.traceScope, 'selected-local-action');
+  assert.equal(r.callBoundary.boundaries[0].producerBodyPinned, false);
+  assert.equal(r.callBoundary.boundaries[0].producerFramesObserved, false);
+  assert.equal(r.callBoundary.propagationProved, false);
 });
 
 test('prepare refuses a dead-code private action without running', async () => {
@@ -49,6 +54,32 @@ test('prepare refuses a dead-code private action without running', async () => {
   assert.equal(r.state, 'dead-code');
   assert.match(r.error, /^dead code: no public entry reaches/);
 });
+test('mounted lifecycle never falls back to an isolated invocation without runtime evidence', async () => {
+  let invoked = false;
+  await assert.rejects(() => runNativeEntry({ action: 'Location_GetProperty', lifecycle: 'mounted',
+    inputs: { Address1: 'x', CountryCode: 'US' } }, readers(), {
+    login: async () => { invoked = true; }, worker: { invoke: async () => { invoked = true; } },
+  }), /mount_runtime_required/);
+  assert.equal(invoked, false);
+  await assert.rejects(() => prepareNativeEntry({ lifecycle: 'mounted', launch: {} }, readers()), /mount_background_unsupported/);
+});
+test('a prepared mount reaches the authorized mount runner instead of a pending refusal', async () => {
+  const prepared = { ok: true, entry: { key: 'OzK7jk5Lo0Wu2dmagSNFog', kind: 'ScreenAction' }, scenarios: [{ name: 'scenario-1', inputs: {} }],
+    mount: { screenKey: 'W4JQW+OX20iILeFJFpMkqA' }, needs: { acknowledgeEffects: ['unknown-javascript'] } };
+  const unacknowledged = await runMountedNativeEntry({ op: 'run', lifecycle: 'mounted', words: 'Mount in DEV' }, prepared, readers(), { requireClientInspection: true });
+  assert.equal(unacknowledged.state, 'effects-not-acknowledged'); assert.deepEqual(unacknowledged.missing, ['unknown-javascript']);
+  await assert.rejects(runMountedNativeEntry({ op: 'run', lifecycle: 'mounted', acknowledgeEffects: ['unknown-javascript'] }, prepared, readers(),
+    { requireClientInspection: true }), /debug_odc_native_mount_explicit_authorization_required/);
+  await assert.rejects(runMountedNativeEntry({ op: 'run', lifecycle: 'mounted', words: 'Mount in DEV', acknowledgeEffects: ['unknown-javascript'] }, prepared, readers(), {}),
+    /debug_odc_native_mount_client_inspection_required/);
+});
+test('client inspector refuses a screen request adapter before login or invocation', async () => {
+  let called = false;
+  const r = await runNativeEntry({ action: 'Location_GetProperty', inputs: { Address1: 'x', CountryCode: 'US' }, persist: false }, readers(), {
+    requireClientInspection: true, login: async () => { called = true; }, worker: { invoke: async () => { called = true; } },
+  });
+  assert.equal(r.error, 'debug_odc_native_client_inspection_entry_required'); assert.equal(called, false);
+});
 
 test('prepare refuses invalid inputs in prepare, before any login', async () => {
   await assert.rejects(() => prepareNativeEntry({ action: 'Location_GetProperty', inputs: { Address1: 'x' }, persist: false }, readers()), /input_mandatory_missing/);
@@ -56,7 +87,7 @@ test('prepare refuses invalid inputs in prepare, before any login', async () => 
 });
 
 test('run without a worker/login returns the exact live plan and touches nothing', async () => {
-  const r = await runNativeEntry({ action: 'Location_GetProperty', inputs: { Address1: 'x', CountryCode: 'US' } }, readers());
+  const r = await runNativeEntry({ action: 'Location_GetProperty', inputs: { Address1: 'x', CountryCode: 'US' }, acknowledgeEffects: ['unknown-call'] }, readers());
   assert.equal(r.ok, false);
   assert.equal(r.state, 'needs-live');
   assert.ok(r.livePlan.length >= 3);
@@ -114,13 +145,15 @@ test('ssam_debug_run MCP schema takes native-entry for both lanes and dispatches
   registerRunTools({ registerTool(name, config, fn) { tools.set(name, { config, fn }); } }, value => debugRun(value, { services }), fn => fn);
   const tool = tools.get('ssam_debug_run');
   assert.match(tool.config.description, /native-entry/);
-  assert.match(tool.config.description, /dead code: no public entry reaches <action>/);
+  assert.match(tool.config.description, /overrides must be reachable/);
   const odc = { op: 'prepare', lane: 'odc', execution: 'native-entry', tenant: 'offline-test', module: 'FloodQuotes', action: 'Location_GetProperty',
     scenarios: [{ name: 'a', inputs: { Address1: 'x', CountryCode: 'US' } }], trace: 'nodes', window: { around: 'A'.repeat(22) }, acknowledgeEffects: ['external-http'] };
   assert.equal(tool.config.inputSchema.safeParse(odc).success, true);
   const prepared = await tool.fn(odc);
   assert.equal(prepared.state, 'prepared'); assert.equal(prepared.entry.name, 'Location'); assert.equal(prepared.distance, 2);
-  assert.equal(typeof prepared.callPath, 'string'); assert.match(prepared.algorithm, /^bfs-callers\/v1/);
+  assert.equal(typeof prepared.callPath, 'string'); assert.match(prepared.algorithm, /^bfs-callers\/v2/);
+  const defaultMode = await tool.fn({ ...odc, execution: undefined });
+  assert.equal(defaultMode.execution, 'native-entry'); assert.equal(defaultMode.state, 'prepared');
   // module is required: the published model is read per module
   assert.equal((await tool.fn({ ...odc, module: undefined })).ok, false);
   const o11 = { op: 'prepare', lane: 'o11', execution: 'native-entry', host: 'personal.example.test', module: 'ShopUI', moduleKey: 'A'.repeat(22),

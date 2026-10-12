@@ -37,6 +37,12 @@ public static class TypeResolver
         foreach (var r in es.References)
             foreach (var st in r.Structures)
                 if (string.Equals(Name(st), rec, StringComparison.OrdinalIgnoreCase) && st is ITypeSignature ts) return ts;
+        // Native common records (e.g. ODC AIMessage/AIItem) are signatures,
+        // not editable IStructure objects or imported reference structures.
+        // Preserve the existing local/reference precedence before this fallback.
+        var common = es.GetAllDescendantsOfType<IStructureSignature>()
+            .FirstOrDefault(x => string.Equals(Name(x), rec, StringComparison.OrdinalIgnoreCase));
+        if (common is ITypeSignature commonType) return commonType;
         throw new KeyNotFoundException($"unknown type: {spec}");
     }
 

@@ -1,17 +1,16 @@
 import './fixtures/isolated-profile.mjs';
-// Lane F of the 2026-10-05 package (docs/PACOTE-SESSOES-NOVO.md, C05 3): the hidden Service Center window of a signed-in
-// Studio expired within minutes and every page read answered WEB_SIGN_IN_REQUIRED asking the user to sign in again
-// (4 times in session dd2b79c0, 9 in 890a2354; "ele ja tava logado"). Now a read answered by the sign-in page re-enters
-// silently once (sc_web login {reenter}) and reads again; a login is asked only when the Studio itself is logged out; an
-// older bridge without reentry never turns an expiry into a credential prompt; a write is never resent. Offline: a fake
-// bridge (fixtures/sc-fake-bridge.mjs) and the synthetic modern pages.
+// Regression coverage for fully headless SC authentication. Legacy window-only
+// bridges must never trigger window login; selected profiles use direct HTTPS.
+// All identities, responses and cookies below are synthetic and offline.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { CookieJar } from 'tough-cookie';
+import { SsoSessionCache } from '../service-center/sso-session-cache.mjs';
 import { Client, Journal } from '../service-center/client.mjs';
 import { StudioWebTransport } from '../service-center/http.mjs';
-import { BridgeError } from '../service-center/errors.mjs';
-import { main, runServiceCenter } from '../service-center/index.mjs';
+import { AuthRequired } from '../service-center/errors.mjs';
+import { runServiceCenter, serviceCenterTool } from '../service-center/index.mjs';
 import { FakeBridge, SC, fakeVault, html, temp, uuid } from './fixtures/sc-fake-bridge.mjs';
 
 const HOST = 'sc.example.test';
@@ -44,46 +43,81 @@ function deps(bridge, extra = {}) {
     opener: () => assert.fail('no credential prompt while the Studio is signed in'), exports: dir, ...extra };
 }
 
-test('the SC client does not ask for a login when the Studio session is active and only the window expired', async () => {
-  const bridge = new ReentryBridge({ pages: { [ESPACE]: [LOGIN, html('factory/espace-edit.html')] } });
-  const result = await main(['timers', '--host', HOST, '--module-id', '102'], deps(bridge));
-  assert.equal(result.ok, true);
-  assert.deepEqual(result.rows.map(r => r.fields.Name), ['ProcessQueue', 'NightlyCleanup']);
-  // One silent re-entry (reenter: the window reloads instead of trusting the page on screen), then the same read again.
-  assert.deepEqual(bridge.logins, [{ reenter: true }]);
-  assert.deepEqual(bridge.calls.filter(c => c[0] === 'web').map(c => [c[1], c[2]]), [['fetch', 'GET'], ['login', null], ['fetch', 'GET']]);
-});
-
-test('a login is asked only when the Studio itself is logged out, and then it is the Studio\'s own sign-in', async () => {
-  const bridge = new ReentryBridge({ pages: { [ESPACE]: [LOGIN, html('factory/espace-edit.html')] } });
-  // Signed in when the call starts, logged out by the time the window expired.
-  const session = bridge.session.bind(bridge); let calls = 0;
-  bridge.session = host => { const info = session(host); if (++calls > 1) info.studio.signedIn = false; return info; };
-  const answer = await runServiceCenter(['timers', '--host', HOST, '--module-id', '102'], deps(bridge));
-  assert.deepEqual([answer.ok, answer.code, answer.continuation.tool, answer.continuation.arguments.action], [false, 'STUDIO_NOT_SIGNED_IN', 'o11_service_center_session', 'sign-in']);
+test('a signed-in legacy window-only bridge never touches its window; with nothing stored only the private prompt opens', async () => {
+  const bridge = new ReentryBridge();
+  const prompts = [];
+  const answer = await runServiceCenter(['timers', '--host', HOST, '--module-id', '102'], deps(bridge, { promptWaitMs: 0,
+    opener: (host, kind) => { prompts.push([host, kind]); return { opened: true }; } }));
+  assert.equal(answer.code, 'CREDENTIAL_PROMPT_PENDING');
+  assert.deepEqual(prompts, [[HOST, 'ServiceCenter']]);
+  assert.deepEqual(bridge.calls.filter(c => c[0] === 'web' || c[0] === 'login'), []);
   assert.deepEqual(bridge.logins, []);
 });
 
-test('an older bridge without reentry never turns an expiry into a credential prompt', async () => {
-  const bridge = new ReentryBridge({ reentry: false, pages: { [ESPACE]: [LOGIN, html('factory/espace-edit.html')] } });
-  const answer = await runServiceCenter(['timers', '--host', HOST, '--module-id', '102'], deps(bridge));
-  assert.equal(answer.code, 'WEB_SIGN_IN_REQUIRED');
-  assert.match(answer.error, /Studio is logged in on sc\.example\.test, but its Service Center window expired/);
-  assert.deepEqual(bridge.logins, []);
-  // With a stored login the older bridge re-enters with it, silently.
-  const stored = new ReentryBridge({ reentry: false, pages: { [ESPACE]: [LOGIN, html('factory/espace-edit.html')] } });
-  const result = await main(['timers', '--host', HOST, '--module-id', '102'], deps(stored, { present: async () => true }));
-  assert.equal(result.ok, true);
-  assert.deepEqual(stored.logins, [{ reenter: true }]);
+test('explicit Studio selection cannot fall back to a window or a stored profile', async () => {
+  const bridge = new ReentryBridge();
+  const answer = await runServiceCenter(['timers', '--host', HOST, '--module-id', '102', '--session', 'studio'], deps(bridge, {
+    present: async () => true,
+    profiles: { resolve: () => assert.fail('explicit Studio selection must not change identity source') }
+  }));
+  assert.equal(answer.code, 'HEADLESS_AUTH_UNAVAILABLE');
+  assert.deepEqual(bridge.calls.filter(c => c[0] === 'web' || c[0] === 'login'), []);
 });
 
-test('a re-entry the identity provider refuses says so once, without a prompt and without a second read', async () => {
-  const bridge = new ReentryBridge({ pages: { [ESPACE]: [LOGIN, html('factory/espace-edit.html')] },
-    login: new BridgeError('SECRET_NOT_FOUND', 'no single sign-on session and no stored login', { write: false, executed: false }) });
-  const answer = await runServiceCenter(['timers', '--host', HOST, '--module-id', '102'], deps(bridge));
-  assert.equal(answer.code, 'WEB_SIGN_IN_INTERACTIVE');
-  assert.match(answer.error, /identity provider asked its Service Center window for a login again/);
-  assert.equal(bridge.calls.filter(c => c[0] === 'web' && c[1] === 'fetch').length, 1);
+function profileDeps(bridge, { challenge = false } = {}) {
+  const counts = { reads: 0, logins: 0, closes: 0, profiles: 0 };
+  const target = `SSAM/O11/${HOST}/ServiceCenter`;
+  const ssoCache = new SsoSessionCache({ schedule: () => null, cancel: () => {} });
+  return { counts, ssoCache, options: deps(bridge, {
+    ssoCache,
+    profiles: { resolve: async (context, options) => {
+      counts.profiles++;
+      assert.equal(context.host, HOST);
+      assert.equal(context.principal, 'dev@example.test');
+      assert.equal(options.interactive, false);
+      return { ok: true, principal: context.principal, target };
+    } },
+    createSso: auth => {
+      assert.equal(auth.user, 'dev@example.test');
+      assert.equal(auth.credentialTarget, target);
+      assert.equal(auth.bridge, bridge);
+      const jar = new CookieJar();
+      return { jar, authenticateSc: async () => {
+        counts.logins++;
+        if (challenge) throw new AuthRequired('IDENTITY_CHALLENGE_REQUIRED', 'Synthetic identity challenge');
+        jar.setCookieSync('SCSession=synthetic-private; Secure; Path=/ServiceCenter/', `https://${HOST}/ServiceCenter/`);
+      }, close: async () => { counts.closes++; jar.removeAllCookiesSync(); } };
+    },
+    send: async req => {
+      counts.reads++;
+      if (!req.headers.Cookie) return { status: 302, location: 'https://id.outsystems.com/community/login', setCookie: [], body: Buffer.alloc(0) };
+      return { status: 200, contentType: 'text/html', setCookie: [], body: Buffer.from(html('factory/espace-edit.html')) };
+    }
+  }) };
+}
+
+test('a selected same-principal profile reads through headless SSO without legacy window login', async () => {
+  const bridge = new ReentryBridge({ reentry: false });
+  const fixture = profileDeps(bridge);
+  const answer = await serviceCenterTool(['timers', '--host', HOST, '--module-id', '102'], fixture.options);
+  assert.equal(answer.ok, true);
+  assert.equal(answer.result.auth.path, 'vault-sso');
+  assert.deepEqual(answer.result.rows.map(r => r.fields.Name), ['ProcessQueue', 'NightlyCleanup']);
+  assert.deepEqual(fixture.counts, { reads: 2, logins: 1, closes: 1, profiles: 1 });
+  assert.deepEqual(bridge.calls.filter(c => c[0] === 'web' || c[0] === 'login'), []);
+  assert.doesNotMatch(JSON.stringify(answer), /synthetic-private|SCSession/);
+  fixture.ssoCache.clear();
+});
+
+test('an identity challenge stops once without opening UI or retrying the protected read', async () => {
+  const bridge = new ReentryBridge();
+  const fixture = profileDeps(bridge, { challenge: true });
+  const answer = await serviceCenterTool(['timers', '--host', HOST, '--module-id', '102'], fixture.options);
+  assert.equal(answer.code, 'IDENTITY_CHALLENGE_REQUIRED');
+  assert.equal(answer.stage, 'authentication');
+  assert.deepEqual(fixture.counts, { reads: 1, logins: 1, closes: 1, profiles: 1 });
+  assert.deepEqual(bridge.calls.filter(c => c[0] === 'web' || c[0] === 'login'), []);
+  assert.equal(fixture.ssoCache.entries.size, 0);
 });
 
 test('a write postback answered by the sign-in page is never re-entered or resent', async () => {

@@ -246,7 +246,7 @@ public sealed class ModelHost
             if (!string.IsNullOrEmpty(detail) && !string.Equals(detail, text.Trim(), StringComparison.Ordinal)) text += " | " + detail;
             var owner = m.ObjectIdentifier?.TryGetAbstractObject();
             result.Add(new(m.Id, m.Type.ToString(), key, PathOf(owner), text)
-                { OwnerKey = m.ObjectIdentifier?.GetObjectKey()?.ToString(), ScreenKey = ScreenKeyOf(owner) });
+                { OwnerKey = m.ObjectIdentifier?.GetObjectKey()?.ToString(), ScreenKey = ScreenKeyOf(owner), Owner = owner, Properties = m.PropertyNames?.ToArray() });
         }
         return result;
     }

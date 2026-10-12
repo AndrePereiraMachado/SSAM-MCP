@@ -61,7 +61,8 @@ public sealed class Pa2F3OdcTests
     [Fact]
     public void EveryProblemOfAFragmentIsInOneCodedRefusal()
     {
-        var op = new JsonObject { ["op"] = "html", ["parent"] = "$scr", ["html"] = "<div><video></video><i icon=\"x\"></i><input bind=\"V\" type=\"color\"></div>" };
+        // <video> is a tag of the ODC HTML Element (the one table, ElementWidgetMap): a tag outside every list is what is refused
+        var op = new JsonObject { ["op"] = "html", ["parent"] = "$scr", ["html"] = "<div><marquee></marquee><i icon=\"x\"></i><input bind=\"V\" type=\"color\"></div>" };
         var ex = Assert.Throws<KernelRefusalException>(() => HtmlVisual.PreflightOp(op));
         Assert.Equal(["HTML_TAG_NOT_ALLOWED", "HTML_INVALID", "INPUT_TYPE_MISMATCH"], ex.Problems!.Select(p => p!["code"]!.ToString()));
     }

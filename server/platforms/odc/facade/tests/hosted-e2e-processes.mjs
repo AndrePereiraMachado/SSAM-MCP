@@ -13,6 +13,10 @@
 //     blank-service fixture open; o11_deliver, o11_studio snapshot/publish-log and o11_environment refresh-refs run the
 //     server's real kernel CLI (ANVIL_BRIDGE_FLAVOR=thin, the installed Service Studio loaded headless) through the relay
 //     and the agent; a hosted ssam_job {lane:"odc"} without base and ssam_discover show the neutral fixture and scrub.
+//   - the 24th release (servidor/fase4-24, step 9i): studio_reference_producers, the Service Center through sc_http and
+//     the Portal through the headless Studio session (odc_mcp_connection readiness), the tools unavailable hosted, the
+//     prototype op and a renamed path argument refused at the gate, and a third customer still on the v48 pack: accepted
+//     by kernel.json odcBridgeAccepted, typed refusals for what the 23rd pack lacks.
 // Tokens and agent credentials only ever go to files under the temporary folder; nothing here prints them.
 // Ports: the server and the fake O11 bridges take free ports in 7400-7499. Never a real Studio: the fake ODC pipes use
 // unlikely pids, and the agents list only the fake Studio processes.
@@ -21,7 +25,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ODC_BRIDGE } from './fixtures/odc-bridge-version.mjs';
 
@@ -70,7 +74,8 @@ const ownerEnv = { ...clean(process.env), SSAM_SERVER_DIR: serverDir, SSAM_NODE:
   TEMP: path.join(T, 'owner-tmp'), TMP: path.join(T, 'owner-tmp'),
   ...(process.env.ANVIL_ODC_FEATURES_DIR ? { ANVIL_ODC_FEATURES_DIR: process.env.ANVIL_ODC_FEATURES_DIR } : {}) };
 // The server's kernel is pinned (the fake Studios report these versions); detection would read the installed Studios.
-write(path.join(serverDir, 'kernel.json'), JSON.stringify({ o11: '11.55.91', odc: '1.7.27', odcBridge: ODC_BRIDGE }));
+// The 24th release keeps serving the packs of v48 and v45 (PLANO-24-PRODUCAO 6): customer C of step 9i is on v48.
+write(path.join(serverDir, 'kernel.json'), JSON.stringify({ o11: '11.55.91', odc: '1.7.27', odcBridge: ODC_BRIDGE, odcBridgeAccepted: ['v48', 'v45'] }));
 
 function customerMachine(name) {
   const base = path.join(T, name);
@@ -179,9 +184,10 @@ const ODC_MODULE = { name: 'SsamNeutralApp', oml: path.join(repo, 'kernel', 'tes
   moduleKey: 'ojF0o++TwanqKJN76uNzpw', host: 'neutral-e2e.outsystems.dev', developerId: 'e2e.dev@neutral-e2e' };
 const odcModuleFile = path.join(T, 'odc-module.json');
 write(odcModuleFile, JSON.stringify(ODC_MODULE));
-async function startStudios(machine) {
+async function startStudios(machine, profile = 'current') {
   const o11Port = await freePort();
-  machine.studios = start([path.join(fixtures, 'fake-studios-process.mjs'), machine.root, machine.studiosFile, String(o11Port), '0', moduleFile, odcModuleFile], { env: machine.env, name: machine.name + '-studios' });
+  machine.studios = start([path.join(fixtures, 'fake-studios-process.mjs'), machine.root, machine.studiosFile, String(o11Port), '0', moduleFile, odcModuleFile, profile],
+    { env: machine.env, name: machine.name + '-studios' });
   const ready = await waitFor(() => fs.existsSync(machine.studiosFile), 15000);
   must(machine.name + ': fake Studios up (ODC pipe + O11 bridge)', ready, machine.studios.out);
   machine.fakes = JSON.parse(fs.readFileSync(machine.studiosFile, 'utf8'));
@@ -212,7 +218,7 @@ function relayLine(relayPort, request, limitMs = 30000) {
 
 // ---------------------------------------------------------------- the run
 let failure = null;
-const A = customerMachine('cliente-a'), B = customerMachine('cliente-b');
+const A = customerMachine('cliente-a'), B = customerMachine('cliente-b'), C = customerMachine('cliente-c');
 const before = Object.fromEntries(Object.entries(guarded).map(([k, f]) => [k, f()]));
 try {
   // 1. Agent pack (fake binaries), extracted on both customer machines.
@@ -249,7 +255,7 @@ try {
 
   // 3. Tokens (to files only).
   const issued = {};
-  for (const [key, customer] of [['a', 'Cliente A'], ['b', 'Cliente B']]) {
+  for (const [key, customer] of [['a', 'Cliente A'], ['b', 'Cliente B'], ['c', 'Cliente C']]) {
     const { status, value } = ssam(['server-token', 'issue', '--customer', customer]);
     must(`ssam server-token issue (${customer}) gives an MCP token and an agent credential`, status === 0 && /^ssam_/.test(value?.token ?? '') && /^ssam_agent_/.test(value?.agentCredential ?? ''), { status, id: value?.id ?? null });
     write(path.join(secrets, key + '.token'), value.token);
@@ -257,7 +263,7 @@ try {
     issued[key] = { id: value.id, token: value.token, credential: value.agentCredential, workspace: path.join(serverDir, 'customers', value.id) };
   }
   const tokensText = fs.readFileSync(path.join(serverDir, 'tokens.json'), 'utf8');
-  check('tokens.json holds no plaintext token or agent credential', ![issued.a, issued.b].some(x => tokensText.includes(x.token) || tokensText.includes(x.credential)));
+  check('tokens.json holds no plaintext token or agent credential', ![issued.a, issued.b, issued.c].some(x => tokensText.includes(x.token) || tokensText.includes(x.credential)));
 
   // 4. Customer A: real setup (credential from a file, icacls on private\), fake Studios, agent process.
   for (const [machine, key] of [[A, 'a'], [B, 'b']]) {
@@ -676,6 +682,166 @@ try {
   const outsideList = sc(await call(clientA, 'ssam_map', { lane: 'odc', target: [odcCapture?.path, path.join(repo, 'kernel', 'tests', 'fixtures', 'odc', 'blank-mobile.oml')], view: 'search', text: 'x' }));
   check('23rd: a server path in a list target is refused by the gate (PATH_OUTSIDE_WORKSPACE) before any read', outsideList?.code === 'PATH_OUTSIDE_WORKSPACE', outsideList);
 
+  // 9i. The 24th product release over the hosted path (servidor/fase4-24, PLANO-24-PRODUCAO B6.7).
+  //   - studio_reference_producers: odc.pipe reference-producers <Module> on the customer's (fake) ODC Studio, read only;
+  //   - o11_service_center_read through sc_http: the Studio's own headless HTTP session on the thin bridge, never sc_web,
+  //     studio_login or a window;
+  //   - odc_mcp_connection readiness through the headless Portal session (portal-session fetch): each request file in
+  //     ws:odc/journal/portal/requests, mirrored to the agent, never under a bridge root of the server (R4);
+  //   - HOSTED_UNAVAILABLE on the three debugger tools and the four API Client tools (cause API_CLIENT_ONLY), the
+  //     prototype op refused at the gate (D2) and a server path under a renamed argument ({targt}) confined (R1);
+  //   - customer C still on the v48 pack (the 23rd agent lists, ODC bridge v48, the thin bridge of the 23rd): accepted by
+  //     kernel.json odcBridgeAccepted and served on its v48 pipe; the Service Center answers STUDIO_BRIDGE_OUTDATED and
+  //     reference-producers COMMAND_NOT_ALLOWED, typed, before anything of theirs reaches a Studio (R5, R7).
+  const odcSince = n => odcLines(A).slice(n).map(e => e.line);
+  let odcSeen = odcLines(A).length;
+  const producers = await call(clientA, 'studio_reference_producers', { module: ODC_MODULE.name });
+  const producerLines = odcSince(odcSeen);
+  check('24th: studio_reference_producers is odc.pipe reference-producers <Module> on the customer\'s (fake) ODC Studio through the agent, read only, no server path',
+    producers.isError !== true && sc(producers)?.ok === true && sc(producers).scope === 'consumer-session-visible-producers' && sc(producers).producers?.[0]?.name === 'NeutralProducerLib'
+      && producerLines.includes('reference-producers ' + ODC_MODULE.name) && !producerLines.some(l => /^(merge|publish|open|check-base|preview) /.test(l)) && !serverPathIn(sc(producers)),
+    { reply: sc(producers) ?? producers, seen: producerLines });
+
+  seen = o11Count();
+  const scRead = await call(clientA, 'o11_service_center_read', { action: 'db-connections', host: O11_MODULE.environment }, 120000);
+  const scSeen = o11Since(seen);
+  const scValue = sc(scRead);
+  // The O11 lane answers {ok, lane, verb, exitCode, result}: result is the Service Center's own answer.
+  const scBody = scValue?.result && typeof scValue.result === 'object' ? scValue.result : scValue;
+  check('24th: hosted o11_service_center_read {action:"db-connections"} reads the page through sc_http (the Studio\'s own headless HTTP session, auth studio-http), with the agent\'s key',
+    scRead.isError !== true && scValue?.ok === true && scBody?.ok === true && scBody.auth?.path === 'studio-http' && scBody.connections?.[0]?.name === 'SampleWarehouse' && scBody.connections[0].id === '7'
+      && scSeen.some(e => e.method === 'sc_http' && e.authOk && e.scAction === 'fetch' && e.scMethod === 'GET' && e.scPath === '/ServiceCenter/DatabaseConnections_List.aspx'),
+    { reply: scValue ?? scRead, seen: scSeen.map(e => e.method + (e.scAction ? ':' + e.scAction : '') + (e.success ? '' : ':' + e.error)) });
+  check('24th: the Service Center read never asked sc_web, studio_login or the private transport of the thin bridge, and names no server path',
+    scSeen.length > 0 && !scSeen.some(e => ['sc_web', 'studio_login', 'sc_private_http', 'sc_private_http_cookie'].includes(e.method)) && !serverPathIn(scValue), scSeen.map(e => e.method));
+
+  const requestsDir = path.join(issued.a.workspace, 'odc', 'journal', 'portal', 'requests');
+  const listRequests = () => (fs.existsSync(requestsDir) ? fs.readdirSync(requestsDir) : []);
+  const requestsBefore = listRequests();
+  odcSeen = odcLines(A).length;
+  const readiness = await call(clientA, 'odc_mcp_connection', { tenant: ODC_MODULE.host, action: 'readiness', connectionId: 'e2e-mcp-connection' }, 300000);
+  const ready = sc(readiness);
+  const fetchFiles = odcSince(odcSeen).filter(l => l.startsWith('portal-session fetch ')).map(l => l.split(' ')[2]);
+  const newRequests = listRequests().filter(name => !requestsBefore.includes(name));
+  check('24th: hosted odc_mcp_connection readiness through the headless Portal session of the customer\'s Studio (portal-session fetch): the connection, its actions, readyForToolImport',
+    readiness.isError !== true && ready?.ok === true && ready.exists === true && ready.readyForToolImport === true && ready.connection?.connectionId === 'e2e-mcp-connection'
+      && ready.availableActionCount === 2 && ready.selectedActionCount === 1 && fetchFiles.length >= 5,
+    { reply: ready ?? readiness, fetches: fetchFiles.length });
+  check('24th: every Portal request is a file of the customer\'s workspace (ws:odc/journal/portal/requests) that the agent read from its own mirror; no server path in the answer',
+    fetchFiles.length > 0 && fetchFiles.every(file => path.dirname(file) === path.join(A.root, 'odc', 'journal', 'portal', 'requests') && newRequests.includes(path.basename(file)))
+      && !serverPathIn(ready), { agentFiles: fetchFiles.map(file => file.replace(T, '<T>')), newRequests: newRequests.length });
+
+  const UNAVAILABLE_24 = { ssam_debug_server: { command: 'status' }, ssam_debug_client: { command: 'status' }, ssam_debug_matrix: { op: 'check' },
+    odc_native_package: { tenant: ODC_MODULE.host, operationKey: randomUUID(), operationUuid: randomUUID() },
+    odc_generated_code: { tenant: ODC_MODULE.host, buildKey: randomUUID() },
+    odc_asset_source: { tenant: ODC_MODULE.host, assetKey: randomUUID(), revisionNumber: 1 },
+    odc_asset_revision: { tenant: ODC_MODULE.host, assetKey: randomUUID(), expectedRevision: 1, file: 'ws:odc/lab/Candidate.oml', expectedSha256: 'a'.repeat(64) } };
+  const API_CLIENT_ONLY = ['odc_native_package', 'odc_generated_code', 'odc_asset_source', 'odc_asset_revision'];
+  odcSeen = odcLines(A).length; seen = o11Count();
+  const unavailable = {};
+  for (const [name, args] of Object.entries(UNAVAILABLE_24)) unavailable[name] = sc(await call(clientA, name, args));
+  check('24th: the three debugger tools and the four API Client tools answer HOSTED_UNAVAILABLE (cause API_CLIENT_ONLY and a continuation to another tool for the four); nothing reached a Studio',
+    Object.entries(unavailable).every(([name, value]) => value?.code === 'HOSTED_UNAVAILABLE'
+      && (API_CLIENT_ONLY.includes(name) ? value.cause === 'API_CLIENT_ONLY' && typeof value.continuation?.tool === 'string' && value.continuation.tool !== name : value.cause === undefined))
+      && odcLines(A).length === odcSeen && o11Count() === seen,
+    Object.fromEntries(Object.entries(unavailable).map(([name, value]) => [name, { code: value?.code ?? null, cause: value?.cause ?? null, next: value?.continuation?.tool ?? null }])));
+
+  const PROTOTYPE = { op: 'prototype', data: { source: 'ws:inbox/prototype' } };
+  odcSeen = odcLines(A).length; seen = o11Count();
+  const prototypes = {};
+  for (const [name, args] of [['ssam_job', { lane: 'odc', job: { ops: [PROTOTYPE] } }], ['o11_job', { job: { ops: [PROTOTYPE] } }],
+    ['studio_deliver', { feature: 'prototype', module: ODC_MODULE.name, job: { ops: [PROTOTYPE] }, owners: ['e2e'], changes: ['The prototype op over the hosted path'] }],
+    ['o11_deliver', { module: O11_MODULE.name, job: { ops: [PROTOTYPE] }, authorize: 'pode entregar no Headless_CS' }]])
+    prototypes[name] = sc(await call(clientA, name, args, 120000));
+  check('24th (D2): the prototype op is refused at the gate in the four job tools (HOSTED_UNAVAILABLE, cause PROTOTYPE_SOURCE_LOCAL, not-sent), before any capture',
+    Object.values(prototypes).every(value => value?.code === 'HOSTED_UNAVAILABLE' && value.cause === 'PROTOTYPE_SOURCE_LOCAL' && value.outcome === 'not-sent')
+      && odcLines(A).length === odcSeen && o11Count() === seen,
+    Object.fromEntries(Object.entries(prototypes).map(([name, value]) => [name, { code: value?.code ?? null, cause: value?.cause ?? null, outcome: value?.outcome ?? null }])));
+
+  // 24th (D2): a COMPOSITE job hides the prototype op in a sub-part the kernel's CollectOps would concatenate. The
+  // customer stages both files in the workspace inbox; the sub-part's data.capture points at a server file outside the
+  // workspace. The gate follows the composite part strictly inside the workspace and refuses before any capture, so the
+  // server file is never read.
+  const outsideCapture = path.join(serverDir, 'tokens.json'); // a server file outside any customer workspace
+  const tokensBeforeComposite = shaFile(outsideCapture);
+  write(path.join(issued.a.workspace, 'inbox', 'proto-sub.json'), JSON.stringify({ ops: [{ op: 'prototype', data: { source: 'x', capture: outsideCapture, captureSha256: 'a'.repeat(64) } }] }));
+  write(path.join(issued.a.workspace, 'inbox', 'proto-main.json'), JSON.stringify({ jobs: ['proto-sub.json'] }));
+  odcSeen = odcLines(A).length; seen = o11Count();
+  const composites = {};
+  for (const [name, args] of [['ssam_job', { lane: 'o11', job: 'ws:inbox/proto-main.json' }], ['o11_job', { job: 'ws:inbox/proto-main.json' }],
+    ['studio_deliver', { feature: 'composite', module: ODC_MODULE.name, job: 'ws:inbox/proto-main.json', owners: ['e2e'], changes: ['A composite prototype job over the hosted path'] }],
+    ['o11_deliver', { module: O11_MODULE.name, job: 'ws:inbox/proto-main.json', authorize: 'pode entregar no Headless_CS' }]])
+    composites[name] = sc(await call(clientA, name, args, 120000));
+  check('24th (D2): a composite job whose sub-part carries the prototype op is refused at the gate too, before any capture; the server file its data.capture named was never read',
+    Object.values(composites).every(value => value?.code === 'HOSTED_UNAVAILABLE' && value.cause === 'PROTOTYPE_SOURCE_LOCAL' && value.outcome === 'not-sent')
+      && odcLines(A).length === odcSeen && o11Count() === seen && shaFile(outsideCapture) === tokensBeforeComposite,
+    Object.fromEntries(Object.entries(composites).map(([name, value]) => [name, { code: value?.code ?? null, cause: value?.cause ?? null, outcome: value?.outcome ?? null }])));
+
+  const renamedOutside = sc(await call(clientA, 'ssam_map', { lane: 'odc', targt: ODC_MODULE.oml, view: 'search', text: 'x' }));
+  check('24th (R1): a server path under a renamed argument ({targt}) is confined as the target it runs as: PATH_OUTSIDE_WORKSPACE before any read',
+    renamedOutside?.code === 'PATH_OUTSIDE_WORKSPACE', renamedOutside);
+  const renamedInside = sc(await call(clientA, 'ssam_map', { lane: 'odc', targt: odcCapture?.path, view: 'search', text: ODC_MODULE.name }, 600000));
+  check('24th (R1): the same renamed argument naming a ws: capture runs as target (the rich index over the customer\'s capture, no server path)',
+    renamedInside?.ok === true && renamedInside.count >= 1 && inWs(renamedInside.captures?.[0]?.file, 'ws:odc/') && !serverPathIn(renamedInside),
+    renamedInside ? { ok: renamedInside.ok, count: renamedInside.count, code: renamedInside.code ?? null, error: renamedInside.error ?? null } : renamedInside);
+
+  // Customer C: the same pack, turned into the v48 pack of the 23rd. pack.json and the ODC bridge files name v48, and the
+  // agent carries the lists of the 23rd (no sc_http, no reference-producers; AGENT_VERSION 0.2.0). Each edit is checked,
+  // so a change of the agent code fails here instead of testing a pack that no longer looks like v48.
+  const expandedC = await powershell(['-Command', `Expand-Archive -LiteralPath '${zip}' -DestinationPath '${C.root}'`], C.env);
+  must(C.name + ': pack extracted', expandedC.code === 0 && fs.existsSync(path.join(C.root, 'pack.json')), expandedC.out);
+  const edits = [];
+  const downgrade = (rel, from, to) => { const file = path.join(C.root, ...rel.split('/')); const text = fs.readFileSync(file, 'utf8');
+    if (!text.includes(from)) return edits.push(rel + ': no ' + from); fs.writeFileSync(file, text.replace(from, to)); };
+  downgrade('agent/lib/kinds.mjs', "'reference-snapshot', 'reference-producers', 'data',", "'reference-snapshot', 'data',");
+  downgrade('agent/lib/kinds.mjs', "'sc_web', 'sc_http', 'studio_login',", "'sc_web', 'studio_login',");
+  downgrade('agent/lib/agent.mjs', "export const AGENT_VERSION = '0.3.1';", "export const AGENT_VERSION = '0.2.0';");
+  const packC = JSON.parse(fs.readFileSync(path.join(C.root, 'pack.json'), 'utf8').replace(/^﻿/, ''));
+  const bridgeDir = path.join(C.root, 'odc', 'studio', 'bridge', 'bin', 'Release', 'net8.0');
+  for (const suffix of ['.dll', '.deps.json']) {
+    const from = path.join(bridgeDir, `ODC3.Bridge.${ODC_BRIDGE}${suffix}`);
+    if (fs.existsSync(from)) fs.renameSync(from, path.join(bridgeDir, 'ODC3.Bridge.v48' + suffix)); else edits.push('no ' + path.basename(from));
+  }
+  packC.odcBridge = 'v48'; packC.id = 'e2e-pack-v48';
+  if (Array.isArray(packC.files)) packC.files = packC.files.map(f => ({ ...f, path: String(f.path).replace(`ODC3.Bridge.${ODC_BRIDGE}.`, 'ODC3.Bridge.v48.') }));
+  fs.writeFileSync(path.join(C.root, 'pack.json'), JSON.stringify(packC, null, 2));
+  must(C.name + ': the pack turned into the v48 pack (pack.json, bridge files, the 23rd agent lists)', edits.length === 0, edits);
+  const setupC = spawnSync(process.execPath, [path.join(C.root, 'agent', 'ssam-agent.mjs'), 'setup', '--server', `http://127.0.0.1:${port}`, '--root', C.root,
+    '--credential-file', path.join(secrets, 'c.agent')], { cwd: C.root, env: C.env, encoding: 'utf8', windowsHide: true, timeout: 120000 });
+  must(C.name + ': ssam-agent.mjs setup of the v48 pack', setupC.status === 0 && !((setupC.stdout ?? '') + (setupC.stderr ?? '')).includes(issued.c.credential),
+    ((setupC.stdout ?? '') + (setupC.stderr ?? '')).replace(issued.c.credential, '<credential>'));
+  await startStudios(C, 'pack-v48');
+  const configC = path.join(C.root, 'private', 'config.json');
+  fs.writeFileSync(configC, JSON.stringify({ ...JSON.parse(fs.readFileSync(configC, 'utf8')), o11Port: C.fakes.o11Port }, null, 2));
+  startAgent(C);
+  const clientC = await connect(issued.c.token);
+  must('v48 pack: customer C agent connected', await waitFor(() => agentConnected(clientC), 20000, 250), C.agent.out);
+  const doctorC = sc(await call(clientC, 'ssam_doctor'));
+  check('v48 pack: the hub accepts customer C\'s pack (odcBridge v48, agent 0.2.0) through kernel.json odcBridgeAccepted: the ODC lane is compatible',
+    doctorC?.agent?.connected === true && doctorC.agent.pack?.odcBridge === 'v48' && doctorC.agent.agentVersion === '0.2.0' && doctorC.lanes?.odc?.compatible?.ok === true,
+    { agent: doctorC?.agent ? { version: doctorC.agent.agentVersion, pack: doctorC.agent.pack, compatible: doctorC.agent.compatible } : null, odc: doctorC?.lanes?.odc?.compatible ?? null });
+  const linesC = () => studioLog(C).filter(e => e.studio === 'odc').map(e => e.line);
+  let seenC = linesC().length;
+  const statusC = await call(clientC, 'studio_status');
+  check('v48 pack: the server asks customer C\'s pipe for the bridge the pack carries (ODC3-Bridge-v48) and the call goes through',
+    statusC.isError !== true && C.fakes.odcBridge === 'v48' && linesC().slice(seenC).some(line => line.startsWith('status')), sc(statusC) ?? statusC);
+  seenC = linesC().length;
+  const producersC = await call(clientC, 'studio_reference_producers', { module: ODC_MODULE.name });
+  check('v48 pack: reference-producers is not in the 23rd agent lists: COMMAND_NOT_ALLOWED from the agent, the command never reached C\'s Studio',
+    producersC.isError === true && /COMMAND_NOT_ALLOWED/.test(textOf(sc(producersC) ?? producersC)) && !linesC().slice(seenC).some(line => line.startsWith('reference-producers')),
+    sc(producersC) ?? producersC);
+  const connectedC = await call(clientC, 'ssam_connect', { lane: 'o11' });
+  const o11C = () => studioLog(C).filter(e => e.studio === 'o11');
+  const seenO11C = o11C().length;
+  const scC = sc(await call(clientC, 'o11_service_center_read', { action: 'db-connections', host: O11_MODULE.environment }, 120000));
+  const scSeenC = o11C().slice(seenO11C);
+  check('v48 pack: o11_service_center_read answers STUDIO_BRIDGE_OUTDATED (the thin bridge of the 23rd has no sc_http:studioSession) with the reconnect continuation; no page was asked',
+    connectedC.isError !== true && scC?.code === 'STUDIO_BRIDGE_OUTDATED' && scC.continuation?.tool === 'ssam_connect'
+      && !scSeenC.some(e => ['sc_http', 'sc_web', 'studio_login'].includes(e.method)),
+    { connect: sc(connectedC)?.ok ?? connectedC, reply: scC, seen: scSeenC.map(e => e.method) });
+  fs.writeFileSync(path.join(C.root, 'private', 'agent.stop'), '');
+  check('v48 pack: customer C agent stops cleanly (exit 0)', (await Promise.race([C.agent.exit, delay(10000).then(() => 'timeout')])) === 0);
+
   // 10. Customer B never reaches customer A's agent or workspace.
   const clientB = await connect(issued.b.token);
   const aLines = odcLines(A).length;
@@ -744,13 +910,13 @@ try {
   const top = fs.readdirSync(serverDir).filter(name => !['customers', 'tokens.json', 'kernel.json', 'server.log', 'server.pid', 'server.json', 'machine-pins.json', 'access-alerts.jsonl'].includes(name) && !/^audit-\d{8}\.jsonl$/.test(name));
   check('the server folder holds only tokens, kernel.json, servidor.ps1 files, audit, the access trail and customers', top.length === 0, top);
   const logs = fs.readdirSync(serverDir).filter(n => n.endsWith('.log') || n.endsWith('.jsonl')).map(n => fs.readFileSync(path.join(serverDir, n), 'utf8')).join('\n');
-  check('server.log and audit carry no token or agent credential', ![issued.a, issued.b].some(x => logs.includes(x.token) || logs.includes(x.credential)));
+  check('server.log and audit carry no token or agent credential', ![issued.a, issued.b, issued.c].some(x => logs.includes(x.token) || logs.includes(x.credential)));
   check('the customer workspaces are separate folders', fs.existsSync(issued.a.workspace) && fs.existsSync(issued.b.workspace) && !fs.existsSync(path.join(issued.b.workspace, 'odc', 'lab', 'Candidate.oml')));
 } catch (error) {
   if (!(error instanceof Stop)) { failure = error; check('unexpected error', false, error.stack ?? error.message); }
 } finally {
   for (const client of clients) await client.close().catch(() => {});
-  for (const machine of [A, B]) if (machine.agent && machine.agent.code === null) {
+  for (const machine of [A, B, C]) if (machine.agent && machine.agent.code === null) {
     try { fs.writeFileSync(path.join(machine.root, 'private', 'agent.stop'), ''); } catch { /* folder gone */ }
     await Promise.race([machine.agent.exit, delay(5000)]);
   }

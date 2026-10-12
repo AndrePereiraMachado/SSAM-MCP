@@ -1,6 +1,8 @@
 // The SSAM agent in one object: channel (I-5), outbox, the 9 kinds, files and the Studio facts of the Hello.
 // createAgent({ root, config, deps }) — every machine touch point is injectable for tests (deps: processes, locate,
-// fileVersion, describe, attachOdc, attachO11, fetch, now, setTimeout, clearTimeout, random, sleep).
+// fileVersion, describe, attachOdc, attachO11, fetch, now, setTimeout, clearTimeout, random, sleep, partMs).
+// The channel's HTTP is net.mjs (fase4-24, docs/FASE2-AGENTE.md 2.9) unless deps.fetch replaces it; SSAM_AGENT_HTTP=fetch
+// in the environment goes back to Node's built-in fetch (the part deadlines stay; the connection rules do not).
 // config: { server, credential?, o11Port? }; without config.credential the agent reads private\credential.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -12,6 +14,7 @@ import { createOutbox } from './outbox.mjs';
 import { createKinds, KINDS } from './kinds.mjs';
 import { createWorkspace } from './workspace.mjs';
 import { uploadBlob, downloadBlob, PART_BYTES, MAX_FILE_BYTES } from './blobs.mjs';
+import { createHttp } from './net.mjs';
 import { listProcesses, fileVersion, locateInstalled, installedStudios } from './studios.mjs';
 import { attachOdc } from './odc-attach.mjs';
 import { connector, readConnection } from './o11-connect.mjs';
@@ -19,7 +22,13 @@ import { AgentError } from './errors.mjs';
 
 // 0.2.0 (servidor/fase4): C03 (POST of 10 s, pong in its own POST, stream headers in 15 s), C26 (agent.root in the Hello),
 // C14 (file.sync), the query-test command of the ODC bridge v45 and the process listing without PowerShell for known pids.
-export const AGENT_VERSION = '0.2.0';
+// 0.3.0 (24th release, ODC bridge v96): sc_http in o11.bridge, reference-producers in odc.pipe and the transport block of
+// o11-bridge.mjs again. The hub logs this version at each connection (agent-connected), so the server log tells which
+// customers still run an older pack (plan risk R7).
+// 0.2.1 (fase4-24/agente-rede): net.mjs (idle reuse of 2 s, TCP keep-alive probes, fresh connection after a failure), a deadline per
+// blob part with the retry on a fresh connection, the hello in 15 s.
+// 0.3.1 (servidor/fase4-24): 0.3.0 and 0.2.1 together, plus the net.probe kind for ssam_doctor {network:true}.
+export const AGENT_VERSION = '0.3.1';
 const INLINE_MAX_BYTES = 524288;
 const MAX_VALUE_BYTES = 16 * 1024 * 1024;
 const STUDIOS_REFRESH_MS = 5 * 60000;
@@ -59,8 +68,10 @@ export function readPack(root) {
 export function createAgent({ root, config = {}, deps = {}, log = () => {}, onState = () => {} }) {
   const base = path.resolve(root);
   const d = { processes: listProcesses, fileVersion, locate: kind => locateInstalled(kind), describe: null, attachOdc, attachO11: null,
-    fetch: globalThis.fetch, now: Date.now, setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout, random: Math.random,
-    sleep: undefined, ...deps };
+    fetch: undefined, now: Date.now, setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout, random: Math.random,
+    sleep: undefined, partMs: undefined, ...deps };
+  const transport = d.fetch || process.env.SSAM_AGENT_HTTP === 'fetch' ? null : createHttp();
+  d.fetch ??= transport ? transport.fetch : globalThis.fetch;
   const run = connector(base);
   d.describe ??= pid => run(['describe', pid]);
   d.attachO11 ??= (pid, startedUtc, hook) => run(['attach', pid, startedUtc, hook]);
@@ -80,8 +91,8 @@ export function createAgent({ root, config = {}, deps = {}, log = () => {}, onSt
       maxValueBytes: welcome?.maxValueBytes ?? MAX_VALUE_BYTES };
   };
   const blobs = {
-    upload: source => uploadBlob(source, { put: channel.blobPut, partBytes: limits().partBytes, sleep: d.sleep }),
-    download: (ref, dest) => downloadBlob(ref, dest, { get: channel.blobGet, limits: limits(), sleep: d.sleep }),
+    upload: source => uploadBlob(source, { put: channel.blobPut, partBytes: limits().partBytes, sleep: d.sleep, partMs: d.partMs, log }),
+    download: (ref, dest) => downloadBlob(ref, dest, { get: channel.blobGet, limits: limits(), sleep: d.sleep, partMs: d.partMs, log }),
   };
 
   const view = record => (record ? { pid: record.pid, startedUtc: record.startedUtc, port: record.port, studioVersion: record.studioVersion ?? null } : null);
@@ -119,8 +130,10 @@ export function createAgent({ root, config = {}, deps = {}, log = () => {}, onSt
     return { studios, o11Connection: connection };
   }
 
+  // probe: the uploads of the network check (kind net.probe, net-probe.mjs); a kinds.mjs without that kind ignores it.
   const kinds = createKinds({ root: base, ws, pack, kernel: () => channel.welcome()?.kernel ?? null, deps: d, blobs, limits,
-    o11Port: Number.isInteger(config.o11Port) ? config.o11Port : 4516, onConnection: record => { connection = view(record); } });
+    o11Port: Number.isInteger(config.o11Port) ? config.o11Port : 4516, onConnection: record => { connection = view(record); },
+    probe: (id, body, options) => channel.probePut(id, body, options) });
 
   // One call -> its result message. A value above inlineMaxBytes (measured on the whole serialized message) goes as
   // a blob, up to maxValueBytes (the server assembles a value in memory and refuses a larger one: VALUE_TOO_LARGE, sent
@@ -167,7 +180,8 @@ export function createAgent({ root, config = {}, deps = {}, log = () => {}, onSt
   return {
     instance,
     run: () => channel.run(),
-    stop: () => channel.stop(),
+    // After the channel's own goodbye (DELETE /agent/v1/channel), the pooled connections are closed.
+    stop: async () => { await channel.stop(); transport?.close(); },
     // One kind run locally exactly as a call would run it (tests, diagnostics): the result message.
     execute: (kind, params) => execute({ id: randomUUID(), kind, params }),
     outbox,

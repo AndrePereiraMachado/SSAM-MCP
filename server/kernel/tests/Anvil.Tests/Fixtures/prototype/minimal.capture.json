@@ -1,0 +1,1698 @@
+{
+ "schema": "ssam-prototype-capture/1",
+ "clock": "2026-10-10T21:00:00Z",
+ "tz": "UTC",
+ "engine": {
+  "name": "jsdom",
+  "version": "30.1.1",
+  "node": "v24.19.0"
+ },
+ "source": {
+  "root": "C:\\fixture\\minimal",
+  "entry": "index.html",
+  "files": [
+   {
+    "path": "index.html",
+    "bytes": 400,
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+   },
+   {
+    "path": "styles.css",
+    "bytes": 273,
+    "sha256": "c09836358bc18f11949ad80d3ac387dc5f0eb280f000f3e4d31ab33a10e0197e"
+   },
+   {
+    "path": "assets/logo.png",
+    "bytes": 73,
+    "sha256": "fd99e9b0699914e995b475040e9ab5e654ecba4d27b2f6cd76358b880dcbc93f"
+   }
+  ],
+  "vendor": []
+ },
+ "kind": "spa-hash",
+ "app": {
+  "prefix": "Mini",
+  "title": "Mini Tarefas",
+  "lang": "pt-BR"
+ },
+ "document": {
+  "html": [
+   [
+    "lang",
+    "pt-BR"
+   ]
+  ],
+  "body": [],
+  "meta": []
+ },
+ "css": {
+  "sheets": [
+   {
+    "path": "styles.css",
+    "bundle": "minimal.bundle/sheets/c09836358bc18f11949ad80d3ac387dc5f0eb280f000f3e4d31ab33a10e0197e.css",
+    "order": 0,
+    "origin": "file",
+    "page": null,
+    "bytes": 273,
+    "sha256": "c09836358bc18f11949ad80d3ac387dc5f0eb280f000f3e4d31ab33a10e0197e",
+    "rules": 6,
+    "imports": [],
+    "urls": []
+   }
+  ]
+ },
+ "assets": [
+  {
+   "path": "assets/logo.png",
+   "bundle": "minimal.bundle/assets/fd99e9b0699914e995b475040e9ab5e654ecba4d27b2f6cd76358b880dcbc93f.png",
+   "mime": "image/png",
+   "bytes": 73,
+   "sha256": "fd99e9b0699914e995b475040e9ab5e654ecba4d27b2f6cd76358b880dcbc93f",
+   "name": "Logo",
+   "uses": [
+    "img"
+   ]
+  }
+ ],
+ "icons": {
+  "library": "lucide",
+  "defaultStrokeWidth": 2,
+  "tag": "svg",
+  "set": {
+   "check": {
+    "viewBox": "0 0 24 24",
+    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path d=\"M20 6 9 17l-5-5\"></path></svg>"
+   },
+   "plus": {
+    "viewBox": "0 0 24 24",
+    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path d=\"M5 12h14\"></path><path d=\"M12 5v14\"></path></svg>"
+   }
+  }
+ },
+ "dimensions": [
+  {
+   "key": "conta",
+   "name": "Conta",
+   "control": null,
+   "event": null,
+   "type": "Integer",
+   "values": [],
+   "initial": "1",
+   "scope": "global"
+  },
+  {
+   "key": "busca",
+   "name": "Busca",
+   "control": "input#busca",
+   "event": "input",
+   "type": "Text",
+   "values": [],
+   "initial": "",
+   "scope": "screen"
+  },
+  {
+   "key": "ordem",
+   "name": "Ordem",
+   "control": "select#ordem",
+   "event": "change",
+   "type": "Text",
+   "values": [
+    "titulo",
+    "pontos"
+   ],
+   "initial": "titulo",
+   "scope": "screen"
+  }
+ ],
+ "store": {
+  "source": "global:seed()",
+  "collections": [
+   {
+    "name": "Categoria",
+    "key": "Id",
+    "mutated": false,
+    "fields": [
+     {
+      "name": "Id",
+      "type": "Integer"
+     },
+     {
+      "name": "Nome",
+      "type": "Text",
+      "length": 50
+     }
+    ],
+    "references": [],
+    "rows": [
+     {
+      "Id": 1,
+      "Nome": "Casa"
+     },
+     {
+      "Id": 2,
+      "Nome": "Trabalho"
+     }
+    ]
+   },
+   {
+    "name": "Tarefa",
+    "key": "Id",
+    "mutated": true,
+    "fields": [
+     {
+      "name": "Id",
+      "type": "Integer"
+     },
+     {
+      "name": "CategoriaId",
+      "type": "Integer"
+     },
+     {
+      "name": "Titulo",
+      "type": "Text",
+      "length": 120
+     },
+     {
+      "name": "Feita",
+      "type": "Boolean"
+     },
+     {
+      "name": "Pontos",
+      "type": "Integer"
+     }
+    ],
+    "references": [
+     {
+      "field": "CategoriaId",
+      "collection": "Categoria"
+     }
+    ],
+    "rows": [
+     {
+      "Id": 1,
+      "CategoriaId": 1,
+      "Titulo": "Lavar louça",
+      "Feita": false,
+      "Pontos": 2
+     },
+     {
+      "Id": 2,
+      "CategoriaId": 2,
+      "Titulo": "Relatório",
+      "Feita": true,
+      "Pontos": 5
+     }
+    ]
+   }
+  ]
+ },
+ "shell": {
+  "root": {
+   "k": "s:app",
+   "t": "div",
+   "a": [
+    [
+     "id",
+     "app"
+    ],
+    [
+     "class",
+     "app"
+    ]
+   ],
+   "viewExpr": {
+    "View": "lista"
+   },
+   "c": [
+    {
+     "k": "s:app/0",
+     "t": "header",
+     "a": [
+      [
+       "class",
+       "top"
+      ]
+     ],
+     "c": [
+      {
+       "k": "s:app/0/0",
+       "t": "img",
+       "a": [
+        [
+         "src",
+         "assets/logo.png"
+        ],
+        [
+         "alt",
+         "Mini"
+        ]
+       ]
+      },
+      {
+       "k": "s:app/0/1",
+       "t": "a",
+       "a": [
+        [
+         "class",
+         "brand"
+        ],
+        [
+         "href",
+         "#lista"
+        ]
+       ],
+       "nav": {
+        "view": "lista"
+       },
+       "c": [
+        {
+         "k": "s:app/0/1/0",
+         "x": "Mini Tarefas"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "k": "s:app/1",
+     "t": "main",
+     "a": [
+      [
+       "class",
+       "main"
+      ],
+      [
+       "id",
+       "conteudo"
+      ]
+     ],
+     "placeholder": "Content"
+    }
+   ]
+  },
+  "regions": [
+   0,
+   1
+  ],
+  "mount": {
+   "region": 1,
+   "path": [
+    1
+   ]
+  },
+  "after": [
+   {
+    "k": "s:notifications",
+    "t": "div",
+    "a": [
+     [
+      "id",
+      "avisos"
+     ],
+     [
+      "class",
+      "avisos"
+     ],
+     [
+      "role",
+      "status"
+     ]
+    ],
+    "c": [],
+    "toast": {
+     "template": {
+      "k": "s:toast",
+      "t": "div",
+      "a": [
+       [
+        "class",
+        "toast "
+       ]
+      ],
+      "classExpr": {
+       "base": "toast",
+       "tokens": [
+        {
+         "token": "erro",
+         "when": {
+          "op": "truthy",
+          "l": {
+           "input": "AvisoErro"
+          }
+         }
+        }
+       ]
+      },
+      "c": [
+       {
+        "k": "s:toast/0",
+        "t": "span",
+        "a": [],
+        "c": [
+         {
+          "k": "s:toast/0/0",
+          "x": "Aviso",
+          "expr": {
+           "fmt": "text",
+           "value": {
+            "input": "Aviso"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "k": "s:toast/1",
+        "t": "button",
+        "a": [
+         [
+          "aria-label",
+          "Fechar aviso"
+         ]
+        ],
+        "events": [
+         "shell:click:close-toast"
+        ],
+        "c": [
+         {
+          "k": "s:toast/1/0",
+          "x": "x"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   }
+  ],
+  "inputs": [
+   {
+    "name": "View",
+    "type": "Text"
+   },
+   {
+    "name": "Aviso",
+    "type": "Text",
+    "toast": "text"
+   },
+   {
+    "name": "AvisoErro",
+    "type": "Boolean",
+    "toast": "error"
+   }
+  ],
+  "events": [
+   {
+    "name": "FecharAviso",
+    "params": [],
+    "from": "shell:click:close-toast"
+   }
+  ]
+ },
+ "views": [
+  {
+   "key": "lista",
+   "route": "#lista",
+   "template": "lista",
+   "params": [],
+   "name": "Lista",
+   "nameSource": "title",
+   "default": true,
+   "state": {},
+   "elements": 30,
+   "root": {
+    "k": "v:lista",
+    "t": "main",
+    "a": [
+     [
+      "class",
+      "main"
+     ],
+     [
+      "id",
+      "conteudo"
+     ]
+    ],
+    "c": [
+     {
+      "k": "v:lista/0",
+      "t": "section",
+      "a": [
+       [
+        "class",
+        "lista"
+       ],
+       [
+        "aria-labelledby",
+        "titulo"
+       ]
+      ],
+      "c": [
+       {
+        "k": "v:lista/0/0",
+        "t": "h1",
+        "a": [
+         [
+          "id",
+          "titulo"
+         ]
+        ],
+        "c": [
+         {
+          "k": "v:lista/0/0/0",
+          "x": "Tarefas"
+         }
+        ]
+       },
+       {
+        "k": "v:lista/0/1",
+        "t": "p",
+        "a": [
+         [
+          "class",
+          "resumo"
+         ]
+        ],
+        "c": [
+         {
+          "k": "v:lista/0/1/0",
+          "x": "2 tarefas",
+          "expr": {
+           "fmt": "integer",
+           "value": {
+            "count": {
+             "list": "Tarefas"
+            }
+           },
+           "suffix": " tarefas"
+          }
+         }
+        ]
+       },
+       {
+        "k": "v:lista/0/2",
+        "t": "search",
+        "a": [
+         [
+          "class",
+          "filtros"
+         ]
+        ],
+        "c": [
+         {
+          "k": "v:lista/0/2/0",
+          "t": "label",
+          "a": [
+           [
+            "for",
+            "busca"
+           ]
+          ],
+          "c": [
+           {
+            "k": "v:lista/0/2/0/0",
+            "x": "Buscar"
+           }
+          ]
+         },
+         {
+          "k": "v:lista/0/2/1",
+          "t": "input",
+          "a": [
+           [
+            "id",
+            "busca"
+           ],
+           [
+            "type",
+            "search"
+           ],
+           [
+            "placeholder",
+            "Buscar tarefa"
+           ],
+           [
+            "maxlength",
+            "60"
+           ],
+           [
+            "aria-describedby",
+            "titulo"
+           ],
+           [
+            "autocomplete",
+            "off"
+           ]
+          ],
+          "control": {
+           "kind": "input",
+           "var": "Busca",
+           "dimension": "busca",
+           "initial": ""
+          },
+          "events": [
+           "lista:input:busca"
+          ]
+         },
+         {
+          "k": "v:lista/0/2/2",
+          "t": "select",
+          "a": [
+           [
+            "id",
+            "ordem"
+           ],
+           [
+            "aria-label",
+            "Ordem"
+           ]
+          ],
+          "c": [
+           {
+            "k": "v:lista/0/2/2/0",
+            "t": "option",
+            "a": [
+             [
+              "value",
+              "titulo"
+             ],
+             [
+              "selected",
+              ""
+             ]
+            ],
+            "c": [
+             {
+              "k": "v:lista/0/2/2/0/0",
+              "x": "Título"
+             }
+            ]
+           },
+           {
+            "k": "v:lista/0/2/2/1",
+            "t": "option",
+            "a": [
+             [
+              "value",
+              "pontos"
+             ]
+            ],
+            "c": [
+             {
+              "k": "v:lista/0/2/2/1/0",
+              "x": "Pontos"
+             }
+            ]
+           }
+          ],
+          "control": {
+           "kind": "select",
+           "var": "Ordem",
+           "dimension": "ordem",
+           "initial": "titulo",
+           "options": {
+            "snapshot": true
+           }
+          },
+          "events": [
+           "lista:change:ordem"
+          ]
+         }
+        ]
+       },
+       {
+        "k": "v:lista/0/3",
+        "t": "button",
+        "a": [
+         [
+          "class",
+          "btn"
+         ],
+         [
+          "type",
+          "button"
+         ],
+         [
+          "data-action",
+          "nova"
+         ]
+        ],
+        "events": [
+         "lista:click:nova"
+        ],
+        "c": [
+         {
+          "k": "v:lista/0/3/0",
+          "t": "svg",
+          "a": [
+           [
+            "xmlns",
+            "http://www.w3.org/2000/svg"
+           ],
+           [
+            "width",
+            "24"
+           ],
+           [
+            "height",
+            "24"
+           ],
+           [
+            "viewBox",
+            "0 0 24 24"
+           ],
+           [
+            "class",
+            "lucide icon"
+           ]
+          ],
+          "icon": {
+           "name": "plus",
+           "strokeWidth": 3,
+           "from": [
+            [
+             "class",
+             "icon"
+            ],
+            [
+             "aria-hidden",
+             "true"
+            ]
+           ]
+          }
+         },
+         {
+          "k": "v:lista/0/3/1",
+          "x": "Nova tarefa"
+         }
+        ]
+       },
+       {
+        "k": "v:lista/0/4",
+        "t": "ul",
+        "a": [
+         [
+          "class",
+          "tarefas"
+         ]
+        ],
+        "list": {
+         "collection": "Tarefa",
+         "mode": "self",
+         "name": "Tarefas",
+         "filter": {
+          "op": "contains",
+          "l": {
+           "dim": "busca"
+          },
+          "r": {
+           "fields": [
+            "Titulo"
+           ]
+          }
+         },
+         "sort": [
+          {
+           "field": "Titulo",
+           "dir": "asc"
+          }
+         ],
+         "sortBy": {
+          "dimension": "ordem",
+          "cases": [
+           {
+            "value": "pontos",
+            "field": "Pontos",
+            "dir": "desc"
+           }
+          ]
+         },
+         "items": 2,
+         "snapshot": null,
+         "template": {
+          "k": "v:lista:template:item",
+          "t": "li",
+          "a": [
+           [
+            "class",
+            "item "
+           ],
+           [
+            "data-id",
+            "1"
+           ]
+          ],
+          "classExpr": {
+           "base": "item",
+           "tokens": [
+            {
+             "token": "done",
+             "when": {
+              "op": "truthy",
+              "l": {
+               "field": "Feita"
+              }
+             }
+            }
+           ]
+          },
+          "attrExpr": {
+           "data-id": {
+            "expr": {
+             "fmt": "integer",
+             "value": {
+              "field": "Id"
+             }
+            }
+           }
+          },
+          "c": [
+           {
+            "k": "v:lista:template:item/0",
+            "t": "span",
+            "a": [
+             [
+              "class",
+              "titulo"
+             ],
+             [
+              "role",
+              "button"
+             ],
+             [
+              "tabindex",
+              "0"
+             ],
+             [
+              "data-action",
+              "alternar"
+             ],
+             [
+              "data-id",
+              "1"
+             ]
+            ],
+            "attrExpr": {
+             "data-id": {
+              "expr": {
+               "fmt": "integer",
+               "value": {
+                "field": "Id"
+               }
+              }
+             }
+            },
+            "events": [
+             "lista:click:alternar"
+            ],
+            "c": [
+             {
+              "k": "v:lista:template:item/0/0",
+              "x": "Lavar louça",
+              "expr": {
+               "fmt": "text",
+               "value": {
+                "field": "Titulo"
+               }
+              }
+             }
+            ]
+           },
+           {
+            "k": "v:lista:template:item/1",
+            "t": "span",
+            "a": [
+             [
+              "class",
+              "estado"
+             ]
+            ],
+            "if": {
+             "op": "truthy",
+             "l": {
+              "field": "Feita"
+             }
+            },
+            "c": [
+             {
+              "k": "v:lista:template:item/1/0",
+              "t": "svg",
+              "a": [
+               [
+                "xmlns",
+                "http://www.w3.org/2000/svg"
+               ],
+               [
+                "width",
+                "24"
+               ],
+               [
+                "height",
+                "24"
+               ],
+               [
+                "viewBox",
+                "0 0 24 24"
+               ],
+               [
+                "class",
+                "lucide icon"
+               ]
+              ],
+              "icon": {
+               "name": "check",
+               "strokeWidth": 2,
+               "from": [
+                [
+                 "class",
+                 "icon"
+                ],
+                [
+                 "aria-hidden",
+                 "true"
+                ]
+               ]
+              }
+             },
+             {
+              "k": "v:lista:template:item/1/1",
+              "x": " feita"
+             }
+            ],
+            "else": [
+             {
+              "k": "v:lista:else:pendente",
+              "t": "span",
+              "a": [
+               [
+                "class",
+                "estado pendente"
+               ]
+              ],
+              "c": [
+               {
+                "k": "v:lista:else:pendente/0",
+                "x": "pendente"
+               }
+              ]
+             }
+            ]
+           },
+           {
+            "k": "v:lista:template:item/2",
+            "t": "button",
+            "a": [
+             [
+              "class",
+              "link"
+             ],
+             [
+              "type",
+              "button"
+             ],
+             [
+              "data-action",
+              "alternar"
+             ],
+             [
+              "data-id",
+              "1"
+             ]
+            ],
+            "attrExpr": {
+             "data-id": {
+              "expr": {
+               "fmt": "integer",
+               "value": {
+                "field": "Id"
+               }
+              }
+             }
+            },
+            "events": [
+             "lista:click:alternar"
+            ],
+            "c": [
+             {
+              "k": "v:lista:template:item/2/0",
+              "x": "Alternar"
+             }
+            ]
+           },
+           {
+            "k": "v:lista:template:item/3",
+            "t": "button",
+            "a": [
+             [
+              "class",
+              "link perigo"
+             ],
+             [
+              "type",
+              "button"
+             ],
+             [
+              "data-action",
+              "remover"
+             ],
+             [
+              "data-id",
+              "1"
+             ]
+            ],
+            "attrExpr": {
+             "data-id": {
+              "expr": {
+               "fmt": "integer",
+               "value": {
+                "field": "Id"
+               }
+              }
+             }
+            },
+            "events": [
+             "lista:click:remover"
+            ],
+            "c": [
+             {
+              "k": "v:lista:template:item/3/0",
+              "x": "Remover"
+             }
+            ]
+           },
+           {
+            "k": "v:lista:template:item/4",
+            "t": "a",
+            "a": [
+             [
+              "class",
+              "abrir"
+             ],
+             [
+              "href",
+              "#tarefa/1"
+             ]
+            ],
+            "nav": {
+             "view": "tarefa",
+             "params": {
+              "Id": {
+               "field": "Id"
+              }
+             }
+            },
+            "c": [
+             {
+              "k": "v:lista:template:item/4/0",
+              "x": "Abrir"
+             }
+            ]
+           }
+          ]
+         }
+        },
+        "c": []
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "key": "tarefa",
+   "route": "#tarefa/1",
+   "template": "tarefa/{id}",
+   "params": [
+    {
+     "name": "Id",
+     "type": "Integer",
+     "value": "1"
+    }
+   ],
+   "name": "TarefaDetalhe",
+   "nameSource": "title",
+   "default": false,
+   "state": {},
+   "elements": 6,
+   "records": [
+    {
+     "name": "Tarefa",
+     "collection": "Tarefa",
+     "key": {
+      "param": "Id"
+     }
+    }
+   ],
+   "root": {
+    "k": "v:tarefa",
+    "t": "main",
+    "a": [
+     [
+      "class",
+      "main"
+     ],
+     [
+      "id",
+      "conteudo"
+     ]
+    ],
+    "c": [
+     {
+      "k": "v:tarefa/0",
+      "t": "article",
+      "a": [
+       [
+        "class",
+        "detalhe"
+       ]
+      ],
+      "c": [
+       {
+        "k": "v:tarefa/0/0",
+        "t": "a",
+        "a": [
+         [
+          "href",
+          "#lista"
+         ]
+        ],
+        "nav": {
+         "view": "lista"
+        },
+        "c": [
+         {
+          "k": "v:tarefa/0/0/0",
+          "x": "Voltar"
+         }
+        ]
+       },
+       {
+        "k": "v:tarefa/0/1",
+        "t": "h2",
+        "a": [],
+        "c": [
+         {
+          "k": "v:tarefa/0/1/0",
+          "x": "Lavar louça",
+          "expr": {
+           "fmt": "text",
+           "value": {
+            "field": "Titulo",
+            "record": "Tarefa"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "k": "v:tarefa/0/2",
+        "t": "p",
+        "a": [],
+        "c": [
+         {
+          "k": "v:tarefa/0/2/0",
+          "x": "2",
+          "expr": {
+           "fmt": "integer",
+           "value": {
+            "field": "Pontos",
+            "record": "Tarefa"
+           },
+           "prefix": "Pontos: "
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "modals": [
+  {
+   "key": "nova-tarefa",
+   "name": "NovaTarefa",
+   "container": {
+    "tag": "dialog",
+    "attrs": [
+     [
+      "id",
+      "dialogo"
+     ],
+     [
+      "aria-labelledby",
+      "dialogo-titulo"
+     ]
+    ],
+    "class": ""
+   },
+   "openedFrom": [
+    {
+     "view": "lista",
+     "event": "lista:click:nova"
+    }
+   ],
+   "params": [],
+   "record": {
+    "collection": "Tarefa",
+    "new": {
+     "Id": 0,
+     "CategoriaId": 1,
+     "Titulo": "",
+     "Feita": false,
+     "Pontos": 1
+    }
+   },
+   "elements": 14,
+   "root": {
+    "k": "m:nova-tarefa",
+    "t": "dialog",
+    "a": [
+     [
+      "id",
+      "dialogo"
+     ],
+     [
+      "aria-labelledby",
+      "dialogo-titulo"
+     ],
+     [
+      "class",
+      ""
+     ],
+     [
+      "open",
+      ""
+     ]
+    ],
+    "c": [
+     {
+      "k": "m:nova-tarefa/0",
+      "t": "h2",
+      "a": [
+       [
+        "id",
+        "dialogo-titulo"
+       ]
+      ],
+      "c": [
+       {
+        "k": "m:nova-tarefa/0/0",
+        "x": "Nova tarefa"
+       }
+      ]
+     },
+     {
+      "k": "m:nova-tarefa/1",
+      "t": "form",
+      "a": [
+       [
+        "id",
+        "tarefa-form"
+       ]
+      ],
+      "events": [
+       "nova-tarefa:submit:tarefa-form"
+      ],
+      "c": [
+       {
+        "k": "m:nova-tarefa/1/0",
+        "t": "div",
+        "a": [
+         [
+          "class",
+          "erro"
+         ],
+         [
+          "id",
+          "tarefa-erro"
+         ],
+         [
+          "role",
+          "alert"
+         ]
+        ],
+        "c": [],
+        "message": {
+         "local": "TarefaErro"
+        }
+       },
+       {
+        "k": "m:nova-tarefa/1/1",
+        "t": "label",
+        "a": [
+         [
+          "class",
+          "campo"
+         ]
+        ],
+        "c": [
+         {
+          "k": "m:nova-tarefa/1/1/0",
+          "t": "span",
+          "a": [],
+          "c": [
+           {
+            "k": "m:nova-tarefa/1/1/0/0",
+            "x": "Título"
+           }
+          ]
+         },
+         {
+          "k": "m:nova-tarefa/1/1/1",
+          "t": "input",
+          "a": [
+           [
+            "name",
+            "Titulo"
+           ],
+           [
+            "required",
+            ""
+           ],
+           [
+            "maxlength",
+            "120"
+           ]
+          ],
+          "control": {
+           "kind": "input",
+           "field": "Titulo"
+          }
+         }
+        ]
+       },
+       {
+        "k": "m:nova-tarefa/1/2",
+        "t": "label",
+        "a": [
+         [
+          "class",
+          "campo"
+         ]
+        ],
+        "c": [
+         {
+          "k": "m:nova-tarefa/1/2/0",
+          "t": "span",
+          "a": [],
+          "c": [
+           {
+            "k": "m:nova-tarefa/1/2/0/0",
+            "x": "Categoria"
+           }
+          ]
+         },
+         {
+          "k": "m:nova-tarefa/1/2/1",
+          "t": "select",
+          "a": [
+           [
+            "name",
+            "CategoriaId"
+           ]
+          ],
+          "c": [
+           {
+            "k": "m:nova-tarefa/1/2/1/0",
+            "t": "option",
+            "a": [
+             [
+              "value",
+              "1"
+             ],
+             [
+              "selected",
+              ""
+             ]
+            ],
+            "c": [
+             {
+              "k": "m:nova-tarefa/1/2/1/0/0",
+              "x": "Casa"
+             }
+            ]
+           },
+           {
+            "k": "m:nova-tarefa/1/2/1/1",
+            "t": "option",
+            "a": [
+             [
+              "value",
+              "2"
+             ]
+            ],
+            "c": [
+             {
+              "k": "m:nova-tarefa/1/2/1/1/0",
+              "x": "Trabalho"
+             }
+            ]
+           }
+          ],
+          "control": {
+           "kind": "select",
+           "field": "CategoriaId",
+           "options": {
+            "collection": "Categoria",
+            "value": "Id",
+            "label": "Nome"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "k": "m:nova-tarefa/1/3",
+        "t": "div",
+        "a": [
+         [
+          "class",
+          "acoes"
+         ]
+        ],
+        "c": [
+         {
+          "k": "m:nova-tarefa/1/3/0",
+          "t": "button",
+          "a": [
+           [
+            "class",
+            "btn secundario"
+           ],
+           [
+            "type",
+            "button"
+           ],
+           [
+            "data-action",
+            "close-modal"
+           ]
+          ],
+          "events": [
+           "nova-tarefa:click:close-modal"
+          ],
+          "c": [
+           {
+            "k": "m:nova-tarefa/1/3/0/0",
+            "x": "Cancelar"
+           }
+          ]
+         },
+         {
+          "k": "m:nova-tarefa/1/3/1",
+          "t": "button",
+          "a": [
+           [
+            "class",
+            "btn"
+           ],
+           [
+            "type",
+            "submit"
+           ]
+          ],
+          "c": [
+           {
+            "k": "m:nova-tarefa/1/3/1/0",
+            "x": "Salvar"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "events": [
+  {
+   "key": "shell:click:close-toast",
+   "view": null,
+   "selector": "[aria-label=\"Fechar aviso\"]",
+   "on": "click",
+   "params": [],
+   "handler": "app.js:10",
+   "effects": [
+    {
+     "kind": "toast",
+     "text": null,
+     "variant": "",
+     "close": true
+    }
+   ],
+   "when": null,
+   "compiled": true
+  },
+  {
+   "key": "lista:input:busca",
+   "view": "lista",
+   "selector": "#busca",
+   "on": "input",
+   "params": [],
+   "handler": "app.js:20",
+   "effects": [
+    {
+     "kind": "setDimension",
+     "dimension": "busca",
+     "value": {
+      "control": "Busca"
+     }
+    }
+   ],
+   "when": null,
+   "compiled": true
+  },
+  {
+   "key": "lista:change:ordem",
+   "view": "lista",
+   "selector": "#ordem",
+   "on": "change",
+   "params": [],
+   "handler": "app.js:21",
+   "effects": [
+    {
+     "kind": "setDimension",
+     "dimension": "ordem",
+     "value": {
+      "control": "Ordem"
+     }
+    }
+   ],
+   "when": null,
+   "compiled": true
+  },
+  {
+   "key": "lista:click:nova",
+   "view": "lista",
+   "selector": "[data-action=\"nova\"]",
+   "on": "click",
+   "params": [],
+   "handler": "app.js:22",
+   "effects": [
+    {
+     "kind": "openPopup",
+     "modal": "nova-tarefa",
+     "inputs": {}
+    }
+   ],
+   "when": null,
+   "compiled": true
+  },
+  {
+   "key": "lista:click:alternar",
+   "view": "lista",
+   "selector": "[data-action=\"alternar\"]",
+   "on": "click",
+   "params": [
+    {
+     "name": "Id",
+     "from": "data-id",
+     "type": "Integer"
+    }
+   ],
+   "handler": "app.js:23",
+   "effects": [
+    {
+     "kind": "toggle",
+     "collection": "Tarefa",
+     "key": {
+      "param": "Id"
+     },
+     "field": "Feita"
+    },
+    {
+     "kind": "toast",
+     "text": {
+      "lit": "Tarefa atualizada."
+     },
+     "variant": ""
+    }
+   ],
+   "when": null,
+   "compiled": true
+  },
+  {
+   "key": "lista:click:remover",
+   "view": "lista",
+   "selector": "[data-action=\"remover\"]",
+   "on": "click",
+   "params": [
+    {
+     "name": "Id",
+     "from": "data-id",
+     "type": "Integer"
+    }
+   ],
+   "handler": "app.js:24",
+   "effects": [
+    {
+     "kind": "remove",
+     "collection": "Tarefa",
+     "key": {
+      "param": "Id"
+     }
+    }
+   ],
+   "when": null,
+   "compiled": true
+  },
+  {
+   "key": "nova-tarefa:submit:tarefa-form",
+   "view": "lista",
+   "modal": "nova-tarefa",
+   "selector": "#tarefa-form",
+   "on": "submit",
+   "params": [],
+   "handler": "app.js:30",
+   "effects": [
+    {
+     "kind": "validate",
+     "target": {
+      "local": "TarefaErro"
+     },
+     "rules": [
+      {
+       "when": {
+        "op": "or",
+        "a": [
+         {
+          "op": "eq",
+          "l": {
+           "control": "Titulo"
+          },
+          "r": {
+           "lit": ""
+          }
+         },
+         {
+          "op": "len-gt",
+          "l": {
+           "control": "Titulo"
+          },
+          "r": {
+           "lit": 120
+          }
+         }
+        ]
+       },
+       "message": "Informe um título com até 120 caracteres.",
+       "control": "Titulo"
+      }
+     ]
+    },
+    {
+     "kind": "insert",
+     "collection": "Tarefa",
+     "fields": {
+      "CategoriaId": {
+       "control": "CategoriaId"
+      },
+      "Titulo": {
+       "control": "Titulo"
+      },
+      "Feita": {
+       "lit": false
+      },
+      "Pontos": {
+       "lit": 1
+      }
+     }
+    },
+    {
+     "kind": "closePopup",
+     "modal": "nova-tarefa"
+    },
+    {
+     "kind": "toast",
+     "text": {
+      "lit": "Tarefa criada."
+     },
+     "variant": ""
+    }
+   ],
+   "when": null,
+   "compiled": true
+  },
+  {
+   "key": "nova-tarefa:click:close-modal",
+   "view": null,
+   "modal": "nova-tarefa",
+   "selector": "[data-action=\"close-modal\"]",
+   "on": "click",
+   "params": [],
+   "handler": "app.js:31",
+   "effects": [
+    {
+     "kind": "closePopup",
+     "modal": "nova-tarefa"
+    }
+   ],
+   "when": null,
+   "compiled": true
+  }
+ ],
+ "explored": [
+  {
+   "id": "v:lista@canonical",
+   "view": "lista",
+   "assign": {},
+   "tree": null
+  },
+  {
+   "id": "v:tarefa@canonical",
+   "view": "tarefa",
+   "assign": {},
+   "tree": null
+  },
+  {
+   "id": "m:nova-tarefa@canonical",
+   "view": "lista",
+   "modal": "nova-tarefa",
+   "assign": {},
+   "tree": null
+  }
+ ],
+ "trees": {},
+ "problems": [],
+ "warnings": [],
+ "stats": {
+  "elements": 50,
+  "views": 2,
+  "modals": 1,
+  "icons": 2,
+  "iconInstances": 2,
+  "events": 8,
+  "probes": 0
+ },
+ "timings": {
+  "loadMs": 0,
+  "crawlMs": 0,
+  "probeMs": 0,
+  "inferMs": 0,
+  "totalMs": 0
+ }
+}

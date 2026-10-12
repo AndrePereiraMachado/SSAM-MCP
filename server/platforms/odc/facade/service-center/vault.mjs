@@ -12,8 +12,8 @@ import path from 'node:path';
 import { ProtocolError } from './errors.mjs';
 import { hostName } from './http.mjs';
 
-const TARGET = /^SSAM\/O11\/[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\/(?:ServiceCenter|ServiceStudio|LifeTime|(?:DatabaseConnection|SiteProperty)\/[A-Za-z0-9_.-]{1,100})$/;
-const LOGIN_TARGET = /^SSAM\/O11\/[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\/(?:ServiceCenter|ServiceStudio)$/;
+const TARGET = /^SSAM\/O11\/[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\/(?:ServiceCenter(?:\/Profiles\/[a-f0-9]{64}\/[a-f0-9-]{36})?|ServiceStudio|LifeTime|(?:DatabaseConnection|SiteProperty)\/[A-Za-z0-9_.-]{1,100})$/;
+const LOGIN_TARGET = /^SSAM\/O11\/[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\/(?:ServiceCenter(?:\/Profiles\/[a-f0-9]{64}\/[a-f0-9-]{36})?|ServiceStudio)$/;
 
 export const powershellPath = (env = process.env) => path.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 
@@ -166,7 +166,7 @@ export async function vaultLogin(target, { url, body, userField, passwordField, 
 export function createVault(host, target = null, { present = t => vaultPresent(t), run = null, credential = CREDENTIAL } = {}) {
   const name = hostName(host);
   const login = target || `SSAM/O11/${name}/ServiceCenter`;
-  if (![`SSAM/O11/${name}/ServiceCenter`, `SSAM/O11/${name}/ServiceStudio`].includes(login))
+  if (!LOGIN_TARGET.test(login) || !login.startsWith(`SSAM/O11/${name}/`))
     throw new ProtocolError('Credential target must match this O11 host and ServiceCenter or ServiceStudio');
   return {
     host: name, target: login,

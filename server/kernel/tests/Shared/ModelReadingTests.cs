@@ -76,6 +76,51 @@ public sealed class ModelReadingTests
         Assert.Throws<ArgumentException>(() => snapshot.Read("/", new(), [], "unused"));
     }
 
+    // G11 (FarmaVirtual, 10/10/2026, call 131): the O11 placeholder "content" of a container is the Parent() of its widgets,
+    // but no Children list holds it; the module index names it as their parent, and "@key" of it was "Unresolved or ambiguous".
+    [Fact]
+    public void KeyOfAnElementOnlyParentReachesResolvesAndAnUnknownKeyIsNeverCalledAmbiguous()
+    {
+        var root = new Node("root", "Module"); var page = root.Add(new("page", "Container", "Page"));
+        var content = new Node("page.content", "MobileWidget", "content") { Parent = page };
+        var input = page.Add(new("input", "Input", "NameInput")); input.Parent = content; content.Children.Add(input);
+        var reader = new Reader();
+        Assert.Same(content, reader.Resolve(root, "@page.content"));
+        var tree = Json(reader.Read(root, "@page.content", new(Depth: 1)))["tree"]!;
+        Assert.Equal("page.content", tree["key"]!.ToString()); Assert.Equal("Container:Page/MobileWidget:content", tree["path"]!.ToString());
+        Assert.Equal("input", tree["children"]![0]!["key"]!.ToString());
+        Assert.Same(input, reader.Resolve(root, "@input"));
+        var unknown = Assert.Throws<InvalidOperationException>(() => reader.Resolve(root, "@missing"));
+        Assert.StartsWith("Unresolved key in this snapshot: @missing", unknown.Message);
+        Assert.DoesNotContain("ambiguous", unknown.Message, StringComparison.OrdinalIgnoreCase);
+        page.Add(new("input", "Input", "Twin"));
+        var twins = Assert.Throws<InvalidOperationException>(() => reader.Resolve(root, "@input")).Message;
+        Assert.StartsWith("Ambiguous key in this snapshot: @input names 2 elements (", twins);
+        Assert.Contains("Container:Page/MobileWidget:content/Input:NameInput", twins); Assert.Contains("Container:Page/Input:Twin", twins);
+    }
+
+    // A select under a path (o11_inspect/studio_inspect select) reads inside it: the Parent() fallback of a key climbs no
+    // further than the chain above the scope, so the placeholder the scope sits in, its container and the module never
+    // resolve there; the placeholders inside the scope still do.
+    [Fact]
+    public void KeyReachedThroughParentStaysInsideTheScopeOfASelect()
+    {
+        var root = new Node("root", "Module"); var page = root.Add(new("page", "Container", "Page"));
+        var slot = new Node("page.content", "MobileWidget", "content") { Parent = page };
+        var box = page.Add(new("box", "Container", "Box")); box.Parent = slot; slot.Children.Add(box);
+        var inner = new Node("box.content", "MobileWidget", "content") { Parent = box };
+        var input = box.Add(new("input", "Input", "NameInput")); input.Parent = inner; inner.Children.Add(input);
+        var reader = new Reader();
+        Assert.Same(slot, reader.Resolve(root, "@page.content"));
+        Assert.Same(inner, reader.Resolve(box, "@box.content"));
+        foreach (var outside in new[] { "@page.content", "@page", "@root" })
+            Assert.StartsWith("Unresolved key in this snapshot: " + outside + " ", Assert.Throws<InvalidOperationException>(() => reader.Resolve(box, outside)).Message);
+        using var snapshot = new ReadSnapshot<Node>(root, new Reader(), "module", () => { });
+        var result = snapshot.Read("@box", new(Depth: 0), ["@box.content", "@input", "@page.content", "@root"], "unused");
+        Assert.Equal(new[] { true, true, false, false }, result["entries"]!.AsArray().Select(e => e!["ok"]!.GetValue<bool>()));
+        Assert.StartsWith("Unresolved key in this snapshot: @page.content", result["entries"]![2]!["error"]!.GetValue<string>());
+    }
+
     [Fact]
     public void TransientPropertyFailuresAreNeverMemoizedAsSuccessfulAnswers()
     {

@@ -1,0 +1,91 @@
+{
+ "description": "Um pedido inteiro num job so (o jeito de entregar: todas as mudancas do pedido num job por modulo, uma chamada; uma recusa traz todos os problemas de uma vez), sobre o modulo vazio: user exception e site property (verbos), entidade e estrutura (op spec) e quatro server actions publicas no MESMO op logic, em qualquer ordem, chamando umas as outras. Passos: aggregate (get com filtros, sort de duas chaves e max), if com raise, foreach com assign e ListAppend, call, create e assign; inputs e outputs tipados (Date, Date Time, Integer, Text, Identifier, lista de registros, estrutura); calculos de DateTime com AddDays, AddMinutes, DiffMinutes, DateToDateTime, DateTimeToTime e NewTime; o usuario corrente por GetUserId numa variavel antes do aggregate.",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IUserException", "name": "AgendaInvalida", "as": "$erro"},
+  {"op": "create", "parent": "@espace", "type": "ISiteProperty", "name": "FusoHorarioMinutos", "as": "$fuso"},
+  {"op": "set", "target": "$fuso", "prop": "DataType", "value": "Integer"},
+  {"op": "set", "target": "$fuso", "prop": "DefaultValue", "value": "-180"},
+  {"op": "set", "target": "$fuso", "prop": "Description", "value": "Deslocamento do fuso do expediente em relacao a UTC, em minutos."},
+  {"op": "spec", "data": {
+   "entities": [
+    {"name": "Compromisso", "public": true, "description": "Um horario reservado por um usuario.",
+     "attributes": [
+      {"name": "UsuarioId", "type": "User Identifier", "mandatory": true},
+      {"name": "Titulo", "type": "Text", "length": 200, "mandatory": true},
+      {"name": "InicioUTC", "type": "Date Time", "mandatory": true},
+      {"name": "DuracaoMinutos", "type": "Integer", "mandatory": true},
+      {"name": "IsCancelado", "type": "Boolean"}
+     ]}
+   ],
+   "structures": [
+    {"name": "ResumoDoDia", "public": true, "description": "Totais calculados de um dia, sem persistir.",
+     "attributes": [
+      {"name": "Data", "type": "Date"},
+      {"name": "Quantidade", "type": "Integer"},
+      {"name": "MinutosOcupados", "type": "Integer"},
+      {"name": "PrimeiroHorario", "type": "Time"}
+     ]}
+   ]
+  }},
+  {"op": "logic", "data": {"actions": [
+   {"name": "Agenda_Resumo", "kind": "server", "public": true, "description": "Resume o dia do usuario corrente: quantidade, minutos ocupados e o primeiro horario no fuso do expediente.",
+    "inputs": [{"name": "Data", "type": "Date"}],
+    "outputs": [{"name": "Resumo", "type": "ResumoDoDia"}],
+    "steps": [
+     {"call": "Agenda_DoDia", "as": "DoDia", "args": {"Data": "Data"}},
+     {"assign": {"Resumo.Data": "Data", "Resumo.Quantidade": "DoDia.Compromissos.Length", "Resumo.PrimeiroHorario": "NewTime(0, 0, 0)"}, "as": "Inicia"},
+     {"foreach": "DoDia.Compromissos", "as": "CadaCompromisso", "do": [
+      {"assign": {"Resumo.MinutosOcupados": "Resumo.MinutosOcupados + DoDia.Compromissos.Current.DuracaoMinutos"}, "as": "Soma"}
+     ]},
+     {"if": "not DoDia.Compromissos.Empty", "label": "TemCompromisso?", "then": [
+      {"assign": {"Resumo.PrimeiroHorario": "DateTimeToTime(AddMinutes(DoDia.Compromissos[0].InicioUTC, Site.FusoHorarioMinutos))"}, "as": "Primeiro"}
+     ]}
+    ]},
+   {"name": "Agenda_DoDia", "kind": "server", "public": true, "description": "Os compromissos ativos do usuario corrente num dia, em ordem de inicio.",
+    "inputs": [{"name": "Data", "type": "Date"}],
+    "outputs": [{"name": "Compromissos", "type": "Compromisso List"}],
+    "vars": [{"name": "UsuarioId", "type": "User Identifier"}, {"name": "Item", "type": "Compromisso"}],
+    "steps": [
+     {"assign": {"UsuarioId": "GetUserId()"}, "as": "UsuarioCorrente"},
+     {"get": "Compromisso", "as": "GetDoDia", "where": ["Compromisso.UsuarioId = UsuarioId", "not Compromisso.IsCancelado", "Compromisso.InicioUTC >= DateToDateTime(Data)", "Compromisso.InicioUTC < AddDays(DateToDateTime(Data), 1)"],
+      "sort": ["Compromisso.InicioUTC", "Compromisso.Id"], "max": 200},
+     {"foreach": "GetDoDia.List", "as": "Copia", "do": [
+      {"assign": {"Item": "GetDoDia.List.Current.Compromisso"}, "as": "Atual"},
+      {"call": "ListAppend", "as": "Acrescenta", "args": {"List": "Compromissos", "Element": "Item"}}
+     ]}
+    ]},
+   {"name": "Agenda_Marcar", "kind": "server", "public": true, "description": "Marca um compromisso do usuario corrente; recusa titulo vazio, duracao invalida, horario passado e conflito.",
+    "inputs": [{"name": "Titulo", "type": "Text"}, {"name": "Inicio", "type": "Date Time"}, {"name": "DuracaoMinutos", "type": "Integer"}],
+    "outputs": [{"name": "CompromissoId", "type": "Compromisso Identifier"}],
+    "vars": [{"name": "Novo", "type": "Compromisso"}],
+    "steps": [
+     {"if": "Trim(Titulo) = \"\" or DuracaoMinutos <= 0 or DuracaoMinutos > 600", "label": "Invalido?", "then": [
+      {"raise": "AgendaInvalida", "message": "\"Informe o titulo e uma duracao entre 1 e 600 minutos\""}
+     ]},
+     {"if": "DiffMinutes(CurrDateTime(), Inicio) < 0", "label": "Passado?", "then": [
+      {"raise": "AgendaInvalida", "message": "\"O horario ja passou\""}
+     ]},
+     {"call": "Agenda_TemConflito", "as": "Conflito", "args": {"Inicio": "Inicio", "DuracaoMinutos": "DuracaoMinutos"}},
+     {"if": "Conflito.HasConflito", "label": "Conflito?", "then": [
+      {"raise": "AgendaInvalida", "message": "\"Ja existe um compromisso neste horario\""}
+     ]},
+     {"assign": {"Novo.UsuarioId": "GetUserId()", "Novo.Titulo": "Trim(Titulo)", "Novo.InicioUTC": "Inicio", "Novo.DuracaoMinutos": "DuracaoMinutos", "Novo.IsCancelado": "False"}, "as": "Preenche"},
+     {"create": "Compromisso", "record": "Novo", "as": "Cria"},
+     {"assign": {"CompromissoId": "Cria.Id"}, "as": "Devolve"}
+    ]},
+   {"name": "Agenda_TemConflito", "kind": "server", "public": true, "description": "Diz se o usuario corrente ja tem um compromisso ativo que cruza o intervalo pedido.",
+    "inputs": [{"name": "Inicio", "type": "Date Time"}, {"name": "DuracaoMinutos", "type": "Integer"}],
+    "outputs": [{"name": "HasConflito", "type": "Boolean"}],
+    "vars": [{"name": "UsuarioId", "type": "User Identifier"}],
+    "steps": [
+     {"assign": {"UsuarioId": "GetUserId()"}, "as": "UsuarioCorrente"},
+     {"get": "Compromisso", "as": "GetCruzamento", "where": ["Compromisso.UsuarioId = UsuarioId", "not Compromisso.IsCancelado", "Compromisso.InicioUTC < AddMinutes(Inicio, DuracaoMinutos)", "AddMinutes(Compromisso.InicioUTC, Compromisso.DuracaoMinutos) > Inicio"],
+      "max": 1},
+     {"assign": {"HasConflito": "not GetCruzamento.List.Empty"}, "as": "Devolve"}
+    ]}
+  ]}}
+ ]
+}

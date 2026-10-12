@@ -20,7 +20,7 @@ public sealed record ModuleCreationOutcome(
 
 public sealed record ApplicationCreationOutcome(
     string ApplicationName, string ApplicationKey, bool ApplicationOk, string? ApplicationMessage, bool ApplicationExisted,
-    string ApplicationKind, string? TemplateKey, IReadOnlyList<ModuleCreationOutcome> Modules)
+    string ApplicationKind, string? TemplateKey, IReadOnlyList<ModuleCreationOutcome> Modules, string? Host = null)
 {
     public bool Succeeded => ApplicationOk && Modules.All(m => m.Succeeded);
 }

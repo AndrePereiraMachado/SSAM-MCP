@@ -53,7 +53,9 @@ const enumOf = (schema, name) => alternatives(schema?.properties?.[name]).flatMa
 
 test('every tool registered by createSsamServer() plus ssam_friction is classified, and every classified tool is live', async () => {
   const names = await liveTools();
-  assert.equal(names.size, 83, 'the 78 tools of createSsamServer of the atritos 3 package (ssam_query_test is new), the 4 hook tools (SSAM_APP_HOOK_TOOLS=1) and ssam_friction');
+  // servidor/fase4-24: the 24th release adds 12 (catalog/tools.json 83 -> 95, none removed): 90 of createSsamServer, the 4
+  // hook tools (SSAM_APP_HOOK_TOOLS=1) and ssam_friction.
+  assert.equal(names.size, 95, 'the 90 tools of createSsamServer of the 24th release, the 4 hook tools (SSAM_APP_HOOK_TOOLS=1) and ssam_friction');
   assert.deepEqual([...names.keys()].filter(n => !tools[n]), [], 'live tools without a hosted class');
   assert.deepEqual(Object.keys(tools).filter(n => !names.has(n)), [], 'stale hosted classes');
 });
@@ -106,10 +108,10 @@ test('every in/out pointer exists in the tool schema under the 6.4 grammar', asy
   assert.equal(pointerExists(names.get('studio_open').inputSchema, '/nope'), false);
 });
 
-test('the totals of section 5: 22 server (10 with a mode that uses the agent), 32 agent, 19 tenant-agent, 10 unavailable', () => {
+test('the totals of section 5: 23 server (10 with a mode that uses the agent), 33 agent, 22 tenant-agent, 17 unavailable', () => {
   const count = klass => Object.values(tools).filter(t => t.class === klass).length;
   assert.deepEqual({ server: count('server'), agent: count('agent'), tenant: count('tenant-agent'), unavailable: count('unavailable') },
-    { server: 22, agent: 32, tenant: 19, unavailable: 10 });
+    { server: 23, agent: 33, tenant: 22, unavailable: 17 });
   assert.equal(Object.values(tools).filter(t => t.class === 'server' && typeof t.agent === 'object').length, 10);
   assert.deepEqual(Object.entries(tools).filter(([, t]) => t.agent === 'report').map(([n]) => n).sort(), ['hybrid_tenants', 'odc_auth_status', 'ssam_doctor', 'studio_doctor']);
 });
@@ -196,4 +198,75 @@ test('ssam_query_test hosted: an agent tool of the ODC lane with /source as inpu
     moduleKey: 'k', environment: 'h.example', query: '@q' }, { o11: async () => { sent = true; return { ok: true }; } }));
   assert.equal(value.ok, false); assert.equal(value.code, 'HOSTED_UNAVAILABLE'); assert.equal(value.execution, 'not-sent');
   assert.equal(sent, false);
+});
+
+// The 24th release (servidor/fase4-24, PLANO-24-PRODUCAO 2.1): the 12 new tools. studio_reference_producers is an agent
+// tool; the MCP and A2A connection tools reach the tenant only through the user's Studio; odc_a2a_connection_plan is a pure
+// preparation on the server; the three debugger tools stay unavailable like ssam_debug; and the four API Client tools
+// answer HOSTED_UNAVAILABLE with cause API_CLIENT_ONLY and a continuation to what the Studio session does (never back to
+// themselves).
+const NEW_24 = {
+  studio_reference_producers: { class: 'agent', lane: 'odc', agent: 'always' },
+  odc_mcp_connection: { class: 'tenant-agent', lane: 'odc', agent: 'always' },
+  odc_mcp_import: { class: 'tenant-agent', lane: 'odc', agent: 'always' },
+  odc_a2a_connection_delete: { class: 'tenant-agent', lane: 'odc', agent: 'always' },
+  odc_a2a_connection_plan: { class: 'server', lane: 'odc', agent: 'never' },
+  odc_native_package: { class: 'unavailable', lane: 'none', agent: 'never' },
+  odc_generated_code: { class: 'unavailable', lane: 'none', agent: 'never' },
+  odc_asset_source: { class: 'unavailable', lane: 'none', agent: 'never' },
+  odc_asset_revision: { class: 'unavailable', lane: 'none', agent: 'never' },
+  ssam_debug_server: { class: 'unavailable', lane: 'none', agent: 'never' },
+  ssam_debug_client: { class: 'unavailable', lane: 'none', agent: 'never' },
+  ssam_debug_matrix: { class: 'unavailable', lane: 'none', agent: 'never' },
+};
+const API_CLIENT_ONLY = ['odc_native_package', 'odc_generated_code', 'odc_asset_source', 'odc_asset_revision'];
+
+test('the 24th release tools: the 12 new entries of plan 2.1, live, with their class, lane and agent rule', async () => {
+  const names = await liveTools();
+  for (const [name, expected] of Object.entries(NEW_24)) {
+    assert.ok(names.has(name), name + ' is live');
+    assert.deepEqual({ class: tools[name].class, lane: tools[name].lane, agent: tools[name].agent }, expected, name);
+  }
+  assert.deepEqual(tools.studio_reference_producers.paths, { in: [], out: [] });
+  assert.deepEqual(tools.odc_a2a_connection_plan.paths, { in: [], out: [] });
+  for (const name of API_CLIENT_ONLY) {
+    assert.equal(tools[name].cause, 'API_CLIENT_ONLY', name);
+    assert.ok(tools[name].continuation?.tool && tools[name].continuation.tool !== name, name + ': a continuation to another tool');
+    assert.ok(!JSON.stringify(tools[name].continuation).includes(name), name + ': the continuation never leads back to it');
+    assert.ok(names.has(tools[name].continuation.tool) && tools[tools[name].continuation.tool].class !== 'unavailable', name + ': the continuation runs hosted');
+  }
+  // The debugger tools keep the reason of ssam_debug: the private vault and the local hooks of the server machine.
+  for (const name of ['ssam_debug_server', 'ssam_debug_client']) assert.match(tools[name].reason, /vault/);
+  assert.match(tools.ssam_debug_matrix.reason, /\.local\/debugger/);
+});
+
+test('the four API Client tools answer HOSTED_UNAVAILABLE with cause API_CLIENT_ONLY before anything runs', async () => {
+  const { wrapHostedTool } = await import('../hosted/policy.mjs');
+  const names = await liveTools();
+  for (const name of [...API_CLIENT_ONLY, 'ssam_debug_server', 'ssam_debug_client', 'ssam_debug_matrix']) {
+    let ran = false;
+    const gated = wrapHostedTool(name, { title: names.get(name).title, inputSchema: {} }, async () => { ran = true; return { content: [] }; },
+      { context: { workspace: '/data/server/ws/acme', lanes: ['odc', 'o11'], agent: { info: () => ({}), connected: () => true } } });
+    const value = (await gated({ tenant: 'acme.outsystems.dev', assetKey: '00000000-0000-0000-0000-000000000000', op: 'check' }, {})).structuredContent;
+    assert.equal(ran, false, name + ': the handler never runs');
+    assert.equal(value.code, 'HOSTED_UNAVAILABLE', name);
+    assert.ok(value.error.includes(tools[name].reason), name + ': the reason is in the answer');
+    if (API_CLIENT_ONLY.includes(name)) {
+      assert.equal(value.cause, 'API_CLIENT_ONLY', name);
+      assert.deepEqual(value.continuation, tools[name].continuation, name);
+    } else assert.equal(value.cause, undefined, name);
+  }
+});
+
+// R1/R3 of the plan: the new path argument of the 24th release is authorizationContext (a contextual approval file, and
+// the proposal it names). Every tool that takes it and runs hosted confines it as an input of the workspace.
+test('authorizationContext is an input path of every hosted tool that takes it', async () => {
+  const names = await liveTools();
+  const taking = [...names.values()].filter(t => t.inputSchema?.properties?.authorizationContext).map(t => t.name).sort();
+  assert.ok(taking.length >= 9, taking.join(', '));
+  for (const name of taking) {
+    if (tools[name].class === 'unavailable') continue;
+    assert.ok(tools[name].paths.in.includes('/authorizationContext'), name + ' confines /authorizationContext');
+    assert.ok(!tools[name].paths.out.includes('/authorizationContext'), name + ': an input, never an output');
+  }
 });

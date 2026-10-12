@@ -1,14 +1,15 @@
 // Bounded, same-origin HTTP for the Service Center pages (port of kernel/scripts/service_center/http.py).
 //   Transport           direct HTTPS with an in-memory cookie jar; the vault form login authenticates it (vault.mjs
 //                       posts the login itself, so the credential never exists in this process).
-//   StudioWebTransport  the connected Studio's own web window (bridge sc_web): the fetch runs in the Studio's WebView,
-//                       same origin, and only the body comes back. The cookie never leaves the Studio.
+//   StudioWebTransport  headless native HTTP (bridge sc_http) in the Studio's browser context.
+//                       Only the response body comes back; cookies stay in the Studio.
 // HTML and protocol contracts are data; scripts from the server are never evaluated.
 import http from 'node:http';
 import https from 'node:https';
-import { BridgeError, ProtocolError } from './errors.mjs';
+import { AuthRequired, BridgeError, ProtocolError } from './errors.mjs';
 import { Document, Page, controls, formFields, lower, postbackTarget, secretRefs as toSecretRefs } from './html.mjs';
 import { urlencode, urljoin, urlsplit } from './urls.mjs';
+import { readCheckpoint } from '../read-budget.mjs';
 
 // Codes with which the bridge turns a request down before sending anything to Service Center.
 export const NOT_SENT = new Set(['NOT_ALLOWED', 'BAD_REQUEST', 'HOST_MISMATCH', 'STUDIO_NOT_SIGNED_IN', 'WEB_SIGN_IN_REQUIRED',
@@ -32,7 +33,7 @@ export function hostName(value) {
 
 export function accepted(kind, accept) {
   if (accept === 'html' && !kind.includes('text/html')) throw new ProtocolError('Expected Service Center HTML; protocol variant unsupported');
-  if (accept === 'text' && !(kind.startsWith('text/') || kind.includes('json') || kind.includes('javascript')))
+  if (['text', 'text-write'].includes(accept) && !(kind.startsWith('text/') || kind.includes('json') || kind.includes('javascript')))
     throw new ProtocolError('Expected a Service Center text reply; protocol variant unsupported');
   // An HTML answer to a download is a login page or an error page, never the file.
   if ((accept === 'xlsx' || accept === 'binary') && kind.includes('text/html')) throw new ProtocolError('Service Center answered with a page instead of the file');
@@ -94,7 +95,7 @@ export function nodeSend() {
 }
 
 export class Transport {
-  constructor(host, { timeoutMs = 30000, send = null, origin = null } = {}) {
+  constructor(host, { timeoutMs = 30000, send = null, origin = null, privateBridge = null, privatePrincipal = null } = {}) {
     this.host = hostName(host);
     this.base = `https://${this.host}/ServiceCenter/`;
     this.timeoutMs = timeoutMs;
@@ -105,11 +106,16 @@ export class Transport {
     // Where the bytes go: the host itself; a test points it at a loopback server. The checks use the logical URL.
     this.origin = origin ?? `https://${this.host}`;
     this.send = send ?? nodeSend();
+    this.privateBridge = privateBridge;
+    this.privatePrincipal = privatePrincipal;
   }
 
-  // This process never holds a database login or a secret property value: only the Studio's web window can receive
+  // This process never holds a database login or a secret property value: only the Studio's headless HTTP transport can receive
   // them (sc_web secretRefs), so the direct HTTPS path refuses every write that carries one.
-  async secretsSupported() { return false; }
+  async secretsSupported() {
+    return Boolean(this.privatePrincipal && this.privateBridge &&
+      (await this.privateBridge.capabilities()).has('sc_private_http:secretRefs'));
+  }
 
   physical(url) { const p = urlsplit(url); return this.origin + p.path + (p.query ? '?' + p.query : ''); }
 
@@ -126,18 +132,38 @@ export class Transport {
   // [final url, content type, body, charset]. accept: html, text (AJAX replies), xlsx or binary. firstHop replaces the
   // first exchange (the vault login, posted by vault.mjs); everything after it follows the same rules.
   async fetch(url, fields = null, accept = 'html', secretRefs = null, firstHop = null) {
+    readCheckpoint('transport');
+    this.privateSessionObservation = null;
     url = this.url(url);
-    if (secretRefs?.length) throw new BridgeError('STUDIO_REQUIRED', "A secret value goes only through the connected Studio's web window (secretRefs); "
-      + 'this process never reads it. Nothing was sent.', { write: true, executed: false });
+    if (secretRefs?.length || (fields == null && this.preauthenticated && await this.secretsSupported())) {
+      if (!await this.secretsSupported()) throw new BridgeError('STUDIO_REQUIRED', "A secret value requires the selected Studio's private headless HTTP transport; nothing was sent.", { write: true, executed: false });
+      const privateCookie=this.jar.header(url);
+      if(!privateCookie)throw new AuthRequired('SC_AUTH_EXPIRED','The tool-owned Service Center session has no remaining cookie. Nothing was sent.');
+      const delegated = new StudioWebTransport(this.host, {
+        capabilities: async () => new Set([SECRET_CAPABILITY]),
+        web: async (host, action, options) => {
+          const reply=await this.privateBridge.privateWeb(host, options,
+            { principal: this.privatePrincipal, cookie: privateCookie, applyCookies:(source,updates)=>this.jar.store(source,updates) });
+          this.privateSessionObservation = typeof reply?.sessionCookieUpdatesObserved === 'boolean'
+            && typeof reply.sessionCookieUpdatesApplied === 'boolean'
+            ? {cookieUpdatesObserved:reply.sessionCookieUpdatesObserved,cookieUpdatesApplied:reply.sessionCookieUpdatesApplied} : null;
+          return reply;
+        },
+      });
+      delegated.authorized = this.authorized;
+      return delegated.fetchOnce(url, fields, accept, secretRefs);
+    }
     let data = fields === null || fields === undefined ? null : urlencode(fields);
-    const limit = accept === 'html' || accept === 'text' ? LIMIT : BINARY_LIMIT;
+    const limit = ['html', 'text', 'text-write'].includes(accept) ? LIMIT : BINARY_LIMIT;
     for (let hop = 0; hop < 6; hop++) {
+      readCheckpoint('transport');
       const headers = { 'User-Agent': 'SSAM-Hybrid-O11/1', Accept: accept === 'html' ? 'text/html' : '*/*', Connection: 'close',
         ...(data !== null ? { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(data) } : {}) };
       const cookie = this.jar.header(url);
       if (cookie) headers.Cookie = cookie;
       let response;
       try {
+        if (data !== null && this.authorized) this.authorized[2].sent = true;
         response = hop === 0 && firstHop ? await firstHop(url, data)
           : await this.send({ method: data === null ? 'GET' : 'POST', url: this.physical(url), headers, body: data, timeoutMs: this.timeoutMs, limit });
       } catch (error) {
@@ -149,7 +175,7 @@ export class Transport {
         const location = response.location || '';
         if (!location) throw new ProtocolError('Service Center redirect has no destination');
         if (urlsplit(urljoin(url, location)).hostname === 'id.outsystems.com')
-          throw new ProtocolError('Service Center requires OutSystems ID SSO; this HTTP adapter has no validated SSO exchange. No vault credential was sent to the identity provider');
+          throw new AuthRequired('SC_SSO_REQUIRED', 'Service Center requires its validated headless identity exchange. No credential was sent by this request.');
         const destination = this.url(location, url);
         if (data !== null && (response.status === 307 || response.status === 308)) throw new ProtocolError('Refusing to replay a POST after a redirect');
         url = destination; data = null;
@@ -157,8 +183,10 @@ export class Transport {
       }
       if (response.status < 200 || response.status >= 300) throw new ProtocolError(`Service Center returned HTTP ${response.status}`);
       const kind = String(response.contentType ?? '').toLowerCase();
-      accepted(kind, accept);
       if (response.body.length > limit) throw new ProtocolError('Service Center response exceeds its size limit');
+      if (this.preauthenticated && kind.includes('html') && LOGIN_PAGE.test(response.body.toString('utf8')))
+        throw new AuthRequired('SC_AUTH_EXPIRED', 'Service Center answered with its login page; no response data was accepted.');
+      accepted(kind, accept);
       return [url, kind, response.body, response.charset ?? charsetOf(kind) ?? 'utf-8'];
     }
     throw new ProtocolError('Too many Service Center redirects');
@@ -170,7 +198,46 @@ export class Transport {
   }
   async text(url, fields = null) { const [, , raw, charset] = await this.fetch(url, fields, 'text'); return decode(raw, charset); }
   // [final url, text] of a read postback whose answer may be a page or an OsAjax reply.
-  async reply(url, fields = null) { const [final, , raw, charset] = await this.fetch(url, fields, 'text'); return [final, decode(raw, charset)]; }
+  async reply(url, fields = null, write = false, secretRefs = null) { const [final, , raw, charset] = await this.fetch(url, fields, write ? 'text-write' : 'text', secretRefs); return [final, decode(raw, charset)]; }
+
+  // Exact Run Now script captured from the live timer page. Never evaluate script.
+  timerRunPost(page, control, updates = null) { return this.scriptedAjaxPost(page, control, updates); }
+  scriptedAjaxPost(page, control, updates = null, secrets = null, { clientValidation = false } = {}) {
+    let script = control.attr('onclick', '') ?? '';
+    if (!/OsAjax/.test(script)) return null;
+    const emptyGuard = /^validateEmptyValue\('([^']+)', 'The effective value is empty\.(?: The value inserted will replace the current saved value\.)? Do you want to confirm\?'\);/.exec(script);
+    if (emptyGuard) {
+      // Current SC secret pages retain the common-field ID in this guard while
+      // rendering only its SecretSitePropertyInput sibling. Bind that exact
+      // captured variant as well; arbitrary missing/different IDs still refuse.
+      const secretSibling = emptyGuard[1].endsWith('_wtSitePropertyInput')
+        ? emptyGuard[1].slice(0, -'_wtSitePropertyInput'.length) + '_wtSecretSitePropertyInput' : null;
+      const fields = controls(control.ancestor('form')).filter(n => n.attr('id') === emptyGuard[1]
+        || (secretSibling !== null && n.attr('id') === secretSibling));
+      const field = fields.length === 1 ? fields[0] : null;
+      if (!clientValidation || !field || lower(field.attr('type', '')) !== 'password'
+          || Object.keys(secrets ?? {}).length !== 1 || secrets[field.attr('name')]?.field !== 'password')
+        throw new ProtocolError('An empty-value confirmation cannot be inferred; no request sent');
+      // Native ScSecretRefs.Resolve rejects empty vault values before send. The
+      // actual password therefore cannot enter this empty-value confirmation branch.
+      script = script.slice(emptyGuard[0].length);
+    }
+    const guard = /^if \(OsPage_ClientValidate\('([^']+)'\)\) /.exec(script);
+    if (guard) {
+      if (!clientValidation || guard[1] !== control.attr('id')) throw new ProtocolError('Unsupported client validation guard; no request sent');
+      // The property write uses the exact declared server event; no remote JS is
+      // evaluated. Server validation/feedback and the fresh effective value still
+      // decide acceptance; acknowledging this guard is not a browser validation proof.
+      script = script.slice(guard[0].length);
+    }
+    const match = /^OsAjax\(arguments\[0\] \|\| window\.event,'([^']+)','([^']+)','','__OSVSTATE,',''\); return false;$/.exec(script.trim());
+    if (!match || match[1] !== control.attr('id') || match[2] !== control.attr('name') || control.attr('formaction'))
+      throw new ProtocolError('Unsupported AJAX submit script; no request sent');
+    if (!secrets || !Object.keys(secrets).length) return this.ajaxPost(page, control, updates);
+    if (Object.keys(secrets).some(k => Object.hasOwn(updates ?? {}, k))) throw new ProtocolError('A secret field cannot also carry a value');
+    const [url, fields] = this.ajaxPost(page, control, { ...(updates ?? {}), ...Object.fromEntries(Object.keys(secrets).map(k => [k, ''])) });
+    return [url, fields, toSecretRefs(secrets)];
+  }
   async download(url, fields = null, accept = 'binary') { return (await this.fetch(url, fields, accept))[2]; }
 
   // [action url, fields] of a click on a plain submit control; nothing is sent.
@@ -214,26 +281,41 @@ export class Transport {
   }
 
   // [action url, fields] of an OsAjax event on a control, as the page's script sends it: the form state, the control's
-  // own value, __EVENTTARGET and __AJAX (matrix L7, D5). A submit adds its own name=value; a select's Change carries
+  // own value, __EVENTTARGET and __AJAX (matrix L7, D5). Submit values are excluded; a select's Change carries
   // __AJAXEVENT instead of __EVENTARGUMENT. Nothing is sent.
   ajaxPost(page, control, updates = null, event = null, ajax = null) {
     const form = control.ancestor('form');
     if (!form || lower(form.attr('method', 'get')) !== 'post') throw new ProtocolError('Expected a POST form around the OsAjax control');
-    const changes = Object.entries(updates ?? {});
+    const checkboxes = new Set(controls(form).filter(n=>n.tag==='input'&&lower(n.attr('type',''))==='checkbox').map(n=>n.attr('name')));
+    const changes = Object.entries(updates ?? {}).map(([key,value])=>[key,value===null&&checkboxes.has(key)?'off':value]);
     const names = new Set(controls(form).map(n => n.attr('name')));
     if (!changes.every(([k]) => names.has(k))) throw new ProtocolError('Unknown form field');
     const changed = new Set(changes.map(([k]) => k));
-    const name = control.attr('name');
-    const fields = formFields(form).filter(([k]) => !changed.has(k) && !['__EVENTTARGET', '__EVENTARGUMENT', '__AJAX', '__AJAXEVENT'].includes(k));
+    const name = control.attr('name') ?? (control.tag === 'a' && postbackTarget(control)?.kind === 'osajax' ? postbackTarget(control).target : null);
+    if (!name) throw new ProtocolError('The AJAX control has no declared event target');
+    const fields = formFields(form, null, {nativeAjax:true}).filter(([k]) => !changed.has(k) && !['__EVENTTARGET', '__EVENTARGUMENT', '__AJAX', '__AJAXEVENT'].includes(k));
     fields.push(...changes.filter(([, v]) => v !== null && v !== undefined));
     fields.push(['__EVENTTARGET', name]);
     fields.push(event ? ['__AJAXEVENT', event] : ['__EVENTARGUMENT', '']);
     fields.push(['__AJAX', ajax || '1280,1024,' + (control.attr('id') || name.replaceAll('$', '_')) + ',0,0,0,0,0,0,']);
-    if (lower(control.attr('type', '')) === 'submit') fields.push([name, control.attr('value', '')]);
+    // Native OsSerializeForm excludes submit inputs for AJAX. The target is
+    // carried by __EVENTTARGET; ordinary formPost retains its submit value.
     return [this.url(form.attr('action') || page.url, page.url), fields];
   }
 
   async export(page, clicked, updates = null, accept = 'xlsx') { return this.download(...this.formPost(page, clicked, updates), accept); }
+
+  // OsNotifyWidget(a, '') in the current public runtime calls
+  // OsAjax(null, '', a, 'Notify', '__OSVSTATE,', ''). This is a bounded read
+  // continuation whose exact target is validated against the pager by Client.
+  notifyPost(page, target, submitted, state) {
+    const form = page.doc.first('form');
+    if (!form || !/^[A-Za-z0-9_]+$/.test(target) || !state) throw new ProtocolError('Invalid pager notification');
+    const fields = submitted.filter(([k]) => !['__EVENTTARGET','__EVENTARGUMENT','__AJAX','__AJAXEVENT'].includes(k))
+      .map(([k,v]) => [k,k.endsWith('__OSVSTATE') ? state : v]);
+    fields.push(['__EVENTTARGET',target],['__AJAXEVENT','Notify'],['__AJAX','1280,1024,,0,0,0,0,0,0,']);
+    return [this.url(form.attr('action') || page.url, page.url), fields];
+  }
 
   // [action url, fields] of a __doPostBack or OsAjax link: the page's own form state plus the event.
   eventPost(page, link, updates = null, extra = null) {
@@ -296,6 +378,7 @@ export class StudioWebTransport extends Transport {
   }
 
   async fetchOnce(url, fields = null, accept = 'html', secretRefs = null) {
+    readCheckpoint('transport');
     url = this.url(url);
     const p = urlsplit(url);
     let form = null;
@@ -306,7 +389,7 @@ export class StudioWebTransport extends Transport {
         form[k] = v;
       }
     }
-    // An OsAjax reply (accept text) only stages a value in the page state: a read postback, never the write itself.
+    // Read/staging AJAX uses text; a committing timer AJAX uses text-write.
     // The bridge accepts each operationId once, so only the committing post carries it.
     const write = form !== null && this.authorized !== null && accept !== 'text';
     if (secretRefs?.length) {
@@ -320,13 +403,13 @@ export class StudioWebTransport extends Transport {
     let reply;
     try {
       reply = await this.bridge.web(this.host, 'fetch', { method: form === null ? 'GET' : 'POST', path, form,
-        accept: accept === 'text' ? 'html' : accept, write,
+        accept: ['text', 'text-write'].includes(accept) ? 'html' : accept === 'solution' ? 'binary' : accept, write,
         ...(write ? { operationId: this.authorized[0], authorizeSha256: this.authorized[1] } : {}),
         ...(secretRefs?.length ? { secretRefs } : {}) });
     } catch (error) {
       if (error instanceof BridgeError) {
         // A bridge without accept=binary returns any download body for xlsx; a read can be asked again.
-        if (accept === 'binary' && error.code === 'BAD_REQUEST' && !write) return this.fetch(url, fields, 'xlsx');
+        if (accept === 'binary' && error.code === 'BAD_REQUEST' && !write && form === null) return this.fetch(url, fields, 'xlsx');
         if (write && !((NOT_SENT.has(error.code) || error.extra.executed === false) && error.extra.write)) this.authorized[2].sent = true;
       }
       throw error;
@@ -334,28 +417,31 @@ export class StudioWebTransport extends Transport {
     if (write) this.authorized[2].sent = true;
     if (reply?.redirected === true && form !== null) {
       // A postback answered with a redirect (manual mode): the POST went through; read the page again.
-      if (accept !== 'html' && accept !== 'text') throw new ProtocolError('Service Center redirected instead of returning the file');
+      if (!['html', 'text', 'text-write'].includes(accept)) throw new ProtocolError('Service Center redirected instead of returning the file');
       return this.fetch(url);
     }
     let final = reply?.finalUrl || url;
     try { final = this.url(final); }
-    catch { throw new BridgeError('HOST_MISMATCH', 'The Studio web window left the Service Center host; nothing was followed', { sent: form !== null }); }
-    if (urlsplit(final).path.toLowerCase().endsWith('/login.aspx') || [401, 403].includes(reply?.status))
-      throw new BridgeError('WEB_SIGN_IN_REQUIRED', "The Studio's Service Center window is not signed in; run o11_service_center_session action=web-sign-in", { sent: form !== null });
+    catch { throw new BridgeError('HOST_MISMATCH', 'The native HTTP response left the Service Center host; nothing was followed', { sent: form !== null }); }
+    if (reply?.status === 403)
+      throw new BridgeError('NOT_ALLOWED', 'Service Center denied this request (HTTP 403); authentication was not retried',
+        { status: 403, sent: form !== null });
+    if (urlsplit(final).path.toLowerCase().endsWith('/login.aspx') || reply?.status === 401)
+      throw new BridgeError('WEB_SIGN_IN_REQUIRED', "The native Service Center HTTP session is not authenticated; no interactive sign-in was attempted", { sent: form !== null });
     const status = reply && Object.hasOwn(reply, 'status') ? reply.status : 200;
     if (status !== 200) throw new ProtocolError(`Service Center returned HTTP ${status ?? 'None'}`);
     const kind = String(reply.contentType || (Object.hasOwn(reply, 'html') ? 'text/html' : '')).toLowerCase();
-    accepted(kind, accept);
     let raw;
     if (Object.hasOwn(reply, 'bodyBase64')) {
       const text = String(reply.bodyBase64);
       if (text.length % 4 || !/^[A-Za-z0-9+/]*={0,2}$/.test(text)) throw new Error('Invalid base64 body');
       raw = Buffer.from(text, 'base64');
     } else raw = Buffer.from(String(reply.html ?? ''), 'utf8'); // html:null + htmlOmitted: the reply echoed a vault value the bridge could not mask
-    if (raw.length > (accept === 'html' || accept === 'text' ? LIMIT : BINARY_LIMIT)) throw new ProtocolError('Service Center response exceeds its size limit');
+    if (raw.length > (['html', 'text', 'text-write'].includes(accept) ? LIMIT : BINARY_LIMIT)) throw new ProtocolError('Service Center response exceeds its size limit');
     if (kind.includes('html') && LOGIN_PAGE.test(raw.toString('utf8')))
-      throw new BridgeError('WEB_SIGN_IN_REQUIRED', "Service Center answered with its login page: the session of the Studio's Service Center window "
-        + 'expired; nothing was read. Run o11_service_center_session action=web-sign-in, the user signs in once, then repeat the call', { sent: form !== null });
+      throw new BridgeError('WEB_SIGN_IN_REQUIRED', "Service Center answered with its login page: the native HTTP session "
+        + 'is unauthenticated; nothing was read and no window was opened', { sent: form !== null });
+    accepted(kind, accept);
     return [final, kind, raw, 'utf-8'];
   }
 }

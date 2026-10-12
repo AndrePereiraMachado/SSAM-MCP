@@ -12,7 +12,28 @@ function studioBroker(answer) {
   return { broker, files, calls };
 }
 
-test('the Studio Portal window runs same-origin fetches by request file and redacts what it returns', async () => {
+test('timer prerequisites send only scoped reads and Wake remains distinct from a read', async () => {
+  const { broker, files } = studioBroker(() => ({ ok: true, status: 200, host: 'personal-test.outsystems.dev', body: { data: { TimerInfo: { Key: 'timer', Password: 'private' } } } }));
+  const variables = { appid: 'app', stageid: 'stage', id: 'timer', _appidInDataFetchStatus: 1, _stageidInDataFetchStatus: 1, _idInDataFetchStatus: 1 };
+  for (const [operationId, action] of [['timers.info','DataActionGetTimerInfo'],['timers.currentRun','DataActionGetCurrentTimerRunInformation'],['timers.pendingConfiguration','DataActionGetPendingConfiguration'],['timers.latestDeployment','DataActionGetLatestDeployedAppVersion'],['timers.stages','DataActionGetApplicationStages'],['timers.deploymentStatus','DataActionCheckLatestDeployment']]) {
+    const result = await broker.callScreenservice({ operationId, input: { screenVariables: variables } });
+    const request = [...files.values()].at(-1);
+    assert.equal(request.write, false); assert.equal(request.path, '/apps/screenservices/apps/Timers/timer/' + action);
+    assert.deepEqual(request.body.screenData.variables, variables); assert.doesNotMatch(JSON.stringify(result), /private/);
+  }
+  await assert.rejects(broker.callScreenservice({ operationId: 'timers.run', input: {} }), { code: 'PORTAL_OPERATION_NOT_FOUND' });
+  for (const operationId of ['timers.pause','timers.resume'])
+    await assert.rejects(broker.callScreenservice({ operationId, input: {} }), { code: 'PORTAL_OPERATION_NOT_FOUND' });
+  assert.equal(files.size, 6);
+  for (const operationId of ['timers.pause','timers.resume']) {
+    await broker.callScreenservice({operationId,write:true,input:{inputParameters:{EnvironmentKey:'stage'}},operationUuid:operationId,authorizeSha256:'hash'});
+    const request=[...files.values()].at(-1);
+    assert.equal(request.path,'/apps/screenservices/apps/Timers/timer/ActionTimers_SaveAndApply');
+    assert.equal(request.write,true);assert.equal(request.operationUuid,operationId);
+  }
+});
+
+test('the Studio headless adapter sends scoped requests and redacts the response', async () => {
   const { broker, files, calls } = studioBroker(() => ({ ok: true, status: 200, host: 'personal-test.outsystems.dev',
     body: { data: { Connections: [{ ConnectionId: 'c', Password: 'SECRET-PW' }] } } }));
   const body = await broker.callScreenservice({ operationId: 'connections.settings', input: { inputParameters: {}, screenVariables: { ConnectionId: 'c' }, clientVariables: {} } });
@@ -25,9 +46,14 @@ test('the Studio Portal window runs same-origin fetches by request file and reda
   await assert.rejects(broker.callScreenservice({ operationId: 'connections.decryptedSecrets', input: {} }), { code: 'PORTAL_OPERATION_NOT_FOUND' });
 });
 
-test('window refusals keep their contract code; another host or a redirect away is HOST_MISMATCH', async () => {
+test('headless session refusals keep their code without directing interactive sign-in; another origin is refused', async () => {
   const signIn = studioBroker(() => ({ ok: false, code: 'WEB_SIGN_IN_REQUIRED' }));
   await assert.rejects(signIn.broker.callScreenservice({ operationId: 'connections.settings', input: {} }), { code: 'WEB_SIGN_IN_REQUIRED' });
+  const unavailable = studioBroker(() => ({ ok: false, code: 'HEADLESS_AUTH_UNAVAILABLE' }));
+  await assert.rejects(unavailable.broker.callScreenservice({ operationId: 'connections.settings', input: {} }), error => {
+    assert.equal(error.code, 'HEADLESS_AUTH_UNAVAILABLE'); assert.match(error.message, /private profile/);
+    assert.doesNotMatch(error.message, /sign in there|open.*window/i); return true;
+  });
   const uncertain = studioBroker(() => ({ ok: false, code: 'UNCERTAIN' }));
   await assert.rejects(uncertain.broker.callScreenservice({ operationId: 'connections.mcpSave', write: true, input: {}, operationUuid: 'u' }), { code: 'UNCERTAIN' });
   const moved = studioBroker(() => ({ ok: true, status: 200, finalUrl: 'https://evil.example/', body: { data: {} } }));
@@ -75,13 +101,20 @@ test('the vault broker serves any tenant origin and never reads a DB secret: sec
   fetchImpl: async (url, request) => { posted.push({ url: String(url), body: JSON.parse(request.body) });
     return new Response(JSON.stringify({ data: { Saved: true } }), { status: 200 }); } });
   broker.metadata.resolve = async (module, view, action) => ({ moduleVersion: 'm', apiVersion: 'a', action });
-  assert.equal(broker.status().origin, origin); assert.match(broker.status().operatorAction ?? '', /-Origin https:\/\/personal-test/);
+  assert.equal(broker.status().origin, origin);
+  assert.equal(broker.status().operatorAction, undefined);
+  assert.match(broker.status().explanation, /compatible credential already configured.*personal-test/);
   await assert.rejects(broker.callScreenservice({ operationId: 'connections.settings', input: {} }), { code: 'PORTAL_AUTH_REQUIRED' });
   broker.authenticated = true;
   const input = { inputParameters: { Common: { ConnectionUsername: '', ConnectionPassword: '' } }, screenVariables: {}, clientVariables: {} };
   // CONTRATO.md wave 2 item 1: a secret value never enters the facade process; only the bridge reads it in the Studio.
   await assert.rejects(broker.callScreenservice({ operationId: 'connections.relationalTest', write: true, input,
-    secretRefs: [{ pointer: '/inputParameters/Common/ConnectionPassword', target: 'SSAM/ODC3/personal-test.outsystems.dev/DB/Sales', field: 'password' }] }), { code: 'STUDIO_REQUIRED' });
+    secretRefs: [{ pointer: '/inputParameters/Common/ConnectionPassword', target: 'SSAM/ODC3/personal-test.outsystems.dev/DB/Sales', field: 'password' }] }), error => {
+      assert.equal(error.code, 'STUDIO_REQUIRED');
+      assert.match(error.message, /headless transport/);
+      assert.doesNotMatch(error.message, /Portal window|sign in there|open.*page/);
+      return true;
+    });
   assert.deepEqual(reads, []); assert.equal(posted.length, 0);
   await assert.rejects(portalVault('read', origin, 'Sales'), { code: process.platform === 'win32' ? 'STUDIO_REQUIRED' : 'PORTAL_AUTH_REQUIRED' });
   await assert.rejects(portalVault('read', origin, undefined, 'ApiPassword'), { code: process.platform === 'win32' ? 'STUDIO_REQUIRED' : 'PORTAL_AUTH_REQUIRED' });

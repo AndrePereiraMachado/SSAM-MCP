@@ -1,0 +1,58 @@
+{
+  "schema": "ssam-traditional-form-observation/1",
+  "capturedAtUtc": "2026-10-05T00:23:32.833Z",
+  "route": "https://personal-2qqw9srv.outsystemscloud.com/HeadlessTrad_UI/Login.aspx?_ts=639267457061508317",
+  "status": 200,
+  "contentType": "text/html; charset=utf-8",
+  "redirect": null,
+  "bodySha256": "790ef1953133b21052386fbed37709ee1077a3dac994f1c9de1777b90d6dca51",
+  "credentialsSubmitted": false,
+  "forms": [
+    {
+      "action": "Login.aspx",
+      "method": "post",
+      "inputs": [
+        {
+          "type": "hidden",
+          "id": "__OSVSTATE",
+          "name": "__OSVSTATE",
+          "valueLength": 192
+        },
+        {
+          "type": "hidden",
+          "id": "__VIEWSTATE",
+          "name": "__VIEWSTATE",
+          "valueLength": 0
+        },
+        {
+          "type": "hidden",
+          "id": "__VIEWSTATEGENERATOR",
+          "name": "__VIEWSTATEGENERATOR",
+          "valueLength": 8
+        },
+        {
+          "type": "text",
+          "id": "OutSystemsUIWeb_wt14_block_wtLogin_OutSystemsUIWeb_wt15_block_wtLogin_OutSystemsUIWeb_wt26_block_wtInput_wtUserNameInput",
+          "name": "OutSystemsUIWeb_wt14$block$wtLogin$OutSystemsUIWeb_wt15$block$wtLogin$OutSystemsUIWeb_wt26$block$wtInput$wtUserNameInput"
+        },
+        {
+          "type": "password",
+          "id": "OutSystemsUIWeb_wt14_block_wtLogin_OutSystemsUIWeb_wt15_block_wtLogin_OutSystemsUIWeb_wt6_block_wtInput_wtPasswordInput",
+          "name": "OutSystemsUIWeb_wt14$block$wtLogin$OutSystemsUIWeb_wt15$block$wtLogin$OutSystemsUIWeb_wt6$block$wtInput$wtPasswordInput"
+        },
+        {
+          "type": "checkbox",
+          "id": "OutSystemsUIWeb_wt14_block_wtLogin_OutSystemsUIWeb_wt15_block_wtLogin_OutSystemsUIWeb_wt17_block_wtContent_wtCheckbox",
+          "name": "OutSystemsUIWeb_wt14$block$wtLogin$OutSystemsUIWeb_wt15$block$wtLogin$OutSystemsUIWeb_wt17$block$wtContent$wtCheckbox"
+        },
+        {
+          "type": "submit",
+          "id": "OutSystemsUIWeb_wt14_block_wtLogin_OutSystemsUIWeb_wt15_block_wtLogin_wt13",
+          "name": "OutSystemsUIWeb_wt14$block$wtLogin$OutSystemsUIWeb_wt15$block$wtLogin$wt13",
+          "label": "Log In"
+        }
+      ],
+      "buttons": []
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Onboarding</title>
+  <style>.step{padding:12px}.primary{font-weight:700}</style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    (function () {
+      var state = { step: 'welcome', plan: 'basic' };
+      var app = document.getElementById('app');
+      function render() {
+        if (state.step === 'welcome') {
+          app.innerHTML = '<section class="step welcome"><h1>Welcome</h1><p>Set up your account in two steps.</p><button class="primary" id="start">Start</button></section>';
+        } else if (state.step === 'plan') {
+          app.innerHTML = '<section class="step plan"><h2>Choose a plan</h2><div class="plans"><button class="option" data-plan="basic">Basic</button><button class="option" data-plan="pro">Pro</button></div><p class="chosen">Selected: ' + state.plan + '</p><button class="primary" id="finish">Finish</button></section>';
+        } else {
+          app.innerHTML = '<section class="step done"><h1>All set</h1><p>Your plan: ' + state.plan + '</p><button id="restart">Restart</button></section>';
+        }
+      }
+      app.addEventListener('click', function (event) {
+        var target = event.target;
+        if (target.id === 'start') state.step = 'plan';
+        else if (target.id === 'finish') state.step = 'done';
+        else if (target.id === 'restart') state = { step: 'welcome', plan: 'basic' };
+        else if (target.dataset.plan) state.plan = target.dataset.plan;
+        else return;
+        render();
+      });
+      render();
+    })();
+  </script>
+</body>
+</html>

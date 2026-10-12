@@ -1,0 +1,1463 @@
+{
+  "jobs": [
+    {
+      "owner": "MiniShell",
+      "parent": "$p.blk.shell",
+      "roots": [
+        {
+          "w": "IContainer",
+          "k": "s:app",
+          "tag": null,
+          "name": "app",
+          "p": [
+            [
+              "Style",
+              "\"app ssam-id-app\""
+            ]
+          ],
+          "x": [],
+          "h": null,
+          "b": null,
+          "c": [
+            {
+              "w": "IAdvancedHtml",
+              "k": "s:app/0",
+              "tag": "header",
+              "name": "Header1",
+              "p": [
+                [
+                  "Style",
+                  "\"top\""
+                ]
+              ],
+              "x": [],
+              "h": null,
+              "b": null,
+              "c": [
+                {
+                  "w": "IImage",
+                  "k": "s:app/0/0",
+                  "tag": null,
+                  "name": "Image1",
+                  "p": [
+                    [
+                      "Type",
+                      "Static"
+                    ],
+                    [
+                      "Image",
+                      "MiniLogo"
+                    ],
+                    [
+                      "Style",
+                      "\"\""
+                    ]
+                  ],
+                  "x": [
+                    [
+                      "alt",
+                      "\"Mini\""
+                    ]
+                  ],
+                  "h": null,
+                  "b": null,
+                  "c": [],
+                  "e": null
+                },
+                {
+                  "w": "ILink",
+                  "k": "s:app/0/1",
+                  "tag": null,
+                  "name": "Link1",
+                  "p": [
+                    [
+                      "Style",
+                      "\"brand\""
+                    ]
+                  ],
+                  "x": [],
+                  "h": "OnClick:Lista::",
+                  "b": null,
+                  "c": [
+                    {
+                      "w": "ITextWidget",
+                      "k": "s:app/0/1/0",
+                      "tag": null,
+                      "name": null,
+                      "p": [
+                        [
+                          "Text",
+                          "Mini Tarefas"
+                        ]
+                      ],
+                      "x": [],
+                      "h": null,
+                      "b": null,
+                      "c": [],
+                      "e": null
+                    }
+                  ],
+                  "e": null
+                }
+              ],
+              "e": null
+            },
+            {
+              "w": "IAdvancedHtml",
+              "k": "s:app/1",
+              "tag": "main",
+              "name": "conteudo",
+              "p": [
+                [
+                  "Style",
+                  "\"main ssam-id-conteudo\""
+                ]
+              ],
+              "x": [],
+              "h": null,
+              "b": null,
+              "c": [
+                {
+                  "w": "IPlaceholderWidget",
+                  "k": "s:app/1/placeholder",
+                  "tag": null,
+                  "name": "Content",
+                  "p": [],
+                  "x": [],
+                  "h": null,
+                  "b": null,
+                  "c": [],
+                  "e": null
+                }
+              ],
+              "e": null
+            }
+          ],
+          "e": null
+        },
+        {
+          "w": "IContainer",
+          "k": "s:notifications",
+          "tag": null,
+          "name": "avisos",
+          "p": [
+            [
+              "Style",
+              "\"avisos ssam-id-avisos\""
+            ]
+          ],
+          "x": [
+            [
+              "role",
+              "\"status\""
+            ]
+          ],
+          "h": null,
+          "b": null,
+          "c": [
+            {
+              "w": "IIfWidget",
+              "k": "s:toast",
+              "tag": null,
+              "name": null,
+              "p": [
+                [
+                  "Condition",
+                  "Aviso <> \"\""
+                ]
+              ],
+              "x": [],
+              "h": null,
+              "b": null,
+              "c": [
+                {
+                  "w": "IContainer",
+                  "k": "s:toast",
+                  "tag": null,
+                  "name": "Container1",
+                  "p": [
+                    [
+                      "Style",
+                      "\"toast\" + If(AvisoErro, \" erro\", \"\")"
+                    ]
+                  ],
+                  "x": [],
+                  "h": null,
+                  "b": null,
+                  "c": [
+                    {
+                      "w": "IAdvancedHtml",
+                      "k": "s:toast/0",
+                      "tag": "span",
+                      "name": "Span1",
+                      "p": [
+                        [
+                          "Style",
+                          "\"\""
+                        ]
+                      ],
+                      "x": [],
+                      "h": null,
+                      "b": null,
+                      "c": [
+                        {
+                          "w": "IExpression",
+                          "k": "s:toast/0/0",
+                          "tag": null,
+                          "name": null,
+                          "p": [
+                            [
+                              "Value",
+                              "Aviso"
+                            ]
+                          ],
+                          "x": [],
+                          "h": null,
+                          "b": null,
+                          "c": [],
+                          "e": null
+                        }
+                      ],
+                      "e": null
+                    },
+                    {
+                      "w": "IButton",
+                      "k": "s:toast/1",
+                      "tag": null,
+                      "name": "Button1",
+                      "p": [
+                        [
+                          "Style",
+                          "\"\""
+                        ]
+                      ],
+                      "x": [
+                        [
+                          "aria-label",
+                          "\"Fechar aviso\""
+                        ]
+                      ],
+                      "h": "OnClick::NotificarFecharAviso:",
+                      "b": null,
+                      "c": [
+                        {
+                          "w": "ITextWidget",
+                          "k": "s:toast/1/0",
+                          "tag": null,
+                          "name": null,
+                          "p": [
+                            [
+                              "Text",
+                              "x"
+                            ]
+                          ],
+                          "x": [],
+                          "h": null,
+                          "b": null,
+                          "c": [],
+                          "e": null
+                        }
+                      ],
+                      "e": null
+                    }
+                  ],
+                  "e": null
+                }
+              ],
+              "e": []
+            }
+          ],
+          "e": null
+        }
+      ]
+    },
+    {
+      "owner": "Lista",
+      "parent": "$p.inst.shell.lista/Content",
+      "roots": [
+        {
+          "w": "IAdvancedHtml",
+          "k": "v:lista/0",
+          "tag": "section",
+          "name": "Section1",
+          "p": [
+            [
+              "Style",
+              "\"lista\""
+            ]
+          ],
+          "x": [
+            [
+              "aria-labelledby",
+              "\"titulo\""
+            ]
+          ],
+          "h": null,
+          "b": null,
+          "c": [
+            {
+              "w": "IAdvancedHtml",
+              "k": "v:lista/0/0",
+              "tag": "h1",
+              "name": "titulo",
+              "p": [
+                [
+                  "Style",
+                  "\"ssam-id-titulo\""
+                ]
+              ],
+              "x": [],
+              "h": null,
+              "b": null,
+              "c": [
+                {
+                  "w": "ITextWidget",
+                  "k": "v:lista/0/0/0",
+                  "tag": null,
+                  "name": null,
+                  "p": [
+                    [
+                      "Text",
+                      "Tarefas"
+                    ]
+                  ],
+                  "x": [],
+                  "h": null,
+                  "b": null,
+                  "c": [],
+                  "e": null
+                }
+              ],
+              "e": null
+            },
+            {
+              "w": "IAdvancedHtml",
+              "k": "v:lista/0/1",
+              "tag": "p",
+              "name": "P1",
+              "p": [
+                [
+                  "Style",
+                  "\"resumo\""
+                ]
+              ],
+              "x": [],
+              "h": null,
+              "b": null,
+              "c": [
+                {
+                  "w": "IExpression",
+                  "k": "v:lista/0/1/0",
+                  "tag": null,
+                  "name": null,
+                  "p": [
+                    [
+                      "Value",
+                      "(IntegerToText(Tarefas.List.Length)) + \" tarefas\""
+                    ]
+                  ],
+                  "x": [],
+                  "h": null,
+                  "b": null,
+                  "c": [],
+                  "e": null
+                }
+              ],
+              "e": null
+            },
+            {
+              "w": "IContainer",
+              "k": "v:lista/0/2",
+              "tag": "div",
+              "name": "Div1",
+              "p": [
+                [
+                  "Style",
+                  "\"filtros ssam-tag-search\""
+                ]
+              ],
+              "x": [],
+              "h": null,
+              "b": null,
+              "c": [
+                {
+                  "w": "ILabel",
+                  "k": "v:lista/0/2/0",
+                  "tag": null,
+                  "name": "Label1",
+                  "p": [
+                    [
+                      "Style",
+                      "\"\""
+                    ]
+                  ],
+                  "x": [],
+                  "h": null,
+                  "b": null,
+                  "c": [
+                    {
+                      "w": "ITextWidget",
+                      "k": "v:lista/0/2/0/0",
+                      "tag": null,
+                      "name": null,
+                      "p": [
+                        [
+                          "Text",
+                          "Buscar"
+                        ]
+                      ],
+                      "x": [],
+                      "h": null,
+                      "b": null,
+                      "c": [],
+                      "e": null
+                    }
+                  ],
+                  "e": null
+                },
+                {
+                  "w": "IInput",
+                  "k": "v:lista/0/2/1",
+                  "tag": null,
+                  "name": "busca2",
+                  "p": [
+                    [
+                      "Variable",
+                      "Busca"
+                    ],
+                    [
+                      "InputType",
+                      "Search"
+                    ],
+                    [
+                      "Prompt",
+                      "\"Buscar tarefa\""
+                    ],
+                    [
+                      "MaxLength",
+                      "60"
+                    ],
+                    [
+                      "Style",
+                      "\"ssam-id-busca\""
+                    ]
+                  ],
+                  "x": [
+                    [
+                      "aria-describedby",
+                      "\"titulo\""
+                    ],
+                    [
+                      "autocomplete",
+                      "\"off\""
+                    ]
+                  ],
+                  "h": "OnChange::DefinirBusca:",
+                  "b": null,
+                  "c": [],
+                  "e": null
+                },
+                {
+                  "w": "IDropdown",
+                  "k": "v:lista/0/2/2",
+                  "tag": null,
+                  "name": "ordem2",
+                  "p": [
+                    [
+                      "Variable",
+                      "Ordem"
+                    ],
+                    [
+                      "List",
+                      "OpcoesOrdem.List"
+                    ],
+                    [
+                      "Values",
+                      "OrdemOpcao.Value"
+                    ],
+                    [
+                      "Labels",
+                      "OrdemOpcao.Label"
+                    ],
+                    [
+                      "Style",
+                      "\"ssam-id-ordem\""
+                    ]
+                  ],
+                  "x": [
+                    [
+                      "aria-label",
+                      "\"Ordem\""
+                    ]
+                  ],
+                  "h": "OnChange::DefinirOrdem:",
+                  "b": null,
+                  "c": [],
+                  "e": null
+                }
+              ],
+              "e": null
+            },
+            {
+              "w": "IButton",
+              "k": "v:lista/0/3",
+              "tag": null,
+              "name": "Button1",
+              "p": [
+                [
+                  "Style",
+                  "\"btn\""
+                ]
+              ],
+              "x": [
+                [
+                  "data-action",
+                  "\"nova\""
+                ]
+              ],
+              "h": "OnClick::AbrirNovaTarefa:",
+              "b": null,
+              "c": [
+                {
+                  "w": "IAdvancedHtml",
+                  "k": "v:lista/0/3/0",
+                  "tag": "span",
+                  "name": "Span1",
+                  "p": [
+                    [
+                      "Style",
+                      "\"icon lucide lucide-plus ssam-icon ssam-icon-plus-w300\""
+                    ]
+                  ],
+                  "x": [
+                    [
+                      "aria-hidden",
+                      "\"true\""
+                    ]
+                  ],
+                  "h": null,
+                  "b": null,
+                  "c": [],
+                  "e": null
+                },
+                {
+                  "w": "ITextWidget",
+                  "k": "v:lista/0/3/1",
+                  "tag": null,
+                  "name": null,
+                  "p": [
+                    [
+                      "Text",
+                      "Nova tarefa"
+                    ]
+                  ],
+                  "x": [],
+                  "h": null,
+                  "b": null,
+                  "c": [],
+                  "e": null
+                }
+              ],
+              "e": null
+            },
+            {
+              "w": "IList",
+              "k": "v:lista/0/4",
+              "tag": "ul",
+              "name": "List1",
+              "p": [
+                [
+                  "Source",
+                  "Tarefas.List"
+                ],
+                [
+                  "Mode",
+                  "Custom"
+                ],
+                [
+                  "Tag",
+                  "ul"
+                ],
+                [
+                  "Style",
+                  "\"tarefas\""
+                ]
+              ],
+              "x": [
+                [
+                  "disable-virtualization",
+                  "True"
+                ]
+              ],
+              "h": null,
+              "b": null,
+              "c": [
+                {
+                  "w": "IAdvancedHtml",
+                  "k": "v:lista:template:item",
+                  "tag": "li",
+                  "name": "Li1",
+                  "p": [
+                    [
+                      "Style",
+                      "\"item\" + If(Tarefas.List.Current.Tarefa.Feita, \" done\", \"\")"
+                    ]
+                  ],
+                  "x": [
+                    [
+                      "data-id",
+                      "IntegerToText(IdentifierToInteger(Tarefas.List.Current.Tarefa.Id))"
+                    ]
+                  ],
+                  "h": null,
+                  "b": null,
+                  "c": [
+                    {
+                      "w": "IAdvancedHtml",
+                      "k": "v:lista:template:item/0",
+                      "tag": "span",
+                      "name": "Span2",
+                      "p": [
+                        [
+                          "Style",
+                          "\"titulo\""
+                        ]
+                      ],
+                      "x": [
+                        [
+                          "role",
+                          "\"button\""
+                        ],
+                        [
+                          "tabindex",
+                          "\"0\""
+                        ],
+                        [
+                          "data-action",
+                          "\"alternar\""
+                        ],
+                        [
+                          "data-id",
+                          "IntegerToText(IdentifierToInteger(Tarefas.List.Current.Tarefa.Id))"
+                        ]
+                      ],
+                      "h": "onclick::AlternarTarefaFeita:Id=IdentifierToInteger(Tarefas.List.Current.Tarefa.Id)",
+                      "b": null,
+                      "c": [
+                        {
+                          "w": "IExpression",
+                          "k": "v:lista:template:item/0/0",
+                          "tag": null,
+                          "name": null,
+                          "p": [
+                            [
+                              "Value",
+                              "Tarefas.List.Current.Tarefa.Titulo"
+                            ]
+                          ],
+                          "x": [],
+                          "h": null,
+                          "b": null,
+                          "c": [],
+                          "e": null
+                        }
+                      ],
+                      "e": null
+                    },
+                    {
+                      "w": "IIfWidget",
+                      "k": "v:lista:template:item/1",
+                      "tag": null,
+                      "name": null,
+                      "p": [
+                        [
+                          "Condition",
+                          "Tarefas.List.Current.Tarefa.Feita"
+                        ]
+                      ],
+                      "x": [],
+                      "h": null,
+                      "b": null,
+                      "c": [
+                        {
+                          "w": "IAdvancedHtml",
+                          "k": "v:lista:template:item/1",
+                          "tag": "span",
+                          "name": "Span3",
+                          "p": [
+                            [
+                              "Style",
+                              "\"estado\""
+                            ]
+                          ],
+                          "x": [],
+                          "h": null,
+                          "b": null,
+                          "c": [
+                            {
+                              "w": "IAdvancedHtml",
+                              "k": "v:lista:template:item/1/0",
+                              "tag": "span",
+                              "name": "Span4",
+                              "p": [
+                                [
+                                  "Style",
+                                  "\"icon lucide lucide-check ssam-icon ssam-icon-check\""
+                                ]
+                              ],
+                              "x": [
+                                [
+                                  "aria-hidden",
+                                  "\"true\""
+                                ]
+                              ],
+                              "h": null,
+                              "b": null,
+                              "c": [],
+                              "e": null
+                            },
+                            {
+                              "w": "ITextWidget",
+                              "k": "v:lista:template:item/1/1",
+                              "tag": null,
+                              "name": null,
+                              "p": [
+                                [
+                                  "Text",
+                                  " feita"
+                                ]
+                              ],
+                              "x": [],
+                              "h": null,
+                              "b": null,
+                              "c": [],
+                              "e": null
+                            }
+                          ],
+                          "e": null
+                        }
+                      ],
+                      "e": [
+                        {
+                          "w": "IAdvancedHtml",
+                          "k": "v:lista:else:pendente",
+                          "tag": "span",
+                          "name": "Span5",
+                          "p": [
+                            [
+                              "Style",
+                              "\"estado pendente\""
+                            ]
+                          ],
+                          "x": [],
+                          "h": null,
+                          "b": null,
+                          "c": [
+                            {
+                              "w": "ITextWidget",
+                              "k": "v:lista:else:pendente/0",
+                              "tag": null,
+                              "name": null,
+                              "p": [
+                                [
+                                  "Text",
+                                  "pendente"
+                                ]
+                              ],
+                              "x": [],
+                              "h": null,
+                              "b": null,
+                              "c": [],
+                              "e": null
+                            }
+                          ],
+                          "e": null
+                        }
+                      ]
+                    },
+                    {
+                      "w": "IButton",
+                      "k": "v:lista:template:item/2",
+                      "tag": null,
+                      "name": "Button2",
+                      "p": [
+                        [
+                          "Style",
+                          "\"link\""
+                        ]
+                      ],
+                      "x": [
+                        [
+                          "data-action",
+                          "\"alternar\""
+                        ],
+                        [
+                          "data-id",
+                          "IntegerToText(IdentifierToInteger(Tarefas.List.Current.Tarefa.Id))"
+                        ]
+                      ],
+                      "h": "OnClick::AlternarTarefaFeita:Id=IdentifierToInteger(Tarefas.List.Current.Tarefa.Id)",
+                      "b": null,
+                      "c": [
+                        {
+                          "w": "ITextWidget",
+                          "k": "v:lista:template:item/2/0",
+                          "tag": null,
+                          "name": null,
+                          "p": [
+                            [
+                              "Text",
+                              "Alternar"
+                            ]
+                          ],
+                          "x": [],
+                          "h": null,
+                          "b": null,
+                          "c": [],
+                          "e": null
+                        }
+                      ],
+                      "e": null
+                    },
+                    {
+                      "w": "IButton",
+                      "k": "v:lista:template:item/3",
+                      "tag": null,
+                      "name": "Button3",
+                      "p": [
+                        [
+                          "Style",
+                          "\"link perigo\""
+                        ]
+                      ],
+                      "x": [
+                        [
+                          "data-action",
+                          "\"remover\""
+                        ],
+                        [
+                          "data-id",
+                          "IntegerToText(IdentifierToInteger(Tarefas.List.Current.Tarefa.Id))"
+                        ]
+                      ],
+                      "h": "OnClick::RemoverTarefa:Id=IdentifierToInteger(Tarefas.List.Current.Tarefa.Id)",
+                      "b": null,
+                      "c": [
+                        {
+                          "w": "ITextWidget",
+                          "k": "v:lista:template:item/3/0",
+                          "tag": null,
+                          "name": null,
+                          "p": [
+                            [
+                              "Text",
+                              "Remover"
+                            ]
+                          ],
+                          "x": [],
+                          "h": null,
+                          "b": null,
+                          "c": [],
+                          "e": null
+                        }
+                      ],
+                      "e": null
+                    },
+                    {
+                      "w": "ILink",
+                      "k": "v:lista:template:item/4",
+                      "tag": null,
+                      "name": "Link1",
+                      "p": [
+                        [
+                          "Style",
+                          "\"abrir\""
+                        ]
+                      ],
+                      "x": [],
+                      "h": "OnClick:TarefaDetalhe::Id=Tarefas.List.Current.Tarefa.Id",
+                      "b": null,
+                      "c": [
+                        {
+                          "w": "ITextWidget",
+                          "k": "v:lista:template:item/4/0",
+                          "tag": null,
+                          "name": null,
+                          "p": [
+                            [
+                              "Text",
+                              "Abrir"
+                            ]
+                          ],
+                          "x": [],
+                          "h": null,
+                          "b": null,
+                          "c": [],
+                          "e": null
+                        }
+                      ],
+                      "e": null
+                    }
+                  ],
+                  "e": null
+                }
+              ],
+              "e": null
+            }
+          ],
+          "e": null
+        },
+        {
+          "w": "IPopup",
+          "k": "m:nova-tarefa",
+          "tag": null,
+          "name": "NovaTarefaPopup",
+          "p": [
+            [
+              "ShowPopup",
+              "NovaTarefaIsOpen"
+            ],
+            [
+              "Style",
+              "\"\""
+            ]
+          ],
+          "x": [],
+          "h": null,
+          "b": null,
+          "c": [
+            {
+              "w": "IContainer",
+              "k": "m:nova-tarefa",
+              "tag": "div",
+              "name": "dialogo",
+              "p": [
+                [
+                  "Style",
+                  "\"ssam-tag-dialog ssam-id-dialogo\""
+                ]
+              ],
+              "x": [
+                [
+                  "aria-labelledby",
+                  "\"dialogo_titulo\""
+                ],
+                [
+                  "open",
+                  "\"open\""
+                ]
+              ],
+              "h": null,
+              "b": null,
+              "c": [
+                {
+                  "w": "IAdvancedHtml",
+                  "k": "m:nova-tarefa/0",
+                  "tag": "h2",
+                  "name": "dialogo_titulo",
+                  "p": [
+                    [
+                      "Style",
+                      "\"ssam-id-dialogo-titulo\""
+                    ]
+                  ],
+                  "x": [],
+                  "h": null,
+                  "b": null,
+                  "c": [
+                    {
+                      "w": "ITextWidget",
+                      "k": "m:nova-tarefa/0/0",
+                      "tag": null,
+                      "name": null,
+                      "p": [
+                        [
+                          "Text",
+                          "Nova tarefa"
+                        ]
+                      ],
+                      "x": [],
+                      "h": null,
+                      "b": null,
+                      "c": [],
+                      "e": null
+                    }
+                  ],
+                  "e": null
+                },
+                {
+                  "w": "IForm",
+                  "k": "m:nova-tarefa/1",
+                  "tag": null,
+                  "name": "tarefa_form",
+                  "p": [
+                    [
+                      "Style",
+                      "\"ssam-id-tarefa-form\""
+                    ]
+                  ],
+                  "x": [],
+                  "h": null,
+                  "b": null,
+                  "c": [
+                    {
+                      "w": "IContainer",
+                      "k": "m:nova-tarefa/1/0",
+                      "tag": null,
+                      "name": "tarefa_erro",
+                      "p": [
+                        [
+                          "Style",
+                          "\"erro ssam-id-tarefa-erro\""
+                        ]
+                      ],
+                      "x": [
+                        [
+                          "role",
+                          "\"alert\""
+                        ]
+                      ],
+                      "h": null,
+                      "b": null,
+                      "c": [
+                        {
+                          "w": "IExpression",
+                          "k": "m:nova-tarefa/1/0/message",
+                          "tag": null,
+                          "name": null,
+                          "p": [
+                            [
+                              "Value",
+                              "TarefaErro"
+                            ]
+                          ],
+                          "x": [],
+                          "h": null,
+                          "b": null,
+                          "c": [],
+                          "e": null
+                        }
+                      ],
+                      "e": null
+                    },
+                    {
+                      "w": "IAdvancedHtml",
+                      "k": "m:nova-tarefa/1/1",
+                      "tag": "label",
+                      "name": "Label2",
+                      "p": [
+                        [
+                          "Style",
+                          "\"campo\""
+                        ]
+                      ],
+                      "x": [],
+                      "h": null,
+                      "b": null,
+                      "c": [
+                        {
+                          "w": "IAdvancedHtml",
+                          "k": "m:nova-tarefa/1/1/0",
+                          "tag": "span",
+                          "name": "Span6",
+                          "p": [
+                            [
+                              "Style",
+                              "\"\""
+                            ]
+                          ],
+                          "x": [],
+                          "h": null,
+                          "b": null,
+                          "c": [
+                            {
+                              "w": "ITextWidget",
+                              "k": "m:nova-tarefa/1/1/0/0",
+                              "tag": null,
+                              "name": null,
+                              "p": [
+                                [
+                                  "Text",
+                                  "Título"
+                                ]
+                              ],
+                              "x": [],
+                              "h": null,
+                              "b": null,
+                              "c": [],
+                              "e": null
+                            }
+                          ],
+                          "e": null
+                        },
+                        {
+                          "w": "IInput",
+                          "k": "m:nova-tarefa/1/1/1",
+                          "tag": null,
+                          "name": "Input1",
+                          "p": [
+                            [
+                              "Variable",
+                              "NovaTarefaRegistro.Titulo"
+                            ],
+                            [
+                              "InputType",
+                              "Text"
+                            ],
+                            [
+                              "MaxLength",
+                              "120"
+                            ],
+                            [
+                              "Mandatory",
+                              "True"
+                            ],
+                            [
+                              "Style",
+                              "\"\""
+                            ]
+                          ],
+                          "x": [
+                            [
+                              "name",
+                              "\"Titulo\""
+                            ]
+                          ],
+                          "h": null,
+                          "b": null,
+                          "c": [],
+                          "e": null
+                        }
+                      ],
+                      "e": null
+                    },
+                    {
+                      "w": "IAdvancedHtml",
+                      "k": "m:nova-tarefa/1/2",
+                      "tag": "label",
+                      "name": "Label3",
+                      "p": [
+                        [
+                          "Style",
+                          "\"campo\""
+                        ]
+                      ],
+                      "x": [],
+                      "h": null,
+                      "b": null,
+                      "c": [
+                        {
+                          "w": "IAdvancedHtml",
+                          "k": "m:nova-tarefa/1/2/0",
+                          "tag": "span",
+                          "name": "Span7",
+                          "p": [
+                            [
+                              "Style",
+                              "\"\""
+                            ]
+                          ],
+                          "x": [],
+                          "h": null,
+                          "b": null,
+                          "c": [
+                            {
+                              "w": "ITextWidget",
+                              "k": "m:nova-tarefa/1/2/0/0",
+                              "tag": null,
+                              "name": null,
+                              "p": [
+                                [
+                                  "Text",
+                                  "Categoria"
+                                ]
+                              ],
+                              "x": [],
+                              "h": null,
+                              "b": null,
+                              "c": [],
+                              "e": null
+                            }
+                          ],
+                          "e": null
+                        },
+                        {
+                          "w": "IDropdown",
+                          "k": "m:nova-tarefa/1/2/1",
+                          "tag": null,
+                          "name": "Dropdown1",
+                          "p": [
+                            [
+                              "Variable",
+                              "NovaTarefaRegistro.CategoriaId"
+                            ],
+                            [
+                              "List",
+                              "OpcoesCategoriaId.List"
+                            ],
+                            [
+                              "Values",
+                              "Categoria.Id"
+                            ],
+                            [
+                              "Labels",
+                              "Categoria.Nome"
+                            ],
+                            [
+                              "Style",
+                              "\"\""
+                            ]
+                          ],
+                          "x": [
+                            [
+                              "name",
+                              "\"CategoriaId\""
+                            ]
+                          ],
+                          "h": null,
+                          "b": null,
+                          "c": [],
+                          "e": null
+                        }
+                      ],
+                      "e": null
+                    },
+                    {
+                      "w": "IContainer",
+                      "k": "m:nova-tarefa/1/3",
+                      "tag": null,
+                      "name": "Container1",
+                      "p": [
+                        [
+                          "Style",
+                          "\"acoes\""
+                        ]
+                      ],
+                      "x": [],
+                      "h": null,
+                      "b": null,
+                      "c": [
+                        {
+                          "w": "IButton",
+                          "k": "m:nova-tarefa/1/3/0",
+                          "tag": null,
+                          "name": "Button4",
+                          "p": [
+                            [
+                              "Style",
+                              "\"btn secundario\""
+                            ]
+                          ],
+                          "x": [
+                            [
+                              "data-action",
+                              "\"close-modal\""
+                            ]
+                          ],
+                          "h": "OnClick::FecharNovaTarefa:",
+                          "b": null,
+                          "c": [
+                            {
+                              "w": "ITextWidget",
+                              "k": "m:nova-tarefa/1/3/0/0",
+                              "tag": null,
+                              "name": null,
+                              "p": [
+                                [
+                                  "Text",
+                                  "Cancelar"
+                                ]
+                              ],
+                              "x": [],
+                              "h": null,
+                              "b": null,
+                              "c": [],
+                              "e": null
+                            }
+                          ],
+                          "e": null
+                        },
+                        {
+                          "w": "IButton",
+                          "k": "m:nova-tarefa/1/3/1",
+                          "tag": null,
+                          "name": "Button5",
+                          "p": [
+                            [
+                              "IsDefault",
+                              "True"
+                            ],
+                            [
+                              "Style",
+                              "\"btn ssam-submit\""
+                            ]
+                          ],
+                          "x": [],
+                          "h": "OnClick::CriarTarefa:",
+                          "b": null,
+                          "c": [
+                            {
+                              "w": "ITextWidget",
+                              "k": "m:nova-tarefa/1/3/1/0",
+                              "tag": null,
+                              "name": null,
+                              "p": [
+                                [
+                                  "Text",
+                                  "Salvar"
+                                ]
+                              ],
+                              "x": [],
+                              "h": null,
+                              "b": null,
+                              "c": [],
+                              "e": null
+                            }
+                          ],
+                          "e": null
+                        }
+                      ],
+                      "e": null
+                    }
+                  ],
+                  "e": null
+                }
+              ],
+              "e": null
+            }
+          ],
+          "e": null
+        }
+      ]
+    },
+    {
+      "owner": "TarefaDetalhe",
+      "parent": "$p.inst.shell.tarefa/Content",
+      "roots": [
+        {
+          "w": "IAdvancedHtml",
+          "k": "v:tarefa/0",
+          "tag": "article",
+          "name": "Article1",
+          "p": [
+            [
+              "Style",
+              "\"detalhe\""
+            ]
+          ],
+          "x": [],
+          "h": null,
+          "b": null,
+          "c": [
+            {
+              "w": "ILink",
+              "k": "v:tarefa/0/0",
+              "tag": null,
+              "name": "Link1",
+              "p": [
+                [
+                  "Style",
+                  "\"\""
+                ]
+              ],
+              "x": [],
+              "h": "OnClick:Lista::",
+              "b": null,
+              "c": [
+                {
+                  "w": "ITextWidget",
+                  "k": "v:tarefa/0/0/0",
+                  "tag": null,
+                  "name": null,
+                  "p": [
+                    [
+                      "Text",
+                      "Voltar"
+                    ]
+                  ],
+                  "x": [],
+                  "h": null,
+                  "b": null,
+                  "c": [],
+                  "e": null
+                }
+              ],
+              "e": null
+            },
+            {
+              "w": "IAdvancedHtml",
+              "k": "v:tarefa/0/1",
+              "tag": "h2",
+              "name": "H21",
+              "p": [
+                [
+                  "Style",
+                  "\"\""
+                ]
+              ],
+              "x": [],
+              "h": null,
+              "b": null,
+              "c": [
+                {
+                  "w": "IExpression",
+                  "k": "v:tarefa/0/1/0",
+                  "tag": null,
+                  "name": null,
+                  "p": [
+                    [
+                      "Value",
+                      "ObterTarefa.List.Current.Tarefa.Titulo"
+                    ]
+                  ],
+                  "x": [],
+                  "h": null,
+                  "b": null,
+                  "c": [],
+                  "e": null
+                }
+              ],
+              "e": null
+            },
+            {
+              "w": "IAdvancedHtml",
+              "k": "v:tarefa/0/2",
+              "tag": "p",
+              "name": "P1",
+              "p": [
+                [
+                  "Style",
+                  "\"\""
+                ]
+              ],
+              "x": [],
+              "h": null,
+              "b": null,
+              "c": [
+                {
+                  "w": "IExpression",
+                  "k": "v:tarefa/0/2/0",
+                  "tag": null,
+                  "name": null,
+                  "p": [
+                    [
+                      "Value",
+                      "\"Pontos: \" + (IntegerToText(ObterTarefa.List.Current.Tarefa.Pontos))"
+                    ]
+                  ],
+                  "x": [],
+                  "h": null,
+                  "b": null,
+                  "c": [],
+                  "e": null
+                }
+              ],
+              "e": null
+            }
+          ],
+          "e": null
+        }
+      ]
+    }
+  ]
+}

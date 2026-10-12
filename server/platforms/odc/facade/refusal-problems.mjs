@@ -8,7 +8,9 @@
 //                              ops and one patch that applies all of theirs), then without the per-item detail, then
 //                              without the patch of the biggest groups (patchOmitted), then with 20 pointers a group
 //                              (pointersTotal), then cut (problemsTotal) so the answer stays under the 40 KB ceiling.
-//   diagnosisOf(source)     -> {verifyRan?, verifyReason?, phases?}: whether the Verify ran (and why not), the phases.
+//   diagnosisOf(source)     -> {verifyRan?, verifyReason?, phases?, normalizations?}: whether the Verify ran (and why not),
+//                              the phases, and what the kernel rewrote instead of refusing (normalizationsOf).
+//   normalizationsOf(src)   -> {normalizations?: {total, byRule, items, itemsLeft?}}: the kernel's JobNormalizer entries.
 // Pure: no I/O.
 
 export const PROBLEMS_BUDGET = 30000;
@@ -67,12 +69,29 @@ export function fitProblems(list, { budget = PROBLEMS_BUDGET, limit = 600 } = {}
   return { problems: kept, grouped: true, problemsTotal: all.length };
 }
 
-// Whether the kernel's Verify ran before the refusal, why not, and the phases its problems come from.
+// lentidao 2026-10-12 (kernel Preflight/JobNormalizer.cs): what the kernel rewrote in the job instead of refusing it
+// (sort keys split, typed nulls, the entity segment of a record list, a documentation property it cannot write), so no
+// rewrite reaches the module unseen: the count per rule and the first entries {rule, path, from, to}. The whole list
+// stays in the kernel's result (data.normalizations, or the refusal envelope). Empty when there are none.
+export const NORMALIZATIONS_SHOWN = 8;
+export function normalizationsOf(source, max = NORMALIZATIONS_SHOWN) {
+  const list = (Array.isArray(source?.normalizations) ? source.normalizations : []).filter(isObject);
+  if (!list.length) return {};
+  const byRule = {};
+  for (const n of list) { const rule = String(n.rule ?? 'UNKNOWN'); byRule[rule] = (byRule[rule] ?? 0) + 1; }
+  const items = list.slice(0, max).map(n => ({ rule: String(n.rule ?? 'UNKNOWN'), ...(n.path ? { path: clip(n.path, 160) } : {}),
+    ...(n.from != null ? { from: clip(n.from, 160) } : {}), ...(n.to != null ? { to: clip(n.to, 160) } : {}) }));
+  return { normalizations: { total: list.length, byRule, items, ...(list.length > max ? { itemsLeft: list.length - max } : {}) } };
+}
+
+// Whether the kernel's Verify ran before the refusal, why not, the phases its problems come from, and what the kernel
+// normalized in the job before refusing what stayed.
 export function diagnosisOf(source) {
   if (!isObject(source)) return {};
   return { ...(typeof source.verifyRan === 'boolean' ? { verifyRan: source.verifyRan } : {}),
     ...(typeof source.verifyReason === 'string' && source.verifyReason ? { verifyReason: clip(source.verifyReason, 600) } : {}),
-    ...(Array.isArray(source.phases) && source.phases.length ? { phases: source.phases.filter(p => typeof p === 'string') } : {}) };
+    ...(Array.isArray(source.phases) && source.phases.length ? { phases: source.phases.filter(p => typeof p === 'string') } : {}),
+    ...normalizationsOf(source) };
 }
 
 // The fields of a refusal with problems: {problems, problemsTotal?, grouped?, verifyRan?, verifyReason?, phases?}; empty

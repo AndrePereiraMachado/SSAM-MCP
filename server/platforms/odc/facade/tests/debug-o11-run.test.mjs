@@ -202,6 +202,9 @@ test('native wrapper graph binds the configured provider and authenticates befor
   ];
   const tree={kind:'RestServiceAction',key:'Z'.repeat(22),children:rows},context={loginRef:'@'+loginContract.key,loginContract,token};
   const checked=o11WrapperContract(tree,action,context);assert.equal(checked.authenticationVerified,true);assert.equal(checked.originalActionKey,action.key);assert.equal(checked.serviceBoundaryProved,false);
+  const unnamed=structuredClone(tree);
+  for(const row of unnamed.children.filter(row=>row.kind==='IfNode')){row.name='';row.modelName='';row.label=null;}
+  assert.equal(o11WrapperContract(unnamed,action,context).authenticationVerified,true);
   for(const mutate of [v=>{v.children[2].propertyReferences.Target.key=key(5);},v=>{v.children[3].propertyReferences.Action.key='X'.repeat(22);},
     v=>{v.children[3].children[2].properties.Value='True';},v=>{v.children[4].properties.Condition='True';},v=>{v.children[5].propertyReferences.Action.key='X'.repeat(22);}]) {
     const changed=structuredClone(tree);mutate(changed);assert.throws(()=>o11WrapperContract(changed,action,context),/wrapper_authentication_unproved/);
@@ -227,6 +230,23 @@ test('HTTP200 defaults or a debugger uncertain start never authorize a second sc
     assert.equal(result.ok,false);assert.equal(result.wrapper.state,'uncertain');assert.ok(f.events.includes('forget'));
     assert.ok(!f.events.includes('publish:'+W.COMMIT.remove));
   }
+});
+
+test('publisher selection refusal is not a submitted write, while transport failures remain uncertain',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'ssam-o11-publisher-preflight-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const request={operationId:randomUUID(),...target,candidateSha256:'a'.repeat(64)},requestPath=path.join(root,'request.json'),receiptPath=path.join(root,'receipt.json');
+  o11Write(requestPath,request);
+  const operation={requestPath,receiptPath,request,operationId:request.operationId};
+  for(const proven of [true,false]) {
+    const life=createO11Lifecycle({root,cli:async()=>{const e=new Error('private diagnostic');e.code='debug_o11_publisher_source_changed';if(proven)e.publicationStage='publisher-selection';throw e;}});
+    const result=await life.publish(operation);
+    assert.equal(result.state,proven?'refused':'uncertain');
+    if(proven){assert.equal(result.nativeSubmission,false);assert.equal(result.error,'debug_o11_publisher_source_changed');}
+    assert.ok(!JSON.stringify(result).includes('private diagnostic'));
+  }
+  o11Write(receiptPath,{...request,host:target.host,state:'uncertain',versionId:2});
+  const life=createO11Lifecycle({root,cli:async()=>{assert.fail('existing uncertain operation must never be resent');}});
+  assert.equal((await life.publish(operation)).state,'uncertain');
 });
 
 test('reconciliation preserves write request bytes and never resends an uncertain publication',async t=>{

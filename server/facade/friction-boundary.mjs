@@ -136,7 +136,9 @@ export function readQueue(store,args={},context={}) {
 
 // sessionId (C33, atritos 3): the id of the MCP session the transport gives when one process serves several (the hosted
 // server's mcp-session-id); without it, one session per observer (per process), as before.
-export function observeMcp({root,entry,args,env=process.env,store=createStore({root}),meta:given=boundaryMetadata(root,entry,args,env),sessionId,toServer,toClient}={}) {
+// The queue answers here, synchronously, on the line of the client's requests: its store never rebuilds the index from the
+// operation files (rebuild:false), so no friction call scans the whole queue while the session waits.
+export function observeMcp({root,entry,args,env=process.env,store=createStore({root,env,rebuild:false}),meta:given=boundaryMetadata(root,entry,args,env),sessionId,toServer,toClient}={}) {
   const meta=sessionId?{...given,sessionId}:given;
   const pending=new Map(),lists=new Set();
   const key=id=>JSON.stringify(id);

@@ -129,3 +129,4 @@ não substituir por `sc_api TestQuery`, que permanece bloqueado.
 - Debugger: `docs/DEBUGGER-HEADLESS.md`; continuidade em `docs/HANDOFF-DEBUGGER-HEADLESS-2026-10-03.md`.
 - Ambiente O11 com SSO: `kernel/docs/proofs/2026-09-25-o11-connected-environment.md`.
 - URLs de apps e telas: `docs/URLS-APPS.md`.
+- Credenciais do Service Center e do Portal (janela privada, cofre, perfis por host, revogar, trava corporativa): `docs/SC-PORTAL-USO.md`.

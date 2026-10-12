@@ -53,7 +53,12 @@ public sealed class Pa2F8ScTests
         var source = File.ReadAllText(Path.Combine(Root, "src", "Anvil.Bridge", "Dispatch.cs"));
         var list = source[source.IndexOf("Capabilities = [", StringComparison.Ordinal)..];
         list = list[..list.IndexOf("];", StringComparison.Ordinal)];
-        Assert.Contains("ScWebSession.StudioSessionCapability", list);
+        // SC/Portal line (port of 2026-10-11): sc_web goes through the headless HTTP handler, so the bridge advertises
+        // sc_http:studioSession (ScHttpHandler) and the private transport (ScPrivateHttp) instead of sc_web:studioSession;
+        // service-center/auth.mjs decides by sc_http:studioSession.
+        Assert.Contains("ScHttpHandler.Capability", list);
+        Assert.Contains("ScPrivateHttp.Capability", list);
+        Assert.DoesNotContain("ScWebSession.StudioSessionCapability", list);
         Assert.Contains("UserDirectory.Capability", list);
         var handler = File.ReadAllText(Path.Combine(Root, "src", "Anvil.Bridge", "ScWebHandler.cs"));
         Assert.Contains("ScWebSession.StudioSession => await LoginThroughStudio", handler);

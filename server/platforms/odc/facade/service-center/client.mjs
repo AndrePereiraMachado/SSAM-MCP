@@ -1,6 +1,6 @@
 // Semantic O11 operations over discovered Service Center forms, with durable receipts (port of
 // kernel/scripts/service_center/client.py). The same parsers serve both page transports: direct HTTPS after the vault
-// form login (Transport) and the connected Studio's own web window (StudioWebTransport). Web Forms postbacks are
+// form login (Transport) and the connected Studio's headless HTTP transport (StudioWebTransport). Web Forms postbacks are
 // rebuilt from the page's own form state (__OSVSTATE/__VIEWSTATE/__EVENTVALIDATION); server scripts are never run.
 //
 // Modern Service Center pages: lists are read only from the page's content (div.sc-content-main), never from the
@@ -10,14 +10,19 @@
 // and the page-layout read that captures them live.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import { readCheckpoint } from '../read-budget.mjs';
 import path from 'node:path';
 import { redactText } from './bridge.mjs';
 import { BridgeError, LayoutError, ProtocolError, ScheduleInModule, TargetPending, connectStudio, continuation } from './errors.mjs';
-import { Document, Page, button, caption, classes, confirmText, controlValue, controls, escape, formFields, isVoid, lower, postbackTarget } from './html.mjs';
-import { NOT_SENT, STATE, Transport } from './http.mjs';
+import { Document, Page, button, caption, classes, confirmText, controlValue, controls, escape, formFields, isVoid, lower, postbackTarget, secretRefs as toSecretRefs } from './html.mjs';
+import { NOT_SENT, STATE, Transport, decode } from './http.mjs';
 import { parseQs, quote, urlsplit } from './urls.mjs';
 import { canonicalUuid, escapeRegExp, fingerprint, fold, rstrip, same, sha256, splitlines, strip, utc, words } from './util.mjs';
 import { excelTime, xlsxRows } from './xlsx.mjs';
+import { asyncStatusArguments, parseAsyncStatus } from './async-status.mjs';
+import { solutionDownload, solutionDownloadAbandon, solutionDownloadStatus } from './solution-download.mjs';
+import { timerLogSnapshot, compareTimerLogs, observeTimerErrors } from './timer-observation.mjs';
+import { OwnerSelectionStore } from './owner-selection.mjs';
 
 // The Timers log is Cyclic_Job_Logs.aspx (Monitoring > Timers, live on 11.42); Timer_Logs.aspx does not exist.
 export const LOG_PAGES = { error: 'Error_Logs.aspx', general: 'General_Logs.aspx', integration: 'Integration_Logs.aspx', timer: 'Cyclic_Job_Logs.aspx' };
@@ -27,6 +32,14 @@ const LOG_FILTERS = { application: [['application'], ['wtApplication_Selector']]
   message: [['message'], ['wtInput1']], source: [['source'], ['wtInput7', 'wtSourceInput']], server: [['server'], ['wtInput4']],
   type: [['type'], ['wtTypeSelector']], action: [['action'], ['wtActionInput']], timer: [['timer', 'name'], ['wtTimerInput']],
   since: [['from', 'from date', 'start date'], ['wtFilter_FromDate']], until: [['to', 'to date', 'end date'], ['wtFilter_ToDate2']] };
+// Control suffixes are reused across log pages (Integration Action and Timer Name
+// both use wtInput1). A suffix alone must never enable another kind's filter.
+export const LOG_KIND_FILTERS = {
+  error: ['application', 'module', 'message', 'source', 'server', 'since', 'until'],
+  general: ['application', 'module', 'message', 'source', 'server', 'since', 'until'],
+  integration: ['application', 'module', 'type', 'action', 'server', 'since', 'until'],
+  timer: ['application', 'module', 'timer', 'server', 'since', 'until']
+};
 // General and timer logs are ASSUMED pages: their listing must show these columns or the page is refused.
 const ASSUMED_LOGS = { general: ['module', 'message'], timer: ['module', 'timer'] };
 export const ACTIONS = { 'timer-run': ['Run Now', 'Run now'], 'timer-deactivate': ['Deactivate'], 'timer-activate': ['Activate'],
@@ -36,7 +49,7 @@ export const VALUE_ACTIONS = ['property-set', 'timer-schedule'];
 export const SCHEDULE = { recurrence: [['recurrence'], 'wtSchedule_Recurrence'], at: [['at'], 'wtSchedule_Time'],
   every: [['every (minutes)', 'every'], 'wtSchedule_Interval'], timeout: [['timeout (minutes)', 'timeout'], 'wtTimeout'] };
 // Page writes beyond timers and properties: the target keys of their journal identity.
-export const WEB_WRITES = { 'solution-create': ['solution'], 'solution-add-component': ['solution', 'component'],
+export const WEB_WRITES = { 'application-timeout-set': ['application'], 'solution-create': ['solution'], 'solution-delete': ['solution'], 'solution-add-component': ['solution', 'component'],
   'solution-remove-component': ['solution', 'component'], 'db-connection-create': ['connection'], 'db-connection-test': ['connection'],
   'db-connection-delete': ['connection'], 'extension-db-connection': ['extensionId', 'connection'], 'integration-log-level': ['moduleId', 'integration'] };
 // Page writes whose form carries the database login: it goes only as sc_web secretRefs, filled inside the Studio.
@@ -79,6 +92,11 @@ export async function assumed(page, what, find) {
 }
 
 export const observedValue = field => (typeOf(field) === 'checkbox' ? (field.has('checked') ? 'true' : 'false') : controlValue(field));
+export const secretPresence = field => {
+  if (typeOf(field) !== 'password') return null;
+  const placeholder = field.attr('placeholder', '') ?? '';
+  return /^•{3,}$/.test(placeholder) ? true : placeholder === 'No value set' ? false : null;
+};
 // What the page shows in a control: a select's chosen option text, else its value.
 export const shown = field => (field.tag === 'select' ? selectedText(field) : observedValue(field));
 export function expectedValue(field, value) {
@@ -89,16 +107,39 @@ export function expectedValue(field, value) {
 
 export const content = page => page.doc.content();
 export function heading(page) {
-  const found = content(page).all('div', 'h1', 'h2').filter(n => n.tag === 'h1' || n.tag === 'h2' || classes(n).includes('heading2')).map(n => n.text);
+  const found = content(page).all('div', 'span', 'h1', 'h2').filter(n => n.tag === 'h1' || n.tag === 'h2' || classes(n).includes('heading2')).map(n => n.text);
   return found[0] ?? '';
+}
+function bptDetailIdentity(page, kind, id) {
+  const title = heading(page) || page.doc.all('title')[0]?.text || '', detail = summary(page);
+  const prefix = kind === 'process' ? 'Process' : 'Activity';
+  const pattern = new RegExp('^' + prefix + '\\b[\\s\\S]*\\bInstance\\s+(?:no|nr)\\.?\\s*' + escapeRegExp(String(id)) + '(?![0-9])', 'i');
+  if (!pattern.test(title) || typeof detail.Status !== 'string' || !detail.Status.trim())
+    throw new ProtocolError('The BPT detail did not prove the requested ' + kind + ' instance identity; no detail returned', 'SC_RESOURCE_IDENTITY_UNVERIFIED');
+  return {title, detail};
 }
 export const errors = page => page.doc.all().filter(n => n.text && /(?:Feedback_Message_Error|ValidationMessage|ErrorMessage)/i.test(n.attr('class', '') ?? ''));
 export const acknowledged = (page, pattern) => page.doc.all().some(n => new RegExp(pattern, 'i').test(n.text) && /Feedback_Message_Success/i.test(n.attr('class', '') ?? ''));
 
+export function connectionTestOutcome(page) {
+  const inFeedback = node => {
+    for (let current=node; current; current=current.parent)
+      if (/(?:^|_)wtFeedback(?:_|$)/.test(current.attr?.('id','') ?? '')) return true;
+    return false;
+  };
+  const nodes = page.doc.all().filter(node => node.text);
+  const good = nodes.filter(node => /Feedback_Message_Success/i.test(node.attr('class','') ?? '')
+    || (classes(node).includes('alert-success') && inFeedback(node)));
+  const bad = [...errors(page), ...nodes.filter(node => classes(node).includes('alert-danger') && inFeedback(node))];
+  if (!good.length && !bad.length) return null;
+  return { testPassed:good.length > 0 && !bad.length,
+    feedback:good.length && !bad.length ? 'success' : 'error (server text withheld: it can echo the login)' };
+}
+
 export function checked(page) {
   // An expired session answers with the login page at the asked URL: its form posts to Login.aspx.
   const loginForm = page.doc.all('form').some(f => /^_?login(?:sso)?\.aspx$/i.test(urlsplit(f.attr('action', '') || '').path.split('/').pop()));
-  if (urlsplit(page.url).path.toLowerCase().endsWith('/login.aspx') || loginForm) throw new ProtocolError('Service Center login required or session expired');
+  if (urlsplit(page.url).path.toLowerCase().endsWith('/login.aspx') || loginForm) throw new ProtocolError('Service Center login required or session expired', 'SC_AUTH_EXPIRED');
   // Feedback may echo a password/property value. Never return raw server feedback.
   if (errors(page).length) throw new ProtocolError('Service Center reported a validation/permission error');
   return page;
@@ -108,7 +149,7 @@ const cellsOf = row => row.children.filter(c => c?.tag === 'th' || c?.tag === 't
 // Header-keyed rows of the listings inside root (default: the page content, never the sidebar).
 export function tables(page, redactValues = false, root = null) {
   const result = [];
-  for (const table of (root ?? content(page)).all('table')) {
+  for (const table of root?.tag === 'table' ? [root] : (root ?? content(page)).all('table')) {
     if (inside(table, /RecentItems|sc-content-left/i)) continue;
     const rows = table.all('tr').filter(r => r.ancestor('table') === table);
     let headers = [];
@@ -129,6 +170,41 @@ export function tables(page, redactValues = false, root = null) {
 }
 
 // Label/value rows of header-less detail tables (BPT process, instance and activity pages).
+export function moduleRows(page) {
+  return factoryRows(page, 'module');
+}
+export function applicationRows(page) {
+  return factoryRows(page, 'application');
+}
+function factoryRows(page, kind) {
+  const isApp = kind === 'application', route = isApp ? /\/Application_Edit\.aspx$/i : /\/eSpace_Edit\.aspx$/i;
+  const idField = isApp ? 'ApplicationId' : 'EspaceId';
+  const control = isApp ? /_wtListApplications_ctl[0-9]+_wtEspaceLink$/ : /_wtListEspaces_ctl[0-9]+_wtESpaceLink$/;
+  const parsed = tables(page), known = new Map();
+  for (const row of parsed) for (const link of row.links) if (route.test(new URL(link.href, page.url).pathname))
+    known.set(new URL(link.href, page.url).href, row);
+  const rows = [], seen = new Map();
+  for (const anchor of content(page).all('a')) {
+    if (inside(anchor, /RecentItems|sc-content-left/i)) continue;
+    const href = anchor.attr('href'); if (!href || /^(?:javascript:|#)/i.test(href)) continue;
+    const url = new URL(href, page.url); if (!route.test(url.pathname)) continue;
+    const name = anchor.text.trim(), id = url.searchParams.get(idField);
+    if (isApp && !name) continue; // application icon link accompanies the named link
+    if (url.origin !== new URL(page.url).origin || !/^[1-9][0-9]*$/.test(id ?? '') || !name)
+      throw new ProtocolError('Unverified module listing link');
+    const row = known.get(url.href);
+    if (!row && !control.test(anchor.attr('id', '') ?? ''))
+      throw new ProtocolError('Module link outside recognized listing row');
+    if (seen.has(id)) { if (seen.get(id) !== name) throw new ProtocolError('Conflicting module listing names'); continue; }
+    seen.set(id, name);
+    // Malformed description HTML may close the table before subsequent rows.
+    // The generated listing link still proves module identity; do not invent missing cells.
+    rows.push(row ?? { fields: { Name: name }, links: [{ name, href: url.href }], partialFields: true });
+  }
+  if (parsed.length && !rows.length) throw new ProtocolError('Module listing has rows but no module identities');
+  return rows;
+}
+
 export function summary(page) {
   const found = {};
   for (const table of content(page).all('table')) {
@@ -142,10 +218,23 @@ export function summary(page) {
   return found;
 }
 
-export function nextLink(page) {
-  const links = content(page).all('a').filter(a => (['next', 'next ›', '›', '>', 'próxima', 'seguinte'].includes(fold(a.text)) || a.attr('rel') === 'next')
-    && !a.has('disabled') && !lower(a.attr('class', '')).includes('disabled') && (a.attr('href') || a.attr('onclick')));
-  return links.length === 1 ? links[0] : null;
+export function nextLink(page, scope = content(page)) {
+  const links = scope.all('a').filter(a => (['next', 'next ›', '›', '>', 'próxima', 'seguinte'].includes(fold(a.text)) || a.attr('rel') === 'next')
+    && !a.has('disabled') && a.attr('aria-disabled') !== 'true' && !lower(a.attr('class', '')).includes('disabled') && (a.attr('href') || a.attr('onclick')));
+  if (links.length <= 1) return links[0] ?? null;
+  // Live SC repeats the pager above and below the same listing. Their generated
+  // event names differ, but the enclosing component and explicit slots agree.
+  const slots = links.map(a => /^(.*)_wt(Top|Bottom)LinksPlaceholderRight_/.exec(a.attr('id','')));
+  const destinations = links.map(a => {
+    if (a.attr('onclick') || !a.attr('href') || /^(?:javascript:|#)/i.test(a.attr('href'))) return null;
+    try { const url = new URL(a.attr('href'), page.url); url.searchParams.sort(); return url.href; }
+    catch { return null; }
+  });
+  const sameNavigation = destinations[0] && destinations.every(url => url === destinations[0]);
+  if (links.length === 2 && slots.every(Boolean) && slots[0][1] === slots[1][1]
+      && slots[0][2] !== slots[1][2] && (sameNavigation || links.every(a => postbackTarget(a)?.kind === 'osajax')))
+    return links[slots.findIndex(s => s[2] === 'Top')];
+  throw new ProtocolError('Ambiguous Next controls; cannot claim the listing is complete');
 }
 
 export function inside(node, pattern) {
@@ -210,8 +299,41 @@ export function timerFields(page) {
 // (by its label or name suffix). The live 11.42 timer page had none (session dd2b79c0, 2026-10-05 01:06: "Expected exactly
 // one timer schedule recurrence control; found 0").
 export function scheduleEditor(page, form) {
+  if (nativeScheduleControls(page, form)) return true;
   const found = entries(formLabels(page, form));
   return Object.values(SCHEDULE).every(([names, suffix]) => found.filter(({ name, label }) => name.endsWith(suffix) || names.includes(label)).length === 1);
+}
+
+// Observed 11.42 editor: Generate is client-only; Save commits the explicit times.
+export function nativeScheduleControls(page, form) {
+  const found = entries(formLabels(page, form));
+  const take = suffix => found.filter(e => e.name.endsWith(suffix)).map(e => e.n);
+  const at = take('$wtInputTimerTimes'), recurrence = take('$wtSelectScheduleType');
+  if (at.length !== 1 || recurrence.length !== 1 || at[0].tag !== 'input' || recurrence[0].tag !== 'select') return null;
+  return { at: at[0], recurrence: recurrence[0] };
+}
+export function nativeScheduleRequest(target, value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !Object.keys(value).length
+    || Object.keys(value).some(k => !['at', 'every', 'recurrence'].includes(k)))
+    throw new ProtocolError('This timer editor supports at/every with Daily occurrence; timeout and other occurrence editors are not mapped');
+  if (value.at !== undefined && value.every !== undefined) throw new ProtocolError('Specify at or every, not both');
+  const occurrence = String(value.recurrence ?? shown(target.recurrence));
+  if (fold(occurrence) !== 'daily') throw new ProtocolError('This timer schedule contract supports Daily occurrence only');
+  let at = value.at;
+  if (value.every !== undefined) {
+    const match = /^(\d{1,2})(?:\s*(?:m|min|mins|minutes))?$/i.exec(String(value.every).trim());
+    const n = match ? Number(match[1]) : 0;
+    if (n < 1 || n > 60 || 60 % n) throw new ProtocolError('Schedule every must be an integer divisor of 60 minutes');
+    at = Array.from({ length: 1440 / n }, (_, i) => String(Math.floor(i * n / 60)).padStart(2, '0') + ':' + String(i * n % 60).padStart(2, '0')).join(' ');
+  }
+  if (at === undefined) throw new ProtocolError('Daily schedule requires at or every');
+  at = String(at).trim();
+  if (at && at.split(/\s+/).some(t => !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t)))
+    throw new ProtocolError('Schedule at requires native HH:mm times separated by spaces');
+  const maximum = Number(target.at.attr('maxlength'));
+  if (!Number.isSafeInteger(maximum) || maximum < 1 || at.length > maximum)
+    throw new ProtocolError('Schedule exceeds the live time field length limit; no truncation or write is allowed');
+  return { recurrence: one(target.recurrence.all('option').filter(o => fold(o.text) === 'daily'), 'Daily occurrence').text, at };
 }
 
 // The refusal of timer-schedule on a page without that editor: the module change, with what the page shows now.
@@ -221,17 +343,17 @@ export function scheduleInModule(page, name, requested = null) {
     current: Object.fromEntries(['schedule', 'effectiveSchedule', 'defaultSchedule', 'nextRun'].filter(k => Object.hasOwn(fields, k)).map(k => [k, fields[k]])) });
 }
 
-// The schedule as the timer's Schedule property in the module takes it (the texts the Studio accepted in session
-// dd2b79c0: "Every 60 minutes", "Every day at 00:00", "Every Monday at 00:05"); null when the request names no interval
-// or daily time.
+// Return native daily occurrences. A string accepted by the generic model setter
+// is not proof that the platform interprets it as a schedule.
 export function moduleSchedule(value) {
   if (!value || typeof value !== 'object') return null;
   const recurrence = fold(String(value.recurrence ?? '')), every = String(value.every ?? '').trim(), at = String(value.at ?? '').trim();
   const interval = /^(\d{1,4})\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours)?$/i.exec(every);
   const minutes = interval ? Number(interval[1]) * (/^h/i.test(interval[2] ?? '') ? 60 : 1) : null;
-  if (minutes && (!recurrence || /every|minute|hour|interval|n minutes/.test(recurrence))) return `Every ${minutes} minutes`;
+  if (minutes && !at && minutes <= 60 && 60 % minutes === 0 && (!recurrence || /^(every|every n minutes|interval|daily)$/.test(recurrence)))
+    return Array.from({ length: 1440 / minutes }, (_, i) => `${String(Math.floor(i * minutes / 60)).padStart(2, '0')}:${String(i * minutes % 60).padStart(2, '0')}`).join(' ');
   const time = /^(\d{1,2}):(\d{2})$/.exec(at);
-  if (time && Number(time[1]) < 24 && Number(time[2]) < 60 && (!recurrence || /daily|day/.test(recurrence))) return `Every day at ${time[1].padStart(2, '0')}:${time[2]}`;
+  if (!every && time && Number(time[1]) < 24 && Number(time[2]) < 60 && (!recurrence || /^(daily|day)$/.test(recurrence))) return `${time[1].padStart(2, '0')}:${time[2]}`;
   return null;
 }
 export function selectedText(select) {
@@ -252,8 +374,39 @@ export function tabPanel(page, tab) {
   return panels[0];
 }
 
-// The refreshed __OSVSTATE of an OsAjax reply: the "__OSVSTATE","<state>" pair is its only evidenced token.
-export const ajaxState = reply => /"__OSVSTATE"\s*[,:]\s*"([A-Za-z0-9+/=_.:-]+)"/.exec(reply)?.[1] ?? null;
+// Native OsJSONUpdate applies hidden fields in response order. A later state
+// supersedes an earlier one, including an invalid/empty final state: never fall
+// back to an older token when the final update cannot be used.
+export const ajaxState = reply => {
+  const states = [...reply.matchAll(/"__OSVSTATE"\s*[,:]\s*"([^"\r\n]*)"/g)];
+  const state = states.at(-1)?.[1];
+  return state && /^[A-Za-z0-9+/=_.:-]+$/.test(state) ? state : null;
+};
+// A live pager asks its parent to refresh the list, optionally updating its
+// state first. Interpret the bound notification; never evaluate server JS.
+export function pagerNotify(reply, expectedTarget, { allowUnchangedState = false } = {}) {
+  const commands = [];
+  let commandsOnly = true;
+  for (const match of reply.matchAll(/OsJSONUpdate\((\{[^\r\n]*\})\)/g)) {
+    let data; try { data = JSON.parse(match[1]); } catch { throw new ProtocolError('Invalid pager response'); }
+    commandsOnly &&= Object.keys(data).every(key => key === 'js');
+    if (data.js !== undefined) {
+      if (!Array.isArray(data.js) || data.js.some(x => typeof x !== 'string')) throw new ProtocolError('Invalid pager commands');
+      commands.push(...data.js);
+    }
+  }
+  const notifications = [];
+  for (const command of commands) {
+    const match = /^OsNotifyWidget\('([A-Za-z0-9_]+)', ''\);$/.exec(command);
+    if (match) notifications.push(match[1]);
+    else if (command !== 'OsEndRequest()' && !/^OsSetRequestInfo\('[a-f0-9-]{36}','List_Navigation\.Next','[a-f0-9-]{36}'\)$/.test(command))
+      throw new ProtocolError('Unsupported pager continuation; no script was executed');
+  }
+  const unchanged = allowUnchangedState && commandsOnly && commands.includes('OsEndRequest()');
+  if (notifications.length !== 1 || notifications[0] !== expectedTarget || !ajaxState(reply) && !unchanged)
+    throw new ProtocolError('Pager continuation does not match its current Next control');
+  return notifications[0];
+}
 // The HTML an OsAjax reply carries in its string literals (the widgets it replaces); the envelope is not parsed.
 export function ajaxMarkup(reply) {
   const found = [];
@@ -266,11 +419,37 @@ export function ajaxMarkup(reply) {
 }
 // A page rebuilt from an OsAjax reply: the original form's fields with the refreshed state, around the replaced
 // markup, so the next postback (Next, Export) carries that state as the browser's form would.
-export function ajaxPage(page, reply) {
+export function ajaxPage(page, reply, submittedFields = null) {
   const state = ajaxState(reply); const fragments = ajaxMarkup(reply); const form = page.doc.first('form');
   if (state === null || !fragments.length || !form) throw new LayoutError(page.url, 'OsAjax reply', 'it carries no refreshed form state or no list markup');
-  const hidden = formFields(form).map(([k, v]) => `<input type="hidden" name="${escape(k)}" value="${escape(k.endsWith('__OSVSTATE') ? state : v)}">`).join('');
+  const retainedNames = new Set(controls(form).filter(n => !['submit','button','image','reset'].includes(typeOf(n))).map(n => n.attr('name')));
+  // Updated filter widgets carry their own controls. Retaining their previous
+  // values as hidden inputs duplicates names on the next postback (e.g. 0,0
+  // instead of 0), changing the search rather than navigating its next page.
+  const refreshedNames = new Set(new Document(fragments.join('')).all('input', 'select', 'textarea', 'button').map(n => n.attr('name')).filter(Boolean));
+  const retained = (submittedFields ? submittedFields.filter(([k]) => retainedNames.has(k)) : formFields(form))
+    .filter(([k]) => !refreshedNames.has(k));
+  const hidden = retained.map(([k, v]) => `<input type="hidden" name="${escape(k)}" value="${escape(k.endsWith('__OSVSTATE') ? state : v)}">`).join('');
   return new Page(page.url, new Document(`<form method="post" action="${escape(form.attr('action') || '')}">${hidden}<div class="sc-content-main">${fragments.join('')}</div></form>`));
+}
+
+export function unchangedReadTab(page, reply) {
+  const state = ajaxState(reply); let ended = false, envelopes = 0;
+  for (const match of reply.matchAll(/OsJSONUpdate\((\{[^\n]*\})\)/g)) {
+    let data; try { data = JSON.parse(match[1]); } catch { throw new ProtocolError('Invalid tab acknowledgement'); }
+    envelopes++;
+    if (Object.keys(data).some(k => !['hidden','js'].includes(k)) || data.hidden && Object.keys(data.hidden).some(k => k !== '__OSVSTATE')
+      || data.js !== undefined && !Array.isArray(data.js)) throw new ProtocolError('Unsupported tab acknowledgement');
+    for (const command of data.js ?? []) {
+      if (command === 'OsEndRequest()') ended = true;
+      else if (typeof command !== 'string' || !/^OsSetRequestInfo\('[a-f0-9-]{36}','[A-Za-z0-9_.]+','[a-f0-9-]{36}'\)$/.test(command))
+        throw new ProtocolError('Unsupported tab continuation; no script executed');
+    }
+  }
+  const fields = page.doc.all('input').filter(n => n.attr('name') === '__OSVSTATE');
+  if (!envelopes || !ended || !state || fields.length !== 1 || ajaxMarkup(reply).length) throw new ProtocolError('Tab acknowledgement is incomplete');
+  fields[0].attrs.set('value',state);
+  return page;
 }
 
 // A linked page and its query parameter names, never their values.
@@ -287,10 +466,20 @@ export function skeleton(node) {
   if (node.tag === 'script' || node.tag === 'style') return '';
   const attrs = new Map(node.attrs);
   if (node.tag === 'input' && !['submit', 'button', 'reset', 'image', 'checkbox', 'radio'].includes(lower(attrs.has('type') ? attrs.get('type') : 'text'))) attrs.delete('value');
-  const inner = node.tag === 'textarea' ? '' : node.children.map(skeleton).join('');
+  const inner = privateDiagnosticValue(node) ? '[redacted]' : node.tag === 'textarea' ? '' : node.children.map(skeleton).join('');
   if (node.tag === 'document') return inner;
   const rendered = [...attrs].map(([k, v]) => (v === null ? ` ${k}` : ` ${k}="${escape(v)}"`)).join('');
   return isVoid(node.tag) ? `<${node.tag}${rendered}>` : `<${node.tag}${rendered}>${inner}</${node.tag}>`;
+}
+
+// The live diagnostic view renders Session Id as ordinary text, not an input.
+// Unexpected-error pages also embed license/activation diagnostics in a pre
+// block. Preserve layout, never persist that report as calibration markup.
+function privateDiagnosticValue(node) {
+  if(node.tag==='pre'&&/\b(?:InstallerId|License\s*(?:Edition|Key)|Activation\s*Code|Serial(?:\s*Number)?)\s*:/i.test(node.text))return true;
+  if (node.tag !== 'div' || !classes(node).includes('columns-item') || node.all('label').length) return false;
+  const siblings = node.parent?.children.filter(n => typeof n !== 'string') ?? [];
+  return siblings.length === 2 && siblings[1] === node && siblings[0].all('label').some(n => /^session\s*id$/i.test(strip(n.text)));
 }
 
 // Names only: controls with their labels, buttons, tabs, table headers, postback targets and linked pages.
@@ -314,6 +503,17 @@ export function describe(page, root) {
 
 const stamp = () => new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
 
+export function applicationOwner(page) {
+    // Only the semantic owner link in the module header proves ownership. Recent items and reference rows do not.
+    const owners = page.doc.all('a').filter(a => a.attr('data-name') === 'applicationedit'
+      && (/(?:^|_)wtContentTop(?:_|$)/.test(a.attr('id', '') ?? '') || inside(a, /(?:^|_)wtContentTop(?:_|\s|$)/)))
+      .map(a => ({ name: a.text.trim(), url: new URL(a.attr('href', '') ?? '', page.url) }));
+    const owner = owners.length === 1 && owners[0].name && owners[0].url.origin === new URL(page.url).origin
+      && /\/Application_Edit\.aspx$/i.test(owners[0].url.pathname)
+      && /^[1-9][0-9]*$/.test(owners[0].url.searchParams.get('ApplicationId') ?? '') ? owners[0] : null;
+    return owner;
+}
+
 export class Client {
   constructor(vault, transport = null, exports = null) {
     this.vault = vault;
@@ -324,17 +524,33 @@ export class Client {
 
   async login() {
     if (this.authenticated || this.http.preauthenticated) return;
-    const page = await this.http.request('Login.aspx');
+    let page;
+    try { page = await this.http.request('Login.aspx'); }
+    catch(error) {
+      if(error.code !== 'SC_SSO_REQUIRED' || !this.http.authenticateSso) throw error;
+      await this.http.authenticateSso(); this.authenticated = true; return;
+    }
+    if (!page.doc.login() && this.http.authenticateSso && page.doc.all('input','button').some(n => /log ?in with|single sign/i.test(n.attr('value','') || n.text))) {
+      await this.http.authenticateSso(); this.authenticated = true; return;
+    }
     // SSO/captcha/identity-provider flows need their own supported protocol.
     if (!page.doc.login()) throw new ProtocolError('No Service Center password form; SSO login variant is unsupported by this adapter');
     const passwords = page.doc.all('input').filter(n => typeOf(n) === 'password');
     if (passwords.length !== 1) throw new ProtocolError('Ambiguous login form');
     const form = passwords[0].ancestor('form');
     if (!form) throw new Error('password outside a form');
-    const users = controls(form).filter(n => ['text', 'email'].includes(typeOf(n, 'text')));
+    // Current SC places telemetry text fields outside its explicit login-form
+    // container. Scope credential discovery to that container, never to a
+    // guessed generated field name or the first text input on the page.
+    const containers = form.all().filter(n => classes(n).includes('login-form'));
+    if (containers.length > 1) throw new ProtocolError('Ambiguous login container');
+    const scope = containers[0] ?? form;
+    if (!scope.all('input').includes(passwords[0])) throw new ProtocolError('Password outside login container');
+    const users = controls(scope).filter(n => n.tag === 'input' && ['text', 'email'].includes(typeOf(n, 'text')));
     if (users.length !== 1) throw new ProtocolError('Ambiguous login username field');
     const click = button(page, ['Log in', 'Login', 'Log In', 'Sign in']);
     if (click.ancestor('form') !== form) throw new ProtocolError('Login controls do not belong to the same form');
+    if (!scope.all('input', 'button').includes(click)) throw new ProtocolError('Submit outside login container');
     const response = await this.http.vaultLogin(page, click, users[0].attr('name'), passwords[0].attr('name'), this.vault);
     checked(response);
     if (response.doc.login()) throw new ProtocolError('Service Center did not accept the vault login; no automatic retry');
@@ -343,7 +559,28 @@ export class Client {
     this.authenticated = true;
   }
 
-  async get(url) { await this.login(); return checked(await this.http.request(url)); }
+  async get(url) {
+    await this.login();
+    const authenticationGeneration = this.authenticationRecoveries ?? 0;
+    try { return checked(await this.http.request(url)); }
+    catch(error) {
+      const expired=['SC_AUTH_EXPIRED','SC_SSO_REQUIRED','WEB_SIGN_IN_REQUIRED'].includes(error.code)
+        || error instanceof ProtocolError && error.message==='Service Center returned HTTP 401';
+      if(!expired || authenticationGeneration > 0 || this.http.authorized || typeof this.http.authenticateSso!=='function')throw error;
+      readCheckpoint('authentication-recovery');
+      // This callback is bound to the already selected host/principal/profile.
+      // Concurrent GETs started before expiry share one recovery, including
+      // late responses received after it completes. A later expiry still fails.
+      // Never retry postbacks, change identity or reset the read budget.
+      if(!this.authenticationRecoveryPromise){
+        this.authenticationRecoveries=1;
+        this.authenticationRecoveryPromise=Promise.resolve().then(async()=>{await this.http.authenticateSso();this.authenticated=true;});
+      }
+      await this.authenticationRecoveryPromise;
+      readCheckpoint('authentication-recovered-read');
+      return checked(await this.http.request(url));
+    }
+  }
 
   async follow(page, link) {
     const href = link.attr('href', '') ?? '';
@@ -352,21 +589,37 @@ export class Client {
   }
 
   // A read postback whose answer is a page, or an OsAjax reply read through its state and markup.
-  async readPostback(page, url, fields) {
+  async readPostback(page, url, fields, allowUnchangedTab = false) {
     const [final, text] = await this.http.reply(url, fields);
     if (/<form\b/i.test(text)) return checked(new Page(final, new Document(text)));
-    return ajaxPage(page, text);
+    if (allowUnchangedTab && !ajaxMarkup(text).length) return unchangedReadTab(page,text);
+    return ajaxPage(page, text, fields);
   }
 
   // A read click on a submit control: a plain form post, or the OsAjax request its onclick sends (L7 Filter).
-  async click(page, control, updates = null) {
-    if (/OsAjax/.test(control.attr('onclick', '') ?? '')) return this.readPostback(page, ...this.http.ajaxPost(page, control, updates));
+  async click(page, control, updates = null, allowUnchangedTab = false) {
+    if (/OsAjax/.test(control.attr('onclick', '') ?? '')) return this.readPostback(page, ...this.http.ajaxPost(page, control, updates), allowUnchangedTab);
     return checked(await this.http.submit(page, control, updates));
   }
 
   // A Web Forms pager (__doPostBack or OsAjax) is replayed as the page's own form post, never as script.
   async nextPage(page, link) {
-    if (postbackTarget(link)) return this.readPostback(page, ...this.http.eventPost(page, link));
+    const event = postbackTarget(link);
+    if (event?.kind === 'osajax') {
+      const [url, fields] = this.http.ajaxPost(page, link);
+      const [final, reply] = await this.http.reply(url, fields);
+      if (/<form\b/i.test(reply)) return checked(new Page(final, new Document(reply)));
+      if (ajaxMarkup(reply).length) return ajaxPage(page, reply, fields);
+      const id = link.attr('id','');
+      let target;
+      const currentStates = fields.filter(([key]) => key === '__OSVSTATE');
+      const currentState = currentStates.length === 1 && typeof currentStates[0][1] === 'string'
+        && /^[A-Za-z0-9+/=_.:-]+$/.test(currentStates[0][1]) ? currentStates[0][1] : null;
+      try { target = pagerNotify(reply, id.slice(0, id.lastIndexOf('_')), {allowUnchangedState:currentState !== null}); }
+      catch (error) { if (!(error instanceof ProtocolError)) throw error; throw new LayoutError(page.url, 'OsAjax pager', error.message); }
+      return this.readPostback(page, ...this.http.notifyPost(page, target, fields, ajaxState(reply) ?? currentState));
+    }
+    if (event) return this.readPostback(page, ...this.http.eventPost(page, link));
     return this.follow(page, link);
   }
 
@@ -383,13 +636,14 @@ export class Client {
     return rows;
   }
 
-  async pages(page, limit = 100, redact = false, maxPages = 20) {
+  async pages(page, limit = 100, redact = false, maxPages = 20, validatePage = null, readRows = tables) {
     if (!(limit >= 1 && limit <= 5000)) throw new ProtocolError('limit must be between 1 and 5000');
     if (!(maxPages >= 1 && maxPages <= 100)) throw new ProtocolError('maxPages must be between 1 and 100');
     const rows = []; const seen = new Set();
     for (let n = 0; n < maxPages; n++) {
+      if (validatePage) validatePage(page);
       if (!content(page).all('th').length && !EMPTY.test(content(page).text)) throw new ProtocolError('Unrecognized listing schema; refusing to report an empty result');
-      const batch = tables(page, redact);
+      const batch = readRows(page, redact);
       const marker = fingerprint(batch);
       if (seen.has(marker)) throw new ProtocolError('Service Center pagination did not advance');
       seen.add(marker);
@@ -397,6 +651,8 @@ export class Client {
       const next = nextLink(page);
       if (rows.length >= limit || next === null)
         return { rows: rows.slice(0, limit), truncated: rows.length > limit || next !== null, source: page.url, observedAt: utc() };
+      if (n + 1 === maxPages)
+        return { rows, truncated: true, pageLimit: maxPages, source: page.url, observedAt: utc() };
       try { page = await this.nextPage(page, next); }
       catch (error) {
         if (!(error instanceof ProtocolError)) throw error;
@@ -406,7 +662,338 @@ export class Client {
     return { rows: rows.slice(0, limit), truncated: true, pageLimit: maxPages, observedAt: utc() };
   }
 
-  async modules(limit = 100) { return this.pages(await this.get('eSpaces_List.aspx'), limit); }
+  async modules(limit = 100, maxPages = 20) { return this.pages(await this.get('eSpaces_List.aspx'), limit, false, maxPages, null, moduleRows); }
+
+  async moduleDependencies({ moduleId, module, limit = 100, moduleLimit = 20, maxPages = 20 } = {}) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 5000 || !Number.isInteger(moduleLimit) || moduleLimit < 1 || moduleLimit > 2000)
+      throw new ProtocolError('limit must be 1..5000 and module-limit 1..2000');
+    if (moduleId && module) throw new ProtocolError('Choose module-id or exact module name, not both');
+    if (module !== undefined && module !== null && (typeof module !== 'string' || !module.trim())) throw new ProtocolError('module must be an exact nonempty name');
+    let selected, selectionTruncated = false;
+    if (moduleId) selected = [{ id: String(moduleId), name: null }];
+    else {
+      const listing = await this.modules(moduleLimit, maxPages);
+      const seen = new Map();
+      for (const row of listing.rows) for (const link of row.links) {
+        const url = new URL(link.href, listing.source);
+        if (!/\/eSpace_Edit\.aspx$/i.test(url.pathname)) continue;
+        const id = url.searchParams.get('EspaceId');
+        if (url.origin !== new URL(listing.source).origin || !/^[1-9][0-9]*$/.test(id ?? '') || !link.name)
+          throw new ProtocolError('Module listing identity is not verified');
+        if (seen.has(id) && seen.get(id).name !== link.name) throw new ProtocolError('Conflicting names for one module ID');
+        seen.set(id, { id, name: link.name });
+      }
+      if (listing.rows.length && !seen.size) throw new ProtocolError('Module listing has no recognized module identities');
+      selected = [...seen.values()]; selectionTruncated = listing.truncated;
+      if (module) {
+        if (selectionTruncated) throw new ProtocolError('Exact module-name selection needs a complete listing; raise module-limit/max-pages', 'SC_MODULE_SELECTION_INCOMPLETE');
+        selected = selected.filter(item => fold(item.name) === fold(module));
+        if (selected.length !== 1) throw new ProtocolError('Exact module name is absent or ambiguous');
+      }
+    }
+    const rows = [], scanned = []; let referencesTruncated = false;
+    for (const item of selected) {
+      if (rows.length >= limit) break;
+      const result = await this.moduleReferences(item.id, limit - rows.length, maxPages);
+      scanned.push(item); referencesTruncated ||= result.truncated;
+      rows.push(...result.rows.map(row => ({ ...row, consumerModuleName: item.name })));
+    }
+    return { rows, direction: 'consumer-to-producer', modulesScanned: scanned, modulesSelected: selected.length,
+      selectionTruncated, referencesTruncated, truncated: selectionTruncated || referencesTruncated || scanned.length < selected.length,
+      observedAt: utc() };
+  }
+
+  async applicationOwners({moduleLimit = 2000, maxPages = 100, moduleOffset = 0, moduleBatchSize = 10, expectedModuleSelectionSha256 = null, ownerParallelism = 1, captureModuleSelection = false, moduleSelectionId = null} = {}) {
+    if (!Number.isInteger(moduleLimit) || moduleLimit < 1 || moduleLimit > 2000 || !Number.isInteger(maxPages) || maxPages < 1 || maxPages > 100)
+      throw new ProtocolError('moduleLimit must be 1..2000 and maxPages 1..100');
+    if (!Number.isInteger(moduleOffset) || moduleOffset < 0 || !Number.isInteger(moduleBatchSize) || moduleBatchSize < 1 || moduleBatchSize > 2000)
+      throw new ProtocolError('moduleOffset must be nonnegative and moduleBatchSize 1..2000');
+    if (!Number.isInteger(ownerParallelism) || ownerParallelism < 1 || ownerParallelism > 8) throw new ProtocolError('ownerParallelism must be 1..8');
+    if (expectedModuleSelectionSha256 !== null && !/^[a-f0-9]{64}$/.test(expectedModuleSelectionSha256) || moduleOffset > 0 && expectedModuleSelectionSha256 === null)
+      throw new ProtocolError('Resuming owners requires the previous module selection SHA256');
+    if(typeof captureModuleSelection!=='boolean' || captureModuleSelection && (moduleSelectionId!==null || moduleOffset!==0))throw new ProtocolError('Capture selection once before resuming owner details');
+    if(moduleSelectionId!==null && expectedModuleSelectionSha256===null)throw new ProtocolError('Owner selection capture requires its module hash');
+    const store = captureModuleSelection || moduleSelectionId!==null ? new OwnerSelectionStore(this.exports,this.ownerSelectionIdentity) : null;
+    const capture = moduleSelectionId!==null ? store.read(moduleSelectionId) : null;
+    const modules = capture?.modules ?? await this.modules(moduleLimit,maxPages), indexed = new Map();
+    for (const row of modules.rows) {
+      const links = row.links.map(link => ({...link,url:new URL(link.href,modules.source)})).filter(link => /\/eSpace_Edit\.aspx$/i.test(link.url.pathname));
+      if (links.length !== 1) throw new ProtocolError('Module owner discovery requires one module per row');
+      const link = links[0], id = link.url.searchParams.get('EspaceId');
+      if (link.url.origin !== new URL(modules.source).origin || !/^[1-9][0-9]*$/.test(id ?? '')) throw new ProtocolError('Unverified module owner discovery identity');
+      if (indexed.has(id) && indexed.get(id).link.name !== link.name) throw new ProtocolError('Conflicting module names during owner discovery');
+      indexed.set(id,{id,link});
+    }
+    const selection = [...indexed.values()];
+    const moduleSelectionSha256 = fingerprint({host:this.vault.host,modules:selection.map(({id,link})=>({id,name:link.name})),listingTruncated:modules.truncated});
+    if (expectedModuleSelectionSha256 !== null && expectedModuleSelectionSha256 !== moduleSelectionSha256)
+      throw new ProtocolError('Module selection changed; do not combine inventories','SC_SELECTION_CHANGED');
+    if (moduleOffset > selection.length) throw new ProtocolError('Module offset exceeds inventory');
+    if(captureModuleSelection){
+      const saved=store.save({source:modules.source,truncated:modules.truncated,rows:selection.map(({link})=>({links:[{name:link.name,href:link.url.href}]}))});
+      return {phase:'selection-captured',rows:[],applications:[],unresolvedModules:[],moduleOffset:0,moduleBatchSize,ownerParallelism,modulesSelected:selection.length,moduleSelectionSha256,
+        moduleSelectionId:saved.id,selectionCapturedAt:saved.capturedAt,listingTruncated:modules.truncated,truncated:true,snapshotAtomic:false,
+        continuation:{tool:'o11_service_center_read',arguments:{action:'application-owners',host:this.vault.host,moduleLimit,maxPages,moduleOffset:0,moduleBatchSize,ownerParallelism,moduleSelectionId:saved.id,expectedModuleSelectionSha256:moduleSelectionSha256}}};
+    }
+    const batch = selection.slice(moduleOffset,moduleOffset+moduleBatchSize), results = new Array(batch.length), failures = [];
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < batch.length && failures.length === 0) {
+        const index = cursor++, {id,link} = batch[index];
+        try {
+          const detail = await this.modulePage(id), url = new URL(detail.url);
+          if (url.origin !== link.url.origin || url.pathname !== link.url.pathname || url.searchParams.get('EspaceId') !== id)
+            throw new ProtocolError('Module identity changed during application owner discovery');
+          const owner = applicationOwner(detail);
+          results[index] = {moduleId:id,moduleName:link.name,applicationId:owner?.url.searchParams.get('ApplicationId')??null,applicationName:owner?.name??null,source:detail.url};
+        } catch (error) { failures.push({index,error}); }
+      }
+    };
+    await Promise.all(Array.from({length:Math.min(ownerParallelism,batch.length)},worker));
+    if (failures.length) throw failures.sort((a,b)=>a.index-b.index)[0].error;
+    const applications = new Map();
+    for (const row of results) if (row.applicationId !== null) {
+      if (applications.has(row.applicationId) && applications.get(row.applicationId).name !== row.applicationName) throw new ProtocolError('Conflicting application owners');
+      applications.set(row.applicationId,{id:row.applicationId,name:row.applicationName});
+    }
+    const unresolvedModules = results.filter(row=>row.applicationId===null).map(row=>({id:row.moduleId,name:row.moduleName}));
+    const nextOffset = moduleOffset + batch.length;
+    return {phase:'owner-details',rows:results,applications:[...applications.values()],unresolvedModules,moduleOffset,moduleBatchSize,ownerParallelism,
+      moduleSelectionId,selectionCapturedAt:capture?.capturedAt??null,selectionSource:capture?'immutable-capture':'live-listing',
+      modulesSelected:selection.length,moduleSelectionSha256,listingTruncated:modules.truncated,
+      truncated:modules.truncated || unresolvedModules.length>0 || nextOffset<selection.length,
+      scope:'applications-with-visible-modules',snapshotAtomic:false,observedAt:utc(),
+      continuation:nextOffset<selection.length ? {tool:'o11_service_center_read',arguments:{action:'application-owners',host:this.vault.host,moduleLimit,maxPages,moduleOffset:nextOffset,moduleBatchSize,ownerParallelism,...(moduleSelectionId ? {moduleSelectionId} : {}),expectedModuleSelectionSha256:moduleSelectionSha256}} : null};
+  }
+
+  async applicationRelationships({ applicationId = null, application = null, applications = [], applicationSource = 'auto', applicationLimit = 20, moduleLimit = 20, limit = 100, maxPages = 20, includeSystem = false, applicationOffset = 0, applicationBatchSize = 3, expectedSelectionSha256 = null, ownerParallelism = 1 } = {}) {
+    if (!Number.isInteger(ownerParallelism) || ownerParallelism < 1 || ownerParallelism > 8) throw new ProtocolError('ownerParallelism must be 1..8');
+    if (!Number.isInteger(applicationOffset) || applicationOffset < 0 || !Number.isInteger(applicationBatchSize) || applicationBatchSize < 1 || applicationBatchSize > 20)
+      throw new ProtocolError('applicationOffset must be nonnegative and applicationBatchSize 1..20');
+    if (expectedSelectionSha256 !== null && !/^[a-f0-9]{64}$/.test(expectedSelectionSha256) || applicationOffset > 0 && expectedSelectionSha256 === null)
+      throw new ProtocolError('Resuming application relationships requires the previous selection SHA256');
+    if (!['auto','modules'].includes(applicationSource) || applicationId && applicationSource !== 'auto') throw new ProtocolError('applicationSource must be auto or modules; applicationId uses auto');
+    if (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > 100) throw new ProtocolError('maxPages must be between 1 and 100');
+    if (!Number.isInteger(applicationLimit) || applicationLimit < 1 || applicationLimit > 2000 || !Number.isInteger(limit) || limit < 1 || limit > 5000)
+      throw new ProtocolError('applicationLimit must be 1..2000 and limit 1..5000');
+    if (application !== null && (typeof application !== 'string' || !application.trim())) throw new ProtocolError('application must be an exact name');
+    if (!Array.isArray(applications) || applications.length > 100 || applications.some(n => typeof n !== 'string' || !n.trim())) throw new ProtocolError('applications must contain exact names');
+    if (application && applications.length || applicationId && (application || applications.length)) throw new ProtocolError('Choose applicationId, application or applications');
+    if (typeof includeSystem !== 'boolean') throw new ProtocolError('includeSystem must be boolean');
+    if (!Number.isInteger(moduleLimit) || moduleLimit < 1 || moduleLimit > 2000) throw new ProtocolError('moduleLimit must be 1..2000');
+    let selected, selectionTruncated = false, selectionSource = applicationId ? 'application-id' : 'applications-list';
+    const unresolvedSelectionModules = [];
+    if (applicationId) {
+      if (!/^[1-9][0-9]*$/.test(String(applicationId))) throw new ProtocolError('applicationId must be numeric');
+      selected = [{id:String(applicationId), name:null}];
+    } else {
+      const listing = applicationSource === 'modules' ? {rows:[],truncated:false} : await this.pages(await this.get('Applications_List.aspx'), applicationLimit, false, maxPages, null, applicationRows);
+      const found = new Map();
+      for (const row of listing.rows) for (const link of row.links) {
+        const url = new URL(link.href, listing.source); if (!/\/Application_Edit\.aspx$/i.test(url.pathname) || !link.name) continue;
+        const id = url.searchParams.get('ApplicationId');
+        if (url.origin !== new URL(listing.source).origin || !/^[1-9][0-9]*$/.test(id ?? '')) throw new ProtocolError('Unverified application listing identity');
+        if (found.has(id) && found.get(id).name !== link.name) throw new ProtocolError('Conflicting application names');
+        found.set(id,{id,name:link.name});
+      }
+      selected = [...found.values()]; selectionTruncated = listing.truncated;
+      const names = new Set((application ? [application] : applications).map(fold));
+      if (!selectionTruncated && (!selected.length || names.size && !selected.some(a => names.has(fold(a.name))))) {
+        const discovery = await this.applicationOwners({moduleLimit,maxPages,moduleBatchSize:moduleLimit,ownerParallelism});
+        unresolvedSelectionModules.push(...discovery.unresolvedModules);
+        selected = discovery.applications;
+        selectionSource = 'module-detail-owners';
+        selectionTruncated = discovery.truncated || selected.length > applicationLimit;
+        selected = selected.slice(0,applicationLimit);
+      }
+      if (names.size) {
+        if (selectionTruncated) throw new ProtocolError('Exact application selection requires a complete listing');
+        selected = selected.filter(a => names.has(fold(a.name)));
+        if (selected.length !== names.size) throw new ProtocolError('Application selection is absent or ambiguous');
+      }
+    }
+    if (!includeSystem) selected = selected.filter(app => app.name === null || fold(app.name) !== 'system');
+    const selectionSha256 = fingerprint({host:this.vault.host, selected, selectionSource, selectionTruncated, includeSystem});
+    if (expectedSelectionSha256 !== null && expectedSelectionSha256 !== selectionSha256)
+      throw new ProtocolError('Application selection changed; restart the read without combining different inventories', 'SC_SELECTION_CHANGED');
+    if (applicationOffset > selected.length) throw new ProtocolError('Application offset exceeds the selected inventory');
+    const batch = selected.slice(applicationOffset, applicationOffset + applicationBatchSize);
+    const rows = [], scanned = []; let referencesTruncated = false;
+    for (const app of batch) {
+      if (rows.length >= limit) break;
+      let page = await this.get(`Application_Edit.aspx?ApplicationId=${app.id}`);
+      const applicationUrl = new URL(page.url);
+      const title = heading(page);
+      if (!title.startsWith('Application ') || app.name && title !== `Application ${app.name}`) throw new ProtocolError('Application detail identity changed');
+      const name = title.slice('Application '.length);
+      if (!includeSystem && fold(name) === 'system') {
+        scanned.push({id:app.id,name,pagesRead:0,excluded:'system-filter'});
+        continue;
+      }
+      page = await this.loadReadTab(page, 'Dependencies');
+      const seen = new Map(), pageMarkers = new Set();
+      let pagesRead = 0;
+      for (let n = 0; n < maxPages; n++) {
+        const currentUrl = new URL(page.url);
+        if (currentUrl.origin !== applicationUrl.origin || currentUrl.pathname !== applicationUrl.pathname
+          || currentUrl.searchParams.get('ApplicationId') !== app.id) throw new ProtocolError('Application pagination changed identity');
+        const candidates = content(page).all('table').filter(t => /(?:^|_)wtListApplicationDependencies$/.test(t.attr('id','') ?? ''));
+        const table = one(candidates, 'application dependencies table');
+        if (!table.all('th').some(n => n.text === 'Name')) throw new ProtocolError('Application dependencies Name column missing');
+        const panel = tabPanel(page, 'tab-Dependencies');
+        if (panel && !panel.all('table').includes(table)) throw new ProtocolError('Application dependencies table is outside its tab');
+        const parsedRows = tables(page, false, table), marker = fingerprint(parsedRows);
+        if (pageMarkers.has(marker)) throw new ProtocolError('Application dependency pagination did not advance');
+        pageMarkers.add(marker); pagesRead++;
+        for (const row of parsedRows) {
+          const producers = row.links.filter(l => l.name && /\/Application_Edit\.aspx$/i.test(new URL(l.href,page.url).pathname));
+          if (!producers.length) throw new ProtocolError('Application dependency row has no verified producer');
+          for (const producer of producers) {
+            const url = new URL(producer.href,page.url), id = url.searchParams.get('ApplicationId');
+            if (url.origin !== new URL(page.url).origin || !/^[1-9][0-9]*$/.test(id ?? '')) throw new ProtocolError('Unverified producer application');
+            if (seen.has(id) && seen.get(id) !== producer.name) throw new ProtocolError('Producer application name changed during pagination');
+            if (id === app.id || fold(producer.name) === fold(name) || !includeSystem && fold(producer.name) === 'system' || seen.has(id)) continue;
+            seen.set(id,producer.name);rows.push({consumerApplication:name,consumerApplicationId:app.id,producerApplication:producer.name,producerApplicationId:id,referenceDetailUrl:url.href,sourceTable:'wtListApplicationDependencies'});
+          }
+        }
+        const next = panel ? nextLink(page, panel) : null;
+        if (!next || rows.length >= limit || n + 1 === maxPages) {
+          referencesTruncated ||= Boolean(next) || !panel && nextLink(page) !== null;
+          break;
+        }
+        page = await this.nextPage(page, next);
+      }
+      scanned.push({id:app.id,name,pagesRead});
+    }
+    const nextOffset = applicationOffset + scanned.length;
+    const continuation = !referencesTruncated && rows.length <= limit && scanned.length > 0 && nextOffset < selected.length
+      ? {tool:'o11_service_center_read',arguments:{action:'application-relationships',host:this.vault.host,
+        ...(applicationId ? {applicationId} : application ? {application} : applications.length ? {applications} : {}),
+        applicationSource,applicationLimit,moduleLimit,limit,maxPages,includeSystem,applicationBatchSize,ownerParallelism,
+        applicationOffset:nextOffset,expectedSelectionSha256:selectionSha256}} : null;
+    return {rows:rows.slice(0,limit),applicationsScanned:scanned,applicationsSelected:selected.length,selectionSource,
+      applicationOffset,applicationBatchSize,selectionSha256,continuation,ownerParallelism,
+      selectionScope:selectionSource==='module-detail-owners'?'applications-with-visible-modules':'application-inventory',unresolvedSelectionModules,selectionTruncated,referencesTruncated,
+      truncated:selectionTruncated||referencesTruncated||rows.length>limit||nextOffset<selected.length,systemIncluded:includeSystem,
+      direction:'consumer-to-producer',detailLevel:'application',readMode:'native-tab-event',observedAt:utc()};
+  }
+
+  async loadReadTab(page, name) {
+    const panel = tabPanel(page, 'tab-'+name);
+    if (!panel) throw new ProtocolError('Requested read tab is missing');
+    const code = page.doc.all('script').map(n => n.children.filter(c => typeof c === 'string').join('')).join('\n');
+    const bindings = [...code.matchAll(/\btabs\.init\('([A-Za-z0-9_]+)',\s*'([A-Za-z0-9_]+)'\);/g)]
+      .filter(m => { for(let n=panel.parent;n;n=n.parent)if(n.attr('id')===m[1])return true;return false; });
+    if (bindings.length !== 1 || bindings[0][2] !== bindings[0][1]+'_wtOnTabChange') throw new ProtocolError('Tab event binding is unverified');
+    const event = bindings[0][2], blocks = page.doc.all('span').filter(n => n.attr('id')===event);
+    const inputs = blocks.flatMap(n => n.all('input').filter(c => c.attr('data-p')==='1' && typeOf(c)==='hidden'));
+    const buttons = blocks.flatMap(n => n.all('input').filter(c => c.attr('data-p')==='btn' && typeOf(c)==='submit'));
+    if (blocks.length!==1 || inputs.length!==1 || buttons.length!==1 || !inputs[0].attr('name')
+      || buttons[0].attr('id')!==event+'_wtTriggerEvent' || postbackTarget(buttons[0])?.kind!=='osajax'
+      || postbackTarget(buttons[0])?.target!==buttons[0].attr('name')) throw new ProtocolError('Tab event controls are unverified');
+    return this.click(page, buttons[0], {[inputs[0].attr('name')]:name}, true);
+  }
+
+  async applicationDependencyGraph({ application = null, applications = [], includeSystem = false, ...options } = {}) {
+    if (application !== null && (typeof application !== 'string' || !application.trim())) throw new ProtocolError('application must be an exact nonempty name');
+    if (!Array.isArray(applications) || applications.length > 100 || applications.some(a => typeof a !== 'string' || !a.trim())) throw new ProtocolError('applications must contain up to 100 exact nonempty names');
+    if (application && applications.length) throw new ProtocolError('Choose application or applications, not both');
+    const selectedApplications = [...new Set((application ? [application] : applications).map(fold))];
+    if (typeof includeSystem !== 'boolean') throw new ProtocolError('includeSystem must be boolean');
+    const result = await this.moduleDependencies(options);
+    const edges = [], unresolvedDependencies = [], seen = new Set(), producerOwners = new Map();
+    let intraApplicationReferences = 0, filteredReferences = 0;
+    for (let row of result.rows) {
+      if ((selectedApplications.length && row.consumerApplication && !selectedApplications.includes(fold(row.consumerApplication)))
+        || (!includeSystem && fold(row.producerApplication ?? '') === 'system')) { filteredReferences++; continue; }
+      if (!row.producerApplication && row.producerDetailUrl && row.consumerApplication) {
+        const producerUrl = new URL(row.producerDetailUrl), referenceUrl = new URL(row.referenceDetailUrl);
+        if (producerUrl.origin !== referenceUrl.origin || !/\/(?:eSpace|Extension)_Edit_Proxy\.aspx$/i.test(producerUrl.pathname)
+          || producerUrl.searchParams.get('SSKey') !== row.producerKey) throw new ProtocolError('Unverified producer owner URL');
+        if (!producerOwners.has(producerUrl.href)) {
+          const producerPage = await this.get(producerUrl.href);
+          if (new URL(producerPage.url).origin !== producerUrl.origin) throw new ProtocolError('Producer owner left the selected origin');
+          producerOwners.set(producerUrl.href, applicationOwner(producerPage));
+        }
+        const producerOwner = producerOwners.get(producerUrl.href);
+        if (producerOwner) row = { ...row, producerApplication: producerOwner.name,
+          producerApplicationId: producerOwner.url.searchParams.get('ApplicationId'), producerOwnerSource: producerOwner.url.href };
+      }
+      if (!includeSystem && fold(row.producerApplication ?? '') === 'system') { filteredReferences++; continue; }
+      if (!row.consumerApplication || !row.producerApplication) {
+        unresolvedDependencies.push(row); continue;
+      }
+      if (fold(row.consumerApplication) === fold(row.producerApplication)) { intraApplicationReferences++; continue; }
+      const key = JSON.stringify([row.consumerApplicationId, row.producerApplication, row.consumerKey, row.producerKey, row.referenceDetailUrl]);
+      if (!seen.has(key)) { seen.add(key); edges.push(row); }
+    }
+    return { ...result, rows: edges, unresolvedDependencies, intraApplicationReferences,
+      systemIncluded: includeSystem, applicationFilter: application, applicationsFilter: selectedApplications, filteredReferences,
+      ownershipComplete: unresolvedDependencies.length === 0 };
+  }
+
+  async moduleReferences(moduleId, limit = 100, maxPages = 20) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 5000) throw new ProtocolError('limit must be between 1 and 5000');
+    if (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > 100) throw new ProtocolError('maxPages must be between 1 and 100');
+    let page = await this.modulePage(moduleId);
+    const rows = [], seen = new Set();
+    let consumerKey = null;
+    for (let n = 0; n < maxPages; n++) {
+      const parsed = this.moduleReferencePage(page, moduleId);
+      const marker = fingerprint(parsed.rows);
+      if (seen.has(marker)) throw new ProtocolError('Module reference pagination did not advance');
+      seen.add(marker);
+      for (const row of parsed.rows) {
+        if (consumerKey && row.consumerKey !== consumerKey) throw new ProtocolError('Consumer identity changed during reference pagination');
+        consumerKey = row.consumerKey;
+      }
+      rows.push(...parsed.rows);
+      const { next, ...metadata } = parsed;
+      if (!next || rows.length >= limit || n + 1 === maxPages) return { ...metadata, rows: rows.slice(0, limit),
+        truncated: rows.length > limit || Boolean(next) || parsed.paginationUnverified, pagesRead: n + 1 };
+      page = await this.nextPage(page, next);
+    }
+  }
+
+  moduleReferencePage(page, moduleId) {
+    const owner = applicationOwner(page);
+    const candidates = content(page).all('table').filter(t => /(?:^|_)wtTableReferences$/.test(t.attr('id', '') ?? ''));
+    if (candidates.length !== 1) throw new LayoutError(page.url, 'module references', 'Expected exactly one wtTableReferences table');
+    const table = candidates[0];
+    if (!table.all('th').some(t => t.text === 'Name')) throw new LayoutError(page.url, 'module references', 'Missing Name column');
+    const rows = tables(page, false, table).map(row => {
+      const links = row.links.map(link => ({ ...link, url: new URL(link.href, page.url) }));
+      const details = links.filter(link => /\/eSpace_Reference_Show\.aspx$/i.test(link.url.pathname));
+      const producers = links.filter(link => /\/(?:eSpace|Extension)_Edit_Proxy\.aspx$/i.test(link.url.pathname));
+      const system = row.fields.Name === '(System)' || row.fields.Name === 'System';
+      if (details.length !== 1 || producers.length !== (system ? 0 : 1))
+        throw new ProtocolError('Unrecognized module reference row; refusing incomplete dependencies');
+      const detail = details[0].url, producer = producers[0];
+      const producerKey = detail.searchParams.get('ProducerKey'), consumerKey = detail.searchParams.get('ConsumerKey');
+      if (detail.origin !== new URL(page.url).origin || detail.searchParams.get('ReturnToESpaceId') !== String(moduleId)
+          || !producerKey || !consumerKey || (producer && (producer.url.origin !== detail.origin || producer.url.searchParams.get('SSKey') !== producerKey)))
+        throw new ProtocolError('Module reference identity does not match the requested module', 'SC_RESOURCE_IDENTITY_UNVERIFIED');
+      const name = system ? '(System)' : producer.name;
+      const suffix = row.fields.Name?.slice(name.length).trim();
+      return { consumerModuleId: String(moduleId), consumerKey, producerKey, producerName: name,
+        consumerApplication: owner?.name ?? null, consumerApplicationId: owner?.url.searchParams.get('ApplicationId') ?? null,
+        consumerOwnerSource: owner?.url.href ?? null,
+        producerKind: system ? 'system' : /\/Extension_/i.test(producer.url.pathname) ? 'extension' : 'module',
+        producerApplication: system ? 'System' : suffix?.startsWith('(') && suffix.endsWith(')') ? suffix.slice(1, -1) : null,
+        producerDetailUrl: producer?.url.href ?? null, referenceDetailUrl: detail.href, sourceTable: 'wtTableReferences' };
+    });
+    if (new Set(rows.map(row => row.consumerKey)).size > 1) throw new ProtocolError('Conflicting consumer identities in reference table');
+    let scope = table.parent;
+    while (scope && !/(?:^|_)wtReferencesContainer$/.test(scope.attr('id', '') ?? '')) scope = scope.parent;
+    if (scope && scope.all('table').filter(t => /(?:^|_)wtTableReferences$/.test(t.attr('id', '') ?? '')).length !== 1)
+      throw new ProtocolError('Ambiguous reference pagination scope');
+    // A pager outside the proven reference container belongs to another panel.
+    // Older/unknown layouts retain the conservative incomplete-result marker.
+    const next = scope ? nextLink(page, scope) : null;
+    const paginationUnverified = !scope && nextLink(page) !== null;
+    return { rows, next, direction: 'consumer-to-producer', paginationUnverified,
+      paginationScope: scope ? 'wtReferencesContainer' : null, source: page.url, observedAt: utc() };
+  }
 
   async modulePage(moduleId) {
     if (!/^[1-9][0-9]*$/.test(String(moduleId))) throw new ProtocolError('module-id must be the numeric ID from the live module listing');
@@ -418,9 +1005,34 @@ export class Client {
   async resourcePage(moduleId, resource) {
     if (!Object.hasOwn(TABS, resource)) throw new ProtocolError('Unknown module resource');
     const [tab, names] = TABS[resource];
-    const page = await this.modulePage(moduleId);
-    const panel = tabPanel(page, tab);
-    if (panel) return [page, panel];
+    let page = await this.modulePage(moduleId);
+    let panel = tabPanel(page, tab);
+    if (panel) {
+      if (resource === 'site-properties' && /^Loading Site Properties$/i.test(strip(panel.text))) {
+        // Current Tabs calls TriggerEvents(changeId, 'SiteProperties'); that
+        // helper sets data-p=1 and clicks its data-p=btn control. Bind both IDs
+        // to this panel's ancestor and the declarations in the current page.
+        const code = page.doc.all('script').map(n => n.children.filter(c => typeof c === 'string').join('')).join('\n');
+        const bindings = [...code.matchAll(/\btabs\.init\('([A-Za-z0-9_]+)',\s*'([A-Za-z0-9_]+)'\);/g)]
+          .filter(m => { for (let n=panel.parent;n;n=n.parent) if (n.attr('id')===m[1]) return true; return false; });
+        if (bindings.length !== 1 || bindings[0][2] !== bindings[0][1] + '_wtOnTabChange')
+          throw new LayoutError(page.url, 'Site properties tab', 'no unique declared headless tab event');
+        const changeId = bindings[0][2];
+        const blocks = page.doc.all('span').filter(n => n.attr('id') === changeId);
+        const inputs = blocks.flatMap(n => n.all('input').filter(c => c.attr('data-p') === '1' && typeOf(c) === 'hidden'));
+        const triggers = blocks.flatMap(n => n.all('input').filter(c => c.attr('data-p') === 'btn' && typeOf(c) === 'submit'));
+        if (blocks.length !== 1 || inputs.length !== 1 || triggers.length !== 1
+            || triggers[0].attr('id') !== changeId + '_wtTriggerEvent'
+            || postbackTarget(triggers[0])?.kind !== 'osajax'
+            || postbackTarget(triggers[0])?.target !== triggers[0].attr('name') || !inputs[0].attr('name'))
+          throw new LayoutError(page.url, 'Site properties tab', 'tab event controls do not match their declaration');
+        page = await this.click(page, triggers[0], { [inputs[0].attr('name')]: 'SiteProperties' });
+        panel = tabPanel(page, tab);
+        if (panel && /^Loading Site Properties$/i.test(strip(panel.text)))
+          throw new LayoutError(page.url, 'Site properties tab', 'tab event did not return its listing');
+      }
+      return [page, panel];
+    }
     const links = content(page).all('a').filter(a => names.includes(fold(a.text)));
     if (links.length !== 1) throw new ProtocolError("Could not identify the module's " + resource + ' tab');
     return [await this.follow(page, links[0]), null];
@@ -482,6 +1094,13 @@ export class Client {
     // General and timer logs are ASSUMED pages: only the listing they are modeled on is read.
     if (!Object.hasOwn(ASSUMED_LOGS, kind)) return;
     const headers = content(page).all('table').flatMap(t => t.all('th').map(c => fold(c.text)));
+    // A persisted empty timer filter removes the table (including its headers)
+    // from the next GET. Accept only the native empty-list container observed live.
+    if (kind === 'timer' && headers.length === 0 && /\/Cyclic_Job_Logs\.aspx$/i.test(new URL(page.url).pathname)
+        && heading(page) === 'Timer Log') {
+      const empty = content(page).all('span','div').filter(n => /(?:^|_)wtContentMain_wtList$/.test(n.attr('id','') ?? ''));
+      if (empty.length === 1 && /^No Logs to show$/i.test(empty[0].text.trim())) return;
+    }
     const missing = ASSUMED_LOGS[kind].filter(c => !headers.some(h => h.includes(c)));
     if (missing.length) throw new LayoutError(page.url, `The ${kind} log page`, 'no listing with the columns ' + missing.join(', '));
   }
@@ -489,6 +1108,13 @@ export class Client {
   async logs(kind = 'error', limit = 100, filters = null, { stackContains = null, exportAll = false, maxPages = 20 } = {}) {
     if (!Object.hasOwn(LOG_PAGES, kind)) throw new ProtocolError('Unknown log kind');
     if (exportAll && !EXPORTABLE.includes(kind)) throw new ProtocolError('Service Center exports error and integration logs only');
+    filters = filters ?? {};
+    for (const key of Object.keys(filters)) {
+      if (!LOG_KIND_FILTERS[kind].includes(key)) throw new ProtocolError(`Unsupported ${kind} log filter: ${key}`, 'SC_LOG_FILTER_UNSUPPORTED');
+    }
+    if (stackContains !== null && stackContains !== undefined && (kind !== 'error' || Object.hasOwn(filters, 'message'))) {
+      throw new ProtocolError('stackContains requires error logs and replaces the message filter', 'SC_LOG_FILTER_UNSUPPORTED');
+    }
     const original = await this.get(LOG_PAGES[kind]);
     let page = original;
     this.logSchema(kind, page);
@@ -502,21 +1128,46 @@ export class Client {
       // The Integration log's Filter is an OsAjax submit: its reply refreshes the state and the list only.
       page = await this.click(page, click, updates);
     }
-    const result = exportAll ? await this.exportLogs(kind, original, page, updates, limit) : await this.pages(page, limit, false, maxPages);
-    return Object.assign(result, { kind, filters, timezone: 'Service Center display timezone', ...(hasStack ? { stackContains } : {}) });
+    let result;
+    if (exportAll) {
+      try { result = await this.exportLogs(kind, original, page, updates, limit); }
+      catch (error) {
+        if (error.code !== 'SC_EXPORT_UNAVAILABLE') throw error;
+        result = { ...await this.pages(page, limit, false, maxPages), export: { available: false, code: error.code },
+          note: 'This page has no supported Excel export control. Returned rows use its normal pagination; no export file was produced.' };
+      }
+    } else result = await this.pages(page, limit, false, maxPages);
+    // A successful empty page is scoped evidence, not proof that the application has no errors.
+    const effectiveFilters = {};
+    const observedLabels = entries(labels(original, content(original)));
+    for (const key of LOG_KIND_FILTERS[kind]) {
+      const [names, suffixes] = LOG_FILTERS[key];
+      const found = observedLabels.filter(({ name, label }) => names.includes(label) || suffixes.some(s => name.endsWith(s)));
+      if (found.length === 1) effectiveFilters[key] = key === 'message' && hasStack ? stackContains
+        : Object.hasOwn(filters, key) ? filters[key] : controlValue(found[0].n);
+    }
+    return Object.assign(result, { kind, filters, effectiveFilters, complete: result.truncated !== true,
+      ...(result.rows?.length === 0 ? { emptyScope: 'No matching rows in the displayed filters; this does not prove absence outside that scope.' } : {}),
+      timezone: 'Service Center display timezone', ...(hasStack ? { stackContains } : {}) });
   }
 
   async exportLogs(kind, original, page, updates, limit) {
     if (this.exports === null) throw new ProtocolError('Exports need a local export folder');
     let body;
-    try { body = await this.http.export(page, button(page, ['Export to excel'])); }
+    const exportControl = source => {
+      try { return button(source, ['Export to excel']); }
+      catch (error) { if (!(error instanceof ProtocolError)) throw error;
+        throw new BridgeError('SC_EXPORT_UNAVAILABLE', 'The page has no unambiguous supported Excel export control.'); }
+    };
+    try { body = await this.http.export(page, exportControl(page)); }
     catch (error) {
-      if (!(error instanceof ProtocolError) || page === original) throw error;
+      if ((!(error instanceof ProtocolError) && error.code !== 'SC_EXPORT_UNAVAILABLE') || page === original) throw error;
       // An AJAX Filter answers with a fragment that carries only the refreshed form state: export from the original
       // form with that state, never reading a missing Export control as zero rows.
+      const control = exportControl(original);
       const state = Object.fromEntries(page.doc.all('input').filter(n => STATE.test(n.attr('name', '') ?? '')).map(n => [n.attr('name'), controlValue(n)]));
       if (!Object.keys(state).length) throw new ProtocolError('The filtered page has neither the Export control nor refreshed form state');
-      body = await this.http.export(original, button(original, ['Export to excel']), { ...updates, ...state });
+      body = await this.http.export(original, control, { ...updates, ...state });
     }
     const rows = xlsxRows(body);
     const header = rows[0] ?? [];
@@ -535,19 +1186,82 @@ export class Client {
   async errorDetail(errorId) {
     if (!/^[A-Za-z0-9_-]{1,100}$/.test(errorId)) throw new ProtocolError('Invalid error ID');
     const page = await this.get('Show_Error.aspx?Error_Id=' + errorId);
+    if (fold(heading(page)) === 'permission denied')
+      throw new ProtocolError('Service Center denied access to this error detail; no permissions were changed.', 'SC_PERMISSION_DENIED');
     // Visible diagnostics of the page content, never the sidebar, cookies, hidden form state, input values or scripts.
     let root = content(page);
     if (root === page.doc.root) root = page.doc.first('main') ?? page.doc.first('body') ?? page.doc.root;
     else if (!root.all('pre').length && !fold(heading(page)).includes('error')) throw new LayoutError(page.url, 'The error detail page', 'no stack block and no error heading');
-    const text = splitlines(root.readable).filter(line => strip(line)).map(rstrip).join('\n');
+    for (const node of root.all('div')) if (privateDiagnosticValue(node)) node.children = ['[redacted]'];
+    const text = redactText(splitlines(root.readable).filter(line => strip(line)).map(rstrip).join('\n'));
     return { errorId, detail: text.slice(0, 64000), truncated: text.length > 64000, source: page.url, observedAt: utc() };
   }
 
-  async trace(requestKey, limit = 100) {
+  async trace(requestKey, limit = 100, maxPages = 20) {
     if (!/^[A-Za-z0-9_-]{8,100}$/.test(requestKey)) throw new ProtocolError('Invalid request/correlation key');
-    // Correlate only exact occurrences; this is log correlation, not a distributed tracing service.
-    const logs = await this.logs('error', limit, { message: requestKey });
-    return { requestKey, kind: 'log-correlation', logs };
+    // The SC request log binds RequestKey server-side. Searching error messages
+    // for the key misses events whose message does not include that identifier.
+    let page = await this.get('GroupedRequest_Logs.aspx?RequestKey=' + requestKey);
+    await assumed(page, 'The request log page', () => {
+      const url = new URL(page.url);
+      if (!url.pathname.endsWith('/GroupedRequest_Logs.aspx') || url.searchParams.get('RequestKey') !== requestKey
+          || fold(heading(page)) !== 'request log') throw new ProtocolError('request scope or heading does not match');
+    });
+    if (/\bLoading records\b/i.test(content(page).text)) {
+      const loader = await assumed(page, 'The request log loader', () => {
+        const control = one(content(page).all('input').filter(n => typeOf(n) === 'submit' && !n.has('disabled')
+          && n.attr('name', '').endsWith('$wtGetRecordsButton')), 'Get Records control');
+        const event = postbackTarget(control);
+        if (event?.kind !== 'osajax' || event.target !== control.attr('name')
+            || control.attr('id') !== control.attr('name').replaceAll('$', '_'))
+          throw new ProtocolError('loader does not match its declared read event');
+        return control;
+      });
+      page = await this.click(page, loader);
+    }
+    await assumed(page, 'The request log listing', () => {
+      const matching = content(page).all('table').filter(t => {
+        const headers = t.all('th').map(n => fold(n.text));
+        return ['time of event', 'event type', 'module / extension', 'element', 'message'].every(h => headers.includes(h));
+      });
+      if (/\bLoading records\b/i.test(content(page).text) || matching.length !== 1)
+        throw new ProtocolError('no unique loaded request-event listing');
+    });
+    const logs = await this.pages(page, limit, false, maxPages);
+      // The current grouped-request page silently caps its table at 50 events
+      // and exposes no pager. Its own export includes the remaining events.
+      if (logs.rows.length >= 50 && !logs.paginationUnsupported) {
+        try {
+          const bytes = await this.http.export(page, button(page, ['Export to excel']));
+          const [header, ...records] = xlsxRows(bytes);
+          const expected = ['Id', 'Instant', 'Type', 'Application Name', 'Module Name', 'Element Name', 'Message'];
+          if (JSON.stringify(header) !== JSON.stringify(expected) || records.length < logs.rows.length)
+            throw new ProtocolError('Request export schema or count does not match the loaded listing');
+          const rows = records.map(r => ({ fields: {
+            'Time of Event': excelTime(r[1] ?? ''), 'Event Type': r[2] ?? '',
+            'Module / Extension': `${r[4] ?? ''}${r[3] ? ' (' + r[3] + ')' : ''}`,
+            Element: r[5] ?? '', Message: r[6] ?? '', 'Event Id': r[0] ?? ''
+          }, links: [] }));
+          const identity = row => JSON.stringify(['Time of Event', 'Event Type', 'Module / Extension', 'Element', 'Message'].map(k => fold(row.fields[k] ?? '')));
+          const counts = new Map();
+          for (const row of rows) counts.set(identity(row), (counts.get(identity(row)) ?? 0) + 1);
+          for (const row of logs.rows) {
+            const key = identity(row), count = counts.get(key) ?? 0;
+            if (!count) throw new ProtocolError('Request export does not contain the displayed events with their multiplicity');
+            counts.set(key, count - 1);
+          }
+          Object.assign(logs, { rows: rows.slice(0, limit), rowCount: rows.length, truncated: rows.length > limit,
+            sourceKind: 'request-bound-xlsx', displayLimit: 50,
+            ...(this.exports !== null ? { export: this.save('request-log', 'xlsx', bytes) } : {}) });
+        } catch (error) {
+          if (!(error instanceof ProtocolError)) throw error;
+          Object.assign(logs, { truncated: true, displayLimit: 50, completenessUnknown: true,
+            exportError: { code: error.code, message: error.message.slice(0, 500) } });
+        }
+      }
+    logs.complete = !logs.truncated;
+    return { requestKey, kind: 'log-correlation', correlation: 'Service Center RequestKey', logs,
+      note: 'Events grouped by the Service Center request key; not a distributed span tree or proof of user-context propagation.' };
   }
 
   // A live capture of one page for calibrating the parsers: GET only; names, never field values, come back, and the
@@ -561,19 +1275,23 @@ export class Client {
     const stem = 'page-' + (dot >= 0 ? base.slice(0, dot) : base).replace(/[^A-Za-z0-9_]/g, '_').slice(0, 60);
     const saved = this.save(stem, 'html', Buffer.from(skeleton(root), 'utf8'));
     return { path: pagePath, source: page.url, scope: root !== page.doc.root ? 'sc-content-main' : 'document', ...describe(page, root), capture: saved,
+      ...(this.http.privateSessionObservation ? {privateSessionObservation:this.http.privateSessionObservation} : {}),
       observedAt: utc(), note: 'Names and captions only; the saved markup has no input values. Hand it over to calibrate the parser.' };
   }
 
   // ---- site properties and timers
   valueField(action, page, form = null) {
     const forms = form ? [form] : page.doc.all('form');
-    const candidates = forms.flatMap(f => controls(f)).filter(n => (['value', 'valor'].includes(fold(strip(page.doc.label(n), ': ')))
-      || /(?:Input_?Value|PropertyValue|SiteProperty_Value)$/i.test(n.attr('name'))) && !['hidden', 'submit', 'button'].includes(typeOf(n)));
+    const candidates = forms.flatMap(f => entries(labels(page, f))).filter(({ name, label, n }) =>
+      !n.has('readonly') && (['value', 'valor', 'effective value'].includes(label)
+        || /(?:Input_?Value|PropertyValue|SiteProperty_Value)$/i.test(name))).map(e => e.n);
     if (candidates.length !== 1) throw new ProtocolError('Could not identify one site-property value field');
     return candidates[0];
   }
 
   scheduleControls(page, form) {
+    const native = nativeScheduleControls(page, form);
+    if (native) return native;
     const found = entries(formLabels(page, form));
     return Object.fromEntries(Object.entries(SCHEDULE).map(([key, [names, suffix]]) =>
       [key, one(found.filter(({ name, label }) => name.endsWith(suffix) || names.includes(label)).map(e => e.n), `timer schedule ${key} control`)]));
@@ -593,6 +1311,7 @@ export class Client {
 
   // The requested schedule by control (recurrence by its option text), checked against the page's controls.
   scheduleRequest(controlsByKey, value) {
+    if (controlsByKey.at?.attr('name')?.endsWith('$wtInputTimerTimes')) return nativeScheduleRequest(controlsByKey, value);
     if (!value || typeof value !== 'object' || Array.isArray(value) || !Object.keys(value).length || !Object.keys(value).every(k => Object.hasOwn(SCHEDULE, k)))
       throw new ProtocolError('timer-schedule takes recurrence, at, every and/or timeout');
     const result = {};
@@ -612,6 +1331,7 @@ export class Client {
     const field = await assumed(page, 'The site property page', () => this.valueField('property-set', page));
     const secret = typeOf(field) === 'password';
     const result = { moduleId: String(moduleId), name, valueType: field.attr('type', field.tag), secret, value: '<redacted>', revealed: false, source: page.url, observedAt: utc() };
+    if (secret) result.configured = secretPresence(field);
     if (reveal && !secret) Object.assign(result, { value: observedValue(field), revealed: true });
     return result;
   }
@@ -621,14 +1341,46 @@ export class Client {
     if (identity.host !== this.vault.host) throw new ProtocolError('Receipt belongs to another host');
     const action = identity.action;
     let confirmed;
+    if (action === 'db-connection-test' && receipt.responseEvidence) {
+      const evidence=receipt.responseEvidence, root=path.resolve(this.exports ?? ''), file=path.resolve(evidence.file ?? '');
+      if (!this.exports || !path.basename(file).startsWith('db-test-reply-')
+        || path.dirname(file).toLowerCase() !== root.toLowerCase() || evidence.size > 8 * 1024 * 1024)
+        throw new ProtocolError('Invalid private connection-test evidence location');
+      const body=fs.readFileSync(file);
+      if (body.length !== evidence.size || sha256(body) !== evidence.sha256) throw new ProtocolError('Connection-test evidence changed');
+      const text=body.toString('utf8'), outcome=connectionTestOutcome(new Page(receipt.plan.target,
+        new Document(/<form\b/i.test(text) ? text : ajaxMarkup(text).join(''))));
+      if (!outcome) return {...receipt,replayed:false,observedDesiredState:false};
+      Object.assign(receipt,outcome,{responseVerification:'original-reply-sha256',replayed:false});
+      delete receipt.code; delete receipt.error;
+      journal.reconcile(receipt);
+      return {...receipt,observedDesiredState:true,replayed:false};
+    }
     if (Object.hasOwn(WEB_WRITES, action)) confirmed = await this.observe(action, identity, receipt.plan ?? null);
-    else if (action === 'timer-run') return this.resolveTimerRun(receipt, journal);
+    else if (action === 'timer-run') {
+      // A receipt without the SC line's complete pre-send log baseline (every receipt written before it) resolves by the
+      // timer's real state (P6, resolveTimerRun); one with the baseline records the log observation, never a replay.
+      if (!receipt.plan?.timerLogBaseline?.available) return this.resolveTimerRun(receipt, journal);
+      const after = timerLogSnapshot(await this.logs('timer', 1000, { timer: identity.name }), identity, receipt.plan.target);
+      const comparison = compareTimerLogs(receipt.plan.timerLogBaseline, after);
+      const errors = await observeTimerErrors(comparison, identity, id => this.errorDetail(id));
+      const observation = { ...comparison, ...errors };
+      const persisted = journal.recordTimerObservation(receipt, observation);
+      return { ...receipt, ...observation, timerObservation: persisted, replayed: false };
+    }
     else if (action === 'timer-schedule') {
       const requested = receipt.plan?.schedule;
       if (!requested || !Object.keys(requested).length) throw new ProtocolError('This receipt keeps no requested schedule to compare');
       const [, , , schedule] = await this.prepare(action, identity.moduleId, identity.name);
       confirmed = Object.entries(requested).every(([k, v]) => fold(shown(schedule[k])) === fold(v));
     } else if (action === 'property-set') {
+      if (receipt.plan?.secret === true && value === null) {
+        const fresh = await this.propertyValue(identity.moduleId, identity.name);
+        receipt.secretValuePresent = fresh.configured;
+        receipt.valueVerified = false;
+        if (fresh.configured === true && receipt.state === 'accepted-unverified') journal.acceptMaskedSecret(receipt);
+        return { ...receipt, observedDesiredState: null, verificationScope: 'masked-presence-only', replayed: false };
+      }
       if (value === null || value === undefined) throw new ProtocolError('Verification requires the expected value (--value-file); a vault value is never read back');
       const [, , , field] = await this.prepare(action, identity.moduleId, identity.name);
       confirmed = typeOf(field) !== 'password' && observedValue(field) === expectedValue(field, value);
@@ -730,7 +1482,7 @@ export class Client {
       return new BridgeError('STUDIO_BRIDGE_OUTDATED', 'The loaded bridge does not fill secret fields from the vault (sc_web:secretRefs); '
         + 'nothing was reserved or sent. Reconnect a new bridge version.', { continuation: connectStudio('reconnect after the Studio loads a bridge with sc_web:secretRefs') });
     return new BridgeError('STUDIO_REQUIRED', "A secret value (database login, secret site property) goes only through the "
-      + "connected Studio's web window, which reads it from the vault inside the Studio; this path never holds it. Open and "
+      + "connected Studio's headless HTTP transport, which reads it from the vault inside the Studio; this path never holds it. Attach and "
       + 'connect the Studio (ssam_connect lane o11), or set it in Service Center yourself.', { continuation: connectStudio('secret values travel only through the connected Studio') });
   }
 
@@ -769,6 +1521,15 @@ export class Client {
         updates[node.attr('name')] = node.tag === 'select' ? one(node.all('option').filter(o => o.text === text), `${key} option`).attr('value', text) : text;
       }
     }
+    const ajaxRun = action === 'timer-run' ? this.http.timerRunPost(page, click, updates)
+      : action === 'property-set' ? this.http.scriptedAjaxPost(page, click, updates, secrets, { clientValidation: true }) : null;
+    if (!ajaxRun) this.http.formPost(page, click, updates); // reject unsupported scripts before reserving
+    if (action === 'timer-run') {
+      const targetCheck = timerLogSnapshot({ complete: true, rows: [] }, identity, plan.target);
+      try { plan.timerLogBaseline = targetCheck.available
+        ? timerLogSnapshot(await this.logs('timer', 1000, { timer: name }), identity, plan.target) : targetCheck; }
+      catch (error) { plan.timerLogBaseline = { available: false, reason: error.code ?? 'log-read-failed' }; }
+    }
     return journal.reserve(operationId, identity, userWords, plan, null, async receipt => {
       let tracker = {};
       // Plans carry no secret; the receipt keeps the one it executed so a later verify knows what to expect.
@@ -778,13 +1539,27 @@ export class Client {
         let response;
         await this.http.authorizing(receipt.operationId, receipt.authorization.wordsSha256, async t => {
           tracker = t;
-          response = checked(secrets ? await this.http.submit(page, click, updates, secrets) : await this.http.submit(page, click, updates));
+          if (ajaxRun) {
+            const [url, body] = await this.http.reply(ajaxRun[0], ajaxRun[1], true, ajaxRun[2] ?? null);
+            const fullForm = /<form\b/i.test(body);
+            if (action === 'timer-run') receipt.schedulerResponse = {
+              received: true, bytes: Buffer.byteLength(body, 'utf8'), sha256: sha256(body),
+              representation: fullForm ? 'html-form' : 'ajax-fragments',
+              schedulingAcknowledged: false,
+            };
+            const markup = fullForm ? body : ajaxMarkup(body).join('');
+            if (receipt.schedulerResponse) Object.assign(receipt.schedulerResponse, {
+              markupBytes: Buffer.byteLength(markup, 'utf8'), markupSha256: sha256(markup),
+            });
+            response = checked(new Page(url, new Document(markup)));
+          } else response = checked(secrets ? await this.http.submit(page, click, updates, secrets) : await this.http.submit(page, click, updates));
         });
         if (action === 'property-set') {
           const [, , , fresh] = await this.prepare(action, moduleId, name);
           if (secrets || typeOf(fresh) === 'password') {
             // A vault value is never known here, so it is never compared.
-            receipt.state = acknowledged(response, 'saved|updated|applied|changed') ? 'accepted' : 'accepted-unverified';
+            receipt.secretValuePresent = secretPresence(fresh);
+            receipt.state = receipt.secretValuePresent === true || acknowledged(response, 'saved|updated|applied|changed') ? 'accepted' : 'accepted-unverified';
             receipt.valueVerified = false;
           } else receipt.state = observedValue(fresh) !== value ? 'accepted-unverified' : 'confirmed';
         } else if (action === 'timer-schedule') {
@@ -798,7 +1573,9 @@ export class Client {
           receipt.state = 'confirmed';
         } else {
           // HTTP 200 alone is not a scheduling receipt.
-          receipt.state = acknowledged(response, 'timer|schedul|queued|execut') ? 'accepted' : 'accepted-unverified';
+          const schedulingAcknowledged = acknowledged(response, 'timer|schedul|queued|execut');
+          if (receipt.schedulerResponse) receipt.schedulerResponse.schedulingAcknowledged = schedulingAcknowledged;
+          receipt.state = schedulingAcknowledged ? 'accepted' : 'accepted-unverified';
           receipt.executionCompleted = false;
         }
         receipt.ok = ['accepted', 'confirmed'].includes(receipt.state);
@@ -823,11 +1600,11 @@ export class Client {
       const click = button(page, ['Filter', 'Search']);
       const fields = entries(formLabels(page, click.ancestor('form'))); const updates = {};
       if (module !== null) {
-        const select = one(fields.filter(({ name, label, n }) => n.tag === 'select' && (/Espace_Selector/i.test(name) || ['module', 'espace'].includes(label))).map(e => e.n), 'module filter');
+        const select = one(fields.filter(({ name, label, n }) => n.tag === 'select' && (/Espace_Selector$/i.test(name) || ['module', 'espace'].includes(label))).map(e => e.n), 'module filter');
         updates[select.attr('name')] = one(select.all('option').filter(o => o.text === module).map(optionValue), 'module option');
       }
       if (process !== null) {
-        const box = one(fields.filter(({ name, label, n }) => n.tag === 'input' && (['process', 'process name'].includes(label) || /Process/i.test(name))).map(e => e.n), 'process filter');
+        const box = one(fields.filter(({ name, label, n }) => n.tag === 'input' && (['name', 'process', 'process name'].includes(label) || /Process/i.test(name))).map(e => e.n), 'process filter');
         updates[box.attr('name')] = process;
       }
       page = await this.click(page, click, updates);
@@ -843,33 +1620,60 @@ export class Client {
   async bptProcess(processKey, moduleKey, limit = 100, maxPages = 20) {
     for (const value of [processKey, moduleKey]) if (!/^[A-Za-z0-9*_-]{1,100}$/.test(value ?? '')) throw new ProtocolError('processKey and moduleKey come from bpt-processes');
     const page = await this.get(`Process_Details.aspx?ProcessKey=${quote(processKey)}&ModuleKey=${quote(moduleKey)}&Index=0`);
-    return { processKey, moduleKey, summary: summary(page), instances: await this.pages(page, limit, false, maxPages) };
+    const detail = summary(page);
+    const counters = ['Active Instances', 'Active Instances with Errors', 'Suspended Instances', 'Closed Instances'];
+    if (!detail.Label || !detail.Status || counters.some(key => !/^[0-9]+$/.test(detail[key] ?? '')))
+      throw new ProtocolError('The BPT process page did not return its detail summary; no unrelated process listing returned', 'SC_RESOURCE_IDENTITY_UNVERIFIED');
+    const instances = await this.pages(page, limit, false, maxPages);
+    if (instances.rows.some(row => !/^[1-9][0-9]*$/.test(row.fields?.['Instance Id'] ?? '')
+        || !row.links.some(link => link.href.includes('Process_Instance_Detail.aspx')
+          && parseQs(urlsplit(link.href).query).ProcessId?.[0] === row.fields['Instance Id'])))
+      throw new ProtocolError('The BPT instance listing did not match its instance-ID contract; no rows returned', 'SC_RESOURCE_IDENTITY_UNVERIFIED');
+    return { processKey, moduleKey, summary: detail, instances };
   }
 
-  async bptInstance(processId) {
+  async bptInstance(processId, limit = 100, maxPages = 20) {
     if (!/^[1-9][0-9]*$/.test(String(processId))) throw new ProtocolError('processId must be the numeric instance ID');
     const page = await this.get(`Process_Instance_Detail.aspx?ProcessId=${processId}`);
-    const activities = tables(page).flatMap(r => r.links.slice(0, 1).filter(l => l.href.includes('Process_Activity_Detail.aspx'))
+    const identity = bptDetailIdentity(page, 'process', processId);
+    const listing = await this.pages(page, limit, false, maxPages,
+      current => bptDetailIdentity(current, 'process', processId));
+    const activities = listing.rows.flatMap(r => r.links.slice(0, 1).filter(l => l.href.includes('Process_Activity_Detail.aspx'))
       .map(l => ({ ...r, activityId: parseQs(urlsplit(l.href).query).ActivityId?.[0] ?? '' })));
-    return { processId: String(processId), title: heading(page), summary: summary(page), activities, source: page.url, observedAt: utc() };
+    if (activities.length !== listing.rows.length || activities.some(a => !/^[1-9][0-9]*$/.test(a.activityId)))
+      throw new ProtocolError('The BPT activities did not match their activity-ID contract', 'SC_RESOURCE_IDENTITY_UNVERIFIED');
+    const { rows, ...pagination } = listing;
+    return { processId: String(processId), title: identity.title, summary: identity.detail, activities, ...pagination };
   }
 
   async bptActivity(activityId) {
     if (!/^[1-9][0-9]*$/.test(String(activityId))) throw new ProtocolError('activityId must be the numeric activity ID');
     const page = await this.get(`Process_Activity_Detail.aspx?ActivityId=${activityId}`);
-    return { activityId: String(activityId), title: heading(page), summary: summary(page), source: page.url, observedAt: utc() };
+    const identity = bptDetailIdentity(page, 'activity', activityId);
+    return { activityId: String(activityId), title: identity.title, summary: identity.detail, source: page.url, observedAt: utc() };
   }
 
   // ---- integrations (module detail) and their logging level
   async integrations(moduleId) {
     let page = await this.modulePage(moduleId);
-    const panel = tabPanel(page, TABS.integrations[0]);
+    // Current SC calls this WebServices; historical pages use Integrations.
+    // Resolve the panel before reading links so another tab cannot supply them.
+    const panels = ['tab-WebServices', TABS.integrations[0]].map(tab => ({ tab, panel: tabPanel(page, tab) })).filter(x => x.panel);
+    if (panels.length > 1) throw new LayoutError(page.url, 'Integrations', 'multiple supported integration panels');
+    const panel = panels[0]?.panel ?? null;
+    if (!panel && content(page).all('div').some(n => n.attr('data-tab')))
+      throw new LayoutError(page.url, 'Integrations', 'the module tabs have no recognized integration panel');
+    if (panel && /^Loading\b/i.test(strip(panel.text)))
+      throw new LayoutError(page.url, 'Integrations', 'the integration panel has not loaded');
     let found = this.integrationLinks(page, panel);
     if (!found.length && !panel) {
       const tabs = content(page).all('a').filter(a => fold(a.text) === 'integrations');
       if (tabs.length === 1) { page = await this.follow(page, tabs[0]); found = this.integrationLinks(page); }
+      if (!found.length) throw new LayoutError(page.url, 'Integrations', 'no recognized integration listing; refusing an unverified empty result');
     }
-    return { moduleId: String(moduleId), integrations: found, source: page.url, observedAt: utc() };
+    return { moduleId: String(moduleId), integrations: found, ...(panel ? { tab: panels[0].tab } : {}),
+      ...(!found.length ? { emptyScope: 'No configurable SOAP/REST integration links in the observed module panel; this does not prove that the module makes no integration calls.' } : {}),
+      source: page.url, observedAt: utc() };
   }
 
   integrationLinks(page, root = null) {
@@ -877,6 +1681,23 @@ export class Client {
     for (const a of (root ?? content(page)).all('a')) {
       const href = a.attr('href', '') ?? '';
       if (!a.text || inside(a, /RecentItems|sc-content-left/i)) continue;
+      if (a.attr('data-name') === 'webservices_exposedwebservice'
+          && /(?:^|_)wtListWebService$/.test(a.ancestor('table')?.attr('id', '') ?? '')) {
+        const headers = a.ancestor('table').all('th').map(h => fold(h.text));
+        if (JSON.stringify(headers) !== JSON.stringify(['name', 'internal access', 'http security', 'integrated authentication']))
+          throw new LayoutError(page.url, 'Exposed SOAP', 'unrecognized runtime-only service table');
+        let runtime;
+        try { runtime = new URL(href, page.url); } catch { throw new ProtocolError('Invalid exposed SOAP runtime URL'); }
+        if (runtime.origin !== new URL(page.url).origin || runtime.username || runtime.password || runtime.search || runtime.hash
+            || !runtime.pathname.toLowerCase().endsWith('.asmx')) throw new ProtocolError('Invalid exposed SOAP runtime URL');
+        const key = 'exposed-soap\n' + runtime.href;
+        if (!seen.has(key)) {
+          seen.add(key);
+          found.push({kind:'exposed-soap', id:null, name:a.text, runtimeUrl:runtime.href,
+            configurationAvailable:false, loggingAvailable:false, configurationSource:page.url});
+        }
+        continue;
+      }
       for (const [kind, pattern] of INTEGRATION_LINKS) {
         const match = pattern.exec(href);
         if (match && !seen.has(kind + '\n' + match[1])) {
@@ -889,13 +1710,27 @@ export class Client {
     return found;
   }
 
-  async integrationPage(moduleId, name, kind = null) {
+  async integrationPage(moduleId, name, kind = null, allowRuntimeOnly = false) {
     const matches = (await this.integrations(moduleId)).integrations.filter(i => i.name === name && (kind === null || kind === undefined || i.kind === kind));
     const target = one(matches, `integration named ${repr(name)} in module ${moduleId}`);
+    if (target.configurationAvailable === false) {
+      if (allowRuntimeOnly) return [target, null, null];
+      throw new ProtocolError('This exposed SOAP service has a runtime link only; the observed Service Center table offers no logging configuration');
+    }
     const page = await this.get(target.href);
     const combo = one(entries(labels(page, content(page))).filter(({ name: n, label, n: c }) => c.tag === 'select'
       && (/HttpTracingCombo|Logging/i.test(n) || ['logging level', 'log level', 'logging'].includes(label))).map(e => e.n), 'logging-level selector');
     return [target, page, combo];
+  }
+
+  async integrationDetail(moduleId, name, kind = null) {
+    const [target, page, combo] = await this.integrationPage(moduleId, name, kind, true);
+    if (!page) return {moduleId:String(moduleId), integration:target.name, kind:target.kind, integrationId:null,
+      currentLevel:null, availableLevels:[], configurationAvailable:false, loggingAvailable:false,
+      runtimeUrl:target.runtimeUrl, source:target.configurationSource, observedAt:utc()};
+    return { moduleId: String(moduleId), integration: target.name, kind: target.kind, integrationId: target.id,
+      currentLevel: selectedText(combo), availableLevels: combo.all('option').map(o => o.text),
+      source: page.url, observedAt: utc() };
   }
 
   // ---- database connections (Administration)
@@ -922,8 +1757,53 @@ export class Client {
     return one([...new Set(ids)].sort(), `extension named ${repr(name)}`);
   }
 
-  // ---- solutions (Factory; every solution page is ASSUMED)
+  // ---- solutions (Factory; version-row download calibrated on the live layout)
   solutionsPage() { return this.get('Solutions_List.aspx'); }
+
+  async applicationRuntimeForm(name) {
+    let listPage = await this.get('Applications_List.aspx');
+    const forms = listPage.doc.all('form');
+    const filters = forms.flatMap(form => [...formLabels(listPage,form)].filter(([, [label, node]]) => label === 'name' && typeOf(node) === 'text'));
+    if (filters.length) {
+      const [fieldName] = one(filters, 'application name filter');
+      listPage = await this.click(listPage, button(listPage, ['Filter']), {[fieldName]:name});
+    }
+    const listing = await this.pages(listPage, 5000, false, 100);
+    if (listing.truncated) throw new ProtocolError('Application listing is incomplete');
+    const links = listing.rows.flatMap(r => r.links).filter(l => l.name === name && /Application_Edit\.aspx\?ApplicationId=\d+(?:&|$)/.test(l.href));
+    const href = one([...new Set(links.map(l => l.href))], 'exact application detail link');
+    const page = await this.get(href);
+    if (heading(page) !== `Application ${name}`) throw new ProtocolError('Application detail identity changed');
+    const panel = tabPanel(page, 'tab-Operation');
+    if (!panel || !panel.all('label').some(l => fold(l.text) === 'server request timeout'))
+      throw new ProtocolError('Application runtime settings layout is not recognized');
+    const control = one(panel.all('input').filter(i => typeOf(i) === 'text' && i.attr('name')), 'server request timeout input');
+    const value = control.attr('value');
+    if (!/^\d+$/.test(value ?? '') || !Number.isSafeInteger(Number(value)))
+      throw new ProtocolError('Server request timeout is not a nonnegative integer');
+    return { page, panel, control, value: Number(value) };
+  }
+
+  async applicationRuntimeSettings(name) {
+    const { page, value } = await this.applicationRuntimeForm(name);
+    return { application: name, serverRequestTimeout: value, source: page.url, observedAt: utc() };
+  }
+
+  async asyncOperationStatus(operationId, lastMessageId = -1) {
+    const args = asyncStatusArguments(operationId, lastMessageId);
+    await this.login();
+    const query = `AjaxStepsGetInfo.aspx?AsyncOperationId=${args.asyncOperationId}&LastSeenId=${args.lastMessageId}&TimeStamp=${encodeURIComponent(new Date().toISOString())}`;
+    let body;
+    try { body = await this.http.download(query, null, 'binary'); }
+    catch (error) {
+      if (error instanceof ProtocolError && error.code === 'SC_PROTOCOL_INVALID'
+          && error.message === 'Service Center answered with a page instead of the file')
+        throw new ProtocolError('Service Center returned HTML for the existing async operation. Its current status is unavailable; no completion or expiration was inferred and no operation was repeated.', 'SC_ASYNC_STATUS_UNAVAILABLE');
+      throw error;
+    }
+    return { asyncOperationId: args.asyncOperationId, ...parseAsyncStatus(body, args.lastMessageId), observedAt: utc(),
+      source: this.http.url(query) };
+  }
 
   async solutions(limit = 1000) {
     const page = await this.solutionsPage();
@@ -940,27 +1820,99 @@ export class Client {
     return this.get(one(listing.solutions.filter(s => s.name === name), `solution named ${repr(name)}`).href);
   }
 
-  async solutionDownload(name) {
+  async solutionDownload(name, options = {}) {
+    return solutionDownload(this,name,{...this.downloadOptions,...options});
+  }
+
+  async solutionVersions(name, limit = 1000, maxPages = 20) {
+    if (!(Number.isInteger(limit) && limit >= 1 && limit <= 5000)) throw new ProtocolError('limit must be between 1 and 5000');
+    if (!(Number.isInteger(maxPages) && maxPages >= 1 && maxPages <= 100)) throw new ProtocolError('maxPages must be between 1 and 100');
+    let page = await this.solutionPage(name);
+    const versions = [], seen = new Set();
+    for (let n = 0; n < maxPages; n++) {
+      const table = await assumed(page, 'Solution versions', () => one(content(page).all('table').filter(t => {
+        const headers = t.all('th').filter(h => h.ancestor('table') === t).map(h => fold(h.text));
+        return ['version', 'name', 'created'].every(h => headers.includes(h));
+      }), 'solution versions table'));
+      const headers = table.all('th').filter(h => h.ancestor('table') === table).map(h => fold(h.text));
+      const batch = table.all('tr').filter(r => r.ancestor('table') === table).flatMap(row => {
+        const cells = cellsOf(row);
+        if (!cells.length || cells.some(c => c.tag === 'th')) return [];
+        if (cells.length === 1 && EMPTY.test(cells[0].text)) return [];
+        if (cells.length !== headers.length) throw new ProtocolError('Unrecognized solution version row');
+        const version = cells[headers.indexOf('version')].text;
+        const label = cells[headers.indexOf('name')];
+        const current = !version && [label, ...label.all()].some(c => fold(c.text) === 'current running version');
+        if (!current && !version) throw new ProtocolError('Solution version has no identity');
+        return [{ version: current ? null : version, currentRunning: current,
+          name: current ? 'Current Running Version' : label.text, created: cells[headers.indexOf('created')].text }];
+      });
+      const marker = fingerprint(batch);
+      if (seen.has(marker)) throw new ProtocolError('Service Center pagination did not advance');
+      seen.add(marker); versions.push(...batch);
+      const next = nextLink(page);
+      if (versions.length >= limit || !next || n + 1 === maxPages)
+        return { solution: name, versions: versions.slice(0, limit), truncated: versions.length > limit || !!next,
+          source: page.url, observedAt: utc() };
+      page = await this.nextPage(page, next);
+    }
+  }
+
+  async solutionDownloadStatus(name, options = {}) {
+    return solutionDownloadStatus(this,name,{...this.downloadOptions,...options});
+  }
+
+  async solutionDownloadAbandon(name, options = {}) {
+    return solutionDownloadAbandon(this,name,{...this.downloadOptions,...options});
+  }
+
+  async solutionDownloadRequest(name) {
     if (this.exports === null) throw new ProtocolError('Downloads need a local export folder');
     const page = await this.solutionPage(name);
-    let click = null;
-    try { click = button(page, ['Download']); } catch (error) { if (!(error instanceof ProtocolError)) throw error; }
-    let body;
-    if (click) body = await this.http.export(page, click, null, 'binary');
+    let click = null, version = null;
+    // Current layouts have one Download per version. Bind to the explicitly
+    // labeled running snapshot, never the first button or newest stored row.
+    const versionTables = content(page).all('table').filter(t => {
+      const headers = t.all('th').filter(h => h.ancestor('table') === t).map(h => fold(h.text));
+      return ['version', 'name', 'created'].every(h => headers.includes(h));
+    });
+    if (versionTables.length) {
+      click = await assumed(page, 'The current running solution snapshot', () => {
+        const table = one(versionTables, 'solution versions table');
+        const headers = table.all('th').filter(h => h.ancestor('table') === table).map(h => fold(h.text));
+        const matches = table.all('tr').filter(r => r.ancestor('table') === table).filter(r => {
+          const cells = cellsOf(r), label = cells[headers.indexOf('name')];
+          return cells[headers.indexOf('version')]?.text === '' && label
+            && (fold(label.text) === 'current running version' || label.all().some(n => fold(n.text) === 'current running version'));
+        });
+        const row = one(matches, 'Current Running Version row');
+        const downloads = row.all('input', 'button').filter(n => typeOf(n, n.tag === 'button' ? 'submit' : '') === 'submit'
+          && fold(n.attr('value') || n.text) === 'download' && n.attr('name') && !n.has('disabled') && !n.attr('onclick'));
+        return one(downloads, 'current running snapshot Download control');
+      });
+      version = 'current-running';
+    } else {
+      try { click = button(page, ['Download']); } catch (error) { if (!(error instanceof ProtocolError)) throw error; }
+    }
+    if (click) {
+      const [url,fields] = this.http.formPost(page,click);
+      return {url,fields,version};
+    }
     else {
       const links = content(page).all('a').filter(a => fold(a.text) === 'download' && a.attr('href') && !/^(?:javascript:|#)/.test(a.attr('href')) && !postbackTarget(a));
       const link = await assumed(page, 'The solution page', () => one(links, 'solution Download control'));
-      body = await this.http.download(this.http.url(link.attr('href'), page.url));
+      return {url:this.http.url(link.attr('href'), page.url),fields:null,version};
     }
-    // The content type of the .osp answer is not trusted: only the package's ZIP signature is.
-    if (!body.subarray(0, 2).equals(Buffer.from('PK'))) throw new ProtocolError('Solution download is not an OSP package');
-    const stem = name.replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 60);
-    return { solution: name, ...this.save(stem, 'osp', body), observedAt: utc() };
   }
 
   // Component names of a solution page's listing (its Name column).
   components(page) {
-    return new Set(tables(page).map(r => r.fields.Name || r.fields.Component).filter(v => v !== null && v !== undefined && v !== ''));
+    const referenceTables = content(page).all('table').filter(t => /wtListReferences$/.test(t.attr('id') || ''));
+    const rows = tables(page, false, referenceTables.length === 1 ? referenceTables[0] : null);
+    return new Set(rows.flatMap(r => {
+      const names = r.links.filter(l => /(?:eSpace|Extension)_Edit\.aspx\?/.test(l.href)).map(l => l.name);
+      return names.length ? names : [r.fields.Name || r.fields.Component];
+    }).filter(v => v !== null && v !== undefined && v !== ''));
   }
 
   // ---- generic page writes: prepare reads, send posts inside the reservation, observe re-reads
@@ -970,25 +1922,37 @@ export class Client {
     const run = async (plan, state, receipt) => {
       // Plans carry no secret; the receipt keeps the one it executed so a later verify knows what to expect.
       receipt.plan = plan;
-      const outcome = await send.call(this, plan, state);
+      const outcome = await send.call(this, plan, state, receipt);
       if (!Object.hasOwn(outcome, 'state')) outcome.state = await this.observe(action, identity, plan) ? 'confirmed' : 'accepted-unverified';
       return outcome;
     };
     const gate = async plan => {
-      // Before the reservation: a write with a secret needs the Studio window that fills it from the vault.
+      // Before reservation: secret writes need native HTTP that resolves vault references inside the Studio.
       if (SECRET_WRITES.includes(action) && !await this.http.secretsSupported()) throw this.secretRefusal();
       if (approve) await approve(plan);
+      // An unknown connection-test result must not prevent explicitly approved
+      // cleanup. This never repeats the test or calls its outcome successful.
+      if (action === 'db-connection-delete' && plan.authorizationContext && journal)
+        journal.supersedeTestForCleanup(identity, plan, operationId);
     };
     return runWrite(identity, () => prepare.call(this, args), run, { execute, words: userWords, operationId, journal,
       authorizing: (id, sha, fn) => this.http.authorizing(id, sha, fn), approve: gate });
   }
 
   async observe(action, identity, plan = null) {
+    if (action === 'application-timeout-set') {
+      const now = await this.applicationRuntimeSettings(identity.application);
+      return now.source === plan?.target && now.serverRequestTimeout === plan?.value;
+    }
     if (action === 'integration-log-level') {
       const [, , combo] = await this.integrationPage(identity.moduleId, identity.integration, plan?.kind ?? null);
       return plan !== null && fold(selectedText(combo)) === fold(plan.level);
     }
     if (action === 'solution-create') return (await this.solutions()).solutions.some(s => s.name === identity.solution);
+    if (action === 'solution-delete') {
+      const listing = await this.solutions();
+      return !listing.truncated && !listing.solutions.some(s => s.name === identity.solution || String(s.id) === plan?.solutionId);
+    }
     if (action === 'solution-add-component' || action === 'solution-remove-component') {
       const present = this.components(await this.solutionPage(identity.solution)).has(identity.component);
       return action === 'solution-add-component' ? present : !present;
@@ -998,7 +1962,7 @@ export class Client {
     if (action === 'db-connection-test') return false; // a test's outcome is its own reply; nothing to re-read
     if (action === 'extension-db-connection') {
       const page = await this.get(`Extension_Edit.aspx?ExtensionId=${await this.extensionRef(identity.extensionId)}`);
-      const connection = (await this.dbConnection(identity.connection)).id;
+      const connection = (await this.mappingConnection(page, identity.connection)).id;
       const combos = this.connectionCombos(page, connection);
       return combos.length > 0 && combos.every(c => controlValue(c) === connection);
     }
@@ -1013,6 +1977,12 @@ export class Client {
     const click = await assumed(page, what, () => button(page, ['Associate']));
     const form = click.ancestor('form');
     const found = {};
+    const selectors = controls(form).filter(n => n.tag === 'select' && /\$wtListBox1$/.test(n.attr('name') || ''));
+    if (selectors.length) {
+      found.select = one(selectors, 'solution component selector');
+      const refs = controls(form).filter(n => /\$wtReferenceAddDependencies$/.test(n.attr('name') || ''));
+      return [page, click, found, refs.length === 1 ? refs[0] : null];
+    }
     for (const [key, suffix] of [['box', 'wtComponentInput'], ['value', 'wttxtAutoCompleteValue'], ['aux', 'wttxtAutoCompleteAux']])
       found[key] = await assumed(page, what, () => bySuffix(form, suffix, key));
     const refs = controls(form).filter(n => n.attr('name').endsWith('wtIncludeReferences'));
@@ -1049,8 +2019,24 @@ export class Client {
     return { [s.user]: { target: plan.loginTarget, field: 'username' }, [s.password]: { target: plan.loginTarget, field: 'password' } };
   }
 
+  connectionEndpoint(page, control) {
+    const fields = entries(formLabels(page, control.ancestor('form')));
+    const value = label => controlValue(one(fields.filter(f => f.label === label).map(f => f.n), 'database ' + label + ' field'));
+    const provider = fields.find(f => f.n.tag === 'select' && (/DBMS/i.test(f.name) || f.label === 'dbms'));
+    return { dbms: provider ? selectedText(provider.n) : null, parameters: { server: value('server'), database: value('database') } };
+  }
+
   connectionCombos(page, connectionId) {
     return content(page).all('select').filter(s => /DBConnectionCombo/i.test(s.attr('name', '') ?? '') && s.all('option').map(optionValue).includes(connectionId));
+  }
+
+  async mappingConnection(page, connection) {
+    if (connection !== '(not configured)') return this.dbConnection(connection);
+    const combos = content(page).all('select').filter(s => /DBConnectionCombo/i.test(s.attr('name', '') ?? ''));
+    if (!combos.length) throw new ProtocolError('No database-connection selector on this extension');
+    const values = combos.map(c => optionValue(one(c.all('option').filter(o => fold(o.text) === '(not configured)'), 'unconfigured database option')));
+    if (new Set(values).size !== 1) throw new LayoutError(page.url, 'Unconfigured database options', 'selectors disagree on their unconfigured value');
+    return { id: values[0], name: '(not configured)' };
   }
 
   // The numeric extension ID, given either that ID or the extension's exact name.
@@ -1058,19 +2044,56 @@ export class Client {
 }
 
 const sendPostback = async function (plan, s) {
-  if (s.control.tag === 'a') checked(await this.http.postback(s.page, s.control));
-  else checked(await this.http.submit(s.page, s.control));
+  if (s.control.tag === 'a') checked(await this.http.postback(s.page, s.control, s.updates));
+  else checked(await this.http.submit(s.page, s.control, s.updates));
   return {};
 };
 
 // action -> [prepare(args), send(plan, state)], called with the Client as this.
 const WEB_HANDLERS = {
+  'application-timeout-set': [async function (a) {
+    for (const v of [a.value, a.expectedValue])
+      if (!/^\d+$/.test(String(v ?? '')) || !Number.isSafeInteger(Number(v)) || Number(v) > 2147483647)
+        throw new ProtocolError('Timeout and expected value must be nonnegative 32-bit integers');
+    const {page,panel,control,value} = await this.applicationRuntimeForm(a.application);
+    if (value !== Number(a.expectedValue)) throw new ProtocolError('Application timeout changed; expected value does not match');
+    const click = one(panel.all('input').filter(n => typeOf(n) === 'submit'
+      && /\$wtApplyRuntimeMobileButton$/.test(n.attr('name') || '') && n.attr('value') === 'Apply' && !n.has('disabled')), 'runtime Apply control');
+    const script = click.attr('onclick') || '';
+    // Only the observed confirmation and client validation pattern; never execute script.
+    if (!/^var ret = confirm\('[^']*'\);if\( ret != true \) \{return false;\}OsPage_ClientValidate\('[A-Za-z0-9_]+'\);$/.test(script)
+        || !script.endsWith(`OsPage_ClientValidate('${click.attr('id')}');`))
+      throw new ProtocolError('Unrecognized runtime Apply script; nothing sent');
+    const updates = {[control.attr('name')]:String(Number(a.value))};
+    this.http.formPost(page,click,updates);
+    return [{host:this.vault.host,action:'application-timeout-set',application:a.application,previousValue:value,
+      value:Number(a.value),target:page.url,execute:false,runtimeCompletionVerified:false}, {page,control:click,updates}];
+  }, async function (plan,s) {
+    checked(await this.http.submit(s.page,s.control,s.updates));
+    return {runtimeCompletionVerified:false, note:'Saved value is read back; application reload completion is not proven by this receipt'};
+  }],
+  'solution-delete': [async function (a) {
+    const page = await this.solutionPage(a.solution);
+    const name = one(page.doc.all('input').filter(n => /Solution_?Name$/.test(n.attr('name') || '')), 'solution name field');
+    if (name.attr('value') !== a.solution) throw new ProtocolError('Solution identity changed; nothing sent');
+    const solutionId = new URL(page.url).searchParams.get('SolutionId');
+    if (!/^[1-9][0-9]*$/.test(solutionId || '')) throw new ProtocolError('Solution ID unavailable; nothing sent');
+    const control = await assumed(page, 'The solution detail header', () => one(page.doc.all('a').filter(n =>
+      fold(caption(n)) === 'delete' && !n.ancestor('tr') && postbackTarget(n)), 'solution Delete postback'));
+    return [{host:this.vault.host,action:'solution-delete',solution:a.solution,solutionId,namedTargets:[a.solution],
+      destructive:true,confirm:redactText(confirmText(control)).slice(0,300),target:page.url,execute:false}, {page,control}];
+  }, sendPostback],
   'solution-create': [async function (a) {
     if (!/^[A-Za-z0-9 _.-]{1,100}$/.test(a.solution)) throw new ProtocolError('Solution name must be plain text (letters, digits, space, _ . -)');
-    if ((await this.solutions()).solutions.some(s => s.name === a.solution)) throw new ProtocolError('A solution with this name already exists');
+    const current = await this.solutions();
+    if (current.truncated) throw new ProtocolError('Solution listing is incomplete; absence not proven');
+    if (current.solutions.some(s => s.name === a.solution)) throw new ProtocolError('A solution with this name already exists');
     const listing = await this.solutionsPage();
     const link = await assumed(listing, 'The solutions list', () => one(content(listing).all('a').filter(l => ['new solution', 'create solution', 'new'].includes(fold(l.text))), 'New Solution link'));
-    const page = await this.follow(listing, link);
+    const event = postbackTarget(link);
+    if (event && (event.kind !== 'postback' || event.argument !== '' || !/\$wtNewSolutionLink$/.test(event.target)))
+      throw new ProtocolError('Unrecognized New Solution navigation; nothing sent');
+    const page = event ? await this.readPostback(listing, ...this.http.eventPost(listing, link)) : await this.follow(listing, link);
     const what = 'The new solution form';
     const click = await assumed(page, what, () => button(page, ['Create', 'Save']));
     const fields = entries(formLabels(page, click.ancestor('form')));
@@ -1092,6 +2115,12 @@ const WEB_HANDLERS = {
       alreadyPresent: present, includeReferences: Boolean(a.includeReferences), target: page.url, execute: false };
     const state = { page, click, refs, ...found };
     if (!present) {
+      if (found.select) {
+        const option = one(found.select.all('option').filter(o => [a.component, a.component+' (Module)', a.component+' (Extension)'].includes(o.text)), 'exact component option');
+        if (!optionValue(option) || option.has('disabled')) throw new ProtocolError('Component option is unavailable');
+        Object.assign(plan, {componentLabel:option.text,componentKey:optionValue(option)});
+        return [plan,state];
+      }
       const lookup = await this.componentLookup(page, found.box, found.value, a.component);
       Object.assign(plan, { componentLabel: lookup.label, componentKey: lookup.key });
       state.lookupState = lookup.state;
@@ -1099,7 +2128,8 @@ const WEB_HANDLERS = {
     return [plan, state];
   }, async function (plan, s) {
     if (plan.alreadyPresent) return { state: 'confirmed', noChange: true };
-    const updates = { [s.box.attr('name')]: plan.componentLabel, [s.value.attr('name')]: plan.componentKey, [s.aux.attr('name')]: 'isVisible' };
+    const updates = s.select ? {[s.select.attr('name')]:plan.componentKey}
+      : { [s.box.attr('name')]: plan.componentLabel, [s.value.attr('name')]: plan.componentKey, [s.aux.attr('name')]: 'isVisible' };
     if (plan.includeReferences) updates[s.refs.attr('name')] = controlValue(s.refs);
     if (s.lookupState) {
       // Associate goes with the state the lookup refreshed, as the page's form does after the autocomplete.
@@ -1111,9 +2141,21 @@ const WEB_HANDLERS = {
 
   'solution-remove-component': [async function (a) {
     const page = await this.solutionPage(a.solution);
-    const rows = content(page).all('table').flatMap(t => t.all('tr')).filter(r => r.children.some(c => c?.tag === 'td' && c.text === a.component));
+    const referenceTables = content(page).all('table').filter(t => /wtListReferences$/.test(t.attr('id') || ''));
+    const scope = referenceTables.length === 1 ? referenceTables : content(page).all('table');
+    const rows = scope.flatMap(t => t.all('tr')).filter(r => r.children.some(c => c?.tag === 'td' && (c.text === a.component
+      || c.all('a').some(l => l.text === a.component && /(?:eSpace|Extension)_Edit\.aspx\?/.test(l.attr('href') || '')))));
     const row = one(rows, `component row ${repr(a.component)}`);
     const candidates = row.all('a', 'input').filter(n => ['remove', 'delete', 'disassociate'].includes(fold(strip(caption(n)))));
+    if (!candidates.length) {
+      const checkbox = one(row.all('input').filter(n => typeOf(n) === 'checkbox' && n.attr('name') && !n.has('disabled')), 'component selection checkbox');
+      const control = await assumed(page, 'The solution components', () => one(content(page).all('input','button').filter(n =>
+        /\$wtReferenceDeleteButton2$/.test(n.attr('name') || '') && fold(caption(n)) === 'dissociate selected'), 'Dissociate Selected control'));
+      const updates = Object.fromEntries(row.ancestor('table').all('input').filter(n => typeOf(n) === 'checkbox' && n.attr('name')).map(n => [n.attr('name'),null]));
+      updates[checkbox.attr('name')] = controlValue(checkbox) || 'on';
+      return [{host:this.vault.host,action:'solution-remove-component',solution:a.solution,component:a.component,
+        confirm:redactText(confirmText(control)).slice(0,300),target:page.url,execute:false}, {page,control,updates}];
+    }
     const control = await assumed(page, 'The solution page', () => one(candidates, 'remove control in the component row'));
     if (control.tag === 'a' && !postbackTarget(control)) throw new ProtocolError('The remove control is not a recognized postback; no request sent');
     const plan = { host: this.vault.host, action: 'solution-remove-component', solution: a.solution, component: a.component,
@@ -1157,21 +2199,34 @@ const WEB_HANDLERS = {
     const click = await assumed(page, what, () => button(page, ['Test Connection', 'Test']));
     const [, user, password] = await this.connectionForm(page, click, what);
     const plan = { host: this.vault.host, action: 'db-connection-test', connection: a.connection, connectionId: connection.id,
+      ...this.connectionEndpoint(page, click),
       loginTarget: target, loginStored: Boolean(await this.vault.present(target)), secretRefsSupported: await this.http.secretsSupported(),
       target: page.url, execute: false };
-    return [plan, { page, click, user, password }];
-  }, async function (plan, s) {
-    const response = await this.http.submit(s.page, s.click, null, this.loginRefs(plan, s));
+    const refs = this.loginRefs(plan, {user, password});
+    const placeholders = Object.fromEntries(Object.keys(refs).map(key => [key, '']));
+    const ajax = this.http.scriptedAjaxPost(page, click, placeholders);
+    if (!ajax) this.http.formPost(page, click, placeholders); // refuse before any reservation
+    return [plan, { page, click, user, password, ajax, refs }];
+  }, async function (plan, s, receipt) {
+    let response;
+    if (s.ajax) {
+      const [final, , raw, charset] = await this.http.fetch(...s.ajax, 'text-write', toSecretRefs(s.refs));
+      const body = decode(raw, charset);
+      // The native transport has already removed resolved credentials/session
+      // material. Keep its redacted reply so uncertain parsing can be repaired
+      // and reconciled without repeating the external connection test.
+      if (this.exports && receipt) receipt.responseEvidence = this.save('db-test-reply', 'txt', Buffer.from(redactText(body)));
+      response = new Page(final, new Document(/<form\b/i.test(body) ? body : ajaxMarkup(body).join('')));
+    } else response = await this.http.submit(s.page, s.click, null, s.refs);
     if (urlsplit(response.url).path.toLowerCase().endsWith('/login.aspx')) throw new ProtocolError('Service Center login required or session expired');
-    const good = response.doc.all().filter(n => n.text && /Feedback_Message_Success/i.test(n.attr('class', '') ?? ''));
-    const bad = errors(response);
-    if (!good.length && !bad.length && !response.doc.all().some(n => n.text))
+    const outcome = connectionTestOutcome(response);
+    if (!outcome && !response.doc.all().some(n => n.text))
       // The bridge dropped the whole reply (htmlOmitted): it echoed the login in a form it cannot mask.
-      return { state: 'accepted-unverified', testPassed: null, feedback: 'withheld by the Studio (the reply echoed the login); open the connection page to see the result' };
-    if (!good.length && !bad.length) throw new LayoutError(response.url, 'The connection test reply', 'it shows no success or error feedback');
+      return { state: 'accepted-unverified', testPassed: null, feedback: 'The reply was withheld because it echoed the login. The connection test remains unverified; reconcile the existing receipt without repeating the test.' };
+    if (!outcome) throw new LayoutError(response.url, 'The connection test reply', 'it shows no success or error feedback');
     // The test changes nothing; its reply is the result. The server's text can echo the login, so only the outcome
     // comes back.
-    return { state: 'confirmed', testPassed: good.length > 0 && !bad.length, feedback: good.length && !bad.length ? 'success' : 'error (server text withheld: it can echo the login)' };
+    return { state: 'confirmed', ...outcome };
   }],
 
   'db-connection-delete': [async function (a) {
@@ -1181,34 +2236,60 @@ const WEB_HANDLERS = {
     // Extensions that use the connection must be named by the user's words too (matrix D4).
     const used = [...new Set(tables(page).map(r => r.fields.Extension).filter(Boolean))].sort();
     const plan = { host: this.vault.host, action: 'db-connection-delete', connection: a.connection, connectionId: connection.id, usedBy: used,
+      ...(a.authorization_context ? this.connectionEndpoint(page, control) : {}),
       namedTargets: [a.connection, ...used], confirm: redactText(confirmText(control)).slice(0, 300), target: page.url, destructive: true, execute: false };
     return [plan, { page, control }];
   }, sendPostback],
 
   'extension-db-connection': [async function (a) {
     const extensionId = await this.extensionRef(a.extensionId);
-    const connection = await this.dbConnection(a.connection);
     const page = await this.get(`Extension_Edit.aspx?ExtensionId=${extensionId}`);
+    const connection = await this.mappingConnection(page, a.connection);
     const combos = this.connectionCombos(page, connection.id);
     if (!combos.length) throw new ProtocolError('No database-connection selector of this extension offers that connection');
     const pending = combos.filter(c => controlValue(c) !== connection.id);
     const plan = { host: this.vault.host, action: 'extension-db-connection', extensionId, connection: a.connection, connectionId: connection.id,
-      selectors: combos.length, pending: pending.length, target: page.url, execute: false };
+      selectors: combos.length, pending: pending.length,
+      currentSelections: combos.map(c => ({ selector: c.attr('name'), value: controlValue(c), connection: selectedText(c) })),
+      target: page.url, execute: false };
     return [plan, { url: page.url }];
   }, async function (plan, s) {
     // One OsAjax Change (a read that stages the value) -> Apply (the write) for one selector. The bridge accepts each
     // operationId once, so a second selector is a new call with its own operationId, after this one's re-read.
     const page = await this.get(s.url);
-    const pending = this.connectionCombos(page, plan.connectionId).filter(c => controlValue(c) !== plan.connectionId);
+    const current = this.connectionCombos(page, plan.connectionId);
+    if (JSON.stringify(current.map(c => c.attr('name')).sort()) !== JSON.stringify(plan.currentSelections.map(c => c.selector).sort()))
+      throw new ProtocolError('Database selectors changed after planning; no mapping request sent');
+    const baseline = new Map(plan.currentSelections.map(c => [c.selector, c.value]));
+    if (current.some(c => controlValue(c) !== baseline.get(c.attr('name'))))
+      return { state: 'refused', code: 'SC_MAPPING_CHANGED', sent: false,
+        error: 'Database mapping changed after planning; no mapping request sent' };
+    const pending = current.filter(c => controlValue(c) !== plan.connectionId);
     if (!pending.length) return { state: 'confirmed', noChange: true };
     const combo = pending[0];
     const name = combo.attr('name');
-    const reply = await this.http.text(...this.http.ajaxPost(page, combo, { [name]: plan.connectionId }, 'Change'));
+    // Modern pages declare an empty AJAX event in onchange. It is not the
+    // synthetic Change event used by older controls: preserve the native route.
+    const handler = combo.attr('onchange');
+    let event = 'Change';
+    if (handler) {
+      const call = /OsAjax\([^,]*,\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*,/.exec(handler);
+      if (!call || call[1] !== combo.attr('id') || call[2] !== name || !['', 'Change'].includes(call[3]))
+        throw new ProtocolError('Unrecognized database selector change handler; no mapping request sent');
+      event = call[3];
+    }
+    const reply = await this.http.text(...this.http.ajaxPost(page, combo, { [name]: plan.connectionId }, event));
     const state = ajaxState(reply);
     if (!state) throw new LayoutError(page.url, "The extension's OsAjax 'Change' reply", 'it carries no refreshed form state');
     const osv = one(controls(combo.ancestor('form')).map(n => n.attr('name')).filter(n => n.endsWith('__OSVSTATE')), 'form state field');
     checked(await this.http.submit(page, button(page, ['Apply']), { [name]: plan.connectionId, [osv]: state }));
-    const left = this.connectionCombos(await this.get(s.url), plan.connectionId).filter(c => controlValue(c) !== plan.connectionId);
+    const observed = this.connectionCombos(await this.get(s.url), plan.connectionId);
+    const left = observed.filter(c => controlValue(c) !== plan.connectionId);
+    const expectedNames = plan.currentSelections.map(c => c.selector).sort();
+    const observedNames = observed.map(c => c.attr('name')).sort();
+    if (JSON.stringify(expectedNames) !== JSON.stringify(observedNames))
+      return { state: 'accepted-unverified', observedDesiredState: false, observationMismatch: 'database-selectors-changed',
+        observedSelections: observed.map(c => ({ selector: c.attr('name'), value: controlValue(c), connection: selectedText(c) })) };
     if (!left.length) return { state: 'confirmed' };
     if (left.length < pending.length) {
       // This Apply landed; the remaining selectors need their own operation (a new operationId each).
@@ -1216,11 +2297,14 @@ const WEB_HANDLERS = {
         { action: 'extension-db-connection', host: plan.host, extensionId: plan.extensionId, connection: plan.connection, execute: true },
         'repeat with a new operationId (and the user words) for the next selector') };
     }
-    return { state: 'accepted-unverified' };
+    return { state: 'accepted-unverified', observedDesiredState: false,
+      observedSelections: observed.map(c => ({ selector: c.attr('name'), value: controlValue(c), connection: selectedText(c) })) };
   }],
 
   'integration-log-level': [async function (a) {
     const [target, page, combo] = await this.integrationPage(a.moduleId, a.integration, a.kind ?? null);
+    if (a.expectedValue !== undefined && fold(selectedText(combo)) !== fold(a.expectedValue))
+      throw new ProtocolError('Integration logging level changed; expected value does not match');
     const options = new Map(combo.all('option').map(o => [fold(o.text), optionValue(o)]));
     if (!options.has(fold(a.level))) throw new ProtocolError('Logging level unavailable; options: ' + combo.all('option').map(o => o.text).join(', '));
     const click = button(page, ['Apply', 'Save']);
@@ -1247,10 +2331,10 @@ export function bridgeFailure(error, tracker = {}, identity = null) {
     error: state !== 'uncertain' ? error.message : 'Sent but not confirmed (' + error.code + '); reconcile by a read, never repeat it' };
   if (error.code === 'SECRET_NOT_FOUND' && refused) {
     // The Studio found no vault entry (or not the part) a secretRefs entry named; nothing was sent. The next call with a
-    // new operationId opens the private prompt for that entry when it is absent.
+    // new operationId reopens secretReady (index.mjs): an absent entry gets the private Windows prompt (012e263e).
     Object.assign(failure, { target: error.extra.target ?? null, part: error.extra.part ?? null,
       continuation: continuation('o11_service_center_write', { ...(identity ? { action: identity.action, host: identity.host } : {}), execute: true },
-        'the next call with a new operationId opens the private prompt for this vault entry when it is absent; repeat with a new operationId after it is stored') });
+        'Nothing was sent. Retry with a new operationId: when the entry is absent, the retry opens the private Windows prompt in its own window for the database login or the secret site property value (the user types there, never in the chat) and goes on once it is stored; an entry that exists without this part is never overwritten through the window, so provision that part privately first') });
   }
   return failure;
 }
@@ -1302,7 +2386,44 @@ export class Journal {
     const result = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (identity && !same(result.identity, identity)) throw new ProtocolError('operation-id already belongs to a different target or operation');
     if (result.state === 'sending') Object.assign(result, { state: 'uncertain', ok: false });
+    if (result.identity?.action === 'timer-run') {
+      const directory = path.join(this.root, 'timer-observations', canonicalUuid(operationId));
+      if (fs.existsSync(directory)) {
+        const names = fs.readdirSync(directory).filter(n => /^[0-9]{17}-[a-f0-9]{64}\.json$/.test(n)).sort();
+        if (names.length) {
+          const observation = JSON.parse(fs.readFileSync(path.join(directory, names.at(-1)), 'utf8'));
+          if (observation.schema !== 'ssam-timer-observation/1' || observation.operationId !== result.operationId
+            || observation.identitySha256 !== fingerprint(result.identity)
+            || observation.planSha256 !== result.authorization?.planSha256
+            || !names.at(-1).endsWith('-' + fingerprint(observation) + '.json'))
+            throw new ProtocolError('Stored timer observation does not match the receipt');
+          result.timerObservation = { ...observation, file: path.resolve(directory, names.at(-1)) };
+        }
+      }
+    }
     return result;
+  }
+
+  // Append observed evidence without confirming/replacing the original send,
+  // releasing its lock, or changing its pre-send baseline.
+  recordTimerObservation(receipt, observation) {
+    const current = JSON.parse(fs.readFileSync(this.path(receipt.operationId), 'utf8'));
+    if (current.identity?.action !== 'timer-run' || current.state === 'sending'
+      || !same(current.identity, receipt.identity) || !same(current.authorization, receipt.authorization)
+      || current.plan?.timerLogBaseline?.available !== true)
+      throw new ProtocolError('Timer receipt changed or has no complete pre-send baseline');
+    if (observation.attributedToRequest !== false || observation.executionCompleted !== null
+      || observation.verificationScope !== 'new-exact-timer-log-rows')
+      return null; // Incomplete reads cannot become a new stored execution observation.
+    const record = { schema: 'ssam-timer-observation/1', operationId: current.operationId,
+      identitySha256: fingerprint(current.identity), planSha256: current.authorization.planSha256,
+      recordedAt: utc(), source: 'live-read', observation };
+    const directory = path.join(this.root, 'timer-observations', current.operationId);
+    fs.mkdirSync(directory, { recursive: true });
+    const name = new Date().toISOString().replace(/[^0-9]/g, '') + '-' + fingerprint(record) + '.json';
+    const file = path.join(directory, name);
+    Journal.writeDurable(file, JSON.stringify(record, null, 2), 'wx');
+    return { ...record, file: path.resolve(file) };
   }
 
   lockFile(target) { return path.join(this.root, fingerprint(target) + '.lock'); }
@@ -1381,6 +2502,29 @@ export class Journal {
   // The last receipt that wrote a target, by a reference to it (host, kind, folded name or key): a repeated delete whose
   // target is gone answers from it without any send.
   pointerFile(ref) { return path.join(this.root, 'targets', fingerprint(ref) + '.txt'); }
+  supersedeTestForCleanup(identity, plan, operationId) {
+    if (!canonicalUuid(operationId) || identity.action !== 'db-connection-delete') throw new ProtocolError('Invalid cleanup operation');
+    const target = Journal.targetOf(identity), held = this.holder(target);
+    if (!held) return;
+    const previous = this.lookup(held);
+    const same = previous?.identity?.action === 'db-connection-test'
+      && previous.identity.host === identity.host && previous.identity.connection === identity.connection
+      && previous.plan?.connectionId === plan.connectionId && previous.plan?.dbms === plan.dbms
+      && previous.plan?.parameters?.server === plan.parameters?.server
+      && previous.plan?.parameters?.database === plan.parameters?.database;
+    if (!same || !plan.authorizationContext || plan.usedBy?.length
+      || !['uncertain', 'accepted-unverified'].includes(previous?.state)
+      || this.rawState(held) === 'sending')
+      throw new ProtocolError('Pending operation does not qualify for approved connection-test cleanup');
+    if (this.holder(target) !== held) throw new ProtocolError('Pending connection-test lock changed');
+    Object.assign(previous, { state:'superseded', ok:false, supersededBy:canonicalUuid(operationId),
+      testOutcome:'unverified', updatedAt:utc(),
+      verification:'Unverified test retained; exact unchanged unused connection approved for deletion. No test replay.' });
+    this.rewrite(previous);
+    const lock = this.lockFile(target);
+    if (fs.existsSync(lock) && fs.readFileSync(lock, 'utf8').trim() === held) fs.unlinkSync(lock);
+  }
+
   point(ref, operationId) {
     const file = this.pointerFile(ref);
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -1390,7 +2534,47 @@ export class Journal {
     try { return canonicalUuid(fs.readFileSync(this.pointerFile(ref), 'utf8').trim()); } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
   }
 
+  acceptMaskedSecret(receipt) {
+    if (receipt.identity?.action !== 'property-set' || receipt.plan?.secret !== true
+        || receipt.secretValuePresent !== true || receipt.valueVerified !== false
+        || receipt.state !== 'accepted-unverified' || this.rawState(receipt.operationId) !== 'accepted-unverified')
+      throw new ProtocolError('Only a completed secret POST with observed masked presence can be acknowledged');
+    const lock = this.lockFile(receipt.lock ?? Journal.targetOf(receipt.identity));
+    if (!fs.existsSync(lock) || fs.readFileSync(lock, 'utf8') !== receipt.operationId)
+      throw new ProtocolError('Pending target lock no longer belongs to this receipt');
+    Object.assign(receipt, { state: 'accepted', ok: true, reconciledAt: utc(),
+      verification: 'POST completed; a masked stored value is present. The submitted secret was never compared.' });
+    this.rewrite(receipt);
+    fs.unlinkSync(lock);
+  }
+
   reconcile(receipt) {
+    if (receipt.state === 'accepted' && receipt.identity?.action === 'apply-settings'
+        && receipt.executionCompleted === true && receipt.applySettingsObservation?.success === true
+        && receipt.applySettingsObservation?.terminal === true
+        && receipt.applySettingsObservation.applyId === receipt.applyId) {
+      const current = JSON.parse(fs.readFileSync(this.path(receipt.operationId), 'utf8'));
+      if (current.state !== 'accepted' || current.applyId !== receipt.applyId
+          || fingerprint(current.identity) !== fingerprint(receipt.identity))
+        throw new ProtocolError('Apply settings receipt changed during reconciliation');
+      Object.assign(receipt, { state: 'confirmed', ok: true, reconciledAt: utc(),
+        verification: 'The recorded apply settings job reported terminal success; no write was resent' });
+      this.rewrite(receipt);
+      return;
+    }
+    if (receipt.state === 'accepted' && receipt.identity?.action === 'solution-publish'
+        && receipt.executionCompleted === true && receipt.publicationObservation?.success === true
+        && receipt.publicationObservation?.terminal === true
+        && receipt.publicationObservation.solutionPublishId === receipt.solutionPublishId) {
+      const current = JSON.parse(fs.readFileSync(this.path(receipt.operationId), 'utf8'));
+      if (current.state !== 'accepted' || current.solutionPublishId !== receipt.solutionPublishId
+          || fingerprint(current.identity) !== fingerprint(receipt.identity))
+        throw new ProtocolError('Publication receipt changed during reconciliation');
+      Object.assign(receipt, { state: 'confirmed', ok: true, reconciledAt: utc(),
+        verification: 'The recorded publication job reported terminal success; no publication was resent' });
+      this.rewrite(receipt);
+      return;
+    }
     if (['confirmed', 'accepted'].includes(receipt.state)) return;
     if (JSON.parse(fs.readFileSync(this.path(receipt.operationId), 'utf8')).state === 'sending')
       throw new ProtocolError('Sender may still be active; a sending receipt cannot be automatically reconciled');

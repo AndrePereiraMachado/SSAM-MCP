@@ -34,7 +34,50 @@ internal static partial class Reads
         });
     });
 
-    public static Task<string> OpenModules() => OnUi(() =>
+    /// <summary>list_open_modules. With model_sha256_of (a module name or key; capability list_open_modules:model_sha256) the
+    /// rows of the opened tabs of that module also carry modelSha256 (MergeRollbackProof.ModelSha256Hex of the tab's own
+    /// SaveToMemoryStream, the bytes snapshot_module would write), modelBytes and modelSha256Ms, read in a second bounded UI
+    /// step: the O11 build phase reuses a capture the server already holds when the model is the same, instead of capturing
+    /// and uploading it again (o11-build-phase.mjs captureByKey). A tab that changed between the two steps, is opening or
+    /// is in silent mode gets no fingerprint; a fingerprint that cannot be read leaves the list as it is.</summary>
+    public static async Task<string> OpenModules(JsonObject? p = null)
+    {
+        var wanted = p?["model_sha256_of"]?.GetValue<string>();
+        var targets = new List<(JsonObject Row, IAggregatorPresenter Tab)>();
+        JsonObject listing;
+        try { listing = await Ui.Run(() => OpenModulesNow(wanted, targets), UiGate.Read, "list_open_modules"); }
+        catch (UiBusyException) { throw; }
+        catch (Exception ex) { return Server.Fail(Server.Unwrap(ex)); }
+        if (targets.Count > 0) await ModelFingerprints(targets);
+        return Server.Ok(listing);
+    }
+
+    private static async Task ModelFingerprints(List<(JsonObject Row, IAggregatorPresenter Tab)> targets)
+    {
+        try
+        {
+            var read = await Ui.Run(() => targets.Select(target =>
+            {
+                var e = target.Tab.ActiveESpace;
+                if (e == null || !target.Tab.HasOpenedActiveESpace || target.Tab.ServerSilentMode || e.Key.ToString() != target.Row["key"]?.ToString())
+                    return (Sha: (string?)null, Bytes: 0, Ms: 0L);
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                using var ms = e.SaveToMemoryStream();
+                var bytes = ms.ToArray();
+                return (Sha: MergeRollbackProof.ModelSha256Hex(bytes), Bytes: bytes.Length, Ms: sw.ElapsedMilliseconds);
+            }).ToList(), UiGate.Model, "list_open_modules: model fingerprint");
+            for (var i = 0; i < targets.Count; i++)
+            {
+                if (read[i].Sha == null) continue;
+                targets[i].Row["modelSha256"] = read[i].Sha; targets[i].Row["modelBytes"] = read[i].Bytes; targets[i].Row["modelSha256Ms"] = read[i].Ms;
+            }
+        }
+        // A busy UI or a failed save leaves the rows without a fingerprint: the caller captures as before.
+        catch (UiBusyException) { UiGate.Forget(); Server.Log("list_open_modules model fingerprint: UI busy"); }
+        catch (Exception ex) { Server.Log("list_open_modules model fingerprint: " + Server.Unwrap(ex)); }
+    }
+
+    private static JsonObject OpenModulesNow(string? fingerprintOf, List<(JsonObject Row, IAggregatorPresenter Tab)> targets)
     {
         var arr = new JsonArray();
         var runtime = ServiceStudio.Runtime.Instance as RuntimeImplementation;
@@ -53,9 +96,13 @@ internal static partial class Reads
             if (index >= 0 && e != null) perWindow[index].Add(JsonValue.Create(e.Name));
             // serverOperation (C31, capability list_open_modules:server_operation): a publish or upload running for the module.
             // pendingDialogs (C10, list_open_modules:dialogs): the tab's own modal presenters (Manage Dependencies, merge editor).
-            arr.Add(new JsonObject { ["name"] = e?.Name, ["key"] = e?.Key.ToString(), ["hasESpace"] = e != null, ["environment"] = Studio.EnvironmentHost(a), ["isModified"] = e?.WasModifiedSinceLastSave, ["hasOpenedActiveESpace"] = a.HasOpenedActiveESpace, ["serverSilentMode"] = a.ServerSilentMode, ["presenter"] = a.GetType().Name,
+            var row = new JsonObject { ["name"] = e?.Name, ["key"] = e?.Key.ToString(), ["hasESpace"] = e != null, ["environment"] = Studio.EnvironmentHost(a), ["isModified"] = e?.WasModifiedSinceLastSave, ["hasOpenedActiveESpace"] = a.HasOpenedActiveESpace, ["serverSilentMode"] = a.ServerSilentMode, ["presenter"] = a.GetType().Name,
                 ["serverOperation"] = e == null ? null : PublishHandler.ServerOperation(a),
-                ["pendingDialogs"] = DialogScope.Presenters(blockedBy), ["window"] = index >= 0 ? index : null });
+                ["pendingDialogs"] = DialogScope.Presenters(blockedBy), ["window"] = index >= 0 ? index : null };
+            arr.Add(row);
+            if (e != null && a.HasOpenedActiveESpace && !a.ServerSilentMode && !string.IsNullOrWhiteSpace(fingerprintOf) && targets.Count < 4
+                && (string.Equals(e.Name, fingerprintOf, StringComparison.OrdinalIgnoreCase) || e.Key.ToString() == fingerprintOf))
+                targets.Add((row, a));
         }
         var environments = windowList.Select(w => w.ServerCommunicationsProvider?.LoginInfo)
             .Where(login => !string.IsNullOrEmpty(login?.UserName) && !string.IsNullOrEmpty(login.HostInfo?.HostName))
@@ -63,10 +110,10 @@ internal static partial class Reads
         var windows = new JsonArray(windowList.Select((w, i) => (JsonNode)new JsonObject { ["index"] = i,
             ["title"] = Studio.Prop(w, "Title")?.ToString() ?? Studio.Prop(w, "Caption")?.ToString(),
             ["environment"] = w.ServerCommunicationsProvider?.LoginInfo?.HostInfo?.HostName?.ToLowerInvariant(), ["modules"] = perWindow[i] }).ToArray());
-        return Server.Ok(new JsonObject { ["count"] = arr.Count, ["modules"] = arr,
+        return new JsonObject { ["count"] = arr.Count, ["modules"] = arr,
             ["environments"] = new JsonArray(environments.Select(host => (JsonNode)JsonValue.Create(host)!).ToArray()),
-            ["windows"] = windows, ["dialogs"] = blocking.Count == 0 ? Dialogs.BlockedBy(null) : DialogScope.Union(blocking) });
-    });
+            ["windows"] = windows, ["dialogs"] = blocking.Count == 0 ? Dialogs.BlockedBy(null) : DialogScope.Union(blocking) };
+    }
 
     // C28: the validation generation (capability get_errors:generation), shared by get_errors of both bridges
     // (ReadsKernel.cs, ReadsThin.cs). settle:true (the kernel's verify after a merge) first waits, bounded and inside the

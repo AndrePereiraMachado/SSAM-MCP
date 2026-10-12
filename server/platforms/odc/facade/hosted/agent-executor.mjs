@@ -21,6 +21,15 @@ import { startRelay } from './o11-relay.mjs';
 
 // The machine kinds of 4.4 this executor forwards; file.* stay between the mirror and the agent.
 export const AGENT_KINDS = Object.freeze(['studio.processes', 'odc.pipe', 'odc.attach', 'o11.bridge', 'o11.connect', 'o11.selected']);
+// servidor/fase4-24 (R3 of PLANO-24-PRODUCAO): the private transports of the 24th release never cross machines. Their
+// bridge commands hand a session or a vault secret over a local pipe of the machine that runs SSAM (Ssam.PrivateTransport)
+// or read the vault of that machine: refused here, before anything is staged or sent, whatever path asked for them
+// (OdcAccess, the Service Center client, studio_command, o11_studio). The agent refuses them as well (4.8).
+export const HOSTED_REFUSED_COMMANDS = Object.freeze(['portal-private-call', 'portal-private-download', 'portal-api-client-fixture-cleanup', 'portal-upload']);
+export const HOSTED_REFUSED_METHODS = Object.freeze(['sc_private_http', 'sc_private_http_cookie']);
+const HOSTED_ONLY_SESSION = 'HOSTED_STUDIO_SESSION_ONLY';
+const privateTransport = what => what + ' uses a private transport of the machine that runs SSAM (a local pipe and its vault), which is never used in hosted mode: '
+  + 'only the session of the user\'s own Studio is a path. Nothing was sent.';
 const MARGIN_MS = 60000;
 // The server-side deadline of each kind (4.4): the agent applies the operation's own timeout; this is the safety net.
 const DEADLINES = {
@@ -116,6 +125,9 @@ export class AgentExecutor {
   }
 
   async pipe(params, options) {
+    const command = String(params?.args?.[0] ?? '');
+    if (HOSTED_REFUSED_COMMANDS.includes(command))
+      throw Object.assign(new PipeError(privateTransport('The bridge command ' + command), { code: HOSTED_ONLY_SESSION, sent: false }), { executed: false });
     let staged;
     try { staged = await stageOdcPipe(params, this.mirror); }
     catch (error) { throw pipeError(error, 'before'); }
@@ -129,6 +141,8 @@ export class AgentExecutor {
   // The port and authorization of the caller are dropped here: the agent uses its own record and its own key.
   async bridge(params, options) {
     const { method, params: inner, timeoutMs } = params;
+    if (HOSTED_REFUSED_METHODS.includes(String(method)))
+      throw new BridgeError(privateTransport('The bridge method ' + method), { code: HOSTED_ONLY_SESSION, method, executed: false });
     let staged;
     try { staged = await stageO11Bridge({ method, params: inner }, this.mirror); }
     catch (error) { throw bridgeError(error, method, 'before'); }

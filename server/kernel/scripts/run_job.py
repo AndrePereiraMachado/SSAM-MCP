@@ -23,6 +23,7 @@ CLI = LANE.cli
 sys.path.insert(0, str(ROOT / "scripts"))
 import anvil_cli  # noqa: E402  (worker residente quando esta de pe; senao processo frio)
 import odc_worker  # noqa: E402  (o mesmo, para a faixa ODC)
+import job_artifacts  # noqa: E402
 try:
     import worker_pool  # noqa: E402  (piscina: varios workers, um despachante)
 except Exception:
@@ -137,6 +138,7 @@ def main() -> int:
                     help="o11 (padrao): este runner sobre um fixture do Anvil; odc: o mesmo job pelo CLI anvil-odc (docs/lanes.md)")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
+    bound_inputs = job_artifacts.capture(args.base, args.job) if args.lane == "odc" and args.base and pathlib.Path(args.base).is_file() else None
     captured = []
     if args.capture_producer:
         if args.lane == "odc":
@@ -174,6 +176,15 @@ def main() -> int:
             d = anvil_cli.apply(args.base, args.job, out, producers=args.producer)
     if captured:
         d["capturedProducers"] = captured
+    if bound_inputs:
+        try:
+            if proof := job_artifacts.bind(bound_inputs, out, d):
+                d["artifacts"] = proof
+        except (OSError, ValueError, KeyError) as error:
+            d["ok"] = False
+            d["artifactError"] = {"code": "JOB_ARTIFACT_BINDING_FAILED", "message": str(error)}
+            if isinstance(d.get("data"), dict):
+                d["data"]["accepted"] = False
     result_path = pathlib.Path(out).with_suffix(".result.json")
     result_path.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
     x = d.get("data") or {}

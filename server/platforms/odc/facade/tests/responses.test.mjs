@@ -58,6 +58,19 @@ test('reference hints become ssam_reference; anvil signature becomes o11_job cap
   assert.doesNotMatch(r.text, /anvil signature/);
 });
 
+test('the FUNCTION_UNKNOWN fix of a refused job keeps its lookup: ssam_reference functions, with the continuation', () => {
+  // The kernel's fix when no built-in is close to the name (JobRunner.cs; VerifyAnchorTests asserts the kernel side).
+  const fix = 'no built-in, no function of the module or of its references and no action of this job is named like Zzqqxxw: '
+    + 'write the built-in the expression means (ToLower, Substr, If, ...), or call an action of the module marked Function; the built-ins: `anvil functions --find Zzqqxxw`';
+  const refusal = { ok: false, code: 'PREFLIGHT_REFUSED', error: 'the job was refused', problems: [
+    { phase: 'base', op: 7, pointer: '/ops/7/data/actions/0/steps/0/assign/N', code: 'FUNCTION_UNKNOWN', severity: 'error', fix }] };
+  const shaped = shapeToolResult('o11_deliver', { module: 'M' }, { content: [{ type: 'text', text: JSON.stringify(refusal) }], structuredContent: refusal, isError: true });
+  const value = shaped.structuredContent;
+  assert.match(value.problems[0].fix, /or call an action of the module marked Function; the built-ins: ssam_reference \{lane:"o11", kind:"functions", query:"Zzqqxxw"\}$/);
+  assert.deepEqual(value.continuation, { tool: 'ssam_reference', arguments: { lane: 'o11', kind: 'functions', query: 'Zzqqxxw' }, why: value.continuation.why });
+  assert.doesNotMatch(JSON.stringify(value), SHELL);
+});
+
 test('ssam and odc CLI lines become the tool with the same arguments', () => {
   const cases = [
     ['.\\ssam inspect --lane o11 --oml "C:\\c\\Q.oml" --path @K12 --expectedSourceSha256 ' + 'a'.repeat(64),
@@ -241,4 +254,13 @@ test('ssam_evidence passes untouched: the evidence says what its file says, and 
   assert.equal(shapeToolResult('ssam_evidence', { file: 'C:\\x\\diario.jsonl' }, reply, { lane: 'o11' }), reply);
   // the same text in another tool's answer is still rewritten
   assert.match(JSON.stringify(shapeToolResult('o11_job', {}, reply, { lane: 'o11' }).structuredContent), /o11_deliver/);
+});
+
+// 2026-10-12: "entregue" carries what the job created (job-summary.mjs), so no ssam_map follows the delivery.
+test('a delivered studio_deliver keeps the summary of the job beside "entregue"; a refusal never carries one', () => {
+  const summary = { ops: 2, actions: ['Pedido_Get(PedidoId: Pedido Identifier) -> (Pedido: Pedido)'], entities: [{ name: 'Pedido', attributes: 3 }] };
+  const delivered = compactDelivery('studio_deliver', {}, { ok: true, feature: 'F', merge: { merged: true, strictlyEqual: true }, summary, steps: [], totalSeconds: 4 });
+  assert.deepEqual(delivered, { ok: true, result: 'entregue', summary });
+  const refused = compactDelivery('studio_deliver', {}, { ok: false, failed: 'build', error: 'x', summary });
+  assert.equal(refused.summary, undefined);
 });

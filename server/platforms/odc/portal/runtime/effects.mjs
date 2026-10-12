@@ -18,6 +18,7 @@ const JOBS = new Set([
   'external-library-generation-api-v1:post:/assets/{assetKey}/revisions/{revision}/source-code-download',
 ]);
 const MUTATION_JOBS = new Set([
+  'user-access-management-api-v1:post:/users/bulk',
   'deployments-api-v1:post:/deployment-operations',
   'deployments-api-v1:post:/publish-operations',
   'build-operations-api-v1:post:/build-operations',
@@ -41,6 +42,8 @@ export const readable = operation => operation.readOnly || SEARCH_POSTS.has(oper
 
 // The read that follows each job to a terminal state. key: field of the POST answer that names the operation.
 export const OPERATION_STATUS = Object.freeze({
+  'bulk-users': { start: 'user-access-management-api-v1:post:/users/bulk', read: 'user-access-management-api-v1:get:/users/bulk/{key}',
+    param: 'key', key: 'key', field: 'status', terminal: ['Finished', 'FinishedWithErrors'], failed: ['FinishedWithErrors'] },
   deployment: { start: DEPLOY, read: 'deployments-api-v1:get:/deployment-operations/{operationKey}',
     messages: 'deployments-api-v1:get:/deployment-operations/{operationKey}/messages', param: 'operationKey', key: 'key',
     field: 'status', terminal: ['Finished', 'FinishedWithError'], failed: ['FinishedWithError'] },

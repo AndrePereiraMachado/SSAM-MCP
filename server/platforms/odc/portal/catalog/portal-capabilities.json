@@ -5,10 +5,241 @@
   "scope": "Evidence-backed capability discovery, not a claim of complete tenant coverage or live authorization.",
   "publicSourceCommit": "fb015a80ad9d1396800eca69836aef08297a0efb",
   "accessPaths": {
-    "studio-web": "Portal window inside the user's own ODC Studio (bridge v32 portal-session fetch, runtime/studio-portal.mjs): each screenservice runs as a same-origin call of the page, with its own cookies and CSRF token, which never reach the facade. The user signs in once with odc_portal_login (SSO/MFA included). Used whenever the Studio holds a session on the tenant.",
-    "vault": "odc3 broker (runtime/odc3-context.mjs) signed in with the Portal account of the Windows vault entry SSAM/ODC3/<host>/Portal; password sign-in only, no SSO/MFA. Used with no ODC Studio open, or with auth:\"portal-credential\"."
+    "studio-http": "Requires an explicit portal-session:headless capability and an authenticated native transport. Bridge v44 does not provide it; the legacy Portal window is disabled. Native SSO and secretRefs over this internal transport remain unproved.",
+    "vault": "odc3 broker (runtime/odc3-context.mjs) signed in with the Portal account of the Windows vault entry SSAM/ODC3/<host>/Portal; password sign-in only, no SSO/MFA. Used by auto when native headless support is absent, or explicitly with auth:\"portal-credential\". A compatible saved profile is selected without opening UI."
   },
   "capabilities": [
+    {
+      "id": "portal.api-client-fixtures",
+      "title": "Disposable API Client private creation and owned deletion",
+      "keywords": "api client fixture criação exclusão cofre credencial",
+      "kind": "internal",
+      "publicCoverage": "native_portal_contract",
+      "implementation": "partial_source",
+      "authentication": "host_managed_portal_session",
+      "currentLiveEvidence": "not_verified",
+      "access": {
+        "tools": ["odc_portal_write", "odc_portal_read"],
+        "paths": ["vault"],
+        "reads": [],
+        "writes": ["apiClients.create", "apiClients.delete"],
+        "typedReads": ["apiClients.fixtureCredentialStatus"],
+        "unmapped": [],
+        "offlineTests": ["tests/api-client-fixture.test.mjs", "tests/api-client-inventory.test.mjs", "tests/private-portal.test.mjs", "tests/access.test.mjs"]
+      },
+      "limitations": ["Only short-lived SSAMApiClientProof fixtures with zero permissions and no notification. Bridge v84 Release is loaded. Original create and delete both remain uncertain; never replay either. Detail confirmed an active own fixture with zero permissions and real creation date; list defaults cannot prove configuration. Partial cleanup binds original grant, baseline, exact new identity and current detail without fabricating private capture. Remote absence and end-to-end capture remain unproved. apiClients.fixtureCredentialStatus is a read-only local presence check requiring the original native reservation and matching authenticated Studio principal; it neither reads nor returns credentials and cannot prove remote deletion. Fixture credential selection for authentication remains unimplemented. See docs/PORTAL-API-CLIENT-PARTIAL-CLEANUP-LIVE-20261010.md."]
+    },
+    {
+      "id": "portal.api-client-reads",
+      "title": "API Client inventory and statuses",
+      "keywords": "api client inventory status clientes autenticação permissões",
+      "kind": "internal",
+      "publicCoverage": "native_portal_contract",
+      "implementation": "implemented_source",
+      "authentication": "host_managed_portal_session",
+      "currentLiveEvidence": "bounded_read_corporate_2026-10-10",
+      "access": {
+        "tools": ["odc_portal_read"],
+        "paths": ["vault"],
+        "reads": ["apiClients.list", "apiClients.statuses", "apiClients.detail"],
+        "writes": [],
+        "unmapped": [],
+        "offlineTests": ["tests/portal-navigation.test.mjs", "tests/api-client-inventory.test.mjs"],
+        "liveEvidence": "docs/PORTAL-API-CLIENT-INVENTORY-LIVE-20261010.md"
+      },
+      "limitations": ["Exact APIClients.apiclients inventory and APIClients.apiclient detail data actions only. Detail requires exact id UUID and _idInDataFetchStatus=1; positive reads passed live. An absent UUID returned generic OS-BERT-00000, which cannot prove deletion. List rows return defaults for state/configuration; only detail proves those fields. Native zero Count/Limit/Offset counters are ignored. Requested offsets0/1/2, one-record pages and name filters passed live. The typed reader validates page sizes, stable TotalResults and distinct identities, aggregates within maxPages, and marks nonzero-offset or truncated scans incomplete. Completeness concerns requested filters and authenticated visibility, not an atomic snapshot. No write is performed by these reads. Native bridge v84 is loaded. See docs/PORTAL-API-CLIENT-PARTIAL-CLEANUP-LIVE-20261010.md."]
+    },
+    {
+      "id": "portal.navigation",
+      "title": "Authenticated Portal navigation",
+      "keywords": "menu navigation govern management api clients users navegação",
+      "kind": "internal",
+      "publicCoverage": "native_portal_contract",
+      "implementation": "implemented_source",
+      "authentication": "host_managed_portal_session",
+      "currentLiveEvidence": "read_corporate_2026-10-10",
+      "access": {
+        "tools": ["odc_portal_read"],
+        "paths": ["vault"],
+        "reads": ["portal.navigation"],
+        "writes": [],
+        "unmapped": [],
+        "offlineTests": ["tests/portal-navigation.test.mjs", "tests/portal-metadata.test.mjs"],
+        "liveEvidence": "docs/PORTAL-NAVIGATION-LIVE-20261010.md"
+      },
+      "limitations": ["Menu options describe navigation for the authenticated Portal profile at read time. A visible item does not prove API permissions or access to its destination. Only the exact shared Aside action is exposed; header and light-access-token actions remain refused. Native bridge v84 is loaded with the exact read allowlist; the original live navigation proof used the headless vault broker."]
+    },
+    {
+      "id": "portal.custom-search-connection",
+      "title": "Owned Custom AI Search connection test and save",
+      "keywords": "custom ai search busca conexão teste salvar search service connection",
+      "kind": "internal",
+      "publicCoverage": "native_portal_contract",
+      "implementation": "partial_source",
+      "authentication": "host_managed_portal_session",
+      "currentLiveEvidence": "native_test_timeout_corporate_2026-10-10",
+      "access": {
+        "tools": ["odc_portal_read", "odc_portal_write"],
+        "paths": ["studio-http", "vault"],
+        "reads": ["connections.detail", "connections.testStatus"],
+        "writes": ["connections.customSearchTest", "connections.customSearchSave"],
+        "unmapped": [],
+        "offlineTests": ["tests/custom-search-connection-plan.test.mjs", "tests/custom-search-connection-approval.test.mjs"],
+        "liveEvidence": "docs/PORTAL-CUSTOM-SEARCH-CONNECTION-LIVE-20261010.md"
+      },
+      "limitations": [
+        "Only new single-stage empty-header connections to an own currently deployed WebApplication. Authorization binds the plan and owned creation receipt; live stage, environment domains and deployed revision are required.",
+        "Save requires a native test receipt and successful exact stage. Only typed persisted configuration readback confirms the receipt; uncertain writes are never replayed.",
+        "Synthetic REST provider was verified live and deleted in the first cycle. New own provider is published; one native test timed out at 15s without returning its ID, receipt 1cd1c3a0-d8b8-4ace-b02d-18053578bc3d remains uncertain and was not replayed. Complete list and Repository are empty and name availability is true; these reads do not prove the test result. Test/save now use a locally tested bounded 60s deadline. Saved SearchServiceConnection, deletion and retained provider cleanup remain unverified. Authenticated headers and existing-connection edits are not supported."
+      ]
+    },
+    {
+      "id": "portal.mobile-extensibility-reads",
+      "title": "Native mobile extensibility prerequisites",
+      "keywords": "mobile extensibility stages revision setting binary flag",
+      "kind": "internal",
+      "publicCoverage": "native_portal_contract",
+      "implementation": "partial_source",
+      "authentication": "host_managed_portal_session",
+      "currentLiveEvidence": "bounded_fixture_corporate_2026-10-10",
+      "access": {
+        "tools": ["odc_portal_read", "odc_portal_write"],
+        "paths": ["studio-http", "vault"],
+        "reads": ["mobileExtensibility.stages", "mobileExtensibility.revision", "mobileExtensibility.setting"],
+        "typedReads": ["mobileExtensibility.downloadFile"],
+        "writes": ["mobileExtensibility.uploadFile", "mobileExtensibility.convertFile", "mobileExtensibility.saveFile"],
+        "unmapped": [],
+        "offlineTests": ["tests/mobile-routes.test.mjs", "tests/mobile-binary-upload.test.mjs", "tests/mobile-binary-save.test.mjs", "tests/mobile-extensibility-read.test.mjs"],
+        "liveEvidence": "docs/PORTAL-MOBILE-PRIVATE-FILE-LIVE-20261010.md"
+      },
+      "limitations": ["Bridge v74 live proof: private signed-URL handoff, temporary upload SHA256, native file save, configuration/metadata readback, private persisted content download with exact 53-byte SHA256 and independent local artifact hash, complete reset and own app deletion/list absence/GET404. Typed mobileExtensibility.downloadFile takes only {saveOperationUuid}; confirmed own creation/upload/save, matching grant and fresh exact nonsecret BinaryUrl scope are required. The private reader uses native screen context and minimal action envelope; absent MIME becomes octet-stream without relaxing content verification. No caller URL or raw native bytes are exposed. Inline BinaryData object support is locally tested; the live response was inline-string. Physical blob cleanup remains unproved. The historical v64 upload receipt remains uncertain and was never replayed. Empty native deployment/revision fields do not prove a revision. Signed-upload secret/library fixture cycles are recorded separately. Bridge v82 implements private native Base64 conversion, hash-bound single-use save and nonsecret persisted download; current corporate-tenant stage flag=false, so Base64 remote execution remains unproved. Secret persisted bytes and physical blob cleanup remain unproved. See docs/PORTAL-MOBILE-BASE64-PRIVATE-20261010.md."]
+    },
+    {
+      "id": "portal.library-release",
+      "title": "Low-code library release and revision prerequisites",
+      "keywords": "biblioteca release versão publicar revisão",
+      "kind": "internal",
+      "publicCoverage": "native_portal_contract",
+      "implementation": "implemented_source",
+      "authentication": "host_managed_portal_session",
+      "currentLiveEvidence": "bounded_fixture_corporate_2026-10-09",
+      "access": {
+        "tools": [
+          "odc_portal_read",
+          "odc_portal_write"
+        ],
+        "paths": [
+          "studio-http",
+          "vault"
+        ],
+        "reads": [
+          "libraries.releaseRevision",
+          "libraries.releaseSettings"
+        ],
+        "writes": [
+          "libraries.release"
+        ],
+        "unmapped": [],
+        "offlineTests": [
+          "tests/asset-build-approval.test.mjs",
+          "tests/access.test.mjs"
+        ],
+        "liveEvidence": "docs/PORTAL-LIBRARY-RELEASE-LIVE-20261009.md"
+      },
+      "limitations": [
+        "Release requires exact library, revision, completed publication and contextual approval. Historical fixture evidence does not authenticate the current caller."
+      ]
+    },
+    {
+      "id": "portal.mobile-build-types",
+      "title": "Native Android and iOS build-type inventory",
+      "keywords": "mobile Android iOS simulator tipos pacote",
+      "kind": "internal",
+      "publicCoverage": "native_portal_contract",
+      "implementation": "implemented_source",
+      "authentication": "host_managed_portal_session",
+      "currentLiveEvidence": "bounded_read_corporate_2026-10-09",
+      "access": {
+        "tools": [
+          "odc_portal_read"
+        ],
+        "paths": [
+          "studio-http",
+          "vault"
+        ],
+        "reads": [
+          "mobile.androidBuildTypes",
+          "mobile.iosBuildTypes"
+        ],
+        "writes": [],
+        "unmapped": [],
+        "offlineTests": [
+          "tests/access.test.mjs"
+        ],
+        "liveEvidence": "docs/PORTAL-MOBILE-IOS-CONTRACT-20261009.md"
+      },
+      "limitations": [
+        "Build-type reads do not generate a package, configure signing or prove Android/iOS compilation. Package generation and restoration remain separate requirements."
+      ]
+    },
+    {
+      "id": "portal.knowledge-bases",
+      "title": "Knowledge bases: inventory, owned lifecycle, file upload and private download",
+      "keywords": "base conhecimento knowledge bases criar excluir chunking divisão texto fontes download arquivo hash privado",
+      "kind": "internal",
+      "publicCoverage": "native_portal_contract",
+      "implementation": "implemented_source",
+      "authentication": "host_managed_portal_session",
+      "currentLiveEvidence": "bounded_fixture_corporate_2026-10-09",
+      "access": {
+        "tools": [
+          "odc_portal_read",
+          "odc_portal_write"
+        ],
+        "paths": [
+          "studio-http",
+          "vault"
+        ],
+        "reads": [
+          "knowledgeBases.list",
+          "knowledgeBases.createStages",
+          "knowledgeBases.chunkingMethods",
+          "knowledgeBases.consumers",
+          "knowledgeBases.uploadLimits",
+          "knowledgeBases.fileEnums",
+          "knowledgeBases.detail",
+          "knowledgeBases.dataSources",
+          "knowledgeBases.dataSource",
+          "knowledgeBases.files",
+          "knowledgeBases.sourceStages",
+          "knowledgeBases.fileDetail"
+        ],
+        "typedReads": ["knowledgeBases.downloadFile"],
+        "writes": [
+          "knowledgeBases.create",
+          "knowledgeBases.delete",
+          "knowledgeBases.uploadFile"
+        ],
+        "unmapped": [],
+        "offlineTests": [
+          "tests/knowledge-base.test.mjs",
+          "tests/access.test.mjs",
+          "tests/knowledge-file-read.test.mjs",
+          "tests/knowledge-file-plan.test.mjs",
+          "tests/knowledge-file-upload.test.mjs"
+        ],
+        "liveEvidence": "docs/PORTAL-KNOWLEDGE-UPLOAD-LIVE-20261009.md"
+      },
+      "limitations": [
+        "knowledgeBases.downloadFile takes only {uploadOperationUuid,fileId}. It requires a private owned upload receipt bound to the same grant as confirmed base creation, five fresh scope reads, bridge v66 and the matching authenticated Studio/private profile. The fixed source-list action and signed storage URL stay in native transport; only a verified private file path, byte length and SHA256 return. Current storage support is HTTPS plat-* regional Amazon S3 only; redirects and other hosts are refused. Real downloaded bytes and ingestion remain unproved live. Legacy receipts without originOperationUuid are refused; uploads are never replayed.",
+        "Creation supports one empty upload_files source with an explicitly approved exact body and portfolio. Upload requires a confirmed own creation receipt, exact approved content and complete prior file inventory. A 131-byte synthetic upload reached native Indexed live, followed by base deletion confirmed/absent/404; zero chunk/vector counts leave complete ingestion unproved. No search execution.",
+        "Upload has a 256 KiB JSON transport budget. Server-side 20 MiB limits do not imply large-file support. Indexed observation plus native upload acceptance confirms native indexing status; content download/hash verification is separate. Lost upload responses stay uncertain without replay.",
+        "Deletion requires the original own-fixture creation receipt, matching human consent and proposal, exact current state and no consumers.",
+        "Create and delete may remain accepted while asynchronous work proceeds. Repeat the same operation UUID and input to reconcile by read without resending.",
+        "The visible inventory must be complete. Pagination with more than one page remains unsupported by these lifecycle guards.",
+        "Live evidence is a historical bounded fixture cycle, not proof of current authentication, permission in other tenants, populated bases or content removal in each stage."
+      ]
+    },
     {
       "id": "public.asset-configurations",
       "title": "App, library and agent settings",
@@ -156,9 +387,10 @@
       "publicCoverage": "contract",
       "implementation": "public_runtime",
       "offlineEvidence": "tests/contracts.test.mjs",
-      "currentLiveEvidence": "not_verified",
+      "currentLiveEvidence": "bounded_configuration_fixture_corporate_2026-10-10",
       "authentication": "api_client_oauth_client_credentials",
       "limitations": [
+        "Public Text extensibility value plus nonempty metadata and null reset are proved in docs/PORTAL-MOBILE-METADATA-VALUE-LIVE-20261010.md. This does not prove metadata-only persistence, binary settings, secrets, signing variants or the entire API.",
         "Signing material is sensitive; mobile build logs are not runtime logs."
       ]
     },
@@ -250,15 +482,35 @@
     {
       "id": "portal.runtime-logs",
       "access": {
-        "tools": ["odc_portal_read"],
-        "paths": ["studio-web", "vault"],
-        "reads": ["monitoring.stages", "monitoring.applications", "monitoring.logs", "monitoring.errors", "monitoring.detail"],
-        "offlineTests": ["tests/access.test.mjs", "tests/studio-portal.test.mjs", "tests/portal-read.test.mjs"],
+        "tools": [
+          "odc_portal_read"
+        ],
+        "paths": [
+          "studio-http",
+          "vault"
+        ],
+        "reads": [
+          "monitoring.stages",
+          "monitoring.applications",
+          "monitoring.logs",
+          "monitoring.errors",
+          "monitoring.detail"
+        ],
+        "offlineTests": [
+          "tests/access.test.mjs",
+          "tests/studio-portal.test.mjs",
+          "tests/portal-read.test.mjs"
+        ],
         "liveEvidence": "not_verified"
       },
       "localAdapter": {
         "file": "runtime/portal-read.mjs",
-        "operations": ["monitoring.stages", "monitoring.applications", "monitoring.logs", "monitoring.errors"],
+        "operations": [
+          "monitoring.stages",
+          "monitoring.applications",
+          "monitoring.logs",
+          "monitoring.errors"
+        ],
         "offlineTests": "tests/portal-read.test.mjs",
         "hostWiring": "odc3_registered_final_broker_reload_required",
         "liveEvidence": "not_verified"
@@ -306,15 +558,28 @@
     {
       "id": "portal.trace-correlation",
       "access": {
-        "tools": ["odc_portal_read"],
-        "paths": ["studio-web", "vault"],
-        "reads": ["monitoring.detail", "monitoring.traceLogs"],
-        "offlineTests": ["tests/access.test.mjs", "tests/portal-read.test.mjs"],
+        "tools": [
+          "odc_portal_read"
+        ],
+        "paths": [
+          "studio-http",
+          "vault"
+        ],
+        "reads": [
+          "monitoring.detail",
+          "monitoring.traceLogs"
+        ],
+        "offlineTests": [
+          "tests/access.test.mjs",
+          "tests/portal-read.test.mjs"
+        ],
         "liveEvidence": "not_verified"
       },
       "localAdapter": {
         "file": "runtime/portal-read.mjs",
-        "operations": ["monitoring.detail"],
+        "operations": [
+          "monitoring.detail"
+        ],
         "offlineTests": "tests/portal-read.test.mjs",
         "hostWiring": "odc3_registered_final_broker_reload_required",
         "liveEvidence": "not_verified"
@@ -353,15 +618,31 @@
     {
       "id": "portal.connection-discovery",
       "access": {
-        "tools": ["odc_portal_read", "odc_external_db_connection"],
-        "paths": ["studio-web", "vault"],
-        "reads": ["connections.providers", "connections.list", "connections.settings"],
-        "offlineTests": ["tests/access.test.mjs", "tests/portal-read.test.mjs"],
+        "tools": [
+          "odc_portal_read",
+          "odc_external_db_connection"
+        ],
+        "paths": [
+          "studio-http",
+          "vault"
+        ],
+        "reads": [
+          "connections.providers",
+          "connections.list",
+          "connections.settings"
+        ],
+        "offlineTests": [
+          "tests/access.test.mjs",
+          "tests/portal-read.test.mjs"
+        ],
         "liveEvidence": "not_verified"
       },
       "localAdapter": {
         "file": "runtime/portal-read.mjs",
-        "operations": ["connections.providers", "connections.list"],
+        "operations": [
+          "connections.providers",
+          "connections.list"
+        ],
         "offlineTests": "tests/portal-read.test.mjs",
         "hostWiring": "odc3_registered_final_broker_reload_required",
         "liveEvidence": "not_verified"
@@ -405,13 +686,40 @@
     {
       "id": "portal.external-db-management",
       "access": {
-        "tools": ["odc_external_db_connection", "odc_portal_read", "odc_portal_write"],
-        "paths": ["studio-web", "vault"],
-        "reads": ["connections.testStatus", "connections.relationalNameAvailability", "connections.connection", "connections.entities", "connections.selectedEntities", "connections.entityAttributes"],
-        "writes": ["connections.relationalTest", "connections.relationalSave", "connections.importEntities"],
-        "unmapped": ["connections.delete"],
-        "secrets": "The database user and password live only in the Windows vault entry SSAM/ODC3/<host>/DB/<name> (private prompt). They reach the request as secretRefs: only on the studio-web path, where the bridge reads the entry inside the ODC Studio right before the page's call (a bridge without secretRefs refuses and nothing is sent). The vault path refuses test/create/save (STUDIO_REQUIRED): a secret value never enters the facade process.",
-        "offlineTests": ["tests/access.test.mjs", "tests/studio-portal.test.mjs", "tests/bridge-agreement.test.mjs"],
+        "tools": [
+          "odc_external_db_connection",
+          "odc_portal_read",
+          "odc_portal_write"
+        ],
+        "paths": [
+          "studio-http",
+          "vault"
+        ],
+        "reads": [
+          "connections.testStatus",
+          "connections.relationalNameAvailability",
+          "connections.connection",
+          "connections.detail",
+          "connections.entities",
+          "connections.selectedEntities",
+          "connections.entityAttributes",
+          "connections.revisionAndStages",
+          "connections.assetForStage"
+        ],
+        "writes": [
+          "connections.relationalTest",
+          "connections.relationalSave",
+          "connections.importEntities",
+          "connections.delete"
+        ],
+        "unmapped": [],
+        "deleteScope": "Only an approved temporary SQL Server connection bound to its original successful test receipt, unchanged endpoint/stage and zero imported objects/actions. No revision/ETag is available in the native delete action. Live validation pending.",
+        "secrets": "The database user and password live only in the Windows vault entry SSAM/ODC3/<host>/DB/<name> (provisioned privately before headless execution). They reach the request as secretRefs: only on an authenticated native headless path, where the bridge reads the entry inside the ODC Studio right before native HTTP send. With portal-private-call:headless:secretRefs, a matching private Portal profile hands off its own request-scoped session through a current-user named pipe. A database secret never enters the facade process. Other bridges refuse before send; live DB validation remains pending.",
+        "offlineTests": [
+          "tests/access.test.mjs",
+          "tests/studio-portal.test.mjs",
+          "tests/bridge-agreement.test.mjs"
+        ],
         "liveEvidence": "not_verified"
       },
       "title": "External database test, create and entity import",
@@ -463,13 +771,35 @@
     {
       "id": "portal.agent-connections",
       "access": {
-        "tools": ["odc_portal_read", "odc_portal_write"],
-        "paths": ["studio-web", "vault"],
-        "reads": ["connections.mcpNameAvailability", "connections.mcpAuthenticationTypes", "connections.mcpTransportTypes", "connections.mcpAuthenticationSchemes", "connections.mcpKeyLocations", "connections.actions", "connections.selectedActions"],
-        "writes": ["connections.mcpTest", "connections.mcpSave"],
-        "unmapped": ["connections.delete"],
+        "tools": [
+          "odc_portal_read",
+          "odc_portal_write"
+        ],
+        "paths": [
+          "studio-http",
+          "vault"
+        ],
+        "reads": [
+          "connections.mcpNameAvailability",
+          "connections.mcpAuthenticationTypes",
+          "connections.mcpTransportTypes",
+          "connections.mcpAuthenticationSchemes",
+          "connections.mcpKeyLocations",
+          "connections.actions",
+          "connections.selectedActions"
+        ],
+        "writes": [
+          "connections.mcpTest",
+          "connections.mcpSave",
+          "connections.importActions"
+        ],
+        "unmapped": [],
+        "deleteScope": "Deletion of agent/MCP connections is not implemented. The temporary SQL Server deletion helper does not cover these providers.",
         "secrets": "Only MCP servers without a secret: secretRefs name database entries only (password|username), and secret-named input fields are refused as arguments.",
-        "offlineTests": ["tests/access.test.mjs", "tests/studio-portal.test.mjs"],
+        "offlineTests": [
+          "tests/access.test.mjs",
+          "tests/studio-portal.test.mjs"
+        ],
         "liveEvidence": "not_verified"
       },
       "title": "MCP and agent connection configuration",
@@ -518,12 +848,46 @@
     {
       "id": "portal.agent-evaluations",
       "access": {
-        "tools": ["odc_portal_read", "odc_portal_write"],
-        "paths": ["studio-web", "vault"],
-        "reads": ["agents.evaluationsAvailable", "agents.datasets", "agents.evaluations", "agents.evaluationRuns", "agents.agenticApps", "agents.serviceActions", "agents.datasetTemplate", "agents.judges", "agents.evaluationRunStatus", "agents.evaluationRun"],
-        "writes": ["agents.datasetCreate", "agents.evaluationCreate", "agents.evaluationRunCreate"],
-        "offlineTests": ["tests/access.test.mjs"],
-        "liveEvidence": "not_verified"
+        "tools": [
+          "odc_portal_read",
+          "odc_portal_write"
+        ],
+        "paths": [
+          "studio-http",
+          "vault"
+        ],
+        "reads": [
+          "agents.evaluationsAvailable",
+          "agents.evaluationFeatures",
+          "agents.datasets",
+          "agents.dataset",
+          "agents.datasetEvaluations",
+          "agents.datasetSchema",
+          "agents.evaluations",
+          "agents.evaluationRuns",
+          "agents.evaluationHistory",
+          "agents.agenticApps",
+          "agents.serviceActions",
+          "agents.datasetTemplate",
+          "agents.judges",
+          "agents.evaluation",
+          "agents.evaluationDatasets",
+          "agents.evaluationDevStage",
+          "agents.evaluationOngoingRun",
+          "agents.evaluationRunStatus",
+          "agents.evaluationRun"
+        ],
+        "writes": [
+          "agents.datasetCreate",
+          "agents.datasetDelete",
+          "agents.evaluationCreate",
+          "agents.evaluationRunCreate",
+          "agents.evaluationDelete"
+        ],
+        "offlineTests": [
+          "tests/access.test.mjs"
+        ],
+        "liveEvidence": "docs/PORTAL-RUN-INVENTORY-LIVE-20261010.md"
       },
       "title": "Agent evaluation datasets, evaluations and runs",
       "keywords": "agent evaluation avaliação dataset judges score",
@@ -531,7 +895,7 @@
       "publicCoverage": "not_found_in_reviewed_contracts",
       "implementation": "implemented_source",
       "authentication": "host_managed_portal_session",
-      "currentLiveEvidence": "not_verified",
+      "currentLiveEvidence": "bounded_fixture_corporate_2026-10-10",
       "legacyEvidence": {
         "repository": "GitSSAM",
         "commit": "6672508d58bac7ece9e52ed00546134a91b15397",
@@ -573,14 +937,82 @@
       ]
     },
     {
+      "id": "portal.ai-model-trials",
+      "access": {
+        "tools": [
+          "odc_portal_read",
+          "odc_portal_write"
+        ],
+        "paths": [
+          "studio-http",
+          "vault"
+        ],
+        "reads": [
+          "aiModels.list",
+          "aiModels.stages",
+          "aiModels.providers",
+          "aiModels.trials",
+          "aiModels.detail"
+        ],
+        "writes": [
+          "aiModels.trialCreate",
+          "aiModels.trialDelete"
+        ],
+        "offlineTests": [
+          "tests/ai-models.test.mjs",
+          "tests/access.test.mjs",
+          "tests/bridge-agreement.test.mjs"
+        ],
+        "liveEvidence": "docs/PORTAL-AI-TRIAL-LIVE-20261010.md"
+      },
+      "title": "AI model inventory and owned trial lifecycle",
+      "keywords": "AI model modelo inteligencia artificial trial connection conexao agente guardrails",
+      "kind": "internal",
+      "publicCoverage": "not_found_in_reviewed_contracts",
+      "implementation": "implemented_source",
+      "authentication": "host_managed_portal_session",
+      "currentLiveEvidence": "docs/PORTAL-AI-TRIAL-LIVE-20261010.md",
+      "limitations": [
+        "Raw read input uses inputParameters, screenVariables and clientVariables. List is one page: TotalCount must equal List length for any trial write.",
+        "trialCreate accepts only inputParameters {TrialId}, requires a live available unconfigured trial and contextual approval bound to a complete empty portfolio inventory, preserving preexisting default models by refusal.",
+        "trialDelete accepts only inputParameters {AIModelId}, requires its original own-fixture creation receipt, unchanged trial header and the same human grant/proposal.",
+        "Neither inference nor external provider credentials, preexisting model updates, stage wake-up or arbitrary model deletion is exposed.",
+        "Source mapping and offline tests do not prove a loaded native bridge supports these routes. Saved Portal profile supports the headless broker path independently."
+      ]
+    },
+    {
       "id": "portal.agent-guardrails",
       "access": {
-        "tools": ["odc_portal_read", "odc_portal_write"],
-        "paths": ["studio-web", "vault"],
-        "reads": ["agents.stages", "agents.latestRevision", "agents.elements", "agents.guardrails"],
-        "writes": ["agents.guardrailsSave"],
-        "offlineTests": ["tests/access.test.mjs", "tests/studio-portal.test.mjs"],
-        "liveEvidence": "not_verified"
+        "tools": [
+          "odc_portal_read",
+          "odc_portal_write"
+        ],
+        "paths": [
+          "studio-http",
+          "vault"
+        ],
+        "reads": [
+          "agents.stages",
+          "agents.latestRevision",
+          "agents.elements",
+          "agents.guardrails",
+          "agents.consoleAvailable",
+          "agents.listLegacy",
+          "agents.listV2",
+          "agents.legacyFeatures",
+          "agents.revisionStages",
+          "agents.guardrailsV2",
+          "agents.guardrailsV5"
+        ],
+        "writes": [
+          "agents.guardrailsSave"
+        ],
+        "offlineTests": [
+          "tests/access.test.mjs",
+          "tests/studio-portal.test.mjs",
+          "tests/guardrails.test.mjs"
+        ],
+        "liveEvidence": "docs/PORTAL-GUARDRAIL-LIVE-20261010.md"
       },
       "title": "Per-agent guardrail read and configuration",
       "keywords": "agent guardrails proteção segurança PII",
@@ -588,7 +1020,7 @@
       "publicCoverage": "not_found_in_reviewed_contracts",
       "implementation": "implemented_source",
       "authentication": "host_managed_portal_session",
-      "currentLiveEvidence": "not_verified",
+      "currentLiveEvidence": "bounded_fixture_corporate_2026-10-10",
       "legacyEvidence": {
         "repository": "GitSSAM",
         "commit": "6672508d58bac7ece9e52ed00546134a91b15397",
@@ -616,16 +1048,30 @@
       },
       "limitations": [
         "Do not weaken global baseline or infer regional availability.",
-        "Existing GitSSAM source is evidence, not copied or imported by this module. ODC1 proof does not authorize or prove ODC3 access."
+        "Existing GitSSAM source is evidence, not copied or imported by this module. ODC1 proof does not authorize or prove ODC3 access.",
+        "Bounded own-fixture Block enforcement proved by control response and OS-ABRS-FM-40005 runtime log. Detect save/readback confirmed but its run still blocked: Detect enforcement remains unproved. No administrative baseline write proof. The earlier deleted fixture left a residual ID with original inactive policies restored; physical ID deletion remains unproved. See docs/PORTAL-GUARDRAIL-RUNTIME-LIVE-20261010.md. Historical proof is not proof of current authentication.",
+        "Fresh creation receipts retain originalPolicies. mode reset requires that immutable original snapshot and exact current state, restoring policies before own app deletion. Legacy mode restore still means the originally created test policies. Old receipts without the snapshot cannot use reset. Reset does not prove physical internal-ID deletion.",
+        "Save/readback observations explicitly report verificationScope=saved-configuration and runtimeEnforcementVerified=false, including read failures. A fresh own app configured with Detect from its first write also blocked the new filtered word; this is a recorded mismatch, not proof of Detect or a proven backend cause. See docs/PORTAL-GUARDRAIL-DETECT-INITIAL-LIVE-20261010.md."
       ]
     },
     {
       "id": "portal.external-library-publish",
       "access": {
-        "tools": ["odc_external_library", "odc_portal_write"],
-        "paths": ["studio-web", "vault"],
-        "writes": ["externalLibraries.publishJob"],
-        "offlineTests": ["tests/external-library.test.mjs", "tests/access.test.mjs"],
+        "tools": [
+          "odc_external_library",
+          "odc_portal_write"
+        ],
+        "paths": [
+          "studio-http",
+          "vault"
+        ],
+        "writes": [
+          "externalLibraries.publishJob"
+        ],
+        "offlineTests": [
+          "tests/external-library.test.mjs",
+          "tests/access.test.mjs"
+        ],
         "liveEvidence": "not_verified"
       },
       "title": "External Library publish of a generated job",
@@ -670,9 +1116,9 @@
       "keywords": "guardrails baseline admin",
       "kind": "internal",
       "publicCoverage": "not_found_in_reviewed_contracts",
-      "implementation": "plan_only",
+      "implementation": "partial_source",
       "authentication": "host_managed_portal_session",
-      "currentLiveEvidence": "not_verified",
+      "currentLiveEvidence": "bounded_administrative_reads_corporate_2026-10-10",
       "legacyEvidence": {
         "repository": "GitSSAM",
         "commit": "6672508d58bac7ece9e52ed00546134a91b15397",
@@ -689,17 +1135,55 @@
         ]
       },
       "limitations": [
-        "Execution must remain unavailable, not advertised as an implemented mutation.",
-        "Existing GitSSAM source is evidence, not copied or imported by this module. ODC1 proof does not authorize or prove ODC3 access."
-      ]
+        "Administrative reads are proved; baseline mutation is implemented and tested offline but remains unproved live. A corporate Development cycle needs exact approval including possible retention of an inactive baseline ID.",
+        "Existing GitSSAM source is evidence, not copied or imported by this module. ODC1 proof does not authorize or prove ODC3 access.",
+        "Only Development baseline was read live; no baseline mutation, restoration, inheritance or runtime enforcement proof. Historical evidence does not establish current authentication."
+      ],
+      "access": {
+        "tools": [
+          "odc_portal_read",
+          "odc_portal_write"
+        ],
+        "paths": [
+          "studio-http",
+          "vault"
+        ],
+        "reads": [
+          "guardrails.stages",
+          "guardrails.baseline",
+          "guardrails.features"
+        ],
+        "writes": ["guardrails.baselineSave"],
+        "offlineTests": [
+          "tests/portal-capabilities.test.mjs",
+          "tests/access.test.mjs"
+        ],
+        "liveEvidence": "docs/PORTAL-GUARDRAIL-ADMIN-READ-LIVE-20261010.md"
+      }
     },
     {
       "id": "portal.runtime-traces",
       "access": {
-        "tools": ["odc_portal_read"],
-        "paths": ["studio-web", "vault"],
-        "reads": ["monitoring.traces", "monitoring.traceSummary", "monitoring.trace", "monitoring.traceLogs"],
-        "offlineTests": ["tests/access.test.mjs", "tests/trace-result.test.mjs", "tests/trace-metadata-result.test.mjs"],
+        "tools": [
+          "odc_portal_read"
+        ],
+        "paths": [
+          "studio-http",
+          "vault"
+        ],
+        "reads": [
+          "monitoring.traces",
+          "monitoring.traceSummary",
+          "monitoring.trace",
+          "monitoring.traceLogs",
+          "monitoring.traceStage",
+          "monitoring.traceSettings"
+        ],
+        "offlineTests": [
+          "tests/access.test.mjs",
+          "tests/trace-result.test.mjs",
+          "tests/trace-metadata-result.test.mjs"
+        ],
         "liveEvidence": "not_verified"
       },
       "title": "Full runtime trace and span hierarchy",
@@ -727,11 +1211,33 @@
     {
       "id": "portal.timers",
       "access": {
-        "tools": ["odc_portal_read", "odc_configurations"],
-        "paths": ["studio-web", "vault"],
-        "reads": ["monitoring.traces"],
-        "unmapped": ["timers.run", "timers.pause", "timers.resume"],
-        "offlineTests": ["tests/access.test.mjs"],
+        "tools": [
+          "odc_portal_read",
+          "odc_portal_write",
+          "odc_configurations"
+        ],
+        "paths": [
+          "studio-http",
+          "vault"
+        ],
+        "reads": [
+          "monitoring.traces",
+          "timers.info",
+          "timers.currentRun",
+          "timers.pendingConfiguration",
+          "timers.latestDeployment",
+          "timers.stages",
+          "timers.deploymentStatus"
+        ],
+        "writes": [
+          "timers.run",
+          "timers.pause",
+          "timers.resume"
+        ],
+        "unmapped": [],
+        "offlineTests": [
+          "tests/access.test.mjs"
+        ],
         "liveEvidence": "not_verified"
       },
       "title": "Timers: schedule, executions, run now, pause and resume",
@@ -747,7 +1253,12 @@
       "limitations": [
         "The schedule is part of the app configuration (asset-configurations timers[], odc_configurations set); which timer keys exist is known only after a read.",
         "Executions are traces whose entry span is a Timer (monitoring.traces with span types Timer).",
-        "Run now, pause and resume have no captured Portal route (the Studio opens the page apps/timer?appid=<app>&id=<timer>&stageid=<stage>): refused as PORTAL_ROUTE_UNMAPPED until the live proof captures them; the instruction comes with the refusal and with this capability."
+        "Timer detail prerequisites use raw screenVariables: appid, stageid, id and _appidInDataFetchStatus/_stageidInDataFetchStatus/_idInDataFetchStatus=1. Keys must come from live application configurations.",
+        "For latestDeployment, first read timers.stages, select the one Environment matching stageid into SelectedStage, then read timers.deploymentStatus and preserve its data as CheckLatestDeployment. Do not fabricate either record or borrow another stage's context.",
+        "timers.latestDeployment preserves native placeholders in data; deploymentState cross-checks live asset portfolio, a complete public page scoped by asset/environment and the exact deployed revision. Metadata comes from public deployment records, with native revision/name agreement; it proves neither browser interaction nor atomicity.",
+        "timers.pendingConfiguration returns configurationState for the exact selected timer (appid/stageid/id). Matching public current/deployed values and origins plus native timer identity detect pending changes even when the native list/flag is empty/false. Missing scope, incomplete reads or drift yield unknown; application-wide absence and atomicity remain unproven. Positive pending, restored none and cleanup were validated live with a disposable fixture.",
+        "timers.run accepts only inputParameters {StageKey, ApplicationKey, TimerKey} (UUIDs). Reads the exact deployed app revision, timer identity and idle/active state first; authorization must name app and timer. Accepted is not execution/completion proof; follow its read continuation and never repeat Wake for evidence. Live write proof is pending.",
+        "timers.pause/resume use native SaveAndApply after matching deployed public/native values and origins, an idle timer, no pending changes or deployments, and inherited unrelated configuration. Schedule and timeout origins are preserved. The deployment receipt is confirmed only after exact application/environment and timer state readback. Atomicity is not claimed; live write proof is pending."
       ]
     },
     {
@@ -878,11 +1389,15 @@
       "keywords": "tracing traces configuração ativar desativar",
       "kind": "gap",
       "publicCoverage": "partial",
-      "publicApiIds": ["asset-configurations-api-v1"],
+      "publicApiIds": [
+        "asset-configurations-api-v1"
+      ],
       "implementation": "not_integrated",
       "currentLiveEvidence": "not_verified",
       "authentication": "api_client_oauth_client_credentials",
-      "limitations": ["Generic configuration maps exist, but the exact tracing keys and their accepted values need authorized discovery. No hardcoded toggle or dedicated endpoint is claimed."]
+      "limitations": [
+        "Generic configuration maps exist, but the exact tracing keys and their accepted values need authorized discovery. No hardcoded toggle or dedicated endpoint is claimed."
+      ]
     },
     {
       "id": "portal.visual-authoring",
@@ -902,19 +1417,47 @@
       ]
     },
     {
-      "id": "portal.knowledge-bases",
-      "title": "Knowledge bases and non-MCP connector authoring",
-      "keywords": "knowledge bases conhecimento conectores",
-      "kind": "gap",
+      "id": "portal.non-mcp-connectors",
+      "title": "Non-MCP connector authoring beyond the verified SQL fixture path",
+      "keywords": "connections conexões conectores provedores A2A search busca",
+      "kind": "internal",
       "publicCoverage": "not_found_in_reviewed_contracts",
-      "implementation": "not_integrated",
+      "implementation": "partial_source",
       "currentLiveEvidence": "not_verified",
       "authentication": "not_established",
+      "access": {
+        "tools": [
+          "odc_portal_read",
+          "odc_a2a_connection_plan",
+          "odc_portal_write",
+          "odc_a2a_connection_delete"
+        ],
+        "paths": [
+          "studio-http",
+          "vault"
+        ],
+        "reads": [
+          "connections.a2aAuthenticationOptions",
+          "connections.a2aNameAvailability",
+          "connections.alternateInventory"
+        ],
+        "writes": [
+          "connections.a2aDiscover",
+          "connections.a2aTest",
+          "connections.a2aSave"
+        ],
+        "unmapped": []
+      },
       "sources": [
         "https://github.com/OutSystems/docs-odc/blob/fb015a80ad9d1396800eca69836aef08297a0efb/src/eap/getting-started/overview-portal-studio.md"
       ],
       "limitations": [
         "Provider discovery is not proof of CRUD/import support for every connector.",
+        "connections.alternateInventory reads the alternate native console with an explicit portfolio, search and offset; visibility of provisional test headers is unverified, so an empty page cannot reconcile an uncertain test.",
+        "odc_a2a_connection_plan prepares new single-stage no_auth URL or JSON-card plans without sending. URL dispatch requires a matching confirmed discovery receipt; JSON configuration availability remains unverified.",
+        "Corporate-tenant URL fixture: discovery, native test Success and save readback were confirmed live; docs/PORTAL-A2A-STRING-ID-LIVE-20261009.md. Save reconciliation did not resend. Authenticated modes, edits and app consumption remain unverified.",
+        "Earlier JSON-card test failed with OS-DATA-40001 and no ID; its receipt remains uncertain and must not be replayed. A failed URL test was cleaned with confirmed absence under strict provisional-state checks.",
+        "Successful URL fixture deletion was accepted and removed the connection from the complete list and asset repository, but native detail retains a header with zero stages. Receipt 8b2ea77c-401f-465a-95a2-c64aa9c94304 remains accepted; continue read-only reconciliation, never resend. Endpoint deletion was confirmed.",
         "Absence is scoped to the contracts and repository methods examined, not a claim that no endpoint can exist."
       ]
     },
@@ -933,6 +1476,43 @@
       "limitations": [
         "Do not infer password reset, MFA policy, invitation or session revocation from generic user CRUD.",
         "Absence is scoped to the contracts and repository methods examined, not a claim that no endpoint can exist."
+      ]
+    },
+    {
+      "id": "portal.search-connection-prerequisites",
+      "title": "Search service connection prerequisites",
+      "keywords": "search pesquisa busca Azure AI Search Custom AI Search tipos consulta disponibilidade nome",
+      "kind": "internal",
+      "publicCoverage": "not_found_in_reviewed_contracts",
+      "implementation": "implemented_source",
+      "authentication": "host_managed_portal_session",
+      "currentLiveEvidence": "bounded_read_corporate_2026-10-10",
+      "access": {
+        "tools": [
+          "odc_portal_read"
+        ],
+        "paths": [
+          "studio-http",
+          "vault"
+        ],
+        "reads": [
+          "connections.azureSearchNameAvailability",
+          "connections.customSearchNameAvailability",
+          "connections.azureSearchQueryTypes",
+          "connections.azureSearchQueryTypeLabels"
+        ],
+        "writes": [],
+        "unmapped": [],
+        "offlineTests": [
+          "tests/search-connection-routes.test.mjs",
+          "tests/access.test.mjs",
+          "tests/bridge-agreement.test.mjs"
+        ],
+        "liveEvidence": "docs/PORTAL-SEARCH-CONNECTION-READS-LIVE-20261010.md"
+      },
+      "limitations": [
+        "Read-only prerequisites; a name check never reserves or creates a connection.",
+        "Creation, external testing, saving and deletion of SearchServiceConnection are not implemented by these reads."
       ]
     }
   ]

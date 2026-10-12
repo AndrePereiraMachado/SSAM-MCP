@@ -21,10 +21,9 @@ internal sealed class SoapTransport(Configuration config, Func<Configuration, (s
     public bool IsOfflineSynthetic => false;
     readonly ObjectKey key = ObjectKey.Parse(config.ModuleKey);
     readonly Uri root = new(config.RuntimeUrl);
-    // Configuration currently has only one module/key pair. It must describe BOTH the runtime entry and
-    // breakpoint owner. A library reached through another app needs separate entry and target module/app
-    // keys (plus debugger token scopes); this transport does not infer that contract from RuntimeUrl.
-    readonly string eSpaceName = config.Module;
+    // The endpoint belongs to the compiled consumer; the target UID and breakpoint keys still
+    // identify the producer. Both published identities are authorized by the private SSO broker.
+    readonly string eSpaceName = config.EntryModule ?? config.Module;
     internal const int MaxEventChars = 1048576;
     string? bearer;                 // only StartDebugSession carries it; later calls authenticate by session token
     string? sessionToken;
@@ -34,6 +33,11 @@ internal sealed class SoapTransport(Configuration config, Func<Configuration, (s
     string? startState;             // null, "attempted" (no answer yet), "failed" (server answered: no session exists)
     CancellationTokenSource? poll;
     Task? pollTask;
+    int pollRequests, pollResponses, lastPollStatus, nativeEvents;
+    string startPhase = "not-started", stopPhase = "not-started";
+    public DebugTransportDiagnostic Diagnostic => new(startPhase, stopPhase, sessionToken != null, startState ?? "not-attempted") {
+        PollRequests = pollRequests, PollResponses = pollResponses, LastPollStatus = lastPollStatus == 0 ? null : lastPollStatus, NativeEvents = nativeEvents
+    };
     public event Func<DebugTransportEvent, Task>? Received;
     public event Action<string>? Failed;
 
@@ -68,10 +72,14 @@ internal sealed class SoapTransport(Configuration config, Func<Configuration, (s
         return null;
     }
 
+    // Native Studio preserves the owner of each enabled breakpoint. Explicit scope metadata must identify one
+    // owner per node (scopesRequired); the owner logic is shared with the ODC transport (BreakpointOwners).
+    internal static string BreakpointIds(Configuration configuration) => BreakpointOwners.Ids(configuration, scopesRequired: true, includeCompoundKey: false);
+
     public async Task Start()
     {
         if (Interlocked.Exchange(ref startAttempted, 1) != 0 || Volatile.Read(ref stopAttempted) != 0) throw new DebugFailure("debug_start_already_attempted");
-        var breakpoints = string.Join(',', config.NodeKeys.Select(n => new BreakpointId(key, ObjectKey.Parse(n), "", "").ToString(false)));
+        var breakpoints = BreakpointIds(config);
         if (!string.IsNullOrEmpty(config.Token)) bearer = config.Token; // SSO: a debugging bearer token leased from the logged-in Studio
         string user = "", secret = "";
         if (bearer != null) {
@@ -84,6 +92,7 @@ internal sealed class SoapTransport(Configuration config, Func<Configuration, (s
         var eSpaceUid = ObjectKeyUtils.DatabaseValue(key);
         // One start attempt. No answer is uncertain; never retry or adopt another session.
         startState = "attempted";
+        startPhase = "soap-start";
         string result;
         try
         {
@@ -97,6 +106,8 @@ internal sealed class SoapTransport(Configuration config, Func<Configuration, (s
             throw new DebugFailure("debug_start_rejected:answered:" + NativeTransport.MessageId(result));
         }
         sessionToken = result;
+        startState = "accepted";
+        startPhase = "poll-starting";
         config.AddPrivateValues(sessionToken);
         poll = new CancellationTokenSource();
         pollTask = Task.Run(() => Poll(poll.Token));
@@ -114,10 +125,14 @@ internal sealed class SoapTransport(Configuration config, Func<Configuration, (s
         {
             try
             {
+                Interlocked.Increment(ref pollRequests);
                 using var answer = await http.GetAsync(EventsUrl(lastEventId, serverForced), HttpCompletionOption.ResponseHeadersRead, ct);
+                Interlocked.Increment(ref pollResponses);
+                lastPollStatus = (int)answer.StatusCode;
                 serverForced = false;
                 if (answer.IsSuccessStatusCode)
                 {
+                    startPhase = "poll-connected";
                     using var stream = await answer.Content.ReadAsStreamAsync(ct);
                     using var reader = new StreamReader(stream);
                     var buffer = new StringBuilder();
@@ -138,13 +153,13 @@ internal sealed class SoapTransport(Configuration config, Func<Configuration, (s
                         bool reconnect;
                         try {
                             var provenance = DebugTransportEvent.ReadXmlRequestId(chunk);
-                            evt = ServerDebuggerEventFactory.Create(eSpaceName, key, chunk, false, sessionToken!, out reconnect, out serverForced, out var id);
+                            evt = ServerDebuggerEventFactory.Create(config.Module, key, chunk, false, sessionToken!, out reconnect, out serverForced, out var id);
                             envelope = evt == null ? null : DebugTransportEvent.FromXml(evt, provenance);
                             if (id > lastEventId) lastEventId = id;
                         }
                         catch { Failed?.Invoke("debug_event_decode_failed"); continue; }
                         if (reconnect) { Failed?.Invoke("debug_reconnect_requires_new_session"); return; }
-                        if (envelope != null && Received != null) await Received(envelope);
+                        if (envelope != null && Received != null) { Interlocked.Increment(ref nativeEvents); await Received(envelope); }
                         if (evt is ServiceStudio.PluginAPI.Debugger.StopDebugSessionEvent) return;
                     }
                 }
@@ -159,13 +174,14 @@ internal sealed class SoapTransport(Configuration config, Func<Configuration, (s
     public string Evaluate(string thread, string request)
         // A capture must not hold a business request for the full control-call timeout.
         => Call(c => c.EvaluateAsync(sessionToken!, thread, request), r => r.Body.EvaluateResult,
-            TimeSpan.FromSeconds(Math.Min(config.PauseSeconds, 2)), withBearer: false).GetAwaiter().GetResult() ?? "";
+            config.EvaluationTimeout, withBearer: false).GetAwaiter().GetResult() ?? "";
 
     public void Execute(string op, string thread)
     {
         var timeout = TimeSpan.FromSeconds(8);
         var result = (op switch
         {
+            "pause" => Call(c => c.SuspendAllThreadsAsync(sessionToken!), r => r.Body.SuspendAllThreadsResult, timeout, false),
             "continue" => Call(c => c.ContinueThreadAsync(sessionToken!, thread), r => r.Body.ContinueThreadResult, timeout, false),
             "step-over" => Call(c => c.StepOverAsync(sessionToken!, thread), r => r.Body.StepOverResult, timeout, false),
             "step-into" => Call(c => c.StepIntoAsync(sessionToken!, thread), r => r.Body.StepIntoResult, timeout, false),
@@ -178,12 +194,14 @@ internal sealed class SoapTransport(Configuration config, Func<Configuration, (s
     public async Task Stop()
     {
         if (Interlocked.Exchange(ref stopAttempted, 1) != 0) return;
+        stopPhase = "stopping";
         try
         {
             if (startState == "attempted" && sessionToken == null) throw new DebugFailure("debug_start_uncertain");
             poll?.Cancel();
             if (sessionToken != null)
                 await Call<StopDebugSessionResponse, string?>(c => c.StopDebugSessionAsync(sessionToken!, false), _ => null, TimeSpan.FromSeconds(8), false);
+            stopPhase = "stopped";
         }
         finally
         {

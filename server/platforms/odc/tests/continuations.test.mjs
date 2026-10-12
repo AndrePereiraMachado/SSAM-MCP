@@ -147,14 +147,15 @@ function argumentProblems(where, args, spec) {
 }
 
 // 79 tools of plan §4.2, the two GitSSAM integrations (o11_extension, odc_external_library), ssam_debug, and the live tools
-// the guides and the continuations of the 2026-10-06 package name (ssam_grant, ssam_evidence, o11_publish).
-test('MCP_TOOLS is the list of plan §4.2 plus the live tools the guides and continuations name: 85 tools', () => {
-  assert.equal(MCP_TOOLS.length, 85);
-  assert.equal(new Set(MCP_TOOLS).size, 85);
+// the guides and the continuations of the 2026-10-06 package name (ssam_grant, ssam_evidence, o11_publish), and
+// studio_reference_producers of the SC/Portal line (port of 2026-10-11).
+test('MCP_TOOLS is the list of plan §4.2 plus the live tools the guides and continuations name: 86 tools', () => {
+  assert.equal(MCP_TOOLS.length, 86);
+  assert.equal(new Set(MCP_TOOLS).size, 86);
   for (const name of ['ssam_grant', 'ssam_evidence', 'o11_publish', 'o11_extension', 'odc_external_library']) assert.ok(MCP_TOOLS.includes(name), name);
   for (const name of ['ssam_status', 'ssam_license', 'ssam_setup', 'ssam_update', 'ssam_credentials', 'ssam_reprove', 'ssam_task',
     'ssam_reference', 'o11_inspect', 'o11_deliver', 'o11_environment', 'o11_studio', 'odc_portal_routes']) assert.ok(MCP_TOOLS.includes(name), name);
-  assert.equal(MCP_TOOLS.filter(t => t.startsWith('studio_')).length, 29, 'the 28 of the plan and studio_create_app');
+  assert.equal(MCP_TOOLS.filter(t => t.startsWith('studio_')).length, 30, 'the 28 of the plan, studio_create_app and studio_reference_producers');
   assert.ok(Object.keys(SPEC).every(t => MCP_TOOLS.includes(t)));
 });
 

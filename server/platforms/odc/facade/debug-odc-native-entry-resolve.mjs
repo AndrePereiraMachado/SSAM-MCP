@@ -16,6 +16,7 @@ const fail = code => { throw new Error('debug_odc_native_' + code); };
 // which entry a model resolves to. A screen (its events/data actions reach actions with the real screen context) is
 // preferred, then data actions, then the explicitly exposed callables, then background triggers.
 export const ENTRY_KIND_ORDER = Object.freeze([
+  'server-stub',       // original published client-to-server callable
   'screen',            // MobileScreen / WebScreen (a screen event or aggregate reaches the action)
   'screen-data-action',// DataAction owned by a screen
   'block-data-action', // DataAction owned by a block
@@ -31,17 +32,22 @@ const KIND_RANK = new Map(ENTRY_KIND_ORDER.map((k, i) => [k, i]));
 
 // Is this graph node an externally invocable entry, and of which kind? Returns null for an internal action that only
 // matters as a step on the path. Decided purely from the node's declared shape, never its name.
+// Consumed REST methods and REST callback flows run inside another request (the consumer's Execute or the exposed
+// method's request): never entries, whatever a runtime index claims for their key.
+const NEVER_ENTRY = new Set(['RestAction', 'RestServiceAuthenticationFlow', 'RestServiceCallbackActionFlow', 'RestCallbackActionFlow']);
 export function entryKindOf(node) {
+  if (NEVER_ENTRY.has(node.kind)) return null;
+  if (['server-stub', 'screen-data-action', 'block-data-action', 'client-action'].includes(node.nativeEntryKind)) return node.nativeEntryKind;
   switch (node.kind) {
     case 'MobileScreen': case 'WebScreen': return 'screen';
     case 'DataAction': return node.ownerKind === 'MobileBlock' || node.ownerKind === 'WebBlock' ? 'block-data-action' : 'screen-data-action';
     case 'RestServiceAction': return 'rest-method';
-    case 'SoapServiceAction': return 'soap-method';
-    case 'ServiceAction': return 'service-action';
+    case 'SoapServiceAction': case 'SOAPServiceAction': return 'soap-method';
     case 'Timer': return 'timer';
     case 'Process': case 'ProcessFlow': return 'process';
-    case 'ClientAction': return node.public ? 'client-action' : null;
-    case 'ServerAction': return node.public ? 'public-server-action' : null;
+    // Public means reusable by a consumer, not externally invocable. Only the
+    // published runtime's nativeEntryKind above proves a direct callable.
+    case 'ClientAction': case 'ServerAction': case 'ServiceAction': return null;
     default: return null;
   }
 }
@@ -70,16 +76,22 @@ const callerOrder = (a, b) => byText(a.key, b.key) || byText(a.edge?.path ?? '',
 function searchCallers(graph, targetKey, { maxDepth = 12, maxNodes = 2000 } = {}) {
   const seen = new Map([[targetKey, { distance: 0, from: null, edge: null }]]);
   const reached = new Map(); // entry key -> { entryKind, distance, node } (first = shortest distance)
+  const target = graph.node(targetKey), ownKind = entryKindOf(target);
+  if (ownKind) reached.set(targetKey, { key: targetKey, node: target, entryKind: ownKind, distance: 0 });
   let frontier = [targetKey];
-  for (let distance = 1; distance <= maxDepth && frontier.length && seen.size < maxNodes; distance++) {
+  for (let distance = 1; frontier.length; distance++) {
+    if (distance > maxDepth) fail('graph_depth_limit');
     const next = [];
     for (const key of frontier) {
       let callers;
       try { callers = [...graph.callers(key)].filter(c => c?.key && c.node).sort(callerOrder); } catch (error) { fail('graph_unreadable:' + (error.message ?? '')); }
       for (const caller of callers) {
-        if (!seen.has(caller.key)) { seen.set(caller.key, { distance, from: key, edge: caller.edge }); next.push(caller.key); }
+        if (!seen.has(caller.key)) {
+          if (seen.size >= maxNodes) fail('graph_node_limit');
+          seen.set(caller.key, { distance, from: key, edge: caller.edge }); next.push(caller.key);
+        }
         const entryKind = entryKindOf(caller.node);
-        if (entryKind && !reached.has(caller.key)) reached.set(caller.key, { key: caller.key, node: caller.node, entryKind, distance });
+        if (entryKind && !reached.has(caller.key)) reached.set(caller.key, { key: caller.key, node: caller.node, entryKind, distance: seen.get(caller.key).distance });
       }
     }
     frontier = next.sort(byText);
@@ -102,19 +114,45 @@ export function resolveEntry(graph, targetKey, options = {}) {
   const ranked = [...reached.values()].sort(compareEntries);
   const target = describe(graph, targetKey);
   if (!ranked.length) return { ok: false, deadCode: true, error: 'dead_code_no_public_entry', message: 'dead code: no public entry reaches ' + (target.name ?? targetKey), target };
+  return resolveRanked(graph, target, ranked, pathOf);
+}
+function resolveRanked(graph, target, ranked, pathOf, eligibility = null) {
   const chosen = ranked[0], path = pathOf(chosen.key);
   return {
-    ok: true, deadCode: false, algorithm: ALGORITHM, target, entry: entryView(graph, chosen),
+    ok: true, deadCode: false, algorithm: ALGORITHM + (eligibility ? '; eligibility=' + eligibility : ''),
+    ...(eligibility ? { entryEligibility: eligibility } : {}), target, entry: entryView(graph, chosen),
     path: pathView(path), callPath: path.map(step => graph.node(step.key)?.name ?? step.key).join(' -> '),
     bindings: bindInputs(graph, path),
     alternatives: ranked.slice(1, 8).map(c => ({ ...describe(graph, c.key), entryKind: c.entryKind, distance: c.distance })),
   };
 }
-export const ALGORITHM = 'bfs-callers/v1 (distance, ENTRY_KIND_ORDER, model key ascending)';
+export const ALGORITHM = 'bfs-callers/v2 (self or caller distance, ENTRY_KIND_ORDER, model key ascending; complete graph required)';
+
+const originalScreenCandidate = candidate => candidate.node.kind === 'ScreenAction' && candidate.entryKind === 'client-action' &&
+  /(?:^|\/)(?:MobileScreen|WebScreen):/.test(candidate.node.path ?? '');
+
+// Apply an eligibility constraint, keeping the existing distance/key order and
+// complete original caller path. This is an automatic resolution, not an override.
+export function resolveOriginalScreenEntry(graph, targetKey, options = {}) {
+  if (!graph.node(targetKey)) fail('target_action_unknown');
+  const { reached, pathOf } = searchCallers(graph, targetKey, options);
+  const ranked = [...reached.values()].filter(originalScreenCandidate).sort(compareEntries), target = describe(graph, targetKey);
+  if (!ranked.length) return { ok: false, error: 'debug_odc_native_original_screen_entry_required', target };
+  return resolveRanked(graph, target, ranked, pathOf, 'original-screen-for-server-request/v1');
+}
+
+// A global function that sends a server request needs an original screen caller;
+// copying the screen's security context while skipping that caller is not valid.
+export function originalScreenEntries(graph, targetKey, options = {}) {
+  return [...searchCallers(graph, targetKey, options).reached.values()]
+    .filter(originalScreenCandidate)
+    .sort(compareEntries).map(candidate => entryView(graph, candidate));
+}
 
 // An override entry (user-supplied) is accepted only when it is a verified caller on the graph that reaches the
 // target and is itself an external entry. It never lets the LLM pick an entry the algorithm would not reach.
 export function resolveOverride(graph, targetKey, overrideKey, options = {}) {
+  if (/^@[A-Za-z0-9_+]{22}$/.test(overrideKey)) overrideKey = overrideKey.slice(1);
   const full = resolveEntry(graph, targetKey, options);
   if (!full.ok) return full;
   const { reached, pathOf } = searchCallers(graph, targetKey, options);
@@ -138,7 +176,7 @@ export function bindInputs(graph, path) {
   let current = null;
   const targetKey = path.at(-1).key;
   try { current = graph.inputs(targetKey).map(input => ({ target: input, source: { kind: 'input', name: input.name } })); }
-  catch { current = []; }
+  catch { fail('input_signature_unreadable'); }
   // path[i].edge is the call from path[i] INTO path[i+1] (BFS parent links, rebuilt entry-first). Walking up from the
   // target, the edge feeding path[i] comes from its caller path[i-1], i.e. path[i-1].edge.
   for (let i = path.length - 1; i >= 1; i--) {
@@ -147,10 +185,15 @@ export function bindInputs(graph, path) {
       current = current.map(row => ({ target: row.target, source: ['input', 'entry-input'].includes(row.source?.kind) ? { kind: 'opaque' } : row.source }));
       continue;
     }
-    const argByParam = new Map(edge.arguments.map(a => [a.parameter, a]));
+    const argByParam = new Map(edge.arguments.filter(a => a.parameter != null).map(a => [a.parameter, a]));
     current = current.map(row => {
       if (row.source?.kind !== 'input') return row;
-      const arg = argByParam.get(row.source.name) ?? edge.arguments.find(a => a.parameterName === row.source.name);
+      const parameter = graph.inputs(path[i].key).find(p => p.name === row.source.name);
+      // A bare caller local (for example a native GetUserId assignment) is not
+      // an input of that caller. Preserve its derivation when walking through
+      // an outer ScreenAction instead of turning it into an omitted default.
+      if (!parameter) return { target: row.target, source: { kind: 'derived', expression: row.source.name } };
+      const arg = argByParam.get(parameter?.key) ?? argByParam.get(row.source.name) ?? edge.arguments.find(a => a.parameterName === row.source.name);
       if (!arg) return { target: row.target, source: { kind: 'default' } };
       return { target: row.target, source: classifyArgument(arg) };
     });
@@ -158,7 +201,8 @@ export function bindInputs(graph, path) {
   const entryInputs = (() => { try { return graph.inputs(path[0].key).map(i => i.name); } catch { return []; } })();
   return current.map(row => ({
     targetInput: row.target.name, targetKey: row.target.key ?? null, dataType: row.target.dataType ?? null,
-    control: row.source.kind === 'entry-input' && entryInputs.includes(row.source.name) ? 'direct'
+    ...(row.target.identifierBase ? { identifierBase: row.target.identifierBase } : {}),
+    control: row.source.kind === 'input' && entryInputs.includes(row.source.name) ? 'direct'
       : row.source.kind === 'constant' ? 'fixed' : row.source.kind === 'default' ? 'default'
       : row.source.kind === 'opaque' ? 'opaque' : 'derived',
     ...(row.source.name ? { entryInput: row.source.name } : {}), ...(row.source.expression ? { expression: row.source.expression } : {}),
@@ -169,7 +213,8 @@ export function bindInputs(graph, path) {
 // anything else (function call, member access, operator) -> derived.
 function classifyArgument(arg) {
   const value = (arg.value ?? '').trim();
-  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) return { kind: 'entry-input', name: value };
-  if (/^(true|false|"|'|\d|#.*#$)/.test(value) || value === '') return { kind: 'constant', expression: value };
+  if (/^(true|false)$/i.test(value)) return { kind: 'constant', expression: value };
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) return { kind: 'input', name: value };
+  if (/^(?:-?\d+(?:\.\d+)?|"(?:[^"]|"")*"|'[^']*'|#[^#]*#)$/.test(value) || value === '') return { kind: 'constant', expression: value };
   return { kind: 'derived', expression: value };
 }

@@ -1,5 +1,6 @@
 // The code under test writes under the user's profile: this process's profile is a temporary folder.
 import './fixtures/isolated-profile.mjs';
+import {zip} from './fixtures/sc-fake-bridge.mjs';
 // Port of kernel/tests/test_service_center_studio.py (56 cases): Service Center through the connected Studio (bridge
 // sc_session/sc_api/sc_web/studio_login), offline: a fake bridge, synthetic HTML fixtures (sc-pages) and a loopback
 // JSON-lines server (fake-o11-bridge.mjs). No Studio, Service Center, identity provider or credential store is touched.
@@ -14,7 +15,7 @@ import { Client, Journal, bridgeFailure } from '../service-center/client.mjs';
 import { AuthRequired, BridgeError, ProtocolError } from '../service-center/errors.mjs';
 import { Document, Page, jsonPointer } from '../service-center/html.mjs';
 import { NOT_SENT, SECRET_CAPABILITY, StudioWebTransport } from '../service-center/http.mjs';
-import { main } from '../service-center/index.mjs';
+import { main, runServiceCenter } from '../service-center/index.mjs';
 import { READS } from '../service-center/studio-api.mjs';
 import { DELETE_OPERATIONS, derivedOperationId } from '../service-center/delete.mjs';
 import { CREDENTIAL } from '../service-center/vault.mjs';
@@ -29,6 +30,15 @@ process.env.SSAM_PROMPT_WAIT_MS = '0';
 const HOST = 'test.example.com';
 const PERSONAL = 'personal-0000test.outsystemscloud.com';
 const REGISTRY = path.join(import.meta.dirname, 'fixtures', 'sc-hosts.json');
+
+test('extension database provider read requires an exact extension key and logical database', () => {
+  const [surface, operation, args] = READS['extension-database-provider'];
+  assert.equal(surface, 'integration-studio');
+  assert.equal(operation, 'TranslateLogicalDatabaseToDbConnection');
+  assert.deepEqual(args({extension_key:'proof-key',logical_database:'Cargo<&'}), {extensionKey:'proof-key',logicalDatabase:'Cargo<&'});
+  assert.throws(() => args({extension_key:'bad key',logical_database:'Cargo'}), ProtocolError);
+  assert.throws(() => args({extension_key:'proof-key'}), ProtocolError);
+});
 const isProtocol = pattern => e => e instanceof ProtocolError && (!pattern || pattern.test(e.message));
 const coded = code => e => e instanceof BridgeError && e.code === code;
 const webClient = (bridge, exports = null, host = HOST, stored = true) => new Client(fakeVault(host, stored), new StudioWebTransport(host, bridge), exports);
@@ -70,6 +80,25 @@ test('a login page or another host is never followed', async () => {
   const bridge = new FakeBridge({ pages: { [`GET ${SC}Show_Error.aspx`]: { ok: true, status: 200, finalUrl: `https://${HOST}${SC}Show_Error.aspx`,
     contentType: 'text/html; charset=utf-8', html: expired } } });
   await assert.rejects(new StudioWebTransport(HOST, bridge).request('Show_Error.aspx'), e => coded('WEB_SIGN_IN_REQUIRED')(e) && e.extra.sent === false);
+  for(const accept of ['binary','xlsx','text'])
+    await assert.rejects(new StudioWebTransport(HOST, bridge).fetch('Show_Error.aspx',null,accept),
+      e=>coded('WEB_SIGN_IN_REQUIRED')(e)&&e.extra.sent===false);
+});
+
+test('HTTP 403 never reauthenticates, while explicit 401 retries only one GET', async () => {
+  for (const status of [401, 403]) {
+    for (const fields of [null, [['save','1']]]) {
+      let requests = 0, reentries = 0;
+      const transport = new StudioWebTransport(HOST, { web: async () => {
+        requests++;
+        return {status, finalUrl:`https://${HOST}${SC}X.aspx`, contentType:'text/html',html:'<p>denied</p>'};
+      } }, { reenter: async () => { reentries++; } });
+      await assert.rejects(transport.request('X.aspx',fields), e => e.code === (status === 403 ? 'NOT_ALLOWED' : 'WEB_SIGN_IN_REQUIRED'));
+      const retry = status === 401 && fields === null;
+      assert.equal(requests,retry ? 2 : 1);
+      assert.equal(reentries,retry ? 1 : 0);
+    }
+  }
 });
 
 test('repeated field names and foreign paths fail before the bridge', async () => {
@@ -80,15 +109,17 @@ test('repeated field names and foreign paths fail before the bridge', async () =
   assert.deepEqual(bridge.calls, []);
 });
 
-test('a redirected postback is read again and binary falls back to the xlsx body', async () => {
+test('a redirected postback is read again; binary fallback never repeats a POST', async () => {
   const bridge = new FakeBridge({ pages: { [`POST ${SC}Edit.aspx`]: { ok: true, status: 0, redirected: true, finalUrl: null }, [`GET ${SC}Edit.aspx`]: '<p>after</p>',
-    [`POST ${SC}Download.aspx`]: (f, a) => (a === 'binary' ? new BridgeError('BAD_REQUEST', 'accept', { write: false }) : Buffer.from('PK\x03\x04', 'latin1')) } });
+    [`POST ${SC}Download.aspx`]: new BridgeError('BAD_REQUEST', 'accept', { write: false }),
+    [`GET ${SC}Download.aspx`]: (f, a) => (a === 'binary' ? new BridgeError('BAD_REQUEST', 'accept', { write: false }) : Buffer.from('PK\x03\x04', 'latin1')) } });
   const t = new StudioWebTransport(HOST, bridge);
   const page = await t.authorizing(uuid(), 'c'.repeat(64), () => t.request('Edit.aspx', [['save', '1']]));
   assert.equal(page.doc.root.text, 'after');
   assert.deepEqual(bridge.calls.map(c => [c[2], c[6]]), [['POST', true], ['GET', false]]);
-  assert.deepEqual(await t.download('Download.aspx', [['d', '1']], 'binary'), Buffer.from('PK\x03\x04', 'latin1'));
-  assert.deepEqual(bridge.calls.slice(2).map(c => c[5]), ['binary', 'xlsx']);
+  await assert.rejects(t.download('Download.aspx', [['d', '1']], 'binary'),{code:'BAD_REQUEST'});
+  assert.deepEqual(await t.download('Download.aspx', null, 'binary'), Buffer.from('PK\x03\x04', 'latin1'));
+  assert.deepEqual(bridge.calls.slice(2).map(c => [c[2],c[5]]), [['POST','binary'],['GET','binary'],['GET','xlsx']]);
 });
 
 test('downloads decode base64 and refuse a page instead of the file', async () => {
@@ -106,7 +137,10 @@ test('the OsAjax pager is replayed as the page\'s own form post', async () => {
   assert.equal(result.truncated, false);
   const form = bridge.posts()[0][4];
   assert.equal(form.__OSVSTATE, 'state-page-1');
-  assert.equal(form['wt12$wtNextLink'], '');
+  assert.equal(form.__EVENTTARGET, 'wt12$wtNextLink');
+  assert.equal(form.__EVENTARGUMENT, '');
+  assert.ok(form.__AJAX);
+  assert.equal(form['wt12$wtNextLink'], undefined);
   assert.ok(!Object.hasOwn(form, 'wt12$wtFilterButton'));
   assert.equal(bridge.posts()[0][6], false, 'a pager post is a read');
   assert.deepEqual(result.rows.filter(r => JSON.stringify(r.links).includes('Orders') && Object.hasOwn(r, 'RecentItems')), []);
@@ -198,6 +232,66 @@ test('one named property stays redacted unless asked and never when masked', asy
 // ---- page writes
 const pageWrites = () => { const dir = temp(); const journal = new Journal(dir); return { dir, journal, execute: (client, action, args, words = 'go') => client.webWrite(action, args, { execute: true, words, operationId: uuid(), journal }) }; };
 
+test('solution selector associates exact component and checkbox removal selects only that row', async () => {
+ const s=pageWrites(),bridge=new FakeBridge(),client=webClient(bridge);let associated=false;
+ const html=()=>`<form method="post" action="Solution_Edit.aspx?SolutionId=5">
+ <select name="root$wtListBox1"><option value="module-key">Orders (Module)</option><option value="other-key">OrdersArchive (Module)</option></select>
+ <input type="checkbox" name="root$wtReferenceAddDependencies"><input type="submit" name="associate" value="Associate">
+ <table id="root_wtListReferences"><tr><th></th><th>Name</th></tr><tr><td><input type="checkbox" name="other" checked></td><td>Other</td></tr>
+ ${associated?'<tr><td><input type="checkbox" name="selected"></td><td><a href="eSpace_Edit.aspx?EspaceId=14">Orders</a><span>(Application) (Module) Description</span></td></tr>':''}</table>
+ <input type="submit" name="root$wtReferenceDeleteButton2" value="Dissociate Selected"></form>`;
+ client.solutionPage=async()=>new Page(`https://${HOST}${SC}Solution_Edit.aspx?SolutionId=5`,new Document(html()));
+ bridge.pages[`POST ${SC}Solution_Edit.aspx?SolutionId=5`]=()=>{associated=!associated;return html();};
+ const added=await s.execute(client,'solution-add-component',{solution:'Billing',component:'Orders',includeReferences:false});
+ assert.equal(added.state,'confirmed');assert.equal(bridge.posts()[0][4]['root$wtListBox1'],'module-key');
+ assert.equal(bridge.posts()[0][4]['root$wtReferenceAddDependencies'],undefined);
+ const removed=await s.execute(client,'solution-remove-component',{solution:'Billing',component:'Orders'});
+ assert.equal(removed.state,'confirmed');assert.equal(bridge.posts()[1][4].selected,'on');
+ assert.equal(bridge.posts()[1][4].other,undefined);
+ assert.equal(associated,false);
+});
+
+test('solution selector refuses ambiguous module and extension labels',async()=>{
+ const bridge=new FakeBridge(),client=webClient(bridge);
+ client.solutionPage=async()=>new Page(`https://${HOST}${SC}Solution_Edit.aspx?SolutionId=5`,new Document('<form method="post"><select name="root$wtListBox1"><option value="m">Orders (Module)</option><option value="x">Orders (Extension)</option></select><input type="submit" name="associate" value="Associate"></form>'));
+ await assert.rejects(client.webWrite('solution-add-component',{solution:'Billing',component:'Orders'}));
+ assert.equal(bridge.posts().length,0);
+});
+
+test('solution delete binds header identity, confirms absence and never replays', async () => {
+  const s=pageWrites(),bridge=new FakeBridge(),client=webClient(bridge);
+  let present=true;
+  const html=`<form method="post"><input name="wtSolution_Name" value="Billing"><input type="hidden" name="__VIEWSTATE" value="state">
+    <a href="javascript:__doPostBack('wtDelete','')" onclick="return confirm('Delete Billing?')">Delete</a>
+    <table><tr><td><a href="javascript:__doPostBack('wtOther','')">Delete</a></td></tr></table></form>`;
+  client.solutionPage=async()=>new Page(`https://${HOST}${SC}Solution_Edit.aspx?SolutionId=5`,new Document(html));
+  client.solutions=async()=>({solutions:present?[{name:'Billing',id:'5'}]:[],truncated:false});
+  bridge.pages[`POST ${SC}Solution_Edit.aspx?SolutionId=5`]=()=>{present=false;return '<p>deleted</p>';};
+  const plan=await client.webWrite('solution-delete',{solution:'Billing'});
+  assert.equal(plan.solutionId,'5');assert.deepEqual(plan.namedTargets,['Billing']);assert.equal(bridge.posts().length,0);
+  const args={execute:true,words:'Delete Billing',operationId:uuid(),journal:s.journal};
+  const result=await client.webWrite('solution-delete',{solution:'Billing'},args);
+  assert.equal(result.state,'confirmed');assert.equal(bridge.posts().length,1);
+  assert.equal(bridge.posts()[0][4].__EVENTTARGET,'wtDelete');
+  assert.equal((await client.webWrite('solution-delete',{solution:'Billing'},args)).existingReceipt,true);
+  assert.equal(bridge.posts().length,1);
+  client.solutions=async()=>({solutions:[],truncated:true});
+  assert.equal(await client.observe('solution-delete',{solution:'Billing'},plan),false);
+  client.solutions=async()=>({solutions:[{name:'Renamed',id:'5'}],truncated:false});
+  assert.equal(await client.observe('solution-delete',{solution:'Billing'},plan),false);
+});
+
+test('solution delete refuses changed name, missing id and ambiguous header controls before POST', async () => {
+  for(const variant of ['name','id','duplicate']){
+    const bridge=new FakeBridge(),client=webClient(bridge);
+    const link='<a href="javascript:__doPostBack(\'wtDelete\',\'\')">Delete</a>';
+    const html=`<form><input name="wtSolution_Name" value="${variant==='name'?'Other':'Billing'}">${link}${variant==='duplicate'?link:''}</form>`;
+    client.solutionPage=async()=>new Page(`https://${HOST}${SC}Solution_Edit.aspx?SolutionId=${variant==='id'?'x':'5'}`,new Document(html));
+    await assert.rejects(client.webWrite('solution-delete',{solution:'Billing'}));
+    assert.equal(bridge.posts().length,0);
+  }
+});
+
 test('a page write prepares, then posts once with authorization and confirms by reading', async () => {
   const s = pageWrites();
   const bridge = new FakeBridge();
@@ -243,7 +337,7 @@ test('a new database connection sends only vault references for its login', asyn
   const old = new FakeBridge({ pages });
   await assert.rejects(s.execute(webClient(old), 'db-connection-create', args), coded('STUDIO_BRIDGE_OUTDATED'));
   assert.deepEqual([old.posts(), files(s.dir)], [[], []]);
-  const bridge = new FakeBridge({ pages, capabilities: ['sc_web', 'sc_web:secretRefs'] });
+  const bridge = new FakeBridge({ pages, capabilities: ['sc_http:studioSession', 'sc_web', 'sc_web:secretRefs'] });
   const client = webClient(bridge);
   const plan = await client.webWrite('db-connection-create', args);
   const target = 'SSAM/O11/test.example.com/DatabaseConnection/NewDb';
@@ -260,7 +354,7 @@ test('a new database connection sends only vault references for its login', asyn
 test('the extension mapping is an OsAjax Change, then Apply with the refreshed state', async () => {
   const s = pageWrites();
   const mapped = [];
-  const extension = () => { const html = fixture('extension-edit.html'); return mapped.length ? html.replaceAll('<option value="3">', '<option value="3" selected>').replaceAll('value="0" selected', 'value="0"') : html; };
+  const extension = () => { const html = fixture('extension-edit.html').replace(", '', '__OSVSTATE,'", ", 'Change', '__OSVSTATE,'"); return mapped.length ? html.replaceAll('<option value="3">', '<option value="3" selected>').replaceAll('value="0" selected', 'value="0"') : html; };
   const post = form => {
     if (Object.hasOwn(form, '__AJAXEVENT')) {
       assert.deepEqual([form.__AJAXEVENT, form['wt7$wtOperations$ctl02$wtDBConnectionCombo']], ['Change', '3']);
@@ -279,6 +373,85 @@ test('the extension mapping is an OsAjax Change, then Apply with the refreshed s
   assert.equal(bridge.posts()[1][7], receipt.operationId);
 });
 
+test('two logical database selectors advance once per receipt and expose the remaining continuation',async()=>{
+ const s=pageWrites(),names=['wt7$wtOperations$ctl02$wtDBConnectionCombo','wt7$wtOperations$ctl03$wtDBConnectionCombo'];
+ const values=['0','0'];
+ const render=()=>{
+  const base=fixture('extension-edit.html'),select=base.match(/<select[\s\S]*?<\/select>/)[0];
+  return base.replace(select,names.map((name,i)=>{
+   const html=select.replaceAll('ctl02',i?'ctl03':'ctl02');
+   return values[i]==='3'?html.replace('value="0" selected','value="0"').replace('value="3"','value="3" selected'):html;
+  }).join(''));
+ };
+ const bridge=new FakeBridge({pages:{[`GET ${SC}DatabaseConnections_List.aspx`]:fixture('db-connections.html'),
+  [`GET ${SC}Extension_Edit.aspx?ExtensionId=12`]:render,
+  [`POST ${SC}Extension_Edit.aspx?ExtensionId=12`]:form=>{
+   if(Object.hasOwn(form,'__AJAX'))return {ok:true,status:200,finalUrl:`https://${HOST}${SC}Extension_Edit.aspx?ExtensionId=12`,contentType:'text/plain',html:'{"__OSVSTATE":"next-state","html":""}'};
+   names.forEach((name,i)=>{values[i]=form[name];});return render();
+  }}});
+ const client=webClient(bridge),args={extensionId:'12',connection:'LegacyERP'};
+ const first=await s.execute(client,'extension-db-connection',args);assert.equal(first.state,'accepted');assert.equal(first.remainingSelectors,1);
+ assert.deepEqual(values,['3','0']);assert.equal(first.continuation.tool,'o11_service_center_write');
+ const repeated=await client.webWrite('extension-db-connection',args,{execute:true,words:'go',operationId:first.operationId,journal:s.journal});
+ assert.equal(repeated.existingReceipt,true);assert.equal(bridge.posts().length,2);
+ const second=await s.execute(client,'extension-db-connection',args);assert.equal(second.state,'confirmed');assert.deepEqual(values,['3','3']);
+ assert.deepEqual(bridge.posts().map(p=>p[6]),[false,true,false,true]);
+});
+
+test('extension mapping refuses concurrent selection changes before Change or Apply', async () => {
+  for (const selected of ['3', '9']) {
+    const s=pageWrites();let reads=0;
+    const base=fixture('extension-edit.html').replace('</select>','<option value="9">Other database</option></select>');
+    const changed=base.replaceAll('value="0" selected','value="0"').replaceAll(`<option value="${selected}">`,`<option value="${selected}" selected>`);
+    const bridge=new FakeBridge({pages:{
+      [`GET ${SC}DatabaseConnections_List.aspx`]:fixture('db-connections.html'),
+      [`GET ${SC}Extension_Edit.aspx?ExtensionId=12`]:()=>++reads===1?base:changed,
+    }});
+    const receipt=await s.execute(webClient(bridge),'extension-db-connection',{extensionId:'12',connection:'LegacyERP'});
+    assert.equal(receipt.state,'refused'); assert.equal(receipt.code,'SC_MAPPING_CHANGED'); assert.equal(receipt.sent,false);
+    assert.deepEqual(bridge.posts(),[]);
+  }
+});
+
+test('extension mapping restores the native unconfigured option and verifies it without a connection lookup', async () => {
+  const s=pageWrites();let mapped=true;
+  const base=fixture('extension-edit.html').replace('(Platform database)','(not configured)').replace('value="0"','value="17"');
+  const extension=()=>mapped?base.replaceAll('<option value="3">','<option value="3" selected>').replaceAll('value="17" selected','value="17"'):base;
+  const post=form=>{
+    assert.equal(form['wt7$wtOperations$ctl02$wtDBConnectionCombo'],'17');
+    if(Object.hasOwn(form,'__AJAX'))return {ok:true,status:200,finalUrl:`https://${HOST}${SC}Extension_Edit.aspx?ExtensionId=12`,contentType:'text/plain',html:'{"__OSVSTATE":"clear-state","html":""}'};
+    assert.equal(form.__OSVSTATE,'clear-state');mapped=false;return extension();
+  };
+  const bridge=new FakeBridge({pages:{[`GET ${SC}Extension_Edit.aspx?ExtensionId=12`]:extension,[`POST ${SC}Extension_Edit.aspx?ExtensionId=12`]:post}});
+  const client=webClient(bridge),args={extensionId:'12',connection:'(not configured)'};
+  const plan=await client.webWrite('extension-db-connection',args);
+  assert.equal(plan.currentSelections[0].value,'3');assert.equal(plan.connectionId,'17');
+  const receipt=await s.execute(client,'extension-db-connection',args);
+  assert.equal(receipt.state,'confirmed');assert.equal(mapped,false);
+  assert.deepEqual(bridge.posts().map(p=>p[6]),[false,true]);
+});
+
+test('extension mapping never confirms an ignored change or a missing selector', async () => {
+  for (const missing of [false, true]) {
+    const s=pageWrites();let applied=false;
+    const base=fixture('extension-edit.html');
+    const bridge=new FakeBridge({pages:{
+      [`GET ${SC}DatabaseConnections_List.aspx`]:fixture('db-connections.html'),
+      [`GET ${SC}Extension_Edit.aspx?ExtensionId=12`]:()=>applied&&missing?'<p>no selectors</p>':base,
+      [`POST ${SC}Extension_Edit.aspx?ExtensionId=12`]:form=>{
+        if(Object.hasOwn(form,'__AJAX'))return {ok:true,status:200,finalUrl:`https://${HOST}${SC}Extension_Edit.aspx?ExtensionId=12`,contentType:'text/plain',html:'{"__OSVSTATE":"next-state","html":""}'};
+        applied=true;return base;
+      }
+    }});
+    const receipt=await s.execute(webClient(bridge),'extension-db-connection',{extensionId:'12',connection:'LegacyERP'});
+    assert.equal(receipt.state,'accepted-unverified');assert.equal(receipt.observedDesiredState,false);
+    assert.equal(receipt.observedSelections.length,missing?0:1);
+    if(missing)assert.equal(receipt.observationMismatch,'database-selectors-changed');
+    else assert.equal(receipt.observedSelections[0].value,'0');
+    assert.deepEqual(bridge.posts().map(p=>p[6]),[false,true]);
+  }
+});
+
 test('the integration log level reads back', async () => {
   const s = pageWrites();
   const level = ['selected', ''];
@@ -288,8 +461,12 @@ test('the integration log level reads back', async () => {
   const client = webClient(bridge);
   const plan = await client.webWrite('integration-log-level', { moduleId: '42', integration: 'PaymentsAPI', level: 'Full' });
   assert.deepEqual([plan.currentLevel, plan.changed, plan.kind], ['Default', true, 'consumed-rest']);
-  const receipt = await s.execute(client, 'integration-log-level', { moduleId: '42', integration: 'PaymentsAPI', level: 'Full' });
+  await assert.rejects(s.execute(client, 'integration-log-level', { moduleId: '42', integration: 'PaymentsAPI', level: 'Full', expectedValue: 'Troubleshoot' }), /expected value/);
+  assert.equal(bridge.posts().length, 0);
+  const receipt = await s.execute(client, 'integration-log-level', { moduleId: '42', integration: 'PaymentsAPI', level: 'Full', expectedValue: 'Default' });
   assert.deepEqual([receipt.state, receipt.observedLevel], ['confirmed', 'Full']);
+  await assert.rejects(s.execute(client, 'integration-log-level', { moduleId: '42', integration: 'PaymentsAPI', level: 'Default', expectedValue: 'Troubleshoot' }), /expected value/);
+  assert.equal(bridge.posts().length, 1);
 });
 
 test('a write the bridge refuses is refused and one it loses stays uncertain', async () => {
@@ -371,6 +548,45 @@ test('solution publish sends the prepared package once and returns its job', asy
   assert.equal(receipt.continuation.arguments.action, 'solution-publish-status');
   const call = s.bridge.calls.find(c => c[0] === 'api' && c[2] === 'PublishSolution');
   assert.deepEqual(call[3], { file: osp, filename: 'Billing.osp' });
+  const finish = { Type: 'State', MessageDefinition: { Message: 'finish' } };
+  const success = { Type: 'Info', MessageDefinition: { Detail: 'The solution was successfully published. 1 module was published.' } };
+  for (const messages of [[], [finish], [success], [finish, success, {Type:'Error'}]]) {
+    s.bridge.replies.CheckSolutionPublish = {messages, lastMessageId: 19};
+    const pending = await s.run('verify', '--operation-id', receipt.operationId);
+    assert.equal(pending.state, 'accepted');
+    assert.equal(pending.observedDesiredState, false);
+    assert.equal(pending.executionCompleted, false);
+  }
+  s.bridge.replies.CheckSolutionPublish = {messages:[finish,success],lastMessageId:20};
+  await assert.rejects(s.run('solution-publish-status', '--publish-id', '18', '--operation-id', receipt.operationId), /must match/);
+  await assert.rejects(s.run('solution-publish-status', '--publish-id', '17', '--operation-id', receipt.operationId, '--last-message-id', '10'), /complete publication status/);
+  const status = await s.run('solution-publish-status', '--publish-id', '17', '--operation-id', receipt.operationId);
+  assert.equal(status.receiptState, 'confirmed');
+  assert.equal(status.executionCompleted, true);
+  const verified = s.journal.lookup(receipt.operationId);
+  assert.equal(verified.state, 'confirmed');
+  assert.equal(verified.executionCompleted, true);
+  assert.equal(verified.publicationObservation.solutionPublishId, 17);
+  assert.equal(verified.publicationObservation.lastMessageId, 20);
+  assert.equal(s.bridge.calls.filter(c => c[0] === 'api' && c[2] === 'PublishSolution').length, 1);
+  const reads = s.bridge.calls.filter(c => c[0] === 'api' && c[2] === 'CheckSolutionPublish').length;
+  s.bridge.replies.CheckSolutionPublish = new Error('Job already removed');
+  const cached = await s.run('solution-publish-status', '--publish-id', '17', '--operation-id', receipt.operationId);
+  assert.equal(cached.source, 'confirmed-receipt');
+  assert.equal(s.bridge.calls.filter(c => c[0] === 'api' && c[2] === 'CheckSolutionPublish').length, reads);
+});
+
+test('database diagnostics preserve explicit lack of evidence through the public command result',async()=>{
+ const s=studioApi();
+ const run=(...args)=>runServiceCenter([...args,'--host',HOST],{journal:s.journal,locate:()=>s.bridge,present:async()=>false,running:async()=>false,
+  opener:()=>assert.fail('No prompt'),exports:s.dir,registry:REGISTRY,sleep:async()=>{}});
+ s.bridge.replies.ListDatabases=new BridgeError('REMOTE_ERROR','server-api ListDatabases: NotFoundException: Http Error Code: 404 - Not Found. ');
+ const inventory=await run('databases');
+ assert.equal(inventory.ok,false);assert.equal(inventory.code,'SC_DATABASE_ENDPOINT_UNAVAILABLE');
+ assert.equal(inventory.inventoryVerified,false);assert.equal(inventory.emptyInventoryProven,false);
+ s.bridge.replies.GetDatabaseByApplicationKey=new BridgeError('REMOTE_ERROR','server-api GetDatabaseByApplicationKey: BadRequestException: Database not returned');
+ const database=await run('application-database','--application-key','app-1');
+ assert.equal(database.code,'SC_APPLICATION_DATABASE_UNVERIFIED');assert.equal(database.databaseVerified,false);assert.equal(database.databaseAbsentProven,false);
 });
 
 test('apply settings and the database association use their surfaces', async () => {
@@ -381,6 +597,25 @@ test('apply settings and the database association use their surfaces', async () 
     AssociateAppWithDatabase: () => { s.associated = true; return { associated: true }; } });
   const settings = await s.run('apply-settings', '--application', 'Orders App', '--execute', '--operation-id', uuid(), '--words', 'apply settings test', '--confirm-host', HOST);
   assert.deepEqual([settings.state, settings.applyId], ['accepted', 55]);
+  assert.equal(settings.continuation.arguments.operationId, settings.operationId);
+  await assert.rejects(s.run('apply-settings-status', '--apply-id', '56', '--operation-id', settings.operationId), /must match/);
+  for (const result of [{Status:'running',REST_Error:{ErrorMessage:''}},
+    {Status:'finished',REST_Error:{ErrorMessage:'Failed'}}, {Status:'finished',REST_Error:{ErrorMessage:'',ErrorCode:5}}]) {
+    s.bridge.replies['apply-settings-status'] = result;
+    const observed = await s.run('apply-settings-status', '--apply-id', '55', '--operation-id', settings.operationId);
+    assert.equal(observed.receiptState, 'accepted');
+    assert.equal(observed.executionCompleted, false);
+  }
+  s.bridge.replies['apply-settings-status'] = {Status:'finished'};
+  await assert.rejects(s.run('apply-settings-status', '--apply-id', '55', '--operation-id', settings.operationId), /Unrecognized/);
+  s.bridge.replies['apply-settings-status'] = {Status:'finished',REST_Error:{ErrorMessage:'',ErrorCode:null}};
+  const complete = await s.run('apply-settings-status', '--apply-id', '55', '--operation-id', settings.operationId);
+  assert.equal(complete.receiptState, 'confirmed');
+  assert.equal(complete.executionCompleted, true);
+  assert.equal(s.journal.lookup(settings.operationId).state, 'confirmed');
+  s.bridge.replies['apply-settings-status'] = new Error('Job gone');
+  assert.equal((await s.run('apply-settings-status', '--apply-id', '55', '--operation-id', settings.operationId)).source, 'confirmed-receipt');
+  assert.equal(s.bridge.calls.filter(c=>c[0]==='api'&&c[2]==='apply-settings').length, 1);
   const database = await s.run('application-database-set', '--application-key', 'app-1', '--database-id', 'db-2', '--execute', '--operation-id', uuid(), '--words', 'use db-2 test', '--confirm-host', HOST);
   assert.equal(database.state, 'confirmed');
   assert.deepEqual(Object.fromEntries(s.bridge.calls.filter(c => c[0] === 'api' && c[4]).map(c => [c[2], c[1]])), { 'apply-settings': 'sc-rest', AssociateAppWithDatabase: 'server-api' });
@@ -420,6 +655,19 @@ test('reads pass named arguments and redact secrets', async () => {
   assert.equal(result.auth.path, 'studio');
   const modules = await s.run('modules');
   assert.deepEqual(modules.result.map(m => m.Name), ['Orders', 'Billing']);
+});
+
+test('platform properties hide opaque authentication material from an older bridge', async () => {
+  const s = studioApi();
+  const marker = 'fictional-opaque-auth-material';
+  s.bridge.replies.GetProperties = { HubServerVersion: '11.42.1', ForceSecureAlgorithmsInAuthentication: marker };
+  const result = await s.run('platform-properties');
+  assert.equal(result.result.HubServerVersion, '11.42.1');
+  assert.equal(result.result.ForceSecureAlgorithmsInAuthentication, '<redacted>');
+  assert.ok(!JSON.stringify(result).includes(marker));
+  const pair = redact([{ Key: 'ForceSecureAlgorithmsInAuthentication', Value: marker }]);
+  assert.equal(pair[0].Value, '<redacted>');
+  assert.equal(pair[0].Key, 'ForceSecureAlgorithmsInAuthentication');
 });
 
 // ---- Studio API writes of this wave
@@ -501,6 +749,18 @@ test('the commit message targets the version id and is read back', async () => {
   await assert.rejects(s.run('commit-message-set', '--module', 'SampleOrders', '--version', '9', '--commit-message', 'x'), isProtocol(/version 9/));
 });
 
+test('extension version precondition refuses a new package when the name appeared after planning', async () => {
+  const s = apiWrites();
+  const xif = path.join(s.dir, 'SampleNewExt.xif');
+  fs.writeFileSync(xif, Buffer.from('synthetic extension'));
+  const args = ['extension-publish', '--xif-file', xif, '--extension', 'SampleNewExt', '--expected-version-id', 'none'];
+  assert.equal((await s.run(...args)).observedVersionId, null);
+  s.extensions.push({key:'concurrent-extension',name:'SampleNewExt',versionId:3400});
+  await assert.rejects(s.execute('publish test extension', ...args), e => e.code === 'EXTENSION_VERSION_CHANGED');
+  assert.equal(s.apiCalls('UploadAndPublishExtension').length, 0);
+  assert.equal(fs.existsSync(path.join(s.dir, 'receipts')), false);
+});
+
 test('extension publish sends the prepared xif once', async () => {
   const s = apiWrites();
   const xif = path.join(s.dir, 'SampleNewExt.xif');
@@ -519,6 +779,25 @@ test('extension publish sends the prepared xif once', async () => {
   await assert.rejects(s.run('extension-publish', '--xif-file', path.join(s.dir, 'x.zip')), isProtocol(/xif/));
 });
 
+test('extension context is revalidated by the write engine before reservation and upload', async () => {
+  const s=apiWrites(),xif=path.join(s.dir,'SampleNewExt.xif'),proposal=path.join(s.dir,'proposal.md'),context=path.join(s.dir,'approval.json');
+  const words='Authorize standalone test fixtures on test';
+  fs.writeFileSync(xif,'synthetic extension');fs.writeFileSync(proposal,'Create SampleNewExt once, standalone; delete afterward.');
+  const record={schema:'ssam-authorization-context/1',decision:'approved',words,
+    source:{kind:'human-conversation',threadId:'11111111-2222-3333-4444-555555555555',messageId:'22222222-2222-3333-4444-555555555555',question:'Express fixture test authorization'},
+    proposal:{file:proposal,sha256:sha256(fs.readFileSync(proposal))},constraints:{createOnly:true},
+    scope:[{lane:'o11',host:HOST,operation:'extension-publish',targets:['SampleNewExt']}]};
+  const save=()=>fs.writeFileSync(context,JSON.stringify(record));save();
+  const args=['extension-publish','--xif-file',xif,'--extension','SampleNewExt','--expected-version-id','none','--authorization-context',context];
+  record.scope[0].targets=['Other'];save();
+  await assert.rejects(s.execute(words,...args),e=>e.code==='AUTHORIZATION_CONTEXT_INVALID');
+  assert.equal(s.apiCalls('UploadAndPublishExtension').length,0);
+  record.scope[0].targets=['SampleNewExt'];save();
+  const result=await s.execute(words,...args);assert.equal(result.state,'confirmed');
+  assert.deepEqual(result.plan.authorizationContext.targets,['SampleNewExt']);
+  assert.equal(s.apiCalls('UploadAndPublishExtension').length,1);
+});
+
 // ---- the resolver
 function resolver(bridge = null, { vault = false, running = false, ...options } = {}) {
   const prompts = [];
@@ -527,107 +806,63 @@ function resolver(bridge = null, { vault = false, running = false, ...options } 
   return [r, prompts];
 }
 
-test('the Studio first, then its web window', async () => {
-  assert.equal((await resolver(new FakeBridge())[0].resolve('api')).path, 'studio');
-  const web = await resolver(new FakeBridge())[0].resolve('web');
-  assert.deepEqual([web.path, web.user], ['studio-web', 'dev@example.test']);
-  const [noWeb, prompts1] = resolver(new FakeBridge({ web: false }), { vault: true });
-  await assert.rejects(noWeb.resolve('web'), e => e instanceof AuthRequired && e.code === 'WEB_SIGN_IN_REQUIRED' && e.continuation.arguments.action === 'web-sign-in');
-  const [notSigned, prompts2] = resolver(new FakeBridge({ signed: false }), { vault: true });
-  await assert.rejects(notSigned.resolve('api'), e => e instanceof AuthRequired && e.code === 'STUDIO_NOT_SIGNED_IN' && e.continuation.arguments.action === 'sign-in');
-  assert.deepEqual([...prompts1, ...prompts2], []);
-});
-
-const HIDDEN = ['sc_api:soap', 'sc_web', 'sc_web:login'];
-
-test('a bridge with sc_web:login signs its hidden window in with the stored login', async () => {
-  const bridge = new FakeBridge({ web: false, capabilities: HIDDEN });
-  const [r, prompts] = resolver(bridge, { vault: true });
-  const web = await r.resolve('web');
-  assert.deepEqual([web.path, web.attempts.at(-1).outcome], ['studio-web', 'signed-in-hidden']);
-  assert.deepEqual(bridge.calls.filter(c => c[0] === 'web').map(c => c[1]), ['login']);
+test('native API and headless pages reuse the selected authenticated Studio', async () => {
+  const bridge = new FakeBridge(); const [r, prompts] = resolver(bridge);
+  assert.equal((await r.resolve('api')).path, 'studio');
+  assert.equal((await r.resolve('web')).path, 'studio-http');
+  assert.deepEqual(bridge.calls.filter(c => c[0] !== 'session'), []);
   assert.deepEqual(prompts, []);
-  // A dry run (session-status) never signs in.
-  const dry = new FakeBridge({ web: false, capabilities: HIDDEN });
-  await assert.rejects(resolver(dry, { vault: true, login: false })[0].resolve('web'), e => e.code === 'WEB_SIGN_IN_REQUIRED');
-  assert.deepEqual(dry.calls.filter(c => c[0] === 'web'), []);
 });
 
-test('without a stored login the private prompt opens, and nothing is submitted', async () => {
-  const bridge = new FakeBridge({ web: false, capabilities: HIDDEN });
-  const [r, prompts] = resolver(bridge);
-  await assert.rejects(r.resolve('web'), e => e instanceof AuthRequired && e.code === 'CREDENTIAL_PROMPT_PENDING'
-    && e.auth.target === 'SSAM/O11/test.example.com/ServiceCenter');
+test('a legacy window capability cannot open UI; stored HTTP credentials remain usable; nothing stored opens the private prompt', async () => {
+  const bridge = new FakeBridge({ capabilities: ['sc_web:login'] });
+  assert.equal((await resolver(bridge, { vault: true })[0].resolve('web')).path, 'vault');
+  const [pending, prompts] = resolver(bridge, { wait: { waitMs: 0 } });
+  await assert.rejects(pending.resolve('web'), e => e.code === 'CREDENTIAL_PROMPT_PENDING');
   assert.deepEqual(prompts, [[HOST, 'ServiceCenter']]);
-  assert.deepEqual(bridge.calls.filter(c => c[0] === 'web'), []);
-  const [quiet, none] = resolver(new FakeBridge({ web: false, capabilities: HIDDEN }), { prompt: 'never' });
-  await assert.rejects(quiet.resolve('web'), e => e.code === 'AUTH_REQUIRED');
-  assert.deepEqual(none, []);
+  await assert.rejects(resolver(bridge, { session: 'studio' })[0].resolve('web'), e => e.code === 'HEADLESS_AUTH_UNAVAILABLE');
+  assert.deepEqual(bridge.calls.filter(c => c[0] !== 'session'), []);
 });
 
-test('a rejected login opens the prompt again and is never resubmitted; an interactive sign-in is reported', async () => {
-  const rejected = new FakeBridge({ web: false, capabilities: HIDDEN, login: new BridgeError('WEB_LOGIN_REJECTED', 'rejected', { submitted: true }) });
-  const [r, prompts] = resolver(rejected, { vault: true });
-  await assert.rejects(r.resolve('web'), e => e.code === 'CREDENTIAL_PROMPT_OPENED' && e.auth.rejected === true);
-  assert.deepEqual(prompts, [[HOST, 'ServiceCenter']]);
-  assert.equal(rejected.calls.filter(c => c[1] === 'login').length, 1);
-  const mfa = new FakeBridge({ web: false, capabilities: HIDDEN, login: new BridgeError('WEB_SIGN_IN_INTERACTIVE', 'mfa', { submitted: true }) });
-  const [m, none] = resolver(mfa, { vault: true });
-  await assert.rejects(m.resolve('web'), e => e.code === 'WEB_SIGN_IN_INTERACTIVE' && e.attempts.at(-1).outcome === 'interactive');
-  assert.deepEqual(none, []);
-  // The window is never shown: no open without hidden.
-  assert.deepEqual(mfa.calls.filter(c => c[1] === 'open'), []);
-  assert.ok(CODES.includes('WEB_LOGIN_REJECTED') && CODES.includes('WEB_SIGN_IN_INTERACTIVE'));
-});
-
-test('the vault only without a Studio, and the prompt only without both', async () => {
-  assert.equal((await resolver(null, { vault: true })[0].resolve('web')).path, 'vault');
-  const [r, prompts] = resolver(null);
-  await assert.rejects(r.resolve('web'), e => e instanceof AuthRequired && e.code === 'CREDENTIAL_PROMPT_PENDING' && e.auth.path === 'prompt'
-    && e.auth.target === 'SSAM/O11/test.example.com/ServiceCenter' && JSON.stringify(e.attempts.map(a => a.path)) === '["studio","vault","prompt"]');
-  assert.deepEqual(prompts, [[HOST, 'ServiceCenter']]);
-});
-
-test('no prompt while a Studio is open or when it cannot help', async () => {
-  for (const [bridge, options, need, code] of [[null, { running: true }, 'web', 'STUDIO_NOT_CONNECTED'], [new FakeBridge({ verbs: ['ping'] }), {}, 'web', 'STUDIO_BRIDGE_OUTDATED'],
-    [null, {}, 'api', 'STUDIO_REQUIRED'], [null, { prompt: 'never' }, 'web', 'AUTH_REQUIRED']]) {
-    const [r, prompts] = resolver(bridge, options);
-    await assert.rejects(r.resolve(need), e => e instanceof AuthRequired && e.code === code, code);
-    assert.deepEqual(prompts, []);
+test('missing credentials: pages open the private prompt (pending), the Studio API never does', async () => {
+  for (const [bridge, options, need, code, prompted] of [[null, {}, 'web', 'CREDENTIAL_PROMPT_PENDING', true], [null, { running: true }, 'web', 'CREDENTIAL_PROMPT_PENDING', true],
+    [new FakeBridge({ verbs: ['ping'] }), {}, 'web', 'CREDENTIAL_PROMPT_PENDING', true], [null, { prompt: 'never' }, 'web', 'AUTH_REQUIRED', false],
+    [null, {}, 'api', 'STUDIO_REQUIRED', false], [new FakeBridge({ signed: false }), {}, 'api', 'STUDIO_NOT_SIGNED_IN', false]]) {
+    const [r, prompts] = resolver(bridge, { wait: { waitMs: 0 }, ...options });
+    await assert.rejects(r.resolve(need), e => e instanceof AuthRequired && e.code === code);
+    assert.deepEqual(prompts, prompted ? [[HOST, 'ServiceCenter']] : []);
   }
-  assert.equal((await resolver(new FakeBridge({ verbs: ['ping'] }), { vault: true })[0].resolve('web')).path, 'vault');
 });
 
-test('LifeTime uses its own token entry', async () => {
-  const [r, prompts] = resolver(new FakeBridge());
-  await assert.rejects(r.resolve('lifetime'), e => e instanceof AuthRequired && e.auth.target === 'SSAM/O11/test.example.com/LifeTime');
-  assert.deepEqual(prompts, [[HOST, 'LifeTime']]);
+test('LifeTime uses its own token entry and never opens a prompt', async () => {
+  const targets = [];
+  const r = new Resolver(HOST, { locate: () => assert.fail('LifeTime is independent'),
+    present: async target => { targets.push(target); return true; }, opener: () => assert.fail('headless') });
+  assert.equal((await r.resolve('lifetime')).path, 'vault');
+  assert.deepEqual(targets, ['SSAM/O11/' + HOST + '/LifeTime']);
 });
 
-test('an explicit vault session skips the Studio', async () => {
+test('explicit vault selection reads only Studio identity metadata', async () => {
   const bridge = new FakeBridge();
   assert.equal((await resolver(bridge, { vault: true, session: 'vault' })[0].resolve('web')).path, 'vault');
-  assert.deepEqual(bridge.calls, []);
+  assert.deepEqual(bridge.calls, [['session', HOST]]);
 });
 
-// ---- the private prompt
-test('the prompt window is detached and nothing is read back', () => {
-  const launched = [];
-  const spawnFn = (exe, argv, options) => { launched.push([exe, argv, options]); return { pid: 31337, unref() {} }; };
-  const state = temp();
-  const first = openPrompt(HOST, 'DatabaseConnection', 'LegacyERP', { state, spawnFn });
-  const second = openPrompt(HOST, 'DatabaseConnection', 'LegacyERP', { state, spawnFn });
-  const folder = path.join(state, 'auth', 'prompts');
-  const marker = fs.readFileSync(path.join(folder, files(folder, /\.json$/)[0]), 'utf8');
-  assert.deepEqual([first.opened, second.alreadyOpen], [true, true]);
-  assert.equal(launched.length, 1);
-  const [exe, argv, options] = launched[0];
-  assert.ok(exe.toLowerCase().endsWith('powershell.exe'));
+test('the private prompt runs windows-o11-credential.ps1 -Mode bootstrap detached, one window per target, its marker under .ssam-hybrid', () => {
+  const state = temp(); const spawned = [];
+  const spawnFn = (exe, argv, options) => { spawned.push([exe, argv, options]); return { pid: 4242, unref() {}, on() {} }; };
+  const first = openPrompt(HOST, 'DatabaseConnection', 'LegacyERP', { state, spawnFn, now: () => Date.now() });
+  assert.deepEqual(first, { opened: true, target: `SSAM/O11/${HOST}/DatabaseConnection/LegacyERP` });
+  const [exe, argv, options] = spawned[0];
+  assert.ok(/powershell\.exe$/i.test(exe));
   assert.deepEqual(argv.slice(3), ['-Mode', 'bootstrap', '-Kind', 'DatabaseConnection', '-HostName', HOST, '-Name', 'LegacyERP']);
   assert.ok(argv[2].endsWith('windows-o11-credential.ps1'));
-  assert.deepEqual([options.stdio, options.detached], ['ignore', true]);
-  assert.deepEqual(new Set(Object.keys(JSON.parse(marker))), new Set(['target', 'pid', 'openedAt']));
-  assert.throws(() => openPrompt(HOST, 'DatabaseConnection', '../x', { state: 'unused', spawnFn }), isProtocol());
+  assert.deepEqual([options.detached, options.stdio, options.windowsHide], [true, 'ignore', false]);
+  assert.equal(files(path.join(state, 'auth', 'prompts'), /\.json$/).length, 1, 'the marker lives under <state>\\auth\\prompts');
+  // The same target within five minutes: the window that is open is the one; nothing new is spawned.
+  assert.deepEqual(openPrompt(HOST, 'DatabaseConnection', 'LegacyERP', { state, spawnFn }), { opened: false, alreadyOpen: true, target: `SSAM/O11/${HOST}/DatabaseConnection/LegacyERP` });
+  assert.equal(spawned.length, 1);
+  assert.throws(() => openPrompt(HOST, 'DatabaseConnection', '../x', { state, spawnFn }), isProtocol());
 });
 
 test('the prompt script and the vault PowerShell never write the secret', () => {
@@ -652,43 +887,26 @@ function sessions() {
 test('status reports the path each kind of call would use', async () => {
   const s = sessions();
   const status = await s.run(['session-status', '--host', HOST], { bridge: new FakeBridge({ web: false }) });
-  assert.deepEqual(status.wouldUse, { api: 'studio', web: 'WEB_SIGN_IN_REQUIRED' });
+  assert.deepEqual(status.wouldUse, { api: 'studio', web: 'studio-http' });
   assert.deepEqual([status.hostClass, status.studio.serviceCenterVerbs, status.vault], ['corporate', true, { ServiceCenter: false, LifeTime: false }]);
   assert.deepEqual(s.prompts, []);
 });
 
-test('sign-in opens the Studio\'s dialog, or the private prompt without a Studio', async () => {
-  const s = sessions();
-  const bridge = new FakeBridge({ signed: false });
-  assert.equal((await s.run(['session-sign-in', '--host', HOST], { bridge })).dialog, 'opened');
-  assert.ok(bridge.calls.some(c => c[0] === 'login' && c[1] === HOST));
-  await assert.rejects(s.run(['session-sign-in', '--host', HOST]), e => e instanceof AuthRequired && e.code === 'CREDENTIAL_PROMPT_PENDING');
-  assert.deepEqual(s.prompts, [[HOST, 'ServiceCenter']]);
-  await assert.rejects(s.run(['session-sign-in', '--host', HOST], { running: true }), e => e instanceof AuthRequired && e.code === 'STUDIO_NOT_CONNECTED');
-  assert.equal(s.prompts.length, 1);
-  await assert.rejects(s.run(['session-sign-in', '--host', HOST, '--surface', 'lifetime']), e => e.code === 'CREDENTIAL_PROMPT_PENDING');
-  assert.deepEqual(s.prompts.at(-1), [HOST, 'LifeTime']);
+test('sign-in never launches a Studio dialog; without a Studio and nothing stored it opens the private prompt', async () => {
+  const s = sessions(); const bridge = new FakeBridge({ signed: false });
+  await assert.rejects(s.run(['session-sign-in', '--host', HOST], { bridge }), e => e.code === 'STUDIO_NOT_SIGNED_IN');
+  assert.deepEqual(s.prompts, []);
+  for (const argv of [[], ['--surface', 'lifetime']])
+    await assert.rejects(s.run(['session-sign-in', '--host', HOST, ...argv]), e => e.code === 'CREDENTIAL_PROMPT_PENDING');
+  assert.deepEqual(bridge.calls, [['session', HOST]]); assert.deepEqual(s.prompts, [[HOST, 'ServiceCenter'], [HOST, 'LifeTime']]);
 });
 
-test('web sign-in opens the Studio\'s Service Center window', async () => {
-  const s = sessions();
-  const bridge = new FakeBridge({ web: false });
-  assert.equal((await s.run(['session-web-sign-in', '--host', HOST], { bridge })).window, 'opened');
-  assert.deepEqual(bridge.calls.at(-1).slice(0, 2), ['web', 'open']);
-});
-
-test('web-sign-in with a hidden-login bridge signs in without showing the window; status never signs in', async () => {
-  const s = sessions();
-  const bridge = new FakeBridge({ web: false, capabilities: HIDDEN });
-  const status = await s.run(['session-status', '--host', HOST], { bridge, vault: true });
-  assert.equal(status.wouldUse.web, 'WEB_SIGN_IN_REQUIRED');
-  assert.deepEqual(bridge.calls.filter(c => c[0] === 'web'), []);
-  const done = await s.run(['session-web-sign-in', '--host', HOST], { bridge, vault: true });
-  assert.deepEqual([done.window, done.signedIn], ['hidden', true]);
+test('web sign-in uses only the headless login command', async () => {
+  const s = sessions(); const bridge = new FakeBridge({ web: false });
+  const done = await s.run(['session-web-sign-in', '--host', HOST], { bridge });
+  assert.equal(done.windowCreated, false); assert.equal(done.auth.path, 'studio-http');
   assert.deepEqual(bridge.calls.filter(c => c[0] === 'web').map(c => c[1]), ['login']);
-  await assert.rejects(s.run(['session-web-sign-in', '--host', HOST], { bridge: new FakeBridge({ web: false, capabilities: HIDDEN }) }),
-    e => e.code === 'CREDENTIAL_PROMPT_PENDING');
-  assert.deepEqual(s.prompts, [[HOST, 'ServiceCenter']]);
+  assert.deepEqual(s.prompts, []);
 });
 
 test('corporate hosts need confirmation and words naming them before any call', async () => {
@@ -718,17 +936,17 @@ test('a connection delete needs words naming it and reads back its absence', asy
   await assert.rejects(s.run([...base, '--operation-id', uuid(), '--words', 'delete it on test'], { bridge }), isProtocol(/name its target/));
   assert.deepEqual(bridge.posts(), []);
   const receipt = await s.run([...base, '--operation-id', uuid(), '--words', 'delete LegacyERP on test'], { bridge });
-  assert.deepEqual([receipt.state, deleted, receipt.auth.path], ['confirmed', ['wt5$wtDeleteLink'], 'studio-web']);
+  assert.deepEqual([receipt.state, deleted, receipt.auth.path], ['confirmed', ['wt5$wtDeleteLink'], 'studio-http']);
 });
 
-test('a new connection without a stored login opens its prompt before any reservation', async () => {
+test('a new connection without a stored login opens its private prompt before any reservation', async () => {
   const s = sessions();
   const argv = ['db-connection-create', '--host', HOST, '--connection', 'NewDb', '--db-server', 'sql', '--execute', '--operation-id', uuid(), '--words', 'create NewDb on test', '--confirm-host', HOST];
   // A bridge without sc_web:secretRefs cannot carry the login: refused, and no prompt is opened for nothing.
   await assert.rejects(s.run(argv, { bridge: new FakeBridge() }), coded('STUDIO_BRIDGE_OUTDATED'));
   assert.deepEqual(s.prompts, []);
-  const bridge = new FakeBridge({ capabilities: ['sc_web', 'sc_web:secretRefs'] });
-  await assert.rejects(s.run(argv, { bridge }), e => e instanceof AuthRequired && e.code === 'CREDENTIAL_PROMPT_PENDING' && e.auth.target === 'SSAM/O11/test.example.com/DatabaseConnection/NewDb');
+  const bridge = new FakeBridge({ capabilities: ['sc_http:studioSession', 'sc_web', 'sc_web:secretRefs'] });
+  await assert.rejects(s.run(argv, { bridge }), e => e instanceof AuthRequired && e.code === 'CREDENTIAL_PROMPT_PENDING');
   assert.deepEqual(s.prompts, [[HOST, 'DatabaseConnection']]);
   assert.deepEqual([bridge.calls.filter(c => c[0] === 'web'), files(s.dir, /\.json$/)], [[], []]);
 });
@@ -740,17 +958,18 @@ test('secret writes are refused without a Studio', async () => {
     coded('STUDIO_REQUIRED'));
   assert.deepEqual([s.prompts, files(s.dir, /\.json$/)], [[], []]);
   await assert.rejects(s.run(['property-set', '--host', HOST, '--module-id', '3', '--name', 'Token', '--value-vault', 'SSAM/O11/other.example.com/SiteProperty/Token'],
-    { bridge: new FakeBridge({ capabilities: ['sc_web', 'sc_web:secretRefs'] }) }), isProtocol(/SiteProperty/));
+    { bridge: new FakeBridge({ capabilities: ['sc_http:studioSession', 'sc_web', 'sc_web:secretRefs'] }) }), isProtocol(/SiteProperty/));
 });
 
 test('the solution download keeps the package locally', async () => {
   const s = sessions();
   const bridge = new FakeBridge();
   solutionPages(bridge, new Set(['Orders']));
-  const osp = Buffer.from('PK\x03\x04osp', 'latin1');
+  const osp = zip({'Solution.xml':'<Solution/>'});
   bridge.pages[`POST ${SC}Solution_Edit.aspx?SolutionId=5`] = (f, a) => (a === 'binary' && f['wt3$wtDownloadButton'] === 'Download' ? osp : '<p/>');
   const result = await s.run(['solution-download', '--host', HOST, '--solution', 'Billing'], { bridge });
-  assert.deepEqual([result.sha256, result.size], [sha256(osp), 7]);
+  assert.match(result.operationId, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/, 'the tool mints the UUID of a new download');
+  assert.deepEqual([result.sha256, result.size], [sha256(osp), osp.length]);
   assert.ok(path.basename(result.file).startsWith('Billing-'));
   assert.equal(bridge.posts()[0][6], false, 'a download is a read');
 });
@@ -769,18 +988,19 @@ async function loopback() {
   const server = await loopbackBridge((request, socket) => {
     const { method } = request; const params = request.params ?? {};
     if (method === 'ping') return { success: true, data: { bridge: 'anvil', pid: 99, version: '2.0' } };
+    if (method === 'bridge_manifest') return { success: true, data: { verbs: VERBS, capabilities: ['sc_http:studioSession'] } };
     if (request.authorization !== 'k3y') return { success: false, data: null, error: 'UnauthorizedAccessException: trusted controller', executed: false };
     if (method === 'sc_api' && params.operation === 'DeleteModule') { socket.end(); return undefined; } // the connection drops after the write arrived
     if (method === 'sc_api') return { success: true, data: { ok: true, source: 'studio', host: params.host, user: 'dev', elapsedMs: 2,
       result: [{ Name: 'A', Token: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJl' }] } };
     if (method === 'sc_session') return { success: true, data: { ok: false, code: 'STUDIO_NOT_SIGNED_IN', message: 'no login; password=hunter2' } };
-    if (method === 'sc_web' && params.secretRefs) {
+    if (method === 'sc_http' && params.secretRefs) {
       // ScSecrets.cs NotFound: the target and part, never a value; nothing left the Studio.
       const ref = params.secretRefs[0];
       return { success: false, data: { ok: false, code: 'SECRET_NOT_FOUND', executed: false, target: ref.target, part: ref.field, gate: 'secret_not_found',
         message: `secretRef target ${ref.target}: the Windows vault of this user has no such entry` }, error: 'SECRET_NOT_FOUND: no such entry', code: 'SECRET_NOT_FOUND', executed: false };
     }
-    if (method === 'sc_web' && params.action === 'fetch')
+    if (method === 'sc_http' && params.action === 'fetch')
       // The sc-bridge envelope: the contract answer in data also on failure, executed:false when nothing left.
       return { success: false, data: { ok: false, code: 'WEB_SIGN_IN_REQUIRED', message: 'window not signed in' }, error: 'WEB_SIGN_IN_REQUIRED: window not signed in', code: 'WEB_SIGN_IN_REQUIRED', executed: false };
     return { success: false, data: null, error: 'Unknown method: ' + method };
@@ -825,6 +1045,9 @@ test('a missing vault entry is SECRET_NOT_FOUND and refuses the receipt', async 
     const failure = bridgeFailure(caught, {}, { action: 'db-connection-create', host: HOST });
     assert.deepEqual([failure.state, failure.target], ['refused', target]);
     assert.ok(failure.continuation.why.includes('new operationId'));
+    // 012e263e: an absent database login or secret property value gets the private Windows prompt before the reservation.
+    assert.match(failure.continuation.why, /private Windows prompt in its own window/);
+    assert.doesNotMatch(failure.continuation.why, /never opens a prompt/);
     assert.equal(failure.continuation.tool, 'o11_service_center_write');
   } finally { await l.server.close(); }
 });
@@ -864,7 +1087,7 @@ function bridgeTables() {
   const parts = text.split(/IReadOnlyDictionary<string, ScOp<Sc(\w+)Send>> (\w+) =/);
   const names = {};
   for (let i = 1; i + 2 < parts.length; i += 3) names[parts[i + 1]] = new Set([...parts[i + 2].matchAll(/^\s*\["([\w-]+)"\] =/gm)].map(m => m[1]));
-  return { soap: names.SoapOperations, 'server-api': names.ServerApiOperations, 'sc-rest': names.RestOperations };
+  return { soap: names.SoapOperations, 'server-api': names.ServerApiOperations, 'sc-rest': names.RestOperations, 'integration-studio': names.IntegrationStudioOperations };
 }
 // op -> the argument names its Prepare reads (a.Key("..."), a.Text("..."), a.Bool("...")...).
 function bridgeArgs() {
@@ -897,7 +1120,7 @@ test('every operation the facade sends is in the bridge allowlist', () => {
 test('the arguments the facade sends are the ones the bridge reads', () => {
   const reads = bridgeArgs();
   for (const [, operation, names] of facadeCalls()) for (const name of names) assert.ok(reads[operation].has(name) || name === 'outFile', `${operation}.${name}`);
-  const args = { application_key: 'k', module_key: 'k', element_key: '', since: '2026-10-01T00:00:00Z', solution: 's', publish_id: '1', last_message_id: '0', apply_id: '1' };
+  const args = { extension_key:'k', logical_database:'Cargo', application_key: 'k', module_key: 'k', element_key: '', since: '2026-10-01T00:00:00Z', solution: 's', publish_id: '1', last_message_id: '0', apply_id: '1' };
   for (const [action, [, operation, build]] of Object.entries(READS)) for (const name of Object.keys(build(args))) assert.ok(reads[operation].has(name) || name === 'outFile', `${action}.${name}`);
   // UploadAndPublishExtension's arguments are built in a variable: the bridge reads file, commitMessage, applicationKey.
   assert.deepEqual(reads.UploadAndPublishExtension, new Set(['file', 'commitMessage', 'applicationKey']));
@@ -906,7 +1129,7 @@ test('the arguments the facade sends are the ones the bridge reads', () => {
 
 test('verbs and web accepts match', () => {
   const dispatch = fs.readFileSync(path.join(BRIDGE_SOURCE, 'Dispatch.cs'), 'utf8');
-  for (const verb of VERBS) assert.ok(dispatch.includes(`"${verb}" => await`), verb);
+  for (const verb of VERBS) assert.ok(dispatch.includes(`"${verb}" =>`), verb);
   assert.ok(fs.readFileSync(path.join(BRIDGE_SOURCE, 'ScProtocol.cs'), 'utf8').includes('accept is not ("html" or "xlsx" or "binary")'));
 });
 

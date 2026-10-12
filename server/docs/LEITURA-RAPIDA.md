@@ -30,6 +30,17 @@ MCP `ssam_map {lane, target, view:"digest", page?, budgetBytes?, expectedSourceS
 mapa: `.oml`, ou nome de módulo (capturado sem abrir aba; no O11 fechado ou de sistema, o OML publicado). Filtros e
 `offset` do mapa são recusados no resumo; `page` é recusado no mapa.
 
+**Chave de todo widget nomeado** (extrator 3, G13: FarmaVirtual 10/10/2026, dez `ssam_map {name}` depois de ler o
+resumo pós-merge). O widget com linha leva a `@key` nela (`input FvSearchInput @key var=...`; `link "..."  # Fv464
+@key`; `if ...:  # IfFv416 @key`). O widget nomeado que a árvore recolhe (container, placeholder, elemento html) não
+ganha linha nem recuo: vai para as linhas `named containers:` da sua tela ou bloco, em ordem de árvore
+(`MountFvEditNome @key, Fv416 @key, ...`). O que uma linha engole leva a chave nela, depois de `inside`: os widgets
+nomeados dentro de botão, link, label, imagem, ícone ou hN (`button "..."  # Fv14 @key; inside IfFv41 @key, Fv41
+@key`; `link "Login" ...  # inside Icon4 @key`) e os placeholders vazios de uma instância de bloco
+(`block LayoutTopMenu()  # inside [Header] @key, [Actions] @key`), então duas instâncias do mesmo bloco nunca dividem
+um `[Header]`. Na captura 6c0927c0 os 776 widgets nomeados têm a chave no resumo, que cresceu 16,5% (148.061 →
+172.436 bytes, 6 → 7 páginas); com uma linha e recuo para cada container nomeado cresceria 27,9%.
+
 **Nada cortado em silêncio.** Texto longo diz quantos caracteres faltam (`…(+N)`). Expressão passa de 2000 caracteres
 só com `…(+N @key)`: o `inspect` dessa `@key` com `full:true` traz o resto. A cobertura conta cada elemento: desenhado,
 valor de um dono desenhado, dobrado com o motivo (assinaturas de referência, temas, pastas...) ou não desenhado, por tipo.
@@ -186,11 +197,23 @@ apagá-lo custa só a reconstrução.
 como as páginas do leitor: `key`, `kind`, `name` (Name, senão Label), `role` (module, flow, screen, block, action,
 actionRef, aggregate, entity, staticEntity, structure, attribute, parameter, variable, widget, event, flowNode,
 expression, reference, other), `parentKey`, `path` legível (corte de 80 caracteres por segmento, como o leitor),
-`childrenTotal` e `dataType` de parâmetros, atributos e variáveis. O pai é o `Parent()` do modelo: nas fontes de
-um agregado (a `DataTable`, O11 e ODC) e nas expressões de propriedades ODC (`CustomProperty`) é um elemento que
-nenhuma lista de filhos contém; ele entra no `path` e no `--parent`, mas não é listado. Filtros: `--kind`
+`childrenTotal` e `dataType` de parâmetros, atributos e variáveis. O pai é o `Parent()` do modelo: nos widgets O11
+(o placeholder `MobileWidget:content` de cada container e a `MobileWidgetSignature`), nas propriedades de widget
+(`CustomProperty` e `ReferenceCustomProperty`: `Style`, `Value`, `Enabled`..., O11 e ODC) e nas fontes de um agregado
+(a `DataTable`, O11 e ODC) é um elemento que nenhuma lista de filhos contém (na captura 6c0927c0: 1.651 placeholders,
+2.329 propriedades e 273 assinaturas); ele entra no `path`, nunca é listado e nunca é `parentKey`. `parentKey` é
+sempre a linha mais próxima acima (a que o leitor mostra como dona) e `parentSlot` nomeia os elementos entre elas
+(`content`, `Style`; sem nome, o kind). `--parent` aceita a chave da linha (tudo que está nela, direto ou por esses
+elementos) ou a de um deles (só o que está sob ele); `--key` com a chave de um deles responde a linha dona, com
+`keyOwner` e um aviso em `notices` que diz o kind e o nome; o `inspect` resolve a mesma chave pelo `Parent()`, e num
+`select` sob um caminho só dentro dele (G11, FarmaVirtual 10/10/2026: 85% dos widgets da captura pós-merge tinham
+como `parentKey` um placeholder que nem o mapa nem o `inspect` aceitavam). Chave que a captura não tem:
+`KEY_UNRESOLVED`; com o hash da própria captura a mensagem diz isso e nunca manda mapear de novo, e o `inspect`
+continua no mapa com `--parent @chave`. Chave de dois elementos: `KEY_AMBIGUOUS`, sem continuação para o mapa (ele
+guarda uma linha por chave); a mensagem do leitor dá o caminho de cada um, para ler pelo caminho. Filtros: `--kind`
 (qualquer interface que o elemento implementa, como `inspect --kind`: no ODC `WebScreen` lista o mesmo que
-`MobileScreen`), `--name` exato
+`MobileScreen`; uma lista `A|B` ou `A,B` lista o que responde a qualquer uma e nomeia em `kindsNotObserved` as que
+nada respondeu; as views `search` e `uses` recusam a lista e leem `A|` ou `A,` como `A`), `--name` exato
 sem diferenciar maiúsculas, `--prefix`, `--role`, `--parent @chave`, `--key @chave`. O mapa simples deixa de fora
 as linhas de detalhe (expression, reference, other: 58–72% dos elementos) e as estruturas anônimas/list types;
 `--detail`, um `--kind` ou um `--role` as listam, e `hidden` conta o que ficou de fora. Paginação `--offset`/`--max`
@@ -198,7 +221,9 @@ as linhas de detalhe (expression, reference, other: 58–72% dos elementos) e as
 é o teto de resposta do MCP menos a margem do formatador: 38912 bytes com `SSAM_MAX_ANSWER_BYTES` no padrão de 40960
 (seção "Teto de resposta do MCP", abaixo). Um orçamento menor que a menor página possível não lança mais erro: devolve
 a resposta mínima (sem entradas) com `size.status:"insufficient"`, `size.minimalBytes` e `continuation`, a mesma
-consulta com um orçamento que cabe uma página. `counts` traz os totais por papel e, na primeira página, por kind. Não
+consulta com um orçamento que cabe uma página. `counts` traz os totais por papel e, só na primeira página da
+listagem sem filtro (sem kind, name, prefix, role, parent nem key), por kind: numa busca por nome eles eram 51,6% dos
+bytes da resposta (FarmaVirtual, 10/10/2026). Não
 responde: busca textual, valores de propriedades e expressões, usos, outros módulos. Isso continua no `inspect`.
 
 **Caminho frio.** Com o índice gravado, a resposta não inicia leitor nenhum, inclusive depois do encerramento de

@@ -86,9 +86,20 @@ test('AWS SDK SRP sends a proof request, not a plaintext password, and does not 
 
 test('unverified Cognito region/pool/flow is rejected without sending credentials', async () => {
   let requests = 0;
-  for (const change of [{ Region: 'eu-west-1' }, { AuthFlow: 'USER_PASSWORD_AUTH' }, { PoolKey: 'https://evil.invalid' }]) {
+  for (const change of [{ Region: 'eu-west-1' }, { Region: 'us-east-2' }, { PoolKey: 'us-east-2_TestPool' }, { AuthFlow: 'USER_PASSWORD_AUTH' }, { PoolKey: 'https://evil.invalid' }]) {
     await assert.rejects(cognitoLogin({ config: { ...config, ...change }, username: 'u', password: 'p', request: async () => { requests++; } }),
       error => error.code === 'PORTAL_LOGIN_PROVIDER_UNSUPPORTED');
   }
   assert.equal(requests, 0);
+});
+
+test('personal region us-east-2 completes the same bounded SRP exchange only at its regional endpoint', { timeout: 10000 }, async () => {
+  const calls = [];
+  const tokens = await cognitoLogin({ config: { ...config, Region: 'us-east-2', PoolKey: 'us-east-2_TestPool' },
+    username: 'test-user', password: 'SYNTHETIC_PASSWORD', signal: AbortSignal.timeout(9000), request: async (url, options) => {
+      const operation = options.headers['X-Amz-Target'].split('.').at(-1); calls.push({ url, operation });
+      return { status: 200, text: JSON.stringify(operation === 'InitiateAuth' ? passwordVerifier : success) };
+    } });
+  assert.deepEqual(calls, ['InitiateAuth', 'RespondToAuthChallenge'].map(operation => ({ url: 'https://cognito-idp.us-east-2.amazonaws.com/', operation })));
+  assert.equal(tokens.AccessToken, jwt);
 });

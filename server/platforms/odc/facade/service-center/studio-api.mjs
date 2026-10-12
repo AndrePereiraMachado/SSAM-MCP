@@ -47,9 +47,11 @@ const integer = value => { if (!/^\s*[+-]?\d+\s*$/.test(String(value))) throw ne
 export const READS = {
   applications: ['soap', 'ListApplications', () => ({ withIcons: false })],
   application: ['soap', 'GetApplicationDetails', a => ({ appKey: key(a, 'application_key') })],
+  'application-api': ['soap', 'GetApplicationAPI', a => ({ appKey: key(a, 'application_key') })],
   'application-dependencies': ['soap', 'GetApplicationDependenciesDetails', a => ({ appKey: key(a, 'application_key') })],
   modules: ['soap', 'ListEspaces', () => ({})],
   extensions: ['soap', 'ListExtensions', () => ({})],
+  'extension-database-provider': ['integration-studio', 'TranslateLogicalDatabaseToDbConnection', a => ({ extensionKey: key(a, 'extension_key'), logicalDatabase: text(a, 'logical_database') })],
   versions: ['soap', 'ListVersions', a => ({ eSpaceKey: key(a, 'module_key') })],
   'module-id': ['soap', 'GetESpaceId', a => ({ eSpaceKey: key(a, 'module_key') })],
   consumers: ['soap', 'GetConsumers', a => ({ producerESpaceKey: key(a, 'module_key'), referenceableElementKey: a.element_key || '' })],
@@ -57,6 +59,9 @@ export const READS = {
   commits: ['soap', 'ListCommits', a => ({ eSpacesStartVersion: 0, extensionsStartVersion: 0, startDate: since(a) })],
   'developer-operations': ['soap', 'GetDeveloperOperations', a => ({ startDate: since(a) })],
   license: ['soap', 'GetLicenseInformation', () => ({})],
+  'installation-kind': ['soap', 'GetInstallationKind', () => ({})],
+  'platform-properties': ['soap', 'GetProperties', () => ({})],
+  'platform-settings': ['sc-rest', 'platform-settings', () => ({})],
   databases: ['server-api', 'ListDatabases', () => ({ withAppsInfo: true })],
   'application-database': ['server-api', 'GetDatabaseByApplicationKey', a => ({ applicationKey: key(a, 'application_key') })],
   'solution-components': ['soap', 'ListSolutionComponents', a => ({ solutionName: text(a, 'solution') })],
@@ -115,7 +120,25 @@ export class StudioApi {
     this.bridge = bridge; this.host = host; this.wait = { ...(wait ?? {}), ...(sleep ? { sleep } : {}) };
   }
 
-  async call(surface, operation, args) { return (await this.bridge.api(this.host, surface, operation, args)).result ?? null; }
+  async call(surface, operation, args) {
+    try { return (await this.bridge.api(this.host, surface, operation, args)).result ?? null; }
+    catch(error) {
+      // Exact native failures observed on the database API. A missing endpoint
+      // or missing embed is not an empty database inventory or a login request.
+      if(surface==='server-api'&&error?.code==='REMOTE_ERROR') {
+        if(operation==='ListDatabases'&&/^server-api ListDatabases: NotFoundException: Http Error Code: 404 - Not Found\.\s*$/.test(error.message))
+          throw new BridgeError('SC_DATABASE_ENDPOINT_UNAVAILABLE',
+            'The native database catalog endpoint returned HTTP 404; no inventory was obtained. Multiple Database Catalogs and Schemas requires a supported self-managed environment and is unavailable in OutSystems Cloud.',
+            {status:404,inventoryVerified:false,emptyInventoryProven:false,
+              documentation:'https://success.outsystems.com/documentation/11/setup_outsystems_infrastructure_and_platform/setting_up_outsystems/'});
+        if(operation==='GetDatabaseByApplicationKey'&&error.message==='server-api GetDatabaseByApplicationKey: BadRequestException: Database not returned')
+          throw new BridgeError('SC_APPLICATION_DATABASE_UNVERIFIED',
+            'The native application response did not include its database object. This does not prove that the application has no database.',
+            {databaseVerified:false,databaseAbsentProven:false});
+      }
+      throw error;
+    }
+  }
 
   async read(action, a) {
     const [surface, operation, build] = READS[action];
@@ -138,6 +161,12 @@ export class StudioApi {
   }
 
   async applications() { return items(await this.call('soap', 'ListApplications', { withIcons: false })); }
+  async numericModuleId(args) {
+    const [, row] = await this.module(args, ['eSpace']);
+    const id = field(row, 'Id', 'ESpaceId') ?? await this.call('soap', 'GetESpaceId', { eSpaceKey: moduleKey(row) });
+    if (!/^[1-9][0-9]*$/.test(String(id))) throw new ProtocolError('The Studio did not return a numeric module ID for this exact module.');
+    return String(id);
+  }
 
   // [key, name] of one application by exact name or key, from the live listing when it is needed.
   async application(a, nameAttr = 'application', keyAttr = 'application_key') {
@@ -208,10 +237,48 @@ export class StudioApi {
     return rows[0];
   }
 
+  observePublicationStatus(receipt, status) {
+    const messages = field(status, 'messages');
+    if (!Array.isArray(messages)) throw new ProtocolError('Unrecognized solution publication status');
+    const terminal = messages.some(m => field(m, 'Type') === 'State' && field(field(m, 'MessageDefinition'), 'Message') === 'finish');
+    const failed = messages.some(m => /error|fatal/i.test(String(field(m, 'Type') ?? '')));
+    const success = messages.some(m => field(m, 'Type') === 'Info'
+      && /^The solution was successfully published\./.test(String(field(field(m, 'MessageDefinition'), 'Detail') ?? '')));
+    receipt.publicationObservation = { solutionPublishId: Number(receipt.solutionPublishId), terminal, success: terminal && success && !failed,
+      lastMessageId: field(status, 'lastMessageId'), observedAt: new Date().toISOString() };
+    if (terminal && success && !failed) { receipt.executionCompleted = true; return true; }
+    return false;
+  }
+
+  observeApplySettingsStatus(receipt, status) {
+    const state = field(status, 'Status'), error = field(status, 'REST_Error');
+    if (typeof state !== 'string' || !isObject(error) || typeof field(error, 'ErrorMessage') !== 'string')
+      throw new ProtocolError('Unrecognized apply settings status');
+    const failed = field(error, 'ErrorMessage') !== ''
+      || [field(error, 'ErrorCode'), field(error, 'ErrorCodeId')].some(code => code !== null && code !== 0 && code !== '0');
+    const success = state === 'finished' && !failed;
+    receipt.applySettingsObservation = { applyId: Number(receipt.applyId), status: state,
+      terminal: state === 'finished', success, observedAt: utc() };
+    if (success) receipt.executionCompleted = true;
+    return success;
+  }
+
   // Read-only reconciliation of an uncertain API write, from the plan its receipt kept.
   async observe(receipt) {
     const plan = receipt.plan ?? {}; const action = receipt.identity.action;
     if (!Object.keys(plan).length) return false;
+    if (action === 'apply-settings') {
+      if (!/^\d+$/.test(String(receipt.applyId ?? '')) || Number(receipt.applyId) < 1)
+        throw new ProtocolError('Apply settings has no observed job ID; reconcile without sending again');
+      return this.observeApplySettingsStatus(receipt, await this.call('sc-rest', 'apply-settings-status', { id: Number(receipt.applyId) }));
+    }
+    if (action === 'solution-publish') {
+      const id = receipt.solutionPublishId;
+      if (!/^\d+$/.test(String(id ?? '')) || Number(id) < 1)
+        throw new ProtocolError('Solution publication has no observed job ID; reconcile without publishing again');
+      const status = await this.call('soap', 'CheckSolutionPublish', { solutionPublishId: Number(id), lastSeenMessageId: 0 });
+      return this.observePublicationStatus(receipt, status);
+    }
     if (action === 'module-delete' || action === 'extension-delete')
       return !items(await this.call('soap', action === 'module-delete' ? 'ListEspaces' : 'ListExtensions', {})).some(r => moduleKey(r) === plan.moduleKey);
     if (action === 'application-database-set') return pyStr(field(await this.call('server-api', 'GetDatabaseByApplicationKey', { applicationKey: plan.applicationKey }), 'Id', 'DatabaseId', 'Key')) === plan.databaseId;
@@ -256,7 +323,7 @@ const API_HANDLERS = {
     const publishId = field(result, 'solutionPublishId');
     return { state: publishId ? 'accepted' : 'accepted-unverified', executionCompleted: false, solutionPublishId: publishId,
       needsConfiguration: field(result, 'needsConfiguration'), messages: redact(field(result, 'messages', 'returnValue')),
-      ...(publishId ? { continuation: continuation('o11_service_center_read', { action: 'solution-publish-status', host: this.host, publishId: String(publishId) }, 'follows the publish job') } : {}) };
+      ...(publishId ? { continuation: continuation('o11_service_center_read', { action: 'solution-publish-status', host: this.host, publishId: String(publishId), operationId: receipt.operationId }, 'follows and reconciles the publish job') } : {}) };
   }],
 
   'apply-settings': [async function (a) {
@@ -272,7 +339,7 @@ const API_HANDLERS = {
     if (error) return { state: 'rejected', message: redact(error), result: redact(result) };
     const applyId = field(response, 'OperationId', 'id');
     return { state: 'accepted', executionCompleted: false, applyId, result: redact(result),
-      ...(applyId !== null && applyId !== undefined ? { continuation: continuation('o11_service_center_read', { action: 'apply-settings-status', host: this.host, applyId: String(applyId) }, 'follows the apply settings job') } : {}) };
+      ...(applyId !== null && applyId !== undefined ? { continuation: continuation('o11_service_center_read', { action: 'apply-settings-status', host: this.host, applyId: String(applyId), operationId: receipt.operationId }, 'follows and reconciles the apply settings job') } : {}) };
   }],
 
   'application-database-set': [async function (a) {

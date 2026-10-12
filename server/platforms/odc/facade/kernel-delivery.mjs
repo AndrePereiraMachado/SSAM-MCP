@@ -7,8 +7,15 @@ import { anvilRoot, odcRoot } from './workspace.mjs';
 import { hostedContext, hostedSpawnEnv } from './executor.mjs';
 import { catalogKind } from './studio-module.mjs';
 import { warningsFromVerdicts, highWarningsOf, HIGH } from './delivery-warnings.mjs';
-import { diagnosisOf, refusalFields } from './refusal-problems.mjs';
+import { diagnosisOf, refusalFields, normalizationsOf } from './refusal-problems.mjs';
 import * as writeLock from './studio-write-lock.mjs';
+import { jobSummary } from './job-summary.mjs';
+// The prototype importer (docs/PROTOTIPO-NATIVO.md, lane surface): the capture before the Studio, the rebuild of 1.4.1,
+// the receipt after the build and the seed after a clean publication.
+import { hasPrototypeOps, expandJobFile, capturePrototype, buildWithDegradation, buildProblems, journalTo, kernelPrototypeReport, findNativeDom,
+  measurePrototypeFidelity, prototypeReceipt, receiptWithSeed } from './prototype-op.mjs';
+import { seedPrototypeData, odcDataWriter } from './prototype-seed.mjs';
+import { prototypeAppUrl, prototypeScreenLinks } from './next-steps.mjs';
 
 const exec = promisify(execFile);
 const steps = ['snapshot', 'build', 'check-base', 'preview', 'merge'];
@@ -84,6 +91,8 @@ export function interpretKernelResult(result, { output, exitCode = 0 }) {
       ...(Array.isArray(result.problems) ? { problems: result.problems } : Array.isArray(result.data?.problems) ? { problems: result.data.problems } : {}),
       ...diagnosisOf(Array.isArray(result.problems) ? result : result.data ?? result) }),
     validation: result.data?.validation, screenRoles: screenRolesOf(result.data?.results), leftovers: leftoversOf(result.data?.validation),
+    // lentidao 2026-10-12: what the kernel rewrote in the job instead of refusing it (JobNormalizer), on an accepted candidate.
+    ...(ok ? normalizationsOf(result.data) : {}),
     // The HIGH warnings of the data-access rules (kernel highWarnings) first, then the Verify ones.
     warnings: [...highWarningsOf(result.data?.highWarnings), ...warningsOf(result.data?.validation)],
     // I7: what each integration op (rest, rest-expose, soap) imported, updated and removed.
@@ -569,6 +578,8 @@ export async function deliverKernel(input, deps) {
   const started = Date.now();
   const report = { ok: false, source: 'kernel-job', module, feature, job, until, steps: [], merged: false, publishInvoked: false };
   let stage = 'snapshot', claimed = false;
+  // proto: the expansion of a prototype op (captures, warnings, timings), its degraded items and its receipt.
+  let proto = null, protoRefusal = null;
   // order: the merge order of this delivery when the candidate has deferred defaults ({deferred, firstPass}); then the
   // manifest of the build is the first pass, and the full candidate is delivered after it (see the merge step).
   let order = null;
@@ -688,6 +699,25 @@ export async function deliverKernel(input, deps) {
       }
       if (Array.isArray(prepared.documents) && prepared.documents.length) report.documents = prepared.documents.slice(0, 32);
     }
+    // The prototype op (docs/PROTOTIPO-NATIVO.md 1.1): captured before the Studio is touched (data.capture,
+    // data.captureSha256); a refusal of the prototype is the answer, ONCE, with every problem, the patch over
+    // /ops/<i>/data and the corrected call.
+    if (hasPrototypeOps(jobDocument)) {
+      stage = 'prototype';
+      const expand = deps.expandPrototype ?? (file => expandJobFile(file, { inlineDir: path.join(root, '.local', 'jobs', 'inline'),
+        work: path.join(root, '.local', 'prototype', randomUUID()), capture: deps.capturePrototype ?? capturePrototype }));
+      const expanded = await expand(job);
+      if (expanded?.refusal) {
+        const { ok: _ok, failed: _failed, ...fields } = expanded.refusal;
+        Object.assign(report, fields, { failed: 'prototype' });
+        if (publish === true) report.publish = { requested: true, outcome: 'skipped' };
+        return report;
+      }
+      if (expanded?.path) {
+        proto = { ...expanded.expansion, original: job, measure: deps.measureFidelity ?? null };
+        job = path.resolve(expanded.path); report.job = job; jobDocument = readJob(job); requestedProducers = producersOf(jobDocument);
+      }
+    }
     // The base is ALWAYS the module as it is now in the Studio: a fresh capture of the open model at every delivery
     // (bridge snapshot = SaveToMemoryStream of the live ESpace, hash-named), never a cached candidate or the manifest of an
     // earlier delivery. An edit the person made in the Studio, or an earlier uncertain merge, is in this capture; the merge
@@ -765,7 +795,17 @@ export async function deliverKernel(input, deps) {
       const key = cache ? (() => { try { return cache.key({ job, snapshot: based, producers: report.producers ?? [] }); } catch { return null; } })() : null;
       let applied = key ? cache.restore(key, output) : null;
       if (applied) report.cache = { hit: true, key };
-      else {
+      else if (proto) {
+        // 1.4.1: a build problem on a generated item rebuilds ONCE without it; a second failure is an SSAM defect.
+        const begin = Date.now();
+        const b = await buildWithDegradation({ jobFile: job, attempt: file => apply({ job: file, snapshot: based, output, producers }), ok: a => a?.ok === true,
+          problemsOf: buildProblems, inlineDir: path.join(root, '.local', 'jobs', 'inline'), journal: journalTo(path.join(root, '.local', 'journal'), { lane: 'odc' }) });
+        applied = b.result; proto.degraded = b.degraded; proto.buildMs = Date.now() - begin;
+        if (b.refusal) { protoRefusal = b.refusal; applied = { ...applied, ok: false, code: 'VALIDATION_REFUSED', error: b.refusal.error, problems: b.refusal.problems }; }
+        else if (b.rebuilt) { job = path.resolve(b.jobFile); report.job = job; }
+        if (key) report.cache = { hit: false, key };
+        if (applied.ok && key) cache.store(key, output);
+      } else {
         applied = await apply({ job, snapshot: based, output, producers });
         if (key) report.cache = { hit: false, key };
         if (applied.ok && key) cache.store(key, output);
@@ -781,6 +821,7 @@ export async function deliverKernel(input, deps) {
       }
       report.kernelReceipt = applied.receipt; candidate = applied.candidate;
       capped(report, 'leftovers', applied.leftovers ?? []);
+      if (applied.normalizations) report.normalizations = applied.normalizations;
       capped(report, 'screenRoles', applied.screenRoles ?? []);
       capped(report, 'integration', Array.isArray(applied.integration) ? applied.integration : [], 10);
       // The merge order (planMergeOrderKernel): a candidate with defaults the Studio drops when the merge creates their
@@ -803,6 +844,13 @@ export async function deliverKernel(input, deps) {
     });
     if (!built) {
       if (kernelRefused?.code === 'PREFLIGHT_REFUSED') report.failed = 'preflight';
+      // The second failure of a prototype build: an SSAM defect with the mapping.ignore patch over the model's own job.
+      if (protoRefusal) {
+        for (const key of ['ssamDefect', 'patch', 'correctedJob', 'degraded']) if (protoRefusal[key] != null) report[key] = protoRefusal[key];
+        report.problems = protoRefusal.problems; report.code = 'VALIDATION_REFUSED'; report.error = protoRefusal.error;
+        if (publish === true) report.publish = { requested: true, outcome: 'skipped' };
+        return report;
+      }
       if (kernelRefused && guide) {
         try { const g = await guide({ lane: 'odc', job, run: { ok: false, result: { error: kernelRefused.error }, resultFile: kernelRefused.receipt ?? null } }); if (g) report.discovery = g; }
         catch { /* guidance never changes the delivery answer */ }
@@ -813,6 +861,21 @@ export async function deliverKernel(input, deps) {
     warm(candidate);
     report.manifest = built.manifest;
     if (!report.manifest) throw new Error('Build succeeded without a manifest; delivery stopped.');
+    // The receipt of a prototype import: the kernel's report.prototype and the fidelity measured on the module read back
+    // after the Verify (prototype-dom.json), before the merge; merge, publish and seed timings are added after them.
+    if (proto) {
+      let data = null;
+      try { data = JSON.parse(fs.readFileSync(path.join(output, 'kernel-result.json'), 'utf8')).data ?? null; } catch { data = null; }
+      const kernelReport = kernelPrototypeReport(data);
+      const measured = await measurePrototypeFidelity({ captures: proto.captures, measure: proto.measure,
+        nativeDom: findNativeDom({ report: kernelReport, captures: proto.captures, dirs: [output, path.join(output, 'work')] }) });
+      // The link of each screen, from the app URL the capture of the module named (appLinks).
+      const links = prototypeScreenLinks(kernelReport, prototypeAppUrl({ lane: 'odc', appLinks: report.appLinks }));
+      proto.receipt = prototypeReceipt(kernelReport, { fidelity: measured.fidelity, degraded: proto.degraded ?? [], captures: proto.captures, warnings: proto.warnings ?? [],
+        verify: data?.validation?.new ?? null, links, phases: { captureMs: proto.timings?.captureMs, buildMs: proto.buildMs ?? data?.applyMs, fidelityMs: measured.fidelityMs } });
+      if (proto.receipt.timings.expandMs == null && proto.timings?.expandMs != null) proto.receipt.timings.expandMs = proto.timings.expandMs;
+      report.prototype = proto.receipt;
+    }
     if (until === 'build') { report.ok = true; return report; }
     if (order) {
       // Merge order, pass 1: the candidate without its deferred defaults creates the elements (the bridge's own plan finds
@@ -892,6 +955,8 @@ export async function deliverKernel(input, deps) {
       if (until === step) report.ok = true;
     }
     if (report.ok && report.result === 'entregue') {
+      // What the job created or changed (job-summary.mjs), so no map of the module follows the delivery.
+      try { const summary = jobSummary(jobDocument); if (summary) report.summary = summary; } catch { /* a summary never changes the delivery */ }
       if (publish === true) {
         // The same call publishes the merged module: the words go into the manifest, the publication is followed to its end.
         stage = 'publish'; progress('publish');
@@ -911,6 +976,24 @@ export async function deliverKernel(input, deps) {
           report.continuation = { tool: 'studio_publish', arguments: { manifest: report.manifest, ...(Number.isInteger(pid) ? { pid } : {}) },
             why: report.publish.outcome === 'uncertain' ? 'Merged; the publication result is unknown: read publish-log first and publish again only if it did not run. Never repeat the delivery.'
               : 'Merged; fix what the publication names, then publish this manifest again. Never repeat the delivery.' };
+        }
+        // The demo data of a prototype import (3.4): after a clean publication, into the empty regular entities the import
+        // marked, through the Studio's data service (studio_data_insert), with the words of this call only.
+        if (proto?.receipt) {
+          proto.receipt.timings.publishMs = Date.now() - begin;
+          const mergeStep = report.steps.filter(s => s.step === 'merge').reduce((n, s) => n + (s.seconds ?? 0), 0);
+          if (mergeStep) proto.receipt.timings.mergeMs = Math.round(mergeStep * 1000);
+          const previous = stage; stage = 'seed'; progress('seed');
+          let seed;
+          try {
+            seed = await seedPrototypeData({ lane: 'odc', module, receipt: proto.receipt, bundle: proto.captures?.[0]?.capture,
+              write: deps.prototypeWriter ?? odcDataWriter({ studio, pid, dir: output }),
+              authorize: authorization?.authorization?.source === 'standing-grant' ? '' : authorization?.words, published: report.publish.outcome === 'published',
+              seed: (d => (Array.isArray(d) ? d : d?.ops ?? []))(readJob(proto.original)).find(op => op?.op === 'prototype')?.data?.seed !== false });
+          } catch (error) { seed = { ran: false, reason: 'the seed failed: ' + withoutStack(error.message), entities: 0, rows: 0, skippedNotEmpty: [] }; }
+          proto.receipt = receiptWithSeed(proto.receipt, seed);
+          report.prototype = proto.receipt;
+          stage = previous;
         }
       } else {
         // The last publication of the module, whoever started it (the bridge's publish log), from one status read.

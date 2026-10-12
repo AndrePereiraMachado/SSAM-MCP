@@ -4,7 +4,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <!-- One assembly name per bridge version. A loaded DLL is never replaced: a new version is a new name and a new pipe. -->
-    <AssemblyName>ODC3.Bridge.v48</AssemblyName>
+    <AssemblyName>ODC3.Bridge.v96</AssemblyName>
+    <!-- IncrementalClean must never treat a prior resident version as an orphan. -->
+    <CleanFile>$(MSBuildProjectFile).$(AssemblyName).FileListAbsolute.txt</CleanFile>
     <DefineConstants>$(DefineConstants);QUERY_TEST_ODC</DefineConstants>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <!-- Any ODC Studio: ../Directory.Build.targets falls back to the registered one and takes its newer framework copies. -->
@@ -51,6 +53,13 @@
     <Compile Include="PublishLogCommands.cs" />
     <Compile Include="PortalCore.cs" />
     <Compile Include="PortalCommands.cs" />
+    <Compile Include="PortalPrivateHttp.cs" />
+    <Compile Include="PortalApiClientSecret.cs" />
+    <Compile Include="PortalApiClientCleanup.cs" />
+    <Compile Include="PortalMobileUpload.cs" />
+    <Compile Include="PortalKnowledgeDownload.cs" />
+    <Compile Include="PortalMobileDownload.cs" />
+    <Compile Include="../../../../kernel/src/Anvil.Bridge/PrivateHttpContext.cs" Link="shared/PrivateHttpContext.cs" />
     <Compile Include="PortalUpload.cs" />
     <Compile Include="PortalVault.cs" />
     <Compile Include="PublicSignatureReader.cs" />

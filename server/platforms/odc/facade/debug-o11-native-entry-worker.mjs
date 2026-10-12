@@ -9,6 +9,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { appUserBinding, sameAppUserTarget, privateAppUserVault } from './debug-app-user.mjs';
 import { validatePrivateDescriptor } from './debug-app-user-worker.mjs';
 import { readO11NativeEntryContract, o11NativePublicCode, o11NativePublicTarget, o11NativeDirectory } from './debug-o11-native-entry.mjs';
+import { applyO11Context, invokeO11Lifecycle, trackO11ClientProxies, settleO11ClientProxies } from './debug-o11-native-context.mjs';
+import { createNativeClientInspection, openNativeClientInspector, redactNativeClientValue, clientInspectionEnableOptions } from './debug-native-client-inspection.mjs';
+import { createPrivateInspectionChannel } from './debug-private-inspection.mjs';
+import { isO11NativeSuspensionCheck } from './debug-o11-suspended-request.mjs';
+import { nativeWireOutput } from './debug-native-wire-output.mjs';
+import { o11InspectionDeadline, o11InvocationBudget, o11NativeInspectionTimeout } from './debug-o11-inspection-deadline.mjs';
+import { O11_NATIVE_ENVELOPE_BYTES } from './debug-o11-native-abi.mjs';
 
 const require = createRequire(import.meta.url);
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -46,13 +53,14 @@ export async function prepareOriginalO11Entry(input, { fetchImpl = fetch, cookie
   const publicEntry = v2
     ? { selector: input.action, kind: policy.entry.kind, actionKey: policy.entry.actionKey ?? null, endpoint: policy.entry.endpoint ?? null,
         apiVersion: policy.entry.apiVersion ?? null, viewName: policy.entry.viewName ?? null, method: policy.entry.method,
-        inputs: policy.entry.inputs.map(i => ({ name: i.name, dataType: i.dataType })), outputs: policy.entry.outputs.map(o => ({ name: o.name, dataType: o.dataType })) }
+        inputs: policy.entry.inputs.map(i => ({ name: i.name, dataType: i.dataType })), outputs: policy.entry.outputs.map(o => ({ name: o.name, dataType: o.dataType })),
+        ...(policy.entry.lifecycle ? { lifecycle: { ...policy.entry.lifecycle, mounted: false } } : {}) }
     : { selector: input.action, actionKey: policy.entry.actionKey, endpoint: policy.entry.endpoint, apiVersion: policy.entry.apiVersion,
         viewName: policy.entry.viewName, inputsCount: 0, outputs: policy.entry.outputs.map(o => ({ name: o.name, type: o.type })) };
   const state = { input, policy, target, fetchImpl, now, beforeRequest, closed: false, armed: false, authenticating: false, v2, postSeq: 0,
     redact: [], scenario: null,
     jar: cookieJar ?? new CookieJar(undefined, { rejectPublicSuffixes: true, prefixSecurity: 'strict', allowSecureOnLocal: false }),
-    requests: new Set(), timers: new Set(), controllers: [], credentials: undefined, userId: undefined, descriptor: undefined,
+    requests: new Set(), requestTokens: new Set(), timers: new Set(), timerCompletions: new Map(), pendingActions: new Set(), controllers: [], credentials: undefined, userId: undefined, descriptor: undefined,
     markerPaths: {},
     report: { schema: 'ssam-o11-native-entry-receipt/1', ok: false, prepared: false, phase: 'preparing', browser: false,
       target, sourceContract: input.sourceContract, sessionId: input.sessionId, entry: publicEntry,
@@ -77,6 +85,7 @@ export async function prepareOriginalO11Entry(input, { fetchImpl = fetch, cookie
   const current = () => {
     if (state.closed) fail('debug_o11_native_closed');
     if (state.descriptor && now() >= Date.parse(state.descriptor.expiresAt)) fail('debug_o11_native_expired');
+    if (state.armed && state.serverInspectionDeadline !== undefined && now() >= state.serverInspectionDeadline) fail('debug_o11_native_expired');
   };
   const reserve = kind => {
     const file = state.markerPaths[kind];
@@ -94,10 +103,11 @@ export async function prepareOriginalO11Entry(input, { fetchImpl = fetch, cookie
     const asset = policy.assets.find(a => a.urlPath === url.pathname && a.query === url.search);
     const manifest = url.pathname === '/' + target.module + '/moduleservices/moduleinfo' && /^\?\d{13}$/.test(url.search);
     const roles = url.pathname === '/' + target.module + '/moduleservices/roles' && /^\?\d{13}$/.test(url.search);
+    const suspension = state.armed && state.report.authenticated && isO11NativeSuspensionCheck(method, url, target, state.requestTokens);
     const login = method === 'POST' && state.authenticating && url.pathname === policy.login.endpoint && !url.search;
     const entry = method === 'POST' && state.armed && !url.search &&
       (v2 ? policy.entry.endpoints.includes(url.pathname) : url.pathname === policy.entry.endpoint);
-    if (!(method === 'GET' && (asset || manifest || roles) || login || entry) || ++state.report.requests > (v2 ? 1500 : 100))
+    if (!(method === 'GET' && (asset || manifest || roles || suspension) || login || entry) || ++state.report.requests > (v2 ? 1500 : 100))
       fail('debug_o11_native_request_denied');
     const out = {};
     for (const [key, value] of Object.entries(headers)) {
@@ -139,10 +149,14 @@ export async function prepareOriginalO11Entry(input, { fetchImpl = fetch, cookie
       reserve(login ? 'login' : 'entry');
     }
     const controller = new AbortController(); state.requests.add(controller);
+    const requestToken = entry ? Object.entries(out).find(([name]) => name.toLowerCase() === 'outsystems-request-token')?.[1] : null;
+    if (requestToken && /^\d{1,16}$/.test(requestToken)) state.requestTokens.add(requestToken);
     const lease = state.descriptor ? Date.parse(state.descriptor.expiresAt) - now() : 120000;
-    const deadline = Math.min(Math.max(1, timeoutMs), lease, 120000);
+    const deadline = entry && state.serverInspectionDeadline !== undefined
+      ? o11InvocationBudget(state) : Math.min(Math.max(1, timeoutMs), lease, 120000);
     const timer = setTimeout(() => controller.abort(), deadline);
     const abort = () => controller.abort(); signal?.addEventListener('abort', abort, { once: true });
+    const requestStartedAt = performance.now();
     try {
       const response = await fetchImpl(url.href, { method, headers: out, body, redirect: 'error', credentials: 'omit', signal: controller.signal });
       if (response.url && new URL(response.url).href !== url.href) fail('debug_o11_native_response_origin_changed');
@@ -153,12 +167,28 @@ export async function prepareOriginalO11Entry(input, { fetchImpl = fetch, cookie
           if (size > 5 * 1024 * 1024) { await reader.cancel(); fail('debug_o11_native_response_limit'); } chunks.push(Buffer.from(next.value)); }
       } else { const bytes = Buffer.from(await response.arrayBuffer()); if (bytes.length > 5 * 1024 * 1024) fail('debug_o11_native_response_limit'); chunks.push(bytes); }
       const bytes = Buffer.concat(chunks), text = bytes.toString('utf8');
+      if (entry) {
+        // Preserve transport evidence before parsing the native envelope. A
+        // proxy error page is not an action answer; keep its status and timing
+        // without persisting its potentially private body or response headers.
+        state.report.lastEntryResponse = {
+          status: response.status, durationMs: Math.round(performance.now() - requestStartedAt),
+          bytes: bytes.length, sha256: hash(bytes), nativeEnvelopeAccepted: false,
+        };
+        persist();
+      }
+      if (suspension) {
+        if (response.status !== 200 || !/^(true|false)$/.test(text.trim())) fail('debug_o11_native_suspension_check_invalid');
+        state.report.nativeSuspensionChecks = (state.report.nativeSuspensionChecks ?? 0) + 1;
+        state.report.lastNativeSuspensionCheck = text.trim() === 'true';
+      }
       for (const item of response.headers.getSetCookie()) await state.jar.setCookie(item, url.href, { http: true });
       if (entry && v2) {
         let value; try { value = JSON.parse(text); } catch { fail('debug_o11_native_response_uncertain'); }
         if (!value || typeof value !== 'object' || !('data' in value || 'exception' in value) ||
             value.versionInfo?.hasApiVersionChanged || value.versionInfo?.hasModuleVersionChanged) fail('debug_o11_native_response_uncertain');
         state.scenario.answered++; state.report.requestAnsweredCount++;
+        state.report.lastEntryResponse.nativeEnvelopeAccepted = true;
         if (value.exception && typeof value.exception === 'object') state.scenario.serverException = {
           name: typeof value.exception.name === 'string' && /^[A-Za-z]{1,80}$/.test(value.exception.name) ? value.exception.name : 'Exception',
           specificType: typeof value.exception.specificType === 'string' && /^[A-Za-z0-9_.]{1,200}$/.test(value.exception.specificType) ? value.exception.specificType : null,
@@ -176,6 +206,7 @@ export async function prepareOriginalO11Entry(input, { fetchImpl = fetch, cookie
             fail('debug_o11_native_response_uncertain');
           state.responseOutputs = Object.fromEntries(policy.entry.outputs.map(o => [o.name, value.data[o.name]]));
           state.report.requestAnsweredCount = 1;
+          state.report.lastEntryResponse.nativeEnvelopeAccepted = true;
         }
       }
       persist();
@@ -188,7 +219,7 @@ export async function prepareOriginalO11Entry(input, { fetchImpl = fetch, cookie
       }
       if (entry && state.report.requestSubmittedCount && !state.report.requestAnsweredCount) state.report.requestUncertain = true;
       persist(); fail(login ? 'debug_o11_native_login_failed' : 'debug_o11_native_request_failed');
-    } finally { clearTimeout(timer); signal?.removeEventListener('abort', abort); state.requests.delete(controller); for (const k of Object.keys(out)) out[k] = ''; }
+    } finally { clearTimeout(timer); signal?.removeEventListener('abort', abort); state.requests.delete(controller); if(requestToken) state.requestTokens.delete(requestToken); for (const k of Object.keys(out)) out[k] = ''; }
   };
   const XHR = class {
     constructor() { this.readyState = 0; this.status = 0; this.headers = {}; this.timeout = 120000; this.controller = new AbortController(); }
@@ -208,10 +239,12 @@ export async function prepareOriginalO11Entry(input, { fetchImpl = fetch, cookie
   };
   state.persist = persist; state.current = current; state.fresh = fresh;
   state.dispose = async () => {
+    const privateCleanup=state.inspection?.dispose()??{completed:true,pending:0};state.report.privateInspectionCleanup=privateCleanup;state.inspector?.close();
     state.closed = true; state.armed = false; state.authenticating = false; state.credentials = undefined; state.userId = undefined;
     state.redact = []; state.scenario = null;
     for (const item of state.requests) item.abort(); for (const timer of state.timers) clearTimeout(timer);
-    state.requests.clear(); state.timers.clear(); let released = true;
+    for (const complete of state.timerCompletions.values()) complete();
+    state.requests.clear(); state.timers.clear(); state.timerCompletions.clear(); state.pendingActions.clear(); let released = privateCleanup.completed;
     for (const controller of state.controllers) try { controller.dispose(); } catch { released = false; }
     try { state.sandbox?.OutSystemsDebugger?.endSession(); } catch { released = false; }
     state.controllers.length = 0; state.login = undefined; state.entry = undefined; state.roles = undefined;
@@ -228,12 +261,33 @@ export async function prepareOriginalO11Entry(input, { fetchImpl = fetch, cookie
       if (response.status !== 200 || response.sha256 !== asset.sha256) fail('debug_o11_native_source_changed'); }
     const deny = () => fail('debug_o11_native_runtime_service_unsupported');
     const sandbox = { console: { log() {}, warn() {}, error() {}, debug() {} }, URL, URLSearchParams, TextEncoder, TextDecoder,
+      // Native BinaryData.length calls toBlob -> atob/Blob for nonempty values.
+      // Expose the standard APIs; preserve the published getter and converter.
+      atob, Blob,
       location: new URL(target.runtimeUrl), OutSystemsApp: { basePath: '/' + target.module + '/' },
       localStorage: globalThis.sessionStorage, sessionStorage: globalThis.sessionStorage,
       XMLHttpRequest: XHR, fetch: deny, WebSocket: deny, importScripts: deny, setInterval: deny, clearInterval() {},
-      setTimeout(fn, ms, ...args) { if (!Number.isFinite(ms) || ms < 0 || ms > 180000) deny();
-        const timer = setTimeout(() => { state.timers.delete(timer); fn(...args); }, ms); state.timers.add(timer); return timer; },
-      clearTimeout(timer) { state.timers.delete(timer); clearTimeout(timer); } };
+      setTimeout(fn, ms, ...args) {
+        const maximum = state.armed && state.serverInspectionDeadline !== undefined ? Math.max(180000, o11InvocationBudget(state)) : 180000;
+        if (!Number.isFinite(ms) || ms < 0 || ms > maximum) deny();
+        const owner = state.armed ? state.scenario : null;
+        let resolve; const completion = owner ? new Promise(done => { resolve = done; }) : null;
+        const complete = () => { if (completion) { state.pendingActions.delete(completion); resolve(); } };
+        const timer = setTimeout(() => {
+          state.timers.delete(timer); state.timerCompletions.delete(timer);
+          try {
+            if (owner && (state.scenario !== owner || !state.armed)) return;
+            const returned = fn(...args);
+            if (owner && returned && typeof returned.then === 'function') {
+              const pending = Promise.resolve(returned).catch(error => { owner.proxyFailure ??= error; });
+              state.pendingActions.add(pending); pending.finally(() => state.pendingActions.delete(pending));
+            }
+          } catch (error) { if (owner) owner.proxyFailure ??= error; else throw error; }
+          finally { complete(); }
+        }, ms);
+        if (completion) { state.pendingActions.add(completion); state.timerCompletions.set(timer, complete); }
+        state.timers.add(timer); return timer; },
+      clearTimeout(timer) { state.timers.delete(timer); clearTimeout(timer); state.timerCompletions.get(timer)?.(); state.timerCompletions.delete(timer); } };
     sandbox.window = sandbox; sandbox.self = sandbox; sandbox.global = sandbox;
     const context = vm.createContext(sandbox);
     for (const asset of policy.assets) {
@@ -247,7 +301,8 @@ export async function prepareOriginalO11Entry(input, { fetchImpl = fetch, cookie
       'OutSystems/ClientRuntime/ApplicationInfo', 'OutSystems/ClientRuntime/Application', 'OutSystems/ClientRuntime/RolesInfo',
       'OutSystems/ClientRuntime/modules/ClientVariables/LocalStorageClientVariablesService', 'OutSystems/ClientRuntime/Communication',
       'OutSystems/ClientRuntime/Logger', 'OutSystems/ClientRuntime/VersionsManager']);
-    await amd(['OutSystems/ClientRuntime/Debugger']);
+    const [nativeDebuggerModule] = await amd(['OutSystems/ClientRuntime/Debugger']);
+    state.nativeDebuggerConverter = nativeDebuggerModule.DebuggerDataConverter;
     if (!sandbox.OutSystemsDebugger || sandbox.OutSystemsDebugger.isInSession) fail('debug_o11_native_debugger_context_invalid');
     logger.setTracingEnabled(false);
     if (logger.forceTracing || definition.userProviderName !== policy.userProvider || definition.homeModuleName !== target.module ||
@@ -299,7 +354,7 @@ export async function prepareOriginalO11Entry(input, { fetchImpl = fetch, cookie
 
 // ---- v2: graph-chosen entry, typed scenarios ---------------------------------------------------------------
 const WIRE_DEFAULTS = Object.freeze({ Integer: 0, LongInteger: '0', Decimal: '0', Currency: '0', Text: '', PhoneNumber: '', Email: '', Boolean: false,
-  Date: '1900-01-01', Time: '00:00:00', DateTime: '1900-01-01T00:00:00Z' });
+  Date: '1900-01-01', Time: '00:00:00', DateTime: '1900-01-01T00:00:00Z', BinaryData: '' });
 const EXCEPTION_TYPES = new Set(['UserException', 'ServerException', 'DataBaseException', 'NotRegisteredException', 'SecurityException',
   'CommunicationException', 'AbortActivityChangeException', 'InvalidLoginException', 'ServiceException', 'TypeError', 'ReferenceError',
   'RangeError', 'SyntaxError']);
@@ -309,15 +364,7 @@ const redactText = (state, value, limit = 2000) => {
   return text.length > limit ? text.slice(0, limit) + '…' : text;
 };
 // Wire value (what ServerDataConverter.to produces) -> plain JSON: {List:[...]} becomes an array, strings filtered.
-function unwire(state, value, depth = 0) {
-  if (depth > 8) return '[depth-limit]';
-  if (value === null || value === undefined) return null;
-  if (typeof value === 'string') return redactText(state, value);
-  if (typeof value !== 'object') return value;
-  if (Array.isArray(value.List)) return value.List.slice(0, 1000).map(item => unwire(state, item, depth + 1));
-  if (Array.isArray(value)) return value.slice(0, 1000).map(item => unwire(state, item, depth + 1));
-  return Object.fromEntries(Object.entries(value).filter(([k]) => k !== 'EmptyListItem').slice(0, 200).map(([k, v]) => [k, unwire(state, v, depth + 1)]));
-}
+function unwire(state, value) { return nativeWireOutput(value, state.redact ?? []); }
 function typedOutput(state, value, dataType) {
   const os = state.os, conv = os.Internal.DataConversion.ServerDataConverter, DT = os.Internal.DataTypes.DataTypes;
   if (value === undefined) return null;
@@ -397,20 +444,49 @@ function hookClientDebugger(state, mode) {
   });
   return { visits, exceptions, restore() { for (const [name, fn] of Object.entries(saved)) debuggerObject[name] = fn; } };
 }
+// A canonical scenario value checked against the ORIGINAL runtime class (Class.getAttributes() / getItemType()) before the
+// original ServerDataConverter reads it. It converts nothing: it refuses an attribute or item the class does not declare
+// with that wire type, and only shapes lists as the {List:[...]} wire the converter reads at every level.
+const WIRE_STRINGS = new Set(['Text', 'Email', 'PhoneNumber', 'LongInteger', 'Decimal', 'Currency', 'Date', 'Time', 'DateTime', 'BinaryData']);
+export function o11ClassWire(DT, Class, value, depth = 0) {
+  const mismatch = () => fail('debug_o11_native_record_class_mismatch');
+  if (depth > 32 || typeof Class !== 'function') mismatch();
+  const names = Object.fromEntries(Object.entries(DT).filter(([, v]) => typeof v === 'number').map(([k, v]) => [v, k]));
+  const basic = (type, item) => {
+    if (WIRE_STRINGS.has(type) ? typeof item !== 'string' : type === 'Integer' ? !Number.isSafeInteger(item) : type !== 'Boolean' || typeof item !== 'boolean') mismatch();
+    return item;
+  };
+  const itemType = typeof Class.getItemType === 'function' ? Class.getItemType() : undefined;
+  if (typeof itemType === 'number' || typeof itemType === 'function') {
+    if (!Array.isArray(value)) mismatch();
+    return { List: value.map(item => item === null || item === undefined ? mismatch()
+      : typeof itemType === 'number' ? basic(names[itemType], item) : o11ClassWire(DT, itemType, item, depth + 1)) };
+  }
+  const attributes = typeof Class.getAttributes === 'function' ? Class.getAttributes() : null;
+  if (!Array.isArray(attributes) || !value || typeof value !== 'object' || Array.isArray(value)) mismatch();
+  const wire = {};
+  for (const [key, item] of Object.entries(value)) {
+    const found = attributes.filter(a => a.name === key);
+    if (found.length !== 1) mismatch();
+    const type = names[found[0].dataType];
+    wire[key] = item === null ? null : type === 'Record' || type === 'RecordList' ? o11ClassWire(DT, found[0].complexType, item, depth + 1) : basic(type, item);
+  }
+  return wire;
+}
 function nativeValue(state, input, wire, present) {
   const os = state.os, conv = os.Internal.DataConversion.ServerDataConverter, DT = os.Internal.DataTypes.DataTypes;
   if (input.dataType === 'Record' || input.dataType === 'RecordList') {
     const Class = state.entry.classes[input.name];
     if (!Class) fail('debug_o11_native_record_class_unresolved');
     if (!present || wire === null) return new Class();
-    return conv.from(input.dataType === 'RecordList' ? { List: wire } : wire, Class);
+    return conv.from(o11ClassWire(DT, Class, wire), Class);
   }
   if (!(input.dataType in WIRE_DEFAULTS)) fail('debug_o11_native_input_conversion_failed');
   return conv.from(present && wire !== null ? wire : WIRE_DEFAULTS[input.dataType], DT[input.dataType]);
 }
 async function instantiateGraphEntry(state, os, amd) {
   const spec = state.policy.entry;
-  let controller, model = null;
+  let controller, screenController, screenModel, model = null;
   if (spec.moduleLevel) {
     const [moduleController] = await amd([state.target.module + '.controller']);
     await amd([spec.controller]); // the define installs default.<method>
@@ -421,22 +497,59 @@ async function instantiateGraphEntry(state, os, amd) {
     controller = controllerFactory.create(model, new os.Internal.WidgetNaming.WidgetIdService(null));
     state.controllers.push(controller);
     if (!(controller instanceof os.Internal.Controller.BaseViewController)) fail('debug_o11_native_abi_invalid');
+    if (spec.hostScreen) {
+      if (spec.hostScreen.controllerFactory === spec.controllerFactory) { screenController = controller; screenModel = model; }
+      else {
+        const [screenModelFactory, screenControllerFactory] = await amd([spec.hostScreen.modelFactory, spec.hostScreen.controllerFactory]);
+        screenModel = screenModelFactory.create({ viewName: spec.hostScreen.viewName, navigatedFromHistory: false, viewWasRestoredFromCache: false });
+        screenController = screenControllerFactory.create(screenModel, new os.Internal.WidgetNaming.WidgetIdService(null));
+        state.controllers.push(screenController);
+      }
+      if (typeof screenController.constructor.checkPermissions !== 'function') fail('debug_o11_native_screen_permissions_unavailable');
+      screenController.setAsActiveScreen?.();
+    }
   }
   if (!controller || typeof controller[spec.method] !== 'function') fail('debug_o11_native_abi_invalid');
+  trackO11ClientProxies(controller, state.pendingActions, error => { if (state.scenario) state.scenario.proxyFailure ??= error; });
+  if (spec.lifecycle && (typeof controller[spec.lifecycle.handler] !== 'function' || typeof controller.fireEvent !== 'function'))
+    fail('debug_o11_native_lifecycle_handler_unavailable');
   if (spec.kind === 'data-action' && !model?.variables?.[spec.dataProperty]) fail('debug_o11_native_abi_invalid');
   const classes = {};
+  const DT = os.Internal.DataTypes.DataTypes;
   for (const input of [...spec.inputs, ...(spec.screenVariables ?? [])]) {
     if (!['Record', 'RecordList'].includes(input.dataType)) continue;
-    const [base, className] = (input.recordClass ?? '').split('$');
-    if (!base || !className) fail('debug_o11_native_record_class_unresolved');
-    await amd([input.recordClass]);
-    const [modelModule] = await amd([base]);
-    if (typeof modelModule?.[className] !== 'function') fail('debug_o11_native_record_class_unresolved');
-    classes[input.name] = modelModule[className];
+    let Class;
+    if (input.runtimeList) Class = os.Internal.DataTypes[input.runtimeList]; // basic list of the pinned published runtime
+    else {
+      const [base, className] = (input.recordClass ?? '').split('$');
+      if (!base || !className) fail('debug_o11_native_record_class_unresolved');
+      await amd([input.recordClass]);
+      const [modelModule] = await amd([base]);
+      Class = modelModule?.[className];
+    }
+    if (typeof Class !== 'function') fail('debug_o11_native_record_class_unresolved');
+    // A basic-type list is used only when the original class's item type is that basic type.
+    if (input.element && (typeof Class.getItemType !== 'function' || Class.getItemType() !== DT[input.element])) fail('debug_o11_native_record_class_mismatch');
+    classes[input.name] = Class;
   }
   let viewName = null;
   try { viewName = controller.getInitialPayloadObject?.(controller.callContext(), spec.apiVersion ?? state.policy.login.apiVersion)?.viewName ?? null; } catch { viewName = null; }
-  return { model, controller, classes, viewName };
+  return { model, controller, classes, viewName, screenController, screenModel };
+}
+
+function contextValue(state, model, spec, wire) {
+  const os = state.os, attributes = model.variables.getAttributes?.();
+  const found = attributes?.filter(a => a.attrName === spec.attribute && a.name === spec.name) ?? [];
+  if (found.length !== 1 || found[0].dataType !== os.Internal.DataTypes.DataTypes[spec.dataType])
+    fail('debug_o11_native_context_attribute_unavailable');
+  const conversion = os.Internal.DataConversion.ServerDataConverter;
+  if (['Record', 'RecordList'].includes(spec.dataType)) {
+    const Class = model.variables[spec.attribute]?.constructor;
+    if (typeof Class !== 'function' || Class === Object || Class === Array) fail('debug_o11_native_record_class_unresolved');
+    return wire === null ? new Class() : conversion.from(o11ClassWire(os.Internal.DataTypes.DataTypes, Class, wire), Class);
+  }
+  if (!(spec.dataType in WIRE_DEFAULTS)) fail('debug_o11_native_input_conversion_failed');
+  return conversion.from(wire === null ? WIRE_DEFAULTS[spec.dataType] : wire, found[0].dataType);
 }
 // Every POST of a scenario: the original runtime built it; this checks its envelope, accounts it with the parent and
 // reserves a one-shot marker BEFORE the fetch. A lost answer is uncertain and never resent.
@@ -444,7 +557,7 @@ async function submitScenarioPost(state, url, body, headers) {
   const policy = state.policy;
   let payload; try { payload = JSON.parse(body); } catch { fail('debug_o11_native_envelope_invalid'); }
   const keys = Object.keys(payload ?? {});
-  if (!state.scenario || typeof body !== 'string' || Buffer.byteLength(body) > 262144 ||
+  if (!state.scenario || typeof body !== 'string' || Buffer.byteLength(body) > O11_NATIVE_ENVELOPE_BYTES ||
       !keys.includes('versionInfo') || !keys.includes('viewName') || keys.some(k => !['versionInfo', 'viewName', 'inputParameters', 'screenData', 'clientVariables'].includes(k)) ||
       payload.versionInfo?.moduleVersion !== policy.manifest.manifest.versionToken ||
       (policy.entry.endpointVersions?.[url.pathname] && payload.versionInfo.apiVersion !== policy.entry.endpointVersions[url.pathname]) ||
@@ -480,27 +593,46 @@ export async function invokeScenarioO11Entry(handle, scenario) {
   state.report.scenarios ??= [];
   if (state.report.scenarios.length >= 50 || state.report.scenarios.some(s => s.name === scenario.name)) fail('debug_o11_native_invocation_refused');
   await state.fresh(); state.roles.checkRegistered();
+  state.entry.screenController?.constructor.checkPermissions();
   const spec = state.policy.entry, { controller, model } = state.entry, os = state.os;
-  let args;
+  let args, contextReceipt;
   try {
+    contextReceipt = applyO11Context({ owners: spec.context,
+      models: { screen: state.entry.screenModel, block: spec.context?.block ? model : undefined }, value: scenario.context,
+      convert: (ownerModel, variable, wire) => contextValue(state, ownerModel, variable, wire) });
     args = spec.inputs.map(input => nativeValue(state, input, scenario.values[input.name], Object.hasOwn(scenario.values, input.name)));
     for (const variable of spec.screenVariables ?? [])
       if (Object.hasOwn(scenario.screen ?? {}, variable.name)) model.variables[variable.attribute] = nativeValue(state, variable, scenario.screen[variable.name], true);
   } catch (error) { fail(o11NativePublicCode(error?.message, 'debug_o11_native_input_conversion_failed')); }
   state.scenario = { name: scenario.name, submitted: 0, answered: 0, uncertain: false, serverException: null };
-  const result = { name: scenario.name, ok: false, outputs: null, exception: null };
+  const result = { name: scenario.name, ok: false, outputs: null, exception: null,
+    ...(contextReceipt ? { context: contextReceipt } : {}),
+    ...(spec.lifecycle ? { lifecycle: { event: spec.lifecycle.event, handler: spec.lifecycle.handler, invoked: false, mounted: false } } : {}),
+    accessContext: { nativeLogin: true, rolesLoadedFromServer: state.report.rolesLoadedFromServer === true,
+      screenPermissionsChecked: !!state.entry.screenController, clientIdentityMatchesBeforeAfter: false, serverPropagationProved: false } };
   const hooks = hookClientDebugger(state, scenario.trace ?? 'none'), nativeDebugger = state.sandbox.OutSystemsDebugger;
-  let timer; const started = performance.now();
+  let timer, restoreNativeTimeout; const started = performance.now();
   try {
     if (nativeDebugger.isInSession) fail('debug_o11_native_debugger_context_invalid');
-    nativeDebugger.clearBreakpoints(); nativeDebugger.startSession(); // local correlation only: no breakpoints, no server debugger
+    nativeDebugger.clearBreakpoints(); nativeDebugger.startSession();
+    if (state.inspection) state.inspection.enable(state.inspectionOptions);
     state.armed = true;
-    const context = controller.callContext().withTimeout ? controller.callContext().withTimeout(state.input.timeoutSeconds) : controller.callContext();
-    const call = spec.kind === 'data-action' ? controller[spec.method](context) : controller[spec.method](...args, context);
-    const value = await Promise.race([Promise.resolve(call), new Promise((_, reject) => { timer = setTimeout(() => {
-      state.armed = false; for (const pending of state.requests) pending.abort(); reject(new Error('debug_o11_native_timeout')); }, state.input.timeoutSeconds * 1000); })]);
+    restoreNativeTimeout = o11NativeInspectionTimeout(state);
+    const budget = o11InvocationBudget(state), timeoutSeconds = Math.ceil(budget / 1000);
+    const context = controller.callContext().withTimeout ? controller.callContext().withTimeout(timeoutSeconds) : controller.callContext();
+    const call = spec.lifecycle ? invokeO11Lifecycle(controller, spec.lifecycle, timeoutSeconds)
+      : spec.kind === 'data-action' ? controller[spec.method](context) : controller[spec.method](...args, context);
+    if (result.lifecycle) result.lifecycle.invoked = true;
+    const completion = Promise.resolve(call).then(async value => {
+      await settleO11ClientProxies(state.pendingActions);
+      if (state.scenario.proxyFailure) throw state.scenario.proxyFailure;
+      return value;
+    });
+    const value = await Promise.race([completion, new Promise((_, reject) => { timer = setTimeout(() => {
+      state.armed = false; for (const pending of state.requests) pending.abort(); reject(new Error('debug_o11_native_timeout')); }, budget); })]);
     state.current(); state.roles.checkRegistered();
     if (state.roles.getUserId() !== state.userId) fail('debug_o11_native_result_unproved');
+    result.accessContext.clientIdentityMatchesBeforeAfter = true;
     if (spec.kind === 'data-action') {
       const record = model.variables[spec.dataProperty];
       if (!record || record.isDataFetchedAttr !== true) fail('debug_o11_native_result_unproved');
@@ -508,6 +640,7 @@ export async function invokeScenarioO11Entry(handle, scenario) {
         .map(a => [a.name, a.dataType === os.Internal.DataTypes.DataTypes.Record || a.dataType === os.Internal.DataTypes.DataTypes.RecordList
           ? unwire(state, os.Internal.DataConversion.ServerDataConverter.to(record[a.attrName])) : unwire(state, os.Internal.DataConversion.ServerDataConverter.to(record[a.attrName], a.dataType))]));
     } else result.outputs = Object.fromEntries(spec.outputs.map(o => [o.name, typedOutput(state, value?.[o.attribute], o.dataType)]));
+    result.outputs = nativeWireOutput(result.outputs, [], { unwrapLists: false });
     result.ok = true;
   } catch (error) {
     const code = typeof error?.message === 'string' && error.message.startsWith('debug_o11_native_') ? o11NativePublicCode(error.message) : null;
@@ -518,12 +651,16 @@ export async function invokeScenarioO11Entry(handle, scenario) {
       origin: code ? 'harness' : state.scenario.serverException ? 'server' : 'client',
       message: code ? code : redactText(state, error?.message ?? '', 500), ...(code ? { code } : {}) };
   } finally {
-    clearTimeout(timer); hooks.restore(); try { nativeDebugger.endSession(); } catch { /* local only */ } state.armed = false;
+    clearTimeout(timer); restoreNativeTimeout?.(); state.inspection?.finish(); hooks.restore(); try { nativeDebugger.endSession(); } catch { /* local only */ } state.armed = false;
+    for (const [pendingTimer, complete] of state.timerCompletions) { clearTimeout(pendingTimer); state.timers.delete(pendingTimer); complete(); }
+    state.timerCompletions.clear();
   }
   if (!result.ok && hooks.exceptions.length && !result.exception) result.exception = { type: hooks.exceptions[0].type, origin: 'client' };
   if (result.ok && hooks.exceptions.length) result.handledExceptions = hooks.exceptions; // original handlers ran (safeExecuteClientAction)
   if (state.scenario.serverException) result.serverException = state.scenario.serverException;
   result.durationMs = Math.round(performance.now() - started);
+  // Business exceptions still need an explicit client-context result. This is not evidence about a server/library frame.
+  try { state.roles.checkRegistered(); result.accessContext.clientIdentityMatchesBeforeAfter = state.roles.getUserId() === state.userId; } catch { /* false */ }
   result.requests = { submitted: state.scenario.submitted, answered: state.scenario.answered };
   result.uncertain = state.scenario.uncertain || state.scenario.submitted > state.scenario.answered;
   if (result.uncertain) state.report.requestUncertain = true;
@@ -531,6 +668,11 @@ export async function invokeScenarioO11Entry(handle, scenario) {
   state.report.scenarios.push({ name: scenario.name, ok: result.ok, submitted: result.requests.submitted, answered: result.requests.answered, uncertain: result.uncertain });
   state.report.phase = 'invoked'; state.persist(); state.scenario = null;
   return { ok: true, scenario: result };
+}
+
+export function configureOriginalO11ServerInspection(handle, options) {
+  const state = sessions.get(handle); if (!state) fail('debug_o11_native_session_invalid'); state.current();
+  const result = o11InspectionDeadline(state, options); state.persist(); return result;
 }
 
 export async function authenticateOriginalO11Entry(handle, descriptor, { vault = privateAppUserVault } = {}) {
@@ -560,6 +702,9 @@ export async function authenticateOriginalO11Entry(handle, descriptor, { vault =
     state.roles.checkRegistered(); state.userId = state.roles.getUserId();
     if (state.userId === state.os.Internal.BuiltinFunctions.nullIdentifier()) fail('debug_o11_native_login_identity_unavailable');
     state.report.authenticated = true; state.report.nativeCheckRegisteredPassed = true; state.report.rolesLoadedFromServer = true;
+    if (state.entry.screenController) {
+      state.entry.screenController.constructor.checkPermissions(); state.report.nativeScreenPermissionsPassed = true;
+    }
     state.report.phase = 'authenticated'; state.persist(); return { ok: true, ...handle.receipt() };
   } catch (error) { state.report.ok = false; state.report.error = publicCode(error); diagnostics(state, error); state.persist(); throw new Error(publicCode(error)); }
   finally { state.authenticating = false; state.credentials = undefined;
@@ -581,9 +726,10 @@ export async function invokeOriginalO11Entry(handle) {
     if (nativeDebugger.isInSession) fail('debug_o11_native_debugger_context_invalid');
     nativeDebugger.clearBreakpoints(); nativeDebugger.startSession();
     state.report.clientRuntimeCorrelationEnabled = true;
-    await Promise.race([state.entry.controller[state.policy.entry.method](state.entry.controller.callContext().withTimeout(state.input.timeoutSeconds)),
+    const budget = o11InvocationBudget(state);
+    await Promise.race([state.entry.controller[state.policy.entry.method](state.entry.controller.callContext().withTimeout(Math.ceil(budget / 1000))),
       new Promise((_, reject) => { timer = setTimeout(() => { state.armed = false; for (const controller of state.requests) controller.abort();
-        reject(new Error('debug_o11_native_timeout')); }, state.input.timeoutSeconds * 1000); })]);
+        reject(new Error('debug_o11_native_timeout')); }, budget); })]);
     state.current(); state.roles.checkRegistered();
     const record = state.entry.model.variables[state.policy.entry.dataProperty];
     if (!record || record.isDataFetchedAttr !== true || state.report.requestAnsweredCount !== 1 || state.roles.getUserId() !== state.userId)
@@ -597,6 +743,17 @@ export async function invokeOriginalO11Entry(handle) {
     if (state.report.requestSubmittedCount && !state.report.requestAnsweredCount) state.report.requestUncertain = true;
     state.persist(); throw new Error(publicCode(error)); }
   finally { clearTimeout(timer); state.sandbox?.OutSystemsDebugger?.endSession(); state.armed = false; state.responseOutputs = undefined; }
+}
+
+// Stored for enable() at invocation: breakpoints and the original
+// pauseOnAllExceptions switch only, validated before inspection exists.
+export function o11InspectionEnableOptions(input) {
+  try { return clientInspectionEnableOptions(input ?? {}); } catch { fail('debug_o11_native_preparation_invalid'); }
+}
+
+export function originalO11WorkerSuccess(id, result, receipt) {
+  // RPC completion is distinct from a previous login/scenario outcome in the receipt.
+  return { ...result, id, ok: true, receipt };
 }
 
 async function main() {
@@ -623,12 +780,28 @@ async function main() {
           const own = ++seq; gates.set(own, { resolve, reject }); emit({ kind: 'submission', id: currentId, seq: own, submission });
         }) });
         result = { receiptPath: handle.receiptPath };
+      } else if (message.op === 'configure-inspection' && handle) {
+        const state = sessions.get(handle);
+        if (state.inspection || state.armed || state.serverInspectionDeadline !== undefined) fail('debug_o11_native_session_busy');
+        const enableOptions = o11InspectionEnableOptions(message.input);
+        state.inspection = createNativeClientInspection({ debuggerObject: state.sandbox.OutSystemsDebugger,
+          binaryType: state.os.Internal.DataTypes.BinaryData,
+          nativeConverter: state.nativeDebuggerConverter,
+          globalObject: state.sandbox, platform: 'o11', modules: message.input.modules, variables: message.input.variables,
+          privateChannel:createPrivateInspectionChannel({binding:state.descriptor.binding,sources:message.input.modules,
+            expiresAt:new Date(Math.min(Date.parse(state.descriptor.expiresAt),Date.now()+message.input.leaseMs)).toISOString()}),
+          redact: value => redactNativeClientValue(value, state.redact) });
+        state.inspectionOptions = enableOptions;
+        state.inspector = openNativeClientInspector();
+        result = { inspectionCapability: { url: state.inspector.url, helperName: state.inspection.helperName,privateConsumerCapability:state.inspection.privateConsumerCapability } };
+      } else if (message.op === 'configure-server-inspection' && handle) {
+        result = configureOriginalO11ServerInspection(handle, message.input);
       } else if (message.op === 'authenticate' && handle) result = await authenticateOriginalO11Entry(handle, message.input.descriptor);
       else if (message.op === 'invoke' && handle && message.input?.scenario) result = await invokeScenarioO11Entry(handle, message.input.scenario);
       else if (message.op === 'invoke' && handle) result = await invokeOriginalO11Entry(handle);
       else if (message.op === 'dispose' && handle) result = await handle.dispose();
       else fail('debug_o11_native_operation_invalid');
-      emit({ id: currentId, ok: true, ...result, receipt: handle?.receipt() });
+      emit(originalO11WorkerSuccess(currentId, result, handle?.receipt()));
     })().catch(error => emit({ id: currentId, ok: false, error: publicCode(error), receipt: handle?.receipt() ?? error.receipt,
       receiptPath: handle?.receiptPath ?? error.receiptPath }))
       .finally(() => { busy = false; });

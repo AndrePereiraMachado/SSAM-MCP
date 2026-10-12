@@ -1,4 +1,4 @@
-// scripts/prova-verbos.mjs (live proof 2 of docs/PROVAS-AO-VIVO.md) against a fake request function: the 21 verbs in the
+// scripts/prova-verbos.mjs (live proof 2 of docs/PROVAS-AO-VIVO.md) against a fake request function: the 22 verbs in the
 // bridge's order, the agent's own port and key, nothing that changes the Studio without the opt-in flags, and the load
 // errors that only a real Studio's JIT shows classified apart. No socket, no Studio.
 import { test } from 'node:test';
@@ -36,9 +36,9 @@ test('read-only by default: every verb answered or skipped, nothing opened, clos
     const { results, summary, passed } = await run({ root, host: null, module: null, publish: false }, { request: fake.request });
     assert.equal(passed, true);
     assert.deepEqual(results.map(r => r.verb), VERBS, 'one line per verb, in the bridge order');
-    assert.deepEqual(summary.skipped.sort(), ['close_module', 'open_module', 'publish', 'sc_api', 'sc_web', 'studio_login']);
+    assert.deepEqual(summary.skipped.sort(), ['close_module', 'open_module', 'publish', 'sc_api', 'sc_http', 'sc_web', 'studio_login']);
     assert.deepEqual(new Set(fake.seen.map(s => s.method)).has('publish'), false);
-    for (const forbidden of ['open_module', 'close_module', 'publish', 'sc_api', 'sc_web', 'studio_login']) assert.equal(fake.seen.some(s => s.method === forbidden), false, forbidden);
+    for (const forbidden of ['open_module', 'close_module', 'publish', 'sc_api', 'sc_web', 'sc_http', 'studio_login']) assert.equal(fake.seen.some(s => s.method === forbidden), false, forbidden);
     assert.ok(fake.seen.every(s => s.target.port === 4516 && s.target.authorization === 'agent-key'));
     // The environment lease is read-only and closed again; the merge candidate does not exist; the snapshot stays in o11/prova.
     assert.deepEqual(fake.seen.filter(s => s.method === 'environment_session').map(s => s.params.operation), ['connect', 'modules', 'close']);
@@ -64,6 +64,8 @@ test('with --host, --module and --publish every verb runs; studio_login only on 
     assert.deepEqual(all.results.map(r => r.verb), VERBS);
     assert.deepEqual(signedIn.seen.filter(s => ['open_module', 'publish', 'close_module'].includes(s.method)).map(s => s.method), ['open_module', 'publish', 'close_module']);
     assert.deepEqual(signedIn.seen.find(s => s.method === 'sc_api').params, { host: 'lab.example.com', surface: 'soap', operation: 'ListEspaces', args: {} });
+    // 24th release: sc_http only reads the status through the Studio's own session (no window, nothing sent).
+    assert.deepEqual(signedIn.seen.find(s => s.method === 'sc_http').params, { host: 'lab.example.com', action: 'status' });
 
     const notSignedIn = fakeRequest(method => (method === 'sc_session' ? { success: true, data: { studio: { signedIn: false } } } : { success: true, data: {} }));
     const partial = await run({ root, host: 'lab.example.com', module: null, publish: false }, { request: notSignedIn.request });

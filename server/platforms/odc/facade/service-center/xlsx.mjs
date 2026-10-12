@@ -44,12 +44,13 @@ const xmlText = text => text.replace(/&(#x[0-9a-fA-F]+|#[0-9]+|[A-Za-z]+);/g, (m
 export function parseXml(source) {
   const root = { name: null, attrs: {}, children: [], text: null, ns: { xml: 'http://www.w3.org/XML/1998/namespace' } };
   const stack = [root];
+  const opened = [null];
   const addText = text => { const top = stack.at(-1); if (top.children.length === 0) top.text = (top.text ?? '') + text; };
   const re = /<!\[CDATA\[([\s\S]*?)\]\]>|<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<!DOCTYPE[^>]*>|<\/([^\s>]+)\s*>|<([^\s/>]+)((?:\s+[^\s=/>]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(\/?)>|([^<]+)/gy;
   let match;
   while (re.lastIndex < source.length && (match = re.exec(source))) {
     if (match[1] !== undefined) addText(match[1]);
-    else if (match[2] !== undefined) { if (stack.length < 2) throw new Error('unbalanced XML'); stack.pop(); }
+    else if (match[2] !== undefined) { if (stack.length < 2 || opened.at(-1) !== match[2]) throw new Error('unbalanced XML'); stack.pop(); opened.pop(); }
     else if (match[3] !== undefined) {
       const parent = stack.at(-1);
       const raw = {};
@@ -61,7 +62,7 @@ export function parseXml(source) {
       const attrs = Object.fromEntries(Object.entries(raw).filter(([k]) => k !== 'xmlns' && !k.startsWith('xmlns:')));
       const element = { name: uri ? `{${uri}}${local}` : local, attrs, children: [], text: null, ns };
       parent.children.push(element);
-      if (!match[5]) stack.push(element);
+      if (!match[5]) { stack.push(element); opened.push(match[3]); }
     } else if (match[6] !== undefined) addText(xmlText(match[6]));
     // otherwise a comment, a processing instruction or the DOCTYPE: skipped
   }

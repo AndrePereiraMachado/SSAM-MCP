@@ -95,6 +95,11 @@ docs/OPERACOES-O11.md
 docs/PILOTO-FASE2.md
 docs/PACOTE-*.md
 docs/proofs
+# the 24th release: the Service Center and Portal line (proposals, live proofs on client tenants, handoffs, checklists)
+# and the prototype importer's design; the runtime catalogs carry what the server needs from them
+docs/PORTAL-*
+docs/SC-*
+docs/PROTOTIPO-NATIVO.md
 # work done for clients: its scripts, html sources and browser contracts carry the client in the file name
 kernel/scripts/*dcips*
 kernel/tests/html/dcips-*
@@ -136,3 +141,4 @@ kernel/scripts/probes
 kernel/debug/tests
 kernel/debug/tests-o11
 kernel/debug/tests-odc
+kernel/debug/tests-witness

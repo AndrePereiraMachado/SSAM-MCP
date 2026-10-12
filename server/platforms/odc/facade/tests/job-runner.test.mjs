@@ -36,6 +36,22 @@ function sandbox(t) {
 const withoutWorkerFlags = env => { const { ANVIL_WORKER, ANVIL_ODC_NO_WORKER, ...rest } = env; return rest; };
 const buildOdcCli = root => { const file = path.join(root, '.local', 'lane-odc', 'cli', 'anvil-odc.dll'); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, ''); return file; };
 
+test('ODC explicit candidate seals native artifacts before/after execution and refuses input drift',async t=>{
+ for(const drift of [false,true]){
+  const s=sandbox(t);buildOdcCli(s.root);
+  const base=path.join(s.root,'base.oml'),out=path.join(s.root,'candidate.oml');fs.writeFileSync(base,'OML base');
+  const runAnvil=async()=>{
+   fs.writeFileSync(out,'OML candidate');if(drift)fs.appendFileSync(base,'changed');
+   return {envelope:{ok:true,data:{accepted:true,isValid:true,messages:0,outPath:out,handles:{'@espace':'native-key'}}}};
+  };
+  const result=await runJob({lane:'odc',job:s.job,base,out},s.deps({runAnvil}));
+  const saved=readResult(result.resultFile);
+  assert.equal(result.ok,!drift);
+  if(drift){assert.equal(result.code,'JOB_ARTIFACT_BINDING_FAILED');assert.equal(saved.data.accepted,false);assert.equal(saved.artifacts,undefined);}
+  else{assert.equal(saved.artifacts.schema,'ssam-job-artifacts/1');assert.equal(saved.artifacts.moduleKey,'native-key');assert.equal(saved.artifacts.base.file,base);assert.equal(saved.artifacts.candidate.file,out);assert.match(saved.artifacts.job.sha256,/^[a-f0-9]{64}$/);}
+ }
+});
+
 test('O11: the argv of anvil_cli.apply, <out>.result.json as run_job.py writes it, and a short JSON answer', async t => {
   const s = sandbox(t);
   const runAnvil = fakeAnvil({ apply: () => ({ envelope: accepted(), stderr: ['warn: slow load'] }) });
@@ -65,7 +81,10 @@ test('O11: the argv of anvil_cli.apply, <out>.result.json as run_job.py writes i
     { op: 'dump', tree: ['IServerAction Text_Tail', '  IAssignNode CalculaCauda', '    IAssignment  = Right(Value, 1)'] }]);
   else { assert.ok(r.resultsTotal >= 3); assert.deepEqual(r.continuation.arguments, { file: resultFile, pointer: '/data/results' }); }
   assert.equal(r.stderr, undefined, 'stderr only on a failure');
-  assert.ok(Buffer.byteLength(JSON.stringify(r)) <= 1024 - 120, 'the answer stays within 1 KB with the job identity jobTool adds');
+  // What the job creates (job-summary.mjs, 2026-10-12): outside the 1 KB budget, as the HIGH warnings.
+  assert.deepEqual(r.summary, { ops: 1, structures: [{ name: 'S', attributes: 0 }] });
+  const { summary: _summary, ...budgeted } = r;
+  assert.ok(Buffer.byteLength(JSON.stringify(budgeted)) <= 1024 - 120, 'the answer stays within 1 KB with the job identity jobTool adds');
   const quiet = await runJob({ lane: 'o11', job: s.job, quiet: true }, s.deps({ runAnvil }));
   assert.equal(quiet.results, undefined);
 });

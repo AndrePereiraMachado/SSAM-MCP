@@ -24,7 +24,7 @@ O nodo ICallAgentNode tambem faz parte de logic: properties.Agent e uma referenc
 
 Instrucoes de sistema e contexto sao mensagens criadas pelo caller. O campo description do agente nao substitui uma system message. Memoria tambem e explicita: BuildMessages_V2 carrega o historico e StoreMemory_V2 grava a interacao por SessionId. A aplicacao deve escolher como esse SessionId se vincula ao usuario autorizado; um teste sintetico de sessao nao comprova autenticacao ou segregacao por usuario.
 
-Exemplo completo sobre o template oficial: kernel/tests/jobs-live/odc-agents-example.json. Escolha a conexao real no tenant; o nome de modelo no exemplo e apenas o modelo usado no laboratorio. Saida estruturada e tool calling sao modos separados; o contrato recusa a combinacao explicita.
+Exemplo completo sobre o template oficial: kernel/tests/jobs-live/odc-agents-example.json. Escolha a conexao real no tenant; o nome de modelo no exemplo e apenas o modelo usado no laboratorio. Use studio_reference_producers com o consumidor aberto para listar nomes/chaves disponiveis a essa sessao; studio_reference_snapshot captura a assinatura do produtor exato. Ausencia nessa listagem nao prova ausencia em todo o tenant. Saida estruturada e tool calling sao modos separados; o contrato recusa a combinacao explicita.
 
 ## Evidencia desta implementacao
 

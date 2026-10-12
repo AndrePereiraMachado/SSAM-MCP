@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { authenticateOdcAppUser, odcAppUserBinding } from '../debug-app-user-odc.mjs';
+import { foreignPendingReason } from '../debug-foreign-pending.mjs';
+// Port D7: us-east-2 user pools wait for cognitoRegionSupported in portal/runtime/cognito-login.mjs.
+const usEast2Pending = foreignPendingReason('cognito-region');
 
 // Synthetic runtime/broker responses; no tenant traffic or real credentials are used.
 const origin = 'https://example-dev.outsystems.app', app = 'ExampleApp', time = 2000000000000;
@@ -30,6 +33,7 @@ function fixture(options = {}) {
     assert.equal(request.redirect, 'manual'); assert.equal(request.credentials, 'omit');
     if (options.networkFailure) throw new Error('private transport diagnostic ' + credentials.password);
     if (url.pathname === options.failurePath) return response(options.failureBody ?? 'private native diagnostic ' + credentials.password, options.failureStatus ?? 503);
+    if (url.pathname === '/' + app + '/moduleservices/clientsettingsinfo') return response(options.settings ?? { clientSettingsHash: 'synthetic-settings-hash', clientSettings: {} });
     if (url.pathname === '/' + app + '/moduleservices/auth/configs') return response(options.metadata ?? { authConfigurations: [
       { key: 'synthetic-provider', type: 'cognito', kc_hint: 'cognito-app', configs: {
         poolId: 'us-east-1_AppPool', amplifyClientId: 'AppClient123', authFlow: 'USER_SRP_AUTH',
@@ -45,7 +49,7 @@ function fixture(options = {}) {
       return response('', 302, { Location: login.href, 'Set-Cookie': 'broker=SYNTHETIC_COOKIE; Secure; HttpOnly; Path=/identity' });
     }
     if (url.pathname === '/authentication/login') return response('Native login shell; no page JavaScript is executed.');
-    if (url.origin === 'https://cognito-idp.us-east-1.amazonaws.com') return response({});
+    if (url.origin === `https://cognito-idp.${options.region ?? 'us-east-1'}.amazonaws.com`) return response({});
     if (url.pathname === '/identityapi/v1alpha1/oidc/store-token') {
       assert.deepEqual(JSON.parse(request.body), { clientId: 'AppClient123', idToken: 'SYNTHETIC_COGNITO_ID',
         accessToken: 'SYNTHETIC_COGNITO_ACCESS', refreshToken: 'SYNTHETIC_COGNITO_REFRESH' });
@@ -88,7 +92,7 @@ function fixture(options = {}) {
   const cognito = async args => {
     signins.push(args);
     if (options.cognitoError) throw options.cognitoError;
-    await args.request('https://cognito-idp.us-east-1.amazonaws.com/', { method: 'POST',
+    await args.request(`https://cognito-idp.${args.config.Region}.amazonaws.com/`, { method: 'POST',
       headers: { 'Content-Type': 'application/x-amz-json-1.1', 'X-Amz-Target': 'AWSCognitoIdentityProviderService.InitiateAuth' },
       body: { AuthFlow: 'USER_SRP_AUTH', ClientId: args.config.AmplifyClientKey, AuthParameters: { USERNAME: args.username, SRP_A: 'synthetic-proof' } } });
     return { IdToken: 'SYNTHETIC_COGNITO_ID', AccessToken: 'SYNTHETIC_COGNITO_ACCESS', RefreshToken: 'SYNTHETIC_COGNITO_REFRESH' };
@@ -136,9 +140,51 @@ test('unsupported, ambiguous, or incomplete app providers stop before requesting
   const valid = { key: 'provider', type: 'cognito', configs: { poolId: 'us-east-1_Test', amplifyClientId: 'Client123' } };
   for (const authConfigurations of [[{ ...valid, type: 'saml' }], [valid, valid], [{ ...valid, configs: {} }],
     [{ ...valid, configs: { ...valid.configs, authFlow: 'USER_PASSWORD_AUTH' } }],
+    [{ ...valid, configs: { ...valid.configs, region: 'us-east-2' } }],
     [{ ...valid, configs: { ...valid.configs, poolId: 'eu-west-1_Test' } }]]) {
     const mock = fixture({ metadata: { authConfigurations } });
     await assert.rejects(mock.run(), safeError('debug_app_auth_provider_unsupported')); assert.equal(mock.signins.length, 0);
+  }
+});
+
+test('personal app metadata selects us-east-2 and preserves the original broker and authenticated user', { skip: usEast2Pending }, async () => {
+  const mock = fixture({ region: 'us-east-2', metadata: { authConfigurations: [{ type: 'cognito', kc_hint: 'os-builtin',
+    configs: { region: 'us-east-2', poolId: 'us-east-2_AppPool', amplifyClientId: 'AppClient123', authFlow: 'USER_SRP_AUTH' } }] } });
+  const result = await mock.run();
+  assert.equal(mock.signins[0].config.Region, 'us-east-2');
+  assert.equal(mock.authorization.searchParams.get('kc_idp_hint'), 'os-builtin');
+  assert.equal(result.userKey, 'synthetic-platform-user');
+  assert.deepEqual(result.roles, ['role-key-one', 'role-key-two']);
+  assert.ok(mock.calls.every(call => [origin, 'https://cognito-idp.us-east-2.amazonaws.com'].includes(new URL(call.url).origin)));
+});
+
+test('published settings provider selection is authoritative, absent-only legacy and private without extra sign-in', { skip: usEast2Pending }, async () => {
+  const provider = { type: 'cognito', kc_hint: 'os-builtin', configs: {
+    poolId: 'us-east-2_AppPool', amplifyClientId: 'AppClient123', authFlow: 'USER_SRP_AUTH', tenantId: 'synthetic-tenant',
+  } };
+  const events = [], settings = { clientSettingsHash: 'synthetic-settings-hash', clientSettings: { IdentityProviders: JSON.stringify([provider]) } };
+  const selected = fixture({ settings, region: 'us-east-2', metadata: { authConfigurations: [] }, observer: event => events.push(event) });
+  const session = await selected.run();
+  assert.equal(session.userKey, 'synthetic-platform-user');
+  assert.deepEqual(selected.signins[0].config, { Region: 'us-east-2', PoolKey: 'us-east-2_AppPool', AmplifyClientKey: 'AppClient123', AuthFlow: 'USER_SRP_AUTH' });
+  assert.equal(selected.signins.length, 1);
+  assert.equal(selected.signins[0].username, credentials.username); assert.equal(selected.signins[0].password, credentials.password);
+  assert.equal(selected.authorization.searchParams.get('kc_idp_hint'), 'os-builtin');
+  assert.equal(selected.calls.filter(call => new URL(call.url).pathname.endsWith('/clientsettingsinfo')).length, 1);
+  assert.equal(selected.calls.some(call => new URL(call.url).pathname.endsWith('/auth/configs')), false);
+  assert.deepEqual(events.find(event => event.event === 'http'), { event: 'http', stage: 'runtime-config', endpoint: 'runtime_client_settings', method: 'GET', status: 200 });
+  for (const privateText of [credentials.username, credentials.password, provider.configs.poolId, provider.configs.amplifyClientId, provider.configs.tenantId]) {
+    assert.equal(JSON.stringify(events).includes(privateText), false);
+  }
+  for (const IdentityProviders of [undefined, null, '']) {
+    const legacy = fixture({ settings: { clientSettings: { IdentityProviders } } });
+    await legacy.run(); assert.equal(legacy.signins.length, 1);
+    assert.equal(legacy.calls.filter(call => new URL(call.url).pathname.endsWith('/auth/configs')).length, 1);
+  }
+  for (const IdentityProviders of ['private malformed ' + credentials.password, '{}', '[]', '[null]', [provider], JSON.stringify([provider, provider])]) {
+    const rejected = fixture({ settings: { clientSettings: { IdentityProviders } } });
+    await assert.rejects(rejected.run(), safeError('debug_app_auth_provider_unsupported'));
+    assert.equal(rejected.signins.length, 0); assert.equal(rejected.calls.length, 1);
   }
 });
 
@@ -216,7 +262,7 @@ test('private observation records fixed stages and bounded HTTP facts without au
     'platform-token', 'platform-jwks', 'token-validation', 'user-profile', 'user-roles', 'session-complete',
   ]);
   assert.deepEqual(events.filter(event => event.event === 'http').map(event => event.endpoint), [
-    'runtime_auth_configs', 'identity_discovery', 'broker_authorize', 'broker_redirect', 'cognito_srp', 'token_store',
+    'runtime_client_settings', 'runtime_auth_configs', 'identity_discovery', 'broker_authorize', 'broker_redirect', 'cognito_srp', 'token_store',
     'broker_resume', 'platform_token', 'platform_jwks', 'user_profile', 'user_roles',
   ]);
   for (const event of events) {
@@ -302,4 +348,51 @@ test('status 201 acceptance is confined to store-token; discovery, platform toke
     assert.equal(mock.calls.filter(call => new URL(call.url).pathname === failurePath).length, 1);
     assert.equal(events.some(event => event.stage === 'session-complete'), false);
   }
+});
+
+import { inspect } from 'node:util';
+import { odcAppUserAnchor } from '../debug-app-user-odc.mjs';
+test('the app-user identity anchor keeps userKey private and exists only for an authenticated, identity-matched ODC login', () => {
+  const userKey = '9F1E2D3C-4B5A-4978-8695-A4B3C2D1E0F9', expiresAt = new Date(Date.now() + 60000).toISOString();
+  const descriptor = { credentialRef: '11111111-2222-4333-8444-555555555555', binding: { ...odcAppUserBinding(binding), runtimeUrl: binding.runtimeUrl },
+    expiresAt, state: 'authenticated', authenticated: true, userKey };
+  const anchor = odcAppUserAnchor(descriptor, { authenticated: true, identityMatches: true });
+  for (const view of [JSON.stringify(anchor), inspect(anchor, { showHidden: true, depth: 8 }), String(Object.keys(anchor)), JSON.stringify(Object.getOwnPropertyDescriptors(anchor))])
+    assert.doesNotMatch(view, /9f1e2d3c|9F1E2D3C|A4B3C2D1E0F9/i);
+  assert.equal(Object.isFrozen(anchor), true); assert.equal(anchor.kind, 'app-user');
+  // The canonical lower-case userKey reaches only the sealing function, for the server runtime.
+  let sealed; const token = anchor.seal(value => { sealed = value; return 'token'; }, { runtime: 'server' });
+  assert.equal(token, 'token'); assert.equal(sealed.type, 'Scalar'); assert.equal(sealed.value, userKey.toLowerCase()); assert.deepEqual(sealed.children, []);
+  assert.throws(() => anchor.seal(() => 'token', { runtime: 'client' }), /debug_app_auth_anchor_unavailable|anchor/);
+  for (const [d, a] of [[{ ...descriptor, authenticated: false }, { authenticated: true, identityMatches: true }],
+    [{ ...descriptor, state: 'credentials-entered' }, { authenticated: true, identityMatches: true }],
+    [{ ...descriptor, userKey: 'not-a-guid' }, { authenticated: true, identityMatches: true }],
+    [{ ...descriptor, userKey: undefined }, { authenticated: true, identityMatches: true }],
+    [{ ...descriptor, binding: { ...descriptor.binding, lane: 'o11' } }, { authenticated: true, identityMatches: true }],
+    [{ ...descriptor, expiresAt: new Date(Date.now() - 1000).toISOString() }, { authenticated: true, identityMatches: true }],
+    [descriptor, { authenticated: true, identityMatches: false }], [descriptor, undefined], [undefined, { authenticated: true, identityMatches: true }]]) {
+    assert.throws(() => odcAppUserAnchor(d, a), error => error.code === 'debug_app_auth_anchor_unavailable' && !/9f1e2d3c/i.test(error.message));
+  }
+});
+
+// Port D7 (review B1): on the consolidation's cognito-login.mjs (no cognitoRegionSupported yet) the module still loads,
+// us-east-1 apps sign in, and a us-east-2 app is refused with the typed provider code before any Cognito request,
+// whether the pool comes from the legacy metadata or from the IdentityProviders setting. Runs only while pending.
+test('until cognitoRegionSupported arrives, us-east-2 apps are refused typed before Cognito and us-east-1 settings stay authoritative',
+  { skip: usEast2Pending ? false : 'cognitoRegionSupported delivered: the us-east-2 sign-in tests above cover this' }, async () => {
+  const east2 = { type: 'cognito', kc_hint: 'os-builtin', configs: { region: 'us-east-2', poolId: 'us-east-2_AppPool', amplifyClientId: 'AppClient123', authFlow: 'USER_SRP_AUTH' } };
+  for (const options of [{ metadata: { authConfigurations: [east2] } },
+    { settings: { clientSettings: { IdentityProviders: JSON.stringify([{ ...east2, configs: { ...east2.configs, region: undefined } }]) } }, metadata: { authConfigurations: [] } }]) {
+    const mock = fixture({ ...options, region: 'us-east-2' });
+    await assert.rejects(mock.run(), safeError('debug_app_auth_provider_unsupported'));
+    assert.equal(mock.signins.length, 0);
+    assert.ok(mock.calls.every(call => new URL(call.url).origin === origin));
+  }
+  const provider = { type: 'cognito', kc_hint: 'os-builtin', configs: { poolId: 'us-east-1_AppPool', amplifyClientId: 'AppClient123', authFlow: 'USER_SRP_AUTH', tenantId: 'synthetic-tenant' } };
+  const events = [], selected = fixture({ settings: { clientSettings: { IdentityProviders: JSON.stringify([provider]) } }, metadata: { authConfigurations: [] }, observer: event => events.push(event) });
+  assert.equal((await selected.run()).userKey, 'synthetic-platform-user');
+  assert.deepEqual(selected.signins[0].config, { Region: 'us-east-1', PoolKey: 'us-east-1_AppPool', AmplifyClientKey: 'AppClient123', AuthFlow: 'USER_SRP_AUTH' });
+  assert.equal(selected.calls.some(call => new URL(call.url).pathname.endsWith('/auth/configs')), false);
+  for (const privateText of [credentials.username, credentials.password, provider.configs.poolId, provider.configs.tenantId])
+    assert.equal(JSON.stringify(events).includes(privateText), false);
 });

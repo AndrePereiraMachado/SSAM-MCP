@@ -10,6 +10,8 @@ import { prepareDebugAppUser, releaseDebugAppUser, appUserWorker, sameAppUserTar
 import { o11NativePublicCode } from './debug-o11-native-entry.mjs';
 import { createO11NativeRun } from './debug-o11-native-run.mjs';
 import { SIGN_IN_FAILURES } from './debug-guidance.mjs';
+import { nativeScreenContextSchema } from './debug-native-context-schema.mjs';
+import { isO11ActionSelector, isO11EntrySelector } from './debug-o11-selectors.mjs';
 
 const NAME = /^[A-Za-z_][A-Za-z0-9_]{0,120}$/, KEY = /^[A-Za-z0-9_+]{22}$/;
 const fail = code => { throw new Error(code); };
@@ -20,22 +22,26 @@ const safeError = error => {
   return /^(?:debug_o11_run|debug_app_user|publish_oml)_[a-z_]+$/.test(code ?? '') ? code : 'debug_o11_run_failed';
 };
 const descriptorPin = z.object({ path: z.string().refine(path.isAbsolute), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
-const KEY_SELECTOR = /^@[A-Za-z0-9_+]{22}$/, QUALIFIED = /^[A-Za-z_][A-Za-z0-9_]{0,120}\.(?:[A-Za-z_][A-Za-z0-9_]{0,120}|@[A-Za-z0-9_+]{22})$/;
 export const o11RunSchema = z.object({
   op: z.enum(['run', 'prepare', 'release', 'status', 'authorize', 'reconcile']), lane: z.literal('o11').default('o11'),
   host: z.string().min(3).max(200), module: z.string().regex(NAME), moduleKey: z.string().regex(KEY),
   applicationKey: z.string().regex(KEY), runtimeUrl: z.string().url(),
   execution: z.enum(['rest-wrapper', 'native-entry']).default('rest-wrapper'),
   nativeEntry: z.object({ sourceContract: descriptorPin }).strict().optional(),
-  action: z.string().refine(v => NAME.test(v) || KEY.test(v) || KEY_SELECTOR.test(v) || QUALIFIED.test(v)).optional(),
+  action: z.string().refine(isO11ActionSelector).optional(),
   // Graph native-entry only: an override that must be a verified invocable caller, extra modules of the graph
   // (consumers/producers of the target) and the server trace window.
-  entry: z.string().min(1).max(300).optional(),
+  entry: z.string().refine(isO11EntrySelector).optional(),
   modules: z.array(z.object({ module: z.string().regex(NAME), moduleKey: z.string().regex(KEY), applicationKey: z.string().regex(KEY) }).strict()).max(8).optional(),
   window: z.object({ around: z.string().regex(KEY).optional(), before: z.number().int().min(0).max(100).default(0),
     after: z.number().int().min(1).max(1000).default(300) }).strict().optional(),
   inputs: z.record(z.string().regex(NAME), z.json()).default({}),
+  context: nativeScreenContextSchema.optional(),
+  contextMode: z.enum(['app-user', 'anonymous', 'native-background']).optional(),
+  launch: z.object({ inputs: z.record(z.string().regex(NAME), z.json()).default({}),
+    contextMode: z.enum(['app-user', 'anonymous']).default('app-user') }).strict().optional(),
   scenarios: z.array(z.object({ name: z.string().min(1).max(80).optional(), inputs: z.record(z.string().regex(NAME), z.json()).default({}),
+    context: nativeScreenContextSchema.optional(),
     trace: z.boolean().optional() }).strict()).min(1).max(50).optional(),
   // No schema default: rest-wrapper and the legacy native entry keep 'all' (applied in the dispatcher); the graph
   // native-entry defaults to 'none'. 'nodes'/'full' belong to the graph native-entry.
@@ -49,11 +55,24 @@ export const o11RunSchema = z.object({
   if (v.scenarios?.length && Object.keys(v.inputs).length) ctx.addIssue({ code: 'custom', path: ['inputs'], message: 'Give inputs or scenarios' });
   if (v.execution === 'rest-wrapper' && v.nativeEntry) ctx.addIssue({ code: 'custom', path: ['nativeEntry'], message: 'nativeEntry requires execution=native-entry' });
   const graph = v.execution === 'native-entry' && !v.nativeEntry;
+  if (v.launch) {
+    if (!graph || v.contextMode !== 'native-background')
+      ctx.addIssue({ code: 'custom', path: ['launch'], message: 'Original background launch requires graph native-entry and explicit native-background context' });
+    if (Object.keys(v.inputs).length || v.scenarios || v.context)
+      ctx.addIssue({ code: 'custom', path: ['launch'], message: 'Give only launch.inputs for the original background entry; target inputs, scenarios and screen context are ambiguous' });
+  }
+  if (!graph && v.contextMode !== undefined)
+    ctx.addIssue({ code: 'custom', path: ['contextMode'], message: 'Explicit execution context requires graph native-entry execution' });
+  if (!graph && (v.context !== undefined || v.scenarios?.some(s => s.context !== undefined)))
+    ctx.addIssue({ code: 'custom', path: ['context'], message: 'Published screen/block state requires graph native-entry execution' });
   if (!graph && (v.entry !== undefined || v.modules || v.window || ['nodes', 'full'].includes(v.trace)))
     ctx.addIssue({ code: 'custom', path: ['execution'], message: 'entry, modules, window and trace nodes|full belong to execution=native-entry without nativeEntry' });
   if (graph) {
     if (!['run', 'prepare', 'status'].includes(v.op)) ctx.addIssue({ code: 'custom', path: ['op'], message: 'native-entry supports run, prepare and status only' });
-    if (v.keep || v.around || v.before || v.after !== 300 || v.words) ctx.addIssue({ code: 'custom', path: ['execution'], message: 'native-entry publishes nothing: no keep/words; use window {around, before, after}' });
+    if (v.keep || v.around || v.before || v.after !== 300 || v.words && v.contextMode !== 'native-background')
+      ctx.addIssue({ code: 'custom', path: ['execution'], message: 'native-entry publishes nothing: no keep; words only authorize native-background; use window {around, before, after}' });
+    if (v.op === 'run' && v.contextMode === 'native-background' && !v.words)
+      ctx.addIssue({ code: 'custom', path: ['words'], message: 'Native background scheduling requires explicit user authorization words' });
     if (v.scenarios?.some(s => s.trace !== undefined)) ctx.addIssue({ code: 'custom', path: ['scenarios'], message: 'native-entry traces every scenario with the request trace' });
   }
   if (v.execution === 'native-entry' && !graph) {

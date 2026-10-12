@@ -45,7 +45,7 @@ internal static class DebugPolicy {
         }
         internal void Clear() { lock (gate) patterns.Clear(); }
     }
-    private static readonly Regex Secret = new("password|passwd|secret|token|authorization|cookie|credential|api.?key|client.?id|username|headers", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex Secret = new("password|passwd|secret|token|authorization|cookie|credential|api.?key|subscription.?key|client.?id|username|headers", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly HashSet<string> Safe = new(StringComparer.OrdinalIgnoreCase) {
         "status", "statuscode", "httpstatuscode", "success", "code", "errorcode", "address", "address1", "address2", "street", "streetaddress",
         "city", "state", "statecode", "zip", "zipcode", "postalcode", "country", "latitude", "longitude", "drpid",
@@ -66,37 +66,42 @@ internal static class DebugPolicy {
     internal static bool Sensitive(string path) => Secret.IsMatch(path);
     // Development tracing (TraceOptions.FullValues): business values are the point of the map, so only
     // credentials stay hidden: private session values, secret-named paths, schemes and JWTs.
-    internal static object? FullValue(string path, string? value, PrivateValues? privateValues = null) {
-        if (Sensitive(path) || privateValues?.Contains(path) == true) return Redacted;
+    internal static object? FullValue(string path, string? value, PrivateValues? privateValues = null, bool complete = false, Action? onRedaction = null) {
+        if (Sensitive(path) || privateValues?.Contains(path) == true) { onRedaction?.Invoke(); return Redacted; }
         if (value == null) return null;
         var text = value.Trim();
         // A JSON text keeps its values, except fields named like credentials (an access_token in a response body).
-        if (text.Length <= 65536 && (text.StartsWith('{') || text.StartsWith('[') || text.StartsWith("\"{") || text.StartsWith("\"["))) {
-            try { return Unsecret(ParseBody(text), 0, privateValues)?.ToJsonString(); } catch (System.Text.Json.JsonException) { }
+        if (text.Length <= (complete ? 4194304 : 65536) && (text.StartsWith('{') || text.StartsWith('[') || text.StartsWith("\"{") || text.StartsWith("\"["))) {
+            JsonNode? parsed = null; var parsedJson = false;
+            try { parsed = ParseBody(text, inspection: complete); parsedJson = true; } catch (JsonException) { }
+            if (parsedJson) return Unsecret(parsed, 0, privateValues, complete, onRedaction)?.ToJsonString();
         }
-        if (HiddenValue(value, privateValues)) return Redacted;
-        return value.Length > 4096 ? value[..4096] + "[truncated]" : value;
+        if (HiddenValue(value, privateValues)) { onRedaction?.Invoke(); return Redacted; }
+        return !complete && value.Length > 4096 ? value[..4096] + "[truncated]" : value;
     }
     static bool HiddenValue(string? value, PrivateValues? privateValues) => privateValues?.Contains(value) == true ||
         value != null && Regex.IsMatch(value, @"(?i)bearer\s|basic\s|eyJ[A-Za-z0-9_-]+\.");
-    private static JsonNode? Unsecret(JsonNode? node, int depth, PrivateValues? privateValues) {
-        if (depth > 12) return JsonValue.Create("[depth limit]");
+    private static JsonNode? Unsecret(JsonNode? node, int depth, PrivateValues? privateValues, bool complete = false, Action? onRedaction = null) {
+        if (depth > (complete ? 64 : 12)) { if (complete) throw new DebugFailure("debug_inspection_json_depth_limit"); return JsonValue.Create("[depth limit]"); }
         if (node is JsonObject obj) {
             var result = new JsonObject();
-            foreach (var field in obj.Take(200)) {
-                if (privateValues?.Contains(field.Key) == true) return JsonValue.Create(Redacted);
-                result[field.Key] = Sensitive(field.Key) ? JsonValue.Create(Redacted) : Unsecret(field.Value, depth + 1, privateValues);
+            foreach (var field in obj.Take(complete ? int.MaxValue : 200)) {
+                if (privateValues?.Contains(field.Key) == true) { onRedaction?.Invoke(); return JsonValue.Create(Redacted); }
+                if (Sensitive(field.Key)) { onRedaction?.Invoke(); result[field.Key] = JsonValue.Create(Redacted); }
+                else result[field.Key] = Unsecret(field.Value, depth + 1, privateValues, complete, onRedaction);
             }
             return result;
         }
-        if (node is JsonArray array) return new JsonArray(array.Take(200).Select(n => Unsecret(n, depth + 1, privateValues)).ToArray());
+        if (node is JsonArray array) return new JsonArray(array.Take(complete ? int.MaxValue : 200).Select(n => Unsecret(n, depth + 1, privateValues, complete, onRedaction)).ToArray());
         if (node is JsonValue scalar && scalar.TryGetValue<string>(out var text)) {
             var trimmed = text.Trim();
-            if (trimmed.Length <= 65536 && (trimmed.StartsWith('{') || trimmed.StartsWith('[') || trimmed.StartsWith("\"{") || trimmed.StartsWith("\"["))) {
-                try { return JsonValue.Create(Unsecret(ParseBody(trimmed), depth + 1, privateValues)?.ToJsonString()); } catch (JsonException) { }
+            if (trimmed.Length <= (complete ? 4194304 : 65536) && (trimmed.StartsWith('{') || trimmed.StartsWith('[') || trimmed.StartsWith("\"{") || trimmed.StartsWith("\"["))) {
+                JsonNode? parsed = null; var parsedJson = false;
+                try { parsed = ParseBody(trimmed, inspection: complete); parsedJson = true; } catch (JsonException) { }
+                if (parsedJson) return JsonValue.Create(Unsecret(parsed, depth + 1, privateValues, complete, onRedaction)?.ToJsonString());
             }
-            if (HiddenValue(text, privateValues)) return JsonValue.Create(Redacted);
-        } else if (HiddenValue(node?.ToJsonString(), privateValues)) return JsonValue.Create(Redacted);
+            if (HiddenValue(text, privateValues)) { onRedaction?.Invoke(); return JsonValue.Create(Redacted); }
+        } else if (HiddenValue(node?.ToJsonString(), privateValues)) { onRedaction?.Invoke(); return JsonValue.Create(Redacted); }
         return node?.DeepClone();
     }
     internal static object? Value(string path, string? value, PrivateValues? privateValues = null) {
@@ -117,15 +122,26 @@ internal static class DebugPolicy {
     }
     // Evaluate returns a debugger Text literal, not necessarily raw HTTP text. Decode JSON
     // string envelopes and the native quoted literal before filtering the actual document.
-    private static JsonNode? ParseBody(string value) {
+    // Invalid JSON may be ordinary Text. A depth refusal must not take that fallback,
+    // otherwise a deeply nested document could evade field-level redaction.
+    private static JsonNode? ParseNode(string text, bool inspection) {
+        if (inspection) {
+            var reader = new Utf8JsonReader(System.Text.Encoding.UTF8.GetBytes(text), new JsonReaderOptions { MaxDepth = int.MaxValue });
+            while (reader.Read())
+                if (reader.CurrentDepth >= 64 && reader.TokenType is JsonTokenType.StartArray or JsonTokenType.StartObject)
+                    throw new DebugFailure("debug_inspection_json_depth_limit");
+        }
+        return JsonNode.Parse(text);
+    }
+    private static JsonNode? ParseBody(string value, bool inspection = false) {
         var text = value.Trim();
         for (var level = 0; level < 3; level++) {
             JsonNode? node;
-            try { node = JsonNode.Parse(text); }
+            try { node = ParseNode(text, inspection); }
             catch (System.Text.Json.JsonException) when (text.Length >= 2 && text[0] == '"' && text[^1] == '"') {
                 text = text[1..^1];
-                try { node = JsonNode.Parse(text); }
-                catch (System.Text.Json.JsonException) { node = JsonNode.Parse(text.Replace("\"\"", "\"")); }
+                try { node = ParseNode(text, inspection); }
+                catch (System.Text.Json.JsonException) { node = ParseNode(text.Replace("\"\"", "\""), inspection); }
             }
             if (node is JsonValue scalar && scalar.TryGetValue<string>(out var decoded)) {
                 var inner = decoded.Trim();
@@ -134,6 +150,7 @@ internal static class DebugPolicy {
             }
             return node;
         }
+        if (inspection) throw new DebugFailure("debug_inspection_json_not_inspectable");
         throw new System.Text.Json.JsonException("Debugger body envelope limit");
     }
     private static JsonNode? Filter(JsonNode? node, int depth, string fieldName, PrivateValues? privateValues) {

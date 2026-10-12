@@ -15,6 +15,14 @@ public sealed record MessageInfo(
     [JsonPropertyName("ownerKey"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? OwnerKey { get; init; }
     /// <summary>Key of the screen that holds the owner (the owner itself when it is a screen), or null outside screens.</summary>
     [JsonPropertyName("screenKey"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? ScreenKey { get; init; }
+    /// <summary>The owner as the Verify gave it, while its module is loaded (never written): the CustomProperty of a widget
+    /// (the Values of a Dropdown, the Value of an Expression) is not among the children of its widget, so no walk of the
+    /// module finds it by its key. Held weakly: the bridge keeps the messages of every snapshot of a Studio session
+    /// (SnapshotRegistry), and a message must never keep the objects of a closed or changed module alive.</summary>
+    [JsonIgnore] public object? Owner { get => _owner != null && _owner.TryGetTarget(out var o) ? o : null; init => _owner = value == null ? null : new(value); }
+    private readonly WeakReference<object>? _owner;
+    /// <summary>The properties of the owner the message is about (the Verify's PropertyNames: Condition, ValueExpression).</summary>
+    [JsonIgnore] public IReadOnlyList<string>? Properties { get; init; }
     [JsonIgnore] public bool IsError => Type.Contains("Error", StringComparison.Ordinal);
     public override string ToString() => $"{Type} {Id}: {Detail} @ {Path}";
 }

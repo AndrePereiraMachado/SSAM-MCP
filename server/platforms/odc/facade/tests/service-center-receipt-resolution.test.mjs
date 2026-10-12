@@ -37,6 +37,9 @@ class Timers extends Client {
   }
   async resourceListing() { return listing(this.timers); }
   async detail() { return this.timer; }
+  // The pre-send timer log baseline of the SC line (timer-run): this fixture has no log pages, so the baseline is
+  // unavailable and no reply of the fake transport is spent on it.
+  async logs() { throw Object.assign(new Error('no log pages in this fixture'), { code: 'LOGS_UNAVAILABLE' }); }
 }
 
 // The receipt of the evidence (C:\Users\andre\.ssam-hybrid\o11\service-center\receipts\5c1a0e26-....json), with its lock,
@@ -147,11 +150,13 @@ test('a held target answers TARGET_PENDING with the holder, verify and discard',
 
 test('a Run Now refused before its POST went out is refused, keeps why, and leaves the timer free', async () => {
   const dir = temp(); const journal = new Journal(dir);
-  // The live 11.42 button routes through script: the form is never posted as planned.
+  // The live 11.42 button routes through script: the form is never posted as planned. The SC line checks the exact
+  // captured Run Now script before anything is reserved: the refusal comes before a receipt, so no receipt, no lock.
   const client = new Timers({ timer: timerPage({ onclick: 'OsAjax(event)' }) });
-  const result = await client.mutate('timer-run', '545', TIMER, { execute: true, words: 'rode o timer', operationId: uuid(), journal });
-  assert.equal(result.state, 'refused', JSON.stringify(result));
-  assert.match(result.error, /^Nothing was sent: Unsupported scripted form submission/);
+  const operationId = uuid();
+  await assert.rejects(client.mutate('timer-run', '545', TIMER, { execute: true, words: 'rode o timer', operationId, journal }),
+    e => /Unsupported AJAX submit script; no request sent/.test(e.message));
+  assert.equal(journal.lookup(operationId), null, 'nothing reserved');
   assert.deepEqual(client.http.requests, []);
   assert.deepEqual(files(dir, /\.lock$/), []);
 });

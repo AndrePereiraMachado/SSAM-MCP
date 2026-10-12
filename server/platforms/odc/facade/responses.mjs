@@ -23,7 +23,7 @@ import { isCode, refusalCode } from './refusal-codes.mjs';
 
 export const NOT_BUILT_WHY ='componente não compilado: o integrador/usuário compila';
 const DIALOG_WHY = 'fecha só janela com dono, pelo título; diálogo web (recuperação, Manage Dependencies): peça à pessoa para responder no Studio e repita';
-const PROMPT_WHY = 'a ferramenta abre sozinha a janela privada do Windows; a pessoa digita lá, nunca no chat; depois repita a chamada';
+const PROMPT_WHY = 'a ferramenta abre sozinha a janela privada do Windows quando nada está guardado; a pessoa digita lá, nunca no chat; depois repita a chamada';
 
 // `tool {key:"value", n:1}`: the notation the tool descriptions already use.
 export function formatCall(tool, args = {}) {
@@ -55,7 +55,7 @@ const HEAD = new RegExp([
   String.raw`(?<runjob>(?:(?:python3?|py)\s+)?(?:\.[\\/]{1,2})?(?:kernel[\\/]{1,2})?scripts[\\/]{1,2}run_job\.py)`,
   String.raw`(?<anvil>\banvil(?:\.dll)?\s+(?:functions|api|signature)\b)`,
   String.raw`(?<api>(?<![\w-])api(?=\s+--(?:name|op)\b))`,
-  String.raw`(?<ssam>(?:\.[\\/]{1,2})?\bssam(?:\.cmd)?\s+(?:inspect|deliver|connect|discover|app|job|map)\b)`,
+  String.raw`(?<ssam>(?:\.[\\/]{1,2})?\bssam(?:\.cmd)?\s+(?:inspect|deliver|connect|discover|app|job|map|prototype)\b)`,
   String.raw`(?<odc>(?:\.[\\/]{1,2})?\bodc(?:\.cmd)?\s+(?:attach|deliver|inspect|discover|app|build|studio\s+[a-z][a-z-]{1,40}|portal\s+internal-routes)\b)`,
   String.raw`(?<dotnet>\bdotnet\s+build\b)`,
   String.raw`(?<cred>windows-(?:api-client|o11)-credential\.ps1)`,
@@ -170,7 +170,7 @@ function commandFor(group, head, opts) {
   } };
   if (group === 'cred') return { spec: {}, build: a => /o11/.test(head)
     ? { tool: 'o11_service_center_session', arguments: { action: 'sign-in', ...(one(a.flags, 'Host', 'host') ? { host: one(a.flags, 'Host', 'host') } : {}) }, why: PROMPT_WHY,
-        textSuffix: ' (opens the private Windows prompt; the person types there, never in chat)' }
+        textSuffix: ' (opens the private Windows prompt when nothing is stored; the person types there, never in chat)' }
     : { tool: 'odc_read', arguments: { tenant: hostOf(one(a.flags, 'Origin', 'origin')) ?? '<tenant>', auth: 'api-client' }, why: PROMPT_WHY,
         textSuffix: ' (opens the private Windows prompt itself when no credential is stored; the person types there, never in chat)' } };
   if (group === 'anvil' || group === 'api') {
@@ -205,6 +205,14 @@ function commandFor(group, head, opts) {
       case 'job': return { spec: { positional: 1 }, build: a => ({ tool: 'ssam_job', arguments: { lane: one(a.flags, 'lane') ?? lane, job: a.positionals[0] ?? '<job.json>' } }) };
       case 'map': return { spec: { positional: 1, bool: new Set(['detail']) }, build: a => ({ tool: 'ssam_map', arguments: { lane: one(a.flags, 'lane') ?? lane,
         target: a.positionals[0] ?? '<capture.oml>', ...argsFrom(a.flags, { skip: ['lane'], rename: { budget: 'budgetBytes', detail: 'includeDetail' } }) } }) };
+      // The CLI rehearsal of the prototype import: the model makes the one MCP call of the import (docs/PROTOTIPO-NATIVO.md 1.1).
+      case 'prototype': return { spec: { positional: 1, bool: new Set(['dry']) }, build: a => {
+        const l = one(a.flags, 'lane') ?? lane;
+        const job = { ops: [{ op: 'prototype', data: { source: a.positionals[0] ?? '<pasta do protótipo>' } }] };
+        const module = typeof one(a.flags, 'module') === 'string' ? one(a.flags, 'module') : '<módulo aberto>';
+        return l === 'odc' ? { tool: 'studio_deliver', arguments: { module, job, publish: true, authorize: "<the user's own words>" } }
+          : { tool: 'o11_deliver', arguments: { module, job, publish: true, authorize: "<the user's own words>" } };
+      } };
       default: return null;
     }
   }
@@ -313,7 +321,9 @@ function validationErrors(v) {
 const CORRECTION = ['job', 'jobSha256', 'jobShape', 'failedOp', 'basedOn', 'nextBasedOn', 'partial', 'patchByNameOmitted'];
 // What a delivered job keeps for the next call (lane "patch por nome"): the basedOn of the job it used and what a partial
 // job merged.
-const NEXT = ['nextBasedOn', 'partial'];
+// summary (job-summary.mjs, 2026-10-12): what the delivered job created or changed, so no map of the module follows it;
+// normalizations (kernel JobNormalizer, 2026-10-12): what the kernel rewrote in the job instead of refusing it, never silent.
+const NEXT = ['nextBasedOn', 'partial', 'summary', 'normalizations'];
 // The shared fields of a deliver/publish answer (contract of the 2026-10-05 package, section 3.2): kept exactly on a
 // success. `result` "entregue e publicado" says the publish ran in the same call; `publish` carries its outcome;
 // `lastPublication`, `leftovers` (what the job declared to pass the gate) and `screenRoles` (who can open each screen the
@@ -321,7 +331,10 @@ const NEXT = ['nextBasedOn', 'partial'];
 // `integration` (contract I7 of docs/INTEGRACOES-GITSSAM.md): what each rest/rest-expose/soap op of the job imported,
 // skipped, updated, removed and broke, at most 10 reports plus integrationTotal.
 // `warnings` (interface I9 of the 2026-10-06 package, A03): the new Verify warnings that did not block the delivery, each
-// {id, path, key?, detail, fix}, at most 20 plus warningsTotal; kept on "entregue" and on a refusal alike.
+// {id, path, key?, detail, fix, count?}, at most 20 entries; kept on "entregue" and on a refusal alike. In o11_deliver
+// (delivery-warnings.mjs warningFields) equal ones, the same id on the same element (its ownerKey, else its path), come
+// once with `count` (only when more than one; a HIGH one never merges), and `warningsTotal`, the number of every warning,
+// comes only when the entries shown, their counts summed, do not count them all.
 // `queue` (A08, studio-write-lock.mjs): a delivery that waited its turn in the Studio write queue, {position, waitedMs,
 // holder: {tool, pid, startedAt}}.
 // `equivalence`, `normalized`, `normalizedTotal` (interface I8 of the atritos 3 package, C16 of lane mb): a merge whose
@@ -339,6 +352,11 @@ const mergedReading = (value, args) => (typeof value.evidence === 'string' && va
   : { tool: 'studio_status', arguments: Number.isInteger(args?.pid) ? { pid: args.pid } : {}, why: 'o merge já foi integrado; leia o estado do Studio e não repita a entrega' });
 const RESULTS = new Set(['entregue', 'entregue e publicado']);
 const sharedFields = value => Object.fromEntries(DELIVERY_FIELDS.filter(key => value[key] != null).map(key => [key, value[key]]));
+// The prototype importer (docs/PROTOTIPO-NATIVO.md 1.4): the receipt (report.prototype as `prototype`) on a success and on
+// a refusal after the build; a refusal of the prototype keeps its combined patch, the corrected call, ssamDefect and the
+// degraded items. Kept apart from DELIVERY_FIELDS (the shared contract of the 2026-10-05 package).
+export const PROTOTYPE_FIELDS = ['prototype', 'patch', 'correctedJob', 'ssamDefect', 'degraded'];
+const prototypeFields = value => Object.fromEntries(PROTOTYPE_FIELDS.filter(key => value[key] != null).map(key => [key, value[key]]));
 const inputFields = value => Object.fromEntries(['inputAdjusted', ...(value.code === 'INPUT_INVALID' ? ['violations', 'corrected'] : [])]
   .filter(key => value[key] != null).map(key => [key, value[key]]));
 export function compactDelivery(tool, args, value) {
@@ -360,8 +378,8 @@ export function compactDelivery(tool, args, value) {
       // pointer, code, fix and patch, the whole list in one answer (grouped only to fit it), whether the Verify ran and
       // the phases; the patches go back with patch + basedOn.
       ...(Array.isArray(problems) && problems.length ? { problems } : {}),
-      ...Object.fromEntries(['problemsTotal', 'grouped', 'verifyRan', 'verifyReason', 'phases'].filter(key => value[key] != null).map(key => [key, value[key]])),
-      ...correction,
+      ...Object.fromEntries(['problemsTotal', 'grouped', 'verifyRan', 'verifyReason', 'phases', 'normalizations'].filter(key => value[key] != null).map(key => [key, value[key]])),
+      ...correction, ...prototypeFields(value),
       // A module name that reached no open module (or several): the open modules are the fix.
       ...(Array.isArray(value.openModules) ? { openModules: value.openModules } : {}), ...(Array.isArray(value.candidates) ? { candidates: value.candidates } : {}),
       ...(Array.isArray(diagnostics) && diagnostics.length ? { diagnostics } : {}), ...(errors ? { validationErrors: errors } : {}),
@@ -389,7 +407,7 @@ export function compactDelivery(tool, args, value) {
       // publish had to list the lab folders for the manifest). studio_publish {module} finds this merge by itself.
       const published = value.result === 'entregue e publicado' || value.publish?.outcome === 'published';
       const module = typeof value.module === 'string' && value.module ? value.module : args?.module;
-      return { ok: true, result: RESULTS.has(value.result) ? value.result : 'entregue', ...sharedFields(value), ...inputFields(value),
+      return { ok: true, result: RESULTS.has(value.result) ? value.result : 'entregue', ...sharedFields(value), ...prototypeFields(value), ...inputFields(value),
         ...Object.fromEntries(NEXT.filter(key => value[key] != null).map(key => [key, value[key]])),
         ...(typeof value.manifest === 'string' && value.manifest ? { manifest: value.manifest } : {}),
         ...(!published && typeof module === 'string' && module ? { continuation: { tool: 'studio_publish', arguments: { module, ...(Number.isInteger(args?.pid) ? { pid: args.pid } : {}) },

@@ -16,7 +16,7 @@
       "wt9$wtContentMain$wt315$wtTabs_Content$wt503$wtContent$wtCheckboxLogging": "on",
       "wt9$wtContentMain$wt315$wtTabs_Content$wt503$wtContent$wtDBConnectionsTR$ctl03$wtDBConnectionCombo": "7",
       "__EVENTTARGET": "wt9$wtContentMain$wt315$wtTabs_Content$wt503$wtContent$wtDBConnectionsTR$ctl03$wtDBConnectionCombo",
-      "__AJAXEVENT": "Change",
+      "__EVENTARGUMENT": "",
       "__AJAX": "1280,1024,wt9_wtContentMain_wt315_wtTabs_Content_wt503_wtContent_wtDBConnectionsTR_ctl03_wtDBConnectionCombo,0,0,0,0,0,0,"
     },
     "accept": "html"

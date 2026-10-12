@@ -262,7 +262,7 @@ test('receipt path traversal refused', () => {
 test('OutSystems ID redirect is classified without vault read', async () => {
   const send = fakeSend([response(302, '', { location: 'https://id.outsystems.com/community/login?private=opaque' })]);
   const vault = loginVault(send);
-  await assert.rejects(new Client(vault, new Transport(HOST, { send })).login(), e => isProtocol(/OutSystems ID SSO/)(e) && !e.message.includes('opaque'));
+  await assert.rejects(new Client(vault, new Transport(HOST, { send })).login(), e => e.code === 'SC_SSO_REQUIRED' && !e.message.includes('opaque'));
   assert.equal(vault.reads, 0);
 });
 
@@ -332,4 +332,15 @@ test('error detail preserves stack lines and omits hidden form state', async () 
   const r = await c.errorDetail('error-123');
   assert.ok(r.detail.includes('\n  at ActionOne\n  at ActionTwo'));
   assert.ok(!r.detail.includes('private-'));
+});
+
+test('error detail masks diagnostic URL tokens before returning or truncating text', async () => {
+  const c = new Client(fakeVault(), new FakeTransport([]));
+  c.get = async () => page('<main><pre>RequestUrl: https://test.example.com/ServiceCenter/Solution_Download_Logic.aspx?Token=private-download-token&amp;SolutionDownloadId=6822\nConnection: Password=private-db-password;Server=test\nStack\n  at SolutionPreparation</pre></main>');
+  const r = await c.errorDetail('error-123');
+  assert.ok(!JSON.stringify(r).includes('private-'));
+  assert.ok(r.detail.includes('Token=<redacted>&SolutionDownloadId=6822'));
+  assert.ok(r.detail.includes('Password=<redacted>;Server=test'));
+  assert.ok(r.detail.includes('\n  at SolutionPreparation'));
+  assert.equal(r.truncated, false);
 });

@@ -1,0 +1,180 @@
+{
+ "schema": "ssam-debugger-native-limits/1",
+ "note": "Each declared native limit with the installed DLL/type/member/version/hash and a decompilation receipt, or the official documentation URL.",
+ "limits": [
+  {
+   "id": "o11-client-suspend-all-threads",
+   "lane": "o11",
+   "title": "Client-side SuspendAllThreads throws InvalidOperationException: no immediate JavaScript suspension (cooperative native-next-node pause instead)",
+   "kind": "installed-assembly",
+   "assembly": {
+    "name": "ServiceStudio.PluginAPI.dll",
+    "fileVersion": "11.55.91.65258",
+    "sha256": "bc80b6fb10f245ef1f03575f0daf3a6d9d1583e90b20020ee379162f716af634",
+    "declaredPath": "C:/Program Files/OutSystems/Service Studio 11/Service Studio/ServiceStudio.PluginAPI.dll"
+   },
+   "type": "ServiceStudio.PluginAPI.Debugger.DebuggerAdapterV3",
+   "member": "SuspendAllThreads",
+   "evidence": [
+    {
+     "path": "item16-native-pause/native-pause-audit.json",
+     "sha256": "99a35121fdcea746588e7aed6af67862ba85cef6057ec549f36a7603680fd7ef",
+     "predicates": [
+      "/platforms/1/lane==\"o11\"",
+      "/platforms/1/assemblySha256==\"bc80b6fb10f245ef1f03575f0daf3a6d9d1583e90b20020ee379162f716af634\"",
+      "/platforms/1/manualClientPauseSupported==false",
+      "/platforms/1/decompilationSha256==\"820c0da07baef27714e6a46c3462f0cfe2baf8bc5e96616a53ca941f8cf9c4d0\""
+     ]
+    },
+    {
+     "path": "item16-native-pause/o11-DebuggerAdapterV3.cs",
+     "sha256": "820c0da07baef27714e6a46c3462f0cfe2baf8bc5e96616a53ca941f8cf9c4d0"
+    }
+   ]
+  },
+  {
+   "id": "odc-client-suspend-all-threads",
+   "lane": "odc",
+   "title": "Client-side SuspendAllThreads throws InvalidOperationException: no immediate JavaScript suspension (cooperative native-next-node pause instead)",
+   "kind": "installed-assembly",
+   "assembly": {
+    "name": "OutSystems.ServiceStudio.PluginAPI.dll",
+    "fileVersion": "13.1431.3.060000",
+    "sha256": "e5383e7d245b284f839c1df6c9be40975498c9e3a15e775bf74261cb8e659266",
+    "declaredPath": "C:/Program Files/OutSystems/ODC Studio/ODC Studio/OutSystems.ServiceStudio.PluginAPI.dll"
+   },
+   "type": "ServiceStudio.PluginAPI.Debugger.DebuggerAdapterV3",
+   "member": "SuspendAllThreads",
+   "evidence": [
+    {
+     "path": "item16-native-pause/native-pause-audit.json",
+     "sha256": "99a35121fdcea746588e7aed6af67862ba85cef6057ec549f36a7603680fd7ef",
+     "predicates": [
+      "/platforms/0/lane==\"odc\"",
+      "/platforms/0/assemblySha256==\"e5383e7d245b284f839c1df6c9be40975498c9e3a15e775bf74261cb8e659266\"",
+      "/platforms/0/manualClientPauseSupported==false",
+      "/platforms/0/decompilationSha256==\"c0596218dfc97e3a834575689f8a040817d6281452a22e68d0af3001d8b456ea\""
+     ]
+    },
+    {
+     "path": "item16-native-pause/odc-DebuggerAdapterV3.cs",
+     "sha256": "c0596218dfc97e3a834575689f8a040817d6281452a22e68d0af3001d8b456ea"
+    }
+   ]
+  },
+  {
+   "id": "o11-service-step-into-from-consumer",
+   "lane": "o11",
+   "title": "O11 needs debugger sessions in the consumer and in the producer; Service Actions offer no step-into from the consumer",
+   "kind": "official-doc",
+   "url": "https://success.outsystems.com/documentation/11/debugging_apps/debugging_producer_modules/",
+   "evidence": [
+    {
+     "path": "o11-identity-boundary-proof/audit-dual-owned.json",
+     "sha256": "1e502bcd457b9d31486d7376b74d99e7bb719a83c89a69111883084ced328f2f",
+     "predicates": [
+      "/consumerInitialCallPauseObserved==false",
+      "/automaticCrossModuleStepIntoProved==false",
+      "/callerPauseAfterStepOutObserved==true"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "odc-service-step-into-from-consumer",
+   "lane": "odc",
+   "title": "One ODC debugger session targets one module key at one entry-app runtime; StepInto has no cross-app argument, so a consumer session never enters a Service Action of another app",
+   "kind": "installed-assembly",
+   "assembly": {
+    "name": "OutSystems.DebuggerClient.dll",
+    "fileVersion": "12.45.0.055304",
+    "sha256": "56ba56d346b4be1de341be63c4440f1a289aa0b994524d04fd5daaae67cf6796",
+    "declaredPath": "C:/Program Files/OutSystems/ODC Studio/ODC Studio/OutSystems.DebuggerClient.dll"
+   },
+   "type": "OutSystems.DebuggerClient.IDebuggerClient",
+   "member": "StepInto(authToken, debugSessionToken, threadId)",
+   "evidence": [
+    {
+     "path": "odc-service-step-contract/findings.json",
+     "sha256": "27a864eae8295cd5f181bf58fce3601ad116b679529bbfb92796fea8a00dc3a8",
+     "predicates": [
+      "/conclusion/consumerSessionCanStepIntoServiceActionOfAnotherApp==false",
+      "/installedVersion==\"1.7.27.10846\""
+     ]
+    },
+    {
+     "path": "odc-service-step-contract/verification-20261011.json",
+     "sha256": "b87402c2c4b1790a6102372d6be0603a784d2bdad37940cfdcb53527fa2d0006",
+     "predicates": [
+      "/hashesUnchanged==true"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "odc-exposed-soap-removed",
+   "lane": "odc",
+   "title": "ConsumeSOAP and ExposeSOAP are Removed model features in the installed ODC model; consumed SOAP runs through an external C# library caller",
+   "kind": "installed-assembly",
+   "refusalCode": "debug_native_endpoint_odc_exposed_soap_unavailable",
+   "assembly": {
+    "name": "OutSystems.Model.dll",
+    "fileVersion": "13.1431.3.060000",
+    "sha256": "c58d41e11ceab7d6a3573c3149c0a856df75fa8790b21850050f5e5456070eb3",
+    "declaredPath": "C:/Program Files/OutSystems/ODC Studio/ODC Studio/OutSystems.Model.dll"
+   },
+   "type": "ServiceStudio.ModelFeatures.ModelFeatures",
+   "member": "ModelFeature_ExposeSOAP / ModelFeature_ConsumeSOAP (Status)",
+   "evidence": [
+    {
+     "path": "item11-odc-soap/native-features.json",
+     "sha256": "071ab41e7051ad6b108603753fd94c36226ef2297c03c3458081d96695820261",
+     "predicates": [
+      "/sha256==\"c58d41e11ceab7d6a3573c3149c0a856df75fa8790b21850050f5e5456070eb3\"",
+      "/features/0/name==\"ConsumeSOAP\"",
+      "/features/0/status==\"Removed\"",
+      "/features/1/name==\"ExposeSOAP\"",
+      "/features/1/status==\"Removed\"",
+      "/modelMutated==false",
+      "/networkRequests==0"
+     ]
+    },
+    {
+     "path": "item11-odc-soap/audit.json",
+     "sha256": "13e333db4bc05f262f08529cd201f8860553bbefc9995f6297cba6df739d9ce5",
+     "predicates": [
+      "/modelMutated==false",
+      "/appRequests==0"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "o11-remote-session-absence-unqualified",
+   "lane": "o11",
+   "title": "The installed Service Center debugger contract exposes no session enumeration; GetIsRunning takes no session argument, so the absence of a remote debug session cannot be proved after an uncertain stop",
+   "kind": "installed-assembly",
+   "refusalCode": "debug_o11_remote_session_absence_unqualified",
+   "assembly": {
+    "name": "ServiceStudio.ServerCommunications.ServiceCenter.dll",
+    "fileVersion": "11.55.91.65258",
+    "sha256": "aff898b80ebbd8ac5385c801779ec52ca909d358830218b8dba8717d570a6002",
+    "declaredPath": "C:/Program Files/OutSystems/Service Studio 11/Service Studio/ServiceStudio.ServerCommunications.ServiceCenter.dll"
+   },
+   "type": "ServiceStudio.ServerCommunications.ServiceCenter.Debugger.DebuggerSoapEndpointSoap",
+   "member": "GetIsRunningAsync",
+   "evidence": [
+    {
+     "path": "completion-20261004/o11-reconcile-protocol/qualification-plan.json",
+     "sha256": "610173e477df9da532873626e66cf5b402b9e1b54a767a9008b11376d84f6dc3",
+     "predicates": [
+      "/nativeContract/sha256==\"aff898b80ebbd8ac5385c801779ec52ca909d358830218b8dba8717d570a6002\"",
+      "/nativeContract/parameters==[]",
+      "/nativeContract/alternateGetSessionOrEnumerationInInstalledContract==false",
+      "/nativeContract/serverImplementationAvailable==false"
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -9,24 +9,25 @@
     "div": { "widget": "IContainer", "rule": "class -> Style, id -> Name" },
     "(html element)": {
       "widget": "IAdvancedHtml",
-      "rule": "Tag = the tag, class -> extended property; article, aside, code, em, footer, h1, h2, h3, h4, h5, h6, header, hr, li, main, nav, ol, p, section, small, span, strong, ul; br: an empty Container"
+      "rule": "Tag = the tag, class -> extended property; any tag of the platform's HTML Element (api --op html, platformTags), tables too; br: an empty Container"
     },
+    "form": { "widget": "IForm", "rule": "class -> Style; children are its content" },
     "(literal text)": { "widget": "ITextWidget", "rule": "no class of its own; a space next to an inline element stays" },
     "{{ expression }}": { "widget": "IExpression", "rule": "OutSystems, copied as written (never JavaScript)" },
     "i": { "widget": "IIcon", "rule": "icon = the icon name; weight is mandatory" },
     "input": { "widget": "IInput", "rule": "bind names an existing variable, placeholder -> Prompt, type text|password|number|time|date|datetime-local|tel|email|search; the bound data type decides the InputType" },
     "input[type=checkbox]": { "widget": "ICheckbox", "rule": "bind names an existing variable" },
     "textarea": { "widget": "ITextArea", "rule": "bind names an existing variable" },
-    "select": { "widget": "IDropdown", "rule": "bind -> Variable, options -> List, value -> Values, label -> Labels" },
-    "button": { "widget": "IButton", "rule": "onclick (or href): an action or screen, Name(args) or :Input passes inputs; children are its content" },
+    "select": { "widget": "IDropdown", "rule": "bind -> Variable, options -> List, value -> Values, label -> Labels; value and label read the element of options by its attributes (Item.Id for an aggregate over Item, Id for a list of records), never options.Current" },
+    "button": { "widget": "IButton", "rule": "onclick (or href): an action or screen, Name(args) or :Input passes inputs; children are its content; empty with aria-label/title" },
     "a": { "widget": "ILink", "rule": "as button" },
-    "label": { "widget": "ILabel", "rule": "for -> TargetWidget (an input id of the fragment); with child elements: a Container of the Label and them" },
+    "label": { "widget": "ILabel", "rule": "for -> TargetWidget (an input id of the fragment); with child elements: an HTML Element label with them" },
     "img": { "widget": "IImage", "rule": "src: module image, URL or {{ }}" },
     "div[list]": { "widget": "IList", "rule": "Source = list; as is mandatory and names the row inside {{ }}" },
     "div[if]": { "widget": "IIfWidget", "rule": "children: True branch; a <div else> right after: False branch" },
     "Block": { "widget": "IMobileBlockInstanceWidget", "rule": "name = an existing block, inputs by :Name, handlers by @Event, children by <slot name>" },
     "ButtonGroup": { "widget": "IButtonGroup", "rule": "bind -> Variable; each <ButtonGroupItem value> an IButtonGroupItem, its text an Expression" },
-    "style": { "widget": "(theme)", "rule": "scoped under the root class; light-dark() expanded, @keyframes kept" }
+    "style": { "widget": "(theme)", "rule": "scoped under the root class; light-dark() expanded, @keyframes kept, @import to the top" }
   },
   "attributes": "any other attribute: an IExtendedProperty, {{ }} makes an expression",
   "names": "id: name, alias $id; else Tag1, Tag2; Block none",

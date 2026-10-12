@@ -437,7 +437,7 @@
         "o11": {
           "proofs": [
             "producer-public", "spec-data", "smoke-data-logic", "screen-form-reactive", "refactor-duplicate", "delete-data-consumers", "aggregate-full",
-            "aggregate-sum-calc", "screen-list-reactive", "service-action", "entity-lifecycle", "entity-refactor", "data-contract-identity"
+            "aggregate-sum-calc", "screen-list-reactive", "service-action", "entity-lifecycle", "entity-refactor", "data-contract-identity", "single-job-actions"
           ],
           "negative": ["delete-attribute-in-use"],
           "context": { "kinds": ["ServerEntity", "ServerAction", "MobileScreen"], "signatures": ["ServerEntity"] },

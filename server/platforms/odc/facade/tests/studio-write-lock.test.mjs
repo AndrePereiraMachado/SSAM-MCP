@@ -63,6 +63,7 @@ const WRITES = [
   ['o11_service_center_write', { action: 'application-delete', application: 'A', words: 'apagar A' }],
   ['o11_extension', { action: 'publish', spec: { name: 'E' } }], ['o11_extension', { action: 'delete', extension: 'E', words: 'apagar E' }],
   ['odc_external_library', { action: 'deploy', spec: { name: 'L' } }], ['odc_external_library', { action: 'discard', library: 'L' }],
+  ['odc_mcp_import', {}],
   ...['sign-in', 'web-sign-in', 'close'].map(action => ['o11_service_center_session', { action }]),
   ['continue', { task_id: 't' }],
   ['studio_deliver', { feature: 'f' }], ['studio_deliver', { feature: 'f', until: 'merge' }],

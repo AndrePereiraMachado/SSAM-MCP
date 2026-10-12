@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { CONSOLE_DIR, FAKE_MODULE, REAL_MODULE, SECRET, filesUnder, makeEnv, request, sleep, startConsole } from './helpers.mjs';
+import { CONSOLE_DIR, FAKE_MODULE, IMAGE23_MODULE, REAL_MODULE, SECRET, filesUnder, makeEnv, request, sleep, startConsole } from './helpers.mjs';
 import { buildScenario } from './scenario.mjs';
 
 function scan(env, logs, extra = []) {
@@ -19,7 +19,7 @@ function scan(env, logs, extra = []) {
   return hits;
 }
 
-for (const [label, module] of [['real module (current image)', REAL_MODULE], ['module with renew/setLanes (24th image)', FAKE_MODULE]]) {
+for (const [label, module] of [['real module (this box, the 24th image)', REAL_MODULE], ['23rd image module (rollback)', IMAGE23_MODULE], ['test double with renew/setLanes', FAKE_MODULE]]) {
   test(`no secret is stored or logged: ${label}`, async t => {
     const env = makeEnv({ tokenModule: module });
     const sc = await buildScenario(env, { module });
@@ -33,7 +33,7 @@ for (const [label, module] of [['real module (current image)', REAL_MODULE], ['m
     const rotated = await c.post(`/api/licenses/${sc.alfa.id}/agent-rotate`, { confirm: 'Cliente Alfa' });
     assert.equal(rotated.status, 200);
     assert.match(rotated.body.secret.agentCredential, SECRET);
-    if (module === FAKE_MODULE) {
+    if (module !== IMAGE23_MODULE) {
       const lic = (await c.get('/api/licenses')).body.licenses.find(l => l.id === sc.beta.id);
       assert.equal((await c.post(`/api/licenses/${sc.beta.id}/renew`, { days: 30, confirm: 'Cliente Beta', expectExpiresAt: lic.expiresAt })).status, 200);
       assert.equal((await c.post(`/api/licenses/${sc.beta.id}/lanes`, { lanes: ['odc', 'o11'], confirm: 'Cliente Beta', expectLanes: ['odc'] })).status, 200);
@@ -72,7 +72,7 @@ test('the entry point logs no secret and no customer name on stdout', async t =>
   assert.ok(port, 'listening line: ' + out + err);
   const first = JSON.parse(out.trim().split('\n')[0]);
   assert.deepEqual(Object.keys(first), ['console', 'socket', 'capabilities']);
-  assert.deepEqual(first.capabilities, { issue: true, revoke: true, agentRotate: true, renew: false, lanes: false, readOnly: null });
+  assert.deepEqual(first.capabilities, { issue: true, revoke: true, agentRotate: true, renew: true, lanes: true, readOnly: null });
   const key = fs.readFileSync(path.join(env.stateDir, 'access.key'), 'utf8');
   assert.match(key, /^[A-Za-z0-9_-]{43}$/);
   const headers = { 'X-SSAM-Console-Key': key, 'Content-Type': 'application/json' };

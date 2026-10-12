@@ -63,7 +63,11 @@
          (scripts/release/overlay/kernel/src/Anvil.Bridge) make them use Ssam.Runtime and Anvil.Core, so a linked copy
          would not compile in a staged release tree. CopiedFilesTests keeps each copy identical to the full bridge's file
          and refuses a link to any file that has a release overlay. -->
-    <Compile Include="..\Anvil.Bridge\ScWebHandler.cs" Link="Shared\ScWebHandler.cs" />
+    <!-- 24th release: sc_web and sc_http are headless HTTP through the Studio's own session (ScHttpHandler, no window, no
+         login dialog), as in the full bridge. ScWebHandler (the Service Center window, its vault login and keep-alive) is
+         no longer linked: no verb of either bridge reaches it. The private transport (ScPrivateHttp*, PrivateHttpContext)
+         is not linked either: sc_private_http stays on the owner's machine. -->
+    <Compile Include="..\Anvil.Bridge\ScHttpHandler.cs" Link="Shared\ScHttpHandler.cs" />
     <!-- Ninth release (docs/O11-BRIDGE-FINA.md section 14): the rollback proof and the dialogs seen of a publication
          (pure, no Studio type) and the Studio's own Refresh References (its error count is Reads.ErrorCount). -->
     <Compile Include="..\Anvil.Bridge\MergeRollbackProof.cs" Link="Shared\MergeRollbackProof.cs" />

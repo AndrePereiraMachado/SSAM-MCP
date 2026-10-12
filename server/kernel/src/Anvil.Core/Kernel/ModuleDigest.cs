@@ -33,7 +33,7 @@ public sealed class ModuleDigest
 {
     public const string Schema = "ssam-digest/1";
     // The version of what Build writes: a stored digest of another version is a miss. Raise it on every change of the text.
-    public const int Extractor = 2;
+    public const int Extractor = 3;
     public static readonly string[] SectionIds = ["module", "entities", "structures", "variables", "roles", "exceptions",
         "actions", "timers", "integrations", "ui", "coverage"];
 
@@ -563,9 +563,12 @@ internal sealed class DigestWriter<T>(T root, ModelReader<T> reader, string lane
         }
         foreach (var action in Sorted(children.Where(c => reader.IsKind(c, "Action") || reader.KindOf(c) is "Preparation" or "DataAction")))
             text.Append("\n  ").Append(Action(action, "  "));
-        var widgets = new List<string>();
+        var widgets = new List<string>(); var named = collapsedNames = [];
         foreach (var child in children.Where(c => reader.IsKind(c, "Widget"))) Widget(child, 2, widgets);
+        collapsedNames = null;
         if (widgets.Count > 0) text.Append("\n  widgets:\n").Append(string.Join("\n", widgets));
+        // G13: the named widgets the tree above collapses, in tree order, a few per line.
+        if (named.Count > 0) text.Append("\n  named containers:").Append(string.Concat(named.Chunk(8).Select(c => "\n    " + string.Join(", ", c))));
         foreach (var child in children.Where(c => reader.KindOf(c) == "UILifeCycleEvent")) Cover(child);
         return text.ToString();
     }
@@ -923,6 +926,25 @@ internal sealed class DigestWriter<T>(T root, ModelReader<T> reader, string lane
 
     private static string Base(string kind) => kind.Length > "Widget".Length && kind.EndsWith("Widget", StringComparison.Ordinal) ? kind[..^"Widget".Length] : kind;
 
+    // G13 (FarmaVirtual 10/10/2026): every named widget's @key is in the digest. After a merge the digest named the widgets
+    // without keys, and the named containers the job had mounted not at all, so ten ssam_map {name} calls followed
+    // (120-128, 132). A widget with a line carries its key there: Named " Name @key" after the kind word, NameNote
+    // "  # Name @key" at the end of a line whose text is not the name (if, button, link, label, text). A named widget the
+    // tree collapses (a container, a placeholder, an html element) keeps the tree as it was and goes to the "named
+    // containers" lines of its screen or block (collapsedNames): a line of its own and the indentation of its children were
+    // 56% of the 27.9% the digest of that capture grew by. A named image or icon is never folded as decoration. What a line
+    // folds in carries its key on that line, after "inside": the named widgets within a button, link, label, image, icon or
+    // hN (CoverTree draws none of them: 24 of the 776 named widgets of that capture, IfFv41 in a button, Icon4 in a link)
+    // and the empty placeholders of a block instance (in the screen's list, two instances of one block read alike).
+    private string Named(T widget, string name) => name.Length > 0 ? " " + name + Key(widget) : "";
+    private string NameNote(T widget, string name) => name.Length > 0 ? "  # " + name + Key(widget) : "";
+    private List<string>? collapsedNames;
+    private void Collapsed(T widget, string name) { if (name.Length > 0) collapsedNames?.Add(name + Key(widget)); }
+    // noted: the line already ends with a "  # Name @key" note.
+    private static string Inside(List<string> items, bool noted) => items.Count == 0 ? "" : (noted ? ";" : "  #") + " inside " + string.Join(", ", items);
+    private List<string> NamedWithin(T widget) =>
+        reader.Walk(widget).Skip(1).Where(d => reader.IsKind(d, "Widget") && reader.NameOf(d).Length > 0).Select(d => reader.NameOf(d) + Key(d)).ToList();
+
     private void Widget(T widget, int depth, List<string> lines)
     {
         covered.Add(widget);
@@ -934,7 +956,7 @@ internal sealed class DigestWriter<T>(T root, ModelReader<T> reader, string lane
         var visible = Text(Raw(widget, "Visible", quiet: true)) is { Length: > 0 } v && v != "True" ? " visible=(" + Clip(OneLine(v), ExpressionMax, widget) + ")" : "";
         void Children(int at) { foreach (var child in reader.ChildrenOf(widget)) Member(child, at, lines); }
         if (reader.IsKind(widget, "IfWidget") || basic == "If") {
-            lines.Add(pad + "if " + Expr(widget, "Condition") + ":" + (name.Length > 0 ? "  # " + name : ""));
+            lines.Add(pad + "if " + Expr(widget, "Condition") + ":" + NameNote(widget, name));
             var whenTrue = Ref(widget, "TrueBranch"); var whenFalse = Ref(widget, "FalseBranch");
             foreach (var branch in reader.ChildrenOf(widget).Where(c => reader.KindOf(c) == "IfBranchWidget")) covered.Add(branch);
             if (whenTrue != null) foreach (var child in reader.ChildrenOf(whenTrue)) Member(child, depth + 1, lines);
@@ -945,62 +967,72 @@ internal sealed class DigestWriter<T>(T root, ModelReader<T> reader, string lane
             return;
         }
         if (kind.Contains("BlockInstance", StringComparison.Ordinal)) {
-            lines.Add(pad + "block " + (Ref(widget, "SourceBlock") is { } source ? Callee(source) : "?") + "(" + Arguments(widget) + ")" + events + visible);
+            // A placeholder of the block is where content mounts: its key on its own line, or on the line of its block
+            // instance when it is empty.
+            bool Empty(T placeholder) => !reader.ChildrenOf(placeholder).Any(c => reader.IsKind(c, "Widget"));
+            var empty = reader.ChildrenOf(widget).Where(c => reader.KindOf(c) == "PlaceholderContentWidget" && Empty(c))
+                .Select(c => "[" + reader.DisplayOf(c) + "]" + Key(c)).ToList();
+            lines.Add(pad + "block " + (Ref(widget, "SourceBlock") is { } source ? Callee(source) : "?") + "(" + Arguments(widget) + ")" + events + visible
+                + NameNote(widget, name) + Inside(empty, name.Length > 0));
             foreach (var child in reader.ChildrenOf(widget)) {
                 if (reader.KindOf(child) == "PlaceholderContentWidget") {
                     covered.Add(child);
-                    if (!reader.ChildrenOf(child).Any(c => reader.IsKind(c, "Widget"))) { foreach (var inner in reader.ChildrenOf(child)) Member(inner, depth + 1, lines); continue; }
-                    lines.Add(pad + "  [" + reader.DisplayOf(child) + "]:");
+                    if (Empty(child)) {
+                        foreach (var inner in reader.ChildrenOf(child)) Member(inner, depth + 1, lines);
+                        continue;
+                    }
+                    lines.Add(pad + "  [" + reader.DisplayOf(child) + "]" + Key(child) + ":");
                     foreach (var inner in reader.ChildrenOf(child)) Member(inner, depth + 2, lines);
                 } else Member(child, depth + 1, lines);
             }
             return;
         }
         if (reader.IsKind(widget, "List") || S(widget, "Source") is { Length: > 0 } && basic is "List" or "TableRecords" or "ListRecords" or "Table" or "Gallery") {
-            lines.Add(pad + "list " + name + " source=" + Expr(widget, "Source") + events + visible + ":");
+            lines.Add(pad + "list " + name + (name.Length > 0 ? Key(widget) : "") + " source=" + Expr(widget, "Source") + events + visible + ":");
             Children(depth + 1);
             return;
         }
         if (basic is "Popup" or "Form" or "EditRecord") {
-            lines.Add(pad + basic.ToLowerInvariant() + (name.Length > 0 ? " " + name : "") + (basic == "Popup" ? " show=" + Expr(widget, "ShowPopup") : "") + events + visible + ":");
+            lines.Add(pad + basic.ToLowerInvariant() + Named(widget, name) + (basic == "Popup" ? " show=" + Expr(widget, "ShowPopup") : "") + events + visible + ":");
             Children(depth + 1);
             return;
         }
         if (S(widget, "Variable") is { Length: > 0 }) {
             var list = S(widget, "List") is { Length: > 0 } source ? " list=" + source : "";
             var mandatory = S(widget, "Mandatory") is { Length: > 0 } m && m != "False" ? " mandatory" + (m == "True" ? "" : "=(" + Expr(widget, "Mandatory") + ")") : "";
-            lines.Add(pad + basic.ToLowerInvariant() + (name.Length > 0 ? " " + name : "") + " var=" + Expr(widget, "Variable") + list + mandatory + events + visible + Enabled(widget));
+            lines.Add(pad + basic.ToLowerInvariant() + Named(widget, name) + " var=" + Expr(widget, "Variable") + list + mandatory + events + visible + Enabled(widget));
             Children(depth + 1);
             return;
         }
         if (reader.IsKind(widget, "Button") || reader.IsKind(widget, "Link") || basic is "Button" or "Link") {
             var label = Expr(widget, "Label") is { Length: > 0 } text ? text : "\"" + Clip(TextOf(widget), TextMax) + "\"";
-            lines.Add(pad + basic.ToLowerInvariant() + " " + label + events + visible + Enabled(widget));
+            lines.Add(pad + basic.ToLowerInvariant() + " " + label + events + visible + Enabled(widget) + NameNote(widget, name) + Inside(NamedWithin(widget), name.Length > 0));
             CoverTree(widget);
             return;
         }
         switch (basic) {
             case "Text":
-                if (S(widget, "Text") is { Length: > 0 } t) lines.Add(pad + "text \"" + Clip(OneLine(t), TextMax) + "\"" + visible);
+                if (S(widget, "Text") is { Length: > 0 } t) lines.Add(pad + "text \"" + Clip(OneLine(t), TextMax) + "\"" + visible + NameNote(widget, name));
                 Children(depth);
                 return;
             case "Expression" or "InlineExpression":
                 // A literal (the ODC Studio writes a label or button text as an Expression widget) reads as text.
-                lines.Add(pad + (Literal(Expr(widget, "Value")) is { } literal ? "text \"" + Clip(literal, TextMax) + "\"" : "expr " + Expr(widget, "Value")) + visible);
+                lines.Add(pad + (Literal(Expr(widget, "Value")) is { } literal ? "text \"" + Clip(literal, TextMax) + "\"" : "expr " + Expr(widget, "Value")) + visible + NameNote(widget, name));
                 Children(depth);
                 return;
             case "Image" or "Icon":
-                if (events.Length == 0 && visible.Length == 0) { covered.Remove(widget); Fold(widget, "decoration (images, icons)"); return; }
-                lines.Add(pad + basic.ToLowerInvariant() + (name.Length > 0 ? " " + name : "") + events + visible);
+                var within = NamedWithin(widget);
+                if (events.Length == 0 && visible.Length == 0 && name.Length == 0 && within.Count == 0) { covered.Remove(widget); Fold(widget, "decoration (images, icons)"); return; }
+                lines.Add(pad + basic.ToLowerInvariant() + Named(widget, name) + events + visible + Inside(within, false));
                 CoverTree(widget);
                 return;
             case "Label":
-                lines.Add(pad + "label \"" + Clip(TextOf(widget), TextMax) + "\"" + visible);
+                lines.Add(pad + "label \"" + Clip(TextOf(widget), TextMax) + "\"" + visible + NameNote(widget, name) + Inside(NamedWithin(widget), name.Length > 0));
                 CoverTree(widget);
                 return;
         }
         if (basic == "AdvancedHtml" && S(widget, "Tag") is { } tag && tag.Length == 2 && tag[0] == 'h' && char.IsDigit(tag[1])) {
-            lines.Add(pad + tag + " \"" + Clip(TextOf(widget), TextMax) + "\"" + visible);
+            lines.Add(pad + tag + " \"" + Clip(TextOf(widget), TextMax) + "\"" + visible + NameNote(widget, name) + Inside(NamedWithin(widget), name.Length > 0));
             CoverTree(widget);
             return;
         }
@@ -1009,16 +1041,17 @@ internal sealed class DigestWriter<T>(T root, ModelReader<T> reader, string lane
             // Containers, placeholders and branches are collapsed: their children stay at the same depth unless the
             // container itself has a condition or an event.
             if (visible.Length > 0 || events.Length > 0) {
-                lines.Add(pad + basic.ToLowerInvariant() + (name.Length > 0 ? " " + name : "") + events + visible + ":");
+                lines.Add(pad + basic.ToLowerInvariant() + Named(widget, name) + events + visible + ":");
                 Children(depth + 1);
-            } else Children(depth);
+            } else { Collapsed(widget, name); Children(depth); }
             return;
         }
         if (basic is "Container" or "Placeholder" or "Content" or "PlaceholderContent" or "IfBranch" or "MobileWidget" or "WebWidget" && events.Length == 0 && visible.Length == 0) {
+            Collapsed(widget, name);
             Children(depth);
             return;
         }
-        lines.Add(pad + basic.ToLowerInvariant() + (name.Length > 0 ? " " + name : "") + events + visible);
+        lines.Add(pad + basic.ToLowerInvariant() + Named(widget, name) + events + visible);
         Children(depth + 1);
     }
 

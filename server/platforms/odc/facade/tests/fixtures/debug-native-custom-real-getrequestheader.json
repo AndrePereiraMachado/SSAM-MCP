@@ -1,0 +1,211 @@
+{
+  "kind": "ExecuteServerActionNode",
+  "name": "GetRequestHeader",
+  "modelName": "GetRequestHeader",
+  "label": null,
+  "key": "cv1zJMnaDU2uScQc9ODv5w",
+  "reference": "@cv1zJMnaDU2uScQc9ODv5w",
+  "path": "ServerAction:GetSessionCookies/ExecuteServerActionNode:GetRequestHeader",
+  "properties": {
+    "ObjectKey": "cv1zJMnaDU2uScQc9ODv5w",
+    "GlobalKey": "WWAQZTkE5UuwES8B+6Svpg*cv1zJMnaDU2uScQc9ODv5w",
+    "WasDeleted": "False",
+    "IsValid": "True",
+    "Key": "/UserActions.hW6+FYlVYEybHnVlfRvXQg/NodesNotShownInESpaceTree.cv1zJMnaDU2uScQc9ODv5w",
+    "HorizontalPosition": "3192",
+    "IsDisabled": "False",
+    "VerticalPosition": "2508",
+    "Connectors": "[ActionConnector:]",
+    "IncomingConnectors": "[ActionConnector:]",
+    "Action": "ServerActionSignature:GetRequestHeader",
+    "AnimationEffect": "None",
+    "Name": "GetRequestHeader",
+    "Target": "ExecuteServerActionNode:String_Split",
+    "Arguments": "[Argument:]"
+  },
+  "propertyReferences": {
+    "Action": {
+      "kind": "ServerActionSignature",
+      "name": "GetRequestHeader",
+      "label": null,
+      "key": "3PeR3yhF2EmYWnHYw3a4xQ",
+      "reference": "@3PeR3yhF2EmYWnHYw3a4xQ",
+      "path": "Reference:HTTPRequestHandler/ServerActionSignature:GetRequestHeader"
+    },
+    "Target": {
+      "kind": "ExecuteServerActionNode",
+      "name": "String_Split",
+      "label": null,
+      "key": "90QTF5spVkuP8t2J5kZzCg",
+      "reference": "@90QTF5spVkuP8t2J5kZzCg",
+      "path": "ServerAction:GetSessionCookies/ExecuteServerActionNode:String_Split"
+    }
+  },
+  "propertyReferenceCollections": {
+    "Connectors": {
+      "items": [
+        {
+          "kind": "ActionConnector",
+          "name": "",
+          "label": null,
+          "key": "t2PAuwA0HUOtpz2tlfC7Sg",
+          "reference": "@t2PAuwA0HUOtpz2tlfC7Sg",
+          "path": "ServerAction:GetSessionCookies/ExecuteServerActionNode:GetRequestHeader/ActionConnector:"
+        }
+      ],
+      "total": 1,
+      "omitted": 0
+    },
+    "IncomingConnectors": {
+      "items": [
+        {
+          "kind": "ActionConnector",
+          "name": "",
+          "label": null,
+          "key": "iJZPWnbQ50WwwUV2SUJLXQ",
+          "reference": "@iJZPWnbQ50WwwUV2SUJLXQ",
+          "path": "ServerAction:GetSessionCookies/StartNode:/ActionConnector:"
+        }
+      ],
+      "total": 1,
+      "omitted": 0
+    },
+    "Arguments": {
+      "items": [
+        {
+          "kind": "Argument",
+          "name": "",
+          "label": null,
+          "key": "IuG15c78LUKJg7byH7KThQ",
+          "reference": "@IuG15c78LUKJg7byH7KThQ",
+          "path": "ServerAction:GetSessionCookies/ExecuteServerActionNode:GetRequestHeader/Argument:"
+        }
+      ],
+      "total": 1,
+      "omitted": 0
+    }
+  },
+  "propertiesOmitted": {},
+  "propertyErrors": {},
+  "propertiesMissing": [],
+  "children": [
+    {
+      "kind": "Argument",
+      "name": "",
+      "modelName": "",
+      "label": null,
+      "key": "IuG15c78LUKJg7byH7KThQ",
+      "reference": "@IuG15c78LUKJg7byH7KThQ",
+      "path": "ServerAction:GetSessionCookies/ExecuteServerActionNode:GetRequestHeader/Argument:",
+      "properties": {
+        "ObjectKey": "IuG15c78LUKJg7byH7KThQ",
+        "GlobalKey": "WWAQZTkE5UuwES8B+6Svpg*IuG15c78LUKJg7byH7KThQ",
+        "WasDeleted": "False",
+        "IsValid": "True",
+        "Key": "/UserActions.hW6+FYlVYEybHnVlfRvXQg/NodesNotShownInESpaceTree.cv1zJMnaDU2uScQc9ODv5w/Arguments.IuG15c78LUKJg7byH7KThQ",
+        "Value": "\"Cookie\"",
+        "Parameter": "InputParameterSignature:HeaderName"
+      },
+      "propertyReferences": {
+        "Parameter": {
+          "kind": "InputParameterSignature",
+          "name": "HeaderName",
+          "label": null,
+          "key": "04hyyD1OyE24Iz4QgrexoQ",
+          "reference": "@04hyyD1OyE24Iz4QgrexoQ",
+          "path": "Reference:HTTPRequestHandler/ServerActionSignature:GetRequestHeader/InputParameterSignature:HeaderName"
+        }
+      },
+      "propertyReferenceCollections": {},
+      "propertiesOmitted": {},
+      "propertyErrors": {},
+      "propertiesMissing": [],
+      "children": [
+        {
+          "kind": "Expression",
+          "name": "",
+          "modelName": "",
+          "label": null,
+          "key": "IuG15c78LUKJg7byH7KThQ.#Value",
+          "reference": "@IuG15c78LUKJg7byH7KThQ.#Value",
+          "path": "ServerAction:GetSessionCookies/ExecuteServerActionNode:GetRequestHeader/Argument:/Expression:",
+          "properties": {
+            "ObjectKey": "IuG15c78LUKJg7byH7KThQ.#Value",
+            "GlobalKey": "WWAQZTkE5UuwES8B+6Svpg*IuG15c78LUKJg7byH7KThQ.#Value",
+            "WasDeleted": "False",
+            "IsValid": "True",
+            "Key": "/UserActions.hW6+FYlVYEybHnVlfRvXQg/NodesNotShownInESpaceTree.cv1zJMnaDU2uScQc9ODv5w/Arguments.IuG15c78LUKJg7byH7KThQ/Value",
+            "Type": "BasicType:Text",
+            "DisplayValue": "\"Cookie\"",
+            "Text": "\"Cookie\"",
+            "Root": "[Id: 20344]\n[Type: Text]\n[Value: Cookie"
+          },
+          "propertyReferences": {
+            "Type": {
+              "kind": "BasicType",
+              "name": "Text",
+              "label": null,
+              "key": "uROOBXPvQEyU76NWO+1uxQ",
+              "reference": "@uROOBXPvQEyU76NWO+1uxQ",
+              "path": "BasicType:Text"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        }
+      ],
+      "childrenTotal": 1,
+      "childrenOmitted": 0
+    },
+    {
+      "kind": "ActionConnector",
+      "name": "",
+      "modelName": "",
+      "label": null,
+      "key": "t2PAuwA0HUOtpz2tlfC7Sg",
+      "reference": "@t2PAuwA0HUOtpz2tlfC7Sg",
+      "path": "ServerAction:GetSessionCookies/ExecuteServerActionNode:GetRequestHeader/ActionConnector:",
+      "properties": {
+        "ObjectKey": "t2PAuwA0HUOtpz2tlfC7Sg",
+        "GlobalKey": "WWAQZTkE5UuwES8B+6Svpg*t2PAuwA0HUOtpz2tlfC7Sg",
+        "WasDeleted": "False",
+        "IsValid": "True",
+        "Key": "/UserActions.hW6+FYlVYEybHnVlfRvXQg/NodesNotShownInESpaceTree.cv1zJMnaDU2uScQc9ODv5w/Links.t2PAuwA0HUOtpz2tlfC7Sg",
+        "Source": "ExecuteServerActionNode:GetRequestHeader",
+        "Target": "ExecuteServerActionNode:String_Split"
+      },
+      "propertyReferences": {
+        "Source": {
+          "kind": "ExecuteServerActionNode",
+          "name": "GetRequestHeader",
+          "label": null,
+          "key": "cv1zJMnaDU2uScQc9ODv5w",
+          "reference": "@cv1zJMnaDU2uScQc9ODv5w",
+          "path": "ServerAction:GetSessionCookies/ExecuteServerActionNode:GetRequestHeader"
+        },
+        "Target": {
+          "kind": "ExecuteServerActionNode",
+          "name": "String_Split",
+          "label": null,
+          "key": "90QTF5spVkuP8t2J5kZzCg",
+          "reference": "@90QTF5spVkuP8t2J5kZzCg",
+          "path": "ServerAction:GetSessionCookies/ExecuteServerActionNode:String_Split"
+        }
+      },
+      "propertyReferenceCollections": {},
+      "propertiesOmitted": {},
+      "propertyErrors": {},
+      "propertiesMissing": [],
+      "children": [],
+      "childrenTotal": 0,
+      "childrenOmitted": 0
+    }
+  ],
+  "childrenTotal": 2,
+  "childrenOmitted": 0
+}

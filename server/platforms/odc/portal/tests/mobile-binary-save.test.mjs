@@ -1,0 +1,27 @@
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';
+import {fingerprint} from '../runtime/write-journal.mjs';import {extensibilityStateHash} from '../runtime/mobile-extensibility.mjs';
+import {MOBILE_FILE_UPLOAD,MOBILE_FILE_SAVE} from '../runtime/mobile-binary-upload.mjs';import {mobileBinarySaveApproval,mobileBinarySaveObservation} from '../runtime/mobile-binary-save.mjs';
+test('native binary save approval binds the opaque upload, full fresh setting and exact baseline',async t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'mobile-save-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const host='proof.outsystems.dev',words='Own file save',source={kind:'human-conversation',threadId:crypto.randomUUID(),messageId:crypto.randomUUID(),question:'Own fixture'};
+ const e={applicationKey:crypto.randomUUID(),environmentKey:crypto.randomUUID(),settingKey:crypto.randomUUID(),portfolioKey:crypto.randomUUID(),originOperationUuid:crypto.randomUUID(),contentSha256:'a'.repeat(64),byteLength:20},uploadOperationUuid=crypto.randomUUID(),objectUri='https://plat-te3423068adb743c3b12fff7faf2a4b9e.s3.us-east-1.amazonaws.com/tenants/uploads/'+crypto.randomUUID();
+ const native={Setting:{Key:e.settingKey,Name:'File',DataType:'BinaryUrl',DataTypeLabel:'Binary data',DefaultValue:'',Value:'',ValueOrigin:'Default',IsSecret:'[REDACTED]',IsMandatory:false,Metadata:{Name:'',Filetype:''}},IsFromLibrary:false,LibraryInfo:{Key:'',Revision:0,Name:''}};
+ const info=structuredClone(native);Object.assign(info.Setting,{ValueOrigin:'Override',IsSecret:false,Metadata:{Name:'proof',Filetype:'txt'}});
+ let current={settings:[{key:e.settingKey,name:'File',dataType:'BinaryUrl',isSecret:false,value:null,valueOrigin:'Default',defaultValue:null}],libraries:[]};
+ const raw={inputParameters:{ApplicationKey:e.applicationKey,EnvironmentKey:e.environmentKey,RequiresDecoding:false,ExtensibilitySettingInfo:info},screenVariables:{},clientVariables:{}};
+ let upload={state:'confirmed',identity:{tenant:host,operationId:MOBILE_FILE_UPLOAD},authorization:{source},reconciliation:{mobileBinaryUpload:e},response:{mobileUploadProof:{uploadOperationUuid,objectUri,contentSha256:e.contentSha256,byteLength:20,contentVerified:true,signedUriExposed:false}}};
+ const proposal=path.join(dir,'proposal.md'),file=path.join(dir,'approval.json');fs.writeFileSync(proposal,'Own native binary save');
+ fs.writeFileSync(file,JSON.stringify({schema:'ssam-authorization-context/1',decision:'approved',words,source,proposal:{file:proposal,sha256:crypto.createHash('sha256').update(fs.readFileSync(proposal)).digest('hex')},scope:[{lane:'odc',host,operation:MOBILE_FILE_SAVE,environmentKey:e.environmentKey,targets:['Fixture','File']}],constraints:{uploadOperationUuid,originOperationUuid:e.originOperationUuid,inputSha256:fingerprint(raw.inputParameters),expectedConfigurationSha256:extensibilityStateHash(current)}}));
+ const args={file,words,host,raw,lookup:()=>upload,read:async id=>({ok:true,data:id.startsWith('asset-')?{assetKey:e.applicationKey,name:'Fixture',assetType:'MobileApplication',portfolioKey:e.portfolioKey}:current}),portalRead:async()=>({ok:true,data:{NotFound:false,ExtensibilitySettingInfo:native}})};
+ const prepared=await mobileBinarySaveApproval(args);assert.equal(prepared.expected.objectUri,objectUri);
+ upload.state='uncertain';await assert.rejects(()=>mobileBinarySaveApproval(args));upload.state='confirmed';
+ current.settings[0].isSecret=true;await assert.rejects(()=>mobileBinarySaveApproval(args));current.settings[0].isSecret=false;
+ raw.inputParameters.ExtensibilitySettingInfo.Setting.DefaultValue='changed';await assert.rejects(()=>mobileBinarySaveApproval(args));raw.inputParameters.ExtensibilitySettingInfo.Setting.DefaultValue='';
+ raw.inputParameters.ExtensibilitySettingInfo.Setting.Value=objectUri+'?sig=raw';await assert.rejects(()=>mobileBinarySaveApproval(args));raw.inputParameters.ExtensibilitySettingInfo.Setting.Value='';
+ const persistedUri=new URL(objectUri).origin+'/nativeapporchestration/configurations/management/'+e.environmentKey+'/binaries/'+e.applicationKey+'/'+e.settingKey;
+ const publicRead={ok:true,data:{settings:[{...current.settings[0],value:persistedUri+'?X-Amz-Signature=%5BREDACTED%5D',valueOrigin:'Override',metadata:[{key:'name',value:'proof'},{key:'type',value:'txt'}]}]}};
+ const nativeRead={ok:true,data:{NotFound:false,ExtensibilitySettingInfo:structuredClone(info)}};nativeRead.data.ExtensibilitySettingInfo.Setting.Value=publicRead.data.settings[0].value;
+ const proof=mobileBinarySaveObservation(prepared.expected,publicRead,nativeRead);assert.equal(proof.verified,true);assert.equal(proof.uploadedContentVerified,true);assert.equal(proof.persistedContentVerified,false);assert.equal(proof.signedUriExposed,false);
+ publicRead.data.settings[0].value=objectUri;assert.equal(mobileBinarySaveObservation(prepared.expected,publicRead,nativeRead).verified,false);publicRead.data.settings[0].value=persistedUri;
+ publicRead.data.settings[0].metadata[1].value='wrong';assert.equal(mobileBinarySaveObservation(prepared.expected,publicRead,nativeRead).verified,false);publicRead.data.settings[0].metadata[1].value='txt';
+ nativeRead.data.ExtensibilitySettingInfo.Setting.Metadata.Name='wrong';assert.equal(mobileBinarySaveObservation(prepared.expected,publicRead,nativeRead).verified,false);
+});

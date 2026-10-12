@@ -2,26 +2,31 @@
 
 Servidor MCP hospedado do SSAM: `ssam serve`, hub do agente, tokens, kernels O11 e ODC, builder ODC, imagem Docker e
 painel do dono. Cópia de `servidor/fase4` (`e7b2119b`) de `C:\Users\andre\SSAM-Hybrid-servidor`, sem edição,
-atualizada para `servidor/fase4-22` (`1fbfa377`, 22º envio).
+atualizada para `servidor/fase4-24` (`a945838b`, 24º envio, branch `server/r24`; antes, `fase4-22` `1fbfa377` e
+`fase4-23` `e589be22`). Cada arquivo que vem da linha tem o blob da revisão (`README.md` da raiz, "De onde veio").
 Esta pasta é a raiz do repositório antigo: caminhos relativos, Dockerfile e compose funcionam daqui.
 
 Arquivos do SSAM-MCP nesta caixa, que **não vêm da linha do servidor**:
 
 - este `README-CAIXA.md`;
 - `Dockerfile`: a imagem de produção, derivada de `docker/ssam-server/Dockerfile`;
-- `deploy/`: compose de produção, Caddyfile, `.env.prod.example`, `backup.sh`, `restore.sh` e o runbook `deploy/DEPLOY.md`.
+- `deploy/`: compose de produção, Caddyfile, `.env.prod.example`, `backup.sh`, `restore.sh` e o runbook `deploy/DEPLOY.md`;
+  o painel do dono (`deploy/console`, o coletor `deploy/host` e o perfil do compose, DEPLOY.md seção 15).
 
 Há uma exceção à regra de não editar arquivos copiados: o `.dockerignore` ganhou no fim um bloco marcado "added by the
 SSAM-MCP monorepo". Ele tira da imagem o `Dockerfile`, o `deploy/`, as cópias de estado (`ssam-state-*.tar.gz`), este
 README e os dados internos do dono que o servidor hospedado não lê (`.mcp.json`, `.env.example`,
 `docs/INTEGRACOES-GITSSAM.md`, `kernel/scripts/service_center/hosts.json`, `kernel/scripts/probes` e os testes do
-depurador). As regras anteriores e a guarda de nomes de cliente continuam iguais.
+depurador, inclusive `kernel/debug/tests-witness`, que entrou no 24º). As regras anteriores e a guarda de nomes de
+cliente continuam iguais. A parte de cima do arquivo é a da linha do servidor: no 24º ela passou a tirar da imagem
+`docs/PORTAL-*`, `docs/SC-*` e `docs/PROTOTIPO-NATIVO.md`.
 
 Ainda vão na imagem, porque são código ou documentação da linha do servidor: caminhos `C:\Users\andre\...` em docs,
 catálogos e comentários, e o host do ambiente pessoal do dono em fontes do kernel e da fachada. Isso se corrige na
 origem (linha do servidor), não aqui.
 
-O servidor no ar continua rodando do original (`SSAM-Hybrid-servidor-wt\fase4-22`, porta 7310). Não use essa porta para testar esta cópia.
+O servidor Windows continua rodando do original (`SSAM-Hybrid-servidor-wt\fase4-23`, porta 7310), e a VPS de produção
+roda a imagem do 23º (`prod-20261011-ed0f94b`). Não use essa porta para testar esta cópia.
 
 ## Compilar
 
@@ -57,6 +62,13 @@ dotnet test platforms/odc/studio/builder/tests/Builder.Tests.csproj -c Release -
 Em 2026-10-10: 154 de 163 passam. O `hosted-e2e` pula (o agente está na outra caixa). As 8 falhas vêm da falta de
 `platforms/odc/tenants.json`, que é dado do dono e ficou de fora. Builder.Tests 7/7.
 
+Em 2026-10-12 (24º, `server/r24`), com `Anvil.Cli` e `Anvil.Cli.Odc` compilados em `kernel/.local` (o discover do
+`hosted-evidence` precisa deles): `hosted-*` 138 de 152 (1 pula), e as outras suítes da linha 85 de 86. As 14 falhas são
+11 por falta de `tenants.json` e 3 de testes novos que importam a caixa agent (`hosted-inline-job`, `hosted-network`).
+Com um `tenants.json` sintético e a caixa agent ao lado, 152/152 e 15/15. Painel do dono:
+`node --test deploy/console/tests/` 90 de 91 (1 pula: socket unix), `node --test deploy/console/ui-tests/` 65/65 e
+`python -m unittest discover -s deploy/host/tests` 45 de 46 (1 pula: POSIX). Detalhes no `README.md` da raiz.
+
 ## Deploy de produção (SSAM-MCP)
 
 VPS Linux com Docker Compose, HTTPS automático pelo Caddy e servidor sem porta no host: siga `deploy/DEPLOY.md`.
@@ -70,6 +82,8 @@ VPS Linux com Docker Compose, HTTPS automático pelo Caddy e servidor sem porta 
 - Construída e provada no Docker Desktop em 2026-10-11 (`deploy/DEPLOY.md`, seção 12). A imagem candidata à produção é
   `ssam-server:prod-20261011-ed0f94b` (terceiro ensaio); falta uma VPS de verdade. Os bundles dos Studios não estão no
   repositório.
+- O 24º envio (`server/r24`) ainda não tem imagem: build, ensaio de upgrade e troca na VPS são as fases E a G do plano
+  do 24º. O `kernel.json` dele está na seção 7.1 do DEPLOY.
 - A cópia do 23º envio tinha desfeito a correção `bfd3ec7` (caminhos Linux em `platforms/odc/facade/hosted/policy.mjs`).
   Ela foi reaplicada em `ed0f94b`. A linha do servidor tem as quatro correções na branch `servidor/fase4-23-linux`, e as
   próximas cópias saem dela (DEPLOY.md, seção 14).
@@ -80,8 +94,9 @@ VPS Linux com Docker Compose, HTTPS automático pelo Caddy e servidor sem porta 
 2. `.env` a partir de `.env.example` (`NGROK_DOMAIN`, `NGROK_AUTHTOKEN`).
 3. `node --test platforms/odc/facade/tests/hosted-image-denylist.test.mjs` antes de cada build.
 4. `docker compose build` e `docker compose up -d`.
-5. `kernel.json` no volume: `{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v48","odcBridgeAccepted":["v45"]}` em
-   `/data/server/kernel.json`, o mesmo do servidor no ar (aceita agentes ainda com a bridge v45).
+5. `kernel.json` no volume: `{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v96","odcBridgeAccepted":["v48","v45"]}` em
+   `/data/server/kernel.json` (24º: pacote do agente v96; aceita agentes ainda com a v48 ou a v45). Com a imagem do
+   23º, o anterior: `{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v48","odcBridgeAccepted":["v45"]}`.
 6. `Features.plain.xml` (do `deploy/odc-features-export.ps1`; o `Features.xml` do Windows é DPAPI e o Linux não o lê)
    em `/data/odc-features/` (`deploy/DEPLOY.md`, seção 7.2).
 7. Tokens: `docker compose run --rm ssam-admin server-token issue ...`.

@@ -61,7 +61,10 @@ async function slotWorker(slot, env) {
 }
 
 // The dependencies of lib.mjs deliver for a phased call: {studio, kernel: {apply, prepareManifest, check?, mergeOrder?}}.
-export function phasedDeliveryDeps({ root, studio, prepareManifest, env = process.env, pool, kernel = kernelDelivery, customer } = {}) {
+// prototype (docs/PROTOTIPO-NATIVO.md, lane surface): {capturePrototype?, measureFidelity?, prototypeWriter?} for the
+// prototype op of the delivery. Its capture runs in this process before the first Studio command, outside the Studio lock
+// (no bridge call); its rebuild of 1.4.1 runs through the same pooled apply.
+export function phasedDeliveryDeps({ root, studio, prepareManifest, env = process.env, pool, kernel = kernelDelivery, customer, prototype = null } = {}) {
   const buildPool = pool ?? sharedBuildPool({ root, env });
   // The customer whose builds share the pool fairly: the one named, the hosted call's token (every customer of the hosted
   // server builds in this one pool), SSAM_CUSTOMER, else the lane root.
@@ -79,6 +82,7 @@ export function phasedDeliveryDeps({ root, studio, prepareManifest, env = proces
       ...(typeof kernel.planMergeOrderKernel === 'function'
         ? { mergeOrder: pooled(async (args, slot) => kernel.planMergeOrderKernel(args, { exec: slotExec(slot), worker: await slotWorker(slot, env) })) } : {}),
       ...(typeof kernel.checkJobKernel === 'function' ? { check: kernel.checkJobKernel } : {}),
+      ...Object.fromEntries(['capturePrototype', 'measureFidelity', 'prototypeWriter', 'expandPrototype'].filter(k => typeof prototype?.[k] === 'function').map(k => [k, prototype[k]])),
     },
   };
 }

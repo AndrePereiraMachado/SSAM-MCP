@@ -26,6 +26,20 @@ public sealed partial class ModelSession
     /// <summary>A note of the receipt, {code, message}.</summary>
     internal void Note(string code, string message) => Report("notes", new JsonObject { ["code"] = code, ["message"] = message });
 
+    /// <summary>lentidao 2026-10-12: what the kernel rewrote instead of refusing (Preflight.JobNormalizer), {rule, path, from,
+    /// to, message}, each once (the preflight and the apply may both see a dropped set).</summary>
+    public void Normalized(IEnumerable<JsonNode?> entries)
+    {
+        foreach (var entry in entries.OfType<JsonObject>())
+        {
+            if (!_receipt.TryGetValue("normalizations", out var list)) _receipt["normalizations"] = list = new JsonArray();
+            if (list.Count < 500 && !list.OfType<JsonObject>().Any(e => Preflight.JobNormalizer.Same(e, entry))) list.Add(entry.DeepClone());
+        }
+    }
+
+    /// <summary>The normalizations of this apply so far (a copy), for a refusal.</summary>
+    public JsonArray Normalizations() => _receipt.TryGetValue("normalizations", out var list) ? list.DeepClone().AsArray() : new JsonArray();
+
     /// <summary>The receipt fields of this apply, a fresh object (the caller moves them into the result).</summary>
     public JsonObject ReceiptFields(ExpectationResult? policy = null, JobFootprint? footprint = null)
     {

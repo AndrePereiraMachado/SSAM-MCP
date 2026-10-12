@@ -53,6 +53,9 @@
     <Compile Include="../../src/Anvil.Bridge/ScIntegrationStudioSoap.cs" Link="Bridge/ScIntegrationStudioSoap.cs" />
     <!-- secretRefs without the vault: ScVault.cs (CredReadW) stays out, the tests use a fake IScVault. -->
     <Compile Include="../../src/Anvil.Bridge/ScSecrets.cs" Link="Bridge/ScSecrets.cs" />
+    <Compile Include="../../src/Anvil.Bridge/ScPrivateHttp.cs" Link="Bridge/ScPrivateHttp.cs" />
+    <Compile Include="../../src/Anvil.Bridge/PrivateHttpContext.cs" Link="Bridge/PrivateHttpContext.cs" />
+    <Compile Include="../../src/Anvil.Bridge/ScPrivateCookieExchange.cs" Link="Bridge/ScPrivateCookieExchange.cs" />
     <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="../Shared/ModelReadingTests.cs" Link="ModelReadingTests.cs" />
     <Compile Include="../Shared/ModuleIndexTests.cs" Link="ModuleIndexTests.cs" />

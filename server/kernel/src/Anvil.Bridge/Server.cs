@@ -86,7 +86,7 @@ public static class Server
                 // A handler that turned a UI_BUSY into a plain failure still answers the code.
                 if (scope.Busy is { } seen && IsPlainFailure(response)) response = UiGate.Reply(seen, scope.Dispatched);
                 // Environment and Service Center answers carry business data: only their size goes to the log.
-                Log(method is "environment_session" or "sc_api" or "sc_web" or "sc_session" or "studio_login" or "query_test"
+                Log(method is "environment_session" or "sc_api" or "sc_web" or "sc_http" or "sc_private_http" or "sc_private_http_cookie" or "sc_session" or "studio_login" or "query_test"
                     ? $"{method} {sw.ElapsedMilliseconds} ms responseBytes={Encoding.UTF8.GetByteCount(response)}"
                     : $"{method} {sw.ElapsedMilliseconds} ms {(response.Length > 4000 ? response[..4000] : response)}");
                 try { await writer.WriteLineAsync(response); } catch { break; }

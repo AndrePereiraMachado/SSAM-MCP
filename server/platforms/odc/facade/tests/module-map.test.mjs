@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { moduleMap, parseMapArguments, prefetchIndex, prefetchMain, prefetchCacheRoot, readerConfig, indexFile, MAP_SCHEMA, DEFAULT_MAP_BUDGET } from '../module-map.mjs';
+import { moduleMap, parseMapArguments, prefetchIndex, prefetchMain, prefetchCacheRoot, readerConfig, indexFile, MAP_SCHEMA, MAP_USAGE, DEFAULT_MAP_BUDGET } from '../module-map.mjs';
 import { paths } from '../lib.mjs';
 import { LANES } from '../lanes.mjs';
 import { LONG_NAME, NODES, moduleIndex, writeCapture, writeIndex, storeFile } from './fixtures/module-index.mjs';
@@ -88,17 +88,122 @@ test('ancestors (parentRow <= -2, as the C# writer stores an aggregate\'s DataTa
   const source = await ask({ kind: 'AddSourceOperation' });
   assert.equal(source.ok, true, source.error); assert.equal(source.cache.index, 'hit');
   // ModelReader.PathOf climbs Parent() through the DataTable: 'DataTable:' (empty name) sits between the aggregate and the source.
+  // parentKey is the aggregate (a row), the DataTable between is parentSlot (its kind: it has no name).
   assert.deepEqual(source.entries, [{ key: 'T1111111111111111111111', kind: 'AddSourceOperation', name: 'Quote', role: 'other',
-    parentKey: 'G1111111111111111111111.#Table', childrenTotal: 0,
+    parentKey: 'G1111111111111111111111', parentSlot: 'DataTable', childrenTotal: 0,
     path: 'MobileFlow:MainFlow/MobileScreen:Home/Aggregate:GetQuotesAgg/DataTable:/AddSourceOperation:Quote' }]);
   assert.deepEqual(keys(await ask({ parent: '@G1111111111111111111111.#Table', includeDetail: true })), ['T1111111111111111111111']);
+  assert.deepEqual(keys(await ask({ parent: '@G1111111111111111111111', includeDetail: true })), ['T1111111111111111111111']);
   assert.equal((await ask({ kind: '*' })).count, 16, 'the DataTable is not a row');
-  assert.match((await ask({ key: '@G1111111111111111111111.#Table' })).error, /Unresolved key/);
+  // Its key answers the aggregate that owns it, and says so.
+  const table = await ask({ key: '@G1111111111111111111111.#Table' });
+  assert.deepEqual(keys(table), ['G1111111111111111111111']);
+  assert.match(table.notices[0], /^@G1111111111111111111111\.#Table is the DataTable of @G1111111111111111111111, an element Parent\(\) reaches and no Children list holds/);
   // An ancestor reference outside the ancestors is refused like any other malformed index.
   const broken = setup(t);
   writeIndex(broken.store, 'odc', broken.sha256, moduleIndex({ lane: 'odc', sourceSha256: broken.sha256, nodes, ancestors, overrides: { ancestors: [] } }));
   assert.match((await moduleMap({ lane: 'odc', target: broken.file }, { env: broken.env, prepare: async () => ({ ok: true }), read: async () => ({ ok: true, index: { built: false } }) })).error,
     /missing or invalid after the reader built it/);
+});
+
+// G11 (FarmaVirtual, 10/10/2026): call 121 handed out as parentKey the MobileWidget "content" placeholder of a container (85%
+// of the widgets of the capture after the merge), and call 129 asked for that key with the same capture and hash: "Unresolved
+// key ... map the current capture again". The placeholders here are laid out as the O11 reader stores them (ancestors).
+test('G11: parentKey is the nearest row (parentSlot names the placeholder between); a placeholder key answers its owner row; an unknown key never blames the capture', async t => {
+  const c = setup(t);
+  const nodes = [...NODES,
+    ['C1111111111111111111111', 'Container', 'Page', 'S1111111111111111111111', 'widget'],
+    ['W1111111111111111111111', 'Container', 'MountEditName', 'C1111111111111111111111.#content', 'widget'],
+    ['W2222222222222222222222', 'AdvancedHtml', '', 'C1111111111111111111111.#content', 'widget'],
+    ['W3333333333333333333333', 'Input', 'EditNameInput', 'W1111111111111111111111.#content', 'widget'],
+    ['E1111111111111111111111', 'Expression', '', 'W1111111111111111111111.#Style', 'expression']];
+  // A widget's property (CustomProperty, O11 and ODC) is an ancestor too: the parent of its expression, never a placeholder.
+  const ancestors = [['C1111111111111111111111.#content', 'MobileWidget', 'content', 'C1111111111111111111111'],
+    ['W1111111111111111111111.#content', 'MobileWidget', 'content', 'W1111111111111111111111'],
+    ['W1111111111111111111111.#Style', 'CustomProperty', 'Style', 'W1111111111111111111111']];
+  writeIndex(c.store, 'o11', c.sha256, moduleIndex({ lane: 'o11', sourceSha256: c.sha256, nodes, ancestors }));
+  const ask = input => moduleMap({ lane: 'o11', target: c.file, expectedSourceSha256: c.sha256, ...input }, { env: c.env, read: noReader });
+  // 121: the entry names the row it sits in, and the placeholder between by name.
+  const named = await ask({ name: 'MountEditName' });
+  assert.equal(named.ok, true, named.error);
+  assert.deepEqual(named.entries, [{ key: 'W1111111111111111111111', kind: 'Container', name: 'MountEditName', role: 'widget',
+    parentKey: 'C1111111111111111111111', parentSlot: 'content', childrenTotal: 0,
+    path: 'MobileFlow:MainFlow/MobileScreen:Home/Container:Page/MobileWidget:content/Container:MountEditName' }]);
+  // Every parentKey the map hands out is a key the map answers, and its parent lists the entry.
+  for (const entry of (await ask({ role: 'widget' })).entries) {
+    const owner = await ask({ key: '@' + entry.parentKey });
+    assert.equal(owner.ok, true, entry.name + ': ' + owner.error); assert.deepEqual(keys(owner), [entry.parentKey]);
+    assert.ok(keys(await ask({ parent: '@' + entry.parentKey })).includes(entry.key), entry.name);
+  }
+  // A row as parent lists what sits in its placeholders; the placeholder as parent only that slot.
+  assert.deepEqual(keys(await ask({ parent: '@C1111111111111111111111' })), ['W1111111111111111111111', 'W2222222222222222222222']);
+  assert.deepEqual(keys(await ask({ parent: '@W1111111111111111111111' })), ['W3333333333333333333333']);
+  assert.deepEqual(keys(await ask({ parent: '@C1111111111111111111111.#content' })), ['W1111111111111111111111', 'W2222222222222222222222']);
+  // 129: the placeholder key (the parentKey of the 22nd release) answers its owner row and says what the key is.
+  const slot = await ask({ key: '@C1111111111111111111111.#content' });
+  assert.equal(slot.ok, true, slot.error); assert.deepEqual(keys(slot), ['C1111111111111111111111']);
+  assert.deepEqual(slot.keyOwner, { key: 'C1111111111111111111111.#content', kind: 'MobileWidget', name: 'content', ownerKey: 'C1111111111111111111111' });
+  assert.match(slot.notices.join(' '), /@C1111111111111111111111\.#content is the MobileWidget content of @C1111111111111111111111, an element Parent\(\) reaches and no Children list holds/);
+  // A property key answers its widget and is named for what it is (review of G11: 2329 of the 4253 ancestors of the real
+  // capture are CustomProperty/ReferenceCustomProperty, 273 MobileWidgetSignature; none of them is a placeholder).
+  const style = await ask({ key: '@W1111111111111111111111.#Style' });
+  assert.equal(style.ok, true, style.error); assert.deepEqual(keys(style), ['W1111111111111111111111']);
+  assert.deepEqual(style.keyOwner, { key: 'W1111111111111111111111.#Style', kind: 'CustomProperty', name: 'Style', ownerKey: 'W1111111111111111111111' });
+  assert.match(style.notices.join(' '), /^@W1111111111111111111111\.#Style is the CustomProperty Style of @W1111111111111111111111, an element Parent\(\) reaches/);
+  assert.doesNotMatch(style.notices.join(' '), /placeholder/);
+  const expression = (await ask({ key: '@E1111111111111111111111' })).entries[0];
+  assert.deepEqual([expression.parentKey, expression.parentSlot], ['W1111111111111111111111', 'Style']);
+  // An unknown key with the hash of this very capture: KEY_UNRESOLVED, and the text never sends the model to map again.
+  for (const input of [{ key: '@Z9' }, { parent: '@Z9' }]) {
+    const unknown = await ask(input);
+    assert.equal(unknown.ok, false); assert.equal(unknown.code, 'KEY_UNRESOLVED', JSON.stringify(input));
+    assert.match(unknown.error, /^Unresolved key in this capture: @Z9\b/);
+    assert.match(unknown.error, /the hash given is this capture's/);
+    assert.doesNotMatch(unknown.error, /map the current capture again|Keys belong to one capture/);
+  }
+  const unpinned = await moduleMap({ lane: 'o11', target: c.file, key: '@Z9' }, { env: c.env, read: noReader });
+  assert.equal(unpinned.code, 'KEY_UNRESOLVED'); assert.doesNotMatch(unpinned.error, /map the current capture again/);
+});
+
+// U6/G12 (FarmaVirtual, 10/10/2026): call 148 asked kind "MobileTheme|MobileFlow|MobileScreen", got 0 entries ("check the
+// kind spelling") and three calls followed, one per kind (150-152); and counts.byKind came in every search by name or kind
+// (51.6% of the bytes of the 17 searches of the session).
+test('U6: kind takes a list (A|B or A,B) and names the kinds it did not find; counts by kind only on the unfiltered listing', async t => {
+  const c = setup(t);
+  writeIndex(c.store, 'odc', c.sha256);
+  const ask = input => moduleMap({ lane: 'odc', target: c.file, ...input }, { env: c.env, read: noReader });
+  const list = await ask({ kind: 'MobileFlow|MobileScreen' });
+  assert.equal(list.ok, true, list.error);
+  assert.deepEqual(keys(list), ['F1111111111111111111111', 'S1111111111111111111111', 'S2222222222222222222222', 'S3333333333333333333333']);
+  assert.deepEqual(keys(await ask({ kind: 'MobileFlow, MobileScreen' })), keys(list));
+  assert.equal(list.kindObserved, true); assert.deepEqual(list.notices, []); assert.equal(list.kindsNotObserved, undefined);
+  const partly = await ask({ kind: 'MobileTheme|MobileFlow' });
+  assert.deepEqual(keys(partly), ['F1111111111111111111111']); assert.deepEqual(partly.kindsNotObserved, ['MobileTheme']);
+  const none = await ask({ kind: 'MobileTheme|Timer' });
+  assert.equal(none.count, 0); assert.equal(none.kindObserved, false); assert.match(none.notices[0], /No instance of the requested kind/);
+  assert.deepEqual(none.kindsNotObserved, ['MobileTheme', 'Timer']);
+  // The next page keeps the list as given.
+  const paged = await ask({ kind: 'MobileFlow|MobileScreen', max: 2 });
+  assert.equal(paged.continuations.next.arguments.kind, 'MobileFlow|MobileScreen');
+  assert.deepEqual(keys(await ask(paged.continuations.next.arguments)), ['S2222222222222222222222', 'S3333333333333333333333']);
+  // counts.byKind: the first page of the unfiltered listing only (detail included or not); a search by name, kind, prefix,
+  // role, parent or key keeps the totals and the roles.
+  assert.equal((await ask({})).counts.byKind.MobileScreen, 3);
+  assert.equal((await ask({ includeDetail: true })).counts.byKind.MobileScreen, 3);
+  for (const filter of [{ name: 'Home' }, { kind: 'MobileScreen' }, { kind: 'MobileFlow|MobileScreen' }, { prefix: 'Quo' }, { role: 'screen' },
+    { parent: '@F1111111111111111111111' }, { key: '@F1111111111111111111111' }]) {
+    const answer = await ask(filter);
+    assert.equal(answer.ok, true, answer.error);
+    assert.equal(answer.counts.byKind, undefined, JSON.stringify(filter)); assert.equal(answer.counts.byKindOmitted, undefined, JSON.stringify(filter));
+    assert.equal(answer.counts.elements, 14); assert.equal(answer.counts.byRole.screen, 3);
+  }
+  // The search and uses views match one kind: a list there is refused with its words, never an empty answer; a kind that
+  // names nothing is refused in every view.
+  assert.match((await ask({ view: 'search', text: 'Quote', kind: 'MobileFlow|MobileScreen' })).error, /one kind/);
+  assert.match((await ask({ view: 'uses', element: 'Home', kind: 'MobileFlow,MobileScreen' })).error, /one kind/);
+  for (const view of ['map', 'search']) assert.match((await ask({ view, text: view === 'search' ? 'Quote' : undefined, kind: '|' })).error, /^kind must name a kind/, view);
+  // The usage line says the map takes a list.
+  assert.match(MAP_USAGE, /^ssam map \[--lane o11\|odc\] <capture\.oml\|Module> \[--kind K\[,K\.\.\.\]\]/);
 });
 
 test('the reader of every lane gets the store root the map reads (module-map indexRoot)', () => {

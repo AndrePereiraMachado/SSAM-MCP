@@ -202,7 +202,7 @@ public static class ExpressionRewrites
 
     /// <summary>Writes <paramref name="value"/> at <paramref name="pointer"/> (relative to the action) when the string there is
     /// exactly the expression read (a sort with its direction, for one, is not rewritten).</summary>
-    private static bool Write(JsonObject action, string pointer, string expected, string value)
+    internal static bool Write(JsonObject action, string pointer, string expected, string value)
     {
         var segments = pointer.Split('/', StringSplitOptions.RemoveEmptyEntries).Select(s => s.Replace("~1", "/").Replace("~0", "~")).ToArray();
         JsonNode? node = action;

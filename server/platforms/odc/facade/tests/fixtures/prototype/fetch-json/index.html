@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Library Catalog</title>
+</head>
+<body>
+  <main id="app"><p class="loading">Loading</p></main>
+  <script>
+    fetch('data/books.json').then(function (response) { return response.json(); }).then(function (data) {
+      document.getElementById('app').innerHTML = '<h1>Books</h1><table class="books"><tbody>' + data.Book.map(function (book) {
+        return '<tr class="book" data-id="' + book.Id + '"><td class="title">' + book.Title + '</td><td class="year">' + book.Year + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    });
+    fetch('https://api.example.com/stats').catch(function () { /* blocked in the capture */ });
+  </script>
+</body>
+</html>

@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Morada | Aluguel de imóveis</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="data.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/buscar" data-action="go" data-target="buscar">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/><path d="M10 19.5v-5h4v5"/></svg>
+      <span>Morada</span>
+    </a>
+    <nav class="mainnav" aria-label="Principal">
+      <a href="#/buscar" data-nav="buscar">Buscar</a>
+      <a href="#/favoritos" data-nav="favoritos">Favoritos <span class="count" id="fav-count">0</span></a>
+      <a href="#/propostas" data-nav="propostas">Minhas propostas</a>
+      <a href="#/anunciar" data-nav="anunciar">Anunciar</a>
+      <a href="#/painel" data-nav="painel">Painel do proprietário</a>
+    </nav>
+    <div class="account">
+      <span class="user-name" id="user-name">Visitante</span>
+      <button class="btn ghost" type="button" data-action="open-login" id="btn-login">Entrar</button>
+      <button class="btn ghost" type="button" data-action="logout" id="btn-logout" hidden>Sair</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Buscar -->
+    <section class="view" data-view="buscar" aria-labelledby="t-buscar">
+      <div class="page-head">
+        <h1 id="t-buscar">Encontre um imóvel para alugar</h1>
+        <p class="muted">Apartamentos, casas e studios com contrato direto com o proprietário.</p>
+      </div>
+      <form class="filters" id="filtros" data-action="filter" autocomplete="off">
+        <label>Cidade
+          <select name="cidade" id="f-cidade"></select>
+        </label>
+        <label>Tipo
+          <select name="tipo" id="f-tipo">
+            <option value="">Todos</option>
+            <option>Apartamento</option>
+            <option>Casa</option>
+            <option>Studio</option>
+            <option>Kitnet</option>
+          </select>
+        </label>
+        <label>Quartos (mín.)
+          <select name="quartos" id="f-quartos">
+            <option value="0">Qualquer</option>
+            <option value="1">1+</option>
+            <option value="2">2+</option>
+            <option value="3">3+</option>
+          </select>
+        </label>
+        <label>Aluguel até
+          <input type="number" name="precoMax" id="f-preco" min="0" step="100" placeholder="R$">
+        </label>
+        <label class="check"><input type="checkbox" name="mobiliado" id="f-mobiliado"> Mobiliado</label>
+        <label class="check"><input type="checkbox" name="pets" id="f-pets"> Aceita pets</label>
+        <button class="btn primary" type="submit">Filtrar</button>
+        <button class="btn ghost" type="button" data-action="clear-filters">Limpar</button>
+      </form>
+      <div class="results-head">
+        <p id="results-count" class="muted">0 imóveis</p>
+        <label class="inline">Ordenar por
+          <select id="ordenar" data-action="sort">
+            <option value="relevancia">Relevância</option>
+            <option value="menor">Menor aluguel</option>
+            <option value="maior">Maior aluguel</option>
+            <option value="area">Maior área</option>
+          </select>
+        </label>
+      </div>
+      <ul class="listing" id="lista-imoveis"></ul>
+      <div class="empty" id="lista-vazia" hidden>
+        <h2>Nenhum imóvel encontrado</h2>
+        <p class="muted">Ajuste os filtros ou limpe a busca.</p>
+      </div>
+    </section>
+
+    <!-- Imóvel -->
+    <section class="view" data-view="imovel" aria-labelledby="t-imovel">
+      <a class="back" href="#/buscar">← Voltar para a busca</a>
+      <div class="detail" id="detalhe">
+        <div class="detail-main">
+          <h1 id="t-imovel" data-bind="titulo">Imóvel</h1>
+          <p class="address">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+            <span data-bind="endereco"></span>
+          </p>
+          <figure class="gallery">
+            <img id="foto-principal" src="assets/casa-1.svg" alt="Foto principal do imóvel">
+            <div class="thumbs" id="miniaturas"></div>
+          </figure>
+          <h2>Características</h2>
+          <ul class="features" id="caracteristicas"></ul>
+          <h2>Descrição</h2>
+          <p data-bind="descricao"></p>
+        </div>
+        <aside class="detail-side">
+          <div class="price-box">
+            <table class="price-table">
+              <tbody>
+                <tr><th>Aluguel</th><td data-bind="aluguel"></td></tr>
+                <tr><th>Condomínio</th><td data-bind="condominio"></td></tr>
+                <tr><th>IPTU</th><td data-bind="iptu"></td></tr>
+                <tr class="total"><th>Total por mês</th><td data-bind="total"></td></tr>
+              </tbody>
+            </table>
+            <button class="btn primary block" type="button" data-action="open-visita">Agendar visita</button>
+            <button class="btn block" type="button" data-action="open-proposta">Fazer proposta</button>
+            <button class="btn ghost block fav-toggle" type="button" data-action="toggle-fav" id="btn-fav-detalhe">
+              <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>
+              <span>Favoritar</span>
+            </button>
+          </div>
+          <div class="owner-box">
+            <p class="muted">Anunciado por</p>
+            <p class="owner-name" data-bind="proprietario"></p>
+            <p class="muted small">Responde em média em <span data-bind="resposta"></span>.</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Favoritos -->
+    <section class="view" data-view="favoritos" aria-labelledby="t-favoritos">
+      <div class="page-head">
+        <h1 id="t-favoritos">Favoritos</h1>
+        <p class="muted">Imóveis que você salvou para comparar.</p>
+      </div>
+      <ul class="listing" id="lista-favoritos"></ul>
+      <div class="empty" id="favoritos-vazio" hidden>
+        <h2>Você ainda não salvou imóveis</h2>
+        <p class="muted">Use o botão de favoritar na busca ou no detalhe do imóvel.</p>
+        <a class="btn primary" href="#/buscar">Buscar imóveis</a>
+      </div>
+    </section>
+
+    <!-- Minhas propostas -->
+    <section class="view" data-view="propostas" aria-labelledby="t-propostas">
+      <div class="page-head">
+        <h1 id="t-propostas">Minhas propostas</h1>
+        <p class="muted">Acompanhe as propostas enviadas aos proprietários.</p>
+      </div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr><th>Imóvel</th><th>Valor proposto</th><th>Início</th><th>Prazo</th><th>Status</th><th>Enviada em</th><th></th></tr>
+          </thead>
+          <tbody id="tabela-propostas"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="propostas-vazio" hidden>
+        <h2>Nenhuma proposta enviada</h2>
+        <p class="muted">Abra um imóvel e use "Fazer proposta".</p>
+      </div>
+    </section>
+
+    <!-- Anunciar -->
+    <section class="view" data-view="anunciar" aria-labelledby="t-anunciar">
+      <div class="page-head">
+        <h1 id="t-anunciar">Anunciar imóvel</h1>
+        <p class="muted">Preencha os dados. O anúncio entra pausado até você ativar no painel.</p>
+      </div>
+      <form class="form-grid" id="form-anuncio" data-action="publish" novalidate>
+        <fieldset>
+          <legend>Imóvel</legend>
+          <label class="wide">Título do anúncio
+            <input name="titulo" required maxlength="80" placeholder="Ex.: Apartamento com varanda perto do metrô">
+          </label>
+          <label>Tipo
+            <select name="tipo" required>
+              <option>Apartamento</option><option>Casa</option><option>Studio</option><option>Kitnet</option>
+            </select>
+          </label>
+          <label>Quartos <input name="quartos" type="number" min="0" max="10" value="2" required></label>
+          <label>Banheiros <input name="banheiros" type="number" min="1" max="10" value="1" required></label>
+          <label>Vagas <input name="vagas" type="number" min="0" max="10" value="1"></label>
+          <label>Área (m²) <input name="area" type="number" min="10" max="2000" value="60" required></label>
+          <label class="check"><input type="checkbox" name="mobiliado"> Mobiliado</label>
+          <label class="check"><input type="checkbox" name="pets"> Aceita pets</label>
+        </fieldset>
+        <fieldset>
+          <legend>Endereço</legend>
+          <label>Cidade <select name="cidade" id="a-cidade" required></select></label>
+          <label>Bairro <input name="bairro" required></label>
+          <label class="wide">Endereço <input name="endereco" required placeholder="Rua, número"></label>
+        </fieldset>
+        <fieldset>
+          <legend>Valores mensais</legend>
+          <label>Aluguel (R$) <input name="aluguel" type="number" min="100" step="50" required></label>
+          <label>Condomínio (R$) <input name="condominio" type="number" min="0" step="10" value="0"></label>
+          <label>IPTU (R$) <input name="iptu" type="number" min="0" step="10" value="0"></label>
+        </fieldset>
+        <fieldset>
+          <legend>Apresentação</legend>
+          <label class="wide">Descrição <textarea name="descricao" rows="4" maxlength="600" required></textarea></label>
+          <label>Foto de capa
+            <select name="foto">
+              <option value="assets/casa-1.svg">Fachada clara</option>
+              <option value="assets/casa-2.svg">Prédio com varanda</option>
+              <option value="assets/casa-3.svg">Casa térrea</option>
+              <option value="assets/casa-4.svg">Studio compacto</option>
+            </select>
+          </label>
+        </fieldset>
+        <p class="form-error" id="anuncio-erro" role="alert" hidden></p>
+        <div class="form-actions">
+          <button class="btn ghost" type="reset">Limpar</button>
+          <button class="btn primary" type="submit">Salvar anúncio</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Painel do proprietário -->
+    <section class="view" data-view="painel" aria-labelledby="t-painel">
+      <div class="page-head">
+        <h1 id="t-painel">Painel do proprietário</h1>
+        <p class="muted">Seus anúncios e as propostas recebidas.</p>
+      </div>
+      <h2>Meus anúncios</h2>
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr><th>Anúncio</th><th>Aluguel</th><th>Status</th><th>Visualizações</th><th>Propostas</th><th></th></tr>
+          </thead>
+          <tbody id="tabela-anuncios"></tbody>
+        </table>
+      </div>
+      <h2>Propostas recebidas</h2>
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr><th>Imóvel</th><th>Interessado</th><th>Valor</th><th>Início</th><th>Status</th><th></th></tr>
+          </thead>
+          <tbody id="tabela-recebidas"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>Morada · protótipo navegável com dados fictícios · nenhum dado é enviado</p>
+  </footer>
+
+  <!-- Modais -->
+  <dialog id="dlg-login" aria-labelledby="dlg-login-t">
+    <form method="dialog" data-action="login">
+      <h2 id="dlg-login-t">Entrar</h2>
+      <p class="muted small">Simulação de sessão: escolha uma conta de demonstração.</p>
+      <label>Conta
+        <select name="usuario" id="login-usuario"></select>
+      </label>
+      <div class="dlg-actions">
+        <button class="btn ghost" value="cancel" formnovalidate>Cancelar</button>
+        <button class="btn primary" value="ok">Entrar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-visita" aria-labelledby="dlg-visita-t">
+    <form method="dialog" data-action="schedule">
+      <h2 id="dlg-visita-t">Agendar visita</h2>
+      <p class="muted small" data-bind="titulo"></p>
+      <label>Data <input type="date" name="data" required></label>
+      <label>Horário
+        <select name="horario">
+          <option>09:00</option><option>10:30</option><option>14:00</option><option>16:30</option><option>18:00</option>
+        </select>
+      </label>
+      <label>Mensagem ao proprietário <textarea name="mensagem" rows="3" maxlength="300"></textarea></label>
+      <div class="dlg-actions">
+        <button class="btn ghost" value="cancel" formnovalidate>Cancelar</button>
+        <button class="btn primary" value="ok">Confirmar visita</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-proposta" aria-labelledby="dlg-proposta-t">
+    <form method="dialog" data-action="propose">
+      <h2 id="dlg-proposta-t">Fazer proposta</h2>
+      <p class="muted small" data-bind="titulo"></p>
+      <label>Valor mensal proposto (R$) <input type="number" name="valor" min="100" step="50" required></label>
+      <label>Início do contrato <input type="date" name="inicio" required></label>
+      <label>Prazo
+        <select name="prazo">
+          <option value="12">12 meses</option><option value="24">24 meses</option><option value="30">30 meses</option>
+        </select>
+      </label>
+      <label>Mensagem <textarea name="mensagem" rows="3" maxlength="300"></textarea></label>
+      <div class="dlg-actions">
+        <button class="btn ghost" value="cancel" formnovalidate>Cancelar</button>
+        <button class="btn primary" value="ok">Enviar proposta</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-editar" aria-labelledby="dlg-editar-t">
+    <form method="dialog" data-action="save-listing">
+      <h2 id="dlg-editar-t">Editar anúncio</h2>
+      <input type="hidden" name="id">
+      <label>Título <input name="titulo" required maxlength="80"></label>
+      <label>Aluguel (R$) <input type="number" name="aluguel" min="100" step="50" required></label>
+      <label>Status
+        <select name="status"><option value="ativo">Ativo</option><option value="pausado">Pausado</option></select>
+      </label>
+      <div class="dlg-actions">
+        <button class="btn ghost" value="cancel" formnovalidate>Cancelar</button>
+        <button class="btn primary" value="ok">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-confirmar" aria-labelledby="dlg-confirmar-t">
+    <form method="dialog" data-action="confirm">
+      <h2 id="dlg-confirmar-t">Confirmar</h2>
+      <p id="confirmar-texto"></p>
+      <div class="dlg-actions">
+        <button class="btn ghost" value="cancel">Voltar</button>
+        <button class="btn danger" value="ok">Confirmar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+</body>
+</html>

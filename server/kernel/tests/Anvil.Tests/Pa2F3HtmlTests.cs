@@ -34,19 +34,22 @@ public sealed class Pa2F3HtmlTests
     // ---- the label, the icon-only button, the line break ---------------------------------------------------------------
 
     [Fact]
-    public void ALabelAroundElementsIsAContainerOfTheLabelAndThem()
+    public void ALabelAroundElementsIsAnHtmlElementLabelWithThem()
     {
-        // The Cardapio BackOffice was refused "<label> takes text, not child elements" twice (2026-10-06 13:32).
+        // The Cardapio BackOffice was refused "<label> takes text, not child elements" twice (2026-10-06 13:32). H6 of
+        // docs/PROTOTIPO-NATIVO.md (the one element-to-widget table): the label stays a label (tag label is in the list of both
+        // platforms), its text and its elements are its content in the order written, its class and its for its attributes.
         var ops = Ops("<div><label for=\"Tel\" class=\"field\">Telefone <span class=\"req\">*</span></label><input id=\"Tel\" bind=\"Telefone\"></div>");
-        var container = ops.Single(o => Is(o, "IContainer", "Label1"));
-        var alias = container["as"]!.ToString();
-        Assert.Contains(ops, o => o["target"]?.ToString() == alias && Sets(o, "Style", "\"field\""));
-        var label = ops.Single(o => Is(o, "ILabel"));
-        Assert.Equal(alias, label["parent"]!.ToString());
-        Assert.Contains(ops, o => o["target"]?.ToString() == label["as"] + "/#ITextWidget" && Sets(o, "Text", "Telefone"));
-        Assert.Contains(ops, o => Is(o, "IAdvancedHtml") && o["parent"]?.ToString() == alias);
-        var input = ops.Single(o => Is(o, "IInput", "Tel"))["as"]!.ToString();
-        Assert.Contains(ops, o => o["target"]?.ToString() == label["as"]!.ToString() && Sets(o, "TargetWidget", input));
+        var label = ops.Single(o => Is(o, "IAdvancedHtml", "Label1"));
+        var alias = label["as"]!.ToString();
+        Assert.Contains(ops, o => o["target"]?.ToString() == alias && Sets(o, "Tag", "label"));
+        Assert.DoesNotContain(ops, o => Is(o, "ILabel"));
+        Assert.Contains(ops, o => Is(o, "ITextWidget") && o["parent"]?.ToString() == alias + "/Content");
+        Assert.Contains(ops, o => Sets(o, "Text", "Telefone "));
+        Assert.Contains(ops, o => Is(o, "IAdvancedHtml", "Span1") && o["parent"]?.ToString() == alias + "/Content");
+        Assert.Contains(ops, o => Sets(o, "Property", "class")); Assert.Contains(ops, o => Sets(o, "Value", "\"field\""));
+        Assert.Contains(ops, o => Sets(o, "Property", "for")); Assert.Contains(ops, o => Sets(o, "Value", "\"Tel\""));
+        Assert.Single(ops, o => Is(o, "IInput", "Tel"));
     }
 
     [Fact]
@@ -95,7 +98,8 @@ public sealed class Pa2F3HtmlTests
         {
             ["op"] = "html", ["parent"] = "$screen",
             ["html"] = "<style>.pa2 { color: color-mix(in srgb, #ff0000 50%, #0000ff); }</style>"
-                + "<div class=\"pa2\"><table><tr><td>x</td></tr></table><i icon=\"star\"></i><input bind=\"X\" type=\"color\">"
+                // a static table compiles now (H9, the one table): a tag outside every list is what is refused
+                + "<div class=\"pa2\"><marquee>x</marquee><i icon=\"star\"></i><input bind=\"X\" type=\"color\">"
                 + "<div list=\"Items\"><span>x</span></div><label for=\"Ghost\">Ghost</label><div else></div></div>",
         };
         var ex = Assert.Throws<KernelRefusalException>(() => HtmlVisual.PreflightOp(op));

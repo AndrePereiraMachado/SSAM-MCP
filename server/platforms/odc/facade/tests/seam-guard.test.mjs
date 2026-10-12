@@ -26,9 +26,14 @@ const LOCAL = new Set(['facade/executor.mjs', 'facade/odc-pipe.mjs', 'facade/o11
   'facade/o11-lane.mjs', 'facade/reader-client.mjs', 'facade/anvil-worker.mjs', 'facade/service-center/vault.mjs', 'facade/service-center/bridge.mjs']);
 // The files of tools that are unavailable on a hosted server (hosted/tools.json class unavailable; the gate refuses before
 // their handler runs): the local preview of ssam_preview (16th release) talks to this machine's Studio pipes by design.
-const HOSTED_UNAVAILABLE_FILES = { 'facade/preview/': 'ssam_preview', 'portal/runtime/external-library-upload.mjs': 'odc_external_library' };
+// servidor/fase4-24: the debugger files (facade/debug-*.mjs) belong to ssam_debug and its siblings, all unavailable hosted.
+const HOSTED_UNAVAILABLE_FILES = { 'facade/preview/': 'ssam_preview', 'portal/runtime/external-library-upload.mjs': 'odc_external_library', 'facade/debug-': 'ssam_debug' };
 const hostedUnavailable = name => Object.keys(HOSTED_UNAVAILABLE_FILES).some(prefix => name.startsWith(prefix));
-const local = name => LOCAL.has(name) || /^facade\/debug-[^/]*\.mjs$/.test(name) || hostedUnavailable(name);
+// servidor/fase4-24 (R3): the handoff pipes of the private transports of the 24th release (a local pipe to a bridge on the
+// same machine). Each refuses in hosted mode before it connects (HOSTED_STUDIO_SESSION_ONLY): checked below.
+const HOSTED_REFUSED_PIPES = { 'facade/service-center/private-cookie-pipe.mjs': /if\(hostedContext\(\)\)throw hostedHandoffRefusal\(\);/,
+  'portal/runtime/private-session-pipe.mjs': /if \(hostedContext\(\)\) throw hostedHandoffRefusal\(\);/ };
+const local = name => LOCAL.has(name) || /^facade\/debug-[^/]*\.mjs$/.test(name) || hostedUnavailable(name) || Object.hasOwn(HOSTED_REFUSED_PIPES, name);
 const MACHINE = {
   'net.createConnection': /net\.createConnection/g,
   tasklist: /\btasklist\b/g,
@@ -55,6 +60,17 @@ for (const [label, pattern] of Object.entries(MACHINE)) {
   });
 }
 
+test('the private handoff pipes refuse in hosted mode before they connect, at the top of their only entry', () => {
+  for (const [name, guard] of Object.entries(HOSTED_REFUSED_PIPES)) {
+    const text = sources.find(s => s.name === name)?.text;
+    assert.ok(text, name + ' exists');
+    assert.match(text, guard, name + ': the hosted refusal');
+    assert.equal(count(text, /net\.createConnection/g), 1, name + ': one connect, as the default of its entry');
+    const guardAt = text.search(guard), connectAt = text.search(/export async function with\w+\(/);
+    assert.ok(connectAt >= 0 && guardAt > connectAt, name + ': the refusal is inside the entry that connects');
+  }
+});
+
 test('the executor seam is where the local transports are called', () => {
   const executor = sources.find(s => s.name === 'facade/executor.mjs').text;
   for (const pattern of [/\bpipeCall\b/, /\bbridgeRequest\b/, /Get-CimInstance/]) assert.match(executor, pattern);
@@ -77,9 +93,12 @@ test('credential prompt windows open only from the two openPrompt functions', ()
   // The prompt is a PowerShell -File of a credential script, detached in its own window.
   const inPrompt = { 'facade/lib.mjs': 1, 'facade/service-center/auth.mjs': 1 };
   const statusOnly = new Set(['portal/runtime/api-client-credential.mjs', 'portal/runtime/odc3-context.mjs']); // -NonInteractive status reads
+  // servidor/fase4-24: the private credential-profile selector of the 24th release (credential-profiles.mjs lists and
+  // launches scripts/credential-profiles.ps1) is the third -File site; both of its helpers refuse hosted before they start.
+  const selector = 'facade/credential-profiles.mjs';
   const files = hits(/'-File'/g);
   for (const [name, n] of Object.entries(files)) {
-    if (/^facade\/debug-[^/]*\.mjs$/.test(name) || statusOnly.has(name)) continue;
+    if (/^facade\/debug-[^/]*\.mjs$/.test(name) || statusOnly.has(name) || name === selector) continue;
     assert.equal(n, inPrompt[name], name + ' starts a PowerShell -File outside openPrompt');
     const lines = sources.find(s => s.name === name).text.split(/\r?\n/);
     const start = lines.findIndex(l => /^(export )?function openPrompt\(/.test(l));
@@ -90,6 +109,11 @@ test('credential prompt windows open only from the two openPrompt functions', ()
   for (const name of Object.keys(inPrompt)) assert.ok(files[name], name + ' still opens its prompt');
   // Each openPrompt refuses in hosted mode before anything opens.
   assert.match(sources.find(s => s.name === 'facade/lib.mjs').text, /function openPrompt\([^)]*\) \{\r?\n  ownerSecrets\(hostedPromptRefusal\);/);
+  assert.match(sources.find(s => s.name === 'facade/service-center/auth.mjs').text, /export function openPrompt\([^\n]*\) \{\r?\n  if \(hostedContext\(\)\) throw hostedNoPrompt\(/);
+  const selectorText = sources.find(s => s.name === selector)?.text ?? '';
+  assert.equal(files[selector], 1, selector + ': one -File, shared by its two helpers');
+  assert.match(selectorText, /function nativeList\(context\) \{\r?\n  if \(hostedContext\(\)\) return Promise\.reject\(hostedError\(\)\);/, selector + ': list refuses hosted');
+  assert.match(selectorText, /async function nativeOpen\([^)]*\) \{\r?\n  if \(hostedContext\(\)\) throw hostedError\(\);/, selector + ': the selector refuses hosted');
 });
 
 test('the Portal runtime keeps its HTTP, vault helpers and Cognito login in today\'s modules', () => {
@@ -99,8 +123,12 @@ test('the Portal runtime keeps its HTTP, vault helpers and Cognito login in toda
   assert.deepEqual(Object.keys(hits(/windowsApiClientCredential|portalVault|resolvePublicApiEnvironment|CredRead/g, runtime)).sort(),
     ['portal/runtime/api-client-credential.mjs', 'portal/runtime/odc3-context.mjs', 'portal/runtime/odc3-host.mjs']);
   assert.deepEqual(Object.keys(hits(/cognito-login|cognitoLogin/g, runtime)).sort(), ['portal/runtime/cognito-login.mjs', 'portal/runtime/odc3-context.mjs']);
-  // The facade reaches the vault helpers only from lib.mjs (refused hosted) and the Service Center's own vault module.
-  assert.deepEqual(Object.keys(hits(/windowsApiClientCredential|portalVault/g, sources.filter(s => s.name.startsWith('facade/')))).sort(), ['facade/lib.mjs']);
+  // The facade reaches the vault helpers only from lib.mjs (refused hosted) and the Service Center's own vault module;
+  // the debugger files of the hosted-unavailable tools are left out (servidor/fase4-24: debug-odc-portal.mjs).
+  assert.deepEqual(Object.keys(hits(/windowsApiClientCredential|portalVault/g, sources.filter(s => s.name.startsWith('facade/') && !hostedUnavailable(s.name)))).sort(), ['facade/lib.mjs']);
+  // odc3-context.mjs (the Portal account of the server and its direct HTTPS) refuses hosted in its vault, broker and host context.
+  const odc3 = sources.find(s => s.name === 'portal/runtime/odc3-context.mjs').text;
+  assert.ok(count(odc3, /^\s*hostedDirect\(\);/gm) >= 4, 'odc3-context.mjs: hostedDirect() in portalVault, the broker, its request and the host context');
 });
 
 // The exceptions above hold only while their tools stay unavailable on a hosted server: the gate refuses those tools

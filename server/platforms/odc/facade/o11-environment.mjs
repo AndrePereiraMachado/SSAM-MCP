@@ -30,7 +30,7 @@ const FIELDS = {
   inventory: { required: [], optional: ['host', 'filter'] },
   download: { required: ['module'], optional: ['version', 'host', 'out'] },
   'download-app': { required: ['apps'], optional: ['host', 'out'] },
-  templates: { required: [], optional: ['host'] },
+  templates: { required: [], optional: ['host', 'refresh'] },
   referenceable: { required: [], optional: ['host', 'filter'] },
   references: { required: ['oml'], optional: [] },
   'create-app': { required: ['name', 'modules'], optional: ['kind', 'templateKey', 'template', 'color', 'blank', 'host'] },
@@ -45,6 +45,17 @@ const LIST_CAP = 100;
 const TIMEOUTS = { read: 600000, 'download-app': 1800000, write: 1800000 };
 // Bridge transport failures (BridgeClient: IOException "execution outcome may be unknown", socket and read timeouts).
 const LOST_ANSWER = /outcome may be unknown|\b(?:IOException|SocketException|TimeoutException)\b|timed out/i;
+// The network between the Studio's PC and the OutSystems environment (Anvil.Core EnvironmentNetwork, code
+// ENVIRONMENT_UNREACHABLE; an older kernel answers the bare text). The kernel already asked a failed read once more.
+const NETWORK = /\b(?:CommunicationException|HttpRequestException|SocketException|EndpointNotFoundException|WebException)\b|An error occurred while sending the request|No such host is known/i;
+export const UNREACHABLE = 'ENVIRONMENT_UNREACHABLE';
+// Templates per environment (speed lane vel-entrega): <lane.local>/environment/templates/<host>.json {host, at, templates}
+// (the CLI's own TemplateSummary rows), written by every templates read. A templates read WITH host answers from it while
+// it is younger than TEMPLATES_TTL_MS (cached:true; refresh:true reads the server); create-app without templateKey passes it
+// to the CLI (--templates), which uses it only when it is of the environment it connected to and holds the kind asked.
+export const TEMPLATES_TTL_MS = 24 * 3600 * 1000;
+export const templatesCache = local => path.join(local, 'environment', 'templates');
+const hostFile = host => String(host).toLowerCase().replace(/[^a-z0-9.-]/g, '_') + '.json';
 
 const reply = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, ...(value.ok === false ? { isError: true } : {}) });
 const sha256 = text => createHash('sha256').update(text, 'utf8').digest('hex');
@@ -123,19 +134,111 @@ const specs = modules => modules.map(m => m.name + ':' + m.kind).join(',');
 // the CLI resolves the version first (the requested one, else the published one) and downloads a version only once; the
 // file always lands in the call's own folder, copied from the cache.
 export const publishedCache = local => path.join(local, 'environment', 'published');
-export function environmentArguments(input, { out, work, cache } = {}) {
+
+// ---- templates cache (vel-entrega): see TEMPLATES_TTL_MS ----------------------------------------------------------------
+export function writeTemplatesCache(local, host, rows, now = new Date()) {
+  try {
+    if (typeof host !== 'string' || !host.trim() || !Array.isArray(rows) || !rows.length) return null;
+    const file = path.join(templatesCache(local), hostFile(host));
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const temporary = file + '.' + randomUUID().slice(0, 8) + '.tmp';
+    fs.writeFileSync(temporary, JSON.stringify({ host: host.toLowerCase(), at: now.toISOString(), templates: rows }));
+    fs.renameSync(temporary, file);
+    return file;
+  } catch { return null; }
+}
+// {file, host, at, templates} of a host's cache younger than the TTL (or, without host, the newest fresh cache: the CLI
+// checks its host before using it); null otherwise.
+export function readTemplatesCache(local, host, now = new Date()) {
+  const dir = templatesCache(local);
+  let files = [];
+  try { files = host ? [hostFile(host)] : fs.readdirSync(dir).filter(name => name.endsWith('.json')); } catch { return null; }
+  const fresh = files.map(name => {
+    try {
+      const file = path.join(dir, name);
+      const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const age = now.getTime() - Date.parse(value.at);
+      return Array.isArray(value.templates) && value.templates.length && typeof value.host === 'string' && age >= 0 && age < TEMPLATES_TTL_MS ? { file, ...value } : null;
+    } catch { return null; }
+  }).filter(Boolean).sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  return fresh[0] ?? null;
+}
+
+// ---- the cached inventory after a creation (vel-entrega) ------------------------------------------------------------------
+// The newest inventory.json of a host under <lane.local>/environment/inventory (o11-studio.mjs readInventory reads the same
+// folders, newest first).
+function newestInventory(local, host) {
+  const base = path.join(local, 'environment', 'inventory');
+  let folders = [];
+  try { folders = fs.readdirSync(base, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name).sort().reverse(); } catch { return null; }
+  for (const folder of folders) {
+    const file = path.join(base, folder, 'inventory.json');
+    try {
+      const data = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''));
+      if (String(get(data, 'host') ?? '').toLowerCase() === String(host).toLowerCase()) return { file, data };
+    } catch { /* next */ }
+  }
+  return null;
+}
+// After create-app / add-modules answered ok: a new inventory folder (<time>-created) with the newest inventory of that
+// environment plus the application and the modules just created, so o11_studio open-module finds them without reading the
+// environment again (lentidão 2026-10-12: MODULE_NOT_FOUND from an inventory read before the creation). Marked
+// derivedFrom/addedBy; the file of the answer, or null (no inventory of that host yet: nothing to complete).
+export function addCreatedToInventory(local, { host, app, appKey = null, modules = [], action = 'create-app', now = new Date() } = {}) {
+  try {
+    if (typeof host !== 'string' || !host || !Array.isArray(modules) || !modules.length) return null;
+    const newest = newestInventory(local, host);
+    if (!newest) return null;
+    const data = structuredClone(newest.data);
+    const list = Array.isArray(data.modules) ? data.modules : (data.modules = []);
+    const apps = Array.isArray(data.applications) ? data.applications : (data.applications = []);
+    if (app && !apps.some(a => get(a, 'Name') === app || (appKey && get(a, 'Key') === appKey))) apps.push({ Name: app, Key: appKey });
+    let added = 0;
+    for (const m of modules) {
+      if (!m?.name || list.some(x => (m.key && get(x, 'Key') === m.key) || String(get(x, 'Name') ?? '').toLowerCase() === m.name.toLowerCase())) continue;
+      list.push({ Name: m.name, Key: m.key ?? null, Kind: 'eSpace', ApplicationName: app ?? null, ApplicationKey: appKey });
+      added++;
+    }
+    if (!added) return null;
+    const previous = Date.parse(get(data, 'capturedAtUtc') ?? '');
+    data.capturedAtUtc = (Number.isFinite(previous) && previous > now.getTime() ? new Date(previous) : now).toISOString();
+    data.derivedFrom = newest.file; data.addedBy = action;
+    // Named after the newer of now and the inventory it completes, so it is the newest inventory of the host.
+    const baseName = path.basename(path.dirname(newest.file)), stamp = timeStamp(now);
+    const folder = uniqueFolder(path.join(local, 'environment', 'inventory'), (baseName > stamp ? baseName : stamp) + '-created');
+    const file = path.join(folder, 'inventory.json');
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+    return file;
+  } catch { return null; }
+}
+// The time of the newest create-app, add-modules or create-module that answered ok (the o11_environment journal), or null.
+export const CREATING = ['create-app', 'add-modules', 'create-module'];
+export function lastModuleCreation(local) {
+  let text = '';
+  try { text = fs.readFileSync(path.join(local, 'journal', 'o11_environment.jsonl'), 'utf8'); } catch { return null; }
+  const lines = text.trim().split('\n').slice(-500).reverse();
+  for (const line of lines) {
+    try { const entry = JSON.parse(line); if (entry.phase === 'result' && entry.outcome === 'ok' && CREATING.includes(entry.action)) return entry.at ?? null; } catch { /* next */ }
+  }
+  return null;
+}
+export function environmentArguments(input, { out, work, cache, withHost, templates } = {}) {
   const i = input; const host = args => opt(args, '--host', i.host);
   switch (i.action) {
     case 'inventory': return [...host(['inventory', '--out', out]), '--read-only'];
     case 'download': return [...host(opt(opt(['download', '--module', i.module, '--out', out], '--version', i.version), '--cache', cache)), '--read-only'];
     case 'download-app': return [...host(['download-app', '--app', i.apps.join(','), '--out', out]), '--read-only'];
-    case 'templates': return [...host(['templates']), '--read-only'];
+    // --with-host: {host, templates}, for the templates cache of that environment
+    case 'templates': return [...host(on(['templates'], '--with-host', withHost)), '--read-only'];
     case 'referenceable': return [...host(['referenceable']), '--read-only'];
     case 'references': return ['references', '--oml', i.oml, '--work', work];
     case 'create-app': {
       const args = ['create-app', '--name', i.name, '--modules', specs(i.modules), '--out', out];
       opt(args, '--kind', i.kind); opt(args, '--template-key', i.templateKey); opt(args, '--template', i.template);
-      opt(args, '--color', i.color); on(args, '--blank', i.blank); return host(args);
+      opt(args, '--color', i.color); on(args, '--blank', i.blank);
+      // the templates cache: the CLI picks the template of the kind from it without an environment call (only its own host)
+      if (i.templateKey === undefined) opt(args, '--templates', templates);
+      return host(args);
     }
     case 'add-modules': return host(on(opt(['add-modules', '--app', i.app, '--modules', specs(i.modules), '--out', out], '--template-key', i.templateKey), '--blank', i.blank));
     case 'create-module': {
@@ -183,8 +286,12 @@ function shapeRead(i, data, { out }) {
       return failed.length || !files.length ? refusal('DOWNLOAD_FAILED', failed.length ? `${failed.length} module(s) not downloaded` : 'no module downloaded',
         inventoryRead(i.host, 'check the application names'), value) : { ok: true, ...value };
     }
-    case 'templates':
-      return { ok: true, templates: (Array.isArray(data) ? data : []).map(t => ({ key: get(t, 'Key'), label: get(t, 'Label'), kind: get(t, 'ApplicationKind') })) };
+    case 'templates': {
+      // --with-host answers {host, templates}; an older CLI the bare list
+      const rows = Array.isArray(data) ? data : Array.isArray(get(data, 'templates')) ? get(data, 'templates') : [];
+      const host = Array.isArray(data) ? null : get(data, 'host') ?? null;
+      return { ok: true, ...(host ? { host } : {}), templates: rows.map(t => ({ key: get(t, 'Key'), label: get(t, 'Label'), kind: get(t, 'ApplicationKind') })) };
+    }
     case 'referenceable': {
       const all = Array.isArray(data) ? data : [];
       const file = path.join(out, 'referenceable.json');
@@ -235,7 +342,8 @@ function shapeWrite(i, data, { out, operationId, at }) {
       const modules = get(data, 'Modules') ?? [];
       const templates = moduleTemplates(modules);
       if (get(data, 'Succeeded') === true)
-        return { ok: true, app: get(data, 'ApplicationName'), key: get(data, 'ApplicationKey'), modules: modules.map(m => ({ name: get(m, 'Name'), key: get(m, 'Key') })), ...templates };
+        return { ok: true, app: get(data, 'ApplicationName'), key: get(data, 'ApplicationKey'), modules: modules.map(m => ({ name: get(m, 'Name'), key: get(m, 'Key') })), ...templates,
+          ...(get(data, 'Host') ? { host: get(data, 'Host') } : {}) };
       return failed('CREATE_APP_FAILED', get(data, 'ApplicationOk') === false ? firstLine(get(data, 'ApplicationMessage')) || 'application not saved' : 'module creation failed',
         { app: get(data, 'ApplicationName') ?? i.name, key: get(data, 'ApplicationKey'), modules: moduleFailures(modules), ...templates });
     }
@@ -243,7 +351,8 @@ function shapeWrite(i, data, { out, operationId, at }) {
       const modules = get(data, 'modules') ?? [];
       const templates = moduleTemplates(modules);
       if (get(data, 'succeeded') === true)
-        return { ok: true, app: get(get(data, 'application'), 'Name') ?? i.app, modules: modules.map(m => ({ name: get(m, 'Name'), key: get(m, 'Key'), ...(get(m, 'Skipped') ? { existed: true } : {}) })), ...templates };
+        return { ok: true, app: get(get(data, 'application'), 'Name') ?? i.app, modules: modules.map(m => ({ name: get(m, 'Name'), key: get(m, 'Key'), ...(get(m, 'Skipped') ? { existed: true } : {}) })), ...templates,
+          ...(get(data, 'host') ? { host: get(data, 'host') } : {}) };
       return failed('ADD_MODULES_FAILED', 'module creation failed', { app: i.app, modules: moduleFailures(modules), ...templates });
     }
     case 'create-module': {
@@ -280,8 +389,28 @@ function shapeWrite(i, data, { out, operationId, at }) {
   }
 }
 
+// The Studio could not reach the OutSystems environment: a read (already asked twice by the kernel when it may be) can be
+// asked again once the network of the Studio's PC answers; a write may or may not have reached the server (never repeated:
+// read the environment first).
+function unreachable(i, envelope) {
+  const write = isWrite(i.action);
+  return { ok: false, code: UNREACHABLE, ...(write ? { outcome: 'uncertain' } : {}),
+    error: 'The Service Studio could not reach the OutSystems environment' + (i.host ? ' ' + i.host : '') + ' (the network of the Studio\'s PC, not SSAM): '
+      + firstLine(envelope.error) + (write ? '. The write may or may not have reached the server; it is not repeated.' : ''),
+    network: { repeated: envelope.cut?.repeated === true || /asked twice/.test(String(envelope.error ?? '')) },
+    continuation: write ? inventoryRead(i.host, 'read the environment to see whether it was applied; never repeat before that')
+      : { tool: 'o11_environment', arguments: withoutKeys(i, ['authorize']), why: 'a read: ask it again once the network of the Studio\'s PC answers (the Studio reaches the environment, not the SSAM server)' } };
+}
+
 function interpret(i, run, context) {
   const envelope = run.envelope;
+  // Only a failure the Studio answered for an environment call (environment_session: ...); a socket error of the local
+  // bridge connection is the bridge, not the environment, and keeps its own answer below.
+  const failure = String(envelope?.error ?? '');
+  // servidor/fase4-24: ENVIRONMENT_CALL_CUT (prazos, the typed cut of a read) is the same failure here: one answer.
+  if (envelope?.ok === false && envelope.data === undefined && (envelope.code === UNREACHABLE || envelope.code === 'ENVIRONMENT_CALL_CUT'
+    || (/environment_session:/.test(failure) && NETWORK.test(failure))))
+    return unreachable(i, envelope);
   if (isWrite(i.action)) {
     const lost = run.timedOut || !envelope || (envelope.ok === false && envelope.data === undefined && LOST_ANSWER.test(String(envelope.error ?? '')));
     if (lost) return { ok: false, code: 'UNCERTAIN', outcome: 'uncertain',
@@ -331,6 +460,21 @@ export async function downloadModule({ module, host, version } = {},
     { timeoutMs: TIMEOUTS.read, cwd: root });
   const value = interpret(input, run, { out: folder });
   return value.ok ? { ...value, folder } : value;
+}
+
+// vel-entrega: one inventory read, the same CLI call and folder as o11_environment {action:"inventory"}, for o11_studio
+// open-module when a name is missing from an inventory older than the last creation (o11-studio.mjs resolveModuleName).
+// The shaped answer, or a refusal; never throws.
+export async function refreshInventory({ host } = {}, { root = anvilRoot, lane = o11Lane.lane, env = process.env, runAnvil, assertSelected, now } = {}) {
+  try {
+    const input = { action: 'inventory', ...(host ? { host } : {}) };
+    const laneInfo = o11LaneOf(lane, { root, env });
+    if (!fs.existsSync(laneInfo.cli)) return refusal('CLI_NOT_BUILT', 'The O11 Anvil CLI is not built for this lane', { tool: 'ssam_doctor', arguments: { lane: 'o11' }, why: 'the doctor reports the CLI build of each lane' });
+    await (assertSelected ?? assertSelectedO11)();
+    const folder = uniqueFolder(path.join(laneInfo.local, 'environment', 'inventory'), timeStamp((now ?? (() => new Date()))()));
+    const run = await (runAnvil ?? createAnvilRunner({ lane, root, env }))(environmentArguments(input, { out: folder }), { timeoutMs: TIMEOUTS.read, cwd: root });
+    return interpret(input, run, { out: folder });
+  } catch (error) { return refusal('INVENTORY_FAILED', firstLine(error?.message), inventoryRead(host, 'read the environment')); }
 }
 
 export function registerO11Environment(server, deps = {}) {
@@ -391,10 +535,23 @@ export function registerO11Environment(server, deps = {}) {
     let folder = null;
     if (input.out) fs.mkdirSync(folder = input.out, { recursive: true });
     else if (needsFolder(input.action)) folder = uniqueFolder(path.join(lane().local, 'environment', input.action), stamp);
-    const context = { out: folder, work: folder && path.join(folder, 'work'), ...(input.action === 'download' ? { cache: publishedCache(lane().local) } : {}) };
+    const local = lane().local;
+    // vel-entrega: templates of a named environment come from its cache while it is fresh (refresh:true reads the server).
+    if (input.action === 'templates' && input.host && input.refresh !== true) {
+      const cached = readTemplatesCache(local, input.host, now());
+      if (cached) return { ...shapeRead(input, { host: cached.host, templates: cached.templates }, {}), cached: true, at: cached.at };
+    }
+    const context = { out: folder, work: folder && path.join(folder, 'work'), ...(input.action === 'download' ? { cache: publishedCache(local) } : {}),
+      ...(input.action === 'templates' ? { withHost: true } : {}),
+      ...(input.action === 'create-app' ? { templates: readTemplatesCache(local, input.host ?? null, now())?.file } : {}) };
     const argv = environmentArguments(input, context);
     const timeoutMs = deps.timeoutMs ?? (isWrite(input.action) ? TIMEOUTS.write : TIMEOUTS[input.action] ?? TIMEOUTS.read);
-    if (!isWrite(input.action)) return interpret(input, await runAnvil(argv, { timeoutMs, cwd: root }), context);
+    if (!isWrite(input.action)) {
+      const run = await runAnvil(argv, { timeoutMs, cwd: root });
+      const data = run?.envelope?.ok === true ? run.envelope.data : undefined;
+      if (input.action === 'templates' && data && !Array.isArray(data)) writeTemplatesCache(local, get(data, 'host'), get(data, 'templates'), now());
+      return interpret(input, run, context);
+    }
 
     const operationId = uuid();
     const record = { action: input.action, target: target(input), operationId, wordsSha256: sha256(input.authorize) };
@@ -405,6 +562,13 @@ export function registerO11Environment(server, deps = {}) {
     // A publication of the call keeps its server version on the journal line of the same operationId.
     journal({ ...record, phase: 'result', outcome: value.ok ? 'ok' : value.outcome ?? 'failed', ...(value.code ? { code: value.code } : {}),
       ...(value.publication?.version != null ? { publishedVersion: value.publication.version, publishedAt: value.publication.at } : {}) });
+    // vel-entrega: the modules just created go into the cached inventory of their environment (o11_studio open-module).
+    if (value.ok === true && CREATING.includes(input.action)) {
+      const created = input.action === 'create-module' ? [{ name: value.module, key: value.key }] : value.modules ?? [];
+      const file = addCreatedToInventory(local, { host: value.host ?? input.host, app: input.action === 'create-app' ? value.app : input.app,
+        appKey: input.action === 'create-app' ? value.key ?? null : null, modules: created.filter(m => !m.existed), action: input.action, now: now() });
+      if (file) value = { ...value, inventory: file };
+    }
     return value;
   }
 
@@ -414,9 +578,10 @@ export function registerO11Environment(server, deps = {}) {
     title: 'O11 environment: inventory, downloads, applications and modules',
     description: 'The O11 environment through the Service Studio already logged in on the O11 lane (SSO included); never a credential. '
       + 'Reads (no words): inventory {filter?} (applications and modules; full list in inventory.json), download {module, version?} '
-      + '(OML of the published version, or versionId; each version is downloaded once, cached:true reuses it), download-app {apps}, templates, referenceable {filter?} (producers), '
+      + '(OML of the published version, or versionId; each version is downloaded once, cached:true reuses it), download-app {apps}, templates {host?, refresh?} (with host, from its cache of the last 24 h: cached:true), referenceable {filter?} (producers), '
       + 'references {oml} (offline: what an OML consumes). Writes need authorize = the user\'s literal words (only their sha256 is '
-      + 'journaled): create-app {name, modules:[{name, kind}], kind?, templateKey?, template?, color?, blank?} (blank: Service/Library only; '
+      + 'journaled): create-app {name, modules:[{name, kind}], kind?, templateKey?, template?, color?, blank?} (it checks the names and picks the template of its kind itself: '
+      + 'no inventory or templates read before it; the modules created go into the cached inventory, so o11_studio open-module finds them; blank: Service/Library only; '
       + 'the answer lists templates [{module, template, layoutBlank, content}]), add-modules '
       + '{app, modules, templateKey?, blank?}, create-module {app, name, replace?, templateKey?, description?, noPublish?}, '
       + 'update-app {name, color?, description?}, refresh-refs {module, all?, publish?} (validation after the refresh; publish goes '
@@ -425,7 +590,8 @@ export function registerO11Environment(server, deps = {}) {
       + 'providerKey?}, delete-app {app} (the Service Center delete in one call: the server\'s simulation and the consumers first; the '
       + 'words name the application and every consumer outside it; DELETE_REFUSED lists every problem). host picks among the '
       + 'environments the Studio is logged in to. Files go to <lane>/environment/<action>/<time> unless out is given. An uncertain '
-      + 'write is never repeated: read inventory first.',
+      + 'write is never repeated: read inventory first. ENVIRONMENT_UNREACHABLE: the Studio could not reach the environment (the network of '
+      + 'the Studio PC); a read was already asked again once, a write is uncertain.',
     inputSchema: z.object({
       action: z.enum(ACTIONS),
       module: text('Module name or key (download, refresh-refs, set-user-provider)').optional(),
@@ -450,6 +616,7 @@ export function registerO11Environment(server, deps = {}) {
       host: text('Environment host; only selects among the environments the Studio is logged in to').optional(),
       out: text('download/download-app: absolute output folder').optional(),
       filter: text('inventory/referenceable: substring of the names to list').optional(),
+      refresh: z.boolean().describe('templates: read the server even when the templates of host are cached').optional(),
       authorize: z.string().describe('Writes: the user\'s literal words; only their sha256 is kept').optional(),
     }).strict(),
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },

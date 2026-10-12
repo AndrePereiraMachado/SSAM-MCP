@@ -195,6 +195,35 @@ public sealed class Pa2F1WarningTests
     }
 
     [Fact]
+    public void ADataUrlOrBase64RunInADetailIsCutWithItsSizeSoTheSentenceAfterItIsRead()
+    {
+        // FarmaVirtual session (2026-10-10, calls 105 and 168): each InvalidResourceURL_Offline quoted its data: URL whole, so the
+        // detail cut at 200 characters ended inside the URL and never said what was wrong. One of the 34 of call 105.
+        const string url = "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22"
+            + "%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.7%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%2212%22"
+            + "%20cy%3D%2212%22%20r%3D%2210%22%2F%3E%3Cpath%20d%3D%22M12%2016v-4%22%2F%3E%3Cpath%20d%3D%22M12%208h.01%22%2F%3E%3C%2Fsvg%3E";
+        const string png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg";
+        const string path = "Theme/Resources/Images/Icons2024/Navigation/ArrowLeftCircle/Variants/Outline24/DarkMode/Final3/Large";
+        const string slashed = "R0lGODlhAQABAIAAAP/AAAAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw/Zm9vYmFyMTIzNDU2Nzg5MEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFla==";
+        var verdicts = new JsonArray(
+            new JsonObject { ["id"] = "InvalidResourceURL_Offline", ["path"] = "Haiku_UI (ESpace) / Haiku_UI (MobileTheme) / WebStyleSheet", ["ownerKey"] = "EHWy15q2lEymE4eJ_Th8yQ.#StyleSheet",
+                ["verdict"] = "nonblocking", ["detail"] = "Offline Behavior | The url '" + url + "' will not be cached for offline usage. Consider adding this resource to the module and use it in the stylesheet instead." },
+            new JsonObject { ["id"] = "ImageTooBig", ["path"] = "M / Logo (Image)", ["verdict"] = "nonblocking", ["detail"] = "Image 'Logo' " + png + png + " is big" },
+            new JsonObject { ["id"] = "InvalidResourceURL_Offline", ["path"] = "M / T", ["verdict"] = "nonblocking", ["detail"] = "The url 'data:,x' stays" },
+            // A slash path has mixed case and digits too, but never a "+" or the "=" padding: it is not base64 and stays whole.
+            new JsonObject { ["id"] = "UnusedResource", ["path"] = "M / R", ["verdict"] = "nonblocking", ["detail"] = "The resource " + path + " is unused" },
+            new JsonObject { ["id"] = "ImageTooBig", ["path"] = "M / Icon (Image)", ["verdict"] = "nonblocking", ["detail"] = "Icon " + slashed + " is big" });
+        var warnings = VerifyHints.Warnings(verdicts, new Dictionary<string, VerifyHint>());
+        Assert.Equal(435, url.Length);
+        Assert.Equal("Offline Behavior | The url 'data:image/svg+xml,…(435 chars)' will not be cached for offline usage. Consider adding this resource to the module and use it in the stylesheet instead.",
+            warnings[0]!["detail"]!.ToString());
+        Assert.Equal("Image 'Logo' iVBORw0KGgoA…(" + (2 * png.Length) + " chars) is big", warnings[1]!["detail"]!.ToString());
+        Assert.Equal("The url 'data:,x' stays", warnings[2]!["detail"]!.ToString());
+        Assert.Equal("The resource " + path + " is unused", warnings[3]!["detail"]!.ToString());
+        Assert.Equal("Icon R0lGODlhAQAB…(" + slashed.Length + " chars) is big", warnings[4]!["detail"]!.ToString());
+    }
+
+    [Fact]
     public void ADeliveryWithOnlyWarningsIsDeliveredWithItsWarnings()
     {
         // Foreseen by the apply (nonblocking) and one the live Verify adds that the apply did not foresee.

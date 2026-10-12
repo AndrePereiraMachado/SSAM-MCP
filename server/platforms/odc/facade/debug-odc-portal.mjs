@@ -58,14 +58,29 @@ export function assetKeyOf(moduleKey) {
   return `${le(hex.slice(0, 8))}-${le(hex.slice(8, 12))}-${le(hex.slice(12, 16))}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-export async function connect(host) {
-  const lib = await import('./lib.mjs'), m = await lib.portal();
-  const { host: key, tenant } = lib.tenantOf(host);
-  const { bridge } = await lib.portalBridge(key, tenant);
-  const writer = new m.OdcBridge({ config: { ...bridge.config, allowedWriteOperations: new Set(WRITES) } });
+export async function connect(host, { services = {} } = {}) {
+  const lib = services.lib ?? await import('./lib.mjs'), m = await lib.portal();
+  const { explicitDebugTenant, OdcStudioSessionAuth } = await import('./debug-odc-portal-session.mjs');
+  const { host: key, tenant } = explicitDebugTenant(host, lib.tenantOf);
+  // Distinguish a missing entry from an inaccessible vault. The general facade's
+  // diagnostic status intentionally coalesces those cases; execution must not.
+  const credential = await (services.credentialStatus ?? (origin => m.windowsApiClientCredential('status', origin)))(tenant.portalOrigin);
+  if (typeof credential?.available !== 'boolean') throw new Error('debug_odc_session_api_client_status_unavailable');
+  const configured = await lib.portalBridge(key, tenant, { requireCredential: false });
+  if (configured.credentialAvailable !== credential.available) throw new Error('debug_odc_session_api_client_status_changed');
+  const nativeSession = credential.available === false;
+  // A configured API Client remains authoritative, including 401/403. Never
+  // switch identity because its token or permissions were refused.
+  const auth = nativeSession ? new OdcStudioSessionAuth({ host: key,
+    acquire: services.getNativeSession ?? (async input => (await import('./debug-odc-session.mjs')).getOdcNativeSession(input)) }) : configured.bridge.auth;
+  const bridge = nativeSession ? new m.OdcBridge({ config: { ...configured.bridge.config, allowedWriteOperations: new Set() }, auth }) : configured.bridge;
+  const writer = new m.OdcBridge({ config: { ...bridge.config, allowedWriteOperations: new Set(nativeSession ? [] : WRITES) }, auth });
   const origin = bridge.config.origin;
   // Signed links (source download, upload) are redacted by the generic bridge on purpose; these two calls go direct.
   async function direct(method, url, { body, headers = {}, json = true } = {}) {
+    const destination = new URL(url);
+    if (destination.origin !== origin || destination.username || destination.password || destination.hash) throw new Error('debug_portal_direct_origin_mismatch');
+    if (nativeSession && method !== 'GET') throw new Error('debug_odc_session_native_write_unavailable');
     const token = await bridge.auth.getToken();
     const response = await fetch(url, { method, headers: { accept: 'application/json', authorization: 'Bearer ' + token, ...headers }, body, redirect: 'error', signal: AbortSignal.timeout(60_000) });
     const text = await response.text();
@@ -81,7 +96,17 @@ export async function connect(host) {
     const r = await writer.execute(operationId, input, 'write');
     return r; // the caller decides: !ok with a status is a definite refusal; a thrown/timeout result is uncertain
   };
-  return { host: key, tenant, origin, bridge, read, write, direct };
+  const readApplication = async moduleKey => {
+    if (!/^[A-Za-z0-9_+]{22}$/.test(moduleKey ?? '')) throw new Error('debug_odc_session_application_key_invalid');
+    if (nativeSession) await auth.getToken();
+    const authority = nativeSession ? auth.nativeAuthority() : null;
+    const reply = await (services.getNativeSession ?? (async input => (await import('./debug-odc-session.mjs')).getOdcNativeSession(input)))({
+      host: key, moduleKey, includeToken: false, ...(authority ? { pid: authority.binding.pid, expectedBinding: authority.binding } : {}) });
+    if (reply?.metadata?.host !== key || reply.metadata.moduleKey !== moduleKey ||
+        authority && reply.metadata.developerKey?.toLowerCase() !== authority.developerKey) throw new Error('debug_odc_session_application_binding_changed');
+    return reply.metadata;
+  };
+  return { host: key, tenant, origin, bridge, read, write, direct, nativeSession, readApplication };
 }
 
 export async function latestRevision(portal, assetKey) {

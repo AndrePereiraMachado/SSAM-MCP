@@ -96,6 +96,7 @@ Tudo aqui roda na máquina do dono. O "cliente de teste" é uma pasta nesta mesm
   Esperado: uma linha por verbo; `loadErrors: []` e `transport: []`; `skipped` só `open_module`, `publish`, `close_module`.
   Recusa do próprio verbo conta como prova (`merge_from_oml` e `close_dialog` recusam de propósito).
   `refresh_references` (nona entrega) vai com uma chave de produtor que não existe: roda e não atualiza nada.
+  `sc_web` e `sc_http` (24º) leem só o status pela sessão do Studio, sem abrir janela.
   Se falhar: `load-error` (TypeLoadException, MissingMethodException) → anote o verbo e a mensagem: é defeito da fina
   contra este Service Studio; pare a sessão O11.
 - [ ] **6.2 Abrir e fechar.** `node scripts\prova-verbos.mjs --root C:\SSAM-Agent-Teste --host <host> --module <ModuloTeste>`

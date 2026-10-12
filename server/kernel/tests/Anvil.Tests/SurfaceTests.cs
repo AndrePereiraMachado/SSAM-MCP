@@ -130,9 +130,9 @@ public class SurfaceTests
             .Select(m => m.Name.ToLowerInvariant()).ToHashSet();
         handlers.UnionWith(["get", "dump"]); // dispatched with a resolved target instead of the op object
         foreach (var verb in named) Assert.Contains(verb.Replace("-", ""), handlers); // rest-expose -> RestExpose
-        foreach (var expected in new[] { "agent", "create", "set", "link", "move", "reference", "usages", "rename", "duplicate", "delete", "get", "find", "replace", "layout", "spec", "logic", "screen", "html", "dump", "rest", "rest-expose", "soap" })
+        foreach (var expected in new[] { "agent", "create", "set", "link", "move", "reference", "usages", "rename", "duplicate", "delete", "get", "find", "replace", "layout", "spec", "logic", "screen", "html", "dump", "rest", "rest-expose", "soap", "prototype" })
             Assert.Contains(expected, named);
-        Assert.Equal(22, named.Length);
+        Assert.Equal(23, named.Length);
         Assert.Contains("parent", schema["verbs"]!["create"]!["required"]!.AsArray().Select(k => k!.ToString()));
         Assert.Contains("$pai/#Tipo[n]", schema["references"]!.AsObject().Select(p => p.Key));
         Assert.Contains("verbs", CommandSurface.OperationNames);
@@ -194,7 +194,7 @@ public class SurfaceTests
     public void HandlerKeyReadsMatchTheVerbTable()
     {
         var kernel = Path.Combine(Root, "src", "Anvil.Core", "Kernel");
-        var sources = string.Join("\n", new[] { "Verbs.cs", "HtmlDelta.cs", "HtmlVisual.cs", "Reparent.cs", "AgentExpander.cs" }.Select(f => File.ReadAllText(Path.Combine(kernel, f))));
+        var sources = string.Join("\n", new[] { "Verbs.cs", "HtmlDelta.cs", "HtmlVisual.cs", "Reparent.cs", "AgentExpander.cs", "Verbs.Prototype.cs" }.Select(f => File.ReadAllText(Path.Combine(kernel, f))));
         // Any method that takes the op object (handlers return JsonNode; the html helpers return string/void).
         var handlerStart = new System.Text.RegularExpressions.Regex(@"\b(?:JsonNode\??|string|void|bool)\s+([A-Z][A-Za-z]*)\(JsonObject op(?:,[^)]*)?\)", System.Text.RegularExpressions.RegexOptions.Compiled);
         var readers = new[] { @"op\[""([A-Za-z_]+)""\]", @"Req\(op,\s*""([A-Za-z_]+)""\)", @"op\.ContainsKey\(""([A-Za-z_]+)""\)", @"op\.TryGetPropertyValue\(""([A-Za-z_]+)""" }

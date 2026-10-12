@@ -125,6 +125,37 @@ test('refusal: an existing continuation stays; a missing one comes from the code
     assert.equal(addNextSteps(tool, {}, value), value, tool);
 });
 
+// G11 (FarmaVirtual, 10/10/2026, call 131): o11_inspect of a key the reader did not resolve answered O11_INSPECT_FAILED
+// with no next step. It is KEY_UNRESOLVED, and the map of the same capture says what lives under that key.
+test('KEY_UNRESOLVED: an inspect key that resolves nowhere continues to the map of the same capture with that key as parent', () => {
+  const KEY = '@g8l2FhvYJEeFJR3xiFuoMQ';
+  const texts = ['Unresolved or ambiguous key in this snapshot: ' + KEY, 'Unresolved key in this snapshot: ' + KEY + ' names no element of it'];
+  for (const error of texts) {
+    const value = { ok: false, file: OML, error };
+    const o11 = shapeToolResult('o11_inspect', { oml: OML, path: KEY, expectedSourceSha256: SHA, depth: 1 },
+      { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, isError: true }, { lane: 'o11' });
+    assert.equal(o11.structuredContent.code, 'KEY_UNRESOLVED', error);
+    assert.deepEqual({ tool: o11.structuredContent.continuation.tool, arguments: o11.structuredContent.continuation.arguments },
+      { tool: 'ssam_map', arguments: { lane: 'o11', target: OML, parent: KEY, expectedSourceSha256: SHA } });
+    assert.ok(o11.structuredContent.continuation.why);
+    const odc = addNextSteps('studio_inspect', { target: ODC_OML, path: KEY, expectedSourceSha256: SHA, pid: 7 }, { ok: false, code: 'KEY_UNRESOLVED', error });
+    assert.deepEqual(odc.continuation.arguments, { lane: 'odc', target: ODC_OML, parent: KEY, expectedSourceSha256: SHA });
+  }
+  // The map's own refusal keeps what it says; an inspect of a live module reads the key in the capture it took.
+  const map = { ok: false, code: 'KEY_UNRESOLVED', error: 'Unresolved key in this capture: ' + KEY };
+  assert.equal(addNextSteps('ssam_map', { lane: 'o11', target: OML, key: KEY }, map), map);
+  const live = addNextSteps('o11_inspect', { module: 'Orders', path: KEY }, { ok: false, code: 'KEY_UNRESOLVED', error: texts[1], capture: { oml: OML, sha256: SHA, module: 'Orders' } });
+  assert.deepEqual(live.continuation.arguments, { lane: 'o11', target: OML, parent: KEY, expectedSourceSha256: SHA });
+  // A key that names two elements is KEY_AMBIGUOUS, never sent to the map (it keeps one row per key, the last one): the
+  // reader's text names the paths to read instead.
+  const twins = { ok: false, file: OML, error: 'Ambiguous key in this snapshot: ' + KEY + ' names 2 elements (Container:Page/Input:A; Container:Page/Input:B): read one by its path' };
+  const ambiguous = shapeToolResult('o11_inspect', { oml: OML, path: KEY, expectedSourceSha256: SHA },
+    { content: [{ type: 'text', text: JSON.stringify(twins) }], structuredContent: twins, isError: true }, { lane: 'o11' });
+  assert.equal(ambiguous.structuredContent.code, 'KEY_AMBIGUOUS');
+  assert.equal(ambiguous.structuredContent.continuation, undefined);
+  assert.equal(addNextSteps('studio_inspect', { target: ODC_OML, path: KEY, expectedSourceSha256: SHA }, { ok: false, code: 'KEY_AMBIGUOUS', error: twins.error }).continuation, undefined);
+});
+
 test('o11_deliver refused by validation: the corrected job with closePrevious and the words marker, never the words', () => {
   const args = { module: 'Orders_CS', job: { ops: [{ op: 'rename' }] }, checks: ['Home'], until: 'merge', authorize: WORDS };
   const refused = { ok: false, outcome: 'refused', code: 'VALIDATION_REFUSED', stage: 'apply', taskId: TASK, error: 'Job rejected', messages: ['E1'] };
@@ -201,6 +232,13 @@ test('ODC gates: base_drift -> a new snapshot of the module; studio_busy -> stud
   // The refused attempt claimed its output directory (evidence is never overwritten): the repeat takes a new one.
   const claimed = refusalContinuation('studio_deliver', { ...call, output: 'lab/x' }, { ok: false, failed: 'check-base', gate: 'base_drift', error: 'Open module differs' });
   assert.deepEqual(claimed.arguments, call);
+  // fase4-24: an inline job is never echoed back; the repeat names the job file the proxy wrote for it (nextBasedOn).
+  const inline = { ...call, job: { ops: [{ op: 'note', text: 'x'.repeat(5000) }] } };
+  const written = 'C:\\ws\\odc\\.local\\jobs\\inline\\1.json';
+  const repeat = refusalContinuation('studio_deliver', inline, { ok: false, failed: 'check-base', gate: 'base_drift', error: 'Open module differs', nextBasedOn: { job: written, sha256: SHA } });
+  assert.deepEqual(repeat.arguments, { ...call, job: written });
+  assert.equal(refusalContinuation('studio_deliver', inline, { ok: false, failed: 'check-base', gate: 'base_drift', error: 'x' }), null,
+    'without nextBasedOn a large inline job is too big to repeat (next stays small): before fase4-24 this was every inline job');
   const busy = refusalContinuation('studio_merge', { manifest: 'm' }, { ok: false, outcome: 'uncertain', gate: 'studio_busy', error: 'still running' });
   assert.deepEqual([busy.tool, busy.arguments], ['studio_status', {}]);
   assert.equal(refusalContinuation('o11_studio', {}, { ok: false, gate: 'studio_busy' }), null, 'ODC gates only on the ODC lane');

@@ -1,6 +1,13 @@
 import { fail } from './errors.mjs';
 
 const escape = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const sharedAside = 'UnifiedExperienceCommonLib/UnifiedExpTools/UnifiedExperienceAside/DataActionGetUEAside';
+// A flow can have the same name as its module (Apps declares apps.apps).
+// Prefer the literal screen name before removing a module qualification.
+function screenName(entry, module, view) {
+  const screens = new Set([...entry.matchAll(/screenName:["']([^"']+)["']/g)].map(m => m[1]));
+  return screens.has(view) ? view : view.replace(new RegExp(`^${escape(module)}\\.`), '');
+}
 // Inspect only same-origin public module assets; never execute downloaded JS.
 export class PortalMetadata {
   constructor({ origin, request }) { this.origin = origin; this.request = request; this.cache = new Map(); }
@@ -17,12 +24,11 @@ export class PortalMetadata {
     const bundle = scripts.find(url => url.pathname.includes('_osbundle-') && url.pathname.includes('.index'));
     if (!bundle || bundle.origin !== this.origin) fail('PORTAL_CONTRACT_CHANGED', 'Module entry bundle unavailable.');
     const entry = (await this.request(bundle.href, { signal })).text;
-    const actualView = view.replace(new RegExp(`^${escape(module)}\\.`), '');
+    const actualView = screenName(entry, module, view);
     const viewPattern = new RegExp(`screenName:["']${escape(actualView)}["'][\\s\\S]{0,400}?import\\(["']([^"']+)["']`);
     const lazy = entry.match(viewPattern);
     if (!lazy) fail('PORTAL_CONTRACT_CHANGED', 'Exact Portal view metadata was not found.');
     const pending = [new URL(lazy[1], bundle)], visited = new Set(), candidates = new Map();
-    const tail = action.split('/').at(-1);
     let bytes = 0;
     while (pending.length && visited.size < 48) {
       const url = pending.shift();
@@ -33,7 +39,7 @@ export class PortalMetadata {
       bytes += Buffer.byteLength(code);
       if (bytes > 16000000) fail('PORTAL_CONTRACT_CHANGED', 'Metadata discovery budget exhausted.');
       for (const match of code.matchAll(/["']screenservices\/([^"']+)["']\s*,\s*["']([^"']+)["']/g)) {
-        if (match[1].startsWith(`${module}/`) && match[1].split('/').at(-1) === tail) candidates.set(match[1], match[2]);
+        if (match[1].startsWith(`${module}/`) || (module === 'apps' && match[1] === sharedAside)) candidates.set(match[1], match[2]);
       }
       if (candidates.has(action)) break;
       const imports = [...code.matchAll(/(?:from\s*|import\s*\()["'](\.\/[^"']+\.js)["']/g)].map(match => new URL(match[1], url));
@@ -43,7 +49,13 @@ export class PortalMetadata {
     if (!exact) fail('PORTAL_CONTRACT_CHANGED', 'The exact allowed action was not found in its current view. Similar names in other blocks are not substitutes.');
     const value = { moduleVersion: version, apiVersion: candidates.get(exact), action: exact, view: actualView,
       remapped: exact !== action, assetsInspected: visited.size };
-    this.cache.set(key, { value, expires: Date.now() + 300000 });
+    // A trace block has several read-only prerequisites in the same screen.
+    // Reuse exact action versions already observed in this traversal; routing
+    // authorization stays in the broker and does not come from this cache.
+    const expires = Date.now() + 300000;
+    for (const [observedAction, apiVersion] of candidates) this.cache.set(`${module}:${view}:${observedAction}`, {
+      value: { ...value, action: observedAction, apiVersion, remapped: false }, expires,
+    });
     return value;
   }
 
@@ -71,7 +83,7 @@ export class PortalMetadata {
     };
     let pending, bytes = Buffer.byteLength(entry);
     if (view) {
-      const actualView = view.replace(new RegExp(`^${escape(module)}\\.`), '');
+      const actualView = screenName(entry, module, view);
       const lazy = entry.match(new RegExp(`screenName:["']${escape(actualView)}["'][\\s\\S]{0,400}?import\\(["']([^"']+)["']`));
       if (!lazy) fail('PORTAL_CONTRACT_CHANGED', 'The view ' + view + ' is not a screen of ' + module + '; screens: ' + screens.slice(0, 60).join(', '));
       pending = [new URL(lazy[1], bundle)];

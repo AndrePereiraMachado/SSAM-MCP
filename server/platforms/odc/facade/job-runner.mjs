@@ -27,7 +27,13 @@ import { createWorkerClient, hostedWorkerClient, workerDisabled } from './anvil-
 import { resolvePatchedJob, jobIdentity, failedOpOf, withNamedPatches } from './job-patch.mjs';
 import { hostedContext, seamFields, usesWorkspace, workspacePath } from './executor.mjs';
 import { highWarningsOf } from './delivery-warnings.mjs';
-import { refusalFields, diagnosisOf } from './refusal-problems.mjs';
+import { jobSummary } from './job-summary.mjs';
+import { refusalFields, diagnosisOf, normalizationsOf } from './refusal-problems.mjs';
+// The prototype op of a headless run (docs/PROTOTIPO-NATIVO.md 1.1, the rehearsal of the delivery): the capture first, the
+// rebuild of 1.4.1, the receipt.
+import { expandJobFile, capturePrototype, buildWithDegradation, buildProblems, journalTo, kernelPrototypeReport, findNativeDom,
+  measurePrototypeFidelity, prototypeReceipt } from './prototype-op.mjs';
+import {captureJobArtifacts,bindJobArtifacts} from './job-artifacts.mjs';
 
 export const JOB_LANES = ['o11', 'odc'];
 const clip = (text, max = 400) => { const s = String(text ?? ''); return s.length > max ? s.slice(0, max - 3) + '...' : s; };
@@ -146,7 +152,10 @@ export function summarize({ lane, job, out, resultFile, saved, note, quiet = fal
     if (Array.isArray(warnings) && warnings.length) value.preflightWarnings = warnings.length;
     // jobTool adds jobSha256 and jobShape (about 100 bytes) after this, and nextBasedOn (the job path and its sha256 again,
     // ready for the next basedOn).
-    return successOf(value, results, SUCCESS_BYTES - 120, x.results?.length ?? 0);
+    const success = successOf(value, results, SUCCESS_BYTES - 120, x.results?.length ?? 0);
+    // lentidao 2026-10-12: what the kernel rewrote in the job instead of refusing it (JobNormalizer), outside the 1 KB budget
+    // like the HIGH warnings and the summary: a rewrite is never hidden.
+    return { ...success, ...normalizationsOf(x) };
   }
   // A refusal of the job (I2): every problem of every phase, from the CLI's error envelope or from the apply's own
   // preflight, with verifyRan and the phases (primeira-certa A3).
@@ -181,12 +190,14 @@ export async function runJob(request = {}, deps = {}) {
 
   const abs = p => path.resolve(root, String(p));
   const laneLocal = lane === 'odc' ? odcLocal : o11.local;
-  let job; let partial;
+  let job; let partial; let basedOnFile = null;
   if (request.patch != null || request.basedOn != null) {
     const patched = resolvePatchedJob({ job: request.job, patch: request.patch, basedOn: request.basedOn }, { root, inlineDir: path.join(laneLocal, 'jobs', 'inline'),
       work: lane === 'o11' ? o11.work : null, journalDir: path.join(laneLocal, 'journal'), tool: lane === 'odc' ? 'ssam_job' : 'o11_job', uuid: deps.uuid ?? randomUUID });
     if (!patched.ok) return { ...patched, lane };
     job = patched.path; partial = patched.partial;
+    // the job it corrects: the kernel's preflight refuses CSS the correction dropped (CSS_RULES_DROPPED)
+    basedOnFile = typeof patched.basedOn?.job === 'string' ? patched.basedOn.job : null;
   } else if (typeof request.job === 'string' && request.job.trim()) job = abs(request.job);
   else if (request.job && typeof request.job === 'object') {
     const folder = path.join(lane === 'odc' ? odcLocal : o11.local, 'jobs', 'inline');
@@ -204,6 +215,7 @@ export async function runJob(request = {}, deps = {}) {
   const stem = path.parse(job).name;
   const producers = producerList(request.producers).map(p => producerArg(p, abs));
   const base = request.base != null && String(request.base) !== '' ? abs(request.base) : null;
+  const boundInputs = lane === 'odc' && base && fs.existsSync(base) ? captureJobArtifacts(base,job) : null;
   const runAnvil = deps.runAnvil ?? createAnvilRunner({ lane: o11.name, root, env });
   // Hosted, an O11 job goes to the customer's own worker (anvil-worker.mjs hostedWorkerClient; deps.hostedWorkers in tests),
   // never to the lane's worker (off: workerDisabled).
@@ -230,56 +242,110 @@ export async function runJob(request = {}, deps = {}) {
     }
   }
 
+  // The prototype op (docs/PROTOTIPO-NATIVO.md 1.1): captured before anything runs; its refusal comes back ONCE with every
+  // problem, the patch over /ops/<i>/data and the corrected call (naming the job as it was given), and nothing is applied.
+  let proto = null;
+  {
+    const expand = deps.expandPrototype ?? (file => expandJobFile(file, { inlineDir: path.join(laneLocal, 'jobs', 'inline'),
+      work: path.join(laneLocal, 'prototype', (deps.uuid ?? randomUUID)()), capture: deps.capturePrototype ?? capturePrototype }));
+    const expanded = await expand(job);
+    if (expanded?.refusal) return { ...expanded.refusal, lane, job };
+    if (expanded?.path) { proto = { ...expanded.expansion, original: job, measure: deps.measureFidelity ?? null }; job = expanded.path; }
+  }
+
+  // A prototype op builds ~2,000 widgets through Model API code that a cold process would run at tier-0 JIT: its process
+  // compiles fully optimized from the first call (measured on FarmaVirtual: the apply 17.5 s -> 10.7 s cold).
+  const applyRunner = proto && !deps.runAnvil ? createAnvilRunner({ lane: o11.name, root, env: { ...env, DOTNET_TC_QuickJit: '0' } }) : runAnvil;
   // wallMs covers the apply only (worker attempt included), as anvil_cli.run and run_job.py odc_lane measure it.
-  let saved; let out; let note; const started = now();
-  if (lane === 'odc') {
-    out = request.out ? abs(request.out) : path.join(odcLocal, 'jobs', stem + '.oml');
+  // One apply of a job file: {saved, out, note}, or {answer} when the CLI gave no result to save.
+  const outFor = file => (request.out ? abs(request.out) : path.join(lane === 'odc' ? path.join(odcLocal, 'jobs') : o11.jobs, path.parse(proto?.original ?? file).name + '.oml'));
+  const applyOnce = async file => {
+    let note; const started = now();
+    const out = outFor(file);
     fs.mkdirSync(path.dirname(out), { recursive: true });
-    const argv = ['apply', '--job', job, '--out', out, ...(base ? ['--base', base] : []), ...producers.flatMap(p => ['--producer', p]),
-      '--work', path.join(odcLocal, 'jobs', 'work')];
-    let envelope = null; let via = 'worker odc';
-    if (worker) {
-      const w = await worker.run(argv);
-      if (w.used && w.unknown) return refusal('worker-outcome-unknown', w.error, { lane, job, via, ...(w.detail ? { detail: w.detail } : {}) });
-      if (w.used && !notExecuted(w.envelope)) envelope = w.envelope; else note = w.used ? coldNote(w.envelope) : w.note;
-      if (w.warning) note = w.warning;
+    if (lane === 'odc') {
+      const argv = ['apply', '--job', file, '--out', out, ...(base ? ['--base', base] : []), ...producers.flatMap(p => ['--producer', p]), ...(basedOnFile ? ['--based-on', basedOnFile] : []),
+        '--work', path.join(odcLocal, 'jobs', 'work')];
+      let envelope = null; let via = 'worker odc';
+      if (worker) {
+        const w = await worker.run(argv);
+        if (w.used && w.unknown) return { answer: refusal('worker-outcome-unknown', w.error, { lane, job: file, via, ...(w.detail ? { detail: w.detail } : {}) }) };
+        if (w.used && !notExecuted(w.envelope)) envelope = w.envelope; else note = w.used ? coldNote(w.envelope) : w.note;
+        if (w.warning) note = w.warning;
+      }
+      if (!envelope) {
+        via = 'processo frio odc';
+        const r = await applyRunner(argv, { cli: odcCli, cwd: root });
+        if (!r.envelope) return { answer: refusal('no-json', 'the CLI printed no JSON', { lane, job: file, via, exitCode: r.exitCode, stdout: tail(r.stdout, 2000), stderr: r.stderr ?? [] }) };
+        envelope = r.envelope;
+      }
+      const wallMs = now() - started;
+      // An error envelope carries error/stack, no data: run_job.py printed it and wrote no result file.
+      if (envelope.data == null) {
+        return { answer: { ok: false, lane, job: file, via, command: envelope.command, elapsedMs: envelope.elapsedMs, wallMs, ...(envelope.code ? { code: envelope.code } : {}),
+          error: clip(envelope.error ?? 'the CLI returned no data', 2000), ...refusalOf(envelope.problems, envelope), ...(note ? { worker: note } : {}) }, envelope };
+      }
+      return { saved: { ok: Boolean(envelope.ok), data: envelope.data, via, wallMs }, out, note };
     }
-    if (!envelope) {
-      via = 'processo frio odc';
-      const r = await runAnvil(argv, { cli: odcCli, cwd: root });
-      if (!r.envelope) return refusal('no-json', 'the CLI printed no JSON', { lane, job, via, exitCode: r.exitCode, stdout: tail(r.stdout, 2000), stderr: r.stderr ?? [] });
-      envelope = r.envelope;
-    }
-    const wallMs = now() - started;
-    // An error envelope carries error/stack, no data: run_job.py printed it and wrote no result file.
-    if (envelope.data == null) {
-      return { ok: false, lane, job, via, command: envelope.command, elapsedMs: envelope.elapsedMs, wallMs, ...(envelope.code ? { code: envelope.code } : {}),
-        error: clip(envelope.error ?? 'the CLI returned no data', 2000), ...refusalOf(envelope.problems, envelope), ...(note ? { worker: note } : {}) };
-    }
-    saved = { ok: Boolean(envelope.ok), data: envelope.data, via, wallMs };
-  } else {
-    out = request.out ? abs(request.out) : path.join(o11.jobs, stem + '.oml');
-    fs.mkdirSync(path.dirname(out), { recursive: true });
-    const argv = ['apply', '--job', job, '--out', out, '--work', o11.work, ...(base ? ['--base', base] : []), ...producers.flatMap(p => ['--producer', p])];
+    const argv = ['apply', '--job', file, '--out', out, '--work', o11.work, ...(base ? ['--base', base] : []), ...producers.flatMap(p => ['--producer', p]),
+      ...(basedOnFile ? ['--based-on', basedOnFile] : [])];
     let envelope = null;
     if (worker) {
       const w = await worker.run(argv);
-      if (w.used && w.unknown) return refusal('worker-outcome-unknown', w.error, { lane, job, via: 'worker', ...(w.detail ? { detail: w.detail } : {}) });
+      if (w.used && w.unknown) return { answer: refusal('worker-outcome-unknown', w.error, { lane, job: file, via: 'worker', ...(w.detail ? { detail: w.detail } : {}) }) };
       if (w.used && !notExecuted(w.envelope)) envelope = { ...w.envelope, via: 'worker' }; else note = w.used ? coldNote(w.envelope) : w.note;
       if (w.warning) note = w.warning;
     }
     if (!envelope) {
-      const r = await runAnvil(argv, { cwd: root, timeoutMs: 900000 });
+      const r = await applyRunner(argv, { cwd: root, timeoutMs: 900000 });
       // anvil_cli.run: a non-JSON answer becomes an error envelope with the end of stdout and stderr.
       envelope = { ...(r.envelope ?? { ok: false, command: 'apply', error: (tail(r.stdout, 800) + '\n' + tail(r.stderr, 800)).trim() }),
         via: 'process', stderr: tail(r.stderr, 4000) };
     }
-    saved = { ...envelope, wallMs: now() - started };
-  }
+    return { saved: { ...envelope, wallMs: now() - started }, out, note };
+  };
+  let applied;
+  let degraded = []; let buildMs = null;
+  if (proto) {
+    // 1.4.1: a build problem on a generated item rebuilds ONCE without it; a second failure is an SSAM defect with the
+    // mapping.ignore patch.
+    const begin = now();
+    const accepted = r => !r.answer && Boolean(r.saved?.ok && r.saved?.data?.accepted) && r.saved.data.isValid !== false;
+    const b = await buildWithDegradation({ jobFile: job, attempt: applyOnce, ok: accepted, problemsOf: r => buildProblems(r.saved ?? r.envelope ?? r.answer),
+      inlineDir: path.join(laneLocal, 'jobs', 'inline'), journal: journalTo(path.join(laneLocal, 'journal'), { lane }), uuid: deps.uuid ?? randomUUID });
+    buildMs = now() - begin; degraded = b.degraded; applied = b.result;
+    if (b.rebuilt) job = b.jobFile;
+    if (b.refusal) return { ...b.refusal, lane, job: proto.original };
+  } else applied = await applyOnce(job);
+  if (applied.answer) return applied.answer;
+  const { saved, out, note } = applied;
   if (receipts.length) saved.capturedProducers = receipts;
+  if (boundInputs) {
+    try { const proof = bindJobArtifacts(boundInputs,out,saved); if (proof) saved.artifacts = proof; }
+    catch (error) {
+      saved.ok = false; saved.code = 'JOB_ARTIFACT_BINDING_FAILED';
+      saved.error = error.message; saved.data.accepted = false;
+    }
+  }
   const resultFile = withSuffix(out, '.result.json');
   fs.writeFileSync(resultFile, JSON.stringify(saved, null, 2), 'utf8');
-  const value = summarize({ lane, job, out, resultFile, saved, note, quiet: request.quiet === true });
+  let value = summarize({ lane, job, out, resultFile, saved, note, quiet: request.quiet === true });
+  // What the proven job creates or changes (job-summary.mjs), outside the 1 KB budget of a success, as highWarnings: the
+  // same summary a delivery of it answers with.
+  if (value.ok && !proto) { try { const summary = jobSummary(JSON.parse(fs.readFileSync(job, 'utf8').replace(/^﻿/, ''))); if (summary) value.summary = summary; } catch { /* a summary never changes the run */ } }
+  // The receipt of a prototype import (report.prototype, outside the 1 KB budget of a success): the kernel's report, the
+  // fidelity measured on the module read back (prototype-dom.json), the degraded items and the timings; no merge,
+  // publication or seed here (a headless run delivers nothing).
+  if (proto) {
+    const data = saved.data ?? {};
+    const report = kernelPrototypeReport(data);
+    const measured = await measurePrototypeFidelity({ captures: proto.captures, measure: proto.measure,
+      nativeDom: findNativeDom({ report, captures: proto.captures, dirs: [path.dirname(out), withSuffix(out, ''), lane === 'odc' ? path.join(odcLocal, 'jobs', 'work') : o11.work] }) });
+    const receipt = prototypeReceipt(report, { fidelity: measured.fidelity, degraded, captures: proto.captures, warnings: proto.warnings ?? [], verify: data.validation?.new ?? null,
+      phases: { captureMs: proto.timings?.captureMs, buildMs: buildMs ?? saved.wallMs, fidelityMs: measured.fidelityMs } });
+    if (receipt.timings.expandMs == null && proto.timings?.expandMs != null) receipt.timings.expandMs = proto.timings.expandMs;
+    value = { ...value, prototype: receipt, prototypeJob: proto.original };
+  }
   // A partial job: what it replaced and added in the earlier job (the whole job is `job`).
   return partial ? { ...value, partial } : value;
 }
@@ -337,6 +403,8 @@ export async function jobTool(input = {}, deps = {}) {
     if (!checked.ok) return checked;
     const result = await runJob(checked.request, deps);
     if (/^(PATCH|BASE)_/.test(result.code ?? '')) return result; // a changed base is never handed back with its new sha256
+    // A refusal of the prototype op (or the SSAM defect of its rebuild) carries its own patch and corrected call.
+    if (/^PROTOTYPE_/.test(result.code ?? '') || result.ssamDefect === true) return withJobIdentity(result);
     if (result.ok) return withJobIdentity(result);
     const guide = deps.guidance ?? (await import('./job-guidance.mjs')).withJobGuidance;
     return withJobIdentity(await guide(checked.request.lane, result.job ?? (typeof input.job === 'string' ? input.job : null), result));

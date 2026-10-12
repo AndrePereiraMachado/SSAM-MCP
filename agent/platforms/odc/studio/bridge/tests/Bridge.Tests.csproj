@@ -20,6 +20,14 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\PortalCore.cs" Link="PortalCore.cs" />
+    <Compile Include="..\PortalPrivateHttp.cs" Link="PortalPrivateHttp.cs" />
+    <Compile Include="..\PortalApiClientSecret.cs" Link="PortalApiClientSecret.cs" />
+    <Compile Include="..\PortalApiClientCleanup.cs" Link="PortalApiClientCleanup.cs" />
+    <Compile Include="..\PortalVault.cs" Link="PortalVault.cs" />
+    <Compile Include="..\PortalMobileUpload.cs" Link="PortalMobileUpload.cs" />
+    <Compile Include="..\PortalKnowledgeDownload.cs" Link="PortalKnowledgeDownload.cs" />
+    <Compile Include="..\PortalMobileDownload.cs" Link="PortalMobileDownload.cs" />
+    <Compile Include="../../../../../kernel/src/Anvil.Bridge/PrivateHttpContext.cs" Link="PrivateHttpContext.cs" />
     <Compile Include="..\PortalUpload.cs" Link="PortalUpload.cs" />
     <Compile Include="..\PublishLogCore.cs" Link="PublishLogCore.cs" />
     <Compile Include="..\MergeDiagnostics.cs" Link="MergeDiagnostics.cs" />

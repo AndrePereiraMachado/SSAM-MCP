@@ -16,6 +16,7 @@
     "reorder": ["reordenar", "mover", "mova", "move", "mover para o inicio", "mover para o fim"],
     "duplicate": ["duplicar", "duplique", "copiar o elemento", "clone", "clonar"],
     "replace": ["reapontar", "substituir", "trocar todos os chamadores", "repoint", "redirect references"],
+    "prototype": ["prototipo", "prototipos", "prototypes", "mockup", "mockups", "mock-up", "maquete navegavel"],
     "edit": ["editar", "edite", "alterar", "altere", "modificar", "atualizar", "manter", "already exists", "ja existe", "já existe"]
   },
   "capabilities": [

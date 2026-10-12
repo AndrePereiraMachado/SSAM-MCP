@@ -55,6 +55,20 @@ public static class PropertyRules
             if (type == null || ModelTypes.Of(type, lane) is not { } facts) return;
             var shown = ShortType(type);
             var kind = raw ? "set" : ops[op]?["op"]?.ToString() ?? "op";
+            // lentidao 2026-10-12 (cause 2): a documentation property the type has no way to write (IUserException.Description)
+            // is dropped with a warning (JobNormalizer.PropertyDropped): the apply drops it too, never refuses it.
+            if (JobNormalizer.Droppable(prop) && !facts.IsWidget && (!facts.Knows(prop) || !facts.Writable().Contains(prop, StringComparer.Ordinal)))
+            {
+                var at = raw && pointer != null ? pointer + "/prop" : pointer;
+                var warning = JobPreflight.Problem(op, at, JobNormalizer.PropertyDropped, "warning",
+                    $"{shown} {Named(target)}has no way to write '{prop}' (a documentation property)" + (raw ? "" : $" (set {prop} on {target}, expanded from this op)")
+                        + ": the set is dropped and nothing else of the job changes",
+                    "nothing to change: the set is dropped (this kind of element keeps no " + prop + ")", null, kind);
+                // The entry of the answer's normalizations (JobPreflight.Analyze moves it there; never published with the warning).
+                warning["_normalization"] = JobNormalizer.Dropped(at, shown, prop, target);
+                problems.Add(warning);
+                return;
+            }
             if (!facts.Knows(prop))
             {
                 // A widget's class writes more than its interfaces declare: its property names are judged at apply only.

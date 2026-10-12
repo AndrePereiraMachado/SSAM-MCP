@@ -7,16 +7,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { mapStoreError } from '../licenses.mjs';
-import { FAKE_MODULE, RACING_MODULE, REAL_MODULE, SECRET, makeEnv, startConsole } from './helpers.mjs';
+import { FAKE_MODULE, IMAGE23_MODULE, RACING_MODULE, REAL_MODULE, SECRET, makeEnv, startConsole } from './helpers.mjs';
 import { createTz } from '../tz.mjs';
 import { buildScenario } from './scenario.mjs';
 
 const load = async m => (await import(pathToFileURL(m).href)).createTokenStore;
 const auditLines = env => fs.readFileSync(path.join(env.serverDir, 'console-audit.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
 
-test('current image module: renew and lanes are 501 NOT_SUPPORTED; revoke twice is 409 ALREADY_REVOKED', async t => {
-  const env = makeEnv();
-  const sc = await buildScenario(env);
+test('23rd image module (the rollback image): renew and lanes are 501 NOT_SUPPORTED; revoke twice is 409 ALREADY_REVOKED', async t => {
+  const env = makeEnv({ tokenModule: IMAGE23_MODULE });
+  const sc = await buildScenario(env, { module: IMAGE23_MODULE });
   const c = await startConsole(env);
   t.after(() => c.close());
   const lic = (await c.get('/api/licenses')).body;
@@ -56,6 +56,35 @@ test('current image module: renew and lanes are 501 NOT_SUPPORTED; revoke twice 
   assert.equal(lines[0].customer, 'Cliente Beta');
   const ev = (await c.get('/api/events?group=licenca')).body.events.map(e => e.text);
   assert.ok(ev.includes('Licença de Cliente Beta revogada.'));
+});
+
+test('24th image module (this box): auto writes, because it locks tokens.json; renew and lanes run end to end', async t => {
+  const env = makeEnv({ licenseWrites: 'auto' });
+  const sc = await buildScenario(env);
+  const c = await startConsole(env);
+  t.after(() => c.close());
+  const lic = (await c.get('/api/licenses')).body;
+  assert.deepEqual(lic.capabilities, { issue: true, revoke: true, agentRotate: true, renew: true, lanes: true, readOnly: null });
+  const alfa = lic.licenses.find(l => l.id === sc.alfa.id);
+  assert.deepEqual(alfa.actions.renew, { allowed: true, reason: null });
+  assert.deepEqual(alfa.actions.lanes, { allowed: true, reason: null });
+  let r = await c.post(`/api/licenses/${sc.alfa.id}/renew`, { days: 30, confirm: 'Cliente Alfa', expectExpiresAt: alfa.expiresAt });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.previousExpiresAt, alfa.expiresAt);
+  assert.ok(Date.parse(r.body.expiresAt) > Date.parse(alfa.expiresAt), 'the validity moved forward');
+  const renewedTo = r.body.expiresAt;
+  r = await c.post(`/api/licenses/${sc.alfa.id}/lanes`, { lanes: ['odc'], confirm: 'Cliente Alfa', expectLanes: ['odc', 'o11'] });
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body.license.lanes, ['odc']);
+  r = await c.post(`/api/licenses/${sc.alfa.id}/lanes`, { lanes: ['odc'], confirm: 'Cliente Alfa', expectLanes: ['odc'] });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.error.code, 'NO_CHANGE');
+  // what the image's own module (the one ssam-admin runs) reads back from tokens.json
+  const after = (await load(REAL_MODULE))(env.serverDir).list().find(x => x.id === sc.alfa.id);
+  assert.deepEqual(after.lanes, ['odc']);
+  assert.equal(Date.parse(after.expiresAt), Date.parse(renewedTo));
+  assert.ok(!fs.existsSync(path.join(env.serverDir, 'tokens.json.lock')), 'the writers lock is released');
+  assert.deepEqual(auditLines(env).map(l => [l.action, l.result, l.code]), [['renew', 'ok', null], ['lanes', 'ok', null], ['lanes', 'error', 'NO_CHANGE']]);
 });
 
 test('module with renew/setLanes: store refusals mapped to 409 codes, an expired license renews to active', async t => {
@@ -134,23 +163,26 @@ test('external changes between polls become "externo" history lines; the first s
   assert.ok(!JSON.stringify(snap).includes('sha256'), 'public view only');
 });
 
-test('unreadable store: 503 STORE_UNREADABLE and the licencas-ilegiveis alert; views stay up', async t => {
-  const env = makeEnv();
-  fs.writeFileSync(path.join(env.serverDir, 'tokens.json'), '{"schema":');
-  const c = await startConsole(env);
-  t.after(() => c.close());
-  await c.app.tickAll();
-  const r = await c.get('/api/licenses');
-  assert.equal(r.status, 503);
-  assert.deepEqual(r.body.error, { code: 'STORE_UNREADABLE', message: 'O arquivo de licenças não pode ser lido agora (PARSE).' });
-  const ov = await c.get('/api/overview');
-  assert.equal(ov.status, 200);
-  const alert = ov.body.alerts.find(a => a.id === 'licencas-ilegiveis');
-  assert.equal(alert.detail, 'PARSE');
-  fs.writeFileSync(path.join(env.serverDir, 'tokens.json'), '{"schema":"outro","tokens":[]}');
-  const again = await c.get('/api/licenses');
-  assert.equal(again.body.error.message, 'O arquivo de licenças não pode ser lido agora (STORE_INVALID).');
-});
+// A broken JSON is PARSE for the 23rd image's module and STORE_INVALID for the 24th's (it reads the file itself).
+for (const [label, module, broken] of [['23rd image module', IMAGE23_MODULE, 'PARSE'], ['24th image module (this box)', REAL_MODULE, 'STORE_INVALID']]) {
+  test(`unreadable store (${label}): 503 STORE_UNREADABLE and the licencas-ilegiveis alert; views stay up`, async t => {
+    const env = makeEnv({ tokenModule: module });
+    fs.writeFileSync(path.join(env.serverDir, 'tokens.json'), '{"schema":');
+    const c = await startConsole(env);
+    t.after(() => c.close());
+    await c.app.tickAll();
+    const r = await c.get('/api/licenses');
+    assert.equal(r.status, 503);
+    assert.deepEqual(r.body.error, { code: 'STORE_UNREADABLE', message: `O arquivo de licenças não pode ser lido agora (${broken}).` });
+    const ov = await c.get('/api/overview');
+    assert.equal(ov.status, 200);
+    const alert = ov.body.alerts.find(a => a.id === 'licencas-ilegiveis');
+    assert.equal(alert.detail, broken);
+    fs.writeFileSync(path.join(env.serverDir, 'tokens.json'), '{"schema":"outro","tokens":[]}');
+    const again = await c.get('/api/licenses');
+    assert.equal(again.body.error.message, 'O arquivo de licenças não pode ser lido agora (STORE_INVALID).');
+  });
+}
 
 test('a token module that cannot be loaded: every capability off, 501 for mutations, 503 for the list', async t => {
   const env = makeEnv({ tokenModule: path.join(makeEnv().root, 'nada.mjs') });
@@ -202,7 +234,7 @@ test('store errors: error.code first, then the message per verb (4.1)', () => {
   assert.equal(mapStoreError('issue', new TypeError('boom')).message, 'Erro interno do painel (TypeError).');
 });
 
-test('the real token module (current image) also runs issue and agent-rotate end to end', async t => {
+test('the real token module (this box, the 24th image) also runs issue and agent-rotate end to end', async t => {
   const env = makeEnv({ tokenModule: REAL_MODULE });
   const c = await startConsole(env);
   t.after(() => c.close());
@@ -333,13 +365,13 @@ test('every write is read back: a change lost to another writer, or a torn file,
   assert.equal(r.body.license.state, 'revoked');
 });
 
-test('license writes: auto is read-only on a module without the writers lock (current image), on with it; off always', async t => {
+test('license writes: auto is read-only on a module without the writers lock (23rd image), on with it (24th); off always', async t => {
   const open = new Set();
   t.after(async () => { for (const x of open) await x.close(); });
   const start = async e => { const x = await startConsole(e); open.add(x); return x; };
-  // the current image's module under the production default
-  let env = makeEnv({ licenseWrites: 'auto' });
-  const sc = await buildScenario(env);
+  // the 23rd image's module (the rollback image) under the production default
+  let env = makeEnv({ tokenModule: IMAGE23_MODULE, licenseWrites: 'auto' });
+  const sc = await buildScenario(env, { module: IMAGE23_MODULE });
   let c = await start(env);
   let lic = (await c.get('/api/licenses')).body;
   assert.deepEqual(lic.capabilities, { issue: false, revoke: false, agentRotate: false, renew: false, lanes: false, readOnly: 'sem-trava' });
@@ -354,7 +386,13 @@ test('license writes: auto is read-only on a module without the writers lock (cu
   assert.equal(fs.readFileSync(path.join(env.serverDir, 'tokens.json'), 'utf8'), before, 'nothing written');
   assert.ok(!fs.existsSync(path.join(env.serverDir, 'console-audit.jsonl')), 'a refusal by mode is not an action');
   assert.equal((await c.get('/api/meta')).body.capabilities.readOnly, 'sem-trava');
-  // a module with renew and setLanes (the 24th image's, which brings the lock): auto writes
+  // the 24th image's module (this box), which brings the lock: auto writes
+  env = makeEnv({ licenseWrites: 'auto' });
+  c = await start(env);
+  lic = (await c.get('/api/licenses')).body;
+  assert.deepEqual(lic.capabilities, { issue: true, revoke: true, agentRotate: true, renew: true, lanes: true, readOnly: null });
+  assert.equal((await c.post('/api/licenses', { customer: 'Cliente Delta', days: 30, lanes: ['odc'], confirm: 'Cliente Delta' })).status, 201);
+  // the test double of that module: auto writes too
   env = makeEnv({ tokenModule: FAKE_MODULE, licenseWrites: 'auto' });
   c = await start(env);
   lic = (await c.get('/api/licenses')).body;

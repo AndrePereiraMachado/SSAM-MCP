@@ -129,7 +129,10 @@ public static class CssCompat
     public sealed record Import(string Statement, int Line, int Column, bool AfterRule);
 
     /// <summary>The top-level @import statements of <paramref name="css"/> and the stylesheet without them (C23 of the atritos 3
-    /// package). Nothing else changes: comments, spacing and every other statement stay as written.</summary>
+    /// package). Nothing else changes: comments, spacing and every other statement stay as written. Found by the statement
+    /// walk, never by lines: an @import inside a minified line of 27 thousand characters, before or after rules, with ';' inside
+    /// its url(…) (Google Fonts weights) or behind a byte order mark is found whole, and the rules on the same line stay (call
+    /// 88 of 2026-10-10 lost 271 rules to a line regex).</summary>
     public static (IReadOnlyList<Import> Imports, string Others) Imports(string css)
     {
         if (css.IndexOf("@import", StringComparison.OrdinalIgnoreCase) < 0) return ([], css);
@@ -170,16 +173,20 @@ public static class CssCompat
     }
 
     /// <summary>The stylesheet with its @import statements at the top (after @charset, which must stay first), and the ones
-    /// that moved; the text itself when every @import is already at the top.</summary>
-    public static (string Css, IReadOnlyList<Import> Hoisted) HoistImports(string css)
+    /// that moved; the text itself when every @import is already at the top. <paramref name="inline"/> is the @font-face
+    /// fallback hook of the prototype importer (docs/PROTOTIPO-NATIVO.md 4.1 item 2): for an @import it resolves (Google Fonts
+    /// through the vendor cache) it returns the CSS to write in its place, else null to keep the statement.</summary>
+    public static (string Css, IReadOnlyList<Import> Hoisted) HoistImports(string css, Func<Import, string?>? inline = null)
     {
         var (imports, rest) = Imports(css);
-        if (!imports.Any(x => x.AfterRule)) return (css, []);
-        var body = rest.TrimStart();
+        var inlined = inline == null ? new List<string?>() : imports.Select(x => inline(x)).ToList();
+        if (!imports.Any(x => x.AfterRule) && !inlined.Any(x => x != null)) return (css, []);
+        var body = rest.TrimStart().TrimStart('\uFEFF').TrimStart();
         var charset = "";
         if (body.StartsWith("@charset", StringComparison.OrdinalIgnoreCase) && body.IndexOf(';') is var semi and > 0)
         { charset = body[..(semi + 1)] + "\n"; body = body[(semi + 1)..].TrimStart(); }
-        return (charset + string.Join("\n", imports.Select(x => x.Statement)) + "\n" + body, imports.Where(x => x.AfterRule).ToList());
+        var head = imports.Select((x, k) => k < inlined.Count && inlined[k] is { Length: > 0 } text ? text.TrimEnd() : x.Statement);
+        return (charset + string.Join("\n", head) + "\n" + body, imports.Where(x => x.AfterRule).ToList());
     }
 
     private static bool IsNesting(string prelude) => prelude.StartsWith("@media", StringComparison.OrdinalIgnoreCase)
@@ -190,7 +197,7 @@ public static class CssCompat
     {
         while (i < css.Length)
         {
-            if (char.IsWhiteSpace(css[i])) { i++; continue; }
+            if (char.IsWhiteSpace(css[i]) || css[i] == '\uFEFF') { i++; continue; }
             if (css[i] == '/' && i + 1 < css.Length && css[i + 1] == '*') { var end = css.IndexOf("*/", i + 2, StringComparison.Ordinal); i = end < 0 ? css.Length : end + 2; continue; }
             break;
         }

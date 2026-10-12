@@ -44,7 +44,7 @@ do kernel em execução (rodada 3, `JobSources.KernelRoot`); `--base` na linha d
 
 | Campo | Conteúdo |
 |---|---|
-| `tools[]` | (entrada única, 03/10/2026) só quando a intenção pede uma operação do SSAM, logo após `intent`: até 3 itens `{tool, verb?, lane, args, when, preconditions?, next?, why, filled?, otherLane?/note?, equivalent?, legacy?, supersedes?}`, ou `{gap, lane, when}` para uma operação que nenhuma ferramenta faz. `args` é o modelo da chamada (`<placeholder>` a preencher; palavras do usuário, UUID e credencial nunca vêm preenchidos; nomes como `abrir o módulo Pedidos` preenchem o slot e vêm em `filled`). Rotas em `platforms/odc/facade/catalog/tools.json` (`ssam-tool-routes/1`), lidas por `tool-routing.mjs` com vocabulário próprio: o casamento de capacidades nunca lê esse arquivo e a resposta de mudança de modelo é o objeto do `discover()` sem alteração (sem a chave `tools`). Regra de modelo: um passo do pedido cujas palavras não explicadas pela rota ainda casam uma capacidade de modelo (`via: match`) só recebe ferramentas de `effect` `read` ou `delivery` (`tools.json`, conferido com `readOnlyHint`/`destructiveHint`), o `hint` começa por "Model change: matches" e nunca diz que não é mudança de modelo, e a parte de modelo nunca é refeita com orçamento menor nem cortada; passos sem capacidade de modelo (o publicar de "criar a entidade X e depois publicar o módulo") mantêm a ferramenta. Ferramenta da outra faixa: `otherLane: true` e `note`. Intenção vazia: `ok:false` como antes, mais `toolGroups` (todas as ferramentas da faixa por grupo, com os verbos) e `otherLaneTools` |
+| `tools[]` | (entrada única, 03/10/2026) só quando a intenção pede uma operação do SSAM, logo após `intent`: até 3 itens `{tool, verb?, lane, args, when, preconditions?, next?, why, filled?, otherLane?/note?, equivalent?, legacy?, supersedes?}`, ou `{gap, lane, when}` para uma operação que nenhuma ferramenta faz. `args` é o modelo da chamada (`<placeholder>` a preencher; palavras do usuário, UUID e credencial nunca vêm preenchidos; nomes como `abrir o módulo Pedidos` preenchem o slot e vêm em `filled`). Rotas em `platforms/odc/facade/catalog/tools.json` (`ssam-tool-routes/1`), lidas por `tool-routing.mjs` com vocabulário próprio: o casamento de capacidades nunca lê esse arquivo e a resposta de mudança de modelo é o objeto do `discover()` sem alteração (sem a chave `tools`). Regra de modelo: um passo do pedido cujas palavras não explicadas pela rota ainda casam uma capacidade de modelo (`via: match`) só recebe ferramentas de `effect` `read` ou `delivery` (`tools.json`, conferido com `readOnlyHint`/`destructiveHint`), o `hint` começa por "Model change: matches" e nunca diz que não é mudança de modelo, e a parte de modelo nunca é refeita com orçamento menor nem cortada; passos sem capacidade de modelo (o publicar de "criar a entidade X e depois publicar o módulo") mantêm a ferramenta. Ferramenta da outra faixa: `otherLane: true` e `note`. Intenção vazia (12/10/2026): `ok:false`, `code` INTENT_REQUIRED, abaixo de 1 KB, com o formato exato da chamada (`shape`), a `continuation` que mantém o `app` pedido e a chamada do catálogo; nada do índice é lido. `catalog:true` (sem intenção) responde `ok:true` com `categories`, `capabilities`, `coverage`, `toolGroups` (todas as ferramentas da faixa por grupo, com os verbos) e `otherLaneTools` |
 | `identity` | hash do CLI e do `Anvil.Core.Odc.dll`, Studio medido (`verify-catalog`, versão, hashes dos assemblies comparados), sha da fixture, hash do descritor, jobs (total, com resultado, `current`, `historical`), versão do índice nativo, `cache`, `warnings` |
 | `matches[]` | por capacidade: `via` (três camadas, fase 3: `match` = a intenção nomeia um elemento da capacidade, ou uma capacidade sem elementos casa por palavras; `dependency` = exigida por um match direto; `alternative` = só palavras de operação casaram, ou a capacidade é alternativa declarada de um match — vem compacta: `id`, `reason`, `level`, `route.kind` e `expand: <id>` para a abrir inteira, nunca com contratos), `why`, `level` (`B`, `route`, `C-suite`, `C-executed-historical`, `C-executed-current`), `route`, ponteiros de `contract`, `proofs` (job + nível + nº de divergências), `depends` (`{id, unless}`), `requiredBy`, `conditions`, `existingInCapture` (com `--app`); matches diretos trazem `summary`, `negative`, `limits` (texto + origem), `guidance`, `notes`. Uma família de dados nomeada só por uma palavra genérica de filho (`atributo`) quando outra família é nomeada pelo seu elemento próprio desce a `alternative`; sem nenhum elemento nomeado (`"reapontar e apagar"`) as famílias vêm como alternativas e o `hint` diz que palavras nomeiam o elemento |
 | `contracts` | os trechos de `api --op` apontados pelos matches diretos **inteiros** (até 6 KiB por trecho; acima disso, chaves + `expand: contract:<ponteiro>`); dependências em forma compacta |
@@ -72,6 +72,45 @@ A resposta traz `expansions` só com o que foi pedido, `problems` por pedido (id
 `element` sem `--app`), e o mesmo orçamento em bytes com as reduções declaradas (exemplo cortado, provas além das duas
 primeiras em `proofsOmitted`, bindings além de 8). `evidence` = provas com descrição, ops/tipos/propriedades, notas
 (`_why`) e cobertura, jobs negativos, limites, orientação, alternativas.
+
+Com `intent` (11/10/2026; a sessão FarmaVirtual de 10/10 mandou `expand`/`detail` com intenção em 11 de 22 discovers e
+nada voltou): a resposta composta traz também `expansions` com as partes pedidas. Elas são o último corte do orçamento
+(depois de a parte de modelo chegar ao mínimo) e a etapa F nunca as corta em silêncio: cada parte, na ordem pedida, vem
+inteira enquanto cabe; senão vem no corte que a F fazia (exemplo com 4 ops, 2 provas, 8 bindings), nomeada em
+`expansionsReduced` (`{expand, kept, why}`); senão vai para `expansionsOmitted` (`{expand, why}`).
+`continuations.next` é a chamada exata que devolve inteiras as reduzidas e as omitidas, só com partes que o `expand`
+aceita; pedido desconhecido ou parte inválida também aparece em `expansionsOmitted`, com o motivo. Com `packet:true`, as
+partes pedidas são `next.expand` do pacote.
+
+Orçamento abaixo do mínimo (11/10/2026; a mesma sessão teve 7 respostas `insufficient`): na entrada (`discoverAll`, isto
+é, MCP e CLI) um `budgetBytes` abaixo da resposta mínima (com toda parte pedida inteira: o mínimo de antes da etapa F)
+sobe até ela quando cabe no teto da resposta (38.912 = 40.960 menos a folga do moldador, `budgetCeiling` do `ssam.mjs`)
+e a resposta diz `inputAdjusted: [{path:"/budgetBytes", from, to, rule:"raise-to-minimal"}]` e, no próprio `size`,
+`budgetAdjusted: {from, to, rule}` (uma camada de entrada que escreva seu próprio `inputAdjusted` por cima não o apaga);
+num pedido misto, o espaço das `tools` vem junto. Mínimo acima do teto: páginas. A primeira página leva o que cabe no teto
+(a parte de modelo da intenção no mínimo, depois as partes pedidas inteiras, na ordem) e o orçamento sobe só até o
+mínimo dessa página (`raise-to-page`; fica o do chamador quando ele já a comporta), nunca até o teto: subir ao teto dava
+a folga à parte de modelo, não às partes pedidas. `continuations.pages` são as chamadas `expand` exatas do resto, uma por
+página, cada uma empacotada para caber no teto (para chamá-las juntas); `continuations.next` pede todo o resto a partir
+da próxima página, e a resposta dela é essa página com as continuações das seguintes: seguindo só `next` chega-se à
+última (toda página traz `pages` até a última). Orçamento igual ao teto é o da primeira página, sem ajuste a declarar; uma
+página que cabe no orçamento do chamador e leva as partes da página no teto, ou tantos bytes de partes, fica com ele.
+Parte maior que uma página vem reduzida na sua própria página: o exemplo com as primeiras ops que cabem e `reference`
+(`ssam_reference {kind:"example"}`) para o job inteiro, nomeado em `expansionsReduced` com essa chamada em `next`. Sem
+`ceilingBytes`, `discover()` (motor, testes, reexecuções para o espaço das ferramentas) mantém o limite duro.
+
+As seções que entram depois da parte de modelo (a seção OutSystems UI, §1.3, e os extras C07: `provenExample`, `steps`,
+`values`) fazem parte da resposta mínima na entrada (11/10/2026, 3ª revisão: subir até o mínimo exato da parte de modelo
+não deixava lugar nem para a nota de corte, e "criar tela de listagem de pedidos com tabela e filtro" a 9.000 subia para
+17.321 sem `outsystemsUi` nem `provenExample`, sem nada em `size.truncated`). O piso delas (`sectionsFloor`): as contagens
+da seção OutSystems UI com a sua nota, os `steps` na forma que `fitWithSteps` guarda como piso (inteiros quando cabem em
+1/4 da resposta, senão com o exemplo por referência), o `provenExample` por referência, os `values` inteiros e a nota
+`c07`. A subida mira o mínimo da parte de modelo mais esse piso, e a folga acima do mínimo vai para as seções, nunca para
+a parte de modelo (`size.reserved.sections`). Um orçamento que comporta a parte de modelo mas deixaria uma seção sem
+palavra fica com o chamador, a parte de modelo orçada com o piso a menos; se ela não cabe ali, o orçamento sobe pelo
+piso, com a parte de modelo como o orçamento do chamador a deu. Na entrada nenhuma seção some sem estar na resposta ou
+em `size.truncated`: quando as `tools` tiram o lugar até da nota, o orçamento sobe pelo piso (`raise-to-minimal`), sob o
+teto. Um título operacional mais longo que o do catálogo reafirma o orçamento subido, sem deixar a resposta acima dele.
 
 ### 1.3 Catálogo OutSystems UI (`outsystemsUi`, 04/10/2026)
 
@@ -239,19 +278,38 @@ captura — reuso (4 por termo), elementos por kind (8), assinaturas (3); (C) ca
 linha, dependências ao que as torna executáveis; (D) o que a intenção não pediu, nos matches diretos — bindings (6),
 **operações não nomeadas (saem por nome, `operationsOmitted`; as nomeadas ficam inteiras)**, **exemplos (3 ops, as
 dos verbos em foco primeiro)**, limites (1), contratos (chaves + `expand`), resumos (220), depois bindings/exemplos/
-contratos inteiros, expansões (exemplo 4 ops, 2 provas, 8 bindings), alternativas removidas por completo; (E) o que
-nunca se perde — as operações em foco reduzem-se a `summary` + `status/evidence/alternative/observed` por papel, o
-envelope perde `routes/lexical/coverage.note`, e o match direto fica só com `id`, `via`, `level`, `focus`, `operations`
-compactas e `expand`. Se mesmo assim não cabe, a resposta é o resultado `insufficient` (§1.1, `size`). Uma resposta
+contratos inteiros, alternativas removidas por completo; (E) o que nunca se perde — as operações em foco reduzem-se a
+`summary` + `status/evidence/alternative/observed` por papel, o envelope perde `routes/lexical/coverage.note`, e o
+match direto fica só com `id`, `via`, `level`, `focus`, `operations` compactas e `expand`; (F, 11/10/2026) por último
+as expansões pedidas por nome (exemplo 4 ops, 2 provas, 8 bindings), só numa resposta de `expand` sem intenção do motor:
+ao lado de uma intenção, e na entrada, elas não passam pela F (vêm inteiras, reduzidas e nomeadas, ou omitidas e
+nomeadas, §1.2). Se mesmo assim não cabe, a resposta é o resultado
+`insufficient` (§1.1, `size`); na entrada (`discoverAll`), o orçamento sobe até o mínimo ou a resposta pagina (§1.2). Uma resposta
 composta sem `--app` cabe no padrão sem perder contratos nem exemplos (teste); a 12.000 bytes uma intenção de dados
 mantém o foco, o estatuto e a evidência por papel, a cautela de integridade e a continuação exata (teste).
+
+Palavras que os casadores leem (11/10/2026; 1º discover da sessão FarmaVirtual de 10/10): caminhos, URLs e nomes de
+arquivo da intenção (`C:\...`, `/home/...`, `./src/x.css`, `\\srv\...`, `https://...`, `index.html`, `*.css`, um
+caminho entre aspas com espaços) deixam pastas, host e nome do arquivo fora das palavras que `query`, o exemplo provado,
+os passos, os valores e a seção OutSystems UI leem (`withoutPaths`); fica o que o trecho diz do seu tipo, entre pausas:
+o arquivo vira a palavra da extensão (`prototipo.html` → html, `Chart.js` → js, `clientes.json` → json), a URL vira o
+esquema (`https`, com a extensão em que termina) e a pasta vira só a pausa. A resposta repete a intenção como escrita.
+Nomes com barra ou ponto (`StyleSheet/WebStyleSheet`, `ui.html-page`, `Client.FvModal`) ficam. E uma palavra de família
+é dita também pela palavra da intenção para ela: a tradução (`tema` → theme) ou a palavra que dá nome à capacidade,
+quando é palavra-chave dela e canônico do grupo de sinônimos da palavra da família (`CSS` de `ui.theme-css`). Assim
+"tema" e "CSS" nomeiam o tema de `ui.theme-css`, que deixa de ser rebaixada a alternativa; as outras palavras do grupo
+`css` (estilo, style, classe, stylesheet) não nomeiam, porque dizem também o estilo ou a classe de um atributo, de uma
+entidade ou de um widget ("criar entidade Aluno com atributo Classe"). Só contam as palavras escritas, nunca o canônico
+que elas produziram.
 
 `tools` (entrada única) cabe em volta da parte de modelo, nunca o contrário: o `discover()` já orçou a parte de modelo
 como acima. Quando a intenção é só operação (os matches que houver são palavras de passagem), os itens vão inteiros
 e, se não couberem, o `discover()` roda uma vez com orçamento menor; quando há as duas partes, os itens reduzem-se
 primeiro (inteiro → `{tool, verb, lane, args, why}` → `{tool, verb, lane}`, declarado em `size.truncated` como
-`tools`). Em último caso fica só o envelope com os ids dos matches diretos e as ferramentas. `size.budgetBytes` é sempre
-o do chamador. Uma intenção sem rota de ferramenta nunca passa por aqui: sua resposta é byte a byte a de antes.
+`tools`). Em último caso fica só o envelope com os ids dos matches diretos e as ferramentas. `size.budgetBytes` é o do
+chamador, salvo quando a parte de modelo de um pedido misto subiu até o mínimo (ou até a primeira página): então é esse
+mínimo mais o espaço das `tools`; ou quando as `tools` deixam a seção OutSystems UI ou os extras C07 sem lugar nem para a
+nota: então sobe pelo piso deles (§1.2). Os dois ditos em `inputAdjusted` e em `size.budgetAdjusted`. Uma intenção sem rota de ferramenta nunca passa por aqui: sua resposta é byte a byte a de antes.
 
 Faixa O11 (desde o piloto da fase 2, 23/09/2026 — `docs/PILOTO-FASE2.md`): `--lane o11` responde **só para o recorte
 partilhado** (static entities, registos, estruturas, atributos de estrutura). As duas capacidades vivem uma vez em

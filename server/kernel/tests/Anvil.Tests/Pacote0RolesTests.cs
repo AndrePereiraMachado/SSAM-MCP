@@ -110,7 +110,8 @@ public sealed class Pacote0RolesTests
     public void LiteralOptionsAndUnboundSelectsPointAtTheFragmentDropdown()
     {
         var unbound = Assert.Throws<InvalidOperationException>(() => Expand(Page("<select><option>A</option><option>B</option></select>"))).Message;
-        Assert.Contains("<select bind='Var' options='List' value='List.Current.X.Id' label='List.Current.X.Label'/>", FragmentOf(unbound)["html"]!.ToString());
+        // value and label read the element of the options list (never List.Current: the Verify cannot identify it there)
+        Assert.Contains("<select bind='Var' options='GetItems.List' value='Item.Id' label='Item.Label'/>", FragmentOf(unbound)["html"]!.ToString());
         var stray = Assert.Throws<InvalidOperationException>(() => Expand(Page("<div><option>A</option></div>"))).Message;
         Assert.Contains("must not contain literal options", stray);
         Assert.StartsWith("<select bind=", FragmentOf(stray)["html"]!.ToString());

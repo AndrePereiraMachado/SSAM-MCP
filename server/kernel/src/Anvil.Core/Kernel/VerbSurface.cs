@@ -50,6 +50,7 @@ public static class VerbSurface
             "Screen archetypes (`api --op screen`) or the typed owners tree (`data.owners`)."),
         new("html", "write", ["parent|data"], ["file", "html"],
             "Visual fragment inside an existing parent (`parent` + `file`|`html`, see `api --op html-visual`) or a whole page manifest (`data`, see `api --op html`)."),
+        new("prototype", "write", ["data"], [], "Prototype folder imported as native screens, a shell block, popups, data and logic (data.capture is written by the facade); see `api --op prototype`."),
         new("rest", "write", ["data"], [],
             "Consumed REST client, declarative over what it names (client, methods, structures, openapi, remove, breaks); see `api --op rest`."),
         new("rest-expose", "write", ["data"], [],

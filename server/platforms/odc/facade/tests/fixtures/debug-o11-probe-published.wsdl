@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<wsdl:definitions xmlns:s="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://schemas.xmlsoap.org/wsdl/soap12/" xmlns:http="http://schemas.xmlsoap.org/wsdl/http/" xmlns:mime="http://schemas.xmlsoap.org/wsdl/mime/" xmlns:tns="http://SSAMDebuggerProbe/ProbeSoap/" xmlns:s0="http://www.outsystems.com" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" xmlns:tm="http://microsoft.com/wsdl/mime/textMatching/" xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/" targetNamespace="http://SSAMDebuggerProbe/ProbeSoap/" xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/">
+  <wsdl:documentation xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/">Technical debugger probes. HTTPS required. No external call or business data.</wsdl:documentation>
+  <wsdl:types>
+    <s:schema elementFormDefault="qualified" targetNamespace="http://www.outsystems.com">
+      <s:element name="Scalar">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="1" maxOccurs="1" name="Value" type="s:int" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="ScalarResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="1" maxOccurs="1" name="Result" type="s:int" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="LaunchProcess">
+        <s:complexType />
+      </s:element>
+      <s:element name="LaunchProcessResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="1" maxOccurs="1" name="ProcessId" type="s:long" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+    </s:schema>
+  </wsdl:types>
+  <wsdl:message name="ScalarSoapIn">
+    <wsdl:part name="parameters" element="s0:Scalar" />
+  </wsdl:message>
+  <wsdl:message name="ScalarSoapOut">
+    <wsdl:part name="parameters" element="s0:ScalarResponse" />
+  </wsdl:message>
+  <wsdl:message name="LaunchProcessSoapIn">
+    <wsdl:part name="parameters" element="s0:LaunchProcess" />
+  </wsdl:message>
+  <wsdl:message name="LaunchProcessSoapOut">
+    <wsdl:part name="parameters" element="s0:LaunchProcessResponse" />
+  </wsdl:message>
+  <wsdl:portType name="ProbeSoapSoap">
+    <wsdl:operation name="Scalar">
+      <wsdl:input message="tns:ScalarSoapIn" />
+      <wsdl:output message="tns:ScalarSoapOut" />
+    </wsdl:operation>
+    <wsdl:operation name="LaunchProcess">
+      <wsdl:input message="tns:LaunchProcessSoapIn" />
+      <wsdl:output message="tns:LaunchProcessSoapOut" />
+    </wsdl:operation>
+  </wsdl:portType>
+  <wsdl:binding name="ProbeSoapSoap" type="tns:ProbeSoapSoap">
+    <soap:binding transport="http://schemas.xmlsoap.org/soap/http" />
+    <wsdl:operation name="Scalar">
+      <soap:operation soapAction="http://SSAMDebuggerProbe/ProbeSoap/Scalar" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="LaunchProcess">
+      <soap:operation soapAction="http://SSAMDebuggerProbe/ProbeSoap/LaunchProcess" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:binding name="ProbeSoapSoap12" type="tns:ProbeSoapSoap">
+    <soap12:binding transport="http://schemas.xmlsoap.org/soap/http" />
+    <wsdl:operation name="Scalar">
+      <soap12:operation soapAction="http://SSAMDebuggerProbe/ProbeSoap/Scalar" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="LaunchProcess">
+      <soap12:operation soapAction="http://SSAMDebuggerProbe/ProbeSoap/LaunchProcess" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:service name="ProbeSoap">
+    <wsdl:documentation xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/">Technical debugger probes. HTTPS required. No external call or business data.</wsdl:documentation>
+    <wsdl:port name="ProbeSoapSoap" binding="tns:ProbeSoapSoap">
+      <soap:address location="https://personal-2qqw9srv.outsystemscloud.com/SSAMDebuggerProbe/ProbeSoap.asmx" />
+    </wsdl:port>
+    <wsdl:port name="ProbeSoapSoap12" binding="tns:ProbeSoapSoap12">
+      <soap12:address location="https://personal-2qqw9srv.outsystemscloud.com/SSAMDebuggerProbe/ProbeSoap.asmx" />
+    </wsdl:port>
+  </wsdl:service>
+</wsdl:definitions>

@@ -83,13 +83,14 @@ namespace Anvil.Tests
         {
             var dir = Path.Combine(Root, ".local", "pacote-b-tests", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(dir);
             var fragment = Path.Combine(dir, "card.html");
-            File.WriteAllText(fragment, "<div class=\"card\"><table><tr><td>x</td></tr></table><marquee>y</marquee></div>");
+            // <table> compiles since the one element table (lane html, 6d85e4d9): two tags outside every list stand for it
+            File.WriteAllText(fragment, "<div class=\"card\"><blink>x</blink><marquee>y</marquee></div>");
             var ops = new JsonArray(new JsonObject { ["op"] = "html", ["parent"] = "$box", ["file"] = fragment });
             var result = JobPreflight.Analyze(ops, new JsonObject { ["ops"] = ops.DeepClone() }, []);
             var problem = Assert.Single(result["problems"]!.AsArray())!;
             var message = problem["message"]!.GetValue<string>();
             Assert.Contains("fragment file", message);
-            Assert.Contains("<table>", message);
+            Assert.Contains("<blink>", message);
             Assert.Contains("<marquee>", message); // every tag outside the syntax at once
             Assert.Contains("supported tags", message);
         }

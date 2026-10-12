@@ -8,12 +8,14 @@ import { fail, redact, publicError } from './errors.mjs';
 import { SEARCH_POSTS } from './effects.mjs';
 
 export class OdcBridge {
-  constructor({ catalog = new Catalog(), config = readConfig(), fetchImpl = globalThis.fetch, now = Date.now } = {}) {
+  constructor({ catalog = new Catalog(), config = readConfig(), fetchImpl = globalThis.fetch, now = Date.now, auth } = {}) {
     this.catalog = catalog;
     this.config = config;
     this.fetch = fetchImpl;
     this.now = now;
-    this.auth = new OAuthClient(config, fetchImpl, now);
+    if (auth && (typeof auth.method !== 'string' || !auth.method || ['configured', 'getToken', 'invalidate', 'secrets'].some(name => typeof auth[name] !== 'function')))
+      fail('CONFIGURATION_INVALID', 'An internal authentication provider must implement its complete contract.');
+    this.auth = auth ?? new OAuthClient(config, fetchImpl, now);
     this.requests = new Map();
     for (const id of config.allowedWriteOperations) {
       if (!catalog.operations.has(id) || catalog.operations.get(id).readOnly) fail('CONFIGURATION_INVALID', 'Write allowlist must contain exact mutation operation IDs from this catalog.');
@@ -23,7 +25,7 @@ export class OdcBridge {
   status() {
     return { catalog: { apiCount: this.catalog.apis.size, operationCount: this.catalog.operations.size,
       sourceCommit: this.catalog.raw.sourceCommit },
-    auth: { configured: this.auth.configured(), method: 'OAuth 2.0 client_credentials', credentialsExposed: false,
+    auth: { configured: this.auth.configured(), method: this.auth.method ?? 'OAuth 2.0 client_credentials', credentialsExposed: false,
       accessVerified: Boolean(this.lastSuccessfulRequest) },
     policy: { readOnlyByDefault: true, allowedWriteOperations: [...this.config.allowedWriteOperations] },
     monitoring: {
@@ -84,7 +86,7 @@ export class OdcBridge {
       // Reads may be retried exactly once on 401. A mutation is never automatically replayed.
       if (response.status === 401) {
         this.auth.invalidate(token);
-        if (operation.readOnly) {
+        if (operation.readOnly && this.auth.retryReadOnUnauthorized !== false) {
           token = await this.auth.getToken();
           this.charge(request.api.id, operation);
           response = await send();

@@ -6,6 +6,7 @@ internal sealed class DebugSession : IAsyncDisposable {
     readonly DebugPolicy.PrivateValues privateValues = new();
     readonly IDebugTransport transport;
     readonly DebugRequestOwnership? ownership;
+    readonly PrivateInspectionWire? privateInspectionWire;
     readonly SemaphoreSlim gate = new(1);
     readonly Dictionary<string, Pause> pauses = new();
     readonly Queue<object> events = new();
@@ -19,20 +20,27 @@ internal sealed class DebugSession : IAsyncDisposable {
     int traceCount, traceSkipped;
     string state = "starting";
     string? fault;
+    bool pauseRequested;
+    int pauseRequests;
+    string? startError, startExceptionClass, stopError, stopExceptionClass;
     Task? stopTask;
     int ownershipFaultStopScheduled;
     internal bool Finished => state is "stopped" or "stop-uncertain";
-    sealed class Pause(ThreadData thread, DebugRequestOwnership.Metadata? metadata = null) {
+    sealed class Pause(ThreadData thread, DebugRequestOwnership.Metadata? metadata = null, string? nativeRequestIdSha256 = null) {
         internal readonly ThreadData Thread = thread;
         internal readonly DebugRequestOwnership.Metadata? OwnershipMetadata = metadata;
+        internal readonly string? NativeRequestIdSha256 = nativeRequestIdSha256;
         internal readonly long Started = Stopwatch.GetTimestamp();
         internal bool Consumed;
+        internal NativeInspection? Inspection;
     }
     internal DebugSession(Configuration config, IDebugTransport? transport = null, TimeProvider? ownershipClock = null,
         Func<Configuration, StreamWriter?>? traceWriterFactory = null) {
         IDebugTransport? preparedTransport = null; StreamWriter? preparedTrace = null;
         try {
             config.ValidatePrivateValues();
+            config.Inspection?.Validate();
+            if (config.Inspection != null && (config.AutoContinue || config.Trace != null)) throw new DebugFailure("debug_inspection_requires_manual_session");
             config.ValidateRequestOwnership();
             if (config.RequestOwnership is { } requestOwnership) {
                 // This qualification executes synthetic events only. An explicitly injected
@@ -58,7 +66,15 @@ internal sealed class DebugSession : IAsyncDisposable {
             preparedTransport.Received += OnEvent;
             preparedTransport.Failed += code => { if (!Finished && state != "stopping") { fault = code; state = "faulted"; } };
             this.config = config; this.transport = preparedTransport; traceFile = preparedTrace;
-            expires = DateTime.UtcNow.AddSeconds(config.Seconds);
+            var deadline = DateTimeOffset.UtcNow.AddSeconds(config.Seconds);
+            if (config.CredentialExpiresAt is { } credentialExpiry && credentialExpiry < deadline) deadline = credentialExpiry;
+            config.Deadline = deadline;
+            expires = deadline.UtcDateTime;
+            if (config.PrivateInspectionKey != null) {
+                if (config.Inspection == null) throw new DebugFailure("debug_private_inspection_not_enabled");
+                privateInspectionWire = new(config.PrivateInspectionKey, config.SessionId);
+                config.PrivateInspectionKey = null;
+            }
         } catch {
             // Preserve the preparation error even if disposal of an incomplete writer/client
             // also fails. The supplied transport remains the injecting caller's resource.
@@ -70,9 +86,15 @@ internal sealed class DebugSession : IAsyncDisposable {
         }
         finally { config.RequestOwnership?.Clear(); config.RequestOwnership = null; }
     }
+    internal TimeSpan RemainingLease { get { var left = expires - DateTime.UtcNow; return left > TimeSpan.Zero ? left : TimeSpan.Zero; } }
     internal async Task Start() {
         try { await transport.Start(); if (fault == null) state = "connected"; }
-        catch (Exception e) { fault = e is DebugFailure ? e.Message : "debug_start_failed_or_uncertain"; state = "start-failed"; throw; }
+        catch (Exception e) {
+            startError = Wire.SafeFailureCode(e, e is System.Net.WebException { Status: System.Net.WebExceptionStatus.Timeout }
+                ? "debug_start_timeout_uncertain" : "debug_start_failed_or_uncertain");
+            startExceptionClass = Wire.SafeExceptionClass(e);
+            fault ??= startError; state = "start-failed"; throw;
+        }
     }
     internal object Status() => new {
         ok = fault == null, sessionId = config.SessionId, headless = true,
@@ -82,15 +104,21 @@ internal sealed class DebugSession : IAsyncDisposable {
         lane = "o11",
 #endif
         processId = Environment.ProcessId, state, error = fault, expiresAt = expires, module = config.Module,
-        breakpoints = config.NodeKeys, breakOnAllErrors = false, autoContinue = config.AutoContinue,
+        startError, startExceptionClass, stopError, stopExceptionClass, transport = transport.Diagnostic,
+        breakpoints = config.NodeKeys, breakpointOwners = config.NodeModuleKeys, breakOnAllErrors = false, autoContinue = config.AutoContinue,
+        // ODC start preflight: a failed one means no start was sent (transport.startOutcome not-attempted).
+        transportPreflight = (transport as NativeTransport)?.Preflight,
+        pauseRequest = new { requested = pauseRequested, attempts = pauseRequests, scope = "native-debug-session-threads" },
+        inspectionMode = config.Inspection == null ? "bounded-capture" : "interactive", remainingLeaseMs = Math.Round(RemainingLease.TotalMilliseconds),
         requestOwnership = ownership == null ? new { mode = "legacy-unbound", productionQualified = false, gate = (object?)null }
             : new { mode = "offline-synthetic", productionQualified = false, gate = (object?)ownership.SafeStatus() },
-        pauses = pauses.Values.Where(p => !p.Consumed).Select(p => View(p.Thread)).ToArray(), events = events.ToArray(),
+        pauses = pauses.Values.Where(p => !p.Consumed).Select(p => View(p.Thread, p.NativeRequestIdSha256)).ToArray(), events = events.ToArray(),
         trace = config.Trace == null ? null : new { mode = config.Trace.Mode, count = traceCount, steps = config.Trace.Steps, skippedThreads = traceSkipped, file = traceFile != null ? "trace.jsonl" : null, last = recentTrace.ToArray() }
     };
-    static object View(ThreadData t) => new {
-        threadId = t.ThreadId, eventId = t.EventId.ToString(System.Globalization.CultureInfo.InvariantCulture),
-        stack = t.Stack.Take(100).Select(f => new { frame = f.StackLevel, module = f.ESpaceName, action = f.FunctionName, nodeKey = f.Breakpoint?.ObjectKey.ToString(), functionKey = f.FunctionId?.ObjectKey.ToString() }).ToArray()
+    // The fingerprint exists only for an original requestId equal to the server thread's RequestId (DebugTransportEvent).
+    static object View(ThreadData t, string? nativeRequestIdSha256 = null) => new {
+        threadId = t.ThreadId, eventId = t.EventId.ToString(System.Globalization.CultureInfo.InvariantCulture), nativeRequestIdSha256,
+        stack = t.Stack.Take(100).Select(f => new { frame = f.StackLevel, module = f.ESpaceName, moduleKey = f.FunctionId?.ESpaceKey.ToString(), action = f.FunctionName, nodeKey = f.Breakpoint?.ObjectKey.ToString(), functionKey = f.FunctionId?.ObjectKey.ToString(), functionType = f.FunctionType }).ToArray()
     };
     void Record(object item) {
         if (Wire.Json(item).Length > 65536) item = new { kind = "capture-truncated", error = "debug_event_output_limit" };
@@ -104,7 +132,9 @@ internal sealed class DebugSession : IAsyncDisposable {
             var thread = evt.ThreadData;
             if (Finished || state is "stopping" or "faulted") return;
             if (evt is StopDebugSessionEvent) { fault = "debug_server_ended_session"; state = "faulted"; return; }
-            if (thread == null) return;
+            // Session-level native events (including readiness) can have no
+            // application thread. Keep them observable before inspecting frames.
+            if (thread == null) { Record(new { kind = evt.GetType().Name, eventId = evt.EventId.ToString(System.Globalization.CultureInfo.InvariantCulture) }); return; }
             DebugRequestOwnership.Metadata? metadata = null;
             if (ownership != null && evt is (AtBreakpointEvent or ThreadEndEvent)) {
                 metadata = Metadata(envelope);
@@ -126,13 +156,20 @@ internal sealed class DebugSession : IAsyncDisposable {
                 }
                 privateValues.Add(metadata.ThreadId, metadata.RawRequestId);
             }
-            if (evt is AtBreakpointEvent && !thread.IsClientSideThread) {
+            // SuspendAllThreads answers with BeforeSuspendEvent (frameless server stack); the installed DebuggerManager
+            // registers it like a breakpoint stop. It is a stop only where pause is permitted; elsewhere it is observed.
+            var suspension = evt is BeforeSuspendEvent && config.Inspection != null && !config.AutoContinue && config.Trace == null && ownership == null;
+            if ((evt is AtBreakpointEvent || suspension) && !thread.IsClientSideThread) {
                 if (seenStops.Count >= 2048) { state = "faulted"; fault = "debug_event_limit"; return; }
                 if (!seenStops.Add((thread.ThreadId, thread.EventId))) return;
                 if (pauses.TryGetValue(thread.ThreadId, out var old) && old.Thread.EventId >= thread.EventId) return;
-                var pause = pauses[thread.ThreadId] = new(thread, metadata);
-                if (config.Trace is { } trace) { TraceStop(pause, trace); return; }
-                Record(new { kind = "paused", stop = View(thread) });
+                var pause = pauses[thread.ThreadId] = new(thread, metadata, envelope.NativeRequestIdSha256);
+                pauseRequested = false;
+                if (config.Inspection is { } inspection && thread.Stack.Any()) pause.Inspection = new(inspection, privateValues, thread, request => transport.Evaluate(thread.ThreadId, request),
+                    new(envelope.RawRequestId, envelope.RawRequestIdPresent, envelope.RequestIdIsFallback), privateInspectionWire);
+                if (config.Trace is { } trace) { TraceStop(pause, trace, envelope.NativeRequestIdSha256); return; }
+                Record(new { kind = "paused", reason = suspension ? "suspend" : "breakpoint", stop = View(thread, envelope.NativeRequestIdSha256),
+                    nativeRequestIdShape = envelope.NativeRequestIdShape });
                 if (config.AutoContinue) {
                     try {
                         if (config.Paths.Length > 0) Record(new { kind = "variables", stop = View(thread), values = Inspect(pause, thread.StackTop.StackLevel, 2, config.Paths) });
@@ -140,9 +177,16 @@ internal sealed class DebugSession : IAsyncDisposable {
                     finally { Continue(pause, "continue"); }
                 }
             } else if (evt is ContinueEvent or ThreadEndEvent) {
+                // ThreadEnd carries no outcome natively; scheduling, ThreadEnd and completion stay separate facts.
+                if (evt is ThreadEndEvent && config.Inspection != null)
+                    Record(new { kind = "thread-end", threadId = thread.ThreadId, eventId = thread.EventId.ToString(),
+                        nativeRequestIdSha256 = envelope.NativeRequestIdSha256, nativeRequestIdShape = envelope.NativeRequestIdShape,
+                        lastBreakpoint = envelope.LastBreakpointNodeKey,
+                        isLongLivedRequest = (thread as ServiceStudio.ServerCommunications.API.ServerThreadData)?.IsLongLivedRequest });
                 // The map of one request ends here: a runner segments scenarios by this marker instead of waiting for silence.
                 if (evt is ThreadEndEvent && config.Trace != null && tracedThreads.Remove(thread.ThreadId))
                     AppendTrace(new { kind = "thread-end", ms = Math.Round(Stopwatch.GetElapsedTime(opened).TotalMilliseconds), threadId = thread.ThreadId,
+                        nativeRequestIdSha256 = envelope.NativeRequestIdSha256,
                         eventId = thread.EventId.ToString(System.Globalization.CultureInfo.InvariantCulture) });
                 if (ownership == null || pauses.TryGetValue(thread.ThreadId, out var p) && MatchesPause(envelope, p)) {
                     pauses.Remove(thread.ThreadId); if (evt is ThreadEndEvent) focusEntered.Remove(thread.ThreadId);
@@ -189,7 +233,7 @@ internal sealed class DebugSession : IAsyncDisposable {
     // One node visit: dump the scope of the action on top of the stack, record it, then step into the next node
     // (or continue once the budget is spent or the focus action returned). RequireFunctionKey filters actions only;
     // it does not distinguish another user's request executing the same action.
-    void TraceStop(Pause pause, TraceOptions t) {
+    void TraceStop(Pause pause, TraceOptions t, string? nativeRequestIdSha256) {
         EnsureOwned(pause);
         var thread = pause.Thread;
         var functions = thread.Stack.Select(f => f.FunctionId?.ObjectKey.ToString()).ToArray();
@@ -206,6 +250,7 @@ internal sealed class DebugSession : IAsyncDisposable {
             }
             AppendTrace(new {
                 seq = traceCount, ms = Math.Round(Stopwatch.GetElapsedTime(opened).TotalMilliseconds), threadId = thread.ThreadId,
+                nativeRequestIdSha256,
                 eventId = thread.EventId.ToString(System.Globalization.CultureInfo.InvariantCulture), module = top.ESpaceName, action = top.FunctionName,
                 functionKey = function, nodeKey = top.Breakpoint?.ObjectKey.ToString(), stackDepth = thread.Stack.Count(),
                 stack = thread.Stack.Take(30).Select(f => new { module = f.ESpaceName, action = f.FunctionName, functionKey = f.FunctionId?.ObjectKey.ToString(), nodeKey = f.Breakpoint?.ObjectKey.ToString() }).ToArray(),
@@ -236,6 +281,7 @@ internal sealed class DebugSession : IAsyncDisposable {
     void Continue(Pause p, string op, bool quiet = false) {
         EnsureOwned(p);
         p.Consumed = true; // Consume BEFORE the network call, including uncertain outcomes.
+        p.Inspection?.Invalidate();
         try {
             transport.Execute(op, p.Thread.ThreadId);
             if (!quiet) Record(new { kind = op, threadId = p.Thread.ThreadId, eventId = p.Thread.EventId.ToString(), pauseObservedMs = Math.Round(Stopwatch.GetElapsedTime(p.Started).TotalMilliseconds, 1) });
@@ -249,8 +295,32 @@ internal sealed class DebugSession : IAsyncDisposable {
         try {
             if (r.Op is "status" or "stop") return Status();
             if (state != "connected") throw new DebugFailure("debug_session_not_connected");
+            if (RemainingLease <= TimeSpan.Zero) throw new DebugFailure("debug_session_expired");
+            if (r.Op == "pause") {
+                if (config.Inspection == null || config.AutoContinue || config.Trace != null || ownership != null)
+                    throw new DebugFailure("debug_pause_requires_manual_session");
+                if (r.ThreadId != null || r.EventId != null || pauseRequested || pauses.Values.Any(p => !p.Consumed))
+                    throw new DebugFailure("debug_pause_already_pending_or_stopped");
+                if (pauseRequests >= 64) throw new DebugFailure("debug_pause_limit");
+                // Reserve before I/O. An uncertain native command is never
+                // repeated; only a new observed stop clears the pending state.
+                pauseRequested = true; pauseRequests++;
+                try { transport.Execute("pause", ""); }
+                catch { state = "faulted"; fault = "debug_pause_uncertain"; throw new DebugFailure(fault); }
+                return Status();
+            }
             if (r.ThreadId == null || !pauses.TryGetValue(r.ThreadId, out var p) || p.Consumed || r.EventId != p.Thread.EventId.ToString()) throw new DebugFailure("debug_stale_stop");
             EnsureOwned(p);
+            if (r.Op is "scope" or "read" or "private-read" or "read-many" or "read-frame" or "expand" or "refresh" or "frame" or "bind-scope") {
+                if (p.Inspection == null) throw new DebugFailure(config.Inspection != null && p.Thread.StackTop == null
+                    ? "debug_native_suspension_without_frames" : "debug_inspection_not_enabled");
+                if (r.Op == "bind-scope") return p.Inspection.BindScope(r.ScopeUpdate ?? throw new DebugFailure("debug_invalid_inspection_scope"));
+                if (r.Op == "scope") return p.Inspection.Scope();
+                if (r.Op == "frame") return p.Inspection.SelectFrame(r.Frame);
+                if (r.Op == "read-many") return p.Inspection.ReadMany(r);
+                if (r.Op == "read-frame") return p.Inspection.ReadFrame(r);
+                return p.Inspection.Read(r);
+            }
             if (r.Op == "variables") return new { ok = true, threadId = r.ThreadId, eventId = r.EventId, values = Inspect(p, r.Frame, r.Depth, r.Paths) };
             if (r.Op is not ("continue" or "step-over" or "step-into" or "step-out")) throw new DebugFailure("debug_unknown_operation");
             Continue(p, r.Op); return Status();
@@ -262,7 +332,7 @@ internal sealed class DebugSession : IAsyncDisposable {
         try {
             if (ownership?.ExpireIfNeeded() == true) { state = "faulted"; fault = "debug_request_ownership_pause_expired"; }
             if (state == "faulted") shouldStop = true;
-            else if (state == "connected") foreach (var p in pauses.Values.Where(p => !p.Consumed && Stopwatch.GetElapsedTime(p.Started).TotalSeconds >= config.PauseSeconds).ToArray()) {
+            else if (state == "connected" && config.Inspection == null) foreach (var p in pauses.Values.Where(p => !p.Consumed && Stopwatch.GetElapsedTime(p.Started).TotalSeconds >= config.PauseSeconds).ToArray()) {
                 try { Continue(p, "continue"); } catch { shouldStop = true; break; }
             }
         } finally { gate.Release(); }
@@ -277,18 +347,25 @@ internal sealed class DebugSession : IAsyncDisposable {
                 completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
                 stopTask = completion.Task;
                 state = "stopping";
+                foreach (var pause in pauses.Values) pause.Inspection?.Invalidate();
+                privateInspectionWire?.Dispose();
             }
             pending = stopTask;
         } finally { gate.Release(); }
         if (completion == null) { await pending; return; }
         bool confirmed = false;
         try { await transport.Stop(); confirmed = true; }
-        catch { /* An uncertain stop is recorded, never retried. */ }
+        catch (Exception e) {
+            // Keep the first failure: cleanup failure must not erase why startup failed.
+            stopError = Wire.SafeFailureCode(e, e is System.Net.WebException { Status: System.Net.WebExceptionStatus.Timeout }
+                ? "debug_stop_timeout_uncertain" : "debug_stop_uncertain");
+            stopExceptionClass = Wire.SafeExceptionClass(e);
+        }
         await gate.WaitAsync();
         try {
             state = confirmed ? "stopped" : "stop-uncertain";
             ownership?.Dispose();
-            if (confirmed) pauses.Clear(); else fault = "debug_stop_uncertain";
+            if (confirmed) pauses.Clear(); else fault ??= "debug_stop_uncertain";
             Record(new { kind = state });
         } finally { gate.Release(); completion.SetResult(); }
     }
@@ -300,6 +377,7 @@ internal sealed class DebugSession : IAsyncDisposable {
         }
     }
     void ClearPrivateResources(Configuration source) {
+        privateInspectionWire?.Dispose(); source.PrivateInspectionKey = null;
         privateValues.Clear(); ownership?.Dispose();
         if (ReferenceEquals(source.Redactor, privateValues)) source.Redactor = null;
     }

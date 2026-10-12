@@ -46,12 +46,21 @@ public sealed partial class ModelSession
 
         public void Mark(JsonObject op, int origin)
         {
+            var kind = op["op"]?.ToString();
+            // H13: an html page op names exactly the widgets its compiler creates (data-av keys, ids of elements without one, the
+            // screen and its variables): those names, never every word of its JSON (the 2026-10-10 session read "it uses
+            // FvAvailable of failed op #202" while the page form did not name widgets by id). The fragment form names its
+            // widgets by their ids, which its text carries.
+            if (kind == "html" && op["parent"] == null && op["data"] is JsonObject page && page["components"] == null)
+            {
+                _texts.Add((origin, string.Join("\n", HtmlExpander.CreatedNames(page))));
+                return;
+            }
             // The op's own texts, unescaped: ToJsonString escapes the quote of id="Pa2Botao" as a backslash-u0022 sequence, whose
             // digits glued to the name hid every widget an html fragment names (the Cardapio UI replay: 92 REFERENCE_UNRESOLVED
             // behind one failure).
             _texts.Add((origin, string.Join("\n", Texts(op))));
             if (op["as"]?.ToString() is { Length: > 0 } alias) _aliases.TryAdd(alias, origin);
-            var kind = op["op"]?.ToString();
             if (kind is "create" or "rename" && op["name"]?.ToString() is { Length: > 0 } name) _names.TryAdd(name, origin);
             if (kind == "logic")
                 foreach (var action in (op["data"]?["actions"] as JsonArray ?? new JsonArray()).OfType<JsonObject>())
@@ -148,7 +157,7 @@ public sealed partial class ModelSession
         var relative = failure.Kind switch
         {
             "rest" or "rest-expose" or "soap" => at,
-            "logic" or "spec" or "screen" => at == null ? null : at + "/data",
+            "logic" or "spec" or "screen" or "prototype" => at == null ? null : at + "/data",
             "html" when failure.Source["parent"] == null => at == null ? null : at + "/data",
             _ => at,
         };

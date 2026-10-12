@@ -362,10 +362,9 @@ public sealed class HtmlSpecTests
     [InlineData("script", "<script>alert(1)</script>", null, "inline scripts are not compiled")]
     [InlineData("orphan-key", """<div data-av="ghost">x</div>""", null, "has no binding")]
     [InlineData("orphan-binding", "<div>x</div>", """{"ghost":{"kind":"text","value":"1"}}""", "matches no element")]
-    [InlineData("duplicate-key", """<div data-av="a">x</div><p data-av="a">y</p>""", """{"a":{"kind":"text","value":"1"}}""", "used twice")]
+    // H12, H9 (docs/PROTOTIPO-NATIVO.md): a repeated key and a static table compile now (HtmlPageCollectAllTests).
     [InlineData("unknown-kind", """<div data-av="a">x</div>""", """{"a":{"kind":"magic"}}""", "unknown kind 'magic'")]
     [InlineData("unknown-binding-key", """<div data-av="a">x</div>""", """{"a":{"kind":"text","value":"1","colour":"red"}}""", "unknown keys: colour")]
-    [InlineData("static-table", "<table><tr><td>x</td></tr></table>", null, "must be bound with kind list")]
     [InlineData("row-mismatch", """<table data-av="t"><thead><tr><th>a</th><th>b</th></tr></thead><tbody><tr><td data-av="f">x</td></tr></tbody></table>""", """{"t":{"kind":"list"},"f":{"kind":"field","field":"Title"}}""", "must match")]
     [InlineData("demo-rows", """<table data-av="t"><thead><tr><th>a</th></tr></thead><tbody><tr><td data-av="f">x</td></tr><tr><td>demo</td></tr></tbody></table>""", """{"t":{"kind":"list"},"f":{"kind":"field","field":"Title"}}""", "one template <tr>")]
     [InlineData("repeater-two-children", """<ul data-av="l"><li data-av="f">a</li><li>b</li></ul>""", """{"l":{"kind":"list"},"f":{"kind":"field","field":"Title"}}""", "exactly one child element")]
@@ -380,16 +379,18 @@ public sealed class HtmlSpecTests
     [InlineData("input-type", """<input type="email" data-av="search">""", null, "input type email is not compiled")]
     [InlineData("date-without-var", """<input type="date" data-av="d">""", """{"d":{"kind":"date","variable":"When"}}""", "is not declared in vars")]
     [InlineData("text-with-children", """<div data-av="a"><b>x</b></div>""", """{"a":{"kind":"text","value":"1"}}""", "must not contain child elements")]
-    [InlineData("visible-on-element", """<section data-av="a">x</section>""", """{"a":{"kind":"visible","condition":"True"}}""", "kind visible needs a <div>")]
+    // H7: visible on any element is a native If around it (HtmlPageCollectAllTests).
     [InlineData("form", "<form><input data-av='q'></form>", null, "forms need the native validation")]
     [InlineData("empty-link", """<a data-av="o"></a>""", """{"o":{"kind":"refresh"}}""", "needs visible content")]
     [InlineData("button-in-link", """<a data-av="o"><span>x</span><button data-av="c">y</button></a>""", """{"o":{"kind":"refresh"},"c":{"kind":"refresh"}}""", "cannot contain another Link/Button")]
     [InlineData("list-in-link", """<a data-av="o"><ul data-av="l"><li data-av="f">a</li></ul></a>""", """{"o":{"kind":"refresh"},"l":{"kind":"list"},"f":{"kind":"field","field":"Title"}}""", "<ul> (kind list) cannot be compiled inside <a> (line 1 col")]
     [InlineData("input-in-button", """<button data-av="o"><input data-av="search"></button>""", """{"o":{"kind":"refresh"}}""", "form controls do not belong inside a Link/Button")]
-    [InlineData("bound-in-label", """<label>Total <span data-av="t">0</span></label>""", """{"t":{"kind":"text","value":"1"}}""", "inside a <label> is not compiled")]
+    // H6: a label keeps its children, bound ones included (HtmlPageCollectAllTests).
     public void UnprovenConstructsAreRejectedWithTheirPosition(string _, string body, string? bindings, string message)
     {
-        Assert.Contains(message, Assert.Throws<InvalidOperationException>(() => Expand(Page(body, bindings, source: true))).Message);
+        // H1: every problem of the page comes at once; a page with more than one is one KernelRefusalException (an
+        // InvalidOperationException) whose text carries each of them.
+        Assert.Contains(message, Assert.ThrowsAny<InvalidOperationException>(() => Expand(Page(body, bindings, source: true))).Message);
     }
 
     [Fact] public void ExistingScreensSourcesAndStylesheetsAreValidated()
@@ -400,8 +401,13 @@ public sealed class HtmlSpecTests
         Assert.Contains("css: line", Assert.Throws<InvalidOperationException>(() => Expand(css)).Message);
         var idSelector = Page("<div>x</div>"); idSelector["css"] = "#status{color:red}";
         Assert.Contains("reserves the id attribute", Assert.Throws<InvalidOperationException>(() => Expand(idSelector)).Message);
-        var import = Page("<div>x</div>"); import["css"] = "@import url(x.css);";
-        Assert.Contains("must be self-contained", Assert.Throws<InvalidOperationException>(() => Expand(import)).Message);
+        // H14: an @import is no refusal: it leads the block the theme install moves to the top of the stylesheet.
+        var import = Page("<div>x</div>"); import["css"] = ".a{color:red}@import url(x.css);";
+        var hoisted = Expand(import);
+        Assert.StartsWith("@import url(x.css);\n", hoisted.ScopedCss);
+        Assert.Equal("@import url(x.css);", hoisted.Report["stylesheet"]!["cssImportsHoisted"]![0]!.ToString());
+        var charset = Page("<div>x</div>"); charset["css"] = "@charset \"utf-8\"; .a{color:red}";
+        Assert.Contains("must be self-contained", Assert.Throws<InvalidOperationException>(() => Expand(charset)).Message);
         var noSource = Page("""<button data-av="r">Atualizar</button>""", """{"r":{"kind":"refresh"}}""", source: false);
         Assert.Contains("requires a source", Assert.Throws<InvalidOperationException>(() => Expand(noSource)).Message);
         var deadFilter = Reference(); deadFilter["sources"]![3]!["args"]!["Search"] = "\"\"";
@@ -455,7 +461,7 @@ public sealed class HtmlSpecTests
         Assert.Contains("line 1", Assert.Throws<InvalidOperationException>(() => CssStylesheet.Parse(".a { color: red")).Message);
         Assert.Contains("expected ':'", Assert.Throws<InvalidOperationException>(() => CssStylesheet.Parse(".a { color red }")).Message);
         var scoped = CssStylesheet.Parse(":root{--a:1} body{margin:0} *{box-sizing:border-box} .x, .y>b{c:d} @media (max-width:5px){.z{e:f}}").Scoped(".av-p");
-        Assert.Equal(".av-p { --a: 1; }\n.av-p { margin: 0; }\n.av-p * { box-sizing: border-box; }\n.av-p .x, .av-p .y>b { c: d; }\n@media (max-width:5px) {\n  .av-p .z { e: f; }\n}", scoped);
+        Assert.Equal(".av-p { --a: 1; }\n.av-p { margin: 0; }\n.av-p, .av-p * { box-sizing: border-box; }\n.av-p .x, .av-p .y>b { c: d; }\n@media (max-width:5px) {\n  .av-p .z { e: f; }\n}", scoped);
         Assert.Equal(new[] { "a", "b[x=\"1,2\"]", "c(1,2)" }, CssStylesheet.SplitSelectors("a, b[x=\"1,2\"], c(1,2)").ToArray());
     }
 }

@@ -84,6 +84,13 @@ internal static class OpenHandler
         // its own; the answer lists it in dependenciesDialog and says referencesOutdated:true, so the caller refreshes the
         // references (refresh_references {module_key}). Any other dialog still ends the open with blockedBy, as before.
         var answerDependencies = p?["answer_dependencies"]?.GetValue<bool>() == true;
+        // Speed lane vel-entrega (capability open_module:references_check_optional): references_check:false on a tab that
+        // is ALREADY open skips the Studio's references check (HasIncompatibleReferences, up to 3 s + 1 s, often "skipped"
+        // on a slow network). Only its signal referencesOutdated is lost, and the delivery that asks for this (Delivery.cs
+        // stage open, after the build phase captured the tab by key in the same call) never reads it: it reads opened,
+        // alreadyOpen, blockedBy and dependenciesDialog.answered. A pending dependencies dialog is still answered below. A
+        // tab this call opens always runs the check (the dialog may come with the load).
+        var referencesCheck = p?["references_check"]?.GetValue<bool>() != false;
         var answered = new JsonArray();
         var sw = Stopwatch.StartNew();
         IAggregatorPresenter? target = null;
@@ -192,6 +199,17 @@ internal static class OpenHandler
                 var owner0 = target;
                 var (tabKey, tabEnvironment) = await Ui.Run(() => (owner0.ActiveESpace?.Key.ToString(), Studio.EnvironmentHost(owner0)), UiGate.Read, "open_module: read the tab");
                 result["key"] = tabKey; result["environment"] = tabEnvironment;
+            }
+            if (already && !referencesCheck)
+            {
+                result["referencesCheck"] = "not-requested";
+                if (answerDependencies && await AnswerDependencies())
+                {
+                    result["referencesOutdated"] = true;
+                    result["dependenciesDialog"] = new JsonObject { ["answered"] = answered.DeepClone(), ["next"] = "refresh_references" };
+                }
+                result["elapsedMs"] = sw.ElapsedMilliseconds;
+                return Server.Ok(result);
             }
             // The manager may communicate with the server. Never block the Avalonia thread.
             var answer = new TaskCompletionSource<bool?>(TaskCreationOptions.RunContinuationsAsynchronously);

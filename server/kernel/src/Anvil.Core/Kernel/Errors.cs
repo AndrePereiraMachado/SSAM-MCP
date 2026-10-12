@@ -67,8 +67,28 @@ public static class Errors
         if (Diagnosis(ex) is { } diagnosis)
             foreach (var (key, value) in diagnosis)
                 if (key != "problems" || envelope["problems"] == null) envelope[key] = value?.DeepClone();
+        // lentidao 2026-10-12: what the kernel rewrote instead of refusing comes with the refusal of what stayed.
+        if (Normalizations(ex) is { } normalizations) envelope["normalizations"] = normalizations;
         envelope["stack"] = stack;
         return envelope;
+    }
+
+    /// <summary>Where a refusal keeps the normalizations of its job (JobNormalizer): {rule, path, from, to, message}.</summary>
+    public const string NormalizationsKey = "anvil.normalizations";
+
+    /// <summary>Keeps the normalizations of the job with its refusal (only when there are some, and only once).</summary>
+    public static void AttachNormalizations(Exception ex, JsonArray? normalizations)
+    {
+        if (normalizations is not { Count: > 0 } || ex.Data.Contains(NormalizationsKey)) return;
+        ex.Data[NormalizationsKey] = normalizations.DeepClone();
+    }
+
+    /// <summary>The normalizations a refusal carries (outermost first), or null.</summary>
+    public static JsonArray? Normalizations(Exception ex)
+    {
+        for (var e = ex; e != null; e = e.InnerException)
+            if (e.Data.Contains(NormalizationsKey) && e.Data[NormalizationsKey] is JsonArray list) return list.DeepClone().AsArray();
+        return null;
     }
 
     /// <summary>Where <see cref="Annotate"/> keeps the fields of a refusal whose exception is not a JobPreflightException.</summary>

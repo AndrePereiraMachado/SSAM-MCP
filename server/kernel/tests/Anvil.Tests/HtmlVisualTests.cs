@@ -358,7 +358,8 @@ public sealed class HtmlVisualTests
     }
 
     [Theory]
-    [InlineData("<table><tr><td>a</td></tr></table>", "is not compiled")]
+    // H9 (the one table): a static table compiles to HTML Elements of its tags (ElementWidgetMapTests); a tag outside every list is refused.
+    [InlineData("<marquee>a</marquee>", "is not compiled")]
     [InlineData("<div list=\"GetUsers.List\"><span>x</span></div>", "needs as=")]
     [InlineData("<div else><span>x</span></div>", "must immediately follow")]
     [InlineData("<div id=\"A\"></div><div id=\"A\"></div>", "already used by another widget")]

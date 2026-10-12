@@ -10,15 +10,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as z from 'zod/v4';
 import { anvilRoot } from './workspace.mjs';
-import { createAnvilRunner } from './anvil-cli.mjs';
+import { execFile } from 'node:child_process';
 import { namesWhole } from './studio-create-app.mjs';
+import { portalTransportDirectory } from './portal-request-file.mjs';
+import {authorizationContext as readApproval} from './authorization-context.mjs';
+import {externalLibrarySelection} from './external-library-selection.mjs';
 
 export const EXTERNAL_LIBRARY_ACTIONS = ['build', 'deploy', 'status', 'discard'];
 const FIELDS = {
   build: ['spec', 'specFile'],
-  deploy: ['spec', 'specFile', 'releaseTag', 'releaseNotes', 'tenant', 'auth', 'pid', 'authorize', 'operationUuid', 'confirmTenant'],
+  deploy: ['spec', 'specFile', 'releaseTag', 'releaseNotes', 'tenant', 'auth', 'pid', 'authorize', 'operationUuid', 'confirmTenant', 'authorizationContext', 'originOperationUuid', 'expectedRevision'],
   status: ['library', 'spec', 'specFile', 'tenant', 'auth', 'pid'],
-  discard: ['library', 'jobKey', 'tenant', 'auth', 'pid', 'authorize', 'operationUuid', 'confirmTenant'],
+  discard: ['library', 'jobKey', 'tenant', 'auth', 'pid', 'authorize', 'operationUuid', 'confirmTenant', 'authorizationContext', 'originOperationUuid'],
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const refusal = (code, error, extra = {}) => ({ ok: false, code, error, ...extra });
@@ -178,12 +181,23 @@ function suggest(name) {
 }
 
 // ---- the tool
-const defaultKernel = ({ root = anvilRoot, env = process.env } = {}) => {
-  const runAnvil = createAnvilRunner({ root, env });
-  const cli = path.join(root, '.local', 'lane-odc', 'cli', 'anvil-odc.dll');
+export const externalLibraryKernel = ({ root = anvilRoot, env = process.env, execFileFn = execFile } = {}) => {
   return async args => {
+    const selection = externalLibrarySelection(root, env);
+    if (selection.error) return { stderr: [selection.error] };
+    const cli = selection.cli;
+    if (!path.isAbsolute(cli)) return { stderr: ['SSAM_ODC_EXTERNAL_LIBRARY_CLI must be an absolute path.'] };
     if (!fs.existsSync(cli)) return { missing: cli };
-    return runAnvil(args, { cli, timeoutMs: 20 * 60000, cwd: root });
+    return new Promise(resolve => execFileFn('dotnet', [cli, ...args], {
+      cwd: root, env: { ...env, ANVIL_LANE: 'odc' }, windowsHide: true,
+      timeout: 20 * 60000, maxBuffer: 256 * 1024 * 1024, encoding: 'utf8',
+    }, (error, stdout, stderr) => {
+      let envelope = null;
+      try { envelope = JSON.parse(String(stdout ?? '').trim()); } catch { /* reported as KERNEL_NO_ANSWER */ }
+      resolve({ ok: !error && envelope?.ok === true, envelope,
+        stderr: String(stderr ?? '').trim().split(/\r?\n/).filter(Boolean).slice(-10),
+        ...(error?.killed ? { timedOut: true } : {}) });
+    }));
   };
 };
 const portalModule = file => import(new URL('../portal/runtime/' + file, import.meta.url).href);
@@ -191,19 +205,18 @@ const portalModule = file => import(new URL('../portal/runtime/' + file, import.
 export function createExternalLibraryTool(deps = {}) {
   const now = deps.now ?? (() => new Date());
   const evidenceRoot = deps.evidenceRoot ?? path.join(anvilRoot, '.local', 'lane-odc', 'external-library');
-  const kernel = deps.kernel ?? defaultKernel(deps);
+  const kernel = deps.kernel ?? externalLibraryKernel(deps);
   const grantsOf = async () => (deps.grants !== undefined ? deps.grants : await import('./standing-grants.mjs').catch(() => null));
   let access = deps.access ?? null;
   const accessOf = async () => access ??= await (await import('./lib.mjs')).createAccess();
-  const portalRoot = deps.portalRoot ?? null;
 
   async function deployer() {
     const a = await accessOf();
     const { ExternalLibraryDeployer } = deps.portalRuntime?.deployer ?? await portalModule('external-library.mjs');
     const uploads = deps.portalRuntime?.uploads ?? await portalModule('external-library-upload.mjs');
-    const root = portalRoot ?? (await import('./lib.mjs')).root;
     const uploaders = deps.uploaders ?? {
-      studio: () => uploads.bridgeUploader({ studio: a.studio, requestFile: json => a.requestFile(json), stage: uploads.stageUpload(path.join(root, 'journal', 'portal', 'uploads')) }),
+      studio: () => uploads.bridgeUploader({ studio: a.studio, requestFile: json => a.requestFile(json),
+        stage: async (file, name) => uploads.stageUpload(await portalTransportDirectory(args => a.studio.call(args), 'uploads'))(file, name) }),
       vault: async host => { try { return uploads.vaultUploader({ bridge: await a.vault.bridge(host) }); } catch { return null; } },
     };
     return new ExternalLibraryDeployer({ access: a, uploaders, sleep: deps.sleep, waits: deps.waits });
@@ -223,6 +236,14 @@ export function createExternalLibraryTool(deps = {}) {
 
   // The words for a deploy: the user's, naming the library, or a standing publish grant of the library.
   async function wordsFor(input, name) {
+    if(input.authorizationContext) {
+      try {
+        const host=await (await accessOf()).pickTenant(input.tenant);
+        const context=readApproval(input.authorizationContext,input.authorize,{lane:'odc',host,operation:'external-library:deploy',targets:[name]});
+        if(!context)throw Object.assign(new Error('Missing approval.'),{code:'AUTHORIZATION_CONTEXT_INVALID'});
+        return {words:input.authorize,userWords:true,authorization:{source:'proposal-context',context}};
+      } catch(error) {return {problem:{code:error.code??'AUTHORIZATION_CONTEXT_INVALID',path:'/authorizationContext',message:error.message,fix:'Use the unchanged human-approved proposal for this exact library.'}};}
+    }
     if (typeof input.authorize === 'string' && input.authorize.trim()) {
       if (typeof name === 'string' && namesWhole(input.authorize, name)) return { words: input.authorize.trim(), userWords: true, authorization: { source: 'words' } };
       return { problem: { code: 'WORDS_MUST_NAME_LIBRARY', path: '/authorize', message: 'The words do not name the library ' + (name ?? '') + ' as a whole word.', fix: 'Repeat with the user\'s own words that name ' + (name ?? 'the library') + ' (quoted, not a paraphrase).', ssamRule: true } };
@@ -245,6 +266,8 @@ export function createExternalLibraryTool(deps = {}) {
     const data = run?.envelope?.data;
     if (!data) return refusal('KERNEL_NO_ANSWER', 'The ODC kernel gave no answer to external-library build' + ((run?.stderr ?? []).length ? ': ' + run.stderr.at(-1) : '') + '.', { evidence: dir });
     if (data.ok === false) return { ok: false, code: data.code, error: data.error, problems: data.problems ?? [], evidence: dir, ...(data.log ? { log: data.log } : {}) };
+    if (run.ok !== true || run.envelope.ok !== true || data.ok !== true)
+      return refusal('KERNEL_BUILD_FAILED', 'The ODC build did not finish successfully.', { evidence: dir, timedOut: run.timedOut === true });
     return { ok: true, evidence: dir, data };
   }
 
@@ -263,11 +286,12 @@ export function createExternalLibraryTool(deps = {}) {
     if (action === 'discard') {
       const problems = [];
       if (typeof input.authorize !== 'string' || input.authorize.trim().length < 8) problems.push({ code: 'WORDS_MUST_NAME_LIBRARY', path: '/authorize', message: 'Discarding a job deletes it: the user\'s words name the library.', fix: 'Repeat with authorize: the user\'s words naming the library.', ssamRule: true });
-      else if (input.library && !namesWhole(input.authorize, input.library)) problems.push({ code: 'WORDS_MUST_NAME_LIBRARY', path: '/authorize', message: 'The words do not name ' + input.library + '.', fix: 'Repeat with the user\'s words that name ' + input.library + '.', ssamRule: true });
+      else if (!input.authorizationContext && input.library && !namesWhole(input.authorize, input.library)) problems.push({ code: 'WORDS_MUST_NAME_LIBRARY', path: '/authorize', message: 'The words do not name ' + input.library + '.', fix: 'Repeat with the user\'s words that name ' + input.library + '.', ssamRule: true });
       if (!UUID.test(String(input.operationUuid ?? ''))) problems.push({ code: 'INPUT_INVALID', path: '/operationUuid', message: 'operationUuid must be a new UUID.', fix: 'Pass a new UUID.' });
       if (!input.jobKey && !input.library) problems.push({ code: 'INPUT_INVALID', path: '/jobKey', message: 'discard needs jobKey or library.', fix: 'Pass the jobKey the refusal named.' });
       if (problems.length) return refusal(problems[0].code, problems.map(p => p.message).join(' '), { problems });
-      return (await deployer()).discard({ tenant: input.tenant, auth: input.auth, jobKey: input.jobKey, library: input.library, authorize: input.authorize, operationUuid: input.operationUuid, confirmTenant: input.confirmTenant });
+      return (await deployer()).discard({ tenant: input.tenant, auth: input.auth, jobKey: input.jobKey, library: input.library, authorize: input.authorize, operationUuid: input.operationUuid, confirmTenant: input.confirmTenant,
+        authorizationContext:input.authorizationContext,originOperationUuid:input.originOperationUuid });
     }
 
     // build and deploy: the spec first, then (deploy) the words and the tenant guard, all before anything runs.
@@ -290,7 +314,7 @@ export function createExternalLibraryTool(deps = {}) {
       try {
         const host = await a.pickTenant(input.tenant);
         const { guardTenant } = deps.portalRuntime?.access ?? await portalModule('access.mjs');
-        guardTenant(a.tenantInfo(host), authorization.words, input.confirmTenant);
+        guardTenant(a.tenantInfo(host), authorization.words, input.confirmTenant,authorization.authorization?.context);
       } catch (error) {
         return refusal(error.code ?? 'INPUT_INVALID', error.message, { sent: false, problems: [{ code: error.code ?? 'INPUT_INVALID', path: '/tenant', message: error.message,
           fix: error.code === 'CORPORATE_TENANT_GUARD' ? 'Repeat with confirmTenant (the tenant host) and the user\'s words that also name the tenant.' : 'Choose a tenant the user may change.' }] });
@@ -301,11 +325,12 @@ export function createExternalLibraryTool(deps = {}) {
     const data = built.data;
     if (action === 'build')
       return { ok: true, action: 'build', library: data.name, package: data.package, contents: data.contents, sdk: data.sdk, targetFramework: data.targetFramework, runtime: data.runtime, evidence: built.evidence,
-        next: { tool: 'odc_external_library', arguments: { action: 'deploy', spec: { name: data.name }, authorize: '<the user\'s words naming ' + data.name + '>', operationUuid: '<new uuid>' }, why: 'deploys this library to the tenant in one call' } };
+        next: { tool: 'odc_external_library', arguments: { action: 'deploy', specFile: path.join(built.evidence, 'spec.json'), authorize: '<the user\'s words naming ' + data.name + '>', operationUuid: '<new uuid>' }, why: 'deploys the complete spec preserved by this build to the authorized tenant in one call' } };
 
     const plan = { name: data.name, package: { path: data.package.path, fileName: data.package.fileName, sha256: data.package.sha256, bytes: data.package.bytes }, contents: data.contents };
     const result = await (await deployer()).deploy(plan, { tenant: input.tenant, auth: input.auth ?? 'auto', words: authorization.words, userWords: authorization.userWords,
-      operationUuid: input.operationUuid, confirmTenant: input.confirmTenant, releaseTag: input.releaseTag, releaseNotes: input.releaseNotes, authorization: authorization.authorization });
+      operationUuid: input.operationUuid, confirmTenant: input.confirmTenant, releaseTag: input.releaseTag, releaseNotes: input.releaseNotes, authorization: authorization.authorization,
+      authorizationContext:input.authorizationContext,originOperationUuid:input.originOperationUuid,expectedRevision:input.expectedRevision });
     return finish(result, { input, spec, evidence: built.evidence });
   };
 
@@ -359,10 +384,13 @@ export function registerExternalLibrary(server, deps = {}) {
       specFile: z.string().min(1).optional().describe('Absolute path of a JSON file with the spec, in place of spec.'),
       releaseTag: z.string().regex(/^\d+\.\d+\.\d+$/).optional().describe('deploy: the version tag of the new revision; default the next patch of the highest tag, or 1.0.0.'),
       releaseNotes: z.string().max(2000).optional(),
+      authorizationContext:z.string().min(1).optional().describe('deploy: absolute path of the human proposal approval bound to exact package hash, release and own-fixture origin.'),
+      originOperationUuid:z.string().uuid().optional().describe('deploy update: confirmed receipt that created this own test library.'),
+      expectedRevision:z.number().int().positive().optional().describe('deploy update: unchanged current revision of that own fixture.'),
       library: z.string().min(1).optional().describe('status and discard: the library name.'),
       jobKey: z.string().min(1).optional().describe('discard: the key of the open job (GENERATION_PENDING names it).'),
       tenant: z.string().min(1).optional().describe('Tenant host. Default: the only Studio session, else the configured default.'),
-      auth: z.enum(['auto', 'studio', 'api-client']).optional().describe('Default auto. auto: the Studio session (public API) and the Portal window inside the ODC Studio; with no Studio open, the vault, else a private prompt. api-client: the vault API Client and Portal account.'),
+      auth: z.enum(['auto', 'studio', 'api-client']).optional().describe('Default auto: the Studio session for public APIs and authenticated headless HTTP or a compatible private profile for internal Portal. No browser or credential prompt opens. api-client: the stored API Client and compatible Portal profile.'),
       pid: z.number().int().positive().optional().describe('ODC Studio process id; detected when there is exactly one.'),
       authorize: z.string().min(8).optional().describe('deploy and discard: the user\'s own words naming the library (and each consumer a deploy would break), quoted verbatim; only their sha256 is kept. Without them a deploy uses a standing publish grant of the library.'),
       operationUuid: z.string().uuid().optional().describe('deploy and discard: a new UUID per change; repeating it never resends, it reads and continues.'),

@@ -104,6 +104,13 @@ test('search: text in expressions, values, arguments and names, with filters, re
   assert.deepEqual((await ask({ text: 'Code', property: 'condition' })).entries.map(e => e.key), ['N4']);
   // kind matches the interfaces an element answers; role filters by the index role.
   assert.deepEqual((await ask({ text: 'MaxLines', kind: 'IfNode' })).entries.map(e => e.key), ['N1']);
+  // One kind with a stray separator is that kind (review of U6: "IfNode|" reached this view raw and answered nothing); a
+  // kind that names nothing is refused.
+  for (const kind of ['IfNode|', 'IfNode,', ' IfNode , ']) {
+    const one = await ask({ text: 'MaxLines', kind });
+    assert.deepEqual(one.entries.map(e => e.key), ['N1'], kind); assert.equal(one.query.kind, 'IfNode', kind);
+  }
+  for (const kind of ['|', ', ,']) assert.match((await ask({ text: 'MaxLines', kind })).error, /^kind must name a kind$/, kind);
   assert.deepEqual((await ask({ text: 'MaxLines', role: 'variable' })).entries.map(e => [e.key, e.property]), [['SP1', 'Name'], ['SP1', 'Description']]);
   // A regular expression; an invalid one is refused with its reason.
   assert.deepEqual((await ask({ text: '^Site\\.MaxLines$', regex: true })).entries.map(e => e.key), ['N3']);
@@ -126,6 +133,8 @@ test('uses inside one module: every consumer, the property that uses it, direct 
     foundIn: [{ module: 'Orders', key: 'SP1' }] });
   assert.deepEqual(site.entries.map(e => [e.consumer.key, e.via, e.relation]), [['N1', 'Condition', 'direct'], ['N3', 'MaxRecords', 'direct'], ['N6', 'Value', 'direct']]);
   assert.equal(site.consumers, 3); assert.equal(site.crossModule, 0);
+  // kind narrows the element; a stray separator ("SiteProperty,") is the same one kind.
+  assert.deepEqual((await ask({ element: 'MaxLines', kind: 'SiteProperty,' })).entries, site.entries);
   // An action: its parameter's uses are uses of the action (descendant), inside the action they are not uses.
   const action = await ask({ element: 'ServerAction:PlaceOrder' });
   assert.deepEqual(action.entries, []);

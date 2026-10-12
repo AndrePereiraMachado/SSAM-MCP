@@ -8,6 +8,10 @@ export class OdcError extends Error {
 }
 
 export function publicError(error) {
+  if (error?.code === 'AUTHORIZATION_CONTEXT_INVALID')
+    return { code: 'AUTHORIZATION_CONTEXT_INVALID', message: 'The approval record does not cover this exact proposal, environment, operation and target. Nothing was sent.' };
+  if (['AbortError', 'TimeoutError'].includes(error?.name) || error?.code === 'READ_DEADLINE_EXCEEDED')
+    return { code: 'PORTAL_TIMEOUT', message: 'Portal request timed out or was cancelled. No replay performed.' };
   return error instanceof OdcError
     ? { code: error.code, message: error.message, ...error.details }
     : { code: 'INTERNAL_ERROR', message: 'The operation failed locally. No remote error or credentials were logged.' };
@@ -28,8 +32,24 @@ export const isSensitiveKey = key => key !== 'isSecret' && !PUBLIC_KEYS.has(key)
 export function redact(value, secrets = []) {
   const replacements = secrets.filter(s => typeof s === 'string' && s.length > 0)
     .flatMap(s => [s, encodeURIComponent(s)]).sort((a, b) => b.length - a.length);
-  function visit(item) {
+  function visit(item, field = '') {
     if (typeof item === 'string') {
+      // Public UUID identifiers must round-trip. A short password fragment can occur in a UUID by chance;
+      // replacing that fragment destroys environment/application keys. Never exempt secret-named fields (below),
+      // an exact secret value, free text, URLs, or arbitrary non-UUID identifiers.
+      const publicUuid = /(?:key|id)$/i.test(field) && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(item);
+      const publicTraceId = /^(?:id|traceId|spanId|parentSpanId)$/i.test(field) && /^(?:[0-9a-f]{16}|[0-9a-f]{32})$/i.test(item);
+      const publicLogId = /^logId$/i.test(field) && /^[A-Za-z0-9_-]{20,64}$/.test(item);
+      const publicTimestamp = /^(?:time|instant|timestamp|startTime|endTime)$/i.test(field) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(item) && Number.isFinite(Date.parse(item));
+      // TimerRunInformation uses these typed dates, including the no-run sentinel
+      // 1900-01-01T00:00:00 without an offset. Cookie flags must not corrupt them.
+      const publicTimerTimestamp = /^(?:currentStartedOn|lastRunStartedOn|lastRunFinishedOn|nextRunStartsOn)$/i.test(field)
+        && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})?$/.test(item) && Number.isFinite(Date.parse(item));
+      // Numeric telemetry is a typed public field, including 64-bit values that
+      // must remain strings. Cookie flags such as "0" must not destroy it.
+      const publicInteger = /^(?:limit|offset|nextPageOffset|totalPages|totalResults|duration|numberOfSpans|numberOfErrors|maxSupportedSpans|(?:origin)?(?:application|asset|library)Version|startTimeUnixNano|endTimeUnixNano)$/i.test(field) && /^-?\d{1,30}$/.test(item);
+      if (publicInteger) return item;
+      if (publicUuid || publicTraceId || publicLogId || publicTimestamp || publicTimerTimestamp) return replacements.includes(item) ? '[REDACTED]' : item;
       let result = item.replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [REDACTED]');
       for (const secret of replacements) result = result.split(secret).join('[REDACTED]');
       // Download links may carry capability credentials, even when their field
@@ -50,9 +70,12 @@ export function redact(value, secrets = []) {
     }
     if (Array.isArray(item)) return item.map(visit);
     if (item && typeof item === 'object') return Object.fromEntries(Object.entries(item)
-      .map(([key, entry]) => [key, isSensitiveKey(key)
-        || (item.isSecret === true && /^(?:value|defaultValue|deployedValue)$/i.test(key))
-        ? '[REDACTED]' : visit(entry)]));
+      .map(([key, entry]) => [key, (isSensitiveKey(key) && !(key === 'hasCredentialValues' && typeof entry === 'boolean')
+          && !(/^isSecret$/i.test(key)&&typeof entry==='boolean')
+          && !(key==='BinarySetting_Secret_MaxFileSize'&&(typeof entry==='number'||typeof entry==='string'&&/^(?:0|[1-9]\d{0,6})(?:\.\d{1,8})?$/.test(entry))&&Number.isFinite(Number(entry))&&Number(entry)>=0&&Number(entry)<=1048576))
+        || (/^isSecret$/i.test(key)&&typeof entry!=='boolean')
+        || ((item.isSecret === true||item.IsSecret===true) && /^(?:value|defaultValue|deployedValue)$/i.test(key))
+        ? '[REDACTED]' : visit(entry, key)]));
     return item;
   }
   return visit(value);

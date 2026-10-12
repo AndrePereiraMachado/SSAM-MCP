@@ -9,7 +9,11 @@ namespace Anvil.Bridge;
 /// server computes on captures or refuses. Any other method is not executed. The ninth release added refresh_references
 /// (the Studio's own Refresh References, C26) to the full bridge; the thin bridge serves it too (section 14). The atritos 3 package
 /// added the dialogs of every tab and window (publish blocked by a dialog, the second window, answer_dependencies_dialog): Studio
-/// primitives, served here too (linked DialogScope and DependenciesDialog); query_test is not (its runtime is the product's).</summary>
+/// primitives, served here too (linked DialogScope and DependenciesDialog); query_test is not (its runtime is the product's).
+/// The 24th release moved the Service Center web to headless HTTP through the Studio's own session (sc_http, ScHttpHandler,
+/// linked): sc_web answers through the same handler, studio_login answers a typed refusal and never opens the sign-in
+/// dialog. The private transport (sc_private_http, sc_private_http_cookie) is not served: its pipe and vault stay on the
+/// owner's machine (docs/O11-BRIDGE-FINA.md section 16).</summary>
 internal static class Dispatch
 {
     internal const string Flavor = "thin";
@@ -21,19 +25,25 @@ internal static class Dispatch
 
     internal static readonly string[] Verbs = ["ping", "bridge_manifest", "get_active_module", "list_open_modules", "get_errors",
         "open_module", "close_module", "publish", "windows", "ui_alive", "close_dialog", "snapshot_module",
-        "merge_from_oml", "merge_status", "environment_session", "sc_api", "sc_web", "studio_login", "sc_session", "publish_log",
+        "merge_from_oml", "merge_status", "environment_session", "sc_api", "sc_web", "sc_http", "studio_login", "sc_session", "publish_log",
         "refresh_references", DialogScope.DependenciesVerb];
 
     /// <summary>The full bridge's capabilities (same order, Anvil.Bridge Dispatch.Capabilities) plus the thin markers:
     /// callers check a capability, not the version. The 16th release's sc_api:integration-studio (ScApiHandler, linked) and
-    /// sc_web:studioSession (ScWebHandler, linked) are served; integration_import:wsdl/openapi and environment_session:users-read
-    /// are not (their logic is the kernel's: Anvil.Core.IntegrationImport and UserDirectory), so the kernel refuses those jobs
-    /// and lookups before any change (INTEGRATION_IMPORT_NEEDS_BRIDGE, STUDIO_BRIDGE_OUTDATED).</summary>
+    /// the 24th's sc_http:studioSession (ScHttpHandler, linked) are served; integration_import:wsdl/openapi and
+    /// environment_session:users-read are not (their logic is the kernel's: Anvil.Core.IntegrationImport and UserDirectory),
+    /// so the kernel refuses those jobs and lookups before any change (INTEGRATION_IMPORT_NEEDS_BRIDGE, STUDIO_BRIDGE_OUTDATED).
+    /// Neither are sc_private_http:secretRefs and sc_private_http:cookieUpdates (the private transport stays local).
+    /// servidor/fase4-24 (speed lane vel-entrega): list_open_modules:model_sha256 and open_module:references_check_optional are
+    /// served as in the full bridge (Reads.cs, OpenHandler.cs and MergeRollbackProof.cs are linked), so a hosted delivery
+    /// reuses a capture the server holds instead of uploading the same model again, and skips the references check of a
+    /// tab already open.</summary>
     internal static readonly string[] Capabilities = [.. UiGate.Capabilities, "environment_session", "sc_api:soap", "sc_api:server-api", "sc_api:sc-rest", "sc_web",
-        "sc_web:secretRefs", "sc_web:hidden", "sc_web:login", "studio_login", "sc_session", "publish_log", "merge_from_oml:first_pass",
+        "sc_web:secretRefs", "sc_session", "publish_log", "merge_from_oml:first_pass",
         MergeRollbackProof.Capability, "merge_from_oml:module_key", "get_errors:generation", "publish:wait_running", "publish:dialogs_seen",
-        "list_open_modules:server_operation", "refresh_references", "sc_api:integration-studio", ScWebSession.StudioSessionCapability,
+        "list_open_modules:server_operation", "refresh_references", "sc_api:integration-studio", ScHttpHandler.Capability,
         DialogScope.BlockedCapability, DialogScope.DialogsCapability, DialogScope.WindowCapability, DialogScope.DependenciesCapability,
+        "list_open_modules:model_sha256", "open_module:references_check_optional",
         "thin", "merge:reference-plan"];
 
     public static JsonObject BridgeInfo() => new()
@@ -51,7 +61,7 @@ internal static class Dispatch
             ["capabilities"] = new JsonArray(Capabilities.Select(c => (JsonNode)JsonValue.Create(c)!).ToArray()),
             ["serviceCenter"] = ScApi.Catalog() }),
         "get_active_module" => await Reads.ActiveModule(),
-        "list_open_modules" => await Reads.OpenModules(),
+        "list_open_modules" => await Reads.OpenModules(p),
         "get_errors" => await Reads.Errors(p),
         "open_module" => await OpenHandler.Open(p),
         "close_module" => await OpenHandler.Close(p),
@@ -64,8 +74,9 @@ internal static class Dispatch
         "merge_status" => MergeHandler.Status(p),
         "environment_session" => await EnvironmentSessionHandler.Handle(p),
         "sc_api" => await ScApiHandler.Api(p),
-        "sc_web" => await ScWebHandler.Handle(p),
-        "studio_login" => await ScApiHandler.Login(p),
+        "sc_web" => await ScHttpHandler.Handle(p),
+        "sc_http" => await ScHttpHandler.Handle(p),
+        "studio_login" => ScReply.Fail(new ScFailure(ScCodes.StudioNotSignedIn, "Headless Service Center tools require an existing authenticated Studio session; no login dialog was opened.")),
         "sc_session" => await ScApiHandler.Session(p),
         "publish_log" => await PublishLogHandler.Handle(p),
         "refresh_references" => await RefreshReferencesHandler.Handle(p),

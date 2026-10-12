@@ -9,6 +9,7 @@ import { anvilCli, LANES } from './lanes.mjs';
 import { connectionEnvironment } from './studio-session.mjs';
 import { kernelReading } from './kernel-reading.mjs';
 import { selectedO11Publisher } from './debug-o11-publisher.mjs';
+import { selectedO11Compiler } from './debug-o11-compiler.mjs';
 import * as W from './debug-wrapper.mjs';
 
 const exec = promisify(execFile), KEY = /^[A-Za-z0-9_+]{22}$/, NAME = /^[A-Za-z_][A-Za-z0-9_]{0,120}$/;
@@ -30,13 +31,17 @@ export function o11WrapperContract(tree, action, { loginRef, loginContract, toke
   if (tree?.kind !== 'RestServiceAction' || !/^@[A-Za-z0-9_+]{22}$/.test(loginRef ?? '') ||
       loginContract?.key !== loginRef.slice(1) || !/^[a-f0-9]{48}$/.test(token ?? '')) fail('debug_o11_run_wrapper_authentication_unproved');
   const model = W.actionModel(tree), n = W.names(action.name), rows = tree.children ?? [];
-  const named = name => rows.filter(c => (c.properties?.Name || c.modelName || c.name) === name);
-  const one = (name, kind) => { const matches = named(name); if (matches.length !== 1 || matches[0].kind !== kind || !KEY.test(matches[0].key ?? ''))
+  const target = (row, connector) => row?.propertyReferences?.[connector]?.key;
+  const one = (key, kind) => { const matches = rows.filter(c => c.key === key); if (matches.length !== 1 || matches[0].kind !== kind || !KEY.test(matches[0].key ?? ''))
       fail('debug_o11_run_wrapper_authentication_unproved'); return matches[0]; };
-  const authorized = one(n.auth, 'IfNode'), deserialize = one(n.deserialize, 'JSONDeserializeNode'),
-    login = one('SSAMDebugLogin', 'ExecuteServerActionNode'), identity = one('SSAMDebugIdentityValid', 'IfNode'),
-    call = one(n.call, 'ExecuteServerActionNode'), denied = one('SSAMDebugAuthenticationRequired', 'AssignNode');
-  const target = (row, connector) => row.propertyReferences?.[connector]?.key;
+  // O11 If nodes have no stable Name/Label after native save. Prove the actual
+  // connected graph; presentation labels are not authentication evidence.
+  const authorized = one(target(rows.find(c => c.key === model.start), 'Target'), 'IfNode'),
+    deserialize = one(target(authorized, 'TrueTarget'), 'JSONDeserializeNode'),
+    login = one(target(deserialize, 'Target'), 'ExecuteServerActionNode'),
+    identity = one(target(login, 'Target'), 'IfNode'),
+    call = one(target(identity, 'TrueTarget'), 'ExecuteServerActionNode'),
+    denied = one(target(authorized, 'FalseTarget'), 'AssignNode');
   const compact = value => typeof value === 'string' ? value.replace(/\s+/g, '') : '';
   if (model.start == null || target(rows.find(row => row.key === model.start), 'Target') !== authorized.key ||
       compact(authorized.properties?.Condition) !== compact(`${n.token} = "${token}"`) ||
@@ -117,7 +122,16 @@ export function o11CliArguments(verb, args, cliPath, studioDirectory) {
 
 export async function operationalO11Cli(verb, args, { timeoutMs = 360000 } = {}) {
   const env = { ...process.env, ...connectionEnvironment(anvilRoot, o11Lane.lane) };
-  const cliPath = verb === 'publish-oml' ? await selectedO11Publisher(env.ANVIL_STUDIO_DIR) : anvilCli();
+  let cliPath;
+  try { cliPath = verb === 'publish-oml' ? await selectedO11Publisher(env.ANVIL_STUDIO_DIR) : anvilCli(); }
+  catch (error) {
+    // Selection only reads the qualified package. No child process or native write
+    // exists yet; preserve this distinction instead of creating false uncertainty.
+    if (verb === 'publish-oml' && /^debug_o11_publisher_[a-z_]+$/.test(error?.code ?? ''))
+      error.publicationStage = 'publisher-selection';
+    throw error;
+  }
+  if (verb === 'apply') cliPath = await selectedO11Compiler(env.ANVIL_STUDIO_DIR, cliPath);
   const argv = o11CliArguments(verb, args, cliPath, env.ANVIL_STUDIO_DIR);
   let stdout;
   try { stdout = (await exec('dotnet', argv, { cwd: anvilRoot, env, windowsHide: true, maxBuffer: 32 * 1024 * 1024, timeout: timeoutMs })).stdout; }
@@ -129,13 +143,24 @@ export async function operationalO11Cli(verb, args, { timeoutMs = 360000 } = {})
   return reply.data ?? { ok: false, state: 'refused', error: 'publish_oml_runtime_unavailable' };
 }
 
-export function createO11Lifecycle({ cli = operationalO11Cli, readTree = nativeReadTree, root = workspaceRoot } = {}) {
-  async function inventory(target, directory) {
-    const reply = await cli('inventory', ['--host', target.host, '--module', target.module, '--read-only']);
-    const row = matchPublishedModule(reply, target);
+export function createO11Lifecycle({ cli = operationalO11Cli, readTree = nativeReadTree, root = workspaceRoot, nativeInventory } = {}) {
+  async function inventory(target, directory, { requireModuleId = false } = {}) {
+    let reply = await cli('inventory', ['--host', target.host, '--module', target.module, '--read-only']);
+    let row = matchPublishedModule(reply, target);
+    if (requireModuleId && row.ModuleId == null) {
+      const acquire = nativeInventory ?? (await import('./debug-o11-native-inventory.mjs')).acquireO11NativeInventory;
+      const nativeReply = await acquire(target, directory, { publishedInventory: reply }), nativeRow = matchPublishedModule(nativeReply, target);
+      if (nativeRow.VersionId !== row.VersionId) fail('debug_o11_run_published_version_changed');
+      reply = nativeReply; row = nativeRow;
+      if (row.ModuleId == null) fail('debug_native_background_native_module_id_unavailable');
+    }
+    if (row.ModuleId != null && (!Number.isSafeInteger(row.ModuleId) || row.ModuleId < 1 || row.ModuleId > 2147483647))
+      fail('debug_o11_native_module_id_invalid');
     // Fresh debugger proof contains exact published identity, never developer/app-user credentials.
-    const proof = { host: target.host, capturedAtUtc: reply.capturedAtUtc, modules: [{
-      Name: row.Name, Key: row.Key, ApplicationKey: row.ApplicationKey, VersionId: row.VersionId, IsActive: row.IsActive }] };
+    const proof = { host: target.host, capturedAtUtc: reply.capturedAtUtc,
+      ...(reply.moduleIdentitySource ? { moduleIdentitySource: reply.moduleIdentitySource } : {}), modules: [{
+      Name: row.Name, Key: row.Key, ApplicationKey: row.ApplicationKey, VersionId: row.VersionId, IsActive: row.IsActive,
+      ...(row.ModuleId != null ? { ModuleId: row.ModuleId } : {}) }] };
     const proofPath = path.join(directory, 'inventory.json'); o11Write(proofPath, proof);
     return { row, versionId: row.VersionId, proof: { path: proofPath, sha256: o11Hash(fs.readFileSync(proofPath)) } };
   }
@@ -259,7 +284,13 @@ export function createO11Lifecycle({ cli = operationalO11Cli, readTree = nativeR
     }
     let reply;
     try { reply = await cli('publish-oml', ['--request', requestPath], { timeoutMs: 630000 }); }
-    catch { reply = fs.existsSync(operation.receiptPath) ? o11Read(operation.receiptPath) : null; }
+    catch (error) {
+      reply = fs.existsSync(operation.receiptPath) ? o11Read(operation.receiptPath) : null;
+      if (!reply && mode === 'publish' && error?.publicationStage === 'publisher-selection' &&
+          /^debug_o11_publisher_[a-z_]+$/.test(error?.code ?? ''))
+        return { ok: false, state: 'refused', error: error.code, operationId: operation.operationId,
+          nativeSubmission: false, phase: 'publisher-selection' };
+    }
     return outcome(reply);
   }
   async function exists(base, selector) {
@@ -276,13 +307,21 @@ export function createO11Lifecycle({ cli = operationalO11Cli, readTree = nativeR
     root, cli, exists };
 }
 
+const nativeModelReaders = new Map();
 async function nativeReadTree(base, selector) {
-  const result = await kernelReading(LANES.o11, ['--oml', base.file, '--path', selector, '--depth', '4', '--max', '500',
-    '--full', '--budget', '1000000', '--expectedSourceSha256', base.sha256]);
-  const data = result.data?.out ? o11Read(result.data.out) : result.data;
-  const tree = data?.tree;
-  function complete(node) { return node && !node.childrenOmitted && !Object.keys(node.propertyErrors ?? {}).length &&
-    !Object.keys(node.propertiesOmitted ?? {}).length && (node.children ?? []).every(complete); }
-  if (!result.ok || !complete(tree)) fail('debug_o11_run_model_read_incomplete');
-  return tree;
+  const { debugO11Reading, debugO11Map, selectedO11DebugReader } = await import('./debug-o11-reader.mjs');
+  const key = base.file + ':' + base.sha256 + ':' + selectedO11DebugReader().generation;
+  if (!nativeModelReaders.has(key)) {
+    const { createNativeModelReader } = await import('./debug-native-model.mjs');
+    const inspect = async options => {
+      const args = ['--oml', base.file, '--path', options.path, '--full', '--budget', '1000000', '--expectedSourceSha256', base.sha256];
+      for (const name of ['depth', 'max', 'offset', 'scope']) if (options[name] !== undefined) args.push('--' + name, String(options[name]));
+      if (options.usages) args.push('--usages');
+      const result = await debugO11Reading(args);
+      return { ...result.data, ok: result.ok, error: result.error ?? result.data?.error };
+    };
+    if (nativeModelReaders.size >= 8) nativeModelReaders.delete(nativeModelReaders.keys().next().value);
+    nativeModelReaders.set(key, createNativeModelReader({ base, lane: 'o11', inspect, map: debugO11Map }));
+  }
+  return nativeModelReaders.get(key).tree(selector);
 }

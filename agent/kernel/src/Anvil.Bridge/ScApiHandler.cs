@@ -61,7 +61,10 @@ internal static class ScApiHandler
             {
                 ["studio"] = host == null ? null : mine?.DeepClone() ?? new JsonObject { ["signedIn"] = false, ["loginPending"] = pending },
                 ["signedInHosts"] = new JsonArray(logins.Select(x => x["host"]?.DeepClone()).ToArray()),
-                ["web"] = host == null ? null : await ScWebHandler.Describe(host),
+                ["web"] = host == null ? null : new JsonObject {
+                    ["transport"] = "studio-http", ["open"] = false, ["windowCreated"] = false,
+                    ["signedIn"] = null, ["status"] = "not-probed",
+                },
                 ["bridge"] = Dispatch.BridgeInfo(),
             };
             return ScReply.Ok("studio", host ?? "", mine?["user"]?.ToString(), 0, body);
@@ -128,6 +131,12 @@ internal static class ScApiHandler
 
     /// <summary>Whether the Studio itself is signed in on host (sc_session's studio.signedIn), for ScWebHandler: an expired
     /// Service Center window re-enters silently only then (ScWebSession.OnSignInPage). False when the Studio cannot tell.</summary>
+    internal static async Task<string?> StudioPrincipal(string host)
+    {
+        try { return await OnUi(() => Bind(host).User); }
+        catch { return null; }
+    }
+
     internal static async Task<bool> StudioSignedIn(string host)
     {
         try { return await OnUi(() => SignedIn(host)); }

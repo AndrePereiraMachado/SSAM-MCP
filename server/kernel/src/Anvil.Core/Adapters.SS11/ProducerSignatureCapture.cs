@@ -234,24 +234,43 @@ public sealed class StudioProducerAuthority(Func<string, HeadlessSession> openRe
         => new(environment => HeadlessSession.ConnectStudio(bridge, environment, null, readOnly: true), log);
 
     public JsonObject Capture(string producer, IReadOnlyList<string> elements, string destination, string environment)
-    {
-        using var session = openReadOnly(environment);
-        if (!string.Equals(session.Host, environment, StringComparison.OrdinalIgnoreCase))
-            throw new SignatureCaptureException("WrongEnvironment", $"the read-only lease is connected to {session.Host}, not {environment}");
-        return ProducerSignatureCapture.Capture(session, new SignatureCaptureRequest(producer, elements, destination), log);
-    }
+        => Guarded(environment, "the published signature", producer, session =>
+        {
+            if (!string.Equals(session.Host, environment, StringComparison.OrdinalIgnoreCase))
+                throw new SignatureCaptureException("WrongEnvironment", $"the read-only lease is connected to {session.Host}, not {environment}");
+            return ProducerSignatureCapture.Capture(session, new SignatureCaptureRequest(producer, elements, destination), log);
+        });
 
     public JsonObject CaptureByKey(string producerKey, IReadOnlyList<string> elements, string destination, string environment)
-    {
-        using var session = openReadOnly(environment);
-        if (!string.Equals(session.Host, environment, StringComparison.OrdinalIgnoreCase))
-            throw new SignatureCaptureException("WrongEnvironment", $"the read-only lease is connected to {session.Host}, not {environment}");
-        return ProducerSignatureCapture.Capture(session, new SignatureCaptureRequest("", elements, destination, Key: producerKey), log);
-    }
+        => Guarded(environment, "the published signature", "the producer with key " + producerKey, session =>
+        {
+            if (!string.Equals(session.Host, environment, StringComparison.OrdinalIgnoreCase))
+                throw new SignatureCaptureException("WrongEnvironment", $"the read-only lease is connected to {session.Host}, not {environment}");
+            return ProducerSignatureCapture.Capture(session, new SignatureCaptureRequest("", elements, destination, Key: producerKey), log);
+        });
 
     public JsonObject Attest(string avsigPath, string environment)
+        => Guarded(environment, "the re-attestation of the captured signature", Path.GetFileNameWithoutExtension(avsigPath),
+            session => ProducerSignatureCapture.Attest(session, avsigPath, environment));
+
+    /// <summary>prazos B: a read the Studio's own client cut (its WCF SendTimeout, a connection that never answered) is
+    /// ENVIRONMENT_CALL_CUT naming the producer, the environment operation that was running and how long it ran, instead of
+    /// the bridge's raw "environment_session: TimeoutException: ..." text. Every other failure passes as it is.</summary>
+    private JsonObject Guarded(string environment, string what, string? producer, Func<HeadlessSession, JsonObject> body)
     {
-        using var session = openReadOnly(environment);
-        return ProducerSignatureCapture.Attest(session, avsigPath, environment);
+        HeadlessSession? session = null;
+        try
+        {
+            session = openReadOnly(environment);
+            return body(session);
+        }
+        catch (Exception ex) when (ex is not EnvironmentCallCutException && EnvironmentCut.Classify(ex) is { } cut)
+        {
+            var connected = session?.Connected;
+            int? elapsed = connected?.LastOperationStartedUtc is { } started ? (int)Math.Round((DateTime.UtcNow - started).TotalSeconds) : null;
+            throw new EnvironmentCallCutException(what, producer, session?.Host ?? environment, connected?.LastOperation, cut.Cause, cut.AfterSeconds, elapsed, ex,
+                EnvironmentCut.RepeatedIn(ex));
+        }
+        finally { session?.Dispose(); }
     }
 }

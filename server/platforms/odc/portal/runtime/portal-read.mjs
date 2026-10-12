@@ -1,6 +1,7 @@
 import { fail, publicError, redact } from './errors.mjs';
 import { normalizeTraceResult } from './trace-result.mjs';
 import { normalizeTraceSearchResult, normalizeTraceSummary } from './trace-metadata-result.mjs';
+import { PORTAL_READS } from './portal-routes.mjs';
 
 // Fresh adapter built from observed wire contracts. It does not import GitSSAM,
 // recover browser cookies, accept headers/tokens, or implement password login.
@@ -11,8 +12,8 @@ const routes = Object.freeze({
   'monitoring.logs': { capability: 'portal.runtime-logs', module: 'monitoring', action: 'monitoring/logs/logs/DataActionLogSearch', view: 'logs.logs', collection: 'LogsList' },
   'monitoring.errors': { capability: 'portal.runtime-logs', module: 'monitoring', action: 'monitoring/logs/logs/DataActionLogSearch', view: 'logs.logs', collection: 'LogsList' },
   'monitoring.detail': { capability: 'portal.trace-correlation', module: 'monitoring', action: 'monitoring/logs/log/DataActionGetLogById', view: 'logs.log', collection: 'Log' },
-  'monitoring.trace': { capability: 'portal.runtime-traces', module: 'monitoring', action: 'monitoring/traces/TreeView_multipleRoots/DataActionGetSpans', view: 'traces.TreeView_multipleRoots', discoveryView: 'traces.trace' },
-  'monitoring.traceLogs': { capability: 'portal.trace-correlation', module: 'monitoring', action: 'monitoring/traces/TreeView_multipleRoots/DataActionGetLogsByTraceId', view: 'traces.TreeView_multipleRoots', discoveryView: 'traces.trace', collection: 'RelatedLogList' },
+  'monitoring.trace': { capability: 'portal.runtime-traces', module: 'monitoring', action: 'monitoring/traces/TreeView_multipleRoots/DataActionGetSpans', view: 'traces.trace', discoveryView: 'traces.trace' },
+  'monitoring.traceLogs': { capability: 'portal.trace-correlation', module: 'monitoring', action: 'monitoring/traces/TreeView_multipleRoots/DataActionGetLogsByTraceId', view: 'traces.trace', discoveryView: 'traces.trace', collection: 'RelatedLogList' },
   'monitoring.traceSummary': { capability: 'portal.runtime-traces', module: 'monitoring', action: 'monitoring/traces/trace/DataActionGetTraceById', view: 'traces.trace' },
   'monitoring.traces': { capability: 'portal.runtime-traces', module: 'monitoring', action: 'monitoring/traces/traces/ActionTraceSearch_Wrapper', view: 'traces.traces' },
   'connections.providers': { capability: 'portal.connection-discovery', module: 'connections', action: 'connections/Connections/connections/DataActionGetProviders', view: 'Connections.connections', collection: 'Providers', fields: ['Id', 'ProviderId', 'ProviderKey', 'Key', 'Label', 'Name', 'DisplayName', 'Title', 'ServiceProviderId', 'ServiceProviderKey'] },
@@ -99,7 +100,10 @@ function prepare(id, input) {
     // server contracts fail explicitly; offline mapping is not a live proof.
     Object.assign(clientVariables, { StageId: parameters.EnvironmentKey, ApplicationId: text(input.applicationKey, 'applicationKey'),
       DateTimeStart: new Date(start).toISOString(), DateTimeEnd: new Date(end).toISOString(),
-      LogsSearchKeyword: text(input.search, 'search', 500, true), LogsSeverity: [...new Set(severity)].join(','), UserId: '' });
+      // The native SearchInput_MON action writes EncodeTextToBase64(Text)
+      // into LogListSearchKeyword; LogsSearchKeyword is a widget local only.
+      LogListSearchKeyword: Buffer.from(text(input.search, 'search', 500, true), 'utf8').toString('base64'),
+      LogsSeverity: [...new Set(severity)].join(','), UserId: '' });
     Object.assign(variables, { SelectedEnviroment: { Key: parameters.EnvironmentKey }, SeverityList: { List: [...new Set(severity)] },
       Page: { Limit: String(limit), Offset: String(offset), NextPageOffset: '0', TotalPages: '0', TotalResults: '0' } });
     delete parameters.EnvironmentKey;
@@ -123,7 +127,7 @@ function prepare(id, input) {
     if (!Number.isInteger(duration) || duration < 0 || duration > 86400000) fail('INPUT_INVALID', 'Invalid minimum trace duration.');
     delete parameters.EnvironmentKey;
     Object.assign(parameters, { StageKey: input.environmentKey, ApplicationKey: '', AssetKey: input.applicationKey, AssetType: '', UserId: '',
-      Since: validated.clientVariables.DateTimeStart, To: validated.clientVariables.DateTimeEnd, ContainsText: validated.clientVariables.LogsSearchKeyword,
+      Since: validated.clientVariables.DateTimeStart, To: validated.clientVariables.DateTimeEnd, ContainsText: text(input.search, 'search', 500, true),
       SpanTypes: { List: [...new Set(spanTypes)] }, Status: { List: [...new Set(statuses)] }, MinDurationMs: String(duration), MaxDurationMs: '0',
       Limit: String(validated.page.limit), Offset: String(validated.page.offset) });
     page = validated.page;
@@ -185,15 +189,66 @@ export class PortalReadAdapter {
       });
       let response;
       try {
-        response = await Promise.race([this.broker.readScreenservice({ target: this.target, origin: this.origin,
+        const read = async () => {
+          if (!this.broker.nativeTraceContext && (operationId === 'monitoring.trace' || operationId === 'monitoring.traceLogs')) {
+            // The native trace screen passes GetTraceById.StartTime to this
+            // block, plus the stage and settings returned by its data actions.
+            const summaryRoute = routes['monitoring.traceSummary'];
+            const summary = await this.broker.readScreenservice({ target: this.target, origin: this.origin,
+              operationId: 'monitoring.traceSummary', module: summaryRoute.module, action: summaryRoute.action, view: summaryRoute.view,
+              inputParameters: {}, screenVariables: { id: input.traceId, stageid: input.environmentKey, spanid: '' }, clientVariables: {},
+              requireCurrentMetadata: true, readOnly: true, maxResponseBytes: 1048576, signal: controller.signal });
+            if (summary?.target !== this.target || summary?.origin !== this.origin) fail('PORTAL_BROKER_SCOPE_MISMATCH', 'Trace context response scope was not verified by the host.');
+            if (!summary.body?.data || summary.body.exception || summary.body.error || Buffer.byteLength(JSON.stringify(summary.body)) > 1048576)
+              fail('PORTAL_CONTRACT_CHANGED', 'Trace context response is invalid.');
+            const context = normalizeTraceSummary(summary.body.data, { traceId: input.traceId });
+            if (context.notFound) fail('PORTAL_TRACE_NOT_FOUND', 'No accessible trace context was returned.');
+            const readContext = async contextOperation => {
+              if (controller.signal.aborted) fail('PORTAL_TIMEOUT', 'Trace context read timed out.');
+              const [module, view, action] = PORTAL_READS[contextOperation];
+              const answer = await this.broker.readScreenservice({ target: this.target, origin: this.origin,
+                operationId: contextOperation, module, view, action, inputParameters: {},
+                screenVariables: { id: input.traceId, stageid: input.environmentKey, spanid: '' }, clientVariables: { StageId: input.environmentKey },
+                requireCurrentMetadata: true, readOnly: true, maxResponseBytes: 1048576, signal: controller.signal });
+              if (answer?.target !== this.target || answer?.origin !== this.origin) fail('PORTAL_BROKER_SCOPE_MISMATCH', 'Trace context tenant does not match.');
+              if (!answer.body?.data || answer.body.exception || answer.body.error || Buffer.byteLength(JSON.stringify(answer.body)) > 1048576)
+                fail('PORTAL_CONTRACT_CHANGED', 'Trace context response is invalid.');
+              return answer.body.data;
+            };
+            const stage = await readContext('monitoring.traceStage');
+            const environment = stage.Environment;
+            if (stage.FoundStage !== true || environment?.Key !== input.environmentKey || ['Name', 'Purpose', 'PortfolioKey'].some(key => typeof environment[key] !== 'string'))
+              fail('PORTAL_BROKER_SCOPE_MISMATCH', 'Trace stage context does not match the requested environment.');
+            const settings = await readContext('monitoring.traceSettings');
+            if (!/^[1-9]\d{0,9}$/.test(String(settings.MaxSupportedSpans)) || !Number.isSafeInteger(Number(settings.MaxSupportedSpans))
+              || !Number.isSafeInteger(settings.MaxSpansExpandDegreeLevel) || settings.MaxSpansExpandDegreeLevel < 0 || typeof settings.IsTraceDuratiomFilterEnabled !== 'boolean')
+              fail('PORTAL_CONTRACT_CHANGED', 'Trace settings context is invalid.');
+            Object.assign(request.variables, { TraceStartTime: context.trace.StartTime, StageName: environment.Name, StagePurpose: environment.Purpose,
+              PortfolioKey: environment.PortfolioKey, TraceStatusLabel: context.trace.StatusLabel ?? '', SelectedSpanId: '',
+              MaxSupportedSpans: String(settings.MaxSupportedSpans), MaxSpansExpandDegreeLevel: settings.MaxSpansExpandDegreeLevel,
+              IsTraceDuratiomFilterEnabled: settings.IsTraceDuratiomFilterEnabled });
+            for (const field of Object.keys(request.variables)) request.variables[`_${field[0].toLowerCase()}${field.slice(1)}InDataFetchStatus`] = 1;
+            request.clientVariables.StageId = input.environmentKey;
+            if (controller.signal.aborted) fail('PORTAL_TIMEOUT', 'Trace context read timed out. No span request sent.');
+          }
+          return this.broker.readScreenservice({ target: this.target, origin: this.origin,
           operationId, module: route.module, action: route.action, view: route.view, discoveryView: route.discoveryView,
           inputParameters: request.parameters, screenVariables: request.variables, clientVariables: request.clientVariables,
           requireCurrentMetadata: true, readOnly: true, maxResponseBytes: 1048576,
-          signal: controller.signal }), expired]);
+          signal: controller.signal });
+        };
+        response = await Promise.race([read(), expired]);
       } catch (error) {
         // WEB_SIGN_IN_REQUIRED and HOST_MISMATCH come from the Studio Portal window (studio-portal.mjs).
-        const codes = new Set(['PORTAL_AUTH_REQUIRED', 'PORTAL_ACCESS_DENIED', 'PORTAL_CONTRACT_CHANGED', 'PORTAL_TIMEOUT', 'WEB_SIGN_IN_REQUIRED', 'HOST_MISMATCH']);
-        fail(codes.has(error?.code) ? error.code : 'PORTAL_BROKER_FAILED', 'Managed Portal read failed. No raw exception or credential is returned.');
+        const codes = new Set(['PORTAL_AUTH_REQUIRED', 'PORTAL_ACCESS_DENIED', 'PORTAL_CONTRACT_CHANGED', 'PORTAL_REQUEST_FAILED', 'PORTAL_RESPONSE_TOO_LARGE', 'PORTAL_BROKER_SCOPE_MISMATCH', 'PORTAL_TRACE_NOT_FOUND', 'PORTAL_TIMEOUT', 'WEB_SIGN_IN_REQUIRED', 'HOST_MISMATCH']);
+        const timeout = ['AbortError', 'TimeoutError'].includes(error?.name) || ['READ_DEADLINE_EXCEEDED', 'PORTAL_TIMEOUT'].includes(error?.code);
+        const code = timeout ? 'PORTAL_TIMEOUT' : codes.has(error?.code) ? error.code : 'PORTAL_BROKER_FAILED';
+        fail(code, 'Managed Portal read failed. No raw exception or credential is returned.', {
+          ...(['trace-stage', 'trace-settings', 'trace-summary'].includes(error?.details?.diagnosticStage) ? { diagnosticStage: error.details.diagnosticStage } : {}),
+          causeCategory: timeout ? 'timeout' : error?.code === 'PORTAL_REQUEST_FAILED' ? 'server-response' : codes.has(error?.code) ? 'contract-or-access' : 'transport-or-local',
+          ...(Number.isInteger(error?.details?.status) ? { status: error.details.status } : {}), ...(typeof error?.details?.sent === 'boolean' ? { sent: error.details.sent } : {}),
+          ...(typeof error?.details?.remoteCode === 'string' && /^OS-[A-Z0-9]{2,12}-\d{3,8}$/.test(error.details.remoteCode) ? { remoteCode: error.details.remoteCode } : {}),
+          ...(['SecurityException', 'InvalidArgumentException', 'CommunicationException', 'DatabaseException', 'UserException'].includes(error?.details?.remoteType) ? { remoteType: error.details.remoteType } : {}) });
       } finally { clearTimeout(timer); }
       if (response?.target !== this.target || response?.origin !== this.origin) fail('PORTAL_BROKER_SCOPE_MISMATCH', 'Portal response scope was not verified by the host.');
       const body = response.body;
@@ -214,7 +269,8 @@ export class PortalReadAdapter {
       }
       if (operationId === 'monitoring.traces') {
         const traces = normalizeTraceSearchResult(data, { applicationKey: input.applicationKey, since: request.parameters.Since, until: request.parameters.To,
-          limit: request.page.limit, offset: request.page.offset, statuses: request.parameters.Status.List, spanTypes: request.parameters.SpanTypes.List });
+          limit: request.page.limit, offset: request.page.offset, statuses: request.parameters.Status.List, spanTypes: request.parameters.SpanTypes.List,
+          minDurationMs: Number(request.parameters.MinDurationMs) });
         this.broker?.verifiedOperations?.add(operationId);
         return { ok: true, target: this.target, origin: this.origin, operationId, internalContract: true, ...redact(traces),
           warning: 'Trace search returns summaries, not full span trees. Use monitoring.trace explicitly for each selected trace.' };
@@ -224,6 +280,29 @@ export class PortalReadAdapter {
       let rows = operationId === 'monitoring.detail' ? (value && typeof value === 'object' && !Array.isArray(value) ? [value] : null)
         : Array.isArray(value) ? value : (Array.isArray(value?.List) ? value.List : null);
       if (!rows) fail('PORTAL_CONTRACT_CHANGED', 'Expected collection is absent; do not interpret contract drift as an empty result.');
+      let connectionTotal;
+      if (operationId === 'connections.list') {
+        // Current native DTO uses lower-case identity fields. Never turn an
+        // unknown row into {}, which could incorrectly prove target absence.
+        rows = rows.map(row => {
+          const native = typeof row?.connectionId === 'string';
+          const id = native ? row.connectionId : row?.ConnectionId ?? row?.Id ?? row?.Key;
+          const name = native ? row.name : row?.Name ?? row?.ConnectionName;
+          if (typeof id !== 'string' || !id || typeof name !== 'string' || !name)
+            fail('PORTAL_CONTRACT_CHANGED', 'Connection inventory row has no verifiable identity.');
+          return native ? { ConnectionId:id, Name:name,
+            ...(typeof row.providerId === 'string' ? {ProviderId:row.providerId} : {}),
+            ...(typeof row.providerName === 'string' ? {ProviderName:row.providerName} : {}) } : row;
+        });
+        if (data.TotalResults !== undefined) {
+          if (!/^[0-9]+$/.test(String(data.TotalResults)) || !Number.isSafeInteger(Number(data.TotalResults))
+              || Number(data.TotalResults) < rows.length)
+            fail('PORTAL_CONTRACT_CHANGED', 'Invalid connection inventory total.');
+          connectionTotal = Number(data.TotalResults);
+        }
+      }
+      if (operationId === 'monitoring.detail' && (rows.length !== 1 || rows[0].LogId !== input.logId))
+        fail('PORTAL_RESPONSE_SCOPE_MISMATCH', 'The log detail did not echo the requested log ID. No log content returned.');
       // Never expose a row outside the requested scope, and never drop a whole valid page for one such row (C34, atritos 3:
       // a row 1 s after the window, the server's rounding, refused the page). Rows outside the scope leave the answer and
       // come back counted in droppedOutOfScope; only an unreadable row (not an object) refuses, as before.
@@ -244,24 +323,39 @@ export class PortalReadAdapter {
         const kept = rows.filter(inScope);
         droppedOutOfScope += rows.length - kept.length; rows = kept;
       }
-      let pagination;
+      let paginationSemantics, pagination, serverPagination, paginationSource = 'server';
       if (request.page) {
         const source = data.LogSearch_Page;
         if (!source || typeof source !== 'object') fail('PORTAL_CONTRACT_CHANGED', 'Expected log pagination is absent.');
         const readInteger = key => {
           const value = source[key];
-          if (!['string', 'number'].includes(typeof value) || !/^-?\d+$/.test(String(value)) || !Number.isSafeInteger(Number(value)) || Number(value) < (key === 'NextPageOffset' ? -1 : 0)) fail('PORTAL_RESPONSE_INVALID', 'Invalid server pagination.');
+          if (!['string', 'number'].includes(typeof value) || !/^-?\d+$/.test(String(value)) || !Number.isSafeInteger(Number(value)) || Number(value) < (key === 'NextPageOffset' ? -1 : 0)) fail('PORTAL_RESPONSE_INVALID', 'Invalid server pagination.', { field: key, valueType: typeof value, redactedValue: typeof value === 'string' && value.includes('[REDACTED]'), length: typeof value === 'string' ? value.length : undefined, ...(typeof value === 'number' || typeof value === 'string' && /^[\d ,.<>+=-]{0,40}$/.test(value) ? { numericValue: value } : {}) });
           return Number(value);
         };
         pagination = Object.fromEntries(['Limit', 'Offset', 'NextPageOffset', 'TotalPages', 'TotalResults'].map(key => [key, readInteger(key)]));
+        // Preserve the native empty page without asserting a successful app session.
+        const nativeEmptyPage = !droppedOutOfScope && rows.length === 0 && Object.values(pagination).every(value => value === 0);
+        paginationSemantics = nativeEmptyPage ? 'native-empty-page' : 'bounded-page';
+        // Current logs UI keeps Limit/Offset locally and copies only totals from
+        // LogSearch_Page. Its DataAction returns zero in the unused fields.
+        // Accept that precise shape only with the exact bounded in-scope row count.
+        if (!nativeEmptyPage && pagination.Limit === 0 && pagination.Offset === 0 && pagination.NextPageOffset === 0 && pagination.TotalPages === 0) {
+          const expectedRows = Math.min(request.page.limit, Math.max(0, pagination.TotalResults - request.page.offset));
+          if (droppedOutOfScope || rows.length !== expectedRows) fail('PORTAL_RESPONSE_SCOPE_MISMATCH', 'Total-only pagination cannot be reconciled with scoped rows.', { requestedPage: request.page, pagination, scopedRows: rows.length, droppedOutOfScope });
+          serverPagination = pagination;
+          paginationSource = 'request-and-server-total';
+          const next = request.page.offset + request.page.limit;
+          pagination = { Limit: request.page.limit, Offset: request.page.offset, NextPageOffset: next < pagination.TotalResults ? next : -1,
+            TotalPages: Math.ceil(pagination.TotalResults / request.page.limit), TotalResults: pagination.TotalResults };
+        }
         // C34: the server may cap the page size (Limit 50 when 100 was asked); its Limit is accepted with the requested
         // Offset, and the next page is computed from the server's values. A larger Limit or another Offset is a scope the
         // request never asked for.
-        if (pagination.Offset !== request.page.offset || pagination.Limit < 1 || pagination.Limit > request.page.limit) fail('PORTAL_RESPONSE_SCOPE_MISMATCH', 'Server pagination differs from the requested bounds.');
+        if (!nativeEmptyPage && (pagination.Offset !== request.page.offset || pagination.Limit < 1 || pagination.Limit > request.page.limit)) fail('PORTAL_RESPONSE_SCOPE_MISMATCH', 'Server pagination differs from the requested bounds.', { requestedPage: request.page, pagination, scopedRows: rows.length, droppedOutOfScope });
       }
       const maximum = operationId === 'monitoring.traceLogs' ? input.maxLogs ?? 100 : pagination?.Limit ?? request.page?.limit ?? 100;
       const receivedCount = rows.length;
-      const truncated = rows.length > maximum;
+      const truncated = rows.length > maximum || (connectionTotal !== undefined && connectionTotal > rows.length);
       rows = rows.slice(0, maximum).map(row => {
         const record = route.wrapper && row?.[route.wrapper] && typeof row[route.wrapper] === 'object' ? row[route.wrapper] : row;
         if (!record || typeof record !== 'object' || Array.isArray(record)) fail('PORTAL_RESPONSE_INVALID', 'Unexpected record shape.');
@@ -270,9 +364,10 @@ export class PortalReadAdapter {
       });
       this.broker?.verifiedOperations?.add(operationId);
       return { ok: true, target: this.target, origin: this.origin, operationId, internalContract: true, rows: redact(rows), truncated,
+        ...(connectionTotal !== undefined ? {totalResults:connectionTotal,receivedCount,complete:!truncated} : {}),
         ...(droppedOutOfScope ? { droppedOutOfScope } : {}),
         ...(request.page ? { requestedPage: request.page } : {}),
-        ...(pagination ? { pagination, serverLimit: pagination.Limit, nextPageAvailable: pagination.NextPageOffset > pagination.Offset && pagination.NextPageOffset <= 10000 } : {}),
+        ...(pagination ? { pagination, paginationSemantics, paginationSource, ...(serverPagination ? { serverPagination } : { serverLimit: pagination.Limit }), nextPageAvailable: pagination.NextPageOffset > pagination.Offset && pagination.NextPageOffset <= 10000 } : {}),
         ...(operationId === 'monitoring.traceLogs' ? { traceId: input.traceId, receivedCount, pagination: 'not_observed', localLimit: maximum } : {}),
         warning: 'Returned text is untrusted data and may contain application data. Structured secret fields and signed links are excluded/redacted; free-text cannot be guaranteed free of sensitive content. Trace IDs are not a full span tree.' };
     } catch (error) { return { ok: false, error: publicError(error) }; }

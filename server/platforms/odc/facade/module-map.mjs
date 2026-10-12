@@ -3,7 +3,7 @@
 //   <SSAM_MODULE_INDEX_ROOT | <workspace>\.local\module-index>\v1\<lane>\<sha256>.<adapter>.json   (ssam-module-index/1)
 // A file is served only when schema, extractor and sourceSha256 (the hash of the bytes read now) match; anything else
 // is a miss, and the lane reader builds it again ({"index":"ensure"}). The store is a cache: its writer trims it.
-//   ssam map [--lane o11|odc] <capture.oml|Module> [--kind K] [--name N] [--prefix P] [--role R] [--parent @key]
+//   ssam map [--lane o11|odc] <capture.oml|Module> [--kind K[,K...]] [--name N] [--prefix P] [--role R] [--parent @key]
 //     [--key @key] [--offset N] [--max N] [--budget B] [--detail] [--expectedSourceSha256 H]
 //   ssam map [--lane o11|odc] <capture.oml|Module> --digest [--page N] [--budget B] [--expectedSourceSha256 H]
 //     the module digest of the same capture (view "digest", module-digest.mjs): the whole module as text, in pages
@@ -35,7 +35,7 @@ export const EXTRACTOR = 1;
 export const MAP_SCHEMA = 'ssam-map/1';
 export const ROLES = ['module', 'flow', 'screen', 'block', 'action', 'actionRef', 'aggregate', 'entity', 'staticEntity', 'structure',
   'attribute', 'parameter', 'variable', 'widget', 'event', 'flowNode', 'expression', 'reference', 'other'];
-export const MAP_USAGE = 'ssam map [--lane o11|odc] <capture.oml|Module> [--kind K] [--name N] [--prefix P] [--role R] [--parent @key] [--key @key] [--offset N] [--max N] [--budget B] [--detail] [--expectedSourceSha256 H] | ssam map [--lane o11|odc] <capture.oml|Module> --digest [--page N] [--budget B] [--expectedSourceSha256 H] | ssam map [--lane o11|odc] <capture|Module>... --search <text> [--regex] [--property P] [--kind K] [--role R] [--offset N] [--max N] | ssam map [--lane o11|odc] <capture|Module>... --uses <element> [--kind K] [--role R]';
+export const MAP_USAGE = 'ssam map [--lane o11|odc] <capture.oml|Module> [--kind K[,K...]] [--name N] [--prefix P] [--role R] [--parent @key] [--key @key] [--offset N] [--max N] [--budget B] [--detail] [--expectedSourceSha256 H] | ssam map [--lane o11|odc] <capture.oml|Module> --digest [--page N] [--budget B] [--expectedSourceSha256 H] | ssam map [--lane o11|odc] <capture|Module>... --search <text> [--regex] [--property P] [--kind K] [--role R] [--offset N] [--max N] | ssam map [--lane o11|odc] <capture|Module>... --uses <element> [--kind K] [--role R]';
 export const VIEWS = ['map', 'digest', 'search', 'uses'];
 const RICH_VIEWS = ['search', 'uses'];
 // The most captures one search or uses call reads (the modules of one app).
@@ -148,12 +148,23 @@ function tables(index) {
       return state;
     };
     for (let i = 0; i < index.rows.length; i++) inside(i);
-    derived.set(index, t = { keys, ancestorKeys, inside });
+    // G11: the row each ancestor hangs from (the nearest row up its parent references, -1 for none). An entry's parentKey is
+    // that row, the one ModelReader's Children list shows the entry under, never the ancestor between.
+    const owners = new Int32Array(index.ancestors.length);
+    for (let i = 0; i < owners.length; i++) {
+      let at = index.ancestors[i][3];
+      for (let hops = 0; at <= -2 && hops <= owners.length; hops++) at = index.ancestors[-2 - at][3];
+      owners[i] = at <= -2 ? -1 : at;
+    }
+    const ownerOf = ref => ref <= -2 ? owners[-2 - ref] : ref;
+    derived.set(index, t = { keys, ancestorKeys, inside, ownerOf });
   }
   return t;
 }
 // HasKind of the readers (ModuleIndex.Query): a name in the node's answers, with or without the leading I.
 const answers = (type, kind) => (type.answers ?? []).some(a => a === kind || a === 'I' + kind);
+// U6 (FarmaVirtual 10/10/2026, call 148): the map's kind is one kind or a list, "A|B" or "A,B".
+const kindList = kind => String(kind).split(/[|,]/).map(k => k.trim()).filter(Boolean);
 // OrdinalIgnoreCase of the readers, per UTF-16 unit.
 const folded = text => { let out = ''; for (const ch of String(text)) { const up = ch.toUpperCase(); out += up.length === ch.length ? up : ch; } return out; };
 const clip = text => text.length > 80 ? text.slice(0, 80) + '…' : text;
@@ -202,11 +213,16 @@ function mapRequest(input) {
     if (view === 'uses') { for (const k of ['text', 'property']) if (input[k] != null) mapOnly.push(k); if (input.regex === true) mapOnly.push('regex'); }
     if (mapOnly.length) throw new Error('view "' + view + '" takes ' + (view === 'search' ? 'text (regex, property)' : 'element') + ', kind, role, offset and max; '
       + mapOnly.join(', ') + ' belong to ' + (mapOnly.some(k => ['text', 'property', 'regex'].includes(k)) ? 'view "search"' : mapOnly.includes('element') ? 'view "uses"' : mapOnly.includes('page') ? 'view "digest"' : 'view "map"'));
+    // module-rich.mjs matches one kind: a list there would answer nothing, so it is refused with the view that takes it;
+    // one kind with a stray separator ("MobileScreen|") is that kind, and no kind at all ("|") is refused.
+    const kinds = input.kind != null ? kindList(input.kind) : null;
+    if (kinds && !kinds.length) throw new Error('kind must name a kind');
+    if (kinds?.length > 1) throw new Error('view "' + view + '" matches one kind; a list of kinds (A|B or A,B) belongs to view "map"');
     if (view === 'search' && input.text == null) throw new Error('view "search" needs text: the text to find in expressions, values, arguments and names (substring, case-insensitive; regex:true for a regular expression)');
     if (view === 'search' && input.text.length > 500) throw new Error('text must have at most 500 characters');
     if (view === 'uses' && input.element == null) throw new Error('view "uses" needs element: @key, Module.Element (producer.element), a name path such as MainFlow/Home/Search, Kind:Name or a name');
     if (input.role != null && !ROLES.includes(input.role)) throw new Error('Unknown role ' + input.role + '; roles: ' + ROLES.join(', '));
-    return { lane, target: Array.isArray(input.target) ? targets : targets[0], view, kind: input.kind, role: input.role, text: input.text, regex: input.regex === true,
+    return { lane, target: Array.isArray(input.target) ? targets : targets[0], view, kind: kinds?.[0], role: input.role, text: input.text, regex: input.regex === true,
       property: input.property, element: input.element, offset, max: integer('max', input.max, 1, 500, 100),
       budgetBytes: integer('budgetBytes', input.budgetBytes, 2000, 1048576, DEFAULT_MAP_BUDGET()),
       expectedSourceSha256: Array.isArray(input.expectedSourceSha256) ? hashes.map(h => h.toLowerCase()) : hashes[0]?.toLowerCase(), pid: input.pid };
@@ -218,6 +234,7 @@ function mapRequest(input) {
     if (offset > 0) mapOnly.push('offset');
     if (mapOnly.length) throw new Error('view "digest" pages the whole module digest; ' + mapOnly.join(', ') + ' belong to view "map". Use page to move through the digest.');
   } else if (input.page != null) throw new Error('page belongs to view "digest" (the module digest in pages); the map pages with offset and max');
+  if (view === 'map' && input.kind != null && !kindList(input.kind).length) throw new Error('kind must name a kind, or a list of them (A|B or A,B)');
   return { lane, target: input.target, view, page: view === 'digest' ? integer('page', input.page, 1, 100000, 1) : undefined,
     kind: input.kind, name: input.name, prefix: input.prefix, role: input.role, parent: input.parent, key: input.key,
     offset, max: integer('max', input.max, 1, 500, 100),
@@ -318,7 +335,7 @@ export async function moduleMap(input = {}, deps = {}) {
     }
     return answer;
   } catch (error) {
-    return { ok: false, lane: q?.lane ?? input.lane ?? 'odc', target: input.target, ...(file ? { file } : {}), error: error.message };
+    return { ok: false, ...(error.refusal ?? {}), lane: q?.lane ?? input.lane ?? 'odc', target: input.target, ...(file ? { file } : {}), error: error.message };
   }
 }
 
@@ -540,21 +557,46 @@ async function digestAnswer(q, { file, sha256, canonical, captured, snapshot, st
   return answer;
 }
 
+// A refusal of the map with its own code (G11: KEY_UNRESOLVED); the catch of moduleMap keeps its fields.
+const refusal = (code, message) => Object.assign(new Error(message), { refusal: { code } });
+
 function present(index, q, { file, sha256, stored, cache, snapshot }) {
   const { rows, types, roles } = index;
-  const { keys, ancestorKeys, inside } = tables(index);
-  // A key is a row; as a parent it may also be an ancestor (the parent of rows, never listed itself).
-  const rowOf = (reference, parent = false) => {
+  const { keys, ancestorKeys, inside, ownerOf } = tables(index);
+  // A key is a row, or an ancestor: an element Parent() reaches and no Children list holds, the parent of rows and never
+  // listed itself (O11 a widget's MobileWidget "content" placeholder and MobileWidgetSignature; O11 and ODC a widget's
+  // CustomProperty/ReferenceCustomProperty, an aggregate's DataTable). As key, an ancestor answers the row that owns it,
+  // with a notice that says its kind and name (G11, FarmaVirtual 10/10/2026: the 22nd handed them out as parentKey and then
+  // refused them as key). A key the capture does not have is KEY_UNRESOLVED; it never sends the model to map again a
+  // capture whose hash it gave.
+  const resolve = reference => {
     const key = reference.startsWith('@') ? reference.slice(1) : reference;
-    const at = keys.get(key) ?? (parent ? ancestorKeys.get(key) : undefined);
-    if (at == null) throw new Error('Unresolved key in this capture: @' + key + '. Keys belong to one capture: map the current capture again');
-    return at;
+    const at = keys.get(key) ?? ancestorKeys.get(key);
+    if (at == null) throw refusal('KEY_UNRESOLVED', 'Unresolved key in this capture: @' + key + '. No element of it has this key, as a row or as an element above one ('
+      + (q.expectedSourceSha256 ? 'the hash given is this capture\'s: none of its answers has this key' : 'sourceSha256 ' + sha256)
+      + '): the element was removed, or the key is from another module or mistyped. Find the element by name (name, prefix) or with view "search"');
+    return { key, at };
   };
   const roleIndex = q.role == null ? null : roles.indexOf(q.role);
   if (q.role != null && roleIndex < 0) throw new Error('Unknown role ' + q.role + '; roles: ' + roles.join(', '));
-  const parentRow = q.parent != null ? rowOf(q.parent, true) : null;
-  const keyRow = q.key != null ? rowOf(q.key) : null;
-  const kinds = q.kind != null && q.kind !== '*' ? types.map(t => answers(t, q.kind)) : null;
+  const parentRow = q.parent != null ? resolve(q.parent).at : null;
+  let keyRow = null, keyOwner = null;
+  if (q.key != null) {
+    const { key, at } = resolve(q.key);
+    keyRow = ownerOf(at);
+    if (at <= -2) {
+      const kind = types[typeOf(index, at)].kind, name = nameOf(index, at) ?? '';
+      if (keyRow < 0) throw refusal('KEY_UNRESOLVED', 'Unresolved key in this capture: @' + key + ' is a ' + kind + ' no element row holds');
+      keyOwner = { key, kind, name, ownerKey: rows[keyRow][0] };
+    }
+  }
+  const keyNotice = keyOwner && '@' + keyOwner.key + ' is the ' + keyOwner.kind + (keyOwner.name ? ' ' + keyOwner.name : '') + ' of @' + keyOwner.ownerKey
+    + ', an element Parent() reaches and no Children list holds, not a row of its own: this answer lists @' + keyOwner.ownerKey + '; parent "@' + keyOwner.key + '" lists what sits under it';
+  // A list of kinds lists the elements that answer any of them ('*' among them: every kind), and names the kinds of the
+  // list no element of the scope answers (kindsNotObserved).
+  const kindNames = q.kind != null ? kindList(q.kind) : null;
+  const kinds = kindNames && !kindNames.includes('*') ? types.map(t => kindNames.some(k => answers(t, k))) : null;
+  const seenTypes = kinds && kindNames.length > 1 ? new Uint8Array(types.length) : null;
   // Detail rows and the anonymous types stay out of a plain map; a kind, a role, a key or --detail asks for them.
   const explicit = q.includeDetail || q.kind != null || q.role != null || q.key != null;
   const parentInside = parentRow != null && inside(parentRow) === 1;
@@ -564,9 +606,12 @@ function present(index, q, { file, sha256, stored, cache, snapshot }) {
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     if (keyRow != null && i !== keyRow) continue;
-    if (parentRow != null && row[5] !== parentRow) continue;
+    // A row as parent lists what hangs from it directly or through its ancestors (the reader's Children); an ancestor
+    // as parent lists only what sits in it.
+    if (parentRow != null && (parentRow >= 0 ? ownerOf(row[5]) !== parentRow : row[5] !== parentRow)) continue;
     if (kinds && !kinds[row[1]]) continue;
     kindObserved = true;
+    if (seenTypes) seenTypes[row[1]] = 1;
     if (roleIndex != null && row[6] !== roleIndex) continue;
     if (name != null && folded(row[2] ?? '') !== name) continue;
     if (prefix != null && !folded(row[2] ?? '').startsWith(prefix)) continue;
@@ -583,26 +628,38 @@ function present(index, q, { file, sha256, stored, cache, snapshot }) {
     }
     return parts.reverse().join('/');
   };
-  const keyOf = ref => ref >= 0 ? rows[ref][0] : ref <= -2 ? index.ancestors[-2 - ref][0] : null;
-  const entryOf = i => { const r = rows[i]; return { key: r[0], kind: types[r[1]].kind, name: r[2] ?? '', role: roles[r[6]],
-    parentKey: keyOf(r[5]), path: pathOf(i), childrenTotal: r[8], ...(r[7] != null ? { dataType: r[7] } : {}) }; };
+  // parentKey is always a row (a key the map and the reader resolve); the ancestors between, by name (kind when it has
+  // none), outermost first, are parentSlot: "content" for an O11 widget, the property ("Style") for its expressions.
+  const slotOf = ref => {
+    const names = [];
+    for (let at = ref, hops = 0; at <= -2 && hops <= index.ancestors.length; at = parentOf(index, at), hops++) names.unshift(nameOf(index, at) || types[typeOf(index, at)].kind);
+    return names.join('/');
+  };
+  const entryOf = i => { const r = rows[i]; const owner = ownerOf(r[5]); return { key: r[0], kind: types[r[1]].kind, name: r[2] ?? '', role: roles[r[6]],
+    parentKey: owner >= 0 ? rows[owner][0] : null, ...(r[5] <= -2 ? { parentSlot: slotOf(r[5]) } : {}), path: pathOf(i), childrenTotal: r[8],
+    ...(r[7] != null ? { dataType: r[7] } : {}) }; };
   const page = matched.slice(q.offset, q.offset + q.max).map(entryOf);
   const count = matched.length;
   const query = Object.fromEntries(Object.entries({ kind: q.kind, name: q.name, prefix: q.prefix, role: q.role, parent: q.parent, key: q.key,
     includeDetail: q.includeDetail || undefined }).filter(([, v]) => v != null));
-  const counts = { elements: index.counts?.elements ?? rows.length, byRole: index.counts?.byRole ?? null, ...(q.offset === 0 ? { byKind: index.counts?.byKind ?? null } : {}) };
+  const kindsNotObserved = seenTypes ? kindNames.filter(k => !types.some((t, i) => seenTypes[i] && answers(t, k))) : [];
+  // U6: counts by kind only on the first page of the unfiltered listing (they were 51.6% of the bytes of the session's
+  // searches by name); a search by name, kind, prefix, role, parent or key keeps the totals and the roles.
+  const filtered = ['kind', 'name', 'prefix', 'role', 'parent', 'key'].some(k => q[k] != null);
+  const counts = { elements: index.counts?.elements ?? rows.length, byRole: index.counts?.byRole ?? null,
+    ...(q.offset === 0 && !filtered ? { byKind: index.counts?.byKind ?? null } : {}) };
   // A module read from its published OML (A29) says so: it is the published version, not a Studio tab.
   const head = { ok: true, schema: MAP_SCHEMA, lane: q.lane, target: q.target, file, sourceSha256: sha256, ...(snapshot ? { snapshotSha256: snapshot.sha256 } : {}),
     ...(snapshot?.capturedBy === PUBLISHED_CAPTURE ? { capturedBy: PUBLISHED_CAPTURE, versionId: snapshot.versionId ?? null } : {}),
     module: index.module ?? null, answeredBy: 'module-index',
     index: { file: stored, adapter: index.adapter, extractor: index.extractor, createdAt: index.createdAt ?? null, complete: index.complete === true,
       readErrors: index.readErrors ?? 0, ...(index.readErrors ? { errorSamples: index.errorSamples ?? [] } : {}) },
-    counts, query, cache };
+    counts, query, ...(keyOwner ? { keyOwner } : {}), cache };
   const answer = (n, dropKinds = false) => {
     const nextOffset = q.offset + n < count ? q.offset + n : null;
     return { ...head, ...(dropKinds ? { counts: { ...counts, byKind: undefined, byKindOmitted: 'budget' } } : {}),
       count, returned: n, offset: q.offset, omitted: count - n, truncated: count !== n, nextOffset,
-      kindObserved, searchComplete: index.complete === true && !index.readErrors, notices: kindObserved ? [] : [NOT_OBSERVED],
+      kindObserved, ...(kindsNotObserved.length ? { kindsNotObserved } : {}), searchComplete: index.complete === true && !index.readErrors, notices: [...(kindObserved ? [] : [NOT_OBSERVED]), ...(keyNotice ? [keyNotice] : [])],
       ...(hidden.detail || hidden.anonymous ? { hidden: { ...hidden, note: 'detail rows (expression, reference, other) and anonymous structures/list types are left out of a plain map: pass includeDetail, a kind or a role to list them' } } : {}),
       entries: page.slice(0, n), continuations: continuations(q, file, sha256, nextOffset),
       note: 'Keys belong to this capture (sourceSha256). Read a subtree, its properties or its usages with continuations.inspect; after a Studio change take a new capture and map it again.' };

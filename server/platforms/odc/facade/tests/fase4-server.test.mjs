@@ -17,6 +17,7 @@ import { applicationUrls, derivedStageOrigin } from '../app-urls.mjs';
 import { recordConnectedTenants, withFragmentPreview, warmSoon } from '../lib.mjs';
 import { renderFragmentPreview } from '../preview/fragment.mjs';
 import { runWithExecutor } from '../executor.mjs';
+import { INLINE_JOB_MARKER } from '../agent-paths.mjs';
 import { fakeAgentLink, hostedDirs, cleanupHostedDirs, agentPaths } from './fixtures/fake-agent-link.mjs';
 
 test.after(cleanupHostedDirs);
@@ -75,12 +76,18 @@ test('C26: an absolute path under the agent folder is its agent: path; any other
   assert.equal(h.calls[0].args.job, path.join(h.workspace, 'inbox', 'cart.json'));
   const outside = (await deliver({ job: 'C:\\Users\\cliente\\AppData\\Local\\Temp\\claude\\job.json', module: 'Shop' })).structuredContent;
   assert.equal(outside.code, 'PATH_OUTSIDE_WORKSPACE');
+  // fase4-24: a job goes inline; the fix says so first and still names the inbox file for a job that already is a file.
+  assert.match(outside.fix, /^mande o próprio job inline em job/);
   assert.match(outside.fix, /C:\\SSAM-Agent\\inbox\\job\.json/);
   assert.equal(outside.inbox, 'C:\\SSAM-Agent\\inbox');
-  assert.deepEqual(outside.continuation.arguments, { job: 'agent:inbox/job.json', module: 'Shop' });
+  assert.deepEqual(outside.continuation.arguments, { job: INLINE_JOB_MARKER, module: 'Shop' });
   assert.equal(outside.continuation.tool, 'studio_deliver');
   assert.equal(h.calls.length, 1, 'the refused call never ran');
-  assert.match(HOSTED_RULES, /Write tool \(UTF-8\)/);
+  // servidor/fase4-24: one job per module, inline, compact; the kernel's normalizations come listed.
+  assert.match(HOSTED_RULES, /^Jobs: ONE job per module, with every change of the request for that module/);
+  assert.match(HOSTED_RULES, /sent inline in the job argument as compact JSON/);
+  assert.match(HOSTED_RULES, /normalizations {total, byRule, items}/);
+  assert.match(HOSTED_RULES, /agent:inbox\/<file> is only for the user's own files/);
   assert.match(HOSTED_RULES, /ported 1:1/);
   assert.match(HOSTED_RULES, /ToolSearch/);
 });

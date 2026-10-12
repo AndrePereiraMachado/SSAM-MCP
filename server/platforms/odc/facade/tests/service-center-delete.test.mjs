@@ -23,6 +23,21 @@ const CORPORATE = 'test.example.com';
 const REGISTRY = path.join(import.meta.dirname, 'fixtures', 'sc-hosts.json');
 const PARENT = '11111111-2222-4333-8444-555555555555';
 
+test('a contextual human approval deletes only the scoped app; new consumers still block it', async () => {
+  for (const hasConsumer of [false, true]) {
+    const s=environment({apps:[{key:'proof',name:'Proof'}],
+      simulations:{proof:{success:true,affectedApplications:hasConsumer?['NewConsumer']:[],deletedModules:[],messages:[]}}});
+    const proposal=path.join(s.dir,'proposal.md'),context=path.join(s.dir,'approval.json'),words='Pode sim, depois apague.';
+    fs.writeFileSync(proposal,'Delete the disposable Proof app after its approved test.');
+    fs.writeFileSync(context,JSON.stringify({schema:'ssam-authorization-context/1',decision:'approved',words,
+      source:{kind:'human-conversation',threadId:PARENT,messageId:PARENT,question:'May I execute this disposable fixture plan?'},
+      proposal:{file:proposal,sha256:sha256(fs.readFileSync(proposal))},scope:[{lane:'o11',host:PERSONAL,operation:'delete',targets:['Proof']}]}));
+    const result=await s.run('delete','--target=application:Proof','--words='+words,'--authorization-context='+context);
+    if(hasConsumer){assert.equal(result.code,'DELETE_REFUSED');assert.ok(result.problems.some(p=>p.code==='CONSUMERS_WOULD_BREAK'));assert.equal(s.writes().length,0);}
+    else {assert.equal(result.state,'confirmed',JSON.stringify(result));assert.equal(s.sent('DeleteApplication').length,1);}
+  }
+});
+
 // A synthetic environment: applications, eSpaces and extensions (each with its application key), GetConsumers answers
 // by producer key and DeleteApplication simulations by application key. Deletes change the listings.
 function environment({ apps = [], espaces = [], extensions = [], consumers = {}, simulations = {}, catalog = CATALOG, host = PERSONAL, uuid = () => PARENT } = {}) {

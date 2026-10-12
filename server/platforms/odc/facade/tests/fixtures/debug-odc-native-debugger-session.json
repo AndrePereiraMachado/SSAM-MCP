@@ -1,0 +1,15 @@
+{
+  "schema": "ssam-odc-native-debugger-session-fixture/1",
+  "source": {
+    "file": ".local/debugger/wrappers/odc/wrightflood.outsystems.dev/Quotes-native-1791222004592/assets/_oschunk-SWJYC2ND.js",
+    "sha256": "89892ff0568197f53e96bc5d1b3a314fe63f88635c2186e34ab13baf1bc297f5"
+  },
+  "startSession": {
+    "offset": 5114,
+    "text": "startSession(){if(this.isInSession){l(\"Debugger is already in session\");return}this.pendingInitializationHandler&&(this.initializationStatus=w.Prepared,this.pendingInitializationHandler(),this.pendingInitializationHandler=null),this.isInSession=!0;let e=M.resolve(O.DebuggerHttpClient);e&&x(O.HttpClient,()=>e)}"
+  },
+  "endSession": {
+    "offset": 5425,
+    "text": "endSession(){if(!this.isInSession){l(\"Can't end an nonexisting session\");return}this.isInSession=!1;let e=M.resolve(O.NonDebuggerHttpClient);e&&x(O.HttpClient,()=>e)}"
+  }
+}

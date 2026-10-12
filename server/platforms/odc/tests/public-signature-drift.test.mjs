@@ -71,9 +71,18 @@ test('the ODC bridge compiles the copy and no file of the kernel; ReferenceComma
   assert.ok(compiled.includes('SecurityWarningsCopy.cs'));
   // kernel/query-test is not the kernel: the native query test runtime (namespace SSAM.QueryTesting, no kernel type) that
   // runs inside the Studio; the agent pack's IP scan still reads the built DLL for every kernel name.
-  assert.deepEqual(compiled.filter(file => /(^|\/)kernel\//.test(file) && !/(^|\/)kernel\/query-test\//.test(file)), [], 'no kernel source is linked into the bridge');
+  // The 24th release (bridge v96) links PrivateHttpContext.cs of the O11 bridge folder: the private Portal transport's pipe
+  // record, namespace Ssam.PrivateTransport, no kernel type either; a file shared by the two bridges (SHARED.md of the
+  // agent box). Any other file under kernel/ stays out.
+  const SHARED_TRANSPORT = '../../../../kernel/src/Anvil.Bridge/PrivateHttpContext.cs';
+  assert.deepEqual(compiled.filter(file => /(^|\/)kernel\//.test(file) && !/(^|\/)kernel\/query-test\//.test(file) && file !== SHARED_TRANSPORT), [], 'no kernel source is linked into the bridge');
   for (const file of fs.readdirSync(path.join(repo, 'kernel', 'query-test')).filter(f => f.endsWith('.cs')))
     assert.doesNotMatch(fs.readFileSync(path.join(repo, 'kernel', 'query-test', file), 'utf8'), /Anvil\.|Ssam\.Runtime|Ssam\.Lic/, file + ' names no kernel namespace');
+  if (compiled.includes(SHARED_TRANSPORT)) {
+    const transport = fs.readFileSync(path.join(bridge, ...SHARED_TRANSPORT.split('/')), 'utf8');
+    assert.match(transport, /^namespace Ssam\.PrivateTransport;\r?$/m, 'the shared transport file keeps its own namespace');
+    assert.doesNotMatch(transport, /Anvil\.|Ssam\.Runtime|Ssam\.Lic/, 'PrivateHttpContext.cs names no kernel namespace');
+  }
   const commands = fs.readFileSync(path.join(bridge, 'ReferenceCommands.cs'), 'utf8');
   assert.match(commands, /PublicSignatureReader\.Read\(info\.SignatureBinary!\)/);
   assert.doesNotMatch(commands, /Anvil\.Core/);

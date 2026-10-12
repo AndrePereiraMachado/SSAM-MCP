@@ -13,8 +13,33 @@
 export const CODE_PATTERN = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$|^[A-Z]{3,}$/;
 export const isCode = value => typeof value === 'string' && CODE_PATTERN.test(value) && value !== 'OK';
 
+// The refusals of the prototype importer (docs/PROTOTIPO-NATIVO.md 1.4; prototype-op.mjs): the source, the headless
+// render, an ambiguity with its ready mapping, a requested name that collides, and an IR or bundle the SSAM itself got
+// wrong (ssamDefect). A divergent capture is captured again, never refused: there is no CAPTURE_STALE.
+export const PROTOTYPE_CODES = Object.freeze(['PROTOTYPE_SOURCE_INVALID', 'PROTOTYPE_RENDER_FAILED', 'PROTOTYPE_AMBIGUOUS',
+  'PROTOTYPE_NAME_COLLISION', 'PROTOTYPE_IR_INVALID']);
+
+// The codes of the html op (docs/PROTOTIPO-NATIVO.md 5, H1-H16; kernel HtmlExpander/HtmlVisual/JobPreflight): the refusals
+// the page and fragment forms answer with every problem at once, and the warnings of a page that compiles (one per class,
+// with counts) that no refusal carries. The css guard of StyleSheetRules answers CSS_RULES_DROPPED (a patched job that lost
+// rules of its stylesheet) and warns CSS_VAR_UNDEFINED.
+export const HTML_CODES = Object.freeze(['HTML_INVALID', 'HTML_ARGUMENT_INVALID', 'HTML_ATTRIBUTE_SCRIPT', 'HTML_BINDING_INVALID',
+  'HTML_BINDING_ORPHAN', 'HTML_CALL_ORDER', 'HTML_CALL_OTHER_SCREEN', 'HTML_CONTENT_EMPTY', 'HTML_CONTROL_DEAD', 'HTML_CSS_ID_SELECTOR',
+  'HTML_CSS_INVALID', 'HTML_ID_DUPLICATE', 'HTML_KEY_UNBOUND', 'HTML_KIND_TAG', 'HTML_LIST_TEMPLATE', 'HTML_REFERENCE_UNRESOLVED',
+  'HTML_TAG_NOT_ALLOWED', 'CSS_RULES_DROPPED']);
+export const HTML_WARNING_CODES = Object.freeze(['CSS_IMPORT_HOISTED', 'CSS_REWRITTEN', 'CSS_VAR_UNDEFINED', 'HTML_ATTRIBUTE_EXTENDED',
+  'HTML_CLICKABLE_ELEMENT', 'HTML_CONTROL_LABELLED', 'HTML_KEY_SHARED', 'HTML_LABEL_CHILDREN', 'HTML_SCREEN_ACTION_SAME_JOB',
+  'HTML_TABLE_STATIC', 'HTML_VISIBLE_IF']);
+
 // [pattern, code | (match) => code]. Each pattern is linear (no nested quantifiers) and anchored on literal words.
 export const TEXT_RULES = Object.freeze([
+  // A text that names a prototype code keeps it (a relayed refusal of the importer that lost its object); a capture engine
+  // that is not in the release is an SSAM defect of the bundle.
+  [/\b(PROTOTYPE_(?:SOURCE_INVALID|RENDER_FAILED|AMBIGUOUS|NAME_COLLISION|IR_INVALID))\b/, m => m[1]],
+  [/\bprototype[\\/](?:capture|fidelity)\.mjs\b/, 'PROTOTYPE_IR_INVALID'],
+  // A text that names a refusal code of the html op or of the css loss guard keeps it (only the refusals: a warning code
+  // in a text never makes it a failure).
+  [/\b(HTML_[A-Z]+(?:_[A-Z]+)*|CSS_RULES_DROPPED)\b/, m => (HTML_CODES.includes(m[1]) ? m[1] : null)],
   // The SDK refuses before the handler ("Input validation error: Invalid arguments for tool X: ..."), zod issues
   // (a ZodError's message is its JSON issue list; "Too big: expected ...", "Unrecognized key"), and the ajv messages of
   // fromJsonSchema ("data/budgetBytes must be >= 4096").
@@ -35,6 +60,12 @@ export const TEXT_RULES = Object.freeze([
   // Studio has no window"), and C26, a path outside the folders the hosted agent reads.
   [/\b(?:has no main window|the Studio has no window)\b/, 'STUDIO_WINDOWLESS'],
   [/\bis outside the folders the agent reads\b/, 'PATH_OUTSIDE_WORKSPACE'],
+  // G11 (FarmaVirtual 2026-10-10, call 131): an @key the reader (ModelReader.Resolve, the 22nd's "Unresolved or ambiguous
+  // key") or the map does not resolve in the capture; next-steps.mjs continues to the map under that key. A key that names
+  // several elements is KEY_AMBIGUOUS, with no continuation: the map keeps one row per key, and the reader's text names
+  // the paths that tell them apart.
+  [/\bUnresolved(?: or ambiguous)? key in this (?:snapshot|capture)\b/, 'KEY_UNRESOLVED'],
+  [/\bAmbiguous key in this (?:snapshot|capture)\b/, 'KEY_AMBIGUOUS'],
   [/\b(?:timed out|TimeoutException|ETIMEDOUT)\b/, 'TIMEOUT'],
   [/\b(?:SharpZipBaseException|Illegal rep length code)\b/, 'FILE_UNREADABLE'],
   [/\b(?:ENOENT|FileNotFoundException|DirectoryNotFoundException)\b|\bno such file or directory\b/, 'FILE_NOT_FOUND'],

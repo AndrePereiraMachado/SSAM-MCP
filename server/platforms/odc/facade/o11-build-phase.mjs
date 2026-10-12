@@ -2,7 +2,8 @@
 // In a phased call (the ssam server passes phased:true), before the Studio is taken:
 //   1. the module open in the selected Service Studio is captured by its key, without selecting its tab
 //      (list_open_modules, then snapshot_module {module_key}: bridge C41), so another delivery's apply of another module
-//      of the same Studio runs meanwhile;
+//      of the same Studio runs meanwhile; when the tab's model fingerprint equals a capture the server already holds
+//      (o11-capture-store.mjs, speed lane vel-entrega), that capture is copied instead: nothing is captured or uploaded;
 //   2. the kernel applies the job to that capture headless (`anvil apply`), in a slot of the build pool (build-pool.mjs:
 //      SSAM_BUILD_WORKERS slots, each with its resident worker on base + i * poolStep and its own TEMP);
 //   3. the accepted candidate becomes a prebuilt manifest (ssam-prebuilt/1) next to it.
@@ -26,6 +27,7 @@ import { phaseOfCall, notePhase, phaseGuard } from './studio-write-lock.mjs';
 import { pooledBuild, sharedBuildPool, BuildQueueRefused, slotWorkerPort } from './build-pool.mjs';
 import { workspaceRoot } from './workspace.mjs';
 import { hostedContext } from './executor.mjs';
+import { findCapture, isModelSha, modelSha256, rememberCapture, rememberDelivery } from './o11-capture-store.mjs';
 
 export const PREBUILT_SCHEMA = 'ssam-prebuilt/1';
 // Bridge methods a build may call without the Studio lock: reads that never select a tab nor change a model.
@@ -69,9 +71,14 @@ export function jobNeedsStudio(jobFile) {
 }
 
 // The module open in a tab, captured by its key without selecting it; null when that cannot be done here.
+// Speed lane vel-entrega (o11-capture-store.mjs): the list asks for the tab's model fingerprint (model_sha256_of; a bridge
+// without list_open_modules:model_sha256 ignores it). When a capture the server already holds has that model (the delivered
+// snapshot of the previous delivery, the capture of a refused call, an o11_studio snapshot), it is copied to the build's
+// file and nothing is captured or uploaded: {..., reused: {from, modelSha256}}. Any other case captures as before, and the
+// new capture is recorded for the next call.
 export async function captureByKey(module, { bridge, local, now = () => new Date(), signal }) {
   const client = bridge();
-  const listed = await client.ok('list_open_modules', {}, { timeoutMs: 10000, ...(signal ? { signal } : {}) });
+  const listed = await client.ok('list_open_modules', { model_sha256_of: String(module) }, { timeoutMs: 10000, ...(signal ? { signal } : {}) });
   const wanted = String(module).toLowerCase();
   const tabs = (Array.isArray(listed?.modules) ? listed.modules : []).filter(m => typeof m?.name === 'string' && m.name.toLowerCase() === wanted && m.hasESpace !== false);
   if (tabs.length !== 1) return null;
@@ -79,10 +86,24 @@ export async function captureByKey(module, { bridge, local, now = () => new Date
   if (typeof tab.key !== 'string' || !tab.key || tab.serverSilentMode === true || tab.hasOpenedActiveESpace === false) return null;
   const file = path.join(local, 'snapshots', 'build-' + tab.name.replace(/[^\w.-]/g, '_') + '-' + stampOf(now()) + '-' + randomUUID().slice(0, 8) + '.oml');
   fs.mkdirSync(path.dirname(file), { recursive: true });
+  const fingerprint = isModelSha(tab.modelSha256) ? tab.modelSha256 : null;
+  const known = fingerprint ? findCapture(local, { moduleKey: tab.key, model: fingerprint }) : null;
+  if (known) {
+    try {
+      fs.copyFileSync(known.path, file);
+      if (modelSha256(file) === fingerprint) {
+        rememberCapture(local, { moduleKey: tab.key, module: tab.name, file, model: fingerprint, source: 'build-reused', now: now() });
+        return { path: file, key: tab.key, module: tab.name, reused: { from: known.path, modelSha256: fingerprint } };
+      }
+    } catch { /* captured below */ }
+    try { fs.rmSync(file, { force: true }); } catch { /* the capture below writes it again */ }
+  }
   const data = await client.ok('snapshot_module', { path: file, module_key: tab.key }, signal ? { signal } : undefined);
   if (data?.key && data.key !== tab.key) return null;
   const captured = typeof data?.path === 'string' && data.path ? data.path : file;
-  return isFile(captured) ? { path: captured, key: tab.key, module: tab.name } : null;
+  if (!isFile(captured)) return null;
+  rememberCapture(local, { moduleKey: tab.key, module: tab.name, file: captured, source: 'build', now: now() });
+  return { path: captured, key: tab.key, module: tab.name };
 }
 
 // The runner of a slot: its resident worker (slot 0 is the lane's own worker; ANVIL_WORKER=0 runs cold) with the slot's
@@ -120,7 +141,9 @@ export async function buildBeforeApply({ input, job, ctx, lane, task, signal }) 
   const pool = ctx.buildPool ?? sharedBuildPool({ root: ctx.root, env: ctx.env });
   const producers = Object.entries(input.producers ?? {});
   const argv = ['apply', '--job', job, '--base', shot.path, '--out', candidate, '--work', path.join(folder, 'model'),
-    ...producers.flatMap(([name, file]) => ['--producer', name + '=' + file])];
+    ...producers.flatMap(([name, file]) => ['--producer', name + '=' + file]),
+    // the job a patched delivery corrects (o11-cycle.mjs BASED_ON): the preflight refuses CSS the correction dropped
+    ...Object.getOwnPropertySymbols(input).filter(s => s.description === 'basedOnJob').map(s => input[s]).filter(f => typeof f === 'string').flatMap(f => ['--based-on', f])];
   let run;
   try {
     run = await pooledBuild({ pool, customer: buildCustomer(ctx), signal, privateDir: folder }, slot =>
@@ -146,16 +169,21 @@ export async function buildBeforeApply({ input, job, ctx, lane, task, signal }) 
   fs.writeFileSync(manifest, JSON.stringify({ schema: PREBUILT_SCHEMA, module: shot.module, moduleKey: shot.key, job, base: shot.path, baseSha256: sha256Of(shot.path),
     candidate, candidateSha256: sha256Of(candidate), result,
     producers: Object.fromEntries(producers.map(([name, file]) => [name, { path: file, sha256: isFile(file) ? sha256Of(file) : null }])),
-    builtAt: new Date().toISOString(), buildMs: run.wallMs ?? null }, null, 2));
+    builtAt: new Date().toISOString(), buildMs: run.wallMs ?? null,
+    // vel-entrega: the base is a copy of a capture the server held with the same model (nothing was captured or uploaded)
+    ...(shot.reused ? { captureReused: shot.reused } : {}) }, null, 2));
   notePhase({ built: true });
   return { args: ['--prebuilt', manifest], manifest };
 }
 
 // After the apply phase: a candidate the kernel did not reuse (the module changed after the build) is a rebase; the
 // task folder's phases.json gets the phases of the call.
-export function afterApply(run, built, { work }) {
-  if (!built?.manifest) return;
+// vel-entrega: the delivery's own snapshot and its delivered snapshot are recorded as known captures of the module
+// (o11-capture-store.mjs), with or without a build phase: the next build of the same model copies one of them.
+export function afterApply(run, built, { work, local }) {
   const state = run?.envelope?.data;
+  if (local && state && typeof state === 'object') rememberDelivery(local, state);
+  if (!built?.manifest) return;
   const prebuilt = state?.apply?.prebuilt;
   if (prebuilt && prebuilt.reused === false) notePhase({ rebased: { reason: String(prebuilt.reason ?? 'base-changed') } });
   const taskId = typeof state?.taskId === 'string' ? state.taskId : null;

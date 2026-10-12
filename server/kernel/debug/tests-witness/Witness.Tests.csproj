@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Standalone model-only witness provenance tests: fakes plus a reflection check of the installed SDK contract names.
+       No vendor reference is compiled in; pass the Studio directory as the first argument. ODC: -p:WitnessLane=odc. -->
+  <PropertyGroup><AssemblyName>SSAM.Debugger.WitnessTests</AssemblyName><DefineConstants Condition="'$(WitnessLane)' == 'odc'">$(DefineConstants);ODC</DefineConstants></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../shared/NativeWitnessBindings.cs" />
+    <Compile Include="../tests/NativeWitnessBindingsTests.cs" />
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+</Project>

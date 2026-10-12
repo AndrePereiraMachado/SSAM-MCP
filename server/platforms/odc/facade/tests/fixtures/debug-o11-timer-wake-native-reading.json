@@ -1,0 +1,963 @@
+{
+  "schema": "ssam-o11-timer-wake-fixture/1",
+  "module": "SSAMDebuggerProbe",
+  "moduleKey": "bf7WCuRy7keTqvquautTGg",
+  "sourceSha256": "F9A13FF25A6925DBFA48B284CCC4BAABFDC4EE589F20BDB243B3AFF3CF3AA619",
+  "readings": [
+    {
+      "kind": "ServerAction",
+      "name": "ProbeTimerAction",
+      "modelName": "ProbeTimerAction",
+      "label": null,
+      "key": "uWaXOn_nZk606RgznzjCew",
+      "reference": "@uWaXOn_nZk606RgznzjCew",
+      "path": "ServerAction:ProbeTimerAction",
+      "properties": {
+        "ObjectKey": "uWaXOn_nZk606RgznzjCew",
+        "GlobalKey": "bf7WCuRy7keTqvquautTGg*uWaXOn_nZk606RgznzjCew",
+        "WasDeleted": "False",
+        "IsValid": "True",
+        "Key": "/UserActions.uWaXOn_nZk606RgznzjCew",
+        "Name": "ProbeTimerAction",
+        "InputParameters": "[]",
+        "LocalVariables": "[LocalVariable:Tick]",
+        "Nodes": "[EndNode:, StartNode:, AssignNode:IncrementLocal]",
+        "OutputParameters": "[]",
+        "Function": "False",
+        "Public": "False"
+      },
+      "propertyReferences": {},
+      "propertyReferenceCollections": {
+        "InputParameters": {
+          "items": [],
+          "total": 0,
+          "omitted": 0
+        },
+        "LocalVariables": {
+          "items": [
+            {
+              "kind": "LocalVariable",
+              "name": "Tick",
+              "label": null,
+              "key": "Vj9ei0Mw_EuEVc2_mS+MnQ",
+              "reference": "@Vj9ei0Mw_EuEVc2_mS+MnQ",
+              "path": "ServerAction:ProbeTimerAction/LocalVariable:Tick"
+            }
+          ],
+          "total": 1,
+          "omitted": 0
+        },
+        "Nodes": {
+          "items": [
+            {
+              "kind": "EndNode",
+              "name": "",
+              "label": null,
+              "key": "F7l_LjPInUayAz3TyVC_yQ",
+              "reference": "@F7l_LjPInUayAz3TyVC_yQ",
+              "path": "ServerAction:ProbeTimerAction/EndNode:"
+            },
+            {
+              "kind": "StartNode",
+              "name": "",
+              "label": null,
+              "key": "DLornobfC0+U4T9IV4Aicw",
+              "reference": "@DLornobfC0+U4T9IV4Aicw",
+              "path": "ServerAction:ProbeTimerAction/StartNode:"
+            },
+            {
+              "kind": "AssignNode",
+              "name": "",
+              "label": "IncrementLocal",
+              "key": "n7+sCzNbiUmlr083auLFaw",
+              "reference": "@n7+sCzNbiUmlr083auLFaw",
+              "path": "ServerAction:ProbeTimerAction/AssignNode:IncrementLocal"
+            }
+          ],
+          "total": 3,
+          "omitted": 0
+        },
+        "OutputParameters": {
+          "items": [],
+          "total": 0,
+          "omitted": 0
+        }
+      },
+      "propertiesOmitted": {},
+      "propertyErrors": {},
+      "propertiesMissing": [],
+      "children": [
+        {
+          "kind": "LocalVariable",
+          "name": "Tick",
+          "modelName": "Tick",
+          "label": null,
+          "key": "Vj9ei0Mw_EuEVc2_mS+MnQ",
+          "reference": "@Vj9ei0Mw_EuEVc2_mS+MnQ",
+          "path": "ServerAction:ProbeTimerAction/LocalVariable:Tick",
+          "properties": {
+            "ObjectKey": "Vj9ei0Mw_EuEVc2_mS+MnQ",
+            "GlobalKey": "bf7WCuRy7keTqvquautTGg*Vj9ei0Mw_EuEVc2_mS+MnQ",
+            "WasDeleted": "False",
+            "IsValid": "True",
+            "Key": "/UserActions.uWaXOn_nZk606RgznzjCew/LocalVariables.Vj9ei0Mw_EuEVc2_mS+MnQ",
+            "DataType": "BasicType:Integer",
+            "Name": "Tick",
+            "Type": "Integer"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "Integer",
+              "label": null,
+              "key": "j2Lc0phK0kuggij4gQYfAw",
+              "reference": "@j2Lc0phK0kuggij4gQYfAw",
+              "path": "BasicType:Integer"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "EndNode",
+          "name": "",
+          "modelName": "",
+          "label": null,
+          "key": "F7l_LjPInUayAz3TyVC_yQ",
+          "reference": "@F7l_LjPInUayAz3TyVC_yQ",
+          "path": "ServerAction:ProbeTimerAction/EndNode:",
+          "properties": {
+            "ObjectKey": "F7l_LjPInUayAz3TyVC_yQ",
+            "GlobalKey": "bf7WCuRy7keTqvquautTGg*F7l_LjPInUayAz3TyVC_yQ",
+            "WasDeleted": "False",
+            "IsValid": "True",
+            "Key": "/UserActions.uWaXOn_nZk606RgznzjCew/NodesNotShownInESpaceTree.F7l_LjPInUayAz3TyVC_yQ",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "VerticalPosition": "4000",
+            "Connectors": "[]",
+            "IncomingConnectors": "[ActionConnector:]"
+          },
+          "propertyReferences": {},
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            },
+            "IncomingConnectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "T+NHOS6_o0uPdXrM_5KwdQ",
+                  "reference": "@T+NHOS6_o0uPdXrM_5KwdQ",
+                  "path": "ServerAction:ProbeTimerAction/AssignNode:IncrementLocal/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "StartNode",
+          "name": "",
+          "modelName": "",
+          "label": null,
+          "key": "DLornobfC0+U4T9IV4Aicw",
+          "reference": "@DLornobfC0+U4T9IV4Aicw",
+          "path": "ServerAction:ProbeTimerAction/StartNode:",
+          "properties": {
+            "ObjectKey": "DLornobfC0+U4T9IV4Aicw",
+            "GlobalKey": "bf7WCuRy7keTqvquautTGg*DLornobfC0+U4T9IV4Aicw",
+            "WasDeleted": "False",
+            "IsValid": "True",
+            "Key": "/UserActions.uWaXOn_nZk606RgznzjCew/NodesNotShownInESpaceTree.DLornobfC0+U4T9IV4Aicw",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "VerticalPosition": "800",
+            "Connectors": "[ActionConnector:]",
+            "IncomingConnectors": "[]",
+            "Target": "AssignNode:IncrementLocal"
+          },
+          "propertyReferences": {
+            "Target": {
+              "kind": "AssignNode",
+              "name": "",
+              "label": "IncrementLocal",
+              "key": "n7+sCzNbiUmlr083auLFaw",
+              "reference": "@n7+sCzNbiUmlr083auLFaw",
+              "path": "ServerAction:ProbeTimerAction/AssignNode:IncrementLocal"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "XhKViv5DtUiqAjSdusSEPg",
+                  "reference": "@XhKViv5DtUiqAjSdusSEPg",
+                  "path": "ServerAction:ProbeTimerAction/StartNode:/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            },
+            "IncomingConnectors": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": null,
+              "key": "XhKViv5DtUiqAjSdusSEPg",
+              "reference": "@XhKViv5DtUiqAjSdusSEPg",
+              "path": "ServerAction:ProbeTimerAction/StartNode:/ActionConnector:",
+              "properties": {
+                "ObjectKey": "XhKViv5DtUiqAjSdusSEPg",
+                "GlobalKey": "bf7WCuRy7keTqvquautTGg*XhKViv5DtUiqAjSdusSEPg",
+                "WasDeleted": "False",
+                "IsValid": "True",
+                "Key": "/UserActions.uWaXOn_nZk606RgznzjCew/NodesNotShownInESpaceTree.DLornobfC0+U4T9IV4Aicw/Links.XhKViv5DtUiqAjSdusSEPg",
+                "Source": "StartNode:",
+                "Target": "AssignNode:IncrementLocal"
+              },
+              "propertyReferences": {
+                "Source": {
+                  "kind": "StartNode",
+                  "name": "",
+                  "label": null,
+                  "key": "DLornobfC0+U4T9IV4Aicw",
+                  "reference": "@DLornobfC0+U4T9IV4Aicw",
+                  "path": "ServerAction:ProbeTimerAction/StartNode:"
+                },
+                "Target": {
+                  "kind": "AssignNode",
+                  "name": "",
+                  "label": "IncrementLocal",
+                  "key": "n7+sCzNbiUmlr083auLFaw",
+                  "reference": "@n7+sCzNbiUmlr083auLFaw",
+                  "path": "ServerAction:ProbeTimerAction/AssignNode:IncrementLocal"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 1,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "AssignNode",
+          "name": "IncrementLocal",
+          "modelName": "",
+          "label": "IncrementLocal",
+          "key": "n7+sCzNbiUmlr083auLFaw",
+          "reference": "@n7+sCzNbiUmlr083auLFaw",
+          "path": "ServerAction:ProbeTimerAction/AssignNode:IncrementLocal",
+          "properties": {
+            "ObjectKey": "n7+sCzNbiUmlr083auLFaw",
+            "GlobalKey": "bf7WCuRy7keTqvquautTGg*n7+sCzNbiUmlr083auLFaw",
+            "WasDeleted": "False",
+            "IsValid": "True",
+            "Key": "/UserActions.uWaXOn_nZk606RgznzjCew/NodesNotShownInESpaceTree.n7+sCzNbiUmlr083auLFaw",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "VerticalPosition": "2400",
+            "Connectors": "[ActionConnector:]",
+            "IncomingConnectors": "[ActionConnector:]",
+            "Label": "IncrementLocal",
+            "Target": "EndNode:",
+            "Assignments": "[Assignment:]"
+          },
+          "propertyReferences": {
+            "Target": {
+              "kind": "EndNode",
+              "name": "",
+              "label": null,
+              "key": "F7l_LjPInUayAz3TyVC_yQ",
+              "reference": "@F7l_LjPInUayAz3TyVC_yQ",
+              "path": "ServerAction:ProbeTimerAction/EndNode:"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "T+NHOS6_o0uPdXrM_5KwdQ",
+                  "reference": "@T+NHOS6_o0uPdXrM_5KwdQ",
+                  "path": "ServerAction:ProbeTimerAction/AssignNode:IncrementLocal/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            },
+            "IncomingConnectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "XhKViv5DtUiqAjSdusSEPg",
+                  "reference": "@XhKViv5DtUiqAjSdusSEPg",
+                  "path": "ServerAction:ProbeTimerAction/StartNode:/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            },
+            "Assignments": {
+              "items": [
+                {
+                  "kind": "Assignment",
+                  "name": "",
+                  "label": null,
+                  "key": "kO8q9nIAik2NSaGm1XgJIw",
+                  "reference": "@kO8q9nIAik2NSaGm1XgJIw",
+                  "path": "ServerAction:ProbeTimerAction/AssignNode:IncrementLocal/Assignment:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "Assignment",
+              "name": "",
+              "modelName": "",
+              "label": null,
+              "key": "kO8q9nIAik2NSaGm1XgJIw",
+              "reference": "@kO8q9nIAik2NSaGm1XgJIw",
+              "path": "ServerAction:ProbeTimerAction/AssignNode:IncrementLocal/Assignment:",
+              "properties": {
+                "ObjectKey": "kO8q9nIAik2NSaGm1XgJIw",
+                "GlobalKey": "bf7WCuRy7keTqvquautTGg*kO8q9nIAik2NSaGm1XgJIw",
+                "WasDeleted": "False",
+                "IsValid": "True",
+                "Key": "/UserActions.uWaXOn_nZk606RgznzjCew/NodesNotShownInESpaceTree.n7+sCzNbiUmlr083auLFaw/Assignments.kO8q9nIAik2NSaGm1XgJIw",
+                "Value": "Tick + 1",
+                "Variable": "Tick"
+              },
+              "propertyReferences": {},
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "Expression",
+                  "name": "",
+                  "modelName": "",
+                  "label": null,
+                  "key": "kO8q9nIAik2NSaGm1XgJIw.#Variable",
+                  "reference": "@kO8q9nIAik2NSaGm1XgJIw.#Variable",
+                  "path": "ServerAction:ProbeTimerAction/AssignNode:IncrementLocal/Assignment:/Expression:",
+                  "properties": {
+                    "ObjectKey": "kO8q9nIAik2NSaGm1XgJIw.#Variable",
+                    "GlobalKey": "bf7WCuRy7keTqvquautTGg*kO8q9nIAik2NSaGm1XgJIw.#Variable",
+                    "WasDeleted": "False",
+                    "IsValid": "True",
+                    "Key": "/UserActions.uWaXOn_nZk606RgznzjCew/NodesNotShownInESpaceTree.n7+sCzNbiUmlr083auLFaw/Assignments.kO8q9nIAik2NSaGm1XgJIw/Variable",
+                    "Type": "BasicType:Integer",
+                    "DisplayValue": "Tick",
+                    "Text": "Tick",
+                    "Root": "[Id: 5889]\n[Type: Integer]\n[Reference: Tick(ObjectElementReference)]\n[ElementType: Integer]"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "Integer",
+                      "label": null,
+                      "key": "j2Lc0phK0kuggij4gQYfAw",
+                      "reference": "@j2Lc0phK0kuggij4gQYfAw",
+                      "path": "BasicType:Integer"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                },
+                {
+                  "kind": "Expression",
+                  "name": "",
+                  "modelName": "",
+                  "label": null,
+                  "key": "kO8q9nIAik2NSaGm1XgJIw.#Value",
+                  "reference": "@kO8q9nIAik2NSaGm1XgJIw.#Value",
+                  "path": "ServerAction:ProbeTimerAction/AssignNode:IncrementLocal/Assignment:/Expression:",
+                  "properties": {
+                    "ObjectKey": "kO8q9nIAik2NSaGm1XgJIw.#Value",
+                    "GlobalKey": "bf7WCuRy7keTqvquautTGg*kO8q9nIAik2NSaGm1XgJIw.#Value",
+                    "WasDeleted": "False",
+                    "IsValid": "True",
+                    "Key": "/UserActions.uWaXOn_nZk606RgznzjCew/NodesNotShownInESpaceTree.n7+sCzNbiUmlr083auLFaw/Assignments.kO8q9nIAik2NSaGm1XgJIw/Value",
+                    "Type": "BasicType:Integer",
+                    "DisplayValue": "Tick + 1",
+                    "Text": "Tick + 1",
+                    "Root": "[Id: 5890]\n[Type: Integer]\n[FormattingBefore ' ']\n[Operator: Plus]"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "Integer",
+                      "label": null,
+                      "key": "j2Lc0phK0kuggij4gQYfAw",
+                      "reference": "@j2Lc0phK0kuggij4gQYfAw",
+                      "path": "BasicType:Integer"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 2,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": null,
+              "key": "T+NHOS6_o0uPdXrM_5KwdQ",
+              "reference": "@T+NHOS6_o0uPdXrM_5KwdQ",
+              "path": "ServerAction:ProbeTimerAction/AssignNode:IncrementLocal/ActionConnector:",
+              "properties": {
+                "ObjectKey": "T+NHOS6_o0uPdXrM_5KwdQ",
+                "GlobalKey": "bf7WCuRy7keTqvquautTGg*T+NHOS6_o0uPdXrM_5KwdQ",
+                "WasDeleted": "False",
+                "IsValid": "True",
+                "Key": "/UserActions.uWaXOn_nZk606RgznzjCew/NodesNotShownInESpaceTree.n7+sCzNbiUmlr083auLFaw/Links.T+NHOS6_o0uPdXrM_5KwdQ",
+                "Source": "AssignNode:IncrementLocal",
+                "Target": "EndNode:"
+              },
+              "propertyReferences": {
+                "Source": {
+                  "kind": "AssignNode",
+                  "name": "",
+                  "label": "IncrementLocal",
+                  "key": "n7+sCzNbiUmlr083auLFaw",
+                  "reference": "@n7+sCzNbiUmlr083auLFaw",
+                  "path": "ServerAction:ProbeTimerAction/AssignNode:IncrementLocal"
+                },
+                "Target": {
+                  "kind": "EndNode",
+                  "name": "",
+                  "label": null,
+                  "key": "F7l_LjPInUayAz3TyVC_yQ",
+                  "reference": "@F7l_LjPInUayAz3TyVC_yQ",
+                  "path": "ServerAction:ProbeTimerAction/EndNode:"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 2,
+          "childrenOmitted": 0
+        }
+      ],
+      "childrenTotal": 4,
+      "childrenOmitted": 0
+    },
+    {
+      "kind": "Timer",
+      "name": "ProbeTimer",
+      "modelName": "ProbeTimer",
+      "label": null,
+      "key": "rb3sLlRkGka3ljKEMMzqtw",
+      "reference": "@rb3sLlRkGka3ljKEMMzqtw",
+      "path": "Timer:ProbeTimer",
+      "properties": {
+        "ObjectKey": "rb3sLlRkGka3ljKEMMzqtw",
+        "GlobalKey": "bf7WCuRy7keTqvquautTGg*rb3sLlRkGka3ljKEMMzqtw",
+        "WasDeleted": "False",
+        "IsValid": "True",
+        "Key": "/Timers.rb3sLlRkGka3ljKEMMzqtw",
+        "Action": "ServerAction:ProbeTimerAction",
+        "Description": "Manual technical debugger probe; no business writes and no external calls.",
+        "IsMultiTenant": "Inherited",
+        "Name": "ProbeTimer",
+        "Priority": "Normal",
+        "TimeoutInMinutes": "20",
+        "Arguments": "[]",
+        "WakeTimerAction": "ActionSignature:WakeProbeTimer"
+      },
+      "propertyReferences": {
+        "Action": {
+          "kind": "ServerAction",
+          "name": "ProbeTimerAction",
+          "label": null,
+          "key": "uWaXOn_nZk606RgznzjCew",
+          "reference": "@uWaXOn_nZk606RgznzjCew",
+          "path": "ServerAction:ProbeTimerAction"
+        },
+        "WakeTimerAction": {
+          "kind": "ActionSignature",
+          "name": "WakeProbeTimer",
+          "label": null,
+          "key": "rb3sLlRkGka3ljKEMMzqtw.#WakeTimer",
+          "reference": "@rb3sLlRkGka3ljKEMMzqtw.#WakeTimer",
+          "path": "Timer:ProbeTimer/ActionSignature:WakeProbeTimer"
+        }
+      },
+      "propertyReferenceCollections": {
+        "Arguments": {
+          "items": [],
+          "total": 0,
+          "omitted": 0
+        }
+      },
+      "propertiesOmitted": {},
+      "propertyErrors": {},
+      "propertiesMissing": [],
+      "children": [
+        {
+          "kind": "ActionSignature",
+          "name": "WakeProbeTimer",
+          "modelName": "WakeProbeTimer",
+          "label": null,
+          "key": "rb3sLlRkGka3ljKEMMzqtw.#WakeTimer",
+          "reference": "@rb3sLlRkGka3ljKEMMzqtw.#WakeTimer",
+          "path": "Timer:ProbeTimer/ActionSignature:WakeProbeTimer",
+          "properties": {
+            "ObjectKey": "rb3sLlRkGka3ljKEMMzqtw.#WakeTimer",
+            "GlobalKey": "bf7WCuRy7keTqvquautTGg*rb3sLlRkGka3ljKEMMzqtw.#WakeTimer",
+            "WasDeleted": "False",
+            "IsValid": "True",
+            "Key": "/Timers.rb3sLlRkGka3ljKEMMzqtw/TimerActions.#WakeTimer",
+            "InputParameters": "[]",
+            "OutputParameters": "[]",
+            "Name": "WakeProbeTimer"
+          },
+          "propertyReferences": {},
+          "propertyReferenceCollections": {
+            "InputParameters": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            },
+            "OutputParameters": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        }
+      ],
+      "childrenTotal": 1,
+      "childrenOmitted": 0
+    },
+    {
+      "kind": "WebServiceMethod",
+      "name": "WakeTimer",
+      "modelName": "WakeTimer",
+      "label": null,
+      "key": "byrvGL9PV06FlXkeRAQUOg",
+      "reference": "@byrvGL9PV06FlXkeRAQUOg",
+      "path": "WebService:ProbeSoap/WebServiceMethod:WakeTimer",
+      "properties": {
+        "ObjectKey": "byrvGL9PV06FlXkeRAQUOg",
+        "GlobalKey": "bf7WCuRy7keTqvquautTGg*byrvGL9PV06FlXkeRAQUOg",
+        "WasDeleted": "False",
+        "IsValid": "True",
+        "Key": "/WebServices.oYbA7jqx+U2uUei8psZKKw/WebServiceMethods.byrvGL9PV06FlXkeRAQUOg",
+        "Name": "WakeTimer",
+        "InputParameters": "[]",
+        "OutputParameters": "[]",
+        "LocalVariables": "[]",
+        "Nodes": "[ExecuteServerActionNode:WakeNativeTimer, StartNode:, EndNode:]"
+      },
+      "propertyReferences": {},
+      "propertyReferenceCollections": {
+        "InputParameters": {
+          "items": [],
+          "total": 0,
+          "omitted": 0
+        },
+        "OutputParameters": {
+          "items": [],
+          "total": 0,
+          "omitted": 0
+        },
+        "LocalVariables": {
+          "items": [],
+          "total": 0,
+          "omitted": 0
+        },
+        "Nodes": {
+          "items": [
+            {
+              "kind": "ExecuteServerActionNode",
+              "name": "WakeNativeTimer",
+              "label": null,
+              "key": "0bK6WelkAUCztUDoxO2BBg",
+              "reference": "@0bK6WelkAUCztUDoxO2BBg",
+              "path": "WebService:ProbeSoap/WebServiceMethod:WakeTimer/ExecuteServerActionNode:WakeNativeTimer"
+            },
+            {
+              "kind": "StartNode",
+              "name": "",
+              "label": null,
+              "key": "bD15+LxlqUql3btJ+jGs3g",
+              "reference": "@bD15+LxlqUql3btJ+jGs3g",
+              "path": "WebService:ProbeSoap/WebServiceMethod:WakeTimer/StartNode:"
+            },
+            {
+              "kind": "EndNode",
+              "name": "",
+              "label": null,
+              "key": "8GlIpzdZi0SLyuGFHG61uQ",
+              "reference": "@8GlIpzdZi0SLyuGFHG61uQ",
+              "path": "WebService:ProbeSoap/WebServiceMethod:WakeTimer/EndNode:"
+            }
+          ],
+          "total": 3,
+          "omitted": 0
+        }
+      },
+      "propertiesOmitted": {},
+      "propertyErrors": {},
+      "propertiesMissing": [],
+      "children": [
+        {
+          "kind": "ExecuteServerActionNode",
+          "name": "WakeNativeTimer",
+          "modelName": "WakeNativeTimer",
+          "label": null,
+          "key": "0bK6WelkAUCztUDoxO2BBg",
+          "reference": "@0bK6WelkAUCztUDoxO2BBg",
+          "path": "WebService:ProbeSoap/WebServiceMethod:WakeTimer/ExecuteServerActionNode:WakeNativeTimer",
+          "properties": {
+            "ObjectKey": "0bK6WelkAUCztUDoxO2BBg",
+            "GlobalKey": "bf7WCuRy7keTqvquautTGg*0bK6WelkAUCztUDoxO2BBg",
+            "WasDeleted": "False",
+            "IsValid": "True",
+            "Key": "/WebServices.oYbA7jqx+U2uUei8psZKKw/WebServiceMethods.byrvGL9PV06FlXkeRAQUOg/NodesNotShownInESpaceTree.0bK6WelkAUCztUDoxO2BBg",
+            "HorizontalPosition": "1000",
+            "IsDisabled": "False",
+            "VerticalPosition": "1000",
+            "Connectors": "[ActionConnector:]",
+            "IncomingConnectors": "[ActionConnector:]",
+            "Action": "ActionSignature:WakeProbeTimer",
+            "AnimationEffect": "None",
+            "Name": "WakeNativeTimer",
+            "Target": "EndNode:",
+            "Arguments": "[]"
+          },
+          "propertyReferences": {
+            "Action": {
+              "kind": "ActionSignature",
+              "name": "WakeProbeTimer",
+              "label": null,
+              "key": "rb3sLlRkGka3ljKEMMzqtw.#WakeTimer",
+              "reference": "@rb3sLlRkGka3ljKEMMzqtw.#WakeTimer",
+              "path": "Timer:ProbeTimer/ActionSignature:WakeProbeTimer"
+            },
+            "Target": {
+              "kind": "EndNode",
+              "name": "",
+              "label": null,
+              "key": "8GlIpzdZi0SLyuGFHG61uQ",
+              "reference": "@8GlIpzdZi0SLyuGFHG61uQ",
+              "path": "WebService:ProbeSoap/WebServiceMethod:WakeTimer/EndNode:"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "ApCM4SlgY0GbaCtvzBRLHw",
+                  "reference": "@ApCM4SlgY0GbaCtvzBRLHw",
+                  "path": "WebService:ProbeSoap/WebServiceMethod:WakeTimer/ExecuteServerActionNode:WakeNativeTimer/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            },
+            "IncomingConnectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "Au5rCL+nHEygWk3yC2OPEw",
+                  "reference": "@Au5rCL+nHEygWk3yC2OPEw",
+                  "path": "WebService:ProbeSoap/WebServiceMethod:WakeTimer/StartNode:/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            },
+            "Arguments": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": null,
+              "key": "ApCM4SlgY0GbaCtvzBRLHw",
+              "reference": "@ApCM4SlgY0GbaCtvzBRLHw",
+              "path": "WebService:ProbeSoap/WebServiceMethod:WakeTimer/ExecuteServerActionNode:WakeNativeTimer/ActionConnector:",
+              "properties": {
+                "ObjectKey": "ApCM4SlgY0GbaCtvzBRLHw",
+                "GlobalKey": "bf7WCuRy7keTqvquautTGg*ApCM4SlgY0GbaCtvzBRLHw",
+                "WasDeleted": "False",
+                "IsValid": "True",
+                "Key": "/WebServices.oYbA7jqx+U2uUei8psZKKw/WebServiceMethods.byrvGL9PV06FlXkeRAQUOg/NodesNotShownInESpaceTree.0bK6WelkAUCztUDoxO2BBg/Links.ApCM4SlgY0GbaCtvzBRLHw",
+                "Source": "ExecuteServerActionNode:WakeNativeTimer",
+                "Target": "EndNode:"
+              },
+              "propertyReferences": {
+                "Source": {
+                  "kind": "ExecuteServerActionNode",
+                  "name": "WakeNativeTimer",
+                  "label": null,
+                  "key": "0bK6WelkAUCztUDoxO2BBg",
+                  "reference": "@0bK6WelkAUCztUDoxO2BBg",
+                  "path": "WebService:ProbeSoap/WebServiceMethod:WakeTimer/ExecuteServerActionNode:WakeNativeTimer"
+                },
+                "Target": {
+                  "kind": "EndNode",
+                  "name": "",
+                  "label": null,
+                  "key": "8GlIpzdZi0SLyuGFHG61uQ",
+                  "reference": "@8GlIpzdZi0SLyuGFHG61uQ",
+                  "path": "WebService:ProbeSoap/WebServiceMethod:WakeTimer/EndNode:"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 1,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "StartNode",
+          "name": "",
+          "modelName": "",
+          "label": null,
+          "key": "bD15+LxlqUql3btJ+jGs3g",
+          "reference": "@bD15+LxlqUql3btJ+jGs3g",
+          "path": "WebService:ProbeSoap/WebServiceMethod:WakeTimer/StartNode:",
+          "properties": {
+            "ObjectKey": "bD15+LxlqUql3btJ+jGs3g",
+            "GlobalKey": "bf7WCuRy7keTqvquautTGg*bD15+LxlqUql3btJ+jGs3g",
+            "WasDeleted": "False",
+            "IsValid": "True",
+            "Key": "/WebServices.oYbA7jqx+U2uUei8psZKKw/WebServiceMethods.byrvGL9PV06FlXkeRAQUOg/NodesNotShownInESpaceTree.bD15+LxlqUql3btJ+jGs3g",
+            "HorizontalPosition": "1000",
+            "IsDisabled": "False",
+            "VerticalPosition": "1000",
+            "Connectors": "[ActionConnector:]",
+            "IncomingConnectors": "[]",
+            "Target": "ExecuteServerActionNode:WakeNativeTimer"
+          },
+          "propertyReferences": {
+            "Target": {
+              "kind": "ExecuteServerActionNode",
+              "name": "WakeNativeTimer",
+              "label": null,
+              "key": "0bK6WelkAUCztUDoxO2BBg",
+              "reference": "@0bK6WelkAUCztUDoxO2BBg",
+              "path": "WebService:ProbeSoap/WebServiceMethod:WakeTimer/ExecuteServerActionNode:WakeNativeTimer"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "Au5rCL+nHEygWk3yC2OPEw",
+                  "reference": "@Au5rCL+nHEygWk3yC2OPEw",
+                  "path": "WebService:ProbeSoap/WebServiceMethod:WakeTimer/StartNode:/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            },
+            "IncomingConnectors": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": null,
+              "key": "Au5rCL+nHEygWk3yC2OPEw",
+              "reference": "@Au5rCL+nHEygWk3yC2OPEw",
+              "path": "WebService:ProbeSoap/WebServiceMethod:WakeTimer/StartNode:/ActionConnector:",
+              "properties": {
+                "ObjectKey": "Au5rCL+nHEygWk3yC2OPEw",
+                "GlobalKey": "bf7WCuRy7keTqvquautTGg*Au5rCL+nHEygWk3yC2OPEw",
+                "WasDeleted": "False",
+                "IsValid": "True",
+                "Key": "/WebServices.oYbA7jqx+U2uUei8psZKKw/WebServiceMethods.byrvGL9PV06FlXkeRAQUOg/NodesNotShownInESpaceTree.bD15+LxlqUql3btJ+jGs3g/Links.Au5rCL+nHEygWk3yC2OPEw",
+                "Source": "StartNode:",
+                "Target": "ExecuteServerActionNode:WakeNativeTimer"
+              },
+              "propertyReferences": {
+                "Source": {
+                  "kind": "StartNode",
+                  "name": "",
+                  "label": null,
+                  "key": "bD15+LxlqUql3btJ+jGs3g",
+                  "reference": "@bD15+LxlqUql3btJ+jGs3g",
+                  "path": "WebService:ProbeSoap/WebServiceMethod:WakeTimer/StartNode:"
+                },
+                "Target": {
+                  "kind": "ExecuteServerActionNode",
+                  "name": "WakeNativeTimer",
+                  "label": null,
+                  "key": "0bK6WelkAUCztUDoxO2BBg",
+                  "reference": "@0bK6WelkAUCztUDoxO2BBg",
+                  "path": "WebService:ProbeSoap/WebServiceMethod:WakeTimer/ExecuteServerActionNode:WakeNativeTimer"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 1,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "EndNode",
+          "name": "",
+          "modelName": "",
+          "label": null,
+          "key": "8GlIpzdZi0SLyuGFHG61uQ",
+          "reference": "@8GlIpzdZi0SLyuGFHG61uQ",
+          "path": "WebService:ProbeSoap/WebServiceMethod:WakeTimer/EndNode:",
+          "properties": {
+            "ObjectKey": "8GlIpzdZi0SLyuGFHG61uQ",
+            "GlobalKey": "bf7WCuRy7keTqvquautTGg*8GlIpzdZi0SLyuGFHG61uQ",
+            "WasDeleted": "False",
+            "IsValid": "True",
+            "Key": "/WebServices.oYbA7jqx+U2uUei8psZKKw/WebServiceMethods.byrvGL9PV06FlXkeRAQUOg/NodesNotShownInESpaceTree.8GlIpzdZi0SLyuGFHG61uQ",
+            "HorizontalPosition": "1000",
+            "IsDisabled": "False",
+            "VerticalPosition": "1000",
+            "Connectors": "[]",
+            "IncomingConnectors": "[ActionConnector:]"
+          },
+          "propertyReferences": {},
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            },
+            "IncomingConnectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "ApCM4SlgY0GbaCtvzBRLHw",
+                  "reference": "@ApCM4SlgY0GbaCtvzBRLHw",
+                  "path": "WebService:ProbeSoap/WebServiceMethod:WakeTimer/ExecuteServerActionNode:WakeNativeTimer/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        }
+      ],
+      "childrenTotal": 3,
+      "childrenOmitted": 0
+    }
+  ]
+}

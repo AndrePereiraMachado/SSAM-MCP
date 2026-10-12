@@ -169,6 +169,7 @@ public static class Program
                 "templates" => Templates(args),
                 "references" => References(args),
                 "inspect" => Inspect(args),
+                "debug-scope" => NativeDebugScope.Read(Host(args), Need(args, "--oml"), Need(args, "--expected-sha256"), Need(args, "--node-key"), Need(args, "--function-key"), Opt(args, "--previous-node-key")),
                 "read-serve" => KernelSnapshotReading.Serve(Need(args, "--state"), Need(args, "--generation"), Opt(args, "--work") ?? ".local/reading"),
                 "roundtrip" => RoundTrip(args),
                 "merge-probe" => MergeProbeCmd(args),
@@ -359,7 +360,25 @@ public static class Program
         using var s = Session(args);
         var list = s.ListApplicationTemplates();
         Log($"{list.Count} application templates");
-        return list;
+        // --with-host: {host, templates}, so o11_environment caches the list per environment (create-app --templates).
+        return args.Contains("--with-host") ? new { host = s.Host, templates = list } : list;
+    }
+
+    /// <summary>create-app --templates &lt;file&gt;: the o11_environment templates cache ({host, templates:[TemplateSummary]}),
+    /// used by FindTemplateForKind only when its host is this session's (HeadlessSession.UseKnownTemplates); an unreadable
+    /// file is ignored (the live read runs as before).</summary>
+    private static void KnownTemplates(HeadlessSession s, string? file)
+    {
+        if (string.IsNullOrEmpty(file) || !File.Exists(file)) return;
+        try
+        {
+            var node = JsonNode.Parse(File.ReadAllText(file))!.AsObject();
+            var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var templates = node["templates"] is { } list ? System.Text.Json.JsonSerializer.Deserialize<List<TemplateSummary>>(list, options) : null;
+            Log(s.UseKnownTemplates(node["host"]?.ToString(), templates) ? $"templates of {s.Host} from {file}" : $"templates file {file} is not of {s.Host}; reading the server");
+        }
+        catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or InvalidOperationException or UnauthorizedAccessException)
+        { Log("templates file ignored: " + ex.Message); }
     }
 
     private static object Summ(IReadOnlyList<DownloadResult> results) => new
@@ -551,9 +570,11 @@ public static class Program
         // A16: refused before the Studio lease, so nothing reaches the environment.
         AppFactory.RefuseBlankUi(specs, blank);
         using var s = Session(args);
+        KnownTemplates(s, Opt(args, "--templates"));
+        // Host: the environment of the answer, so o11_environment adds the created modules to its cached inventory.
         return AppFactory.CreateApplicationWithModules(s, Host(args), Need(args, "--name"), Opt(args, "--kind") ?? "Reactive", specs,
             Need(args, "--out"), Opt(args, "--template-key"), Log, Opt(args, "--color"), null, blankModules: blank,
-            preferTemplateLabel: Opt(args, "--template"));
+            preferTemplateLabel: Opt(args, "--template")) with { Host = s.Host };
     }
 
     /// <summary>Atualiza cor/descricao de uma app existente: --name Headless --color #2E86C1</summary>
@@ -588,7 +609,7 @@ public static class Program
         var app = s.FindApplication(Need(args, "--app")) ?? throw new KeyNotFoundException("application not found");
         var results = AppFactory.AddModulesToApplication(s, Host(args), app.Key, Opt(args, "--template-key") ?? app.TemplateKey, specs, Need(args, "--out"),
             blankModules: blank, Log);
-        return new { application = app, modules = results, succeeded = results.All(m => m.Succeeded) };
+        return new { application = app, modules = results, succeeded = results.All(m => m.Succeeded), host = s.Host };
     }
 
     /// <summary>Troca o user provider de um modulo publicado: --module Headless_Lib [--provider-name Users] [--provider-key K] --out DIR</summary>
@@ -750,6 +771,8 @@ public static class Program
     {
         JobRunner.CheckJobName(Need(args, "--job"));   // regra de nome ANTES de subir o runtime (plano, item 09)
         JobRunner.ValidateJob(Need(args, "--job"));
+        // the job a patched or partial job corrects (job-patch.mjs): the CSS loss guard of the preflight compares the two
+        JobPreflight.BasedOn.Value = Opt(args, "--based-on") is { Length: > 0 } basedOn ? Path.GetFullPath(basedOn) : null;
         // Every problem at once, with the code and the structured problems in the error envelope (PREFLIGHT_REFUSED, I2).
         // primeira-certa A2: the preflight runs inside JobRunner, which goes on to the base check, the apply and the Verify
         // when the base loads, and refuses once with every phase (verifyRan says whether the Verify ran).
@@ -809,6 +832,8 @@ public static class Program
         else request = Anvil.Core.Delivery.DeliverArguments.ForJob(args, work, port);
         // --prebuilt: the candidate the build phase made outside the Studio lock (lane wp); reused only on the same model.
         var prebuilt = request.Specification == null && Opt(args, "--resume") == null ? Opt(args, "--prebuilt") : null;
+        // The build phase captured the module's tab by key in this call: the open skips the references check (OpeningOwnTab).
+        if (prebuilt != null && File.Exists(prebuilt)) request = request with { SkipOpenReferencesCheck = true };
         return RunDelivery(request, port, prebuilt);
     }
 

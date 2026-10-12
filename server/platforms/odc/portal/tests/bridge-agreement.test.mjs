@@ -75,7 +75,7 @@ async function dbCreateRequests() {
   const host = 'personal-test.outsystems.dev', dir = fs.mkdtempSync(path.join(os.tmpdir(), 'odc-agreement-'));
   const files = new Map();
   const studio = { running: async () => true, call: async args => {
-    if (args[0] === 'auth-status') return { ok: true, bridge: 'v32', sessions: [{ host, loggedIn: true, user: 'dev@example.test' }], portalWindows: [] };
+    if (args[0] === 'auth-status') return { ok: true, bridge: 'headless-fixture', capabilities: ['portal-session:headless'], sessions: [{ host, loggedIn: true, user: 'dev@example.test' }], portalWindows: [] };
     if (args[1] !== 'fetch') return { ok: true, host, signedIn: true };
     const request = files.get(args[2]);
     const data = request.path.endsWith('DataActionGetFilter_Stages') ? { EnvironmentList: [{ Key: 'dev', Name: 'Development', Purpose: 'Development' }] }
@@ -128,7 +128,13 @@ test('secretRefs: the facade sends only vault entry names at empty placeholders,
 
 test('secretRefs: the bridge announces them and refuses with the gates the facade explains', () => {
   const commands = fs.readFileSync(path.join(bridgeDir, 'PortalCommands.cs'), 'utf8');
-  for (const capability of ['portal-call:secretRefs', 'portal-session:secretRefs']) assert.ok(commands.includes('"' + capability + '"'), capability);
+  assert.ok(commands.includes('"portal-call:secretRefs"'));
+  assert.equal(commands.includes('"portal-session:secretRefs"'), false, 'disabled window transport must not advertise internal secretRefs');
+  assert.ok(core.includes('HEADLESS_AUTH_UNAVAILABLE'));
+  assert.ok(commands.includes('PortalCore.HeadlessSession(action, words.Length, tenant)'));
+  assert.doesNotMatch(commands, /WebViewControl\.|Xilium\.|EvaluateScript|\.Show\(|\.LoadUrl\(|DeleteCookies/,
+    'Portal bridge commands cannot retain a browser transport or modify browser cookies');
+  assert.doesNotMatch(commands, /portal:signin-recheck|sign in again|restart it|signs in.*window/);
   const access = fs.readFileSync(path.join(here, '..', 'runtime', 'access.mjs'), 'utf8');
   for (const gate of ['secret_ref_missing', 'secret_ref_vault']) {
     assert.ok(core.includes('"' + gate + '"'), 'bridge gate ' + gate);
@@ -171,7 +177,7 @@ test('secretRefs: the secret setting PATCH names a Setting entry at /settings/<i
   const files = new Map();
   const settings = [{ key: 's-1', name: 'ApiPassword', isSecret: true, value: '********' }];
   const studio = { running: async () => true, call: async args => {
-    if (args[0] === 'auth-status') return { ok: true, bridge: 'v32', sessions: [{ host, loggedIn: true, user: 'dev@example.test' }], portalWindows: [] };
+    if (args[0] === 'auth-status') return { ok: true, bridge: 'headless-fixture', capabilities: ['portal-session:headless'], sessions: [{ host, loggedIn: true, user: 'dev@example.test' }], portalWindows: [] };
     const request = files.get(args[1]);
     return { ok: true, status: 200, host, contentType: 'application/json', body: request.method === 'PATCH' ? {} : { key: 'app-1', settings } };
   } };

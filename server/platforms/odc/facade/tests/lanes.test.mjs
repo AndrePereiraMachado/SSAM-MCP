@@ -199,7 +199,7 @@ test('the ssam MCP server lists the tools of both lanes', async t => {
       assert.ok(names.includes(odc), 'missing ODC tool ' + odc);
     // The ODC access tools reach the ssam MCP with the lane prefix, and the session instructions give the auth order.
     assert.match((await client.listTools()).tools.find(t => t.name === 'odc_write').description, /^\[odc\] .*user's words/);
-    assert.match(client.getInstructions(), /ODC Studio session first.*Windows vault.*private Windows prompt only when no Studio is open/);
+    assert.match(client.getInstructions(), /ODC Studio session first.*Windows vault.*private Windows prompt only when nothing is stored/);
     for (const o11 of ['context', 'propose', 'continue', 'status', 'o11_job', 'o11_data', 'o11_inspect', 'o11_deliver',
       'o11_studio', 'o11_environment', 'ssam_reference', 'ssam_task', 'odc_portal_routes'])
       assert.ok(names.includes(o11), 'missing tool ' + o11);

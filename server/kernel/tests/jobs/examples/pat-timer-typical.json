@@ -19,7 +19,7 @@
   {"op": "create", "parent": "@espace", "type": "ITimer", "name": "SendDueReminders", "as": "$timer"},
   {"op": "set", "target": "$timer", "prop": "Action", "value": "IServerAction:Reminders_SendDue"},
   {"op": "set", "target": "$timer", "prop": "Description", "value": "Envia os lembretes vencidos uma vez por dia"},
-  {"op": "set", "target": "$timer", "prop": "Schedule", "value": "Every day at 02:00"},
+  {"op": "set", "target": "$timer", "prop": "Schedule", "value": "02:00"},
   {"op": "get", "target": "$timer"}
  ]
 }

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Oficina | Painel</title>
+  <style>
+    .board{display:grid;gap:8px}.card{border:1px solid #ccc;padding:8px}
+    dialog .sheet{display:grid;gap:6px}.history{border-collapse:collapse}.history td{padding:2px 6px}
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <dialog id="modal"></dialog>
+  <script>
+    window.OficinaData = {
+      seed() {
+        return {
+          Servico: [
+            { Id: 1, Nome: 'Troca de óleo', Preco: 120 },
+            { Id: 2, Nome: 'Alinhamento', Preco: 90 }
+          ],
+          Cliente: [
+            { Id: 1, Nome: 'Ana Souza', Visitas: 3 },
+            { Id: 2, Nome: 'Bruno Lima', Visitas: 1 }
+          ]
+        };
+      }
+    };
+    const data = OficinaData.seed();
+    const app = document.getElementById('app');
+    const modal = document.getElementById('modal');
+    function render() {
+      app.innerHTML = '<main class="board"><section><h2>Serviços</h2>' +
+        data.Servico.map(s => '<div class="card" data-servico="' + s.Id + '"><strong>' + s.Nome + '</strong> <button data-action="ver-servico" data-id="' + s.Id + '">Ver</button></div>').join('') +
+        '</section><section><h2>Clientes</h2>' +
+        data.Cliente.map(c => '<div class="card" data-cliente="' + c.Id + '"><strong>' + c.Nome + '</strong> <button data-action="ver-cliente" data-id="' + c.Id + '">Ver</button></div>').join('') +
+        '</section></main>';
+    }
+    // Two different dialogs share the title "Detalhes": a service sheet and a client history table.
+    function servico(id) {
+      const s = data.Servico.find(item => item.Id === id);
+      modal.innerHTML = '<h3>Detalhes</h3><div class="sheet"><label>Serviço <input name="Nome" value="' + s.Nome + '"></label><label>Preço <input name="Preco" type="number" value="' + s.Preco + '"></label><button data-action="fechar">Fechar</button></div>';
+      modal.showModal();
+    }
+    function cliente(id) {
+      const c = data.Cliente.find(item => item.Id === id);
+      modal.innerHTML = '<h3>Detalhes</h3><table class="history"><tbody><tr><td>Cliente</td><td>' + c.Nome + '</td></tr><tr><td>Visitas</td><td>' + c.Visitas + '</td></tr></tbody></table><p class="note">Histórico do cliente</p><button data-action="fechar">Fechar</button>';
+      modal.showModal();
+    }
+    document.addEventListener('click', event => {
+      const button = event.target.closest('[data-action]');
+      if (!button) return;
+      const action = button.dataset.action;
+      if (action === 'ver-servico') servico(Number(button.dataset.id));
+      if (action === 'ver-cliente') cliente(Number(button.dataset.id));
+      if (action === 'fechar') modal.close();
+    });
+    render();
+  </script>
+</body>
+</html>

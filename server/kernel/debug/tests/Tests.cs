@@ -8,8 +8,18 @@ class Tests {
     internal const string ModuleKey = "AQEBAQEBAQEBAQEBAQEBAQ", NodeKey = "AgICAgICAgICAgICAgICAg";
     static async Task Main(string[] args) {
         var dir = Path.GetFullPath(args[0]);
-        if (args.Length > 1) DebugRequestOwnershipIntegrationTests.NativeProofBytes = File.ReadAllBytes(Path.GetFullPath(args[1]));
         AssemblyLoadContext.Default.Resolving += (c, n) => File.Exists(Path.Combine(dir, n.Name + ".dll")) ? c.LoadFromAssemblyPath(Path.Combine(dir, n.Name + ".dll")) : null;
+        if (args.Length == 2 && args[1] == "--trace-options-only") { TraceFunctionKeyTests.Run(); return; }
+        if (args.Length == 2 && args[1] == "--trace-only") { await TraceTests.Run(); Console.WriteLine("PASS: trace and native request provenance"); return; }
+        if (args.Length == 2 && args[1] == "--session-diagnostics-only") { await SessionDiagnosticTests.Run(); return; }
+        if (args.Length == 2 && args[1] == "--native-inspection-only") { await NativeInspectionTests.Run(); return; }
+        if (args.Length == 2 && args[1] == "--pipe-only") { await DebugPipeTests.Run(); return; }
+        if (args.Length == 2 && args[1] == "--breakpoint-owners-only") { BreakpointOwnerTests.Run(); return; }
+        if (args.Length == 2 && args[1] == "--transport-preflight-only") { await TransportPreflightTests.Run(); return; }
+#if !ODC
+        if (args.Length == 2 && args[1] == "--soap-breakpoints-only") { O11SoapFixture.CheckBreakpointOwners(); await O11SoapFixture.Run(bearer: true, separateEntry: true); Console.WriteLine("PASS: native SOAP breakpoint owners and entry binding"); return; }
+#endif
+        if (args.Length > 1) DebugRequestOwnershipIntegrationTests.NativeProofBytes = File.ReadAllBytes(Path.GetFullPath(args[1]));
         if (args.Length > 2 && args[2] == "ownership-only") {
             DebugRequestOwnershipTests.Run(); await DebugRequestOwnershipIntegrationTests.Run(); return;
         }
@@ -18,6 +28,11 @@ class Tests {
     internal static void Check(bool condition, string message) { if (!condition) throw new Exception(message); }
     [MethodImpl(MethodImplOptions.NoInlining)] static async Task Run() {
         BodyPolicyTests.Run();
+        await DebugPipeTests.Run();
+        NativeVariableTests.Run();
+        await NativeInspectionTests.Run();
+        TraceFunctionKeyTests.Run();
+        await SessionDiagnosticTests.Run();
         DebugRequestOwnershipTests.Run();
         await DebugRequestOwnershipIntegrationTests.Run();
         await PrivateValuePolicyTests.Run();
@@ -96,13 +111,17 @@ class Tests {
         await NativeFixture.Run();
         await NativeFixture.Run(slowEvaluation: true);
         await NativeFixture.Run(rejectStart: true);
+        BreakpointOwnerTests.Run();
+        await TransportPreflightTests.Run();
 #if !ODC
         O11SoapFixture.CheckFailureClassification();
+        O11SoapFixture.CheckBreakpointOwners();
         await O11SoapFixture.Run();
         await O11SoapFixture.Run(slowEvaluation: true);
         await O11SoapFixture.Run(rejectStart: true);
         await O11SoapFixture.Run(bearer: true);
         await O11SoapFixture.Run(missingRawRequestId: true);
+        await O11SoapFixture.Run(bearer: true, separateEntry: true);
 #endif
         Console.WriteLine("PASS: filtering, XXE, exact event ids, uncertain execution, exclusive session, auto capture, concurrent stop, native transport and bounded slow capture");
     }

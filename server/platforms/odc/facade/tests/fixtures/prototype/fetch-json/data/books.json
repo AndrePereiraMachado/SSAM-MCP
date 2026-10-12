@@ -1,0 +1,7 @@
+{
+  "Book": [
+    { "Id": 1, "Title": "Dom Casmurro", "Year": 1899 },
+    { "Id": 2, "Title": "Vidas Secas", "Year": 1938 },
+    { "Id": 3, "Title": "Grande Sertao", "Year": 1956 }
+  ]
+}

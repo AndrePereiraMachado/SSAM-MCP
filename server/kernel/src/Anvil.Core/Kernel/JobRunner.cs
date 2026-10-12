@@ -76,9 +76,23 @@ public static partial class JobRunner
                     throw;
                 }
             }
+            // lentidao 2026-10-12 (cause 3): the normalizations of the preflight (the job alone), again on these ops (idempotent: a
+            // composite or an integration job collects its ops anew), then those only the base decides (the attributes of a module
+            // record, the null functions the module does not declare), before the base check and the first op; each is listed in
+            // the answer (normalizations), never refused. Not for a job that expects an invalid module.
+            phase = sw.ElapsedMilliseconds;
+            session.Normalized(preflight?["normalizations"] as JsonArray ?? new JsonArray());
+            // One reading of the base for the normalizations and the base check (its index of names and records is built once).
+            var baseFacts = new Preflight.ModelBaseFacts(session, espace);
+            if (expectedValid)
+            {
+                session.Normalized(Preflight.JobNormalizer.Pure(ops, opsPointer, MessageExpectations.Lane));
+                session.Normalized(Preflight.JobNormalizer.WithBase(ops, opsPointer, MessageExpectations.Lane, baseFacts));
+            }
+            var normalizeMs = sw.ElapsedMilliseconds - phase;
             // Everything the job names that only the base can answer, all at once, before the first op (C20).
             phase = sw.ElapsedMilliseconds;
-            var baseCheck = CheckAgainstBase(session, espace, ops, preflight, opsPointer, checkFunctions: expectedValid, log: log);
+            var baseCheck = CheckAgainstBase(session, espace, ops, preflight, opsPointer, checkFunctions: expectedValid, log: log, facts: baseFacts);
             var baseCheckMs = sw.ElapsedMilliseconds - phase;
             phase = sw.ElapsedMilliseconds;
             // A02 item 6: every failing op is recorded (its dependents skipped). primeira-certa A2: kept, not thrown, so the
@@ -93,7 +107,12 @@ public static partial class JobRunner
             // primeira-certa A1/A2: a problem of any phase is refused once, with the problems of every phase, the Verify's
             // included; nothing is saved.
             if (preflight?["valid"]?.GetValue<bool>() == false || baseCheck.Problems.Count > 0 || session.Kept != null || upgrade.Count > 0)
-                throw Diagnosis(session, espace, before, ops, preflight, baseCheck, upgrade, expected, expectedValid, opsPointer, log);
+            {
+                var refusal = Diagnosis(session, espace, before, ops, preflight, baseCheck, upgrade, expected, expectedValid, opsPointer, log);
+                // What was rewritten comes with what stayed, so the correction does not undo a normalization.
+                Errors.AttachNormalizations(refusal, session.Normalizations());
+                throw refusal;
+            }
             var sessionApplyMs = sw.ElapsedMilliseconds - phase;
             phase = sw.ElapsedMilliseconds;
             var dataContract = session.DataContract();
@@ -165,7 +184,7 @@ public static partial class JobRunner
                     policyMessages.Add("Refactor reference sets changed after save/reload: " + refactorProof["differences"]!.ToJsonString());
                 }
             }
-            var timings = new { loadMs, baseAcquireMs = spare?.AcquireMs, verifyBeforeMs, baseCheckMs, footprintMs, applyMs, sessionApplyMs, dataContractMs, verifyAfterMs, describeMs, detailsMs, saveMs, releaseMs, refactorProofMs = sw.ElapsedMilliseconds - phase, totalMs = sw.ElapsedMilliseconds };
+            var timings = new { loadMs, baseAcquireMs = spare?.AcquireMs, verifyBeforeMs, normalizeMs, baseCheckMs, footprintMs, applyMs, sessionApplyMs, dataContractMs, verifyAfterMs, describeMs, detailsMs, saveMs, releaseMs, refactorProofMs = sw.ElapsedMilliseconds - phase, totalMs = sw.ElapsedMilliseconds };
             // Flows whose layout the engine refused keep their geometry; name them in the receipt.
             var layoutRefused = session.AutomaticLayouts.Where(l => l.Refused != null)
                 .Select(l => new { action = l.Action, source = "automatic", reason = l.Refused! })
@@ -213,13 +232,23 @@ public static partial class JobRunner
     private static readonly Regex StringLiteral = new("\"(?:[^\"]|\"\")*\"", RegexOptions.Compiled);
     private static readonly Regex RoleFunction = new(@"^(?:Check|Grant|Revoke)\w+Role$", RegexOptions.Compiled);
 
+    /// <summary>The expression with every call of <paramref name="name"/> renamed to <paramref name="to"/>, outside its text
+    /// literals (a text that only looks like the call stays as written): the patch of an unknown function one built-in
+    /// certainly means, here (FUNCTION_UNKNOWN) and in the Verify mapped to the job (ModelSession.VerifyProblems).</summary>
+    internal static string RenameCall(string text, string name, string to)
+    {
+        var rename = new Regex(@"(?<![\w.])" + Regex.Escape(name) + @"(?=\s*\()", RegexOptions.IgnoreCase);
+        return string.Concat(StringLiteral.Split(text).Zip(StringLiteral.Matches(text).Select(m => m.Value).Append(""), (code, literal) => rename.Replace(code, to) + literal));
+    }
+
     /// <summary>What only the base can answer, checked before the first op and refused all at once (C20, I2): the types the
     /// job uses without declaring, the SQL names of the base, the names and keys the ops reference without creating, and the
     /// functions the logic expressions call (built-ins of this Studio, functions of the module or its references, the job's
     /// own actions). The refusal is a JobPreflightException (PREFLIGHT_REFUSED) with every problem; the wording of the type
     /// and SQL lines stays the one tools already read. primeira-certa A2: the problems are returned, never thrown here: the
     /// caller goes on to the apply and the Verify and refuses once with every phase (Diagnosis).</summary>
-    private static BaseCheck CheckAgainstBase(ModelSession session, ServiceStudio.Model.ESpace espace, JsonArray ops, JsonObject? preflight, string? opsPointer, bool checkFunctions = true, Action<string>? log = null)
+    private static BaseCheck CheckAgainstBase(ModelSession session, ServiceStudio.Model.ESpace espace, JsonArray ops, JsonObject? preflight, string? opsPointer, bool checkFunctions = true, Action<string>? log = null,
+        Preflight.ModelBaseFacts? facts = null)
     {
         var problems = new List<JsonObject>();
         var lines = new List<string>();
@@ -318,6 +347,8 @@ public static partial class JobRunner
             object element;
             try { element = session.Resolve(target); } catch { continue; }
             JsonObject? problem = null;
+            // A documentation property the element cannot write is dropped by the apply and listed (JobNormalizer), never refused.
+            if (!session.CanSet(element, prop) && Preflight.JobNormalizer.Droppable(prop)) continue;
             if (!session.CanSet(element, prop) && !(prop == "Style" && session.StyleHasAPlace(element)))
                 problem = JobPreflight.Problem(index, Pointer(index) is { } at ? at + "/prop" : null, "PROPERTY_NOT_WRITABLE", "error",
                     ModelSession.PropertyErrorText(element, prop), $"write one of: {string.Join(", ", ModelSession.ClosestWritable(element, prop))}", null, "set");
@@ -331,7 +362,9 @@ public static partial class JobRunner
         }
         // Functions the logic expressions call: the same rule as the Verify's ExpressionUnknownFunction, before any op. A job
         // that expects an invalid module (expectValid false) asks the Verify for that verdict: it is not refused here.
-        var calls = checkFunctions ? LogicLint.AllExpressions(ops)
+        // G5 (2026-10-11): the expressions an html page op writes from its bindings, sources and variables are read too (job
+        // 0314 of the html replay reached the Verify with 18 ExpressionUnknownFunction 'Lower' in its bindings).
+        var calls = checkFunctions ? LogicLint.AllExpressions(ops).Concat(HtmlPageExpressions(ops))
             .SelectMany(e => FunctionCall.Matches(StringLiteral.Replace(e.Text, "\"\"")).Select(m => (e.Op, Name: m.Groups[1].Value)))
             .Where(c => c.Name is not ("and" or "or" or "not") && !RoleFunction.IsMatch(c.Name)).ToList() : [];
         HashSet<string>? builtins = null, scope = null;
@@ -346,6 +379,15 @@ public static partial class JobRunner
                 if (op["name"] is JsonValue n && n.TryGetValue<string>(out var created)) declared.Add(created);
                 foreach (var action in (op["data"]?["actions"] as JsonArray ?? new JsonArray()).OfType<JsonObject>())
                     if (action["name"] is JsonValue a && a.TryGetValue<string>(out var actionName)) declared.Add(actionName);
+                // The client functions of a page (data.scripts): its bindings call them by name, the page creates them as
+                // <screen>_<name>.
+                if (HtmlPage(op) is { } page)
+                    foreach (var script in (page["scripts"] as JsonArray ?? new JsonArray()).OfType<JsonObject>())
+                        if (script["name"] is JsonValue s && s.TryGetValue<string>(out var scriptName))
+                        {
+                            declared.Add(scriptName);
+                            if (page["screen"] is JsonValue screen && screen.TryGetValue<string>(out var screenName)) declared.Add(screenName + "_" + scriptName);
+                        }
             }
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var (op, name) in calls)
@@ -357,14 +399,15 @@ public static partial class JobRunner
                 // one letter) is the fix, with the patch that renames it in every expression of the op that calls it.
                 var certain = FunctionCatalog.Certain(name) is { } c && !scope.Contains(c) ? c : null;
                 var sites = CallSites(ops, op, name, opsPointer);
-                var rename = new Regex(@"(?<![\w.])" + Regex.Escape(name) + @"(?=\s*\()", RegexOptions.IgnoreCase);
                 var patch = certain == null || sites.Count == 0 || sites.Any(s => s.Sort) ? null
-                    : new JsonArray(sites.Select(s => (JsonNode)new JsonObject { ["op"] = "replace", ["path"] = s.Pointer,
-                        ["value"] = string.Concat(StringLiteral.Split(s.Text).Zip(StringLiteral.Matches(s.Text).Select(m => m.Value).Append(""), (code, literal) => rename.Replace(code, certain) + literal)) }).ToArray());
+                    : new JsonArray(sites.Select(s => (JsonNode)new JsonObject { ["op"] = "replace", ["path"] = s.Pointer, ["value"] = RenameCall(s.Text, name, certain) }).ToArray());
+                // Without a certain or a close name, the lookup of the built-ins: the facade turns `anvil functions --find X`
+                // into ssam_reference {kind:"functions", query:X} with its continuation (responses.mjs), so the session follows it.
                 var problem = JobPreflight.Problem(op, sites.Count == 1 ? sites[0].Pointer : Pointer(op), "FUNCTION_UNKNOWN", "error",
                     $"'{name}(' is not a built-in function of this Studio ({MessageExpectations.Lane}), nor a function of the module, of its references or of this job",
                     certain != null ? $"write {certain}(...), the built-in meant here (same arguments)"
-                        : closest.Count > 0 ? "use one of: " + string.Join(", ", closest) : "see `anvil functions --find " + name + "`", patch, "logic");
+                        : closest.Count > 0 ? "use one of: " + string.Join(", ", closest)
+                        : $"no built-in, no function of the module or of its references and no action of this job is named like {name}: write the built-in the expression means (ToLower, Substr, If, ...), or call an action of the module marked Function; the built-ins: `anvil functions --find {name}`", patch, "logic");
                 problems.Add(problem);
                 lines.Add(JobPreflight.Text(problem));
             }
@@ -373,7 +416,7 @@ public static partial class JobRunner
         // job that imports producers (their names are not the base's) nor one that expects an invalid module.
         if (checkFunctions && !imports)
         {
-            var found = Preflight.PreflightChecks.WithBase(ops, opsPointer, MessageExpectations.Lane, new Preflight.ModelBaseFacts(session, espace));
+            var found = Preflight.PreflightChecks.WithBase(ops, opsPointer, MessageExpectations.Lane, facts ?? new Preflight.ModelBaseFacts(session, espace));
             foreach (var problem in found.Problems) { problems.Add(problem); lines.Add(JobPreflight.Text(problem)); }
             foreach (var warning in found.Warnings) log?.Invoke("  " + JobPreflight.Text(warning));
         }
@@ -423,7 +466,24 @@ public static partial class JobRunner
             if (source["data"]!["actions"]![a] is JsonObject action)
                 foreach (var site in Preflight.LogicScan.Of(action).Expressions.Where(s => Calls(s.Text)))
                     sites.Add(($"{opsPointer}/{op}/data/actions/{a}{site.Pointer}", site.Text, site.Key == "sort"));
+        // G5: a binding, source or variable default of an html page op (a sort entry is [expression, direction]: its site is
+        // the expression alone, so it is patched as any other).
+        if (HtmlPage(source) is { } page)
+            foreach (var (pointer, text) in HtmlExpander.Expressions(page).Where(e => Calls(e.Text)))
+                sites.Add(($"{opsPointer}/{op}/data{pointer}", text, false));
         return sites;
+    }
+
+    /// <summary>The data of an html op in its page form (no parent, no components), or null.</summary>
+    private static JsonObject? HtmlPage(JsonNode? node)
+        => node is JsonObject op && op["op"]?.ToString() == "html" && op["parent"] == null && op["data"] is JsonObject data && data["components"] == null ? data : null;
+
+    /// <summary>G5: every expression the html page ops of the job write (HtmlExpander.Expressions), with its op.</summary>
+    private static IEnumerable<(int Op, string Text)> HtmlPageExpressions(JsonArray ops)
+    {
+        for (var i = 0; i < ops.Count; i++)
+            if (HtmlPage(ops[i]) is { } data)
+                foreach (var (_, text) in HtmlExpander.Expressions(data)) yield return (i, text);
     }
 
     private static readonly Regex VersionSuffix = new(@"(?:[-_][vV]\d+|\s*\(\d+\))$", RegexOptions.Compiled);

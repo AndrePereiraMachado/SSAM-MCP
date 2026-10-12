@@ -1,10 +1,14 @@
-param([ValidateSet('status','read','bootstrap')][string]$Mode='status', [string]$Origin='https://wrightflood.outsystems.dev')
+param([ValidateSet('status','read','bootstrap')][string]$Mode='status', [string]$Origin='https://wrightflood.outsystems.dev', [string]$FixtureOperationUuid='')
 $ErrorActionPreference = 'Stop'
 # One Credential Manager entry per tenant host. The default keeps the entry created on 2026-09-15 for the
 # WrightFlood tenant; other tenants use the same naming with their own host.
 $tenantHost = ([uri]$Origin).Host
 if ([string]::IsNullOrWhiteSpace($tenantHost) -or ([uri]$Origin).Scheme -ne 'https') { throw 'Origin must be an HTTPS origin' }
 $credentialTarget = "SSAM/ODC3/$tenantHost/APIClient"
+if($FixtureOperationUuid){
+ if($Mode -ne 'status' -or $FixtureOperationUuid -cnotmatch '^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$'){throw 'Fixture destination supports only status with its canonical operation UUID'}
+ $credentialTarget="SSAM/ODC3/$tenantHost/APIClientFixture/$FixtureOperationUuid"
+}
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
@@ -109,11 +113,11 @@ try {
  $found=[OdcApiClientVault]::Read($credentialTarget,1,0,[ref]$native)
  if (!$found) {
   if ([Runtime.InteropServices.Marshal]::GetLastWin32Error() -ne 1168) { throw 'Credential manager unavailable' }
-  @{available=$false;target='odc3-api-client'} | ConvertTo-Json -Compress
+  if($FixtureOperationUuid){@{available=$false;target='odc3-api-client-fixture';fixtureOperationUuid=$FixtureOperationUuid;entry=$credentialTarget}|ConvertTo-Json -Compress}else{@{available=$false;target='odc3-api-client'} | ConvertTo-Json -Compress}
   exit 0
  }
  try {
-  if ($Mode -eq 'status') { @{available=$true;target='odc3-api-client'} | ConvertTo-Json -Compress; exit 0 }
+  if ($Mode -eq 'status') { if($FixtureOperationUuid){@{available=$true;target='odc3-api-client-fixture';fixtureOperationUuid=$FixtureOperationUuid;entry=$credentialTarget}|ConvertTo-Json -Compress}else{@{available=$true;target='odc3-api-client'} | ConvertTo-Json -Compress}; exit 0 }
   # Private subprocess channel consumed only by the broker. Never invoke read as
   # a model-facing command, log this stdout, or put it into a tool result.
   $record=[Runtime.InteropServices.Marshal]::PtrToStructure($native,[type][OdcApiClientVault+Credential])

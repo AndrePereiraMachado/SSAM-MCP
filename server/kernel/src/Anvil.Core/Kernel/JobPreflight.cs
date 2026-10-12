@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
@@ -75,10 +76,18 @@ public static class JobPreflight
     public static void RequireValid(JsonObject result, string? verifyReason = null)
     {
         if (result["errors"]!.AsArray().Count > 0)
-            throw new JobPreflightException(string.Join(Environment.NewLine, result["errors"]!.AsArray().Select(e => e!.ToString())),
+        {
+            var refusal = new JobPreflightException(string.Join(Environment.NewLine, result["errors"]!.AsArray().Select(e => e!.ToString())),
                 result["problems"]?.DeepClone().AsArray() ?? new JsonArray(), result["warnings"]?.DeepClone().AsArray())
             { VerifyRan = false, VerifyReason = verifyReason ?? OnlyTheJob, Phases = ["preflight"] };
+            Errors.AttachNormalizations(refusal, result["normalizations"] as JsonArray);
+            throw refusal;
+        }
     }
+
+    /// <summary>The job file the job being checked corrects (a patch or a partial job resolved by the facade's job-patch, given
+    /// to the CLI as <c>apply --based-on</c>): the CSS loss guard compares the two (StyleSheetRules.CheckPatched).</summary>
+    public static readonly AsyncLocal<string?> BasedOn = new();
 
     /// <summary>Without the job document the pointers assume the usual {"ops":[...]} shape.</summary>
     public static JsonObject Analyze(JsonArray ops) => Analyze(ops, (JsonNode?)null);
@@ -101,17 +110,27 @@ public static class JobPreflight
         var problems = new List<JsonObject>();
         var warnings = new List<JsonObject>();
         var notes = new JsonArray();
+        // lentidao 2026-10-12 (cause 3): the deterministic shape errors the job alone decides (a comma-separated sort, the entity
+        // segment of a list of records the job declares) are rewritten in place before any check and listed, never refused. A
+        // job that expects an invalid module asks the Verify for that verdict: nothing of it is rewritten.
+        var expectsInvalid = job is JsonObject expecting && expecting["expectValid"] is JsonValue expectation && expectation.TryGetValue<bool>(out var expectedValidity) && !expectedValidity;
+        var normalizations = new JsonArray(expectsInvalid ? [] : Preflight.JobNormalizer.Pure(ops, prefix, MessageExpectations.Lane).Select(n => (JsonNode)n).ToArray());
         var expansions = new List<Preflight.Expansion>();
         string? Pointer(int op, string? rest = null) => prefix == null ? null : prefix + "/" + op + (rest ?? "");
         void Error(int? op, string kind, string code, string message, string? fix = null, string? pointer = null, JsonArray? patch = null)
             => problems.Add(Problem(op, pointer ?? (op is { } i ? Pointer(i) : null), code, "error", message, fix ?? FixFrom(message) ?? DefaultFix(kind), patch, kind));
         // A coded refusal (I4) becomes its own problems, rebased onto the job; anything else one generic problem, which a
         // more specific problem of the same op under its pointer replaces at the end (A02 item 1).
-        void Refused(Exception ex, int op, string kind, string code, string? basePointer, string? swapFrom = null, string? swapTo = null)
+        void Refused(Exception ex, int op, string kind, string code, string? basePointer, string? swapFrom = null, string? swapTo = null, string? fixKind = null)
         {
             if (Preflight.CodedProblems.From(ex, op, kind, basePointer, swapFrom, swapTo) is { } coded)
             {
-                foreach (var p in coded) (p["severity"]?.ToString() == "warning" ? warnings : problems).Add(p);
+                foreach (var p in coded)
+                {
+                    // H15: the generic fix of a fragment points at the fragment syntax, never at the page manifest.
+                    if (fixKind != null && p["fix"]?.ToString() == DefaultFix(kind)) p["fix"] = DefaultFix(fixKind);
+                    (p["severity"]?.ToString() == "warning" ? warnings : problems).Add(p);
+                }
                 return;
             }
             // C24: a raw System.Text.Json cast ("The node must be of type ...") never reaches an answer: the shape it broke.
@@ -123,7 +142,7 @@ public static class JobPreflight
                 foreach (var shape in shapes) problems.Add(Problem(op, shape.Pointer, JobDocument.ShapeCode, "error", shape.Message, shape.Fix, shape.Patch, kind));
                 return;
             }
-            var generic = Problem(op, swapTo ?? basePointer, code, "error", Errors.Text(ex), FixFrom(Errors.Text(ex)) ?? DefaultFix(kind), null, kind);
+            var generic = Problem(op, swapTo ?? basePointer, code, "error", Errors.Text(ex), FixFrom(Errors.Text(ex)) ?? DefaultFix(fixKind ?? kind), null, kind);
             generic["_generic"] = true;
             problems.Add(generic);
         }
@@ -173,7 +192,7 @@ public static class JobPreflight
                     if (op["parent"] != null)
                     {
                         try { HtmlVisual.PreflightOp(op); }
-                        catch (Exception ex) { Refused(ex, i, kind, code, Pointer(i)); }
+                        catch (Exception ex) { Refused(ex, i, kind, code, Pointer(i), fixKind: "html-visual"); }
                     }
                     else if (op["data"]?["components"] is JsonValue source)
                     {
@@ -182,9 +201,31 @@ public static class JobPreflight
                     }
                     else
                     {
-                        try { HtmlExpander.Preflight(op["data"]?.AsObject() ?? throw new InvalidOperationException("html: 'data' is required")); }
+                        // H1/H2: the page form is compiled whole without a module (every element, key and CSS statement), with
+                        // call checked against the logic ops of this job; its problems come at once, the constructions the former
+                        // page form refused come as warnings with their counts (the same answer), and a move of an op is a patch.
+                        try
+                        {
+                            var data = op["data"]?.AsObject() ?? throw new InvalidOperationException("html: 'data' is required");
+                            var (report, refusal) = HtmlExpander.Analyze(data, HtmlJob.From(ops, i));
+                            foreach (var (warningCode, at, message) in HtmlExpander.RewriteWarnings(report))
+                                warnings.Add(Problem(i, Pointer(i, "/data" + at), warningCode, "warning", "html: " + message,
+                                    "nothing to change: the page compiles this way (api --op html)", null, kind));
+                            if (refusal != null)
+                            {
+                                var before = problems.Count;
+                                Refused(refusal, i, kind, code, Pointer(i, "/data"));
+                                JobPatches(problems, before, prefix);
+                            }
+                        }
                         catch (Exception ex) { Refused(ex, i, kind, code, Pointer(i, "/data")); }
                     }
+                }
+                if (kind == "prototype")
+                {
+                    if (PrototypeSeams.Preflight is { } analyzePrototype)
+                        foreach (var problem in analyzePrototype(op, i)) problems.Add(problem);
+                    continue;
                 }
                 if (kind == "logic")
                 {
@@ -238,7 +279,30 @@ public static class JobPreflight
         var expectsValid = !(job is JsonObject document && document["expectValid"] is JsonValue ev && ev.TryGetValue<bool>(out var valid) && !valid);
         var checks = Preflight.PreflightChecks.Pure(ops, prefix, MessageExpectations.Lane, expansions, verifyRules: expectsValid);
         problems.AddRange(checks.Problems); warnings.AddRange(checks.Warnings);
+        // A documentation property the type cannot write is dropped (a warning of PropertyRules): listed with the rewrites.
+        Preflight.JobNormalizer.Merge(normalizations, checks.Warnings.Select(w => w["_normalization"]));
         RunRules(ops, rules ?? DiscoveredRules, problems, warnings, prefix);
+        // CSS_RULES_DROPPED (docs/PROTOTIPO-NATIVO.md 4.3, lane css): a patched or partial job against the job it corrects, which
+        // the facade's job-patch names (apply --based-on); never on a job without that provenance.
+        if (jobPath != null && BasedOn.Value is { Length: > 0 } basedOnPath && File.Exists(basedOnPath)
+            && !string.Equals(Path.GetFullPath(basedOnPath), Path.GetFullPath(jobPath), StringComparison.OrdinalIgnoreCase))
+        {
+            JsonArray? baseOps = null;
+            try { baseOps = JsonNode.Parse(File.ReadAllText(basedOnPath)) switch { JsonArray a => a, JsonObject o => o["ops"] as JsonArray, _ => null }; }
+            catch (Exception ex) when (ex is IOException or JsonException) { notes.Add(new JsonObject { ["code"] = "BASED_ON_UNREADABLE", ["message"] = $"the job this one corrects ({basedOnPath}) could not be read: {ex.Message}" }); }
+            if (baseOps != null)
+                foreach (var dropped in PreflightRules.StyleSheetRules.CheckPatched(baseOps, ops, MessageExpectations.Lane))
+                {
+                    if (prefix != "/ops" && dropped["pointer"]?.ToString() is { } at && at.StartsWith("/ops", StringComparison.Ordinal))
+                    {
+                        var rebased = prefix == null ? null : prefix + at["/ops".Length..];
+                        dropped["pointer"] = rebased;
+                        if (dropped["patch"] is JsonArray restore) foreach (var p in restore.OfType<JsonObject>()) p["path"] = rebased;
+                    }
+                    dropped["kind"] = "css";
+                    problems.Add(dropped);
+                }
+        }
         // A generic problem (the one-line form of an uncoded refusal) whose pointer is a prefix of a more specific problem a
         // rule reports for the same op says the same thing less precisely. The independent checks (defaults, signatures, the
         // A02/A04 rules) never replace it: they judge another fault, and hiding the generic one would cost a round.
@@ -258,7 +322,7 @@ public static class JobPreflight
         // primeira-certa A2: every problem says its phase; these are the job's own (no base, no model).
         foreach (var p in sorted) p["phase"] ??= "preflight";
         var errors = new JsonArray(sorted.Select(p => (JsonNode)Text(p)).ToArray());
-        return new JsonObject
+        var analysis = new JsonObject
         {
             ["valid"] = errors.Count == 0, ["errors"] = errors, ["ops"] = ops.Count,
             ["problems"] = new JsonArray(sorted.Select(p => (JsonNode)PublicProblem(p)).ToArray()),
@@ -274,6 +338,9 @@ public static class JobPreflight
             ["identicalImplementations"] = new JsonArray(identical),
             ["scope"] = "Validates syntax (fragment files included), declared data type order, known enums and lengths, literal defaults, the types public actions expose, and the SQL the job carries (lexical balance, {Entity}.[Attribute] and @parameters against the job, type clashes, SQL Server rules in O11, PostgreSQL rules in ODC), plus the rules of Anvil.Core.PreflightRules; warnings (never blocking) for List.Current without an empty guard, Date compared with Date Time and, in ODC, Count assigned to Integer. Names and keys the job does not declare, unresolved types, unresolvedSql and unknown functions are checked against the base, all at once, before the first op; what only the database upgrade refuses (cascade paths and cycles on O11, columns per table) is checked on the effective model (base + job) at apply, before anything is saved; expressions and business correctness still require Verify and delivery assertions. Always-raising endpoints are not evidence of completed integrations."
         };
+        // What the kernel rewrote instead of refusing ({rule, path, from, to, message}), only when it rewrote something.
+        if (normalizations.Count > 0) analysis["normalizations"] = normalizations;
+        return analysis;
 
         // A data/sql check names its op and place in its own prefix ("op #i (SQL <where>, line n): ..."): that place stays the kind.
         void Legacy(string text, string kind, string code)
@@ -314,7 +381,7 @@ public static class JobPreflight
     public static JsonObject PublicProblem(JsonObject p)
     {
         var copy = p.DeepClone().AsObject();
-        copy.Remove("_kind"); copy.Remove("_generic"); copy.Remove("_rule");
+        copy.Remove("_kind"); copy.Remove("_generic"); copy.Remove("_rule"); copy.Remove("jobPatch"); copy.Remove("_normalization");
         return copy;
     }
 
@@ -336,11 +403,30 @@ public static class JobPreflight
         return null;
     }
 
+    /// <summary>The patch over the whole job a problem of the html page carries (<c>jobPatch</c>, paths relative to the ops
+    /// array: the move of a logic op before the html op that calls its action, H10) becomes its patch, with the job's pointers.</summary>
+    private static void JobPatches(List<JsonObject> problems, int from, string? prefix)
+    {
+        for (var n = from; n < problems.Count; n++)
+        {
+            if (problems[n]["jobPatch"] is not JsonArray patch) continue;
+            problems[n].Remove("jobPatch");
+            if (prefix == null) continue;
+            var steps = patch.DeepClone().AsArray();
+            foreach (var step in steps.OfType<JsonObject>())
+                foreach (var key in new[] { "path", "from" })
+                    if (step[key] is JsonValue v && v.TryGetValue<string>(out var at)) step[key] = prefix + at;
+            problems[n]["patch"] = steps;
+        }
+    }
+
     internal static string DefaultFix(string kind) => kind switch
     {
         "logic" => "write the step in the logic grammar (`api --op logic`): one step kind per step, closed keys",
         "spec" => "write the data in the spec grammar (`api --op spec`)",
-        "html" => "write the fragment in the closed syntax (`api --op html-visual`) or the page manifest (`api --op html`)",
+        // H15: a problem of the page form names its rules; the fragment form (html-visual) is another syntax, never the fix of a page.
+        "html" => "fix the element at the line and column the message names; the rules of the page form (kinds and their tags, attributes, names, call) are `api --op html`",
+        "html-visual" => "write the fragment in the closed syntax (`api --op html-visual`)",
         "sql" => "fix the statement as the message says; the SQL of the job is checked against the job and the base",
         "data" => "fix the value as the message says (`api --name <Type>` lists properties and enums)",
         _ => "write the op as `api --op verbs` describes it",

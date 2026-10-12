@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { bridgeAnswer, bridgeUploader, checkTarget, stageUpload, vaultUploader } from '../runtime/external-library-upload.mjs';
-import { OPS, PUBLISH_ROUTE, breakingChanges, contentsDifferences, nextPatch, publishKeyOf, stepUuid } from '../runtime/external-library.mjs';
+import { ExternalLibraryDeployer, OPS, PUBLISH_ROUTE, breakingChanges, contentsDifferences, nextPatch, publishKeyOf, stepUuid } from '../runtime/external-library.mjs';
 import { PORTAL_WRITES } from '../runtime/portal-routes.mjs';
 import { Catalog } from '../runtime/catalog.mjs';
 
@@ -26,6 +26,100 @@ function fakeFetch(answers) {
   return { fetchImpl, seen };
 }
 const schema = () => Response.json({ uploadUrl: 'https://bucket.s3.amazonaws.com/up?X-Amz-Signature=s1', downloadUrl: 'https://bucket.s3.amazonaws.com/down?X-Amz-Signature=s2' });
+
+test('own fixture publication rechecks job identity, complete inventory, revision and consumers after upload',async()=>{
+ for(const changed of ['job','inventory','revision','consumers']){
+  let writes=0;
+  const receipt={operationUuid:'root',identity:{tenant:HOST},progress:{authorization:{context:{}},library:{key:'asset',name:'Proof',revision:1,isNew:false},generation:{ready:true,libraryKey:'asset'}}};
+  const access={receipts:{settle:(r,p)=>Object.assign(r,p)},resolvePublic:async()=>({ok:true}),
+   dependentsOf:async()=>({ok:true,consumers:changed==='consumers'?[{name:'Other'}]:[]}),
+   portalWrite:async()=>{writes++;assert.fail('must refuse before publish');},
+   read:async({operationId})=>operationId===OPS.job?{ok:true,data:{status:'ReadyForReview',libraryName:'Proof',libraryKey:changed==='job'?'other':'asset',isNewLibrary:false}}:
+    {ok:true,data:{results:[{name:'Proof',assetType:'ExternalLibrary',assetKey:'asset',revision:changed==='revision'?2:1}],page:{totalResults:changed==='inventory'?2:1}}}};
+  const result=await new ExternalLibraryDeployer({access}).publish({name:'Proof'},receipt,{host:HOST,publicAuth:'api-client'},'job');
+  assert.equal(result.ok,false);assert.equal(result.step,'pre-publication');assert.equal(writes,0);
+  assert.equal(result.code,changed==='consumers'?'EXTERNAL_LIBRARY_HAS_CONSUMERS':changed==='inventory'?'ASSET_INVENTORY_UNAVAILABLE':'EXTERNAL_LIBRARY_CHANGED');
+ }
+});
+
+test('library status cannot turn failed job, revision or metadata reads into successful empty results', async () => {
+  for (const exists of [false, true]) {
+    for (const [failedOp, failedRead] of [[OPS.jobs, 'generation-jobs'], [OPS.revisions, 'revisions'], [OPS.revisionMetadata, 'revision-metadata']]) {
+      if (!exists && failedOp !== OPS.jobs) continue;
+      const access = {
+        pickTenant: async () => HOST,
+        read: async ({ operationId }) => {
+          if (operationId === failedOp) return { ok: false, status: 503, error: { code: 'UNAVAILABLE' } };
+          if (operationId === OPS.assets) return { ok: true, data: exists ? [{ name: 'Proof', assetType: 'ExternalLibrary', assetKey: 'lib-1', revision: 1 }] : [] };
+          if (operationId === OPS.jobs || operationId === OPS.revisions) return { ok: true, data: [] };
+          assert.fail('unexpected read: ' + operationId);
+        },
+      };
+      const result = await new ExternalLibraryDeployer({ access }).status({ tenant: HOST, library: 'Proof' });
+      assert.equal(result.ok, false);
+      assert.equal(result.status, 503);
+      assert.equal(result.exists, exists);
+      assert.equal(result.incomplete, true);
+      assert.equal(result.failedRead, failedRead);
+      if (failedOp === OPS.jobs) assert.equal(result.jobs, null);
+    }
+  }
+});
+
+test('publication without a response key uses the deploy start even when the response arrives after publication', async () => {
+  const start = Date.parse('2026-10-09T03:38:00Z');
+  let now = start + 18000;
+  let sends = 0;
+  const access = {
+    receipts: { settle: (receipt, patch) => Object.assign(receipt, patch) },
+    portalWrite: async () => { sends++; now = start + 20000; return { ok: true, data: {}, receipt: { state: 'accepted' } }; },
+    read: async request => {
+      assert.equal(request.operationId, OPS.publishOps);
+      assert.equal(request.query.createdDateSince, new Date(start).toISOString());
+      return { ok: true, data: [{ key: 'publication-1', createdAt: new Date(start + 18437).toISOString() }] };
+    },
+    operationStatus: async request => {
+      assert.equal(request.operationKey, 'publication-1');
+      return { ok: true, terminal: true, status: 'Finished', data: { revision: 1 } };
+    },
+  };
+  const deployer = new ExternalLibraryDeployer({ access, now: () => now });
+  const receipt = { operationUuid: crypto.randomUUID(), progress: { startedAt: new Date(start).toISOString(), library: { key: 'library-1' } } };
+  assert.equal(await deployer.publish({ name: 'Proof' }, receipt, { host: HOST }, 'job-1'), null);
+  assert.equal(sends, 1);
+  assert.equal(receipt.progress.publish.startedAt, new Date(start + 18000).toISOString());
+  assert.equal(receipt.progress.publish.done, true);
+});
+
+test('accepted or uncertain publication without a key is read on every resume and never resent', async () => {
+  for (const state of ['accepted', 'uncertain']) {
+    let visible = false;
+    let reads = 0;
+    let continued = 0;
+    const access = {
+      receipts: { settle: (receipt, patch) => Object.assign(receipt, patch) },
+      portalWrite: async () => assert.fail('publication must not be resent'),
+      read: async request => {
+        reads++;
+        assert.equal(request.operationId, OPS.publishOps);
+        return { ok: true, data: visible ? [{ key: 'publication-1' }] : [] };
+      },
+    };
+    const deployer = new ExternalLibraryDeployer({ access });
+    deployer.run = async (_plan, receipt) => { continued++; assert.equal(receipt.progress.publish.operationKey, 'publication-1'); return { ok: true }; };
+    const receipt = { identity: { tenant: HOST }, operationUuid: crypto.randomUUID(), progress: { library: { key: 'library-1' }, publish: { state } } };
+    for (let i = 0; i < 3; i++) {
+      const result = await deployer.resume({ name: 'Proof' }, receipt, { host: HOST });
+      assert.equal(result.code, 'UNCERTAIN');
+      assert.equal(result.step, 'publish');
+    }
+    assert.equal(continued, 0);
+    visible = true;
+    assert.equal((await deployer.resume({ name: 'Proof' }, receipt, { host: HOST })).ok, true);
+    assert.equal(reads, 4);
+    assert.equal(continued, 1);
+  }
+});
 
 test('vault uploader: GET /uploads and POST with the API Client token, the PUT with no Authorization and no redirect, no URL in the answer', async () => {
   const dir = tmp(); const pkg = packageFile(dir);
@@ -74,6 +168,24 @@ test('bridge uploader: the package staged in journal/portal/uploads, the request
   const thrown = await bridgeUploader({ studio: { call: async () => { throw new Error('pipe'); } }, requestFile: () => 'r', stage: stageUpload(uploads) })
     .upload({ host: HOST, file: pkg.file, sha256: pkg.sha256, fileName: path.basename(pkg.file), operationUuid: crypto.randomUUID(), authorizeSha256: 'a'.repeat(64) });
   assert.equal(thrown.state, 'uncertain');
+});
+
+test('bridge uploader awaits local preparation and never sends after a local preparation failure', async () => {
+  const seen = [];
+  const studio = { call: async args => { seen.push(args); return { ok: true, operationKey: 'job-async' }; } };
+  const stage = async () => 'staged.zip';
+  const requestFile = async json => { assert.equal(json.file, 'staged.zip'); return 'request.json'; };
+  assert.equal((await bridgeUploader({ studio, stage, requestFile }).upload({ host: HOST })).ok, true);
+  assert.equal(seen[0][1], 'request.json');
+  for (const step of ['stage', 'requestFile']) {
+    seen.length = 0;
+    const fail = async () => { throw Object.assign(new Error('private local detail'), { code: 'BRIDGE_ROOT_UNAVAILABLE' }); };
+    const result = await bridgeUploader({ studio, stage, requestFile, [step]: fail }).upload({ host: HOST });
+    assert.equal(result.state, 'not-sent');
+    assert.equal(result.code, 'BRIDGE_ROOT_UNAVAILABLE');
+    assert.equal(seen.length, 0);
+    assert.doesNotMatch(JSON.stringify(result), /private local detail/);
+  }
 });
 
 test('plan versus generation: names and directions only; removed or updated elements are the breaking changes', () => {

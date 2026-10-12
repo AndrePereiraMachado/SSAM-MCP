@@ -24,11 +24,15 @@ public interface IMergePlanner
 /// <summary>CaptureProducers: binding names whose current server signature the delivery captures (read-only) into its
 /// own task folder, records by SHA-256 and reuses on resume; absent from the serialized request when unused, so
 /// earlier tasks keep their identity. CloseOpenedTab (K1-g): close the Studio tab this delivery opened when it ends in a
-/// saved state; a property of the call, never of the task identity (not serialized), so a resume passes it again.</summary>
+/// saved state; a property of the call, never of the task identity (not serialized), so a resume passes it again.
+/// SkipOpenReferencesCheck (speed lane vel-entrega): the build phase of this call captured the module's tab by key (`deliver
+/// --prebuilt`), so the open of an already open tab skips the Studio's references check (OpeningOwnTab); a call property,
+/// not serialized.</summary>
 public sealed record DeliveryRequest(string Module, string JobPath, string WorkDirectory, IReadOnlyList<string> Checks,
     IReadOnlyDictionary<string, string>? Producers = null, string? TaskId = null, int? BridgePort = null, JsonObject? Specification = null, string? ExpectedEnvironment = null, string? ReservationOwner = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? CaptureProducers = null,
-    [property: System.Text.Json.Serialization.JsonIgnore] bool CloseOpenedTab = false);
+    [property: System.Text.Json.Serialization.JsonIgnore] bool CloseOpenedTab = false,
+    [property: System.Text.Json.Serialization.JsonIgnore] bool SkipOpenReferencesCheck = false);
 
 public sealed record DeliveryDependencyContext(DeliveryRequest Request, string Environment, string ModuleKey,
     string TaskDirectory, Anvil.CSharp.CompilationResult? Compilation);
@@ -72,7 +76,7 @@ public static partial class Delivery
         var failures = new List<(string Stage, string Error)>();
         ModuleReservation? reservation = null;
         if (result["closed"]?.GetValue<bool>() == true) throw new InvalidOperationException("This failed delivery was closed for revision; it cannot be replayed");
-        result["delivered"] = false; result.Remove("error"); result.Remove("code"); result.Remove("warnings"); result.Remove("reselected");
+        result["delivered"] = false; result.Remove("error"); result.Remove("code"); result.Remove("warnings"); result.Remove("reselected"); result.Remove("normalizations");
         result.Remove("referencesRefreshed"); result.Remove("referencesRefreshFailed");
         IReadOnlyDictionary<string, VerifyHint>? hints = null;
         var dataProofDiffers = false;
@@ -118,7 +122,7 @@ public static partial class Delivery
             if (DeliveryReceipt.Changed(sources).Count > 0) return Fail("Task source changed; this task covers only its original revision");
             var expectations = result["expectations"]!.Deserialize<List<ExpectedMessage>>()!;
             stage = "open";
-            var opened = bridge.Call("open_module", AnsweringDependencies(new() { ["name"] = request.Module, ["timeout"] = 20,
+            var opened = bridge.Call("open_module", OpeningOwnTab(request, new() { ["name"] = request.Module, ["timeout"] = 20,
                 ["environment"] = request.ExpectedEnvironment ?? result["environment"]?.ToString(), ["module_key"] = result["moduleKey"]?.DeepClone() }));
             result["open"] = opened;
             var dependencyDialogs = AnsweredDependencies(opened);
@@ -130,7 +134,7 @@ public static partial class Delivery
             {
                 // A08: another session of the same Studio selected its own tab between open_module and here. The task selects
                 // its module again (by the task's key when it has one) instead of failing; it fails only when it cannot.
-                var reopened = bridge.Call("open_module", AnsweringDependencies(new() { ["name"] = request.Module, ["timeout"] = 20,
+                var reopened = bridge.Call("open_module", OpeningOwnTab(request, new() { ["name"] = request.Module, ["timeout"] = 20,
                     ["environment"] = request.ExpectedEnvironment ?? result["environment"]?.ToString(), ["module_key"] = result["moduleKey"]?.DeepClone() }));
                 if (AnsweredDependencies(reopened) is { } again)
                 {
@@ -561,7 +565,7 @@ public static partial class Delivery
             {
                 var now = bridge.Call("get_active_module");
                 if (now["key"]?.ToString() == key) return;
-                var again = bridge.Call("open_module", AnsweringDependencies(Target(new() { ["name"] = request.Module, ["timeout"] = 20 })));
+                var again = bridge.Call("open_module", OpeningOwnTab(request, Target(new() { ["name"] = request.Module, ["timeout"] = 20 })));
                 // MB2: a dependencies dialog the bridge answered here is followed by the refresh of every producer.
                 if (AnsweredDependencies(again) is { } answered
                     && RefreshAfterDependencies(bridge, result, "verify", answered, request.Module, key, result["environment"]?.ToString(), log) is { } refreshFailed)
@@ -646,7 +650,18 @@ public static partial class Delivery
             if (result["writeState"]?.ToString() == "intent") result["writeState"] = ex is BridgeCallException { Executed: false } ? "not-sent" : "unknown";
             // A coded kernel refusal raised inside the apply (the base check's PREFLIGHT_REFUSED with every problem, I2;
             // SIGNATURE_CHANGE_BREAKS_CONSUMERS, ...) keeps its code and problems in the task result, as the CLI envelope does.
-            if (Errors.FindCoded(ex) is { } coded && result["code"] == null)
+            // prazos B: a read of the environment the Studio's own client cut (ENVIRONMENT_CALL_CUT) names what was cut in
+            // cut {what, stage, producer, host, operation, cause, afterSeconds, elapsedSeconds, cutBy, writeState}; a job the
+            // preflight already refused keeps that refusal as the answer (A3), with the cut as the reason the rest did not run.
+            var environmentCut = EnvironmentCut.Find(ex);
+            // servidor/fase4-24: an environment read of this delivery that still failed on the network after the kernel's
+            // single retry (ENVIRONMENT_UNREACHABLE, outside the producer capture) is the same cut while nothing was written
+            // yet, so a delivery answers one code (ENVIRONMENT_CALL_CUT) for one failure. After a write it keeps its own code.
+            var unreachableOnly = environmentCut == null && result["writeState"]?.ToString() is null or "not-sent"
+                && EnvironmentCut.FindUnreachable(ex) is { } unreachable ? EnvironmentCut.FromUnreachable(unreachable, "an environment read of the delivery") : null;
+            environmentCut ??= unreachableOnly;
+            if (environmentCut != null) result["cut"] = environmentCut.Cut(stage);
+            if ((unreachableOnly ?? Errors.FindCoded(ex)) is { } coded && result["code"] == null && !(environmentCut != null && pure != null))
             {
                 result["code"] = coded.Code;
                 if (coded.Problems is { } problems) result["problems"] = problems.DeepClone();
@@ -655,6 +670,8 @@ public static partial class Delivery
             if (Errors.Diagnosis(ex) is { } diagnosis && result["apply"] == null)
                 foreach (var (key, value) in diagnosis)
                     if (key != "problems" || result["problems"] == null) result[key] = value?.DeepClone();
+            // lentidao 2026-10-12: what the kernel rewrote instead of refusing comes with the refusal of what stayed.
+            if (Errors.Normalizations(ex) is { } normalizations && result["apply"] == null) result["normalizations"] = normalizations;
             return Fail(Errors.Text(ex));
         }
         finally
@@ -764,6 +781,7 @@ public static partial class Delivery
         if (string.IsNullOrWhiteSpace(environment)) throw new InvalidOperationException("Producer capture requires a known target environment");
         var state = task.State;
         if (state["capturedProducers"] is not JsonObject captured) state["capturedProducers"] = captured = new JsonObject();
+        var announced = false;
         foreach (var (name, producerName) in targets)
         {
             if (captured[name] is JsonObject recorded)
@@ -773,6 +791,9 @@ public static partial class Delivery
                 continue;
             }
             if (authority == null) throw new InvalidOperationException("--capture-producer requires the read-only Studio producer authority");
+            // prazos B: the task shows the stage it waits in while the Studio reads the environment (ssam_task read
+            // "validate-job" for 107 s on 2026-10-12 while these reads hung on the PC's network).
+            if (!announced) { announced = true; task.Save("producer-signatures"); }
             var destination = Path.Combine(task.DirectoryPath, "producers", name + ".avsig");
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
             // Nothing consumed a file that is not recorded in capturedProducers (every capture precedes the apply): a
@@ -796,7 +817,8 @@ public static partial class Delivery
                         receipt = cached.Receipt; reused = true;
                     }
                 }
-                catch (Exception ex) when (ex is not OutOfMemoryException)
+                // A cut read (ENVIRONMENT_CALL_CUT) says nothing about the cached capture: it propagates, typed, and the cache stays.
+                catch (Exception ex) when (ex is not OutOfMemoryException and not EnvironmentCallCutException)
                 {
                     log?.Invoke($"deliver: cached capture of {producerName} no longer attests ({Errors.Text(ex)}); capturing it again");
                     cache.Remove(environment, producerName, elements);
@@ -896,7 +918,7 @@ public static partial class Delivery
                             if (authority.Attest(cached.Path, environment)["attested"]?.GetValue<bool>() != false)
                             { File.Copy(cached.Path, destination, overwrite: true); receipt = cached.Receipt; reused = true; }
                         }
-                        catch (Exception ex) when (ex is not OutOfMemoryException) { cache.Remove(environment, "@" + owner, elements); }
+                        catch (Exception ex) when (ex is not OutOfMemoryException and not EnvironmentCallCutException) { cache.Remove(environment, "@" + owner, elements); }
                     }
                     if (!reused)
                     {
@@ -905,7 +927,9 @@ public static partial class Delivery
                         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { log?.Invoke("deliver: producer cache not written: " + ex.Message); }
                     }
                 }
-                catch (Exception ex) when (ex is not OutOfMemoryException)
+                // prazos B: a cut read is not a missing owner (PRODUCER_SIGNATURE_MISSING would send the model to the job); it
+                // propagates as ENVIRONMENT_CALL_CUT.
+                catch (Exception ex) when (ex is not OutOfMemoryException and not EnvironmentCallCutException)
                 {
                     refusedFor ??= dependentName;
                     var problem = Preflight.ProducerSignatureMissing.Problem(string.Join(", ", elements), dependentName, "foreign",

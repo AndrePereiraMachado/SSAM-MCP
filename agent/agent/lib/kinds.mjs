@@ -11,22 +11,29 @@ import { bridgeRequest, BridgeError } from './o11-wire.mjs';
 import { validateRef, fileSha256, TEMP_SUFFIX } from './blobs.mjs';
 import { IMAGES } from './studios.mjs';
 import { connectO11, selectedO11, readConnection, readBridgeKey } from './o11-connect.mjs';
+import { netProbe, NET_PROBE_KIND } from './net-probe.mjs';
 
 export const KINDS = Object.freeze(['studio.processes', 'odc.pipe', 'odc.attach', 'o11.bridge', 'o11.connect', 'o11.selected',
-  'file.put', 'file.get', 'file.list', 'file.sync']);
+  'file.put', 'file.get', 'file.list', 'file.sync', NET_PROBE_KIND]);
 // file.sync (C14, fase4): at most this many files per call, at most this many downloads at a time.
 export const SYNC_MAX_FILES = 256;
 export const SYNC_PARALLEL = 4;
+// reference-producers <Module> (ODC bridge v96, 24th release): the producers the open consumer can reference, read only,
+// no path. Never here: portal-private-call, portal-private-download, portal-api-client-fixture-cleanup (a local pipe and
+// the owner's vault, which do not cross machines) and portal-upload (only odc_external_library, unavailable hosted).
 export const ODC_COMMANDS = Object.freeze(['status', 'wait', 'authorize', 'open', 'snapshot', 'latest', 'check-base', 'preview', 'merge',
   'publish', 'publish-status', 'publish-log', 'dismiss-dialog', 'close', 'module-info', 'assets', 'consumers', 'create', 'create-app',
-  'templates', 'template-download', 'refresh-references', 'reference-snapshot', 'data', 'data-insert', 'data-update', 'data-delete',
-  'portal-call', 'portal-session', 'auth-status', 'stop', 'query-test']);
-// The 22 verbs of the thin O11 bridge, in the order of its bridge_manifest (docs/O11-BRIDGE-FINA.md 3.2 and 14):
+  'templates', 'template-download', 'refresh-references', 'reference-snapshot', 'reference-producers', 'data', 'data-insert', 'data-update',
+  'data-delete', 'portal-call', 'portal-session', 'auth-status', 'stop', 'query-test']);
+// The 23 verbs of the thin O11 bridge, in the order of its bridge_manifest (docs/O11-BRIDGE-FINA.md 3.2, 14 and 16):
 // refresh_references (the Studio's own Refresh References, no path) since the ninth release; answer_dependencies_dialog (the
-// Manage Dependencies dialog answered as Cancel, no path) since servidor/fase4.
+// Manage Dependencies dialog answered as Cancel, no path) since servidor/fase4; sc_http (the Service Center over the
+// Studio's own HTTP session, no window) since the 24th release. Never here: sc_private_http and sc_private_http_cookie
+// (the private transport of the owner's machine).
 export const O11_METHODS = Object.freeze(['ping', 'bridge_manifest', 'get_active_module', 'list_open_modules', 'get_errors', 'open_module',
   'close_module', 'publish', 'windows', 'ui_alive', 'close_dialog', 'snapshot_module', 'merge_from_oml', 'merge_status',
-  'environment_session', 'sc_api', 'sc_web', 'studio_login', 'sc_session', 'publish_log', 'refresh_references', 'answer_dependencies_dialog']);
+  'environment_session', 'sc_api', 'sc_web', 'sc_http', 'studio_login', 'sc_session', 'publish_log', 'refresh_references',
+  'answer_dependencies_dialog']);
 const MANIFEST_COMMANDS = new Set(['check-base', 'preview', 'merge', 'publish', 'publish-status', 'create', 'authorize', 'create-app']);
 const LANE_IMAGE = { odc: 'ODCStudio.exe', o11: 'ServiceStudio.exe' };
 const STUDIO_NAME = { odc: 'ODC Studio', o11: 'Service Studio' };
@@ -52,7 +59,7 @@ function odcPositions(words) {
 }
 
 export function createKinds({ root, ws, pack = {}, kernel = () => null, deps = {}, blobs = null, limits = () => ({}), o11Port = 4516,
-  onConnection = () => {} }) {
+  onConnection = () => {}, probe = null }) {
   const lanes = Array.isArray(pack.lanes) ? pack.lanes : [];
   const pids = new Map(); // pid -> {image, version}, from the last listing
   const maxFileBytes = () => limits().maxFileBytes ?? 512 * 1024 * 1024;
@@ -204,7 +211,7 @@ export function createKinds({ root, ws, pack = {}, kernel = () => null, deps = {
       if (!p.arguments || typeof p.arguments !== 'object') throw refuse('PATH_NOT_AGENT', 'environment_session download takes arguments.outputDirectory as agent:o11/<folder>');
       p.arguments.outputDirectory = at(p.arguments.outputDirectory, 'write');
     }
-    if (method === 'sc_api' || method === 'sc_web') {
+    if (method === 'sc_api' || method === 'sc_web' || method === 'sc_http') {
       const args = p.args;
       if (args && typeof args === 'object' && args.outFile !== undefined && args.outFile !== null)
         throw refuse('PATH_FORBIDDEN', `${method} args.outFile is never accepted by the agent; results come back in the reply`);
@@ -360,7 +367,10 @@ export function createKinds({ root, ws, pack = {}, kernel = () => null, deps = {
   }
 
   const handlers = { 'studio.processes': studioProcesses, 'odc.pipe': odcPipe, 'odc.attach': odcAttach, 'o11.bridge': o11Bridge,
-    'o11.connect': o11ConnectKind, 'o11.selected': o11Selected, 'file.put': filePut, 'file.get': fileGet, 'file.list': fileList, 'file.sync': fileSync };
+    'o11.connect': o11ConnectKind, 'o11.selected': o11Selected, 'file.put': filePut, 'file.get': fileGet, 'file.list': fileList, 'file.sync': fileSync,
+    // net.probe (fase4-24, docs/FASE2-AGENTE.md 2.10): throwaway uploads on new connections for ssam_doctor {network:true};
+    // probe is channel.probePut (agent.mjs). Nothing of the machine is read or written.
+    [NET_PROBE_KIND]: params => netProbe(params, { put: probe }) };
 
   return {
     async execute(kind, params) {

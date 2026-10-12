@@ -5,6 +5,34 @@ using ServiceStudio.ServerCommunications.API;
 
 internal static partial class Bridge
 {
+    private static async Task<object> ReferenceProducers(string module, Context context)
+    {
+        Require(!string.IsNullOrWhiteSpace(module), "module is required");
+        var selection = await Ui(() => {
+            var presenter = Active(module);
+            Require(presenter.ServerCommunicationsProvider.IsLoggedIn, "The consumer session is not signed in");
+            context.Module = presenter.ActiveESpace.Name;
+            context.ModuleKey = presenter.ActiveESpace.Key.ToString();
+            return (Presenter: presenter, Host: Host(presenter)!, Before: Capture(presenter.ActiveESpace),
+                Service: ((IServerCommunicationsServicesProvider)presenter.ServerCommunicationsProvider).ReferencesService);
+        });
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+        var producers = selection.Service.ListReferenceable(timeout.Token)
+            .Select(r => new { name = r.Name, key = r.Key.ToString() })
+            .OrderBy(r => r.name, StringComparer.OrdinalIgnoreCase).ThenBy(r => r.key, StringComparer.Ordinal).ToArray();
+        var after = await Ui(() => {
+            Require(Host(selection.Presenter) == selection.Host && selection.Presenter.ActiveESpace.Key.ToString() == context.ModuleKey,
+                "Consumer session changed during listing");
+            Require(selection.Presenter.ServerCommunicationsProvider.IsLoggedIn, "Consumer session is no longer signed in");
+            return Capture(selection.Presenter.ActiveESpace);
+        });
+        Require(after.Sha256 == selection.Before.Sha256, "Consumer changed during listing; capture again before preparing a candidate");
+        return new { ok = true, module = context.Module, moduleKey = context.ModuleKey, tenant = selection.Host,
+            listedAt = DateTimeOffset.UtcNow.ToString("o"), source = "ReferencesService.ListReferenceable",
+            scope = "consumer-session-visible-producers", count = producers.Length, producers,
+            sourceSha256 = after.Sha256, consumerUnchanged = true, mergeInvoked = false, publishInvoked = false };
+    }
+
     // Read-only acquisition through the consumer's authenticated native service. No credentials leave the Studio.
     private static async Task<object> ReferenceSnapshot(string argument, Context context)
     {

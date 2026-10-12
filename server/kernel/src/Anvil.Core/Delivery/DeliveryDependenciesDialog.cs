@@ -25,6 +25,20 @@ public static partial class Delivery
         return parameters;
     }
 
+    /// <summary>The open_module parameters of a delivery (AnsweringDependencies), and references_check:false when the request
+    /// says the build phase of the same call captured this module's tab by key (SkipOpenReferencesCheck: `deliver
+    /// --prebuilt`). The bridge (capability open_module:references_check_optional) then skips the Studio's references check
+    /// on a tab that is already open, up to 3 s + 1 s per delivery. No check of the delivery is lost: it reads opened,
+    /// alreadyOpen, blockedBy/hint and dependenciesDialog.answered of the open, never referencesOutdated or referencesCheck
+    /// (only recorded in result.open); the bridge still answers a pending dependencies dialog, and a tab the open has to
+    /// load runs the check as before. An older bridge ignores the parameter and checks as before.</summary>
+    internal static JsonObject OpeningOwnTab(DeliveryRequest request, JsonObject parameters)
+    {
+        AnsweringDependencies(parameters);
+        if (request.SkipOpenReferencesCheck) parameters["references_check"] = false;
+        return parameters;
+    }
+
     /// <summary>The dependencies dialogs the bridge answered in this open_module, or null.</summary>
     internal static JsonArray? AnsweredDependencies(JsonObject? opened) =>
         opened?["dependenciesDialog"]?["answered"] is JsonArray { Count: > 0 } answered ? answered : null;

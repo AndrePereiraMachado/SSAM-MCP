@@ -469,7 +469,8 @@ test('every data path of the facade lands in the workspace; code locations stay'
       'evidence roots': [evidenceRoots().join('|'), ['odc', 'o11', 'inbox'].map(f => path.join(ws, f)).join('|')],
     };
     for (const [name, [actual, wanted]] of Object.entries(expected)) assert.equal(actual, wanted, name);
-    assert.ok(inside(lib.requestFile({ marker }), path.join(ws, 'odc', 'journal', 'portal', 'requests')));
+    // 24th release: requestFile is async (locally it asks the loaded bridge for its root); hosted it is a file of ws:odc.
+    assert.ok(inside(await lib.requestFile({ marker }), path.join(ws, 'odc', 'journal', 'portal', 'requests')));
     const records = lib.recordsFile([{ marker }]);
     assert.ok(inside(records, path.join(ws, 'odc', 'journal', 'data', 'requests')));
     markers.files.push(path.join(lib.root, 'journal', 'data', 'requests', path.basename(records)));
@@ -587,11 +588,15 @@ test('the vault, the API Client and the prompt of the server are refused in host
     assert.equal((await runServiceCenter(['session-sign-in', '--host', TENANT, '--surface', 'lifetime'], { present: spyPresent, opener: spyOpener })).code, 'HOSTED_STUDIO_SESSION_ONLY');
     const status = await runServiceCenter(['session-status', '--host', TENANT], { locate: async () => null });
     assert.equal(status.vault, 'not used in hosted mode');
-    // The hidden window signs in with the customer's own vault entry: no check of the server's vault first.
-    const signedIn = await hiddenSignIn({ web: async () => ({ signedIn: true, submitted: true }) }, TENANT, { present: spyPresent, opener: spyOpener });
+    // 24th release: the compatibility sign-in goes through the headless session of the customer's Studio (sc_http,
+    // capability sc_http:studioSession), never a vault entry or a window; a bridge without it is refused, nothing sent.
+    const sent = [];
+    const signedIn = await hiddenSignIn({ capabilities: async () => new Set(['sc_http:studioSession']),
+      web: async (...args) => { sent.push(args); return { signedIn: true, submitted: true }; } }, TENANT);
     assert.equal(signedIn.signedIn, true);
-    await assert.rejects(hiddenSignIn({ web: async () => { throw new BridgeError('SECRET_NOT_FOUND', 'no entry'); } }, TENANT, { present: spyPresent, opener: spyOpener }),
-      e => e.code === 'HOSTED_PROMPT_UNAVAILABLE');
+    assert.deepEqual(sent, [[TENANT, 'login', { studioSession: true }]]);
+    await assert.rejects(hiddenSignIn({ capabilities: async () => new Set(), web: async () => { throw new BridgeError('SECRET_NOT_FOUND', 'no entry'); } }, TENANT),
+      e => e.code === 'HEADLESS_AUTH_UNAVAILABLE');
   });
   assert.deepEqual(present, [], 'the server vault is never asked'); assert.deepEqual(opened, [], 'no prompt opens');
   assert.deepEqual(spawned, [], 'no PowerShell vault read'); assert.deepEqual(connections, []);

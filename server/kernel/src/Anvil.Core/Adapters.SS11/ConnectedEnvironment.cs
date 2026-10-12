@@ -38,14 +38,38 @@ public sealed class ConnectedEnvironment : IDisposable
     public static readonly IReadOnlySet<string> WriteOperations = new HashSet<string>(StringComparer.Ordinal) {
         "application-save", "module-associate", "application-delete", "module-delete", "publish-start", EnvironmentData.WriteOperation };
 
+    /// <summary>The last operation submitted on this lease and when (UTC): a call the Studio's own client cut is named by
+    /// them (EnvironmentCut), so the answer says which environment call was cut and after how long.</summary>
+    public string? LastOperation { get; private set; }
+    public DateTime? LastOperationStartedUtc { get; private set; }
+
+    private readonly List<string> _repeated = [];
+    /// <summary>The reads this lease asked a second time after a network failure (EnvironmentNetwork), in order.</summary>
+    public IReadOnlyList<string> RepeatedReads => _repeated;
+
     public T Call<T>(string operation, object? arguments = null)
     {
         if (ReadOnly && WriteOperations.Contains(operation))
             throw new InvalidOperationException($"read-only environment {Host}: '{operation}' refused before reaching the Studio");
-        var request = new JsonObject { ["operation"] = operation, ["lease"] = _lease,
-            ["arguments"] = JsonSerializer.SerializeToNode(arguments, Wire) };
-        // No replay: losing the response to a write has an unknown outcome.
-        var response = _bridge.Call("environment_session", request);
+        // A fresh request each time: a JSON node sent once already belongs to the envelope of that call. Each attempt names
+        // the operation and its start (prazos B: a call the Studio's own client cut is named by them, EnvironmentCut).
+        JsonObject Request() { LastOperation = operation; LastOperationStartedUtc = DateTime.UtcNow;
+            return new() { ["operation"] = operation, ["lease"] = _lease, ["arguments"] = JsonSerializer.SerializeToNode(arguments, Wire) }; }
+        JsonObject response;
+        // The ONE retry policy of an environment call (servidor/fase4-24: ENVIRONMENT_CALL_CUT and ENVIRONMENT_UNREACHABLE
+        // share it): no replay of a write, since losing the response to a write has an unknown outcome; a read that failed on
+        // the network between the Studio and the environment is asked once more (EnvironmentNetwork.MayRepeat; never a
+        // timeout of the Studio's own client, which would only wait as long again); one that still fails is
+        // ENVIRONMENT_UNREACHABLE, which a delivery's capture names as ENVIRONMENT_CALL_CUT (EnvironmentCut) with repeated.
+        try { response = _bridge.Call("environment_session", Request()); }
+        catch (BridgeCallException first) when (!WriteOperations.Contains(operation) && EnvironmentNetwork.IsUnreachable(first.Message))
+        {
+            if (!EnvironmentNetwork.MayRepeat(operation, first.Message)) throw new EnvironmentUnreachableException(operation, Host, first.Message, repeated: false);
+            _repeated.Add(operation);
+            try { response = _bridge.Call("environment_session", Request()); }
+            catch (BridgeCallException second) when (EnvironmentNetwork.IsUnreachable(second.Message))
+            { throw new EnvironmentUnreachableException(operation, Host, second.Message, repeated: true); }
+        }
         return response["value"].Deserialize<T>(Wire)!;
     }
 

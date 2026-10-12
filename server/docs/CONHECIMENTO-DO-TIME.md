@@ -26,11 +26,14 @@ Codex ou outro) e para qualquer pessoa do time. Leia antes de gerar ou alterar m
 - **Sem execuções longas.** Nada de fluxos de horas ou de suítes completas repetidas sem necessidade. Prefira o menor
   teste que responde a pergunta e diga antes quanto tempo ele leva.
 
-### Jobs em arquivo: ferramenta Write em UTF-8
+### Jobs em arquivo (local) e inline (hospedado)
 
-Um job grande vai num arquivo gravado com a ferramenta Write, em UTF-8, e a chamada passa o caminho do arquivo.
-- Local: o caminho absoluto do arquivo.
-- Hospedado: o inbox do agente. Grave em `<pasta do agente>\inbox\<nome>.json` e passe `agent:inbox/<nome>.json`.
+- Local: um job grande vai num arquivo gravado com a ferramenta Write, em UTF-8, e a chamada passa o caminho absoluto.
+- Hospedado: o próprio job vai inline no argumento `job`, em JSON compacto (sem indentação), mesmo grande. A chamada vai
+  direto ao servidor (até 16 MiB). Um job no inbox custa mais uma subida pelo agente: 26,9 s para 60 KB no teste de
+  produção de 2026-10-11, e 57% dos bytes eram espaços da indentação. Correção: `patch` + `basedOn` (o `nextBasedOn`).
+- O inbox do agente (`<pasta do agente>\inbox\<nome>`, passado como `agent:inbox/<nome>`) fica para arquivos do usuário:
+  OML, imagens, assets. Um job que já está lá (`agent:inbox/<nome>.json`) ainda funciona.
 - Nunca gere o JSON com heredoc, `echo` ou script: o encoding e as aspas quebram.
 
 ### Subagentes: carregar as ferramentas SSAM primeiro

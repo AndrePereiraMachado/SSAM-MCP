@@ -12,6 +12,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
 import { discover } from '../discovery.mjs';
+import * as discoveryModule from '../discovery.mjs'; // answerCeiling: at the base the baseline test fails on its rule, not at import
 import { discoverAll, routeTools, loadToolRoutes, toolGroups, TOOLS_FILE, modelMatchesOf, withOperationalTitles, lex } from '../tool-routing.mjs';
 import { snapshotSources, resultsSnapshot } from './fixtures/discovery-results.mjs';
 
@@ -22,6 +23,15 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const laneSourcesOf = {}; const laneSources = lane => (laneSourcesOf[lane] ??= snapshotSources(lane));
 const fixture = name => JSON.parse(fs.readFileSync(path.join(here, 'fixtures', name), 'utf8'));
 const data = loadToolRoutes().data;
+
+test('integration logging inspection routes to the read even with an explicit no-change clause', () => {
+  for (const intent of ['consultar o nível de log da integração sem alterar', 'read integration logging level without changing it']) {
+    const first=routeTools({lane:'o11',intent}).tools[0];
+    assert.equal(first.tool,'o11_service_center_read');assert.equal(first.verb,'integration-detail');
+  }
+  const write=routeTools({lane:'o11',intent:'mudar o nível de log da integração para Full'}).tools[0];
+  assert.equal(write.tool,'o11_service_center_write');assert.equal(write.verb,'integration-log-level');
+});
 const norm = s => String(s).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9_]+/g, ' ').trim();
 const label = x => (x.tool ?? 'gap:' + x.gap) + (x.verb ? '.' + x.verb : '') + (x.otherLane ? '*' : '');
 const verbOf = (tool, verb) => { const v = data.tools[tool]?.verbs?.[verb]; return v ? { field: v.field, value: v.value } : null; };
@@ -133,26 +143,44 @@ test('discoverAll keeps the model answers of the baseline (matches identical, mo
     const snapshot = fs.readdirSync(resultsSnapshot().dirs[lane]).filter(f => fs.existsSync(path.join(laneSources(lane).jobsDir, f.replace(/\.result\.json$/, '.json'))));
     assert.ok(snapshot.length > 0 && warm.identity.jobs.results === snapshot.length, `${lane}: the index reads the ${snapshot.length} snapshot results (${warm.identity.jobs.results})`);
   }
-  let floored = 0;
+  let floored = 0; let raisedProbes = 0;
+  // The entry as MCP and the CLI call it: its answer ceiling raises a budget below the minimal answer to it (discovery.mjs
+  // atEntry, 2026-10-11); the baseline answered 'insufficient' there, with the direct matches by id.
+  const ceilingBytes = discoveryModule.answerCeiling?.() ?? null;
   for (const i of base.intents) for (const [lane, byBudget] of Object.entries(i.byLane)) for (const [budget, expected] of Object.entries(byBudget)) {
     probes++;
     const input = { lane, intent: i.intent, budgetBytes: Number(budget), sources: laneSources(lane) };
     const answer = await discoverAll(input);
     const matches = (answer.matches ?? []).map(m => `${m.id}:${m.via}`);
-    // A screen intent whose model part would leave no room for the OutSystems UI counts is budgeted with that floor less
-    // (2026-10-05, C07), and says so (size.reserved): its matches are the model answer at the budget minus the floor.
-    const reserved = answer.size?.reserved?.outsystemsUi ?? 0;
-    const want = reserved ? ((await discover({ ...input, budgetBytes: Number(budget) - reserved, outsystemsUi: false })).matches ?? []).map(m => `${m.id}:${m.via}`) : expected;
-    if (reserved) floored++;
-    if (!isDeepStrictEqual(matches, want)) diffs.push(`${lane} ${budget} ${i.id}: ${matches.join(',')} != ${want.join(',')}${reserved ? ` (floor ${reserved})` : ''}`);
+    const raised = answer.inputAdjusted?.find(a => a.path === '/budgetBytes');
+    if (raised) {
+      // Raised to the minimal answer: the direct matches the insufficient answer listed, in the same order (the dependencies
+      // that answer drops come along). A model part that fit the budget but left a section of its request no room even for
+      // its note (discovery.mjs atEntry, sections) is the one that budget gave: the matches of the baseline.
+      raisedProbes++;
+      const direct = matches.filter(m => m.endsWith(':match'));
+      const got = expected.every(m => m.endsWith(':match')) ? direct : matches;
+      if (raised.rule !== 'raise-to-minimal' || !isDeepStrictEqual(got, expected)) diffs.push(`${lane} ${budget} ${i.id}: raised (${JSON.stringify(raised)}) ${got.join(',')} != ${expected.join(',')}`);
+    } else {
+      // A screen intent whose model part would leave no room for the OutSystems UI counts is budgeted with that floor less
+      // (2026-10-05, C07), and says so (size.reserved): its matches are the model answer at the budget minus the floor. At
+      // the entry the same for the floor of every section of the request (size.reserved.sections, 2026-10-11).
+      const reserved = (answer.size?.reserved?.outsystemsUi ?? 0) + (answer.size?.reserved?.sections ?? 0);
+      const want = reserved ? ((await discover({ ...input, budgetBytes: Number(budget) - reserved, outsystemsUi: false })).matches ?? []).map(m => `${m.id}:${m.via}`) : expected;
+      if (reserved) floored++;
+      if (!isDeepStrictEqual(matches, want)) diffs.push(`${lane} ${budget} ${i.id}: ${matches.join(',')} != ${want.join(',')}${reserved ? ` (floor ${reserved})` : ''}`);
+    }
     if (i.tools === 'none' && budget === '12000') {
       // With a direct model match, operational capabilities are shown with their operationalTitles title (titles only).
-      const raw = await discover(input); const plain = modelMatchesOf(raw).length ? withOperationalTitles(raw) : raw;
+      // discover() at the same entry (its answer ceiling) is the answer itself.
+      const raw = await discover({ ...input, ceilingBytes }); const plain = modelMatchesOf(raw).length ? withOperationalTitles(raw) : raw;
       assert.equal('tools' in answer, false, `${lane} ${i.id}: no tools key on a model-only answer`);
-      if (isDeepStrictEqual(stable(answer), stable(plain))) identical++; else diffs.push(`${lane} ${i.id}: answer differs from discover()`);
+      // A raised budget is a measured minimal, and the answer measured holds elapsedMs: its digits move it by a byte.
+      const settled = a => stable(raised ? { ...a, inputAdjusted: a.inputAdjusted?.map(x => ({ ...x, to: 0 })), size: { ...a.size, budgetBytes: 0, budgetAdjusted: { ...a.size?.budgetAdjusted, to: 0 } } } : a);
+      if (isDeepStrictEqual(settled(answer), settled(plain))) identical++; else diffs.push(`${lane} ${i.id}: answer differs from discover()`);
     }
   }
-  t.diagnostic(`${probes} probes compared with the baseline; ${identical} model-only answers deep-equal to discover(); ${floored} under the OutSystems UI floor`);
+  t.diagnostic(`${probes} probes compared with the baseline at the entry; ${raisedProbes} raised to the minimal answer; ${identical} model-only answers deep-equal to discover(); ${floored} under the floor of their sections (OutSystems UI, C07)`);
   assert.deepEqual(diffs, []);
 });
 
@@ -313,7 +341,12 @@ test('the model rule: a model step gets no write tool and no "not a model change
     else if (/not a model change/i.test(JSON.stringify(a))) leaks.push(`${lane} "${intent}": the answer says "not a model change"`);
     if (a.tools?.length) {
       withTools++;
-      const plain = await discover(input);
+      // A budget below the minimal answer is raised at the entry (raise-to-minimal, f53ba1f2) and the answer declares it
+      // in inputAdjusted: the model part is discover()'s own at that declared budget, never the 'insufficient' answer of
+      // the budget the caller gave (12000 drops the deliver.job dependency of "create a REST API method ...").
+      const raised = (a.inputAdjusted ?? []).find(x => x.path === '/budgetBytes');
+      if (raised) assert.ok(raised.from === input.budgetBytes && raised.rule === 'raise-to-minimal' && raised.to > input.budgetBytes, `${lane} "${intent}": ${JSON.stringify(raised)}`);
+      const plain = await discover({ ...input, budgetBytes: raised?.to ?? input.budgetBytes });
       assert.deepEqual((a.matches ?? []).map(m => m.id + ':' + m.via), (plain.matches ?? []).map(m => m.id + ':' + m.via), `${lane} "${intent}": the model part is discover()'s`);
       assert.ok(!(a.size?.truncated ?? []).some(x => x.section === 'model'), `${lane} "${intent}": the model part is never cut`);
     }
@@ -396,16 +429,56 @@ test('debugger routes promise only what exists, and the flow node is read before
   assert.ok(!toks('nós precisamos publicar no módulo').includes('node'));
 });
 
-test('an empty intent lists every tool of the lane by group, and keeps ok:false', async () => {
-  const answer = await discoverAll({ lane: 'o11', intent: '', sources: laneSources('o11') });
-  assert.equal(answer.ok, false);
+test('catalog:true lists every tool of the lane by group, with the model catalog and without the index identity', async () => {
+  const answer = await discoverAll({ lane: 'o11', intent: '', catalog: true, sources: laneSources('o11') });
+  assert.equal(answer.ok, true); assert.equal(answer.catalog, true);
   assert.ok(answer.categories?.length && answer.capabilities?.length, 'the model catalog is still listed');
   const listed = answer.toolGroups.flatMap(g => g.tools.map(x => x.tool));
   assert.ok(listed.includes('o11_studio') && listed.includes('ssam_discover') && !listed.includes('studio_open'));
   assert.ok(answer.toolGroups.find(g => g.tools.some(x => x.tool === 'o11_studio')).tools.find(x => x.tool === 'o11_studio').verbs.includes('open-module'));
   const { otherLaneTools } = toolGroups('o11');
   assert.equal(answer.otherLaneTools, otherLaneTools);
-  assert.match(answer.error, /toolGroups every SSAM tool of this lane/);
+  assert.equal(answer.identity, undefined, 'the index identity is the expand answers\' business');
+  assert.match(answer.next, /with an intent/);
+});
+
+// 2026-10-12 (production test): a call that only lacked its intent got the whole catalog, 11.6 KB, as an error. Now it
+// answers with the exact shape of the call, under 1 KB, without reading the index; the app it named stays in the
+// continuation, and the catalog is one named call away.
+test('an empty intent answers the exact shape of the call in under 1 KB, without the index', async () => {
+  let ran = 0;
+  const counting = async () => { ran++; return { ok: true }; };
+  for (const lane of ['o11', 'odc']) {
+    const answer = await discoverAll({ lane, intent: '', app: 'Vendas_CS', packet: true }, { discover: counting });
+    assert.equal(answer.ok, false); assert.equal(answer.code, 'INTENT_REQUIRED'); assert.equal(answer.lane, lane);
+    assert.ok(Buffer.byteLength(JSON.stringify(answer), 'utf8') < 1024, String(Buffer.byteLength(JSON.stringify(answer), 'utf8')));
+    assert.equal(answer.shape.intent, '<what to do, in words>');
+    assert.deepEqual(answer.continuation.arguments, { lane, intent: '<what to do, in words>', app: 'Vendas_CS', packet: true });
+    assert.deepEqual(answer.catalog.arguments, { lane, catalog: true });
+  }
+  const bare = await discoverAll({ lane: 'o11', intent: '   ' }, { discover: counting });
+  assert.deepEqual(bare.continuation.arguments, { lane: 'o11', intent: '<what to do, in words>' });
+  assert.equal(ran, 0, 'nothing was read for a call without intent');
+  // expand without intent still answers its expansions (the discover runs).
+  await discoverAll({ lane: 'o11', intent: '', expand: 'logic.flow:contract' }, { discover: counting });
+  assert.equal(ran, 1);
+});
+
+test('the MCP answer of an empty intent stays under 1 KB on the wire text', async () => {
+  const { createFacadeServer } = await import('../mcp.mjs');
+  const server = await createFacadeServer();
+  const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: 'discover-tools-empty', version: '1.0.0' });
+  await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
+  try {
+    const reply = await client.callTool({ name: 'ssam_discover', arguments: { lane: 'o11', app: 'FolhaPonto_CS' } });
+    assert.equal(reply.isError, true);
+    const text = reply.content[0].text;
+    assert.ok(Buffer.byteLength(text, 'utf8') < 1024, String(Buffer.byteLength(text, 'utf8')));
+    assert.equal(JSON.parse(text).code, 'INTENT_REQUIRED');
+    const tool = (await client.listTools()).tools.find(t => t.name === 'ssam_discover');
+    assert.equal(tool.inputSchema.properties.catalog.type, 'boolean');
+  } finally { await client.close(); await server.close(); }
 });
 
 test('the index or the tool data failing does not break the other half', async () => {
@@ -424,8 +497,13 @@ test('tools fit the byte budget around the model part (4096, 12000, 40960)', asy
     for (const budgetBytes of [4096, 12000, 40960]) {
       const a = await discoverAll({ lane, intent, budgetBytes, sources: laneSources(lane) });
       assert.ok(a.tools?.length, `${lane} ${budgetBytes} ${intent}: tools present`);
-      assert.equal(a.size.budgetBytes, budgetBytes);
-      assert.ok(Buffer.byteLength(JSON.stringify(a), 'utf8') <= budgetBytes, `${lane} ${budgetBytes} ${intent}: within budget`);
+      // A model part kept beside the tools (a mixed request) below its minimal answer is raised to it, with the room of
+      // the tools, under the answer ceiling, and the answer says so (discovery.mjs atEntry, 2026-10-11).
+      const raised = a.inputAdjusted?.find(x => x.path === '/budgetBytes');
+      if (raised) assert.ok(raised.from === budgetBytes && raised.rule === 'raise-to-minimal' && raised.to > budgetBytes && raised.to <= 38912, JSON.stringify(raised));
+      const B = raised?.to ?? budgetBytes;
+      assert.equal(a.size.budgetBytes, B);
+      assert.ok(Buffer.byteLength(JSON.stringify(a), 'utf8') <= B, `${lane} ${budgetBytes} ${intent}: within budget`);
       assert.equal(a.size.bytes, Buffer.byteLength(JSON.stringify(a), 'utf8'), 'size.bytes measures the returned answer');
     }
 });

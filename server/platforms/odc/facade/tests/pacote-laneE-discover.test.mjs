@@ -25,7 +25,7 @@ test('step words of an action intent name the logic steps; values answer the clo
   assert.deepEqual(stepKindsOf('server action que percorre os pedidos com for each e salva o registro'), ['foreach', 'save']);
   assert.deepEqual(stepKindsOf('criar uma tela com if'), [], 'no action word: not a logic intent');
   const o11 = valuesFor('o11', 'criar timer que roda a cada hora');
-  assert.deepEqual(o11.find(v => v.property === 'Schedule').set, ['Every 60 minutes', 'Every day at 00:00', 'Every Monday at 00:05']);
+  assert.deepEqual(o11.find(v => v.property === 'Schedule').set, ['00:00 01:00 02:00 03:00 04:00 05:00 06:00 07:00 08:00 09:00 10:00 11:00 12:00 13:00 14:00 15:00 16:00 17:00 18:00 19:00 20:00 21:00 22:00 23:00', '00:00', '00:05 Mon']);
   assert.equal(valuesFor('odc', 'criar timer que roda a cada hora').find(v => v.property === 'CronSchedule').set[0], '0 * * * *');
   assert.equal(valuesFor('odc', 'criar timer que roda a cada hora').some(v => v.property === 'Schedule'), false, 'the O11 text is never offered on ODC');
   const input = valuesFor('odc', 'qual o tipo do input de senha');
@@ -87,6 +87,30 @@ test('the dropdown, block instance and list routes carry the fragment form the h
   assert.match(event, /@Event="ScreenAction" on <Block name="B">/);
 });
 
+// UI-Mockup 2026-10-10 (FarmaVirtual, call 49 read the ui.dropdown route, call 99 refused 18 Verify errors): the Values and
+// Labels of a Dropdown are evaluated per element of its List, so `<List>.Current.X` is unknown there (the kernel refuses it
+// as DROPDOWN_ITEM_SCOPE). No catalog text may teach that form: every <select> fragment reads the element's attributes.
+test('no catalog <select> reads the Current of its options in value or label; the dropdown route reads Item.Id', () => {
+  const files = fs.readdirSync(path.join(facade, 'catalog', 'fragments'), { recursive: true }).filter(f => String(f).endsWith('.json')).map(f => path.join('catalog', 'fragments', String(f)));
+  const offenders = [];
+  for (const f of files) {
+    const text = fs.readFileSync(path.join(facade, f), 'utf8');
+    JSON.stringify(JSON.parse(text.replace(/^﻿/, '')), (k, v) => {
+      if (typeof v !== 'string') return v;
+      for (const [tag] of v.matchAll(/<select\b[^>]*>/g)) {
+        const attrs = Object.fromEntries([...tag.matchAll(/([\w:-]+)=\\?["']([^"'\\]*)\\?["']/g)].map(m => [m[1], m[2]]));
+        const list = (attrs.options ?? '').trim();
+        if (list && ['value', 'label'].some(a => (attrs[a] ?? '').replace(/\s+/g, '').includes(list.replace(/\s+/g, '') + '.Current'))) offenders.push(`${f}: ${tag}`);
+      }
+      return v;
+    });
+  }
+  assert.deepEqual(offenders, []);
+  const dropdown = JSON.parse(fs.readFileSync(path.join(facade, 'catalog', 'fragments', 'B', 'widgets.json'), 'utf8')).capabilities.find(c => c.id === 'ui.dropdown');
+  assert.match(dropdown.route.operation, /options=\\"GetItems\.List\\" value=\\"Item\.Id\\" label=\\"Item\.Label\\"/);
+  assert.doesNotMatch(dropdown.route.operation + dropdown.summary, /\.Current\./);
+});
+
 test('o11: a timer that runs every hour answers the O11 Schedule with the whole proven job (C07)', { skip: cliSkip('o11'), timeout: 900000 }, async () => {
   const a = await discover({ lane: 'o11', intent: 'criar timer que roda a cada hora', sources: sourcesOf('o11') });
   assert.equal(a.ok, true);
@@ -94,11 +118,11 @@ test('o11: a timer that runs every hour answers the O11 Schedule with the whole 
   assert.equal(a.provenExample.job, 'pacote-laneE-timer-schedule');
   assert.equal(a.provenExample.whole, true);
   const schedules = a.provenExample.ops.filter(op => op.op === 'set' && op.prop === 'Schedule').map(op => op.value);
-  assert.deepEqual(schedules, ['Every 60 minutes', 'Every day at 00:00', 'Every Monday at 00:05']);
+  assert.deepEqual(schedules, ['00:00 01:00 02:00 03:00 04:00 05:00 06:00 07:00 08:00 09:00 10:00 11:00 12:00 13:00 14:00 15:00 16:00 17:00 18:00 19:00 20:00 21:00 22:00 23:00', '00:00', '00:05 Mon']);
   assert.deepEqual(a.provenExample.reference, { tool: 'ssam_reference', arguments: { lane: 'o11', kind: 'example', query: { id: 'pacote-laneE-timer-schedule' } } });
-  assert.ok(a.values.some(v => v.property === 'Schedule' && v.set.includes('Every 60 minutes')));
+  assert.ok(a.values.some(v => v.property === 'Schedule' && v.set.includes('00:00 01:00 02:00 03:00 04:00 05:00 06:00 07:00 08:00 09:00 10:00 11:00 12:00 13:00 14:00 15:00 16:00 17:00 18:00 19:00 20:00 21:00 22:00 23:00')));
   const route = a.matches.find(m => m.id === 'timer.schedule').route?.operation ?? '';
-  assert.match(route, /O11: set Schedule "Every 60 minutes"/);
+  assert.match(route, /O11: set Schedule "00:00 01:00 02:00 03:00 04:00 05:00 06:00 07:00 08:00 09:00 10:00 11:00 12:00 13:00 14:00 15:00 16:00 17:00 18:00 19:00 20:00 21:00 22:00 23:00"/);
   assert.ok(a.size.bytes <= a.size.budgetBytes);
 });
 

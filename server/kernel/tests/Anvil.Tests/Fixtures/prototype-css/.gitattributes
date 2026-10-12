@@ -1,0 +1,2 @@
+# Byte-exact fixtures: the tests check sha256 and offsets, so no line-ending conversion on checkout.
+* -text

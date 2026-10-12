@@ -130,6 +130,18 @@ const connectLane = (tool, input) => {
   return step('ssam_connect', lane ? { lane } : {}, 'conecta o Studio já aberto da faixa, sem salvar, publicar nem reiniciar; depois repita o doctor');
 };
 const attach = (tool, input, value, lane) => (lane === 'odc' ? step('studio_attach', withPid({}, input), 'a bridge do ODC Studio não está anexada; anexe e repita a chamada') : null);
+// G11 (FarmaVirtual 2026-10-10, call 131): an @key the reader did not resolve; the map of the same capture (pinned by its
+// hash) says what the key is and lists what lives under it. The map's own refusal already says it, so nothing for ssam_map.
+function keyMap(tool, input, value) {
+  if (tool !== 'o11_inspect' && tool !== 'studio_inspect') return null;
+  const text = typeof value.error === 'string' ? value.error : value.error?.message ?? '';
+  const key = /key in this (?:snapshot|capture): (@\S+)/.exec(text)?.[1] ?? (str(input.path) && /^@[^/]+$/.test(input.path) ? input.path : null);
+  const file = tool === 'o11_inspect' ? input.oml ?? value.capture?.oml ?? value.file : input.target ?? value.file;
+  const sha = input.expectedSourceSha256 ?? value.capture?.sha256;
+  if (!key || !str(file) || !/\.oml$/i.test(file)) return null;
+  return step('ssam_map', { lane: tool === 'o11_inspect' ? 'o11' : 'odc', target: file, parent: key, ...(SHA.test(sha ?? '') ? { expectedSourceSha256: sha } : {}) },
+    'a chave não resolveu neste leitor; o mapa da mesma captura diz o que ela é e lista o que fica sob ela');
+}
 
 const BY_CODE = new Map([
   ...['O11_NOT_CONNECTED', 'O11_NOT_SELECTED', 'O11_STUDIO_CHANGED', 'O11_NOT_AUTHORIZED', 'STUDIO_NOT_SELECTED',
@@ -141,6 +153,7 @@ const BY_CODE = new Map([
   ['DISCOVERY_INDEX_INVALID', () => DOCTOR_ALL],
   ['DOCTOR_LANE_UNUSABLE', connectLane],
   ['BRIDGE_NOT_ATTACHED', attach],
+  ['KEY_UNRESOLVED', keyMap],
 ]);
 
 // ODC Studio gates carry no code: base_drift (the open module changed) and studio_busy (a dialog or a command holds it).
@@ -153,6 +166,9 @@ function byGate(tool, input, value, lane) {
   // (evidence is never overwritten), so the repeated delivery takes a new one.
   if (value.gate === 'base_drift' && tool === 'studio_deliver' && str(input.module) && input.job != null && !isObject(input.patch)) {
     const { output: _claimed, ...again } = input;
+    // fase4-24: an inline job is never echoed back (a large job doubled the answer): the same delivery names the job file
+    // the proxy wrote for it (nextBasedOn.job), which holds the same job.
+    if (typeof again.job !== 'string' && str(value.nextBasedOn?.job)) again.job = value.nextBasedOn.job;
     return step('studio_deliver', again, 'o módulo mudou no Studio entre a captura e o merge; nada foi mesclado: a mesma entrega captura o módulo como está agora e refaz o build');
   }
   if (value.gate === 'studio_busy') return step('studio_status', withPid({}, input), 'veja os diálogos com escolha e o comando em curso; não repita antes');
@@ -208,6 +224,21 @@ function publishOnly(tool, input, value) {
     if (code === 'PUBLISH_FAILED' && str(value.manifest)) return step('studio_publish', withPid({ manifest: value.manifest, wait: true }, input), 'a entrega está feita; corrija o que as mensagens da publicação apontam e publique de novo (nunca repita a entrega)');
   }
   return null;
+}
+
+// ---- the screens of a prototype import (docs/PROTOTIPO-NATIVO.md 1.4): each screen of report.prototype with its link,
+// so the answer that delivered them already carries what the person opens. Pure; a link is URL construction only (it never
+// proves the publication). appUrl: the delivery's appLinks.appUrl (ODC), else https://<host>/<Module>/ (O11 Reactive).
+export function prototypeAppUrl({ lane, host = null, module = null, appLinks = null } = {}) {
+  if (isObject(appLinks) && str(appLinks.appUrl)) return appLinks.appUrl.endsWith('/') ? appLinks.appUrl : appLinks.appUrl + '/';
+  if (lane !== 'o11' || !str(host) || !str(module) || /[\s/\\]/.test(module)) return null;
+  const origin = /^https?:\/\//i.test(host) ? host.replace(/\/+$/, '') : 'https://' + host.replace(/\/+$/, '');
+  return origin + '/' + encodeURIComponent(module) + '/';
+}
+// {<screen name>: url} for the screens of a receipt; empty without an app URL. The default screen also opens at the app URL.
+export function prototypeScreenLinks(receipt, appUrl) {
+  if (!str(appUrl) || !Array.isArray(receipt?.screens)) return {};
+  return Object.fromEntries(receipt.screens.filter(s => isObject(s) && str(s.name)).map(s => [s.name, appUrl + encodeURIComponent(s.name)]));
 }
 
 // The answer with `next` (success) or `continuation` (refusal) added when one is obvious; otherwise the same object.

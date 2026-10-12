@@ -459,7 +459,7 @@
         "o11": {
           "proofs": [
             "logic-spec-services", "flow-layout-decisions", "delete-data-consumers", "smoke-data-logic", "refactor-move", "rename-logic-propagation",
-            "refactor-usages", "rename-data-propagation", "screen-form-reactive", "email-digest-foreach-traditional", "tickets-02-helpers", "cat-a-reset-typed-values"
+            "refactor-usages", "rename-data-propagation", "screen-form-reactive", "email-digest-foreach-traditional", "single-job-actions", "cat-a-reset-typed-values"
           ],
           "negative": [],
           "context": { "kinds": ["ServerAction", "ClientAction", "ServiceAction", "MobileScreen", "DataAction"], "signatures": ["ServerAction", "ClientAction"] },

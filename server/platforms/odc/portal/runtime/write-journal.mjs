@@ -25,33 +25,54 @@ export class WriteJournal {
     if (typeof operationUuid !== 'string' || !UUID.test(operationUuid)) fail('INPUT_INVALID', 'operationUuid must be a UUID.');
     return path.join(this.dir, operationUuid.toLowerCase() + '.json');
   }
-  lockFile(identity) { const { kind, ...target } = identity; return path.join(this.dir, fingerprint(target) + '.lock'); }
+  lockFile(identity) {
+    const {kind,...target}=identity;
+    // Both native transports prepare the same binary setting. A flag change
+    // cannot bypass an uncertain upload by choosing the other action.
+    if(target.operationId==='mobileExtensibility.convertFile')target.operationId='mobileExtensibility.uploadFile';
+    return path.join(this.dir,fingerprint(target)+'.lock');
+  }
 
   // An existing receipt is the answer to a repeated operationUuid; the same UUID for another target is refused.
-  lookup(operationUuid, identity) {
+  lookup(operationUuid, identity, requestSha256) {
     const file = this.file(operationUuid);
     if (!fs.existsSync(file)) return null;
     const receipt = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (identity && fingerprint(receipt.identity) !== fingerprint(identity)) fail('OPERATION_UUID_REUSED', 'This operationUuid already belongs to another target or operation; use a new UUID.');
+    if (requestSha256 && receipt.requestSha256 && receipt.requestSha256 !== requestSha256)
+      fail('OPERATION_UUID_REUSED', 'This operationUuid already belongs to a different request; read its receipt instead of sending again.');
+    // Relocated journals retain the original bytes as evidence. Reads point to
+    // the actual local receipt instead of sending callers back to an old checkout.
+    receipt.receipt = file;
     if (receipt.state === 'sending') receipt.state = 'uncertain';
     return receipt;
   }
 
-  reserve({ operationUuid, identity, wordsSha256, plan }) {
+  reserve({ operationUuid, identity, wordsSha256, plan, reconciliation, requestSha256, once = false }) {
     fs.mkdirSync(this.dir, { recursive: true });
     const file = this.file(operationUuid), lock = this.lockFile(identity);
-    let fd;
+    let fd, claimed=false;
     try { fd = fs.openSync(lock, 'wx'); }
     catch { fail('TARGET_PENDING', 'This target has a pending or uncertain write; read its receipt and reconcile by a read before any new write.', { pendingOperationUuid: readLock(lock) }); }
     const receipt = { schema: 'ssam-odc-write/1', operationUuid: operationUuid.toLowerCase(), identity,
-      authorization: { wordsSha256, planSha256: fingerprint(plan) }, state: 'sending', ok: false, createdAt: this.now(), receipt: file };
+      authorization: { wordsSha256, planSha256: fingerprint(plan), ...(plan?.authorizationContext ? {
+        contextSha256: plan.authorizationContext.sha256, proposalSha256: plan.authorizationContext.proposalSha256,
+        source: plan.authorizationContext.source } : {}) }, state: 'sending', ok: false, createdAt: this.now(), receipt: file,
+      ...(reconciliation ? { reconciliation } : {}), ...(requestSha256 ? { requestSha256 } : {}) };
     try {
+      // A bounded fixture run is one submission forever, including a lost
+      // response or rejection. A new UUID cannot bypass this durable claim.
+      if(once){
+        try{const claim=fs.openSync(lock+'.once','wx');fs.writeSync(claim,operationUuid);fs.fsyncSync(claim);fs.closeSync(claim);claimed=true;}
+        catch(error){if(error.code==='EEXIST')fail('ONE_SHOT_ALREADY_RESERVED','This target already reserved its single submission. Inspect the original receipt; never resend.');throw error;}
+      }
       fs.writeSync(fd, receipt.operationUuid); fs.fsyncSync(fd); fs.closeSync(fd); fd = null;
       // 'wx': not even a concurrent caller with the same UUID can send twice.
       const out = fs.openSync(file, 'wx'); fs.writeSync(out, JSON.stringify(receipt, null, 2)); fs.fsyncSync(out); fs.closeSync(out);
     } catch (error) {
       if (fd != null) fs.closeSync(fd);
       fs.rmSync(lock, { force: true });
+      if(claimed)fs.rmSync(lock+'.once',{force:true});
       if (error.code === 'EEXIST') fail('OPERATION_UUID_REUSED', 'This operationUuid was already used; read its receipt instead of sending again.');
       throw error;
     }

@@ -99,6 +99,15 @@ node C:\SSAM-Agent\agent\ssam-agent.mjs doctor
   mesma chamada depois desse tempo. Não é preciso reiniciar nada. Só `AGENT_NOT_CONNECTED` pede para iniciar o agente.
 - Desde o agente 0.2.0: um envio de mensagens desiste em 10 s (mais 1 s a cada 64 KiB) e vai de novo; o pong vai num envio
   próprio; um stream sem resposta em 15 s é refeito na hora. Um envio preso não derruba mais o canal.
+- Desde o agente 0.2.1: uma troca de rede ou de IP (Wi-Fi, 4G, VPN) no meio de uma tarefa atrasa uma parte de arquivo
+  em cerca de 11 s (antes, de 20 a 50 s). Cada parte tem prazo próprio (10 s, mais 1 s a cada 64 KiB) e, sem resposta,
+  vai de novo numa conexão nova; conexões paradas há mais de 2 s não são reaproveitadas; uma conexão morta cai em cerca
+  de 15 s. Cada nova tentativa aparece em `private\agent.log` como `blob-retry`.
+- Desde o agente 0.3.0 (pacote com a bridge ODC `v96`): o Service Center pela sessão do Studio (`sc_http`) e a lista de
+  produtores de um módulo ODC (`reference-producers`). Com um pacote mais velho, essas ferramentas respondem
+  `STUDIO_BRIDGE_OUTDATED` ou `COMMAND_NOT_ALLOWED`: peça o pacote novo ao dono.
+- O agente 0.3.1 (pacote do 24º) junta os dois e responde ao teste de rede do `ssam_doctor {network:true}` (envios
+  descartáveis em conexões novas; nada da máquina é lido nem gravado).
 - Em primeiro plano, para ver erros na tela:
   `node --use-env-proxy --use-system-ca C:\SSAM-Agent\agent\ssam-agent.mjs run --root C:\SSAM-Agent`.
 - O `doctor` confere as opções do Node, a pasta, a integridade do pacote (`pack.json`), a configuração, a credencial
@@ -141,15 +150,19 @@ script ou caminho de DLL.
 
 - Comandos ODC aceitos: `status`, `wait`, `authorize`, `open`, `snapshot`, `latest`, `check-base`, `preview`, `merge`,
   `publish`, `publish-status`, `publish-log`, `dismiss-dialog`, `close`, `module-info`, `assets`, `consumers`, `create`,
-  `create-app`, `templates`, `template-download`, `refresh-references`, `reference-snapshot`, `data`, `data-insert`,
-  `data-update`, `data-delete`, `portal-call`, `portal-session`, `auth-status`, `stop`, `query-test` (o teste nativo de
-  uma consulta SQL ou Aggregate, bridge ODC `v45`; a captura que ele lê também fica na pasta do agente).
-- Métodos O11 aceitos (os 22 da bridge fina): `ping`, `bridge_manifest`, `get_active_module`, `list_open_modules`,
+  `create-app`, `templates`, `template-download`, `refresh-references`, `reference-snapshot`, `reference-producers` (os
+  produtores que o módulo aberto pode referenciar; só lê, bridge ODC `v96`), `data`, `data-insert`, `data-update`,
+  `data-delete`, `portal-call`, `portal-session`, `auth-status`, `stop`, `query-test` (o teste nativo de uma consulta SQL
+  ou Aggregate, bridge ODC `v45`; a captura que ele lê também fica na pasta do agente).
+- Métodos O11 aceitos (os 23 da bridge fina): `ping`, `bridge_manifest`, `get_active_module`, `list_open_modules`,
   `get_errors`, `open_module`, `close_module`, `publish`, `windows`, `ui_alive`, `close_dialog`, `snapshot_module`,
-  `merge_from_oml`, `merge_status`, `environment_session`, `sc_api`, `sc_web`, `studio_login`, `sc_session`,
-  `publish_log`, `refresh_references` (o Refresh References do próprio Studio; o Ctrl+Z desfaz),
+  `merge_from_oml`, `merge_status`, `environment_session`, `sc_api`, `sc_web`, `sc_http` (o Service Center pela sessão
+  do próprio Studio, sem janela), `studio_login` (só responde que falta a sessão do Studio; nunca abre o diálogo de
+  login), `sc_session`, `publish_log`, `refresh_references` (o Refresh References do próprio Studio; o Ctrl+Z desfaz),
   `answer_dependencies_dialog` (responde Cancel ao diálogo "Incompatible or missing dependencies found"; depois o servidor
   pede o Refresh References).
+- Nunca passam pelo agente: o transporte privado do Service Center (`sc_private_http`) e os comandos privados do Portal
+  (`portal-private-*`). Eles usam um cofre e um pipe locais, que não atravessam máquinas.
 - A bridge O11 do pacote é a bridge FINA: só as operações primitivas do Studio (abrir e fechar módulo, capturar o
   módulo aberto, o merge nativo de um OML pronto, publicar, a sessão de ambiente, o Service Center, dados, diálogos).
   Ela não leva o kernel do SSAM: toda a lógica roda no servidor. O agente só fala com essa bridge; se o Service Studio
@@ -204,24 +217,35 @@ nunca são lidos nem gravados pelo servidor.
 ## Entregar um arquivo ao servidor
 
 Ponha o arquivo em `C:\SSAM-Agent\inbox\` e diga ao seu LLM o nome `agent:inbox/<arquivo>` (por exemplo
-`agent:inbox/Quotes.oml`). Os jobs também vão para lá: o LLM grava o job com a ferramenta Write (UTF-8) em
-`C:\SSAM-Agent\inbox\<nome>.json` e passa `agent:inbox/<nome>.json`. Um caminho absoluto dentro da pasta do agente
+`agent:inbox/Quotes.oml`). Os jobs não passam por lá: o LLM manda o job dentro da própria chamada (inline, em JSON
+compacto), direto ao servidor, sem subida pelo agente. Um job que já está no inbox ainda funciona.
+Um caminho absoluto dentro da pasta do agente
 (`C:\SSAM-Agent\inbox\job.json`) vale como o mesmo `agent:`; qualquer outro caminho é recusado com o lugar exato onde
 gravar. O `ssam_doctor` mostra a pasta (`agent.inbox`). O servidor só lê esse arquivo quando uma ferramenta pede. Os caminhos que as ferramentas
 devolvem aparecem como `ws:odc/...`, `ws:o11/...` ou `ws:inbox/...` (o seu espaço no servidor).
+
+## Teste de rede
+
+Entregas lentas ou travando? Peça ao seu LLM `ssam_doctor {network:true}`. Em uns 5 s o agente sobe alguns envios
+pequenos e dois de 1 MB, cada um numa conexão nova, e o servidor diz, por saída da sua internet, se as subidas passam.
+Exemplo: "uma das suas saídas de internet (177.26.87.x) perde pacotes nas subidas". Isso acontece com roteador de duas
+saídas em balanceamento, ou com 5G e celular ancorado. Os bytes do teste são aleatórios e descartados; nada do seu
+computador é lido.
 
 ## Proxy corporativo e certificados
 
 - Proxy: defina `HTTPS_PROXY` (e, se precisar, `NO_PROXY`) para o seu usuário, por exemplo
   `setx HTTPS_PROXY http://proxy.empresa:8080`, abra um terminal novo e reinicie o agente. O `ssam-agent.ps1` sobe o Node
   com `--use-env-proxy`, que faz o agente usar essas variáveis.
+- Se o proxy da empresa recusar as conexões do agente 0.2.1 e o agente 0.2.0 funcionava, defina `SSAM_AGENT_HTTP=fetch`
+  para o seu usuário (`setx SSAM_AGENT_HTTP fetch`), abra um terminal novo, reinicie o agente e avise o dono.
 - Certificado da empresa (inspeção TLS): instale a CA da empresa no repositório de certificados do Windows. O agente
   sobe com `--use-system-ca`, que confia nesse repositório.
 - Rodando `node ... run` à mão, passe as duas opções você mesmo (exemplo na seção "Iniciar").
 
 ## Atualizar o agente (pacote novo)
 
-Quando o dono manda um pacote novo (por exemplo, o da bridge ODC `v45`):
+Quando o dono manda um pacote novo (por exemplo, o da bridge ODC `v96`):
 
 1. `C:\SSAM-Agent\agent\ssam-agent.ps1 stop`.
 2. Feche o ODC Studio (a bridge antiga fica carregada até ele fechar; a nova tem outro nome e outro pipe).

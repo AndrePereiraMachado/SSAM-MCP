@@ -803,27 +803,51 @@ export function withOperationalTitles(answer, compiled = loadToolRoutes()) {
   return out;
 }
 
+// A call without intent, expand, detail or type: the exact shape of a call and the continuation that keeps its app, never
+// the catalog (catalog:true asks for it). Under 1 KB.
+const hasExpansion = input => ['expand', 'detail', 'type'].some(k => typeof input[k] === 'string' && input[k].trim() !== '');
+export function intentRequired(lane, input = {}) {
+  const app = typeof input.app === 'string' && input.app.trim() ? input.app.trim().slice(0, 260) : null;
+  return { ok: false, code: 'INTENT_REQUIRED', lane, error: 'intent is required: what to do, in words (Portuguese or English); nothing was read',
+    shape: { intent: '<what to do, in words>', lane: 'o11|odc', 'app?': '<Module or capture.oml>', 'packet?': true, 'expand?': '<id>:contract+example', 'catalog?': true },
+    continuation: { tool: 'ssam_discover', arguments: { lane, intent: '<what to do, in words>', ...(app ? { app, packet: true } : {}) },
+      why: 'the same call with the intent: the exact tool, verb and arguments, or the contracts, a proven example and the next step' },
+    catalog: { tool: 'ssam_discover', arguments: { lane, catalog: true }, why: 'every capability and tool of the lane by group, only when that list is what you need' } };
+}
+
 // ---- the single entry: discover() unchanged, plus `tools` when the intent asks for an SSAM operation.
 export async function discoverAll(input = {}, { discover = null, file = TOOLS_FILE } = {}) {
   const run = discover ?? (await import('./discovery.mjs')).discover;
   const lane = input.lane ?? 'odc';
   const intent = String(input.intent ?? '');
+  // The entry's answer ceiling (discovery.mjs atEntry): a budget below the minimal answer is raised to it, a minimal above
+  // the ceiling answers in pages. Only the calls that answer the caller carry it; a classification or a rerun for the room
+  // of the tools keeps the hard budget it is given.
+  const ceilingBytes = input.ceilingBytes !== undefined ? input.ceilingBytes : (await import('./discovery.mjs')).answerCeiling();
+  const entry = { ...input, ceilingBytes };
   let compiled = null; let toolsError = null;
   try { compiled = loadToolRoutes(file); if (compiled.problems.length) { toolsError = 'tools.json: ' + compiled.problems.slice(0, 5).join('; '); compiled = null; } }
   catch (e) { toolsError = 'tools.json unavailable: ' + e.message; }
   if (!intent.trim()) {
-    const answer = await run(input);
+    // Without intent and without expand/detail/type: the exact shape of the call, under 1 KB (2026-10-12: the catalog of
+    // every capability and tool came back as an 11.6 KB error to a call that only lacked its intent). The catalog is
+    // catalog:true, asked for by name.
+    if (input.catalog !== true && !hasExpansion(input)) return intentRequired(lane, input);
+    const answer = await run(entry);
     if (!compiled) return toolsError ? { ...answer, toolsError } : answer;
     if (answer.ok !== false || answer.expansions) return answer; // expand/detail/type: no tools
     const { toolGroups: groups, otherLaneTools } = toolGroups(lane, compiled);
-    return { ...answer, error: 'intent is required (or expand/detail): categories lists the model capabilities, toolGroups every SSAM tool of this lane; call ssam_discover with an intent for the exact call (tool, verb and arguments)', toolGroups: groups, otherLaneTools };
+    // The catalog asked by name is an answer, not a refusal; the index identity stays out (the expand answers carry it).
+    const { categories, capabilities, coverage } = answer;
+    return { ok: true, schemaVersion: answer.schemaVersion, lane, catalog: true, categories, capabilities, coverage, toolGroups: groups, otherLaneTools,
+      next: 'call ssam_discover with an intent for the exact call (tool, verb and arguments) or the contracts of a model change' };
   }
   const routed = compiled ? routeTools({ intent, lane }, compiled) : { tools: [] };
   // packet:true (W1): discover()'s work packet as it is, sized by itself; the tools the words route to ride in its next
   // section by name only (no fitting around it, so the same input keeps the same bytes).
   if (input.packet === true) return run({ ...input, operations: routed.tools.length ? levelItems(routed.tools, 'names') : null });
   let answer;
-  try { answer = await run(input); }
+  try { answer = await run(entry); }
   catch (error) {
     if (!routed.tools.length) throw error;
     const fallback = { ok: true, schemaVersion: 'ssam-discovery/4', lane, intent, indexError: error.message };
@@ -832,14 +856,21 @@ export async function discoverAll(input = {}, { discover = null, file = TOOLS_FI
   if (!compiled) return toolsError ? { ...answer, toolsError } : answer;
   if (answer.ok === false) return answer;
   routed.hasModel = modelMatchesOf(answer, compiled).length > 0;
+  const { outsystemsUiRequest, stripOutsystemsUi, fitOutsystemsUi, stripC07, fitC07, sectionsFloor, silentlyLost, withAdjustment } = await import('./discovery.mjs');
+  const budgetRaise = a => a.inputAdjusted?.find(x => x.path === '/budgetBytes');
   if (routed.hasModel) answer = withOperationalTitles(answer, compiled);
+  // A budget raised to the minimal answer (discovery.mjs atEntry) was measured on the catalog titles: a longer operational
+  // title restates it, never leaving the answer above the budget it declares ("delete the record" at 4,096: 7,126 bytes
+  // under a declared 7,055).
+  if (budgetRaise(answer) && answer.size?.bytes > answer.size.budgetBytes) answer = withAdjustment(answer, { ...budgetRaise(answer), to: answer.size.bytes });
   if (!routed.tools.length) return answer;
   // supersedes: a live tool that contradicts an `unavailable` entry of this answer says so on its item.
   if (answer.unavailable?.length) { const again = routeTools({ intent, lane, unavailable: answer.unavailable.map(x => x.id) }, compiled); routed.tools = again.tools; routed.steps = again.steps; routed.residual = again.residual; }
   if (routed.hasModel) {
     // The words of a step are classified at a budget that keeps every match's score (a reduced answer drops them); this
-    // call only classifies, the answer's model part stays the one above.
-    await applyModelRule(routed, text => run({ ...input, intent: text, budgetBytes: CLASSIFY_BUDGET }), compiled, intent);
+    // call only classifies, the answer's model part stays the one above (the parts asked by expand/detail/type stay
+    // there too: the classification never builds them).
+    await applyModelRule(routed, text => run({ ...input, intent: text, budgetBytes: CLASSIFY_BUDGET, ceilingBytes: null, expand: null, detail: null, type: null }), compiled, intent);
     if (!routed.tools.length) return answer;
   }
   routed.mixed = routed.modelRest && routed.hasModel;
@@ -849,14 +880,31 @@ export async function discoverAll(input = {}, { discover = null, file = TOOLS_FI
   // ("abrir a página do Portal") gets none.
   // The same for the proven example, the step grammar and the values (C07 of the 2026-10-05 package): they come back
   // last, in the room the tools and the section leave.
-  const B = input.budgetBytes ?? answer.size?.budgetBytes ?? 40960;
-  const { outsystemsUiRequest, stripOutsystemsUi, fitOutsystemsUi, stripC07, fitC07 } = await import('./discovery.mjs');
+  let B = input.budgetBytes ?? answer.size?.budgetBytes ?? 40960;
+  // A model part raised to its minimal (atEntry) keeps the tools beside it: the budget is the raised one plus the room of
+  // the tools, under the ceiling, and the adjustment says so. An operation (the tools are the answer) keeps the caller's
+  // budget: its model part is asked again below it (rerun, hard budget) as before.
+  const raised = budgetRaise(answer);
+  if (raised && (routed.mixed || routed.keepModel || routed.modelStep)) {
+    B = Math.max(raised.to, Math.min(ceilingBytes ?? Infinity, raised.to + bytes(levelItems(routed.tools, 'full')) + bytes(toolHint(answer, routed, lane)) + 64));
+    answer = { ...answer, inputAdjusted: answer.inputAdjusted.map(a => (a === raised ? { ...a, to: B } : a)), ...(answer.size?.budgetAdjusted ? { size: { ...answer.size, budgetAdjusted: { ...answer.size.budgetAdjusted, to: B } } } : {}) };
+  }
   const osui = routed.hasModel ? await outsystemsUiRequest({ lane, intent, matches: answer.matches, context: answer.context ?? null, app: input.app ?? null, map: input.map ?? null }) : null;
   let extras = null;
   const strip = a => { const s = stripC07(stripOutsystemsUi(a)); extras ??= s.extras; return s.answer; };
-  const out = await attachTools(strip(answer), routed, { budgetBytes: B, lane, rerun: async B2 => { const again = strip(await run({ ...input, budgetBytes: B2 })); return routed.hasModel ? withOperationalTitles(again, compiled) : again; } });
-  const withOsui = osui ? fitOutsystemsUi(out, osui, B) : out;
-  return extras ? fitC07(withOsui, extras, B) : withOsui;
+  const out = await attachTools(strip(answer), routed, { budgetBytes: B, lane, rerun: async B2 => { const again = strip(await run({ ...input, budgetBytes: B2, ceilingBytes: null })); return routed.hasModel ? withOperationalTitles(again, compiled) : again; } });
+  // `room` for the C07 extras, when given: the OutSystems UI section takes the budget less it.
+  const sectionsAt = (a, budget, room = 0) => { const withOsui = osui ? fitOutsystemsUi(a, osui, budget - room) : a; return extras ? fitC07(withOsui, extras, budget) : withOsui; };
+  const final = sectionsAt(out, B);
+  // At the entry no section goes without a word (review of 2026-10-11, round 3): when the tools left the OutSystems UI
+  // section or the C07 extras no room even for their note, the budget rises by their floor (sectionsFloor) under the
+  // ceiling, the model part and the tools as they are, and the answer says so (raise-to-minimal).
+  if (ceilingBytes == null || !silentlyLost(final, { osui, extras }).length) return final;
+  const floor = sectionsFloor({ osui, extras }, B);
+  const to = B + floor.bytes;
+  if (to > Math.max(ceilingBytes, B)) return final;
+  const again = sectionsAt(withAdjustment(out, { path: '/budgetBytes', from: raised?.from ?? input.budgetBytes ?? B, to, rule: 'raise-to-minimal' }), to, floor.c07);
+  return silentlyLost(again, { osui, extras }).length ? final : again;
 }
 
 // The model rule. A step of the request (the clauses where a route's trigger held, else the whole request) is a model

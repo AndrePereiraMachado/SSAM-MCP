@@ -1996,7 +1996,7 @@
    "summary": "Native IDropdown bound to an option list (List, Values, Labels) and to a variable or record field (Variable); EmptyValue (not Prompt) is the text of the empty option. The visual `html` op maps `<select>` to it. Its property names for the installed Studio are in the native contract (--expand ui.dropdown:native).",
    "route": {
     "kind": "job",
-    "operation": "create IDropdown under a container; set List/Values/Labels/Variable/EmptyValue with raw verbs; or the fragment {\"op\":\"html\",\"parent\":\"<widget path>\",\"html\":\"<select bind=\\\"Var\\\" options=\\\"GetItems.List\\\" value=\\\"GetItems.List.Current.Item.Id\\\" label=\\\"GetItems.List.Current.Item.Label\\\"/>\"} (never <option> elements)"
+    "operation": "create IDropdown under a container; set List/Values/Labels/Variable/EmptyValue with raw verbs (Values/Labels are evaluated per element of List and read only its attributes: Item.Id for an aggregate over Item, Id for a list of records; never GetItems.List.Current or a screen variable); or the fragment {\"op\":\"html\",\"parent\":\"<widget path>\",\"html\":\"<select bind=\\\"Var\\\" options=\\\"GetItems.List\\\" value=\\\"Item.Id\\\" label=\\\"Item.Label\\\"/>\"} (never <option> elements)"
    },
    "contract": [
     "verbs.verbs.create",

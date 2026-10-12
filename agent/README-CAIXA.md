@@ -2,7 +2,9 @@
 
 Agente do SSAM que roda na máquina do cliente: `agent/ssam-agent.mjs` e `.ps1`, bridge ODC e cliente de attach, bridge
 O11 fina, gancho de runtime, conector O11 e a montagem do pacote `ssam-agent.zip` com a varredura de PI.
-Cópia de `servidor/fase4` (`e7b2119b`) de `C:\Users\andre\SSAM-Hybrid-servidor`, sem edição.
+Cópia de `servidor/fase4` (`e7b2119b`) de `C:\Users\andre\SSAM-Hybrid-servidor`, sem edição, atualizada para
+`servidor/fase4-24` (`a945838b`, 24º envio, branch `server/r24`): bridge ODC `v96`, bridge O11 fina com `sc_http`
+(`ScHttpHandler.cs`) e agente `0.3.1` (`reference-producers`, `sc_http`, transporte novo e `net.probe`).
 Esta pasta guarda os caminhos relativos do repositório antigo: os `.csproj` e os scripts resolvem daqui.
 
 ## Compilar e montar o pacote
@@ -29,6 +31,11 @@ dotnet test platforms\odc\studio\bridge\tests\Bridge.Tests.csproj -c Release
 
 Em 2026-10-10: 68 de 69 testes node passam; Bridge.Tests 149/149; pacote com 38 arquivos (v48, 11.55.91) e varredura
 sem achados. A falha (`drift.test.mjs`, bloco congelado de `o11-wire.mjs`) já existia na revisão original.
+
+Em 2026-10-12 (24º): node 86/86 (o `drift.test.mjs` passa), Bridge.Tests 311/311, e `Bridge.csproj` (`ODC3.Bridge.v96`),
+`Client.csproj`, `Anvil.Bridge.Thin`, `Anvil.RuntimeHook` e `Anvil.Connect` compilam a partir desta pasta. O pacote do
+24º (`pack-20261012-074714`, 40 entradas, v96, 11.55.91, agente 0.3.1, varredura sem achados) saiu da worktree da
+linha, com as mesmas fontes desta caixa (`README.md` da raiz, "Conferência de 2026-10-12").
 
 ## Deploy
 

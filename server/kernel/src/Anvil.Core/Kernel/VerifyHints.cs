@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 namespace Anvil.Core;
 
@@ -56,7 +57,7 @@ public static class VerifyHints
             var id = verdict["id"]?.ToString() ?? "";
             var warning = new JsonObject { ["id"] = id, ["path"] = verdict["path"]?.ToString() ?? "" };
             if (verdict["ownerKey"]?.ToString() is { Length: > 0 } key) warning["key"] = key;
-            warning["detail"] = OneLine(verdict["detail"]?.ToString(), 200);
+            warning["detail"] = OneLine(ShortText(verdict["detail"]?.ToString()), 200);
             warning["fix"] = Fix(id, hints);
             result.Add(warning);
         }
@@ -69,4 +70,28 @@ public static class VerifyHints
         var line = string.Join(' ', (text ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
         return line.Length > limit ? line[..(limit - 1)] + "…" : line;
     }
+
+    /// <summary>Machine text inside a warning cut to its head with its original size, so the sentence around it is read
+    /// (FarmaVirtual session, 2026-10-10): the Studio quotes a data: URL whole in each InvalidResourceURL_Offline, so the detail
+    /// cut at 200 characters ended inside the URL before it said what was wrong. A data: URL keeps its media type
+    /// ("data:image/svg+xml,…(435 chars)"), a base64 run (mixed case and digits) its first 12 characters; a run with a "/" is
+    /// base64 only with a "+" or the "=" padding too, which a slash path ("Theme/Resources/Icons2024/...") never has, so a path
+    /// is never cut. A short data: URL, words and a run of one letter stay. The facade cuts the same way (delivery-warnings.mjs
+    /// shortText).</summary>
+    public static string ShortText(string? text)
+    {
+        var s = text ?? "";
+        if (!s.Contains("data:", StringComparison.Ordinal) && !Base64Run.IsMatch(s)) return s;
+        s = DataUrl.Replace(s, m => m.Groups[2].Length > DataKeep ? Sized("data:" + m.Groups[1].Value + ",", m.Value) : m.Value);
+        return Base64Run.Replace(s, m => IsBase64(m.Value) ? Sized(m.Value[..12], m.Value) : m.Value);
+    }
+    private static bool IsBase64(string run) => run.Any(char.IsAsciiLetterLower) && run.Any(char.IsAsciiLetterUpper) && run.Any(char.IsAsciiDigit)
+        && (!run.Contains('/') || run.IndexOfAny(['+', '=']) >= 0);
+    private const int DataKeep = 24;
+    private static readonly Regex DataUrl = new(@"data:((?:[A-Za-z0-9_.+\-/;=]|\\u[0-9A-Fa-f]{4}){0,100}),((?:[^\s'""<>\\)]|\\u[0-9A-Fa-f]{4})*)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex Base64Run = new("[A-Za-z0-9+/]{80,}={0,2}", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex JsonEscape = new(@"\\u[0-9A-Fa-f]{4}", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    // The size in characters of the text (a JSON escape \uXXXX is one).
+    private static string Sized(string head, string text) => head + "…(" + JsonEscape.Replace(text, "_").Length + " chars)";
 }

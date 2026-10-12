@@ -313,3 +313,205 @@ Build: `setup-dev.ps1 -Yes -NoUserEnv -SkipInstall -SkipMcp -SkipDoctor` (sem sh
     só leitura). Um caminho do servidor na lista é recusado pelo gate.
   - Rode com `ANVIL_ODC_FEATURES_DIR` apontando para o cache de features do ODC Studio da máquina (o perfil do dono no
     teste é uma pasta temporária). Sem isso, as etapas ODC que compilam falham com "ODC Studio feature cache not found".
+
+## 9. 24º envio do produto (`servidor/fase4-24`)
+
+Ramo `servidor/fase4-24`, worktree `C:\Users\andre\SSAM-Hybrid-servidor-wt\fase4-24`, a partir de
+`servidor/fase4-23-linux` (`b37715e1`: o 23º com as 4 correções de Linux). O roteiro é o `PLANO-24-PRODUCAO` (fase B).
+O servidor no ar continua no 23º. A troca é a das fases C a G do plano, pela integradora.
+
+Commits:
+- `f57933d9`: merge de `integracao/juncao-24` `02b71765`. É a junção do 24º (`bd970835`), as correções da junção
+  (`90cd3426`) e o patch do `OdcFeatures.cs` (`02b71765`), com os mesmos bytes do `b37715e1`. Base comum `cd7e4f11`.
+- `7f4f8e66`: bridge ODC `v96`.
+- `d1a15fea`: faixa hospedada (`fase4-24/hospedado`, `34bf1d01`).
+- `f166d0a1`: bridge O11 fina e agente (`fase4-24/fina`, `a3f361fc`).
+- O commit desta seção: passo 9i do ponta a ponta, guarda da imagem e este texto.
+
+O Texto do SSAM entra depois, como diferença à parte (24.1). O worker O11 por cliente entrou em `fc44b403`
+(`fase4-24/worker` `be83a579` = SSAM-MCP `9661871`). O que entrou depois dele está em "Juntado em 12/10", no fim desta
+seção.
+
+### Conflitos
+
+O merge do produto teve 19, resolvidos pela tabela 5.1 do plano. Fica a costura hospedada da linha, e os corpos do 24º
+entram em volta dela.
+- `.gitattributes` e `portal/runtime/odc3-context.mjs`: união.
+- `facade/catalog/tools.json`: versão do 24º, com os exemplos sem nome de cliente da linha.
+- `facade/lib.mjs`: o `requestFile` do 24º (raiz da bridge) só vale no uso local. No hospedado, o pedido vai para o
+  workspace do cliente e o espelho o leva ao agente (R4). `profiles` nulo no hospedado. `reference-producers` entra em
+  `OPEN_MODULE_COMMANDS`.
+- `service-center/auth.mjs`, `bridge.mjs` e `index.mjs`: fluxo novo do 24º com as guardas da linha reescritas sobre ele.
+- `facade/ssam.mjs`: corpo do 24º com o portão da linha por fora.
+- `portal/runtime/access.mjs`: corpo do 24º com as recusas hospedadas.
+- `cognito-login.mjs`, `client-content.test.mjs` e `PortalCommands.cs`: versão do 24º.
+- `portal/tests/access.test.mjs`: união.
+- `Bridge.csproj`, `StartupHook.cs`, `client/Program.cs` e `weave-spec.json`: a bridge do 24º com as cópias da linha.
+- Overlays `ScProtocol.cs.patch` e `Anvil.Cli/Program.cs.patch`: recapturados com `stage.mjs edit/capture`.
+  `stage check --from-worktree`: 53 overlays, ok (de novo na cabeça deste commit).
+
+O merge das duas faixas teve 1 conflito, numa linha de `docs/FASE2-AGENTE.md` (§5). As duas tiraram o mesmo caractere
+de controle antigo de jeitos diferentes. Ficou o texto da fina. As seções de cada faixa (§4.8 de uma, §5 e §6.4 da
+outra) entraram as duas.
+
+### O que muda no modo hospedado
+
+- **12 ferramentas novas** (plano 2.1). `studio_reference_producers` é do agente (comando `reference-producers` da
+  bridge, só leitura). `odc_mcp_connection`, `odc_mcp_import` e `odc_a2a_connection_delete` alcançam o tenant só pela
+  sessão do Studio do cliente. `odc_a2a_connection_plan` roda no servidor (não autentica). As 4 só de API Client
+  (`odc_native_package`, `odc_generated_code`, `odc_asset_source` e `odc_asset_revision`) e as 3 do depurador
+  (`ssam_debug_server`, `ssam_debug_client` e `ssam_debug_matrix`) respondem `HOSTED_UNAVAILABLE`. As de API Client
+  trazem `cause:"API_CLIENT_ONLY"` e uma continuação para o que a sessão do Studio faz.
+- Totais de `hosted/tools.json`: 95 ferramentas (90 de `createSsamServer`, 4 do gancho e `ssam_friction`). Servidor 23,
+  agente 33, tenant-agente 22, indisponível 17. No ar, o `tools/list` sem o gancho passa de 79 para 91.
+- **R1, o portão confina o que roda.** A camada de entrada do 24º (`tool-input.mjs`) corrige nomes de campo (`targt`
+  vira `target`). O portão conferia os argumentos crus e não via o caminho. Agora o `ssam.mjs` passa o `argsOf` ao
+  portão, e o handler recebe os argumentos já resolvidos.
+- **D2, op `prototype` recusado.** Em `o11_deliver`, `studio_deliver`, `ssam_job` e `o11_job`, antes de qualquer
+  captura: `HOSTED_UNAVAILABLE`, `cause:"PROTOTYPE_SOURCE_LOCAL"`. A chave é `HOSTED_PROTOTYPE_OP` em `hosted/policy.mjs`.
+- **Service Center** só por `sc_http`, a sessão HTTP do Studio do cliente, sem janela. Perfil privado, janela de
+  credencial, `authPrompt`, `sc_private_http*`, SSO, protocolo de identidade e LifeTime são recusados antes de tentar
+  (`HOSTED_STUDIO_SESSION_ONLY` ou `HOSTED_PROMPT_UNAVAILABLE`). Os registros do `solution-download` vão para
+  `ws:o11/service-center/downloads`.
+- **Portal** pela sessão headless do Studio (`portal-session`). `select-profile`, `auth:"portal-credential"`,
+  `portal-private-*`, `portal-api-client-fixture-cleanup` e `portal-upload` são recusados, e os pipes privados nunca
+  abrem. O HTTP direto do servidor (`odc3-context.mjs`) recusa. Os pedidos de `odc_read`, `odc_write` e `odc_portal_*`
+  ficam em `ws:odc/journal/portal/requests` (R4).
+- `odc_configurations` com segredo móvel usa o cofre do cliente pela bridge dele. `authorizationContext` tem de estar na
+  área visível do workspace.
+- Um servidor sem bridge ODC compilada (a imagem Linux) sonda o pipe do cliente com a `odcBridge` do kernel.
+
+### Imagem: a guarda de nomes de cliente
+
+A guarda `hosted-image-denylist` falhou depois do merge: 223 arquivos do contexto nomeavam um cliente. Correções:
+- `.dockerignore`: `docs/PORTAL-*`, `docs/SC-*` e `docs/PROTOTIPO-NATIVO.md` ficam fora da imagem. São propostas,
+  provas ao vivo e passagens de bastão da linha SC/Portal e o desenho do importador. O servidor não lê nenhum deles.
+- `portal/catalog/portal-capabilities.json`: os rótulos de evidência dizem `corporate` no lugar do nome do cliente.
+  O teste do catálogo acompanha.
+- `kernel/src/Anvil.Core/Kernel/Prototype/RuntimeDomTable.cs` e `facade/debug-lock-inventory.mjs`: o texto de
+  evidência e um comentário sem o nome do cliente.
+- Três jobs do depurador (`debugger-client-variable-*`, ODC) rodavam sobre a captura do cliente. Passam a usar a
+  fixture anonimizada `insurance-reactive-r8.oml` (espace `InsuranceApp`). `OdcJobTests`: 3 de 3. A mesma correção
+  cabe no produto.
+
+`public-signature-drift` também falhou: a bridge v96 liga `kernel/src/Anvil.Bridge/PrivateHttpContext.cs`. O teste
+aceita esse arquivo (namespace `Ssam.PrivateTransport`, sem tipo do kernel) como compartilhado das duas bridges. Qualquer
+outro arquivo do kernel continua fora da bridge.
+
+### Pacote do agente
+
+Muda.
+- Bridge ODC `v96`. A bridge da linha é a `v95` do produto com o CSRF e as cópias da `v48`: outra DLL, outro número.
+  Nenhuma ref da integração, do servidor, do operacional ou do SSAM-MCP cita v96 a v99. As worktrees vistas usam `v95`
+  (junção), `v84` (SC/Portal do Codex), `v55` (operacional) e `v48` (SSAM-MCP).
+- Bridge O11 fina com `sc_http` (23 verbos). `sc_web` e `sc_http` vão para o `ScHttpHandler`, e `studio_login` responde
+  uma recusa tipada. Entra `sc_http:studioSession`. Saem `sc_web:hidden`, `sc_web:login` e `studio_login`.
+  `sc_private_http*` fica fora.
+- Agente `0.3.0`: `reference-producers` no `odc.pipe` e `sc_http` no `o11.bridge` (`args.outFile` recusado). O bloco
+  copiado de `o11-bridge.mjs` voltou a ser igual (o `drift.test.mjs`, vermelho desde o 20º, passa). Com o transporte
+  do 0.2.1 e o `net.probe`, o pacote do 24º leva o agente `0.3.1` (ver "Juntado em 12/10").
+- Pacotes antigos continuam aceitos (`odcBridgeAccepted`). Degradam com códigos tipados: o Service Center responde
+  `STUDIO_BRIDGE_OUTDATED` e `reference-producers` recebe `COMMAND_NOT_ALLOWED` do agente antigo.
+- O ZIP novo ainda não foi gerado (fase C do plano).
+
+### `kernel.json`
+
+`{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v96","odcBridgeAccepted":["v48","v45"]}`. No rollback, volta o do 23º:
+`{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v48","odcBridgeAccepted":["v45"]}`.
+
+### Testes desta entrega
+
+Build: `setup-dev.ps1 -Yes -NoUserEnv -SkipInstall -SkipMcp -SkipDoctor`, com `ANVIL_WORKER=0`, `ANVIL_ODC_NO_WORKER=1`,
+`SSAM_NO_WARM=1` e os workers do `.ssam-workspace.json` trocados só localmente para 22517/22537/22547. A comparação é
+com `b37715e1` (o 23º da linha), extraído por `git archive` numa pasta de rascunho e compilado do mesmo jeito.
+
+- `Anvil.Bridge.Thin.Tests` 114/114, `Bridge.Tests` 311/311 e `Builder.Tests` 7/7 (no `b37715e1`: 110, 149 e 7).
+- `Anvil.Tests` e `Anvil.Tests.Odc` filtrados em `ServiceCenter|Pa2F8|ThinBridge|ModuleIndex|ModelReading`: 171/171 e
+  18/18 (no `b37715e1`: 150 e 16). Mais `PrototypeCss` 25/25 (o `RuntimeDomTable.cs`) e os 3 jobs do depurador sobre a
+  fixture anonimizada (`OdcJobTests`) 3/3.
+- Node, em `platforms/odc`: `agent-hub`, `hosted-*` (17 arquivos), `http-server`, `fase4-server`, `fase4-wp-load`,
+  `server-tokens`, `public-signature-drift`, `executor`, `seam-guard`, `odc-access`, `access.test` do portal,
+  `service-center*`, `studio-write-lock`, `prototype-op` e `job-runner`: 42 arquivos, 655 testes, 654 ok e 1 pulado por
+  desenho (a regra 8 do `prototype-op`, que só roda sem a faixa de render). No `b37715e1`: 32 arquivos, 407/407.
+  Nenhuma falha nova. `portal-capabilities` 25/25 junto das guardas.
+- `agent/tests` e `tests/prova-verbos.test.mjs`: 70/70. No `b37715e1`, 68/69: o `drift.test.mjs` agora passa.
+- Ponta a ponta com Studios falsos (`hosted-e2e-processes.mjs`): o passo 9i foi escrito aqui, mas só rodou de verdade
+  na cabeça de "Juntado em 12/10" (117 de 117, com o passo do job composto de `ec19d87f`).
+  - `studio_reference_producers` chega ao Studio ODC falso como `reference-producers <Módulo>`, só leitura.
+  - `o11_service_center_read {action:"db-connections"}` pela fina: `sc_session` e `sc_http` com a chave do agente,
+    `auth.path` `studio-http`. Nenhum `sc_web`, `studio_login` ou transporte privado.
+  - `odc_mcp_connection readiness` pela sessão headless do Portal (`portal-session fetch`): cada pedido em
+    `ws:odc/journal/portal/requests` e lido pelo agente do espelho dele.
+  - `HOSTED_UNAVAILABLE` nas 3 do depurador e nas 4 de API Client (`API_CLIENT_ONLY` com continuação). Nada chega a um
+    Studio.
+  - Op `prototype` recusado nas 4 ferramentas de job (`PROTOTYPE_SOURCE_LOCAL`, `not-sent`).
+  - `ssam_map {targt:<caminho do servidor>}` dá `PATH_OUTSIDE_WORKSPACE`; `{targt:<ws:>}` roda como `target`.
+  - Cliente C com o pacote v48 (listas do agente do 23º, bridge ODC v48, fina do 23º): o hub aceita pelo
+    `odcBridgeAccepted`, o pipe pedido é o da v48, `reference-producers` recebe `COMMAND_NOT_ALLOWED` e o Service Center
+    responde `STUDIO_BRIDGE_OUTDATED` com a continuação `ssam_connect`.
+  - Rode com `ANVIL_ODC_FEATURES_DIR` apontando para o cache de features do ODC Studio da máquina, como no 23º.
+
+### Fora desta entrega
+
+- O Texto do SSAM (24.1): `feat/texto-ssam*` e `feat/tx*` não entraram.
+- Pacote v96, cópia para o SSAM-MCP, imagem, ensaio e troca na VPS (fases C a G do plano).
+- Prova ao vivo com o dono: SC por `sc_http`, `studio_reference_producers` e Portal headless na máquina dele.
+
+### Juntado em 12/10 (velocidade, prazos, painel)
+
+Cada um num merge `--no-ff` próprio, sobre `fc44b403` (24º + v96 + hospedado R1/R3/R4 + recusa do protótipo, inclusive
+em job composto + fina com `sc_http` + agente 0.3.0 + worker O11):
+- `899022a3`: `fase4-24/prazos` (`ec757019`). O produtor aberto e sem alterações no Studio é ligado pela aba
+  (`o11-open-producer.mjs`), a leitura do ambiente que o cliente do próprio Studio cortou responde
+  `ENVIRONMENT_CALL_CUT` (`EnvironmentCut.cs`), o relé hospedado dá 330 s ao `environment_session` e o log do hub
+  nomeia método e operação. Conflito em `o11-cycle.mjs`: ficou o fluxo do protótipo do 24º, com o `runInput` dos
+  produtores ligados pela aba no build e na entrega.
+- `cab7fdf0`: `fase4-24/tokens` (`934abab1`): `renew`, `setLanes`, códigos de erro e trava de escrita do
+  `server-tokens.mjs` para o painel do dono. Sem conflito.
+- `5016e2a3`: `fase4-24/vel-hosted` (`1b42c8cb`, com `fase4-24/agente-rede` `ec11f911`; nasceu de `b37715e1`). Job
+  inline no hospedado, `ssam_doctor {network:true}` e o transporte do agente 0.2.1 (prazo por parte, conexão nova na
+  nova tentativa). Conflitos: `AGENT_VERSION` (0.3.0 e 0.2.1 viram `0.3.1`; `fase4.test.mjs` e o rebaixamento do
+  cliente C no ponta a ponta acompanham), `AGENTE-CLIENTE.md` (os dois itens), `agent-hub.mjs` (os verbos do log e a
+  sonda de rede, os dois) e `ssam.mjs` (o texto JSON do job vira objeto antes dos padrões do protótipo). O
+  `hosted/policy.mjs` fundiu sozinho: ficam as correções do portão de `73449b8e`, `34bf1d01` e `ec19d87f`.
+- `4c5ffdd2`: o tipo `net.probe` na lista fechada do agente (`patch-kinds.diff` da faixa), ao lado das listas do 24º.
+- `a505fde5`: `integracao/velocidade` (`1b26c2b4`, base `02b71765`). `JobNormalizer` (o motor corrige erros de forma
+  em vez de recusar e lista o que mudou), um job por módulo, leituras menores, resumo no "entregue", as normalizações na
+  fachada, reaproveitamento da captura, `open` sem a checagem de referências, create-app sem pré-leituras e a nova
+  tentativa de leitura do ambiente (`ENVIRONMENT_UNREACHABLE`). Conflitos: `ConnectedEnvironment.cs` (o registro da
+  operação de prazos em cada tentativa da nova leitura), `o11-build-phase.mjs` (os dois imports) e dois overlays:
+  `Anvil.Cli/Program.cs.patch`, refeito por merge de 3 vias de cada lado (fica o `PdfText` sem nome de cliente), e
+  `OdcFeatures.cs.patch`, o da linha. `stage.mjs check --from-worktree`: 53 de 53.
+
+Correções que as faixas deixaram para a linha:
+- `ff27a1cd`: a fina serve `list_open_modules:model_sha256` e `open_module:references_check_optional` (o build
+  hospedado reaproveita a captura em vez de subir o mesmo modelo) e descreve a falha do ambiente como a completa
+  (`DescribeParityTests`).
+- `f42fedcf`: as regras hospedadas dizem um job por módulo, inline e compacto, e que a resposta lista as
+  `normalizations` (já aplicadas; nunca reenviar para desfazer).
+- `68c16e5c` e `67d7f36c`: `ENVIRONMENT_CALL_CUT` e `ENVIRONMENT_UNREACHABLE` sem tratamento duplo. A nova tentativa
+  só existe no `ConnectedEnvironment.Call`: uma leitura que falhou na rede vai uma vez mais, uma escrita nunca, e uma
+  chamada que o cliente do próprio Studio encerrou pelo prazo dele (o SendTimeout de 60 s do WCF) também nunca. Uma
+  entrega responde um código só: a captura de produtor embrulha a leitura inalcançável como `ENVIRONMENT_CALL_CUT` com
+  `cut.repeated`, e uma leitura inalcançável em outro ponto da entrega, antes de qualquer escrita, vira o mesmo corte.
+  A fachada nunca repete. O `EnvironmentCut.cs` continua compilando no kernel ODC (`IEnvironmentReadFailure`).
+
+Agente: `0.3.1` (0.3.0 do 24º, transporte do 0.2.1 e o tipo `net.probe`), com a bridge ODC `v96` e a fina com as duas
+capacidades novas. O ZIP ainda não foi gerado (fase C do plano). `kernel.json` não muda.
+
+Testes na cabeça destes commits (`ANVIL_WORKER=0`, `ANVIL_ODC_NO_WORKER=1`, `SSAM_NO_WARM=1`, `setup-dev.ps1` com as
+portas dos workers trocadas só localmente para 24617/24637/24647):
+- `Anvil.Bridge.Thin.Tests` 116/116, `Bridge.Tests` 311/311, `Builder.Tests` 7/7.
+- `Anvil.Tests` filtrado em `ServiceCenter|Pa2F8|ThinBridge|ModuleIndex|ModelReading|Delivery|Environment|Normalizer|Open|Producer`:
+  463/463. `Anvil.Tests.Odc` no mesmo filtro: 25 ok e 1 pulado.
+- Node: 61 arquivos (`hosted-*` com 20 arquivos, `agent-hub`, `http-server`, `fase4-*`, `server-tokens`, `executor`,
+  `seam-guard`, `job-runner`, `o11-*`, `studio-*`, `prazos-*`, `agent/tests` e `tests/prova-verbos.test.mjs`), cada
+  um sozinho: 598/598, nenhum nome de falha (portanto nenhum novo em relação a `fc44b403`).
+- Guardas de segurança: `hosted-input-rename`, `hosted-prototype`, `hosted-tools` (totais sem mudança), `hosted-policy`,
+  `hosted-roots`, `hosted-mirror` e `hosted-image-denylist`: 66/66.
+- `hosted-e2e-processes.mjs` executado, com `ANVIL_ODC_FEATURES_DIR` no cache de features do ODC Studio da máquina:
+  117 de 117, inclusive todos os passos do 9i e o cliente C com o pacote v48.
+
+Fica em aberto: a prova de que um job inline no hospedado não carrega caminho fora do workspace do cliente nos campos
+que o kernel lê de dentro do job (`data.source`, `file`, partes de job composto, documentos) e de que as recusas de
+protótipo e de job composto valem também para o job inline em texto JSON. Não entrou nesta rodada.

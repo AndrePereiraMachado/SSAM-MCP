@@ -1,0 +1,2041 @@
+{
+ "schema": "ssam-debugger-matrix-source/1",
+ "root": ".local/debugger",
+ "note": "Tracked R19 manifest. Pins are file sha256 of evidence under .local/debugger; predicates are JSON pointers; regenerate the matrix with `ssam debug matrix`.",
+ "fingerprint": {
+  "installed": [
+   {
+    "lane": "o11",
+    "name": "ServiceStudio.exe"
+   },
+   {
+    "lane": "o11",
+    "name": "OutSystems.DebuggerClient.dll"
+   },
+   {
+    "lane": "o11",
+    "name": "ServiceStudio.PluginAPI.dll"
+   },
+   {
+    "lane": "odc",
+    "name": "ODCStudio.exe"
+   },
+   {
+    "lane": "odc",
+    "name": "OutSystems.DebuggerClient.dll"
+   },
+   {
+    "lane": "odc",
+    "name": "OutSystems.ServiceStudio.PluginAPI.dll"
+   }
+  ],
+  "odc": {
+   "stageKey": "c25f532e-de28-430d-b864-79f830ce6cb7",
+   "fixture": {
+    "pin": {
+     "path": "native-runs/odc/92088a26-b29b-45cb-9257-cb99f51c4535/receipt.json",
+     "sha256": "70751b3f267f1add856e05d3b429931b81d8653d3cfb8f0f1cf66f5b1f4f7d3c",
+     "predicates": [
+      "/binding/environmentKey==\"c25f532e-de28-430d-b864-79f830ce6cb7\""
+     ]
+    },
+    "environmentKey": "/binding/environmentKey",
+    "revision": "/binding/revision",
+    "module": "/binding/module"
+   },
+   "snapshot": {
+    "pin": {
+     "path": "native-runs/odc/92088a26-b29b-45cb-9257-cb99f51c4535/mount-submission.json",
+     "sha256": "a059a5cc464cb46ac2a8b92703ea5a863616989744f3199e7b9dc205c844cbf5"
+    },
+    "sourceSha256": "/metadata/sourceSha256"
+   }
+  }
+ },
+ "typeAudits": [
+  {
+   "path": "item2-o11-server-scalars/live-Bool/audit.json",
+   "sha256": "c5aadc8e14a8a2c069f7f93636a4320a61045bb347552e4c30a4471b7673bb72",
+   "transport": "mcp",
+   "operationId": "a04aa99c-b9c2-4cce-9bf7-3e4a48895f65",
+   "sessionId": "e233f83f-8b47-4359-9807-deea528d87e9",
+   "predicates": [
+    "/passed==true"
+   ],
+   "live": true,
+   "lane": "o11",
+   "runtime": "server",
+   "scenarios": "/scenarios",
+   "pauses": "/pauses",
+   "cells": [
+    {
+     "type": "Boolean",
+     "role": "input"
+    },
+    {
+     "type": "Boolean",
+     "role": "return"
+    }
+   ]
+  },
+  {
+   "path": "item2-o11-server-scalars/live-Date/audit.json",
+   "sha256": "ea52d0f86e3d5418528ff909c6475c8bda860431a7a9c2847552f40ef5ae1388",
+   "transport": "mcp",
+   "operationId": "c18e7659-10a8-4461-a005-f4abe907827e",
+   "sessionId": "9e13eb98-68d8-44d8-be2c-e5016cf42e39",
+   "predicates": [
+    "/passed==true"
+   ],
+   "live": true,
+   "lane": "o11",
+   "runtime": "server",
+   "scenarios": "/scenarios",
+   "pauses": "/pauses",
+   "cells": [
+    {
+     "type": "Date",
+     "role": "input"
+    },
+    {
+     "type": "Date",
+     "role": "return"
+    }
+   ]
+  },
+  {
+   "path": "item2-o11-server-scalars/live-Decimal/audit.json",
+   "sha256": "ab751941a607b569e3d23b90b1d538ddbde70e1f3375c4feb5f281d495bfd575",
+   "transport": "mcp",
+   "operationId": "cc265ee9-5464-42b9-b162-1f19250b3dfa",
+   "sessionId": "7d86ddc1-b00d-4763-bd97-6d606e9eb91e",
+   "predicates": [
+    "/passed==true"
+   ],
+   "live": true,
+   "lane": "o11",
+   "runtime": "server",
+   "scenarios": "/scenarios",
+   "pauses": "/pauses",
+   "cells": [
+    {
+     "type": "Decimal",
+     "role": "input"
+    },
+    {
+     "type": "Decimal",
+     "role": "return"
+    }
+   ]
+  },
+  {
+   "path": "o11-rest-text-proof/audit.json",
+   "sha256": "b4b92a97bc472b425f9d840780ad824c9538d1c9a77163bb72f17b855465f585",
+   "transport": "mcp",
+   "operationId": "6b00d5ab-1121-41f3-92ec-967c4aad78bf",
+   "sessionId": "f0316374-3659-4643-b9a0-5998324fff72",
+   "predicates": [
+    "/ok==true"
+   ],
+   "live": true,
+   "lane": "o11",
+   "runtime": "server",
+   "scenarios": "/scenarios",
+   "pauses": "/pauses",
+   "cells": [
+    {
+     "type": "Text",
+     "role": "input"
+    },
+    {
+     "type": "Text",
+     "role": "local"
+    },
+    {
+     "type": "Text",
+     "role": "output"
+    }
+   ]
+  },
+  {
+   "path": "item15-o11-server-auto-pages/audit.json",
+   "sha256": "4d67acf001b09cc0533b9b6dccaf99583b1087bf34b6293341d3eba3ec49b561",
+   "transport": "mcp",
+   "operationId": "5773ab62-e967-4262-907c-8eb731b3e795",
+   "sessionId": "785f1b79-b8f3-481f-b9ce-fb9001ddb74f",
+   "predicates": [
+    "/cleanupConfirmed==true"
+   ],
+   "live": true,
+   "lane": "o11",
+   "runtime": "server",
+   "scenarios": "/scenarios",
+   "pauses": "/pauses",
+   "cells": [
+    {
+     "type": "Record List",
+     "role": "return"
+    }
+   ]
+  },
+  {
+   "path": "item15-o11-composite/live-audit.json",
+   "sha256": "df0d77195c8833790423b2642a298b3f67d00b58e27520e03564ddcdbb269686",
+   "transport": "mcp",
+   "operationId": null,
+   "sessionId": "101cb57a-1e19-4d9f-a2dc-ada9f39f8c19",
+   "predicates": [
+    "/cleanupCompleted==true"
+   ],
+   "live": true,
+   "lane": "o11",
+   "runtime": "client",
+   "scenarios": "/nativeReturnCounts",
+   "pauses": "/pauses",
+   "cells": [
+    {
+     "type": "Record List",
+     "role": "return"
+    }
+   ]
+  },
+  {
+   "path": "client-pause-o11/audit.json",
+   "sha256": "e1f59eca6a98f82930133038f3690eea8253587c09b0a197adc9a1ab9f3c91a3",
+   "transport": "mcp",
+   "operationId": "cf40f4f3-1499-4501-be76-0fe88b3262e5",
+   "sessionId": "c8a2d1f2-9c25-40d4-8a87-c549f7b349ba",
+   "predicates": [
+    "/live==true",
+    "/transport==\"public-mcp\""
+   ],
+   "live": true,
+   "lane": "o11",
+   "runtime": "client",
+   "scenarios": 2,
+   "pauses": "/pauses",
+   "cells": [
+    {
+     "type": "Integer",
+     "role": "input"
+    },
+    {
+     "type": "Integer",
+     "role": "output"
+    }
+   ]
+  },
+  {
+   "path": "client-pause-o11/audit-cli.json",
+   "sha256": "3092c9613114eb81d76a590df2105b91bc548af8571404891c5d70c604857af2",
+   "transport": "cli",
+   "operationId": "be4eacd5-c553-485f-bfcd-f5831ba0aacf",
+   "sessionId": "492dc669-6ef7-436f-89ff-e4990985f7e8",
+   "predicates": [
+    "/live==true",
+    "/transport==\"root-cli-json-lines\""
+   ],
+   "live": true,
+   "lane": "o11",
+   "runtime": "client",
+   "scenarios": 2,
+   "pauses": "/pauses",
+   "cells": [
+    {
+     "type": "Integer",
+     "role": "input"
+    },
+    {
+     "type": "Integer",
+     "role": "output"
+    }
+   ]
+  },
+  {
+   "path": "o11-session-variable-proof/audit.json",
+   "sha256": "487021ed9d7c30023dcb6bafd98760295bf8c359765d06311702b32a83804d37",
+   "transport": "mcp",
+   "operationId": "ba0da2b7-68ec-4bea-8cc4-1845b0b62a82",
+   "sessionId": "aae7e106-e889-4969-8765-6c8cce720521",
+   "predicates": [
+    "/ok==true"
+   ],
+   "live": true,
+   "lane": "o11",
+   "runtime": "server",
+   "scenarios": "/scenarios",
+   "pauses": "/pauses",
+   "cells": [
+    {
+     "type": "Integer",
+     "role": "local"
+    }
+   ]
+  },
+  {
+   "path": "client-pause-odc/audit-authorized.json",
+   "sha256": "b2209753380c15f149097cdcce476f56808df4a7958f5678cc569c5ccf49515a",
+   "transport": "mcp",
+   "operationId": "cb2f6e99-1093-41e2-b7c2-c59a5e29fb2e",
+   "sessionId": "272d5f67-5f51-48e2-9144-22c183b9ab47",
+   "predicates": [
+    "/live==true",
+    "/transport==\"public-mcp-stdio\""
+   ],
+   "live": true,
+   "lane": "odc",
+   "runtime": "client",
+   "scenarios": 2,
+   "pauses": "/pauses",
+   "cells": [
+    {
+     "type": "Integer",
+     "role": "input"
+    },
+    {
+     "type": "Integer",
+     "role": "output"
+    }
+   ]
+  },
+  {
+   "path": "client-pause-odc/audit-cli-v2.json",
+   "sha256": "41f0f9fff5a00b3e7bee9506dd01667bfd89b4a3d969301598ea56e9ff4038c4",
+   "transport": "cli",
+   "operationId": "51083929-7294-4f3d-a07a-ce1afc4fc604",
+   "sessionId": "5472f210-87dc-4e23-8167-baa757349722",
+   "predicates": [
+    "/live==true",
+    "/transport==\"root-cli-json-lines\""
+   ],
+   "live": true,
+   "lane": "odc",
+   "runtime": "client",
+   "scenarios": 2,
+   "pauses": "/pauses",
+   "cells": [
+    {
+     "type": "Integer",
+     "role": "input"
+    },
+    {
+     "type": "Integer",
+     "role": "output"
+    }
+   ]
+  },
+  {
+   "path": "vault-app-proof-20261007/public-odc-filter-list-audit.json",
+   "sha256": "183297ea74734229e71844e50ab8baa417dfc512c96d456fc2ccf31c3884ce9f",
+   "transport": "mcp",
+   "operationId": "7265723a-8470-455b-a61d-dab443237702",
+   "sessionId": "da981a08-e354-4c65-840a-a562e70fc527",
+   "predicates": [
+    "/allExpandedRecordFieldsMatched==true"
+   ],
+   "live": false,
+   "lane": "odc",
+   "runtime": "client",
+   "scenarios": "/scenarios",
+   "pauses": "/nativePauses",
+   "cells": [
+    {
+     "type": "Record List",
+     "role": "input"
+    },
+    {
+     "type": "Record List",
+     "role": "output"
+    }
+   ]
+  }
+ ],
+ "typeLimits": [],
+ "typeRefusals": [],
+ "requirements": [
+  {
+   "id": 1,
+   "title": "Real user and roles across modules",
+   "lanes": {
+    "o11": {
+     "subCriteria": [
+      {
+       "id": "1.o11.a",
+       "text": "Authenticated user id equal and non-zero in caller and producer frames (REST -> Users), HTTP 200, cleanup confirmed",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "o11-identity-group-current/audit-observed-threads.json",
+         "sha256": "ee45fbc1d2b3945c848ca91d20326e54d072f569d67b250ab8c73e599c4134ae",
+         "transport": "mcp",
+         "operationId": "47aabe66-6d0b-4d90-801c-2d536d18fdca",
+         "sessionId": "3e13c464-bbb1-404e-8155-92def2b0e5fe",
+         "predicates": [
+          "/live==true",
+          "/observedThreadChainsVerified==true",
+          "/uncertain==false",
+          "/credentialsReleased==true",
+          "/lockRetained==false"
+         ],
+         "evidenceKey": "o11-group-lifecycle-mcp",
+         "live": true
+        },
+        {
+         "path": "o11-identity-boundary-proof/audit-dual-owned.json",
+         "sha256": "1e502bcd457b9d31486d7376b74d99e7bb719a83c89a69111883084ced328f2f",
+         "transport": "mcp",
+         "operationId": "8427f7ce-e90f-41ec-a9d5-a64166ea094e",
+         "sessionId": "553661a7-8415-4caa-814b-2937872975c1",
+         "predicates": [
+          "/ok==true",
+          "/samePauseCallerProducerIdentityEqual==true",
+          "/nonzeroUserId==true",
+          "/uncertain==false",
+          "/credentialsReleased==true",
+          "/lockRetained==false"
+         ],
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "1.o11.b",
+       "text": "Registered role observed across the Service Action boundary",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "o11-boundary-20261009/audit-service-registered-role.json",
+         "sha256": "eb55dd72b04edd2ed6765828696e7360041761772997b348539ecec302a0f80b",
+         "transport": "mcp",
+         "operationId": null,
+         "sessionId": "3fbd4ddb-ec2f-427c-ad88-69ba1a5e5849",
+         "predicates": [
+          "/ok==true",
+          "/publicMcp==true",
+          "/registeredRoleProved==true",
+          "/credentialsReleased==true",
+          "/lockRetained==false"
+         ],
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "1.o11.c",
+       "text": "Custom roles and user propagation into Library/Service producers",
+       "kind": "proof",
+       "pins": [],
+       "nativeLimits": []
+      }
+     ]
+    },
+    "odc": {
+     "subCriteria": [
+      {
+       "id": "1.odc.a",
+       "text": "Authenticated app user with native identity preserved and permission check in an original client chain",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "vault-app-proof-20261007/public-odc-map-stepout-audit.json",
+         "sha256": "68ec95550e08dc557bc648d120ac3637536ae654414a0ee829813312649a0f7b",
+         "transport": "mcp",
+         "operationId": "1f2b6095-9b27-4497-825c-122040ffb66f",
+         "sessionId": "416606d4-ea2d-452e-ad79-1f8aa88cde15",
+         "predicates": [
+          "/live==true",
+          "/authenticated==true",
+          "/nativeUserIdentityPreserved==true",
+          "/nativePermissionCheck==true",
+          "/credentialsReleased==true",
+          "/cleanupCompleted==true"
+         ],
+         "live": false
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "1.odc.b",
+       "text": "Temporary application role granted and restored around the MCP and CLI runs (permission-set hash before == after)",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "odc-lifecycle-proof/authorized-cycle-v2-proof.json",
+         "sha256": "c82ab48d3f0588bc01aa5d0e834efd8e033eaeb5c093da1dcb2b6fd1893a3ccc",
+         "transport": "mcp",
+         "operationId": null,
+         "sessionId": null,
+         "predicates": [
+          "/restored==true",
+          "/credentialsReleased==true"
+         ],
+         "profile": {
+          "name": "odc-role-cycle",
+          "beforeList": "/before",
+          "afterList": "/afterRestore"
+         },
+         "live": true
+        },
+        {
+         "path": "odc-lifecycle-proof/audit-initialize.json",
+         "sha256": "be45ec5dd9d74e56f67762ddb01953fcfe44d0d5d2f932d66ef6910b2148b5d8",
+         "transport": "mcp",
+         "operationId": "4d828feb-ab1d-4940-b91c-92a300146adc",
+         "sessionId": "a4363a95-04a0-493b-b759-f1494cda57f1",
+         "predicates": [
+          "/roleRestored==true",
+          "/roleCycleSha256==\"c82ab48d3f0588bc01aa5d0e834efd8e033eaeb5c093da1dcb2b6fd1893a3ccc\""
+         ],
+         "live": true
+        },
+        {
+         "path": "client-pause-odc/authorized-cli-cycle-v2-proof.json",
+         "sha256": "46f3f4485e22a8222064583bac7a8c7d7af13c898ae5f36c3c9e7e934ef711ba",
+         "transport": "cli",
+         "operationId": null,
+         "sessionId": null,
+         "predicates": [
+          "/restored==true",
+          "/credentialsReleased==true"
+         ],
+         "profile": {
+          "name": "odc-role-cycle",
+          "beforeList": "/before",
+          "afterList": "/afterRestore"
+         },
+         "live": true
+        },
+        {
+         "path": "client-pause-odc/audit-cli-v2.json",
+         "sha256": "41f0f9fff5a00b3e7bee9506dd01667bfd89b4a3d969301598ea56e9ff4038c4",
+         "transport": "cli",
+         "operationId": "51083929-7294-4f3d-a07a-ce1afc4fc604",
+         "sessionId": "5472f210-87dc-4e23-8167-baa757349722",
+         "predicates": [
+          "/roleRestored==true",
+          "/transport==\"root-cli-json-lines\""
+         ],
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "1.odc.c",
+       "text": "Server user context and roles inside Library/Service producers",
+       "kind": "proof",
+       "pins": [],
+       "nativeLimits": []
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 2,
+   "title": "Declared inputs, data types and multiple scenarios",
+   "lanes": {
+    "o11": {
+     "subCriteria": [
+      {
+       "id": "2.o11.a",
+       "text": "Per-type coverage of inputs/locals/outputs/returns in client and server frames (debug-type-coverage)",
+       "kind": "type-coverage",
+       "pins": [],
+       "nativeLimits": []
+      },
+      {
+       "id": "2.o11.b",
+       "text": "Server scalar scenarios (Boolean, Date, Decimal) read and re-evaluated with response and cleanup",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "item2-o11-server-scalars/live-Bool/audit.json",
+         "sha256": "c5aadc8e14a8a2c069f7f93636a4320a61045bb347552e4c30a4471b7673bb72",
+         "transport": "mcp",
+         "operationId": "a04aa99c-b9c2-4cce-9bf7-3e4a48895f65",
+         "sessionId": "e233f83f-8b47-4359-9807-deea528d87e9",
+         "predicates": [
+          "/passed==true",
+          "/responseAndCleanup==true"
+         ],
+         "live": true
+        },
+        {
+         "path": "item2-o11-server-scalars/live-Date/audit.json",
+         "sha256": "ea52d0f86e3d5418528ff909c6475c8bda860431a7a9c2847552f40ef5ae1388",
+         "transport": "mcp",
+         "operationId": "c18e7659-10a8-4461-a005-f4abe907827e",
+         "sessionId": "9e13eb98-68d8-44d8-be2c-e5016cf42e39",
+         "predicates": [
+          "/passed==true",
+          "/responseAndCleanup==true"
+         ],
+         "live": true
+        },
+        {
+         "path": "item2-o11-server-scalars/live-Decimal/audit.json",
+         "sha256": "ab751941a607b569e3d23b90b1d538ddbde70e1f3375c4feb5f281d495bfd575",
+         "transport": "mcp",
+         "operationId": "cc265ee9-5464-42b9-b162-1f19250b3dfa",
+         "sessionId": "7d86ddc1-b00d-4763-bd97-6d606e9eb91e",
+         "predicates": [
+          "/passed==true",
+          "/responseAndCleanup==true"
+         ],
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      }
+     ]
+    },
+    "odc": {
+     "subCriteria": [
+      {
+       "id": "2.odc.a",
+       "text": "Per-type coverage of inputs/locals/outputs/returns in client and server frames (debug-type-coverage)",
+       "kind": "type-coverage",
+       "pins": [],
+       "nativeLimits": []
+      },
+      {
+       "id": "2.odc.b",
+       "text": "Client record lists and Unicode inputs in three scenarios",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "vault-app-proof-20261007/public-odc-filter-list-audit.json",
+         "sha256": "183297ea74734229e71844e50ab8baa417dfc512c96d456fc2ccf31c3884ce9f",
+         "transport": "mcp",
+         "operationId": "7265723a-8470-455b-a61d-dab443237702",
+         "sessionId": "da981a08-e354-4c65-840a-a562e70fc527",
+         "predicates": [
+          "/live==true",
+          "/allExpandedRecordFieldsMatched==true",
+          "/cleanupCompleted==true",
+          "/credentialsReleased==true"
+         ],
+         "live": false
+        },
+        {
+         "path": "vault-app-proof-20261007/public-odc-quotes-inputs-audit.json",
+         "sha256": "29a42e494ed7b646d8417570a19c1eecccdad8d1b1331d3cb77c837d407297b7",
+         "transport": "mcp",
+         "operationId": "dc2a27f5-f0a1-46ca-800c-a62e97de5308",
+         "sessionId": "55e311fb-daca-4c0b-93f5-d7be660acf92",
+         "predicates": [
+          "/scenarios==3",
+          "/cleanupCompleted==true",
+          "/credentialsReleased==true"
+         ],
+         "live": false
+        }
+       ],
+       "nativeLimits": []
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 3,
+   "title": "Client Actions",
+   "lanes": {
+    "o11": {
+     "subCriteria": [
+      {
+       "id": "3.o11.a",
+       "text": "Client Action with cooperative pause, reads/re-evaluations, stale references refused and cleanup (MCP and CLI)",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "client-pause-o11/audit.json",
+         "sha256": "e1f59eca6a98f82930133038f3690eea8253587c09b0a197adc9a1ab9f3c91a3",
+         "transport": "mcp",
+         "operationId": "cf40f4f3-1499-4501-be76-0fe88b3262e5",
+         "sessionId": "c8a2d1f2-9c25-40d4-8a87-c549f7b349ba",
+         "predicates": [
+          "/live==true",
+          "/manualPauseOutsideConfiguredBreakpoints==true",
+          "/memoryCleared==true",
+          "/credentialsReleased==true",
+          "/lockRetained==false",
+          "/transport==\"public-mcp\""
+         ],
+         "evidenceKey": "o11-client-action-mcp",
+         "live": true
+        },
+        {
+         "path": "client-pause-o11/audit-cli.json",
+         "sha256": "3092c9613114eb81d76a590df2105b91bc548af8571404891c5d70c604857af2",
+         "transport": "cli",
+         "operationId": "be4eacd5-c553-485f-bfcd-f5831ba0aacf",
+         "sessionId": "492dc669-6ef7-436f-89ff-e4990985f7e8",
+         "predicates": [
+          "/live==true",
+          "/manualPauseOutsideConfiguredBreakpoints==true",
+          "/memoryCleared==true",
+          "/credentialsReleased==true",
+          "/lockRetained==false",
+          "/transport==\"root-cli-json-lines\""
+         ],
+         "evidenceKey": "o11-client-action-cli",
+         "live": true
+        },
+        {
+         "path": "item17-cli/client-o11-audit.json",
+         "sha256": "6bbb2dae1e329d5ed5798c6c053a73b877b0b77dc1c219f3c09a3402f5052068",
+         "transport": "cli",
+         "operationId": "26cac7e0-31ef-4364-9504-d0f0ca16e01d",
+         "sessionId": "394e9f56-54b3-40de-8724-291a804a59f8",
+         "predicates": [
+          "/transport==\"root-cli-json-lines\"",
+          "/memoryCleared==true",
+          "/credentialsReleased==true",
+          "/lockRetained==false"
+         ],
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "3.o11.b",
+       "text": "Consumer -> Library client function boundary with producer frames",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "o11-client-boundary-proof/audit.json",
+         "sha256": "41436457881bb2b4395b7dae9d03ce03b8f0609939b6e9f50013f837cdb67562",
+         "transport": "mcp",
+         "operationId": "a3f97aac-7fe9-42a1-9314-809387e07c3f",
+         "sessionId": "e25d7329-ce83-4153-bc0c-49880d8a06a4",
+         "predicates": [
+          "/nativeLibraryBoundaryValuesProven==true",
+          "/memoryCleared==true",
+          "/credentialsReleased==true",
+          "/lockRetained==false"
+         ],
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      }
+     ]
+    },
+    "odc": {
+     "subCriteria": [
+      {
+       "id": "3.odc.a",
+       "text": "Client/Screen Action with cooperative pause, reads/re-evaluations and cleanup (MCP and CLI)",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "client-pause-odc/audit-authorized.json",
+         "sha256": "b2209753380c15f149097cdcce476f56808df4a7958f5678cc569c5ccf49515a",
+         "transport": "mcp",
+         "operationId": "cb2f6e99-1093-41e2-b7c2-c59a5e29fb2e",
+         "sessionId": "272d5f67-5f51-48e2-9144-22c183b9ab47",
+         "predicates": [
+          "/live==true",
+          "/roleRestored==true",
+          "/cleanupCompleted==true",
+          "/credentialsReleased==true",
+          "/lockRetained==false",
+          "/transport==\"public-mcp-stdio\""
+         ],
+         "evidenceKey": "odc-client-action-mcp",
+         "live": true
+        },
+        {
+         "path": "client-pause-odc/audit-cli-v2.json",
+         "sha256": "41f0f9fff5a00b3e7bee9506dd01667bfd89b4a3d969301598ea56e9ff4038c4",
+         "transport": "cli",
+         "operationId": "51083929-7294-4f3d-a07a-ce1afc4fc604",
+         "sessionId": "5472f210-87dc-4e23-8167-baa757349722",
+         "predicates": [
+          "/live==true",
+          "/roleRestored==true",
+          "/cleanupCompleted==true",
+          "/credentialsReleased==true",
+          "/lockRetained==false",
+          "/transport==\"root-cli-json-lines\""
+         ],
+         "evidenceKey": "odc-client-action-cli",
+         "live": true
+        },
+        {
+         "path": "item17-cli/client-odc-audit.json",
+         "sha256": "4a72f3d489df59bd3ef5ca0960bd829390739963cffd8b2f81a0101e02a963d4",
+         "transport": "cli",
+         "operationId": "2d9aa5c0-ce84-40db-b268-0ef71d3745be",
+         "sessionId": "b022422e-5809-4f69-a08e-2395b5f592d3",
+         "predicates": [
+          "/transport==\"root-cli-json-lines\"",
+          "/cleanupConfirmed==true",
+          "/credentialsReleased==true",
+          "/lockRetained==false"
+         ],
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 4,
+   "title": "Screen Actions, screens/blocks and lifecycle",
+   "lanes": {
+    "o11": {
+     "subCriteria": [
+      {
+       "id": "4.o11.a",
+       "text": "Screen/block widget state mutations observed in client frames (MCP and CLI)",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "o11-widget-mutation-proof/audit-values.json",
+         "sha256": "242cfd0fe23a5109e923da0367898d721e934d17b64234ba1e1072a83981c563",
+         "transport": "mcp",
+         "operationId": "06d4a4d9-9743-4c28-ba00-99d30d8f0577",
+         "sessionId": "25c9b042-6b06-46f8-a712-d1dcb6eaeb64",
+         "predicates": [
+          "/live==true",
+          "/responseAndCleanupConfirmed==true"
+         ],
+         "live": true
+        },
+        {
+         "path": "o11-widget-mutation-proof/audit-cli.json",
+         "sha256": "e4d25856de84756d91d445b30590ed1e421ff20111432709dda4b688c6bb8441",
+         "transport": "cli",
+         "operationId": "ebd2f75b-1487-4d9a-ba9a-ed0d588d8b35",
+         "sessionId": "9c75a56d-e670-4cd1-9bf8-fb6c76cbf981",
+         "predicates": [
+          "/live==true",
+          "/transport==\"root-cli-json-lines\"",
+          "/responseAndCleanupConfirmed==true"
+         ],
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "4.o11.b",
+       "text": "Complete screen lifecycle (no O11 mounted dispatcher)",
+       "kind": "proof",
+       "pins": [],
+       "nativeLimits": []
+      }
+     ]
+    },
+    "odc": {
+     "subCriteria": [
+      {
+       "id": "4.odc.a",
+       "text": "Individual lifecycle event (ScreenOnInitialize) with reads and role restored",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "odc-lifecycle-proof/audit-initialize.json",
+         "sha256": "be45ec5dd9d74e56f67762ddb01953fcfe44d0d5d2f932d66ef6910b2148b5d8",
+         "transport": "mcp",
+         "operationId": "4d828feb-ab1d-4940-b91c-92a300146adc",
+         "sessionId": "a4363a95-04a0-493b-b759-f1494cda57f1",
+         "predicates": [
+          "/ok==true",
+          "/live==true",
+          "/roleRestored==true",
+          "/cleanupConfirmed==true"
+         ],
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "4.odc.b",
+       "text": "Authorized Development mount: single journaled submission/result, staticEffectsQualified:false carried, limits flagged",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "native-runs/odc/92088a26-b29b-45cb-9257-cb99f51c4535/receipt.json",
+         "sha256": "70751b3f267f1add856e05d3b429931b81d8653d3cfb8f0f1cf66f5b1f4f7d3c",
+         "transport": "mcp",
+         "operationId": "92088a26-b29b-45cb-9257-cb99f51c4535",
+         "sessionId": "036bd7309c214e53bfc3eb9d8839797c",
+         "predicates": [
+          "/ok==true"
+         ],
+         "profile": {
+          "name": "odc-mount"
+         },
+         "evidenceKey": "odc-mount-receipt-mcp",
+         "live": true
+        },
+        {
+         "path": "client-pause-odc/mounted-lifecycle/live-mount-r3d/audit.json",
+         "sha256": "31f2439563a8a28ead3584d632fde8fff761af5596b87ad9e0b6816cd27e3bf1",
+         "transport": "mcp",
+         "operationId": "92088a26-b29b-45cb-9257-cb99f51c4535",
+         "sessionId": "71af6779-e610-4242-af9a-6d6c326b5e8e",
+         "predicates": [
+          "/staticEffectsQualified==false",
+          "/runOk==true",
+          "/uncertain==false",
+          "/cleanup==true",
+          "/credentialsReleased==true",
+          "/lockRetained==false",
+          "/roleRestored==true"
+         ],
+         "evidenceKey": "odc-mount-mcp",
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "4.odc.c",
+       "text": "Complete mounted lifecycle with render verification and OnDestroy",
+       "kind": "proof",
+       "pins": [],
+       "nativeLimits": []
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 5,
+   "title": "Data Actions",
+   "lanes": {
+    "o11": {
+     "subCriteria": [
+      {
+       "id": "5.o11.a",
+       "text": "Data Action pauses, reads and timed response with cleanup",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "item5-o11-data/audit.json",
+         "sha256": "a39e4a9c14494b6175bbd58a0db1e9b182a1a78ff1f9e3d6033cc1950242b277",
+         "transport": "mcp",
+         "operationId": null,
+         "sessionId": "c351f9ff-4c68-408a-b399-429e23faaf25",
+         "predicates": [
+          "/live==true",
+          "/timeoutAndResponseValidated==true",
+          "/threadEnded==true",
+          "/credentialsReleased==true",
+          "/debuggerStopped==true"
+         ],
+         "evidenceKey": "o11-server-chain-mcp",
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      }
+     ]
+    },
+    "odc": {
+     "subCriteria": [
+      {
+       "id": "5.odc.a",
+       "text": "Scalar server value matches the client wire output; cleanup confirmed",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "vault-app-proof-20261007/odc-scalar-read/live-comparison-audit.json",
+         "sha256": "d6c1c73c9a42e40dfcedd64338827a10032ff852a0e4daa5116847eb974e3183",
+         "transport": "mcp",
+         "operationId": "57da0eee-4359-42c7-9a6e-4faea47da3c8",
+         "sessionId": null,
+         "predicates": [
+          "/wireMatchesNativeClient==true",
+          "/cleanupConfirmed==true",
+          "/credentialsReleased==true",
+          "/threadEnded==true"
+         ],
+         "live": false
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "5.odc.b",
+       "text": "Compound Data Action across modules",
+       "kind": "proof",
+       "pins": [],
+       "nativeLimits": []
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 6,
+   "title": "Server Actions",
+   "lanes": {
+    "o11": {
+     "subCriteria": [
+      {
+       "id": "6.o11.a",
+       "text": "Server frames, steps and frame selection with response and cleanup",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "item16-o11-server-frames/audit.json",
+         "sha256": "20c6d079c9feccf0093d97bb5be2f7d4dda6f1710c19c603ba823e5590d81f56",
+         "transport": "mcp",
+         "operationId": "8b7bc4fd-0a69-4531-a75e-bafbdb32918b",
+         "sessionId": "fb2af141-e7d2-46a0-9562-b76c14bee8f0",
+         "predicates": [
+          "/passed==true",
+          "/responseAndCleanup==true"
+         ],
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      }
+     ]
+    },
+    "odc": {
+     "subCriteria": [
+      {
+       "id": "6.odc.a",
+       "text": "Server frames through the public server session (MCP and CLI)",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "vault-app-proof-20261007/public-server-frames-audit.json",
+         "sha256": "c80e7c500fe561120177a222a93d2934f25121b16b522d06d4bf1242983001c4",
+         "transport": "mcp",
+         "operationId": "f8d9a276-512f-4d9f-b235-6ca49fa1f468",
+         "sessionId": null,
+         "predicates": [
+          "/completed==true",
+          "/uncertain==false",
+          "/cleanupConfirmed==true",
+          "/credentialsReleased==true"
+         ],
+         "evidenceKey": "odc-server-chain-mcp",
+         "live": false
+        },
+        {
+         "path": "item17-cli/server-odc-audit.json",
+         "sha256": "5b623168abcaa7760d584b5f3f257f29a00e3f6c0c3915dbbfbafd780e47cd36",
+         "transport": "cli",
+         "operationId": "3dd20df2-63f3-4dcd-9101-1bc2a121f291",
+         "sessionId": null,
+         "predicates": [
+          "/cleanupConfirmed==true",
+          "/validated/uncertain==false",
+          "/validated/credentialsReleased==true"
+         ],
+         "evidenceKey": "odc-server-chain-cli",
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 7,
+   "title": "Service Actions",
+   "lanes": {
+    "o11": {
+     "subCriteria": [
+      {
+       "id": "7.o11.a",
+       "text": "Basic REST -> Server -> Service interactive session with frame selection and both responses",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "o11-boundary-20261009/audit-service-interactive.json",
+         "sha256": "1795098d708a465419ce63ae73dca31bc844a316c3d92da0660cdab47f149b2c",
+         "transport": "mcp",
+         "operationId": null,
+         "sessionId": "d513ee24-0a85-4635-9669-91481eb4063c",
+         "predicates": [
+          "/ok==true",
+          "/publicMcp==true",
+          "/bothResponsesCorrect==true",
+          "/credentialsReleased==true",
+          "/lockRetained==false"
+         ],
+         "evidenceKey": "o11-service-chain-mcp",
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "7.o11.b",
+       "text": "Step-into a Service Action from the consumer session",
+       "kind": "native-limit",
+       "pins": [],
+       "nativeLimits": [
+        "o11-service-step-into-from-consumer"
+       ]
+      }
+     ]
+    },
+    "odc": {
+     "subCriteria": [
+      {
+       "id": "7.odc.a",
+       "text": "Service Action frames reached in background (Workflow r1), stop/cleanup/credentials confirmed",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "native-runs/odc/ead0e151-82ca-46fb-9182-55b98d53c789/receipt.json",
+         "sha256": "967c0f6a8fb6b35ff7cd7e22537026339729ee1001cd2f7f120ce9f7fe70d5bd",
+         "transport": "mcp",
+         "operationId": "ead0e151-82ca-46fb-9182-55b98d53c789",
+         "sessionId": "12d6c343d64d4fd2a69b81958a9d9e24",
+         "predicates": [
+          "/ok==true"
+         ],
+         "profile": {
+          "name": "odc-native-run"
+         },
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "7.odc.b",
+       "text": "Step-into a Service Action of another app from the consumer session",
+       "kind": "native-limit",
+       "pins": [],
+       "nativeLimits": [
+        "odc-service-step-into-from-consumer"
+       ]
+      },
+      {
+       "id": "7.odc.c",
+       "text": "Interactive Service Action with the app-user context",
+       "kind": "proof",
+       "pins": [],
+       "nativeLimits": []
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 8,
+   "title": "Library and cross-module reuse",
+   "lanes": {
+    "o11": {
+     "subCriteria": [
+      {
+       "id": "8.o11.a",
+       "text": "Library producer frames with private reads, model and native hash bound",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "o11-client-private-boundary-proof/audit.json",
+         "sha256": "4a2ac6d65545a00014d2ed52f8e469a3e574a9fcffca15dcf5f68e50f9ef086e",
+         "transport": "mcp",
+         "operationId": "62af18e9-6953-4d30-a49b-c7bfabeca966",
+         "sessionId": "273ca76a-1d4f-4b29-8239-790982717368",
+         "predicates": [
+          "/nativeLibraryBoundaryValuesProven==true",
+          "/privateConsumptionMatched==true",
+          "/memoryCleared==true",
+          "/credentialsReleased==true",
+          "/lockRetained==false"
+         ],
+         "evidenceKey": "o11-client-private-mcp",
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      }
+     ]
+    },
+    "odc": {
+     "subCriteria": [
+      {
+       "id": "8.odc.a",
+       "text": "Library producer frames through the public server session",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "vault-app-proof-20261007/public-static-server-audit.json",
+         "sha256": "ceb9cba14b255bd16573bee3a6f25d16b666f31a989f226935cf53e7915b16d8",
+         "transport": "mcp",
+         "operationId": "460c155d-af2f-4cb3-ab96-11c710da6c40",
+         "sessionId": null,
+         "predicates": [
+          "/completed==true",
+          "/uncertain==false",
+          "/cleanupConfirmed==true",
+          "/credentialsReleased==true"
+         ],
+         "evidenceKey": "odc-library-producer-mcp",
+         "live": false
+        }
+       ],
+       "nativeLimits": []
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 9,
+   "title": "Timers and BPT",
+   "lanes": {
+    "o11": {
+     "subCriteria": [
+      {
+       "id": "9.o11.a",
+       "text": "Timer through its original launcher with manual pause (MCP and CLI)",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "vault-app-proof-20261007/public-o11-timer-interactive-audit.json",
+         "sha256": "00e55fb263bafe5d6add19cc516f9244d120776604abce74883feb064730961b",
+         "transport": "mcp",
+         "operationId": "34dd6d0e-5943-46f0-acdc-b46b4e52de5c",
+         "sessionId": "f0e7a76b-18fc-45c0-93d8-08618ed85fba",
+         "predicates": [
+          "/live==true",
+          "/debuggerStopped==true",
+          "/memoryReferencesReleased==true",
+          "/pendingRequests==0"
+         ],
+         "evidenceKey": "o11-timer-mcp",
+         "live": false
+        },
+        {
+         "path": "item17-cli/manual-pause-audit.json",
+         "sha256": "d0cd5e7064434b174825a7350d2acbdb085e37e00526b5f20c8721effd8afbb2",
+         "transport": "cli",
+         "operationId": "58a1481e-d005-4148-9345-cac071d10f16",
+         "sessionId": "588a24f9-26c8-4b27-abc2-6f5639fcff13",
+         "predicates": [
+          "/manualPauseInterruptionProved==true",
+          "/debuggerStopped==true",
+          "/memoryReferencesReleased==true"
+         ],
+         "evidenceKey": "o11-timer-cli",
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "9.o11.b",
+       "text": "Timer instance correlation and execution completion",
+       "kind": "proof",
+       "pins": [],
+       "nativeLimits": []
+      },
+      {
+       "id": "9.o11.c",
+       "text": "BPT (excluded from the registered goal)",
+       "kind": "excluded",
+       "pins": [],
+       "nativeLimits": [],
+       "reason": "BPT is outside the registered goal (REPASSE 09/10); not claimed",
+       "registry": "o11/bpt-original-launch"
+      }
+     ]
+    },
+    "odc": {
+     "subCriteria": [
+      {
+       "id": "9.odc.a",
+       "text": "Timer through an original Wake caller (interactive)",
+       "kind": "proof",
+       "pins": [],
+       "nativeLimits": []
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 10,
+   "title": "REST and authentication",
+   "lanes": {
+    "o11": {
+     "subCriteria": [
+      {
+       "id": "10.o11.a",
+       "text": "REST Basic app-user and anonymous entries, interactive",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "o11-rest-basic-proof/audit.json",
+         "sha256": "1880032b400e728540f071ae7f884c956083c916fd9af4e81ef5734eead1a9ab",
+         "transport": "mcp",
+         "operationId": "bd657f70-85ac-4949-8e2c-c77f6c3cdb9e",
+         "sessionId": "58fcfc7d-3ea3-455e-bb27-7d7acb620697",
+         "predicates": [
+          "/ok==true",
+          "/live==true",
+          "/basicAccepted==true",
+          "/debuggerStopped==true",
+          "/credentialsReleased==true",
+          "/lockRetained==false"
+         ],
+         "evidenceKey": "o11-rest-basic-mcp",
+         "live": true
+        },
+        {
+         "path": "o11-rest-text-proof/audit.json",
+         "sha256": "b4b92a97bc472b425f9d840780ad824c9538d1c9a77163bb72f17b855465f585",
+         "transport": "mcp",
+         "operationId": "6b00d5ab-1121-41f3-92ec-967c4aad78bf",
+         "sessionId": "f0316374-3659-4643-b9a0-5998324fff72",
+         "predicates": [
+          "/ok==true",
+          "/live==true",
+          "/credentialsReleased==true",
+          "/lockRetained==false"
+         ],
+         "evidenceKey": "o11-rest-text-basic-mcp",
+         "live": true
+        },
+        {
+         "path": "vault-app-proof-20261007/public-o11-rest-interactive-audit.json",
+         "sha256": "84d31bc777f485eb39587860c7ff9fd295bed6db9aebe5021f584ef67fa33da4",
+         "transport": "mcp",
+         "operationId": "303cfcaf-3771-42e2-ba7b-32fc8c381cfb",
+         "sessionId": "c8dc51ec-e3e6-48dc-8ec1-004bf33aafec",
+         "predicates": [
+          "/publicMcp==true",
+          "/debuggerStopped==true",
+          "/lockRetained==false"
+         ],
+         "evidenceKey": "o11-rest-anonymous-mcp",
+         "live": false
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "10.o11.b",
+       "text": "REST Custom authentication and cross-module roles",
+       "kind": "proof",
+       "pins": [],
+       "nativeLimits": []
+      }
+     ]
+    },
+    "odc": {
+     "subCriteria": [
+      {
+       "id": "10.odc.a",
+       "text": "Anonymous REST -> Server Action -> external SOAP consumer, interactive",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "new-o11-soap-20261009/audit-odc-v2.json",
+         "sha256": "3cb851a29fdd8a7641a955196fbffc42c788ffb9b3cfd537f14a32eb89268f1e",
+         "transport": "mcp",
+         "operationId": null,
+         "sessionId": "5dba6a43-2b43-4f05-a3e1-86cf60e4de67",
+         "predicates": [
+          "/ok==true",
+          "/nativeStopped==true",
+          "/runnerLockReleased==true"
+         ],
+         "evidenceKey": "odc-rest-anonymous-mcp",
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "10.odc.b",
+       "text": "REST Basic/Custom authentication",
+       "kind": "proof",
+       "pins": [],
+       "nativeLimits": []
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 11,
+   "title": "SOAP and applicable contracts",
+   "lanes": {
+    "o11": {
+     "subCriteria": [
+      {
+       "id": "11.o11.a",
+       "text": "Exposed SOAP scalar and structure/list contracts, anonymous",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "vault-app-proof-20261007/public-o11-soap-interactive-audit.json",
+         "sha256": "b519103778198aaa1c6e2aaa9a51606a945d022f7b56277cc744cf2cfffd4cf1",
+         "transport": "mcp",
+         "operationId": "94fffe66-9cdc-459c-8fe1-d49f7939805f",
+         "sessionId": "2113aed0-aa8b-4cbd-be7d-abf47d6d34dc",
+         "predicates": [
+          "/live==true",
+          "/debuggerStopped==true",
+          "/memoryReferencesReleased==true",
+          "/pendingRequests==0"
+         ],
+         "evidenceKey": "o11-soap-anonymous-mcp",
+         "live": false
+        },
+        {
+         "path": "o11-soap-compound-proof/audit.json",
+         "sha256": "c0d495319e4bccec9ec17943e5cf657e7c542b335e82304e19dc69ada6881102",
+         "transport": "mcp",
+         "operationId": "28184fd7-a1b3-4d46-8c32-40059cd5caa2",
+         "sessionId": "bcb22c59-7675-440e-8fe2-20960df213a5",
+         "predicates": [
+          "/ok==true",
+          "/live==true",
+          "/outputsExact==true",
+          "/debuggerStopped==true",
+          "/lockRetained==false"
+         ],
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      }
+     ]
+    },
+    "odc": {
+     "subCriteria": [
+      {
+       "id": "11.odc.a",
+       "text": "Exposed/consumed native SOAP removed in the installed ODC model",
+       "kind": "native-limit",
+       "pins": [],
+       "nativeLimits": [
+        "odc-exposed-soap-removed"
+       ]
+      },
+      {
+       "id": "11.odc.b",
+       "text": "Internal frames of the external C# SOAP library",
+       "kind": "proof",
+       "pins": [],
+       "nativeLimits": []
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 12,
+   "title": "Complete scope per frame",
+   "lanes": {
+    "o11": {
+     "subCriteria": [
+      {
+       "id": "12.o11.a",
+       "text": "Inputs/locals/outputs with private reads in client and server frames",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "item12-o11-private/live-audit.json",
+         "sha256": "94ca88326bca377af5f041f4530ce4a8a6563d63f59c490f2e84283045c2e202",
+         "transport": "mcp",
+         "operationId": null,
+         "sessionId": "8d52d9e6-5a6c-4018-a46e-c3cf69c3aea5",
+         "predicates": [
+          "/uncertain==false",
+          "/credentialsReleased==true"
+         ],
+         "live": true
+        },
+        {
+         "path": "o11-client-private-boundary-proof/audit.json",
+         "sha256": "4a2ac6d65545a00014d2ed52f8e469a3e574a9fcffca15dcf5f68e50f9ef086e",
+         "transport": "mcp",
+         "operationId": "62af18e9-6953-4d30-a49b-c7bfabeca966",
+         "sessionId": "273ca76a-1d4f-4b29-8239-790982717368",
+         "predicates": [
+          "/privateReferencesInvalidated==true",
+          "/credentialsReleased==true",
+          "/lockRetained==false"
+         ],
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "12.o11.b",
+       "text": "Every scope category complete in every frame",
+       "kind": "proof",
+       "pins": [],
+       "nativeLimits": []
+      }
+     ]
+    },
+    "odc": {
+     "subCriteria": [
+      {
+       "id": "12.odc.a",
+       "text": "Client private-read classification with cleanup",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "item12-client-private/audit.json",
+         "sha256": "12da277323661e54f0758f01921b0de8e82b3f567c4450d7aec6c6cea3aab438",
+         "transport": "mcp",
+         "operationId": "230dc03a-b389-4800-9dcb-171962f85632",
+         "sessionId": "6425f5f4-f1bd-4915-9b64-b633f2ae02c9",
+         "predicates": [
+          "/identityPreserved==true",
+          "/credentialsReleased==true",
+          "/cleanupConfirmed==true"
+         ],
+         "evidenceKey": "odc-client-private-mcp",
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "12.odc.b",
+       "text": "Server private read and every scope category complete (runtimeValuesComplete)",
+       "kind": "proof",
+       "pins": [],
+       "nativeLimits": []
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 13,
+   "title": "External settings/site property changes reflected",
+   "lanes": {
+    "o11": {
+     "subCriteria": [
+      {
+       "id": "13.o11.a",
+       "text": "Site property 17 -> 29 -> 17 at the same pause and reference, restored and answered",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "o11-site-soap-proof/audit.json",
+         "sha256": "6001cbecdbd057995c231745f491061d9bf4bd19f0df6e4702537e08d71745e2",
+         "transport": "mcp",
+         "operationId": "f42ed88e-e6b6-4d1e-84d3-76e1015cc168",
+         "sessionId": "feaad5ba-6aa6-4782-8e4c-7dbf2bce3aa2",
+         "predicates": [
+          "/ok==true",
+          "/live==true",
+          "/sameReferenceAndPause==true",
+          "/restored==true",
+          "/responseStatus==200",
+          "/lockRetained==false"
+         ],
+         "evidenceKey": "o11-soap-settings-mcp",
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      }
+     ]
+    },
+    "odc": {
+     "subCriteria": [
+      {
+       "id": "13.odc.a",
+       "text": "Setting changed and restored with value and origin compared (item 13)",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "item13-settings/audit-2026-10-09T00-04-03-060Z.json",
+         "sha256": "e283530cd8f3c0a6603f6906a1de62908f1fde9555d6d7ff9df6c1d14d7942be",
+         "transport": "mcp",
+         "operationId": null,
+         "sessionId": null,
+         "predicates": [
+          "/configurationRestored==true"
+         ],
+         "profile": {
+          "name": "odc-settings-restore",
+          "before": "/cases/2/configurationBefore",
+          "after": "/cases/2/configurationAfterRestoration"
+         },
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "13.odc.b",
+       "text": "Changed value re-evaluated by the native debugger at the same pause",
+       "kind": "proof",
+       "pins": [],
+       "nativeLimits": []
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 14,
+   "title": "Client/session variable changes",
+   "lanes": {
+    "o11": {
+     "subCriteria": [
+      {
+       "id": "14.o11.a",
+       "text": "Session Integer changes 0 -> -17 -> 0 and 0 -> 29 -> 0, restored",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "o11-session-variable-proof/audit.json",
+         "sha256": "487021ed9d7c30023dcb6bafd98760295bf8c359765d06311702b32a83804d37",
+         "transport": "mcp",
+         "operationId": "ba0da2b7-68ec-4bea-8cc4-1845b0b62a82",
+         "sessionId": "aae7e106-e889-4969-8765-6c8cce720521",
+         "predicates": [
+          "/ok==true",
+          "/live==true",
+          "/restored==true",
+          "/outputsMatch==true",
+          "/debuggerStopped==true",
+          "/lockRetained==false"
+         ],
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "14.o11.b",
+       "text": "Client variables and authenticated session context",
+       "kind": "proof",
+       "pins": [],
+       "nativeLimits": []
+      }
+     ]
+    },
+    "odc": {
+     "subCriteria": [
+      {
+       "id": "14.odc.a",
+       "text": "Client variables read per pause across three scenarios",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "item12-widget/audit-odc.json",
+         "sha256": "a79ea39485ca062737a6424d23ad8f559903d819d509bfec895ed6b5f3e7a5c3",
+         "transport": "mcp",
+         "operationId": "f633ae4f-8617-476d-b0a8-9774b3891a21",
+         "sessionId": "3eab05cb-22d8-4846-8d27-145e029e83ce",
+         "predicates": [
+          "/live==true",
+          "/allReadValuesComplete==true",
+          "/credentialsReleased==true",
+          "/cleanupConfirmed==true"
+         ],
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 15,
+   "title": "Returns, structures/lists and pagination",
+   "lanes": {
+    "o11": {
+     "subCriteria": [
+      {
+       "id": "15.o11.a",
+       "text": "Compound client and server returns 0/2/151 with child pages and text slices",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "item15-o11-composite/live-audit.json",
+         "sha256": "df0d77195c8833790423b2642a298b3f67d00b58e27520e03564ddcdbb269686",
+         "transport": "mcp",
+         "operationId": null,
+         "sessionId": "101cb57a-1e19-4d9f-a2dc-ada9f39f8c19",
+         "predicates": [
+          "/executionCompleted==true",
+          "/cleanupCompleted==true",
+          "/credentialsReleased==true"
+         ],
+         "live": true
+        },
+        {
+         "path": "item15-o11-server-auto-pages/audit.json",
+         "sha256": "4d67acf001b09cc0533b9b6dccaf99583b1087bf34b6293341d3eba3ec49b561",
+         "transport": "mcp",
+         "operationId": "5773ab62-e967-4262-907c-8eb731b3e795",
+         "sessionId": "785f1b79-b8f3-481f-b9ce-fb9001ddb74f",
+         "predicates": [
+          "/completeCompoundPagination==true",
+          "/cleanupConfirmed==true"
+         ],
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      }
+     ]
+    },
+    "odc": {
+     "subCriteria": [
+      {
+       "id": "15.odc.a",
+       "text": "Native client returns, list pages and Unicode text pages",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "vault-app-proof-20261007/odc-return-candidate/live-returns-audit.json",
+         "sha256": "3bed2fec929e2a2fd3a9fe4c63c65cae42896592923ad5537e15e53b3bf0c72b",
+         "transport": "mcp",
+         "operationId": "726bc3d8-c58e-463b-b3df-afc26df66b16",
+         "sessionId": "f91ad8a7-2858-4667-90a1-5ee4bf286ad8",
+         "predicates": [
+          "/liveReturnProved==true",
+          "/cleanupCompleted==true",
+          "/credentialsReleased==true"
+         ],
+         "live": false
+        },
+        {
+         "path": "item15-odc-text-pages/audit.json",
+         "sha256": "57c36fe76a234226b0f1c1bcd852efe85560af99111ad472622dff960e239fa3",
+         "transport": "mcp",
+         "operationId": null,
+         "sessionId": null,
+         "predicates": [
+          "/ok==true",
+          "/paginationExact==true",
+          "/cleanupCompleted==true"
+         ],
+         "live": true
+        },
+        {
+         "path": "item15-odc-list-pages/audit.json",
+         "sha256": "15aa543f5370ea1c1958bf773c0f75c343278e6cdb2ac80c0e09c40a0d82110b",
+         "transport": "mcp",
+         "operationId": null,
+         "sessionId": null,
+         "predicates": [
+          "/ok==true",
+          "/cleanupCompleted==true"
+         ],
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "15.odc.b",
+       "text": "Server returns",
+       "kind": "proof",
+       "pins": [],
+       "nativeLimits": []
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 16,
+   "title": "Steps, frames, manual pause and stale references",
+   "lanes": {
+    "o11": {
+     "subCriteria": [
+      {
+       "id": "16.o11.a",
+       "text": "Cooperative client pause (native-next-node) on MCP and CLI",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "client-pause-o11/audit.json",
+         "sha256": "e1f59eca6a98f82930133038f3690eea8253587c09b0a197adc9a1ab9f3c91a3",
+         "transport": "mcp",
+         "operationId": "cf40f4f3-1499-4501-be76-0fe88b3262e5",
+         "sessionId": "c8a2d1f2-9c25-40d4-8a87-c549f7b349ba",
+         "predicates": [
+          "/manualPauses==2",
+          "/staleReferencesRefused==6",
+          "/transport==\"public-mcp\""
+         ],
+         "live": true
+        },
+        {
+         "path": "client-pause-o11/audit-cli.json",
+         "sha256": "3092c9613114eb81d76a590df2105b91bc548af8571404891c5d70c604857af2",
+         "transport": "cli",
+         "operationId": "be4eacd5-c553-485f-bfcd-f5831ba0aacf",
+         "sessionId": "492dc669-6ef7-436f-89ff-e4990985f7e8",
+         "predicates": [
+          "/manualPauses==2",
+          "/staleReferencesRefused==6",
+          "/transport==\"root-cli-json-lines\""
+         ],
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "16.o11.b",
+       "text": "Server manual pause outside breakpoints (MCP and CLI)",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "item16-server-loop/manual-pause-audit.json",
+         "sha256": "f45bfe7136b41890d1996d904b961cf8490532368cff73b9dc5faa95abddfea0",
+         "transport": "mcp",
+         "operationId": "303a799a-5911-4939-a5f5-afdcab9dc447",
+         "sessionId": "dc2139a3-475c-416a-b746-0e6ac8c566d9",
+         "predicates": [
+          "/manualPauseInterruptionProved==true",
+          "/debuggerStopped==true"
+         ],
+         "live": true
+        },
+        {
+         "path": "item17-cli/manual-pause-audit.json",
+         "sha256": "d0cd5e7064434b174825a7350d2acbdb085e37e00526b5f20c8721effd8afbb2",
+         "transport": "cli",
+         "operationId": "58a1481e-d005-4148-9345-cac071d10f16",
+         "sessionId": "588a24f9-26c8-4b27-abc2-6f5639fcff13",
+         "predicates": [
+          "/manualPauseInterruptionProved==true",
+          "/debuggerStopped==true"
+         ],
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "16.o11.c",
+       "text": "Immediate JavaScript suspension on the client",
+       "kind": "native-limit",
+       "pins": [],
+       "nativeLimits": [
+        "o11-client-suspend-all-threads"
+       ]
+      }
+     ]
+    },
+    "odc": {
+     "subCriteria": [
+      {
+       "id": "16.odc.a",
+       "text": "Cooperative client pause (native-next-node) on MCP and CLI",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "client-pause-odc/audit-authorized.json",
+         "sha256": "b2209753380c15f149097cdcce476f56808df4a7958f5678cc569c5ccf49515a",
+         "transport": "mcp",
+         "operationId": "cb2f6e99-1093-41e2-b7c2-c59a5e29fb2e",
+         "sessionId": "272d5f67-5f51-48e2-9144-22c183b9ab47",
+         "predicates": [
+          "/manualPauses==2",
+          "/staleReferencesRefused==6",
+          "/transport==\"public-mcp-stdio\""
+         ],
+         "live": true
+        },
+        {
+         "path": "client-pause-odc/audit-cli-v2.json",
+         "sha256": "41f0f9fff5a00b3e7bee9506dd01667bfd89b4a3d969301598ea56e9ff4038c4",
+         "transport": "cli",
+         "operationId": "51083929-7294-4f3d-a07a-ce1afc4fc604",
+         "sessionId": "5472f210-87dc-4e23-8167-baa757349722",
+         "predicates": [
+          "/manualPauses==2",
+          "/staleReferencesRefused==6",
+          "/transport==\"root-cli-json-lines\""
+         ],
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "16.odc.b",
+       "text": "Step-out between caller and callee with stale frame references refused",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "vault-app-proof-20261007/public-odc-map-stepout-audit.json",
+         "sha256": "68ec95550e08dc557bc648d120ac3637536ae654414a0ee829813312649a0f7b",
+         "transport": "mcp",
+         "operationId": "1f2b6095-9b27-4497-825c-122040ffb66f",
+         "sessionId": "416606d4-ea2d-452e-ad79-1f8aa88cde15",
+         "predicates": [
+          "/stepOutProved==true",
+          "/staleFrameReferenceRefused==true"
+         ],
+         "live": false
+        }
+       ],
+       "nativeLimits": []
+      },
+      {
+       "id": "16.odc.c",
+       "text": "Server manual pause",
+       "kind": "proof",
+       "pins": [],
+       "nativeLimits": []
+      },
+      {
+       "id": "16.odc.d",
+       "text": "Immediate JavaScript suspension on the client",
+       "kind": "native-limit",
+       "pins": [],
+       "nativeLimits": [
+        "odc-client-suspend-all-threads"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 17,
+   "title": "Interactive public MCP/CLI interfaces",
+   "lanes": {
+    "o11": {
+     "subCriteria": [
+      {
+       "id": "17.o11.a",
+       "text": "Every interactive adapter live on MCP and CLI (debug-adapter-registry)",
+       "kind": "adapter-coverage",
+       "pins": [],
+       "nativeLimits": []
+      }
+     ]
+    },
+    "odc": {
+     "subCriteria": [
+      {
+       "id": "17.odc.a",
+       "text": "Every interactive adapter live on MCP and CLI (debug-adapter-registry)",
+       "kind": "adapter-coverage",
+       "pins": [],
+       "nativeLimits": []
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 18,
+   "title": "Response, stop, credentials, cleanup and reconciliation",
+   "lanes": {
+    "o11": {
+     "subCriteria": [
+      {
+       "id": "18.o11.a",
+       "text": "No retained or unreconciled debugger lock and no blocked binding (debug-lock-inventory)",
+       "kind": "lock-inventory",
+       "pins": [],
+       "nativeLimits": []
+      },
+      {
+       "id": "18.o11.b",
+       "text": "Absence of a remote debug session after an uncertain stop",
+       "kind": "native-limit",
+       "pins": [],
+       "nativeLimits": [
+        "o11-remote-session-absence-unqualified"
+       ]
+      }
+     ]
+    },
+    "odc": {
+     "subCriteria": [
+      {
+       "id": "18.odc.a",
+       "text": "No retained or unreconciled debugger lock and no blocked binding (debug-lock-inventory)",
+       "kind": "lock-inventory",
+       "pins": [],
+       "nativeLimits": []
+      },
+      {
+       "id": "18.odc.b",
+       "text": "ODC native run with cleanup confirmed, transport counters, credentials released and no lock",
+       "kind": "proof",
+       "pins": [
+        {
+         "path": "native-runs/odc/ead0e151-82ca-46fb-9182-55b98d53c789/receipt.json",
+         "sha256": "967c0f6a8fb6b35ff7cd7e22537026339729ee1001cd2f7f120ce9f7fe70d5bd",
+         "transport": "mcp",
+         "operationId": "ead0e151-82ca-46fb-9182-55b98d53c789",
+         "sessionId": "12d6c343d64d4fd2a69b81958a9d9e24",
+         "predicates": [
+          "/ok==true"
+         ],
+         "profile": {
+          "name": "odc-native-run"
+         },
+         "live": true
+        }
+       ],
+       "nativeLimits": []
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 19,
+   "title": "Final matrix with evidence and hashes",
+   "lanes": {
+    "o11": {
+     "subCriteria": [
+      {
+       "id": "19.o11.a",
+       "text": "Every other O11 cell closed or documented, fingerprints current",
+       "kind": "matrix-integrity",
+       "pins": [],
+       "nativeLimits": []
+      }
+     ]
+    },
+    "odc": {
+     "subCriteria": [
+      {
+       "id": "19.odc.a",
+       "text": "Every other ODC cell closed or documented, fingerprints current",
+       "kind": "matrix-integrity",
+       "pins": [],
+       "nativeLimits": []
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

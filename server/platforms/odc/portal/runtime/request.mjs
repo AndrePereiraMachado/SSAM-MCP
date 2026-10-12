@@ -5,6 +5,15 @@ const parameterLocations = ['path', 'query'];
 const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 const plain = value => value && typeof value === 'object' && !Array.isArray(value);
 
+// Portfolio v2 documents comma-separated library types but omits explode:false.
+// Live comparison (2026-10-09) showed repeated keys silently drop the second type.
+// Keep this compatibility correction scoped; other APIs retain their OpenAPI defaults.
+function queryParameter(operation, parameter) {
+  return operation.id === 'portfolio-api-v2:get:/libraries' && parameter.name === 'type'
+    && parameter.style === undefined && parameter.explode === undefined
+    ? { ...parameter, explode: false } : parameter;
+}
+
 function binary(value, maxBytes) {
   if (!plain(value) || typeof value.$base64 !== 'string'
     || Object.keys(value).some(key => !['$base64', 'filename'].includes(key))
@@ -78,7 +87,7 @@ export function prepareRequest(catalog, operationId, input, config) {
   // Catalog-only dry validation works without an operator origin, never sends to the placeholder.
   const url = new URL(pathname, config.origin ?? 'https://not-configured.invalid');
   if (url.pathname !== pathname || (config.origin && url.origin !== config.origin)) fail('INPUT_INVALID', 'Route normalization changed the expected path.');
-  for (const p of parameters.filter(p => p.in === 'query')) if (own(input.query ?? {}, p.name)) addQuery(url, p, input.query[p.name]);
+  for (const p of parameters.filter(p => p.in === 'query')) if (own(input.query ?? {}, p.name)) addQuery(url, queryParameter(operation, p), input.query[p.name]);
   const headers = { accept: 'application/json' };
   let body;
   const requestBody = resolveRef(api.spec, operation.requestBody);

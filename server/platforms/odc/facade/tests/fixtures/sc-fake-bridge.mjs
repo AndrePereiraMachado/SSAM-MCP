@@ -19,7 +19,7 @@ export const CATALOG = Object.freeze({ soap: ['AddModuleToApplication', 'ChangeC
 export class FakeBridge {
   // login: what sc_web login answers (an Error is thrown; anything else signs the hidden window in). serviceCenter: the
   // manifest's catalog (null: a bridge that predates it).
-  constructor({ signed = true, web = true, verbs = VERBS, pages = {}, api = {}, capabilities = ['sc_api:soap', 'sc_web'], login = null, serviceCenter = CATALOG } = {}) {
+  constructor({ signed = true, web = true, verbs = VERBS, pages = {}, api = {}, capabilities = ['sc_api:soap', 'sc_web', 'sc_http:studioSession'], login = null, serviceCenter = CATALOG } = {}) {
     this.pid = 4242; this.version = '2.0.0'; this.corporate = false;
     this.signed = signed; this.webSigned = web; this.verbSet = new Set(verbs); this.caps = new Set(capabilities); this.loginReply = login;
     this.pages = { ...pages }; this.replies = { ...api }; this.calls = []; this.targets = []; this.catalog = serviceCenter;

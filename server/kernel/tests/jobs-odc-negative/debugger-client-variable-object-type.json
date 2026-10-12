@@ -1,0 +1,24 @@
+{
+ "description": "P09-w1-fixture-capability-evidence: evidence job for the debugger coverage fixture; never delivered. Object is not a Client Variable type: the model refuses the DataType write itself (no Verify step).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectError": [
+  "set DataType on IClientVariable 'SSAMDbgCvObject'",
+  "cannot be used as the value for the OutSystems.Model.Data.IClientVariable.DataType property"
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IClientVariable",
+   "name": "SSAMDbgCvObject",
+   "as": "$vObject"
+  },
+  {
+   "op": "set",
+   "target": "$vObject",
+   "prop": "DataType",
+   "value": "Object"
+  }
+ ]
+}

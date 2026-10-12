@@ -4,7 +4,13 @@
 // Captured code proves the wire contract, not a successful live login for this implementation.
 import { createHash, createPublicKey, randomBytes, verify } from 'node:crypto';
 import { CookieJar } from 'tough-cookie';
-import { cognitoLogin } from '../portal/runtime/cognito-login.mjs';
+import * as cognitoRuntime from '../portal/runtime/cognito-login.mjs';
+
+// Port D7: until the SC/Portal lane delivers cognito-login.mjs with cognitoRegionSupported (us-east-2 user pools),
+// the region allowlist is the one the installed adapter verifies (us-east-1). A namespace import keeps this module
+// loadable either way; a named import of the missing export made every ODC app-user sign-in fail to load.
+const { cognitoLogin } = cognitoRuntime;
+const cognitoRegionSupported = cognitoRuntime.cognitoRegionSupported ?? (region => region === 'us-east-1');
 
 const CLIENT = 'client_runtime', SCOPE = 'openid', MAX_BYTES = 512 * 1024;
 const MESSAGES = {
@@ -14,6 +20,7 @@ const MESSAGES = {
   debug_app_auth_challenge_required: 'Application sign-in requires an additional authentication challenge.',
   debug_app_auth_unavailable: 'Application authentication is unavailable; no automatic retry was performed.',
   debug_app_auth_expired: 'The application authentication token is expired or not yet valid.',
+  debug_app_auth_anchor_unavailable: 'No authenticated application user identity anchor is available.',
 };
 export class DebugAppAuthError extends Error {
   constructor(code) { super(MESSAGES[code]); this.name = 'DebugAppAuthError'; this.code = code; }
@@ -38,6 +45,25 @@ export function odcAppUserBinding(binding) {
     && runtime.pathname === '/' + binding.app + '/');
   return { lane: 'odc', runtimeUrl: runtime.href, app: binding.app, sessionId: binding.sessionId.replace(/-/g, '').toLowerCase(),
     ...(hasProducer ? { module: binding.module, moduleKey: binding.moduleKey } : {}) };
+}
+
+// Coordinator-side identity anchor of the ORIGINAL ODC login (ODC Service frames have no consumer frame).
+// Only after the private session proved userKey and the native host proved auth.getUserId() === userKey
+// (authenticated + identityMatches). The canonical lower-case userKey lives in this closure and reaches only
+// a sealing function: private-compare's seal, an HMAC under its per-public-session key. Never enumerable,
+// serialized, logged or returned.
+const USER_GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function odcAppUserAnchor(descriptor, authentication) {
+  if (descriptor?.binding?.lane !== 'odc' || descriptor.authenticated !== true || descriptor.state !== 'authenticated' ||
+      typeof descriptor.userKey !== 'string' || !USER_GUID.test(descriptor.userKey) || !(Date.parse(descriptor.expiresAt) > Date.now()) ||
+      authentication?.authenticated !== true || authentication.identityMatches !== true) fail('debug_app_auth_anchor_unavailable');
+  const userKey = descriptor.userKey.toLowerCase();
+  // Server native renderings are untyped Scalars; the server channel canonicalizes GUID text the same way.
+  const seal = (sealer, { runtime } = {}) => {
+    if (runtime !== 'server' || typeof sealer !== 'function') fail('debug_app_auth_anchor_unavailable');
+    return sealer({ type: 'Scalar', value: userKey, path: 'app-user', unavailable: false, undefined: false, trimmed: false, deferred: false, children: [] });
+  };
+  return Object.freeze(Object.defineProperties({ kind: 'app-user', lane: 'odc' }, { seal: { value: seal } }));
 }
 
 function jwtParts(token) {
@@ -105,7 +131,8 @@ export async function authenticateOdcAppUser({ binding, credentials, fetchImpl =
     try {
       response = await fetchImpl(url.href, { method, headers: { Accept: 'application/json', ...headers, ...(cookie ? { Cookie: cookie } : {}) },
         body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body), signal, redirect: 'manual', credentials: 'omit' });
-      const endpoint = stage === 'builtin-broker' && url.pathname === authorizationPath ? 'broker_authorize'
+      const endpoint = stage === 'runtime-config' && url.pathname === '/' + target.app + '/moduleservices/clientsettingsinfo' ? 'runtime_client_settings'
+        : stage === 'builtin-broker' && url.pathname === authorizationPath ? 'broker_authorize'
         : stage === 'broker-resume' && url.pathname !== resumePath ? 'broker_redirect' : endpointLabels[stage];
       observe({ event: 'http', stage, endpoint, method: method === 'POST' ? 'POST' : 'GET',
         status: Number.isInteger(response.status) && response.status >= 100 && response.status <= 599 ? response.status : 0 });
@@ -143,18 +170,38 @@ export async function authenticateOdcAppUser({ binding, credentials, fetchImpl =
   };
   try {
     enter('runtime-config');
-    const metadata = await json(target.runtimeUrl + 'moduleservices/auth/configs');
+    // Published useSettingsAndAuthConfigs/selectAuthConfigsManager prefers the
+    // IdentityProviders setting. A present but invalid setting must not silently
+    // select another provider from the legacy endpoint.
+    const settings = await json(target.runtimeUrl + 'moduleservices/clientsettingsinfo');
     detail = 'configuration-shape';
-    requireValue(Array.isArray(metadata.authConfigurations), 'debug_app_auth_provider_unsupported');
-    const builtins = metadata.authConfigurations.filter(item => item.type === 'cognito');
+    requireValue(settings?.clientSettings && typeof settings.clientSettings === 'object'
+      && !Array.isArray(settings.clientSettings), 'debug_app_auth_provider_unsupported');
+    const providerSetting = settings.clientSettings.IdentityProviders;
+    let configurations;
+    if (providerSetting === undefined || providerSetting === null || providerSetting === '') {
+      const metadata = await json(target.runtimeUrl + 'moduleservices/auth/configs');
+      detail = 'configuration-shape';
+      configurations = metadata?.authConfigurations;
+    } else {
+      requireValue(typeof providerSetting === 'string', 'debug_app_auth_provider_unsupported');
+      try { configurations = JSON.parse(providerSetting); } catch { fail('debug_app_auth_provider_unsupported'); }
+    }
+    requireValue(Array.isArray(configurations) && configurations.every(item => item && typeof item === 'object' && !Array.isArray(item)),
+      'debug_app_auth_provider_unsupported');
+    const builtins = configurations.filter(item => item.type === 'cognito' || item.kc_hint === 'cognito');
     detail = 'builtin-provider-count';
     requireValue(builtins.length === 1, 'debug_app_auth_provider_unsupported');
     const builtin = builtins[0], config = builtin.configs, pool = config?.poolId;
     const client = config?.amplifyClientId ?? config?.clientId, flow = config?.authFlow ?? 'USER_SRP_AUTH';
-    // The reused AWS adapter supports only its verified SRP region. The pool/client are always from this app.
+    const poolRegion = typeof pool === 'string' ? pool.split('_')[0] : undefined;
+    const region = config?.region ?? poolRegion;
+    // The pool/client and region come from this app; an explicit region must
+    // agree with the pool. No default tenant or alternate provider is selected.
     detail = 'builtin-provider-contract';
-    requireValue(/^us-east-1_[A-Za-z0-9]+$/.test(pool ?? '') && /^[A-Za-z0-9]+$/.test(client ?? '')
+    requireValue(cognitoRegionSupported(region) && region === poolRegion && /^(us-east-[12])_[A-Za-z0-9]+$/.test(pool ?? '') && /^[A-Za-z0-9]+$/.test(client ?? '')
       && flow === 'USER_SRP_AUTH' && /^[A-Za-z0-9_-]+$/.test(builtin.kc_hint ?? 'cognito'), 'debug_app_auth_provider_unsupported');
+    const cognitoOrigin = `https://cognito-idp.${region}.amazonaws.com`;
     enter('identity-discovery');
     const discovery = await json(origin + '/identity/.well-known/openid-configuration');
     const issuer = safeUrl(discovery.issuer, origins);
@@ -179,13 +226,13 @@ export async function authenticateOdcAppUser({ binding, credentials, fetchImpl =
     let cognitoTokens;
     enter('srp-signin');
     try {
-      origins.add('https://cognito-idp.us-east-1.amazonaws.com');
-      cognitoTokens = await cognito({ config: { Region: 'us-east-1', PoolKey: pool, AmplifyClientKey: client, AuthFlow: flow },
-        username: credentials.username, password: credentials.password, request, signal });
+      origins.add(cognitoOrigin);
+      cognitoTokens = await cognito({ config: { Region: region, PoolKey: pool, AmplifyClientKey: client, AuthFlow: flow },
+        username: credentials.username, password: credentials.password, request, signal, observer: observe });
     } catch (error) {
       fail(error?.code === 'PORTAL_LOGIN_CHALLENGE_REQUIRED' ? 'debug_app_auth_challenge_required'
         : error?.code === 'PORTAL_LOGIN_PROVIDER_UNSUPPORTED' ? 'debug_app_auth_provider_unsupported' : 'debug_app_auth_rejected');
-    } finally { origins.delete('https://cognito-idp.us-east-1.amazonaws.com'); }
+    } finally { origins.delete(cognitoOrigin); }
     requireValue(['IdToken', 'AccessToken', 'RefreshToken'].every(key => nonempty(cognitoTokens?.[key])), 'debug_app_auth_rejected');
     enter('broker-store-token');
     // The native exchange creates a code and can return 201. Other endpoints retain their 200 contract.

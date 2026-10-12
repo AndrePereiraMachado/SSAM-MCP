@@ -1,6 +1,10 @@
 using OutSystems.ObjectKeys;
 using OutSystems.RuntimeCommon;
 using ServiceStudio.PluginAPI.Debugger;
+using ServerThreadData = ServiceStudio.ServerCommunications.API.ServerThreadData;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 
 // Tracer: every pause is dumped and immediately stepped; the budget and the focus action end the stepping;
 // threads that are not ours are released without a dump; full values still hide credentials.
@@ -18,6 +22,8 @@ static class TraceTests {
         return new ThreadData(module, threadId, "Test", "", eventId, false, "PRIVATE-SESSION", true, stack, false);
     }
     internal static async Task Run() {
+        await RequestProvenance();
+        await BackgroundThreadEndTests.Run(); // interactive counterpart of the trace fingerprint (Tests.cs is a shared entry)
         var dir = Path.Combine(Path.GetTempPath(), "ssam-trace-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(dir);
         try {
             var config = new Configuration {
@@ -68,6 +74,38 @@ static class TraceTests {
             }
             config.Trace = new TraceOptions(); config.NodeKeys = Enumerable.Range(0, 21).Select(i => Convert.ToBase64String(Enumerable.Repeat((byte)i, 16).ToArray()).TrimEnd('=').Replace('/', '_')).ToArray();
             config.Validate(); // a trace window may start at more than 20 entry nodes
+        } finally { Directory.Delete(dir, true); }
+    }
+    static async Task RequestProvenance() {
+        var dir = Path.Combine(Path.GetTempPath(), "ssam-trace-provenance-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try {
+            const string requestId = "PRIVATE-NATIVE-REQUEST";
+            var config = new Configuration { SessionId = Guid.NewGuid().ToString("N"), Module = "Fixture", ModuleKey = Tests.ModuleKey,
+                RuntimeUrl = "https://example.invalid/App/", NodeKeys = [Tests.NodeKey], ReceiptPath = Path.Combine(dir, "receipt.json"),
+                Trace = new TraceOptions { Mode = "step", Steps = 3 } };
+            var fake = new FakeTransport();
+            DebugTransportEvent Envelope(bool end, long eventId, bool original) {
+                var thread = new ServerThreadData(ObjectKey.Parse(Tests.ModuleKey), "T1", requestId, "Fixture", null,
+                    eventId, false, false, "PRIVATE-SESSION", Thread("T1", eventId, Tests.NodeKey, Target).Stack.ToList());
+                DebuggerEvent evt = end ? new ThreadEndEvent(false, thread, eventId) : new AtBreakpointEvent(BreakpointType.Normal, "", thread, eventId);
+                return original ? DebugTransportEvent.FromXml(evt, new(requestId, true, false)) : DebugTransportEvent.WithoutProvenance(evt);
+            }
+            await using (var session = new DebugSession(config, fake)) {
+                await session.Start();
+                await fake.Emit(Envelope(false, 1, true));
+                await fake.Emit(Envelope(true, 2, true));
+                await fake.Emit(Envelope(false, 3, false));
+                await fake.Emit(Envelope(true, 4, false));
+            }
+            var text = File.ReadAllText(Path.Combine(dir, "trace.jsonl"));
+            Tests.Check(!text.Contains(requestId) && !text.Contains("PRIVATE-SESSION"), "trace leaked raw native identifiers");
+            var rows = text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => JsonDocument.Parse(l).RootElement.Clone()).ToArray();
+            var expected = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(requestId))).ToLowerInvariant();
+            Tests.Check(rows.Length == 4 && rows.Take(2).All(r => r.GetProperty("nativeRequestIdSha256").GetString() == expected), "native request fingerprint lost across stop/end");
+            Tests.Check(rows.Skip(2).All(r => !r.TryGetProperty("nativeRequestIdSha256", out var value) || value.ValueKind == JsonValueKind.Null), "fallback manufactured request provenance");
+            Tests.Check(rows.Where(r => r.TryGetProperty("kind", out _)).All(r => r.EnumerateObject().Select(p => p.Name)
+                .SequenceEqual(["kind", "ms", "threadId", "nativeRequestIdSha256", "eventId"])), "trace thread-end row format changed");
         } finally { Directory.Delete(dir, true); }
     }
 }

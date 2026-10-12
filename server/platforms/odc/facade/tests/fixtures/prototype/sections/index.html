@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Fleet Desk - Dashboard</title>
+  <style>
+    .tabs button[aria-selected="true"]{font-weight:700}
+    .panel{padding:16px}
+    .panel[hidden]{display:none}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <nav class="tabs" role="tablist">
+      <button role="tab" aria-controls="overview" aria-selected="true">Overview</button>
+      <button role="tab" aria-controls="vehicles" aria-selected="false">Vehicles</button>
+      <button role="tab" aria-controls="drivers" aria-selected="false">Drivers</button>
+    </nav>
+    <main class="panels">
+      <section id="overview" class="panel" role="tabpanel"><h1>Overview</h1><p>12 vehicles on the road.</p></section>
+      <section id="vehicles" class="panel" role="tabpanel" hidden><h1>Vehicles</h1><table class="grid"><tr><td>Truck 1</td></tr><tr><td>Truck 2</td></tr></table></section>
+      <section id="drivers" class="panel" role="tabpanel" hidden><h1>Drivers</h1><ul class="people"><li>Ana</li><li>Bruno</li></ul></section>
+    </main>
+  </div>
+  <script>
+    document.querySelector('.tabs').addEventListener('click', function (event) {
+      var tab = event.target.closest('[role=tab]');
+      if (!tab) return;
+      document.querySelectorAll('[role=tab]').forEach(function (other) { other.setAttribute('aria-selected', String(other === tab)); });
+      document.querySelectorAll('.panel').forEach(function (panel) { panel.hidden = panel.id !== tab.getAttribute('aria-controls'); });
+    });
+  </script>
+</body>
+</html>

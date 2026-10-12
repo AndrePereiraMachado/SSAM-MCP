@@ -60,6 +60,9 @@ test('o11.bridge path positions: sc_api file, outFile, snapshot, merge and downl
     await refused(kinds.execute('o11.bridge', { method: 'sc_api', params: { operation: 'PublishSolution', args: { file: 'C:\\Users\\cliente\\x.osp' } } }), 'PATH_NOT_AGENT');
     await refused(kinds.execute('o11.bridge', { method: 'sc_api', params: { operation: 'GetSolution', args: { outFile: 'agent:o11/x.osp' } } }), 'PATH_FORBIDDEN');
     await refused(kinds.execute('o11.bridge', { method: 'sc_web', params: { path: '/ServiceCenter/x', args: { outFile: 'C:\\x.bin' } } }), 'PATH_FORBIDDEN');
+    // 24th release: sc_http answers in the reply like sc_web; an outFile, even an agent: one, never passes.
+    for (const outFile of ['C:\\x.bin', 'agent:o11/x.bin'])
+      await refused(kinds.execute('o11.bridge', { method: 'sc_http', params: { host: 'lab.example.com', action: 'fetch', path: '/ServiceCenter/x', args: { outFile } } }), 'PATH_FORBIDDEN');
     for (const outputDirectory of ['agent:odc/lab/downloads', 'agent:inbox/x', 'agent:private/x', 'agent:o11'])
       await refused(kinds.execute('o11.bridge', { method: 'environment_session', params: { operation: 'download', lease: 'l', arguments: { outputDirectory } } }), 'PATH_FORBIDDEN');
     await refused(kinds.execute('o11.bridge', { method: 'environment_session', params: { operation: 'download', lease: 'l', arguments: { outputDirectory: null } } }), 'PATH_NOT_AGENT');

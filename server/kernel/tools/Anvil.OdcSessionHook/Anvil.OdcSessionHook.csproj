@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><AssemblyName>Anvil.OdcSessionHook</AssemblyName></PropertyGroup>
+  <!-- Exact installed SDK only; no replacement bridge, Core or vendor assembly is copied. -->
+  <ItemGroup>
+    <Reference Include="$(StudioDir)/System.Collections.Immutable.dll" Private="false" />
+    <Reference Include="$(StudioDir)/OutSystems.Model.dll" Private="false" />
+    <Reference Include="$(StudioDir)/OutSystems.Model.V1.dll" Private="false" />
+    <Reference Include="$(StudioDir)/OutSystems.Model.Implementation.dll" Private="false" />
+    <Reference Include="$(StudioDir)/OutSystems.MetaModel.dll" Private="false" />
+    <Reference Include="$(StudioDir)/OutSystems.RuntimeCommon.dll" Private="false" />
+    <Reference Include="$(StudioDir)/OutSystems.C5.dll" Private="false" />
+    <Reference Include="$(StudioDir)/ServiceStudio.Framework.dll" Private="false" />
+    <Reference Include="$(StudioDir)/ServiceStudio.Common.dll" Private="false" />
+    <Reference Include="$(StudioDir)/ServiceStudio.Presenter.dll" Private="false" />
+    <Reference Include="$(StudioDir)/ServiceStudio.ServerCommunications.API.dll" Private="false" />
+    <Reference Include="$(StudioDir)/ServiceStudio.ServerCommunications.dll" Private="false" />
+    <Reference Include="$(StudioDir)/ServiceStudio.Identity.dll" Private="false" />
+    <Reference Include="$(StudioDir)/OutSystems.ServiceStudio.PluginAPI.dll" Private="false" />
+    <Reference Include="$(StudioDir)/OutSystems.ServiceStudio.Observability.dll" Private="false" />
+    <Reference Include="$(StudioDir)/Avalonia.Base.dll" Private="false" />
+    <Reference Include="$(StudioDir)/Avalonia.Controls.dll" Private="false" />
+  </ItemGroup>
+</Project>

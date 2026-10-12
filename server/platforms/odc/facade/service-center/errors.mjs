@@ -5,7 +5,7 @@
 import { urlsplit } from './urls.mjs';
 
 export class ProtocolError extends Error {
-  constructor(message) { super(message); this.name = 'ProtocolError'; }
+  constructor(message, code = 'SC_PROTOCOL_INVALID') { super(message); this.name = 'ProtocolError'; this.code = code; }
 }
 
 export class BridgeError extends ProtocolError {
@@ -21,7 +21,7 @@ export class AuthRequired extends BridgeError {
     this.name = 'AuthRequired'; this.auth = auth; this.continuation = next; this.attempts = attempts;
   }
   answer() {
-    return { ok: false, code: this.code, error: this.message, auth: this.auth ?? {},
+    return { ok: false, code: this.code, stage: 'authentication', error: this.message, auth: this.auth ?? {},
       ...(this.continuation ? { continuation: this.continuation } : {}), attempts: this.attempts };
   }
 }
@@ -36,16 +36,16 @@ export class Refusal extends BridgeError {
 // timer-schedule on a timer page without a schedule editor SSAM can write through (the live Service Center 11.42 page:
 // generic control names, no recurrence control; session dd2b79c0, 2026-10-05 01:06). Not an unknown layout and no
 // capture round: the schedule of an O11 timer is its Schedule property in the module, delivered with o11_deliver (the
-// route that session then proved: "Every 60 minutes", "Every day at 00:00", "Every Monday at 00:05"). Nothing was sent.
+// native occurrence syntax, not prose accepted without semantic validation). Nothing was sent.
 export class ScheduleInModule extends BridgeError {
   constructor({ timer, module = null, schedule = null, current = {} }) {
-    const op = { op: 'set', target: 'ITimer:' + timer, prop: 'Schedule', value: schedule ?? '<schedule text, e.g. Every 60 minutes>' };
+    const op = { op: 'set', target: 'ITimer:' + timer, prop: 'Schedule', value: schedule ?? '<native schedule, e.g. 00:00 12:00>' };
     const override = current.effectiveSchedule && current.defaultSchedule && current.effectiveSchedule !== current.defaultSchedule
       ? ` Service Center shows the effective schedule '${current.effectiveSchedule}' over the default '${current.defaultSchedule}': `
         + 'the module sets the default, and the effective one changes only where Service Center has no override.' : '';
     super('TIMER_SCHEDULE_IN_MODULE', `The timer page of ${timer} has no schedule editor SSAM writes through, so nothing was sent. The schedule `
       + `of an O11 timer is its Schedule property in the module: deliver ${JSON.stringify(op)} with o11_deliver${module ? ' on ' + module : ''} `
-      + '(the user\'s words), then publish. Texts the Studio accepts: "Every 60 minutes", "Every day at 00:00", "Every Monday at 00:05".' + override,
+      + '(the user\'s words), then publish. Use native HH:mm occurrences, for example "00:00 12:00". Runtime activation and cadence require live verification.' + override,
     { write: true, executed: false, continuation: continuation('o11_deliver', { module: module ?? '<module of the timer>', job: { ops: [op] } },
       'the timer schedule is a module property; the deliver needs the user\'s authorization words and a publish afterwards') });
     this.name = 'ScheduleInModule';

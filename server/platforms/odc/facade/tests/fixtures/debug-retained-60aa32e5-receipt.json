@@ -1,0 +1,317 @@
+{
+  "schema": "ssam-o11-native-run/1",
+  "operationId": "60aa32e5-1100-4e1f-9d5a-7d74e5bc5ce2",
+  "lane": "o11",
+  "execution": "native-entry",
+  "op": "run",
+  "state": "failed-or-uncertain",
+  "target": {
+    "host": "personal-2qqw9srv.outsystemscloud.com",
+    "module": "SSAMDebuggerProbe",
+    "moduleKey": "bf7WCuRy7keTqvquautTGg",
+    "applicationKey": "v9olmpzPq0y7f4GzufZEWA",
+    "runtimeUrl": "https://personal-2qqw9srv.outsystemscloud.com/SSAMDebuggerProbe/"
+  },
+  "receiptPath": "C:\\Users\\andre\\SSAM-Hybrid\\.local\\debugger\\native-runs\\o11\\personal-2qqw9srv.outsystemscloud.com\\60aa32e5-1100-4e1f-9d5a-7d74e5bc5ce2\\receipt.json",
+  "trace": "full",
+  "assumptions": [
+    "DEV environment: a server breakpoint may also catch another user request on the same action",
+    "request isolation not proved"
+  ],
+  "results": [],
+  "graphSha256": "ba3b074a3f2834c46597e910f86abfb80e6458aa5b5f96eaeee21a8b5454fd56",
+  "resolution": {
+    "state": "background-trigger-resolved",
+    "message": "the original app entry can trigger native background work; execution is asynchronous and must be observed separately",
+    "entry": {
+      "id": "bf7WCuRy7keTqvquautTGg*byrvGL9PV06FlXkeRAQUOg",
+      "kind": "WebServiceMethod",
+      "name": "WakeTimer",
+      "module": "SSAMDebuggerProbe",
+      "key": "byrvGL9PV06FlXkeRAQUOg",
+      "owner": "@module",
+      "entry": "soap-method",
+      "sortKey": "byrvGL9PV06FlXkeRAQUOg",
+      "runnable": false
+    },
+    "distance": 3,
+    "callPath": "SSAMDebuggerProbe.WakeTimer -> SSAMDebuggerProbe.WakeProbeTimer -> SSAMDebuggerProbe.ProbeTimer -> SSAMDebuggerProbe.ProbeTimerAction",
+    "path": [
+      {
+        "id": "bf7WCuRy7keTqvquautTGg*byrvGL9PV06FlXkeRAQUOg",
+        "kind": "WebServiceMethod",
+        "name": "WakeTimer",
+        "module": "SSAMDebuggerProbe",
+        "key": "byrvGL9PV06FlXkeRAQUOg",
+        "owner": "@module",
+        "entry": "soap-method",
+        "sortKey": "byrvGL9PV06FlXkeRAQUOg"
+      },
+      {
+        "id": "bf7WCuRy7keTqvquautTGg*rb3sLlRkGka3ljKEMMzqtw.#WakeTimer",
+        "kind": "TimerWakeAction",
+        "name": "WakeProbeTimer",
+        "module": "SSAMDebuggerProbe",
+        "key": "rb3sLlRkGka3ljKEMMzqtw.#WakeTimer",
+        "owner": "@module",
+        "entry": null,
+        "sortKey": "rb3sLlRkGka3ljKEMMzqtw.#WakeTimer"
+      },
+      {
+        "id": "bf7WCuRy7keTqvquautTGg*rb3sLlRkGka3ljKEMMzqtw",
+        "kind": "Timer",
+        "name": "ProbeTimer",
+        "module": "SSAMDebuggerProbe",
+        "key": "rb3sLlRkGka3ljKEMMzqtw",
+        "owner": "@module",
+        "entry": null,
+        "sortKey": "rb3sLlRkGka3ljKEMMzqtw"
+      },
+      {
+        "id": "bf7WCuRy7keTqvquautTGg*uWaXOn_nZk606RgznzjCew",
+        "kind": "ServerAction",
+        "name": "ProbeTimerAction",
+        "module": "SSAMDebuggerProbe",
+        "key": "uWaXOn_nZk606RgznzjCew",
+        "owner": "@module",
+        "entry": null,
+        "sortKey": "uWaXOn_nZk606RgznzjCew"
+      }
+    ],
+    "bindings": [],
+    "candidatesAtDistance": [
+      {
+        "id": "bf7WCuRy7keTqvquautTGg*byrvGL9PV06FlXkeRAQUOg",
+        "kind": "WebServiceMethod",
+        "name": "WakeTimer",
+        "module": "SSAMDebuggerProbe",
+        "key": "byrvGL9PV06FlXkeRAQUOg",
+        "owner": "@module",
+        "entry": "soap-method",
+        "sortKey": "byrvGL9PV06FlXkeRAQUOg",
+        "distance": 3
+      }
+    ],
+    "algorithm": "bfs-callers/v1 (distance, ENTRY_PRIORITY, sortKey)",
+    "priority": [
+      "server-stub",
+      "data-action",
+      "client-action",
+      "rest-method",
+      "soap-method",
+      "traditional-preparation"
+    ],
+    "override": false,
+    "originalLaunch": {
+      "schema": "ssam-o11-entry-resolution/1",
+      "algorithm": "bfs-callers/v1 (distance, ENTRY_PRIORITY, sortKey)",
+      "priority": [
+        "server-stub",
+        "data-action",
+        "client-action",
+        "rest-method",
+        "soap-method",
+        "traditional-preparation"
+      ],
+      "graphSha256": "ba3b074a3f2834c46597e910f86abfb80e6458aa5b5f96eaeee21a8b5454fd56",
+      "selector": "bf7WCuRy7keTqvquautTGg*rb3sLlRkGka3ljKEMMzqtw.#WakeTimer",
+      "target": {
+        "id": "bf7WCuRy7keTqvquautTGg*rb3sLlRkGka3ljKEMMzqtw.#WakeTimer",
+        "kind": "TimerWakeAction",
+        "name": "WakeProbeTimer",
+        "module": "SSAMDebuggerProbe",
+        "key": "rb3sLlRkGka3ljKEMMzqtw.#WakeTimer",
+        "owner": "@module",
+        "entry": null,
+        "sortKey": "rb3sLlRkGka3ljKEMMzqtw.#WakeTimer"
+      },
+      "reachedFrom": [
+        {
+          "id": "bf7WCuRy7keTqvquautTGg*byrvGL9PV06FlXkeRAQUOg",
+          "kind": "WebServiceMethod",
+          "name": "WakeTimer",
+          "module": "SSAMDebuggerProbe",
+          "key": "byrvGL9PV06FlXkeRAQUOg",
+          "owner": "@module",
+          "entry": "soap-method",
+          "sortKey": "byrvGL9PV06FlXkeRAQUOg",
+          "distance": 1
+        }
+      ],
+      "state": "resolved",
+      "override": true,
+      "entry": {
+        "id": "bf7WCuRy7keTqvquautTGg*byrvGL9PV06FlXkeRAQUOg",
+        "kind": "WebServiceMethod",
+        "name": "WakeTimer",
+        "module": "SSAMDebuggerProbe",
+        "key": "byrvGL9PV06FlXkeRAQUOg",
+        "owner": "@module",
+        "entry": "soap-method",
+        "sortKey": "byrvGL9PV06FlXkeRAQUOg",
+        "runnable": false
+      },
+      "distance": 1,
+      "path": [
+        {
+          "id": "bf7WCuRy7keTqvquautTGg*byrvGL9PV06FlXkeRAQUOg",
+          "kind": "WebServiceMethod",
+          "name": "WakeTimer",
+          "module": "SSAMDebuggerProbe",
+          "key": "byrvGL9PV06FlXkeRAQUOg",
+          "owner": "@module",
+          "entry": "soap-method",
+          "sortKey": "byrvGL9PV06FlXkeRAQUOg"
+        },
+        {
+          "id": "bf7WCuRy7keTqvquautTGg*rb3sLlRkGka3ljKEMMzqtw.#WakeTimer",
+          "kind": "TimerWakeAction",
+          "name": "WakeProbeTimer",
+          "module": "SSAMDebuggerProbe",
+          "key": "rb3sLlRkGka3ljKEMMzqtw.#WakeTimer",
+          "owner": "@module",
+          "entry": null,
+          "sortKey": "rb3sLlRkGka3ljKEMMzqtw.#WakeTimer"
+        }
+      ],
+      "callPath": "SSAMDebuggerProbe.WakeTimer -> SSAMDebuggerProbe.WakeProbeTimer",
+      "hops": [
+        {
+          "from": "bf7WCuRy7keTqvquautTGg*byrvGL9PV06FlXkeRAQUOg",
+          "to": "bf7WCuRy7keTqvquautTGg*rb3sLlRkGka3ljKEMMzqtw.#WakeTimer",
+          "via": {
+            "kind": "execute",
+            "nodeKey": "0bK6WelkAUCztUDoxO2BBg",
+            "nodeName": "WakeNativeTimer"
+          }
+        }
+      ],
+      "candidatesAtDistance": [
+        {
+          "id": "bf7WCuRy7keTqvquautTGg*byrvGL9PV06FlXkeRAQUOg",
+          "kind": "WebServiceMethod",
+          "name": "WakeTimer",
+          "module": "SSAMDebuggerProbe",
+          "key": "byrvGL9PV06FlXkeRAQUOg",
+          "owner": "@module",
+          "entry": "soap-method",
+          "sortKey": "byrvGL9PV06FlXkeRAQUOg",
+          "distance": 1
+        }
+      ],
+      "bindings": [],
+      "entryInputs": [],
+      "entryAbiObserved": false
+    },
+    "background": {
+      "kind": "timer-original-wake",
+      "processKey": null,
+      "timerKey": "rb3sLlRkGka3ljKEMMzqtw",
+      "launcherContext": "app-user",
+      "activityContext": "native-background",
+      "inputsReferTo": "original launcher entry; never activity variables",
+      "directActivityInvocation": false,
+      "requestOwnershipProved": false,
+      "appUserIdentityProved": false,
+      "rolesProved": false,
+      "executionCompleted": false
+    }
+  },
+  "background": {
+    "schema": "ssam-o11-timer-observation/1",
+    "kind": "timer-original-wake",
+    "timerKey": "rb3sLlRkGka3ljKEMMzqtw",
+    "wakeActionKey": "rb3sLlRkGka3ljKEMMzqtw.#WakeTimer",
+    "schedulerActionKey": "uWaXOn_nZk606RgznzjCew",
+    "moduleKey": "bf7WCuRy7keTqvquautTGg",
+    "sourceSha256": "d685cba086346a7b796e605d979d113f45aa1199b2467570068561f806c80e7c",
+    "targetKey": "uWaXOn_nZk606RgznzjCew",
+    "targetKind": "ServerAction",
+    "startNodeKey": "DLornobfC0+U4T9IV4Aicw",
+    "originalEntryKey": "byrvGL9PV06FlXkeRAQUOg",
+    "originalEntryKind": "soap-method",
+    "launchContext": "anonymous",
+    "activityContext": "native-background",
+    "directActivityInvocation": false,
+    "scopes": {
+      "uWaXOn_nZk606RgznzjCew": [
+        "Tick",
+        "StartedAt"
+      ]
+    },
+    "omittedScopeRoots": 0,
+    "observationSeconds": 60,
+    "valuesComplete": false,
+    "applicationUserContext": false,
+    "appUserIdentityProved": false,
+    "rolesProved": false,
+    "propagationProved": false,
+    "requestOwnershipProved": false,
+    "executionCompleted": false,
+    "authorizationWordsSha256": "c8882b1dc4e89bf4216e1f3a3505e387acd8e71fd7bc09b97494a65bfd2cb89a"
+  },
+  "needs": {
+    "contextMode": "native-background",
+    "launchContextMode": "anonymous",
+    "inputContract": "launch.inputs refers only to the original published launcher entry",
+    "words": true,
+    "loginWindow": false
+  },
+  "sourceContract": {
+    "path": "C:\\Users\\andre\\SSAM-Hybrid\\.local\\debugger\\native-runs\\o11\\personal-2qqw9srv.outsystemscloud.com\\60aa32e5-1100-4e1f-9d5a-7d74e5bc5ce2\\native-timer-wake-source.json",
+    "sha256": "276e737b958886964ff0a140b7c8ae728a68d09cb6add564f8a835efe7c4cd24"
+  },
+  "entryAbi": {
+    "kind": "soap-method",
+    "protocol": "soap",
+    "endpoint": "https://personal-2qqw9srv.outsystemscloud.com/SSAMDebuggerProbe/ProbeSoap.asmx",
+    "inputs": [],
+    "outputs": []
+  },
+  "tracePlan": {
+    "mode": "full",
+    "schema": "ssam-o11-timer-observation/1",
+    "kind": "timer-original-wake",
+    "timerKey": "rb3sLlRkGka3ljKEMMzqtw",
+    "wakeActionKey": "rb3sLlRkGka3ljKEMMzqtw.#WakeTimer",
+    "schedulerActionKey": "uWaXOn_nZk606RgznzjCew",
+    "moduleKey": "bf7WCuRy7keTqvquautTGg",
+    "sourceSha256": "d685cba086346a7b796e605d979d113f45aa1199b2467570068561f806c80e7c",
+    "targetKey": "uWaXOn_nZk606RgznzjCew",
+    "targetKind": "ServerAction",
+    "startNodeKey": "DLornobfC0+U4T9IV4Aicw",
+    "originalEntryKey": "byrvGL9PV06FlXkeRAQUOg",
+    "originalEntryKind": "soap-method",
+    "launchContext": "anonymous",
+    "activityContext": "native-background",
+    "directActivityInvocation": false,
+    "scopes": {
+      "uWaXOn_nZk606RgznzjCew": [
+        "Tick",
+        "StartedAt"
+      ]
+    },
+    "omittedScopeRoots": 0,
+    "observationSeconds": 60,
+    "valuesComplete": false,
+    "applicationUserContext": false,
+    "appUserIdentityProved": false,
+    "rolesProved": false,
+    "propagationProved": false,
+    "requestOwnershipProved": false,
+    "executionCompleted": false,
+    "depth": 2,
+    "fullValues": true
+  },
+  "serverTrace": {
+    "sessionId": "e691b931a24f4e94a10fd75b2b7a26ca",
+    "state": "connected",
+    "inspectionMode": "interactive",
+    "requestDeadline": "2026-10-09T01:12:37.3793731Z",
+    "stopped": true
+  },
+  "uncertain": true,
+  "error": "debug_native_background_bpt_launch_outcome_uncertain",
+  "ok": false,
+  "lockRetained": true
+}

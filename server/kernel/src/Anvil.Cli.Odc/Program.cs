@@ -93,6 +93,7 @@ usage: anvil-odc <comando> [--flags]
         "create-blank" => CreateBlank(args),
         "create-app" => CreateApp(args),
         "inspect" => Inspect(args),
+        "debug-scope" => NativeDebugScope.Read(Host(args), Need(args, "--oml"), Need(args, "--expected-sha256"), Need(args, "--node-key"), Need(args, "--function-key"), Opt(args, "--previous-node-key")),
         "digest" => Digest(args),
         "rich-index" => RichIndex(args),
         "read-serve" => ReadServe(args),
@@ -132,6 +133,8 @@ usage: anvil-odc <comando> [--flags]
         var job = Need(args, "--job");
         JobRunner.CheckJobName(job);        // a regra do nome antes de subir o runtime, como na faixa O11
         JobRunner.ValidateJob(job);
+        // the job a patched or partial job corrects (job-patch.mjs): the CSS loss guard of the preflight compares the two
+        JobPreflight.BasedOn.Value = Opt(args, "--based-on") is { Length: > 0 } basedOn ? Path.GetFullPath(basedOn) : null;
         // Every problem at once, with the code and the structured problems in the error envelope (PREFLIGHT_REFUSED, I2).
         // primeira-certa A2: the preflight runs inside JobRunner, which goes on to the base check, the apply and the Verify
         // when the base loads, and refuses once with every phase (verifyRan says whether the Verify ran).

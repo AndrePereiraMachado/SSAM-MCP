@@ -31,7 +31,7 @@ const allowed = new Set(('help version doctor inspect diagnostics delivery-statu
   'snapshot preview merge check-base authorize attach data data-insert data-update data-delete open close status assets ' +
   'context propose continue tenants apis search describe read write debug app app-url api check-job refresh-references ' +
   'grant warm discover map connect evidence reference task studio environment wait latest consumers command dismiss-dialog ' +
-  'create-app debug-run debug-invoke service-center-read service-center-write access dependencies').split(' '));
+  'create-app debug-run debug-invoke service-center-read service-center-write service-center-session portal-read portal-write portal-login portal-capabilities access dependencies').split(' '));
 export function operationName(value) {
   const name = String(value ?? '').replace(/^(ssam_|studio_|odc_|o11_|hybrid_)/, '').replaceAll('_', '-');
   return allowed.has(name) ? name : 'other';
@@ -39,7 +39,7 @@ export function operationName(value) {
 export const laneName = value => ['o11', 'odc'].includes(value) ? value : 'unknown';
 // The stages the producers name in `failed`, `stage` or `gate` (interface I9 of the 2026-10-05 package).
 export const STEPS = ['snapshot', 'build', 'manifest', 'check-base', 'preview', 'merge', 'publish', 'validation', 'equivalence', 'preflight', 'apply',
-  'verify', 'reconcile', 'refresh-references', 'relay', 'connect', 'data', 'debug', 'service-center'];
+  'verify', 'reconcile', 'refresh-references', 'relay', 'connect', 'data', 'debug', 'service-center', 'authentication'];
 const stepName = value => STEPS.includes(value) ? value : null;
 // A specific code the answer carries (UPPER_SNAKE) wins over the generic OPERATION_FAILED; `OK` is never a failure code.
 const CODE = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$|^[A-Z]{3,}$/;
@@ -88,6 +88,10 @@ export function outcomeOf(input, transport = {}) {
     : failed ? (explicit ?? classified() ?? 'OPERATION_FAILED')
     : semanticKnown ? 'OK' : 'RESULT_UNOBSERVED';
   const failing = interrupted || declaredUncertain || timeout || failed;
+  const knownCauseKinds = new Set(['authentication', 'http', 'soap', 'transport', 'protocol']);
+  const causeKind = values.map(v => v.cause?.kind).find(v => knownCauseKinds.has(v))
+    ?? (/^(AUTH_|SSO_|LOGIN_)/.test(code ?? '') ? 'authentication' : null);
+  const httpStatus = values.flatMap(v => [v.cause?.httpStatus, v.status]).find(v => Number.isInteger(v) && v >= 100 && v <= 599);
   return { outcome: interrupted || declaredUncertain ? 'uncertain' : timeout ? 'timeout' : failed ? 'failure' : semanticKnown ? 'success' : 'unknown',
     code,
     step: values.map(v => stepName(v.failed) ?? stepName(v.stage) ?? stepName(v.gate)).find(Boolean) ?? (failing ? stepOfCode(code) : null),
@@ -95,6 +99,7 @@ export function outcomeOf(input, transport = {}) {
     reportedPackageId: packageId ?? null,
     exitCode: Number.isInteger(transport.exitCode) ? transport.exitCode : null,
     transportSucceeded: transport.exitCode === 0,
+    ...(causeKind ? { cause: { kind: causeKind, ...(httpStatus === undefined ? {} : { httpStatus }) } } : {}),
   };
 }
 
@@ -103,7 +108,11 @@ export function outcomeOf(input, transport = {}) {
 export function frictionDirectory({ root, directory, env = process.env } = {}) {
   return directory ?? (typeof env.SSAM_FRICTION_DIR === 'string' && env.SSAM_FRICTION_DIR.trim() ? path.resolve(env.SSAM_FRICTION_DIR) : path.join(root, '.local', 'friction'));
 }
-export function createStore({ root, directory, env = process.env, warning = code => process.stderr.write(`[ssam-friction] ${code}; operation result is unchanged.\n`), clock = () => Date.now() } = {}) {
+// rebuild:false (the MCP launcher, where the queue answers synchronously on the line of the client's requests): an index
+// without its .complete mark is read as it is (health.indexComplete false), never rebuilt from the operation files; the
+// CLI and a direct store rebuild it. Every read the relay makes is bounded by what it names (UI-Mockup, 2026-10-11: one
+// report that read 37,666 operation files stopped a session's MCP for 8 min 11 s).
+export function createStore({ root, directory, env = process.env, warning = code => process.stderr.write(`[ssam-friction] ${code}; operation result is unchanged.\n`), clock = () => Date.now(), rebuild = true } = {}) {
   const dir = frictionDirectory({ root, directory, env });
   let losses = 0;
   const warn = code => { losses++; try { warning(code); } catch {} };
@@ -146,18 +155,22 @@ export function createStore({ root, directory, env = process.env, warning = code
   const END_FIELDS = ['endedAt', 'outcome', 'code', 'step', 'signal'];
   const indexLine = (event, end) => Object.fromEntries([['k', end ? 'e' : 's'], ['id', event.operationId],
     ...INDEX_FIELDS.map(k => [k, event[k] ?? null]), ...(end ? END_FIELDS.map(k => [k, event[k] ?? null]) : [])]);
-  let markKnown = false;
+  let markKnown = false, baseChecked = false;
   // quiet: the mark of an empty store (a folder that cannot be written loses the operation records too, and they warn).
   function markIndex(operations, quiet = false) {
     try { fs.mkdirSync(indexDir, { recursive: true }); fs.writeFileSync(indexMark, JSON.stringify({ schema: 'ssam-friction-index/1', at: new Date(clock()).toISOString(), operations })); markKnown = true; }
     catch { if (!quiet) warn('INDEX_WRITE_FAILED'); }
   }
-  // A store without any operation yet starts with a complete (empty) index.
+  // A store without any operation yet starts with a complete (empty) index. Checked once per store; without rebuild only
+  // the folder's existence is looked at, never its listing.
   function ensureIndexBase() {
-    if (markKnown) return;
+    if (markKnown || baseChecked) return;
+    baseChecked = true;
     if (fs.existsSync(indexMark)) { markKnown = true; return; }
+    const operations = path.join(dir, 'operations');
+    if (!rebuild) { if (!fs.existsSync(operations)) markIndex(0, true); return; }
     let names = [];
-    try { names = fs.readdirSync(path.join(dir, 'operations')).filter(n => n.endsWith('.json')); } catch { names = []; }
+    try { names = fs.readdirSync(operations).filter(n => n.endsWith('.json')); } catch { names = []; }
     if (!names.length) markIndex(0, true);
   }
   function appendIndex(event, end) {
@@ -173,29 +186,76 @@ export function createStore({ root, directory, env = process.env, warning = code
     }
     if (whole) markIndex(data.operations.length);
   }
-  // The operations as snapshot() gives them (ends, then starts without an end as incomplete), from the index.
+  // The lines of one index text into its starts and ends (the first line of each kind wins); the count of damaged lines.
+  function indexLines(text, starts, ends, keep = () => true) {
+    let damaged = 0;
+    for (const line of text.split('\n')) {
+      if (!line.trim()) continue;
+      let entry; try { entry = JSON.parse(line); } catch { damaged++; continue; }
+      if (!entry || !id(entry.id) || !Number.isFinite(Date.parse(entry.startedAt))) { damaged++; continue; }
+      if (!keep(entry)) continue;
+      const map = entry.k === 'e' ? ends : starts;
+      if (!map.has(entry.id)) map.set(entry.id, entry);
+    }
+    return damaged;
+  }
+  const shape = (entry, start) => ({ operationId: entry.id, ...Object.fromEntries(INDEX_FIELDS.map(k => [k, entry[k] ?? start?.[k] ?? null])),
+    ...Object.fromEntries(END_FIELDS.map(k => [k, entry[k] ?? null])) });
+  const ordered = (starts, ends) => [...[...ends.values()].map(e => shape(e, starts.get(e.id))),
+    ...[...starts.values()].filter(s => !ends.has(s.id)).map(s => ({ ...shape(s), outcome: 'incomplete', code: 'NO_COMPLETION_RECEIPT' }))]
+    .sort((a, b) => a.startedAt.localeCompare(b.startedAt) || a.operationId.localeCompare(b.operationId));
+  // The operations as snapshot() gives them (ends, then starts without an end as incomplete), from the index. Without the
+  // mark, a store with rebuild rebuilds it from the operation files first; one without (the relay) reads what it has.
   function indexed() {
-    if (!fs.existsSync(indexMark)) rebuildIndex();
+    const complete = fs.existsSync(indexMark);
+    if (!complete && rebuild) rebuildIndex();
     const starts = new Map(), ends = new Map(); let damaged = 0;
     let names = [];
     try { names = fs.readdirSync(indexDir).filter(n => n.endsWith('.jsonl')); } catch { names = []; }
     for (const name of names) {
       let text = '';
       try { text = fs.readFileSync(path.join(indexDir, name), 'utf8'); } catch { damaged++; continue; }
-      for (const line of text.split('\n')) {
-        if (!line.trim()) continue;
-        let entry; try { entry = JSON.parse(line); } catch { damaged++; continue; }
-        if (!entry || !id(entry.id) || !Number.isFinite(Date.parse(entry.startedAt))) { damaged++; continue; }
-        const map = entry.k === 'e' ? ends : starts;
-        if (!map.has(entry.id)) map.set(entry.id, entry);
-      }
+      damaged += indexLines(text, starts, ends);
     }
-    const shape = (entry, start) => ({ operationId: entry.id, ...Object.fromEntries(INDEX_FIELDS.map(k => [k, entry[k] ?? start?.[k] ?? null])),
-      ...Object.fromEntries(END_FIELDS.map(k => [k, entry[k] ?? null])) });
-    const operations = [...[...ends.values()].map(e => shape(e, starts.get(e.id))),
-      ...[...starts.values()].filter(s => !ends.has(s.id)).map(s => ({ ...shape(s), outcome: 'incomplete', code: 'NO_COMPLETION_RECEIPT' }))]
-      .sort((a, b) => a.startedAt.localeCompare(b.startedAt) || a.operationId.localeCompare(b.operationId));
-    return { operations, health: { damagedRecords: damaged, partialRecords: 0, localWriteLosses: losses, source: 'index' } };
+    return { operations: ordered(starts, ends), health: { damagedRecords: damaged, partialRecords: 0, localWriteLosses: losses, source: 'index',
+      indexComplete: complete || (rebuild && fs.existsSync(indexMark)) } };
+  }
+  // The last operations of one session, from the end of the index (newest day first, at most TAIL_BYTES read in all): what a
+  // report links. The index of a day holds the operations started that day, appended in order.
+  function sessionTail(session, count) {
+    const starts = new Map(), ends = new Map();
+    let names = [];
+    try { names = fs.readdirSync(indexDir).filter(n => /^\d{8}\.jsonl$/.test(n)).sort().reverse(); } catch { names = []; }
+    let budget = TAIL_BYTES;
+    for (const name of names) {
+      if (budget <= 0 || starts.size >= count) break;
+      let fd;
+      try {
+        fd = fs.openSync(path.join(indexDir, name), 'r');
+        const size = fs.fstatSync(fd).size, length = Math.min(size, budget);
+        const buffer = Buffer.alloc(length);
+        fs.readSync(fd, buffer, 0, length, size - length);
+        budget -= length;
+        let text = buffer.toString('utf8');
+        if (length < size) text = text.slice(text.indexOf('\n') + 1); // a line cut by the start of the tail
+        indexLines(text, starts, ends, entry => entry.sessionId === session);
+      } catch { /* an unreadable day links nothing */ }
+      finally { if (fd !== undefined) { try { fs.closeSync(fd); } catch { /* closed */ } } }
+    }
+    return ordered(starts, ends).slice(-count);
+  }
+  // One operation by its id, as snapshot() gives it: its end, else its start as incomplete; null when neither is readable.
+  function operation(operationId) {
+    const key = id(operationId);
+    if (!key) return null;
+    for (const [suffix, incomplete] of [['.end.json', false], ['.start.json', true]]) {
+      try {
+        const event = JSON.parse(fs.readFileSync(path.join(dir, 'operations', key + suffix), 'utf8'));
+        if (event?.schema !== 'ssam-friction-operation/1' || id(event.operationId) !== key) return null;
+        return incomplete ? { ...event, outcome: 'incomplete', code: 'NO_COMPLETION_RECEIPT' } : event;
+      } catch (error) { if (error?.code !== 'ENOENT') return null; }
+    }
+    return null;
   }
   function begin(meta = {}) {
     ensureIndexBase();
@@ -281,9 +341,12 @@ export function createStore({ root, directory, env = process.env, warning = code
     if (problems.length) return { ok: false, code: 'REPORT_INVALID', error: 'Invalid friction report: ' + problems.join('; '), problems,
       accepted: { kind: REPORT_KINDS, required: ['kind', 'tool', 'intent', 'attempted'], optional: ['workaround', 'cost', 'summary', 'taskId'], maxLength: REPORT_FIELDS } };
     const session = sessionKey(sessionId);
-    const recent = session ? snapshot().operations.filter(e => e.sessionId === session).slice(-REPORT_LINKED).map(e => ({ operationId: e.operationId,
-      operation: e.operation, lane: e.lane, outcome: e.outcome, code: e.code ?? null, step: e.step ?? null, startedAt: e.startedAt,
-      ...(e.evidence?.sha256 ? { receiptSha256: e.evidence.sha256 } : {}) })) : [];
+    // From the tail of the index; only the ended operations it links are read, for their receipt.
+    const recent = session ? sessionTail(session, REPORT_LINKED).map(e => {
+      const evidence = e.endedAt ? operation(e.operationId)?.evidence : null;
+      return { operationId: e.operationId, operation: e.operation, lane: e.lane, outcome: e.outcome, code: e.code ?? null, step: e.step ?? null, startedAt: e.startedAt,
+        ...(evidence?.sha256 ? { receiptSha256: evidence.sha256 } : {}) };
+    }) : [];
     const reportId = randomUUID();
     const text = key => (input[key] === undefined || input[key] === null ? undefined : String(input[key]).trim());
     const record = { schema: 'ssam-friction-report/1', reportId, kind: input.kind, tool: text('tool'), intent: text('intent'), attempted: text('attempted'),
@@ -329,7 +392,7 @@ export function createStore({ root, directory, env = process.env, warning = code
       proofRef = {sha256:proof.sha256,versionSha256:proof.versionSha256};
     }
     if (status === 'verified') {
-      const event = snapshot().operations.find(e=>e.operationId===proof.operationId);
+      const event = operation(proof.operationId);
       if (!event || event.outcome !== 'success' || event.signal || event.operation !== issue.operation || event.lane !== issue.lane || event.profile !== issue.profile || event.startedAt < state.updatedAt) throw Error('Verification requires a later successful matching operation');
       const version = event.selectedPackageSha256 ?? event.toolingSha256;
       if (!version || version !== proof.versionSha256 || version !== state.proof?.versionSha256) throw Error('Verification version differs from corrected version');
@@ -343,7 +406,8 @@ export function createStore({ root, directory, env = process.env, warning = code
   }
   function task({taskId,offset=0,limit=100} = {}) {
     if (!taskId) throw Error('Explicit task ID required; unrelated calls cannot be treated as one task');
-    const data = snapshot(), events = data.operations.filter(e=>e.taskRef===taskRef(taskId));
+    // The task's operations from the index, each read from its own file (never a listing of the operations folder).
+    const data = indexed(), events = data.operations.filter(e=>e.taskRef===taskRef(taskId)).map(e=>operation(e.operationId)??e);
     const live = events.filter(e=>e.interface!=='receipt-import');
     const intervals = live.filter(e=>e.endedAt).map(e=>[Date.parse(e.startedAt),Date.parse(e.endedAt)]).sort((a,b)=>a[0]-b[0]);
     let coveredMs = 0, end = -Infinity;
@@ -365,7 +429,7 @@ export function createStore({ root, directory, env = process.env, warning = code
 // records up to 64 KB) and keep it a description, never a transcript.
 export const REPORT_KINDS = ['gap', 'defect', 'slow'];
 export const REPORT_FIELDS = Object.freeze({ tool: 120, intent: 500, attempted: 1500, workaround: 1500, cost: 200, summary: 1500, taskId: 512 });
-const REPORT_LINKED = 5, REPORTS_SHOWN = 20;
+const REPORT_LINKED = 5, REPORTS_SHOWN = 20, TAIL_BYTES = 1 << 20;
 export function reportProblems(input) {
   const problems = [];
   if (!input || typeof input !== 'object' || Array.isArray(input)) return ['the report is an object'];

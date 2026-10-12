@@ -1,0 +1,2220 @@
+{
+  "provenance": {
+    "capture": "HeadlessTrad_UI published4850",
+    "sourceSha256": "10c54d9abab3498758b381a311ce96b7ef11c1b5f8b04f84075d3fd2db7b9b7f",
+    "projection": "Required native properties only; hidden state and credentials absent",
+    "routeSource": "Live DebuggerService.GetEntryPointUri"
+  },
+  "contract": {
+    "schema": "ssam-o11-traditional-source/1",
+    "binding": {
+      "lane": "o11",
+      "host": "personal-2qqw9srv.outsystemscloud.com",
+      "runtimeUrl": "https://personal-2qqw9srv.outsystemscloud.com/HeadlessTrad_UI/",
+      "module": "HeadlessTrad_UI",
+      "moduleKey": "a67O2cgEPU67HKaCkxp9ZQ",
+      "applicationKey": "8vCWmZVW50KGwsXsU659Jw",
+      "revision": 4850,
+      "sourceSha256": "10c54d9abab3498758b381a311ce96b7ef11c1b5f8b04f84075d3fd2db7b9b7f"
+    },
+    "screen": {
+      "kind": "WebScreen",
+      "name": "ContactsWeb",
+      "modelName": "ContactsWeb",
+      "label": null,
+      "key": "dEWwXGH7NkeApGZ+qJiYJQ",
+      "reference": "@dEWwXGH7NkeApGZ+qJiYJQ",
+      "path": "WebFlow:MainFlow/WebScreen:ContactsWeb",
+      "properties": {
+        "ObjectKey": "dEWwXGH7NkeApGZ+qJiYJQ",
+        "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*dEWwXGH7NkeApGZ+qJiYJQ",
+        "WasDeleted": "False",
+        "IsValid": "True",
+        "HorizontalPosition": "1000",
+        "IsDisabled": "False",
+        "VerticalPosition": "1000",
+        "ThemeBeingUsed": "WebTheme:HeadlessTrad_UI",
+        "GridType": "Fluid",
+        "Name": "ContactsWeb",
+        "Public": "False",
+        "Roles": "[RoleSignature:Registered]",
+        "InputParameters": "[]",
+        "LocalVariables": "[]",
+        "HTTPSecurity": "Inherited",
+        "IntegratedAuthentication": "Inherited",
+        "IsFrequentDestination": "False",
+        "Targets": "[WebScreen:ContactDetailWeb]",
+        "ExtendedProperties": "[]",
+        "Preparation": "Preparation:",
+        "ScreenActions": "[]"
+      },
+      "propertyReferences": {
+        "ThemeBeingUsed": {
+          "kind": "WebTheme",
+          "name": "HeadlessTrad_UI",
+          "label": null,
+          "key": "y+dETUbAJUW+iTEdU9cL_w",
+          "reference": "@y+dETUbAJUW+iTEdU9cL_w",
+          "path": "WebTheme:HeadlessTrad_UI"
+        },
+        "Preparation": {
+          "kind": "Preparation",
+          "name": "",
+          "label": null,
+          "key": "dEWwXGH7NkeApGZ+qJiYJQ.#Preparation",
+          "reference": "@dEWwXGH7NkeApGZ+qJiYJQ.#Preparation",
+          "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:"
+        }
+      },
+      "propertyReferenceCollections": {
+        "Roles": {
+          "items": [
+            {
+              "kind": "RoleSignature",
+              "name": "Registered",
+              "label": null,
+              "key": "I1Fm79oZdUu8QBe+dLY9Cg",
+              "reference": "@I1Fm79oZdUu8QBe+dLY9Cg",
+              "path": "RoleSignature:Registered"
+            }
+          ],
+          "total": 1,
+          "omitted": 0
+        },
+        "InputParameters": {
+          "items": [],
+          "total": 0,
+          "omitted": 0
+        }
+      },
+      "propertiesOmitted": {},
+      "propertyErrors": {},
+      "propertiesMissing": [],
+      "children": [],
+      "childrenTotal": 3,
+      "childrenOmitted": 0
+    },
+    "preparation": {
+      "kind": "Preparation",
+      "name": "",
+      "modelName": "",
+      "label": null,
+      "key": "dEWwXGH7NkeApGZ+qJiYJQ.#Preparation",
+      "reference": "@dEWwXGH7NkeApGZ+qJiYJQ.#Preparation",
+      "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:",
+      "properties": {
+        "ObjectKey": "dEWwXGH7NkeApGZ+qJiYJQ.#Preparation",
+        "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*dEWwXGH7NkeApGZ+qJiYJQ.#Preparation",
+        "WasDeleted": "False",
+        "IsValid": "True",
+        "UserReadOnlySessionsInScreens": "False"
+      },
+      "propertyReferences": {},
+      "propertyReferenceCollections": {
+        "Nodes": {
+          "items": [
+            {
+              "kind": "EndNode",
+              "name": "",
+              "label": null,
+              "key": "sviamnXgekS9Zev7hFcUTQ",
+              "reference": "@sviamnXgekS9Zev7hFcUTQ",
+              "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/EndNode:"
+            },
+            {
+              "kind": "StartNode",
+              "name": "",
+              "label": null,
+              "key": "Ve1jm59P106LICsn2yCOBA",
+              "reference": "@Ve1jm59P106LICsn2yCOBA",
+              "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/StartNode:"
+            },
+            {
+              "kind": "AggregateNode",
+              "name": "GetContacts",
+              "label": null,
+              "key": "OC7E758Q6Uu3l9xbypAWUg",
+              "reference": "@OC7E758Q6Uu3l9xbypAWUg",
+              "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/AggregateNode:GetContacts"
+            }
+          ],
+          "total": 3,
+          "omitted": 0
+        }
+      },
+      "propertiesOmitted": {},
+      "propertyErrors": {},
+      "propertiesMissing": [],
+      "children": [
+        {
+          "kind": "EndNode",
+          "name": "",
+          "modelName": "",
+          "label": null,
+          "key": "sviamnXgekS9Zev7hFcUTQ",
+          "reference": "@sviamnXgekS9Zev7hFcUTQ",
+          "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/EndNode:",
+          "properties": {
+            "ObjectKey": "sviamnXgekS9Zev7hFcUTQ",
+            "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*sviamnXgekS9Zev7hFcUTQ",
+            "WasDeleted": "False",
+            "IsValid": "True",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "VerticalPosition": "4000",
+            "Connectors": "[]",
+            "IncomingConnectors": "[ActionConnector:]"
+          },
+          "propertyReferences": {},
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            },
+            "IncomingConnectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "cwwsuTSdm067eD_EVd7jww",
+                  "reference": "@cwwsuTSdm067eD_EVd7jww",
+                  "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/AggregateNode:GetContacts/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "StartNode",
+          "name": "",
+          "modelName": "",
+          "label": null,
+          "key": "Ve1jm59P106LICsn2yCOBA",
+          "reference": "@Ve1jm59P106LICsn2yCOBA",
+          "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/StartNode:",
+          "properties": {
+            "ObjectKey": "Ve1jm59P106LICsn2yCOBA",
+            "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*Ve1jm59P106LICsn2yCOBA",
+            "WasDeleted": "False",
+            "IsValid": "True",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "VerticalPosition": "800",
+            "Connectors": "[ActionConnector:]",
+            "IncomingConnectors": "[]",
+            "Target": "AggregateNode:GetContacts"
+          },
+          "propertyReferences": {
+            "Target": {
+              "kind": "AggregateNode",
+              "name": "GetContacts",
+              "label": null,
+              "key": "OC7E758Q6Uu3l9xbypAWUg",
+              "reference": "@OC7E758Q6Uu3l9xbypAWUg",
+              "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/AggregateNode:GetContacts"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "vFGDF__T2kKkrfXQ_bDF+w",
+                  "reference": "@vFGDF__T2kKkrfXQ_bDF+w",
+                  "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/StartNode:/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            },
+            "IncomingConnectors": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": null,
+              "key": "vFGDF__T2kKkrfXQ_bDF+w",
+              "reference": "@vFGDF__T2kKkrfXQ_bDF+w",
+              "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/StartNode:/ActionConnector:",
+              "properties": {
+                "ObjectKey": "vFGDF__T2kKkrfXQ_bDF+w",
+                "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*vFGDF__T2kKkrfXQ_bDF+w",
+                "WasDeleted": "False",
+                "IsValid": "True",
+                "Source": "StartNode:",
+                "Target": "AggregateNode:GetContacts"
+              },
+              "propertyReferences": {
+                "Source": {
+                  "kind": "StartNode",
+                  "name": "",
+                  "label": null,
+                  "key": "Ve1jm59P106LICsn2yCOBA",
+                  "reference": "@Ve1jm59P106LICsn2yCOBA",
+                  "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/StartNode:"
+                },
+                "Target": {
+                  "kind": "AggregateNode",
+                  "name": "GetContacts",
+                  "label": null,
+                  "key": "OC7E758Q6Uu3l9xbypAWUg",
+                  "reference": "@OC7E758Q6Uu3l9xbypAWUg",
+                  "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/AggregateNode:GetContacts"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 1,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "AggregateNode",
+          "name": "GetContacts",
+          "modelName": "GetContacts",
+          "label": null,
+          "key": "OC7E758Q6Uu3l9xbypAWUg",
+          "reference": "@OC7E758Q6Uu3l9xbypAWUg",
+          "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/AggregateNode:GetContacts",
+          "properties": {
+            "ObjectKey": "OC7E758Q6Uu3l9xbypAWUg",
+            "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*OC7E758Q6Uu3l9xbypAWUg",
+            "WasDeleted": "False",
+            "IsValid": "True",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "VerticalPosition": "2400",
+            "AsFullAggregate": "AggregateNode:GetContacts",
+            "AsDatabaseAggregate": "AggregateNode:GetContacts",
+            "IsClientSide": "False",
+            "Name": "GetContacts",
+            "Type": "ListType:Contact Record List",
+            "RootOperation": "CombineSourcesOperation:Contacts",
+            "Sources": "[AliasedSource:Contact]",
+            "Joins": "[]",
+            "Filters": "[]",
+            "FiltersInGroupBy": "[]",
+            "CalculatedAttributes": "[]",
+            "CalculatedAttributesInGroupBy": "[]",
+            "Sorts": "[]",
+            "SortsInGroupBy": "[]",
+            "GroupByAttributes": "[]",
+            "AggregateAttributes": "[]",
+            "Connectors": "[ActionConnector:]",
+            "IncomingConnectors": "[ActionConnector:]",
+            "Target": "EndNode:"
+          },
+          "propertyReferences": {
+            "AsFullAggregate": {
+              "kind": "AggregateNode",
+              "name": "GetContacts",
+              "label": null,
+              "key": "OC7E758Q6Uu3l9xbypAWUg",
+              "reference": "@OC7E758Q6Uu3l9xbypAWUg",
+              "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/AggregateNode:GetContacts"
+            },
+            "AsDatabaseAggregate": {
+              "kind": "AggregateNode",
+              "name": "GetContacts",
+              "label": null,
+              "key": "OC7E758Q6Uu3l9xbypAWUg",
+              "reference": "@OC7E758Q6Uu3l9xbypAWUg",
+              "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/AggregateNode:GetContacts"
+            },
+            "Type": {
+              "kind": "ListType",
+              "name": "Contact Record List",
+              "label": null,
+              "key": "yw5zcwiqLEWMr2WljyL9Jw",
+              "reference": "@yw5zcwiqLEWMr2WljyL9Jw",
+              "path": "ListType:Contact Record List"
+            },
+            "RootOperation": {
+              "kind": "CombineSourcesOperation",
+              "name": "Contacts",
+              "label": null,
+              "key": "K6lp8Ny1uUupKSu9BOCt3g",
+              "reference": "@K6lp8Ny1uUupKSu9BOCt3g",
+              "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/AggregateNode:GetContacts/DataTable:/CombineSourcesOperation:Contacts"
+            },
+            "Target": {
+              "kind": "EndNode",
+              "name": "",
+              "label": null,
+              "key": "sviamnXgekS9Zev7hFcUTQ",
+              "reference": "@sviamnXgekS9Zev7hFcUTQ",
+              "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/EndNode:"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Sources": {
+              "items": [
+                {
+                  "kind": "AliasedSource",
+                  "name": "Contact",
+                  "label": null,
+                  "key": "sgozT3OPQUmrdy_qJvi+Ig",
+                  "reference": "@sgozT3OPQUmrdy_qJvi+Ig",
+                  "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/AggregateNode:GetContacts/DataTable:/CombineSourcesOperation:Contacts/AliasedSource:Contact"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            },
+            "Joins": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            },
+            "Filters": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            },
+            "FiltersInGroupBy": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            },
+            "CalculatedAttributes": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            },
+            "CalculatedAttributesInGroupBy": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            },
+            "Sorts": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            },
+            "SortsInGroupBy": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            },
+            "GroupByAttributes": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            },
+            "AggregateAttributes": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            },
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "cwwsuTSdm067eD_EVd7jww",
+                  "reference": "@cwwsuTSdm067eD_EVd7jww",
+                  "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/AggregateNode:GetContacts/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            },
+            "IncomingConnectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "vFGDF__T2kKkrfXQ_bDF+w",
+                  "reference": "@vFGDF__T2kKkrfXQ_bDF+w",
+                  "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/StartNode:/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": null,
+              "key": "cwwsuTSdm067eD_EVd7jww",
+              "reference": "@cwwsuTSdm067eD_EVd7jww",
+              "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/AggregateNode:GetContacts/ActionConnector:",
+              "properties": {
+                "ObjectKey": "cwwsuTSdm067eD_EVd7jww",
+                "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*cwwsuTSdm067eD_EVd7jww",
+                "WasDeleted": "False",
+                "IsValid": "True",
+                "Source": "AggregateNode:GetContacts",
+                "Target": "EndNode:"
+              },
+              "propertyReferences": {
+                "Source": {
+                  "kind": "AggregateNode",
+                  "name": "GetContacts",
+                  "label": null,
+                  "key": "OC7E758Q6Uu3l9xbypAWUg",
+                  "reference": "@OC7E758Q6Uu3l9xbypAWUg",
+                  "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/AggregateNode:GetContacts"
+                },
+                "Target": {
+                  "kind": "EndNode",
+                  "name": "",
+                  "label": null,
+                  "key": "sviamnXgekS9Zev7hFcUTQ",
+                  "reference": "@sviamnXgekS9Zev7hFcUTQ",
+                  "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/EndNode:"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "AddSourceOperation",
+              "name": "Contact",
+              "modelName": "Contact",
+              "label": null,
+              "key": "pOuRhqHxhEe7h5Vu+ysinQ",
+              "reference": "@pOuRhqHxhEe7h5Vu+ysinQ",
+              "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/AggregateNode:GetContacts/DataTable:/AddSourceOperation:Contact",
+              "properties": {
+                "ObjectKey": "pOuRhqHxhEe7h5Vu+ysinQ",
+                "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*pOuRhqHxhEe7h5Vu+ysinQ",
+                "WasDeleted": "False",
+                "IsValid": "True",
+                "Source": "ServerEntity:Contact",
+                "AttributesInPreview": "[]"
+              },
+              "propertyReferences": {
+                "Source": {
+                  "kind": "ServerEntity",
+                  "name": "Contact",
+                  "label": null,
+                  "key": "Ij7fB7WlzE2I9iS8Znn8Gw",
+                  "reference": "@Ij7fB7WlzE2I9iS8Znn8Gw",
+                  "path": "ServerEntity:Contact"
+                }
+              },
+              "propertyReferenceCollections": {
+                "AttributesInPreview": {
+                  "items": [],
+                  "total": 0,
+                  "omitted": 0
+                }
+              },
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "CombineSourcesOperation",
+              "name": "Contacts",
+              "modelName": "Contacts",
+              "label": null,
+              "key": "K6lp8Ny1uUupKSu9BOCt3g",
+              "reference": "@K6lp8Ny1uUupKSu9BOCt3g",
+              "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/AggregateNode:GetContacts/DataTable:/CombineSourcesOperation:Contacts",
+              "properties": {
+                "ObjectKey": "K6lp8Ny1uUupKSu9BOCt3g",
+                "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*K6lp8Ny1uUupKSu9BOCt3g",
+                "WasDeleted": "False",
+                "IsValid": "True",
+                "Name": "Contacts",
+                "CalculatedAttributes": "[]",
+                "Filters": "[]",
+                "Joins": "[]",
+                "Sorts": "[]",
+                "Sources": "[AliasedSource:Contact]"
+              },
+              "propertyReferences": {},
+              "propertyReferenceCollections": {
+                "CalculatedAttributes": {
+                  "items": [],
+                  "total": 0,
+                  "omitted": 0
+                },
+                "Filters": {
+                  "items": [],
+                  "total": 0,
+                  "omitted": 0
+                },
+                "Joins": {
+                  "items": [],
+                  "total": 0,
+                  "omitted": 0
+                },
+                "Sorts": {
+                  "items": [],
+                  "total": 0,
+                  "omitted": 0
+                },
+                "Sources": {
+                  "items": [
+                    {
+                      "kind": "AliasedSource",
+                      "name": "Contact",
+                      "label": null,
+                      "key": "sgozT3OPQUmrdy_qJvi+Ig",
+                      "reference": "@sgozT3OPQUmrdy_qJvi+Ig",
+                      "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/AggregateNode:GetContacts/DataTable:/CombineSourcesOperation:Contacts/AliasedSource:Contact"
+                    }
+                  ],
+                  "total": 1,
+                  "omitted": 0
+                }
+              },
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "AliasedSource",
+                  "name": "Contact",
+                  "modelName": "Contact",
+                  "label": null,
+                  "key": "sgozT3OPQUmrdy_qJvi+Ig",
+                  "reference": "@sgozT3OPQUmrdy_qJvi+Ig",
+                  "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/AggregateNode:GetContacts/DataTable:/CombineSourcesOperation:Contacts/AliasedSource:Contact",
+                  "properties": {
+                    "ObjectKey": "sgozT3OPQUmrdy_qJvi+Ig",
+                    "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*sgozT3OPQUmrdy_qJvi+Ig",
+                    "WasDeleted": "False",
+                    "IsValid": "True",
+                    "Name": "Contact",
+                    "Source": "ServerEntity:Contact",
+                    "AttributesInPreview": "[]",
+                    "SourceOperation": "AddSourceOperation:Contact"
+                  },
+                  "propertyReferences": {
+                    "Source": {
+                      "kind": "ServerEntity",
+                      "name": "Contact",
+                      "label": null,
+                      "key": "Ij7fB7WlzE2I9iS8Znn8Gw",
+                      "reference": "@Ij7fB7WlzE2I9iS8Znn8Gw",
+                      "path": "ServerEntity:Contact"
+                    },
+                    "SourceOperation": {
+                      "kind": "AddSourceOperation",
+                      "name": "Contact",
+                      "label": null,
+                      "key": "pOuRhqHxhEe7h5Vu+ysinQ",
+                      "reference": "@pOuRhqHxhEe7h5Vu+ysinQ",
+                      "path": "WebFlow:MainFlow/WebScreen:ContactsWeb/Preparation:/AggregateNode:GetContacts/DataTable:/AddSourceOperation:Contact"
+                    }
+                  },
+                  "propertyReferenceCollections": {
+                    "AttributesInPreview": {
+                      "items": [],
+                      "total": 0,
+                      "omitted": 0
+                    }
+                  },
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 1,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 3,
+          "childrenOmitted": 0
+        }
+      ],
+      "childrenTotal": 3,
+      "childrenOmitted": 0
+    },
+    "login": {
+      "kind": "WebScreen",
+      "name": "Login",
+      "modelName": "Login",
+      "label": null,
+      "key": "AB72AaFvZ0KHIik9GRLCWQ",
+      "reference": "@AB72AaFvZ0KHIik9GRLCWQ",
+      "path": "WebFlow:Common/WebScreen:Login",
+      "properties": {
+        "ObjectKey": "AB72AaFvZ0KHIik9GRLCWQ",
+        "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*AB72AaFvZ0KHIik9GRLCWQ",
+        "WasDeleted": "False",
+        "IsValid": "True",
+        "HorizontalPosition": "914",
+        "IsDisabled": "False",
+        "VerticalPosition": "1142",
+        "ThemeBeingUsed": "WebTheme:HeadlessTrad_UI",
+        "GridType": "Fluid",
+        "Name": "Login",
+        "Public": "False",
+        "Roles": "[RoleSignature:Registered, RoleSignature:Anonymous]",
+        "InputParameters": "[InputParameter:OriginalURL]",
+        "LocalVariables": "[LocalVariable:Password, LocalVariable:UserName, LocalVariable:RememberLogin]",
+        "HTTPSecurity": "SSL",
+        "IntegratedAuthentication": "Inherited",
+        "IsFrequentDestination": "True",
+        "Targets": "[]",
+        "Title": "\"Login\"",
+        "ExtendedProperties": "[]",
+        "Preparation": "Preparation:",
+        "ScreenActions": "[ScreenAction:Login, ScreenAction:ForgotPassword]"
+      },
+      "propertyReferences": {
+        "ThemeBeingUsed": {
+          "kind": "WebTheme",
+          "name": "HeadlessTrad_UI",
+          "label": null,
+          "key": "y+dETUbAJUW+iTEdU9cL_w",
+          "reference": "@y+dETUbAJUW+iTEdU9cL_w",
+          "path": "WebTheme:HeadlessTrad_UI"
+        },
+        "Preparation": {
+          "kind": "Preparation",
+          "name": "",
+          "label": null,
+          "key": "AB72AaFvZ0KHIik9GRLCWQ.#Preparation",
+          "reference": "@AB72AaFvZ0KHIik9GRLCWQ.#Preparation",
+          "path": "WebFlow:Common/WebScreen:Login/Preparation:"
+        }
+      },
+      "propertyReferenceCollections": {},
+      "propertiesOmitted": {},
+      "propertyErrors": {},
+      "propertiesMissing": [],
+      "children": [],
+      "childrenTotal": 9,
+      "childrenOmitted": 0
+    },
+    "loginAction": {
+      "kind": "ScreenAction",
+      "name": "Login",
+      "modelName": "Login",
+      "label": null,
+      "key": "RWYXbeoMsEK3MeHdMBK_gw",
+      "reference": "@RWYXbeoMsEK3MeHdMBK_gw",
+      "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login",
+      "properties": {
+        "ObjectKey": "RWYXbeoMsEK3MeHdMBK_gw",
+        "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*RWYXbeoMsEK3MeHdMBK_gw",
+        "WasDeleted": "False",
+        "IsValid": "True",
+        "IsCalledByAjax": "False",
+        "Name": "Login",
+        "UserReadOnlySessionsInScreens": "False",
+        "InputParameters": "[]",
+        "LocalVariables": "[]",
+        "OutputParameters": "[]"
+      },
+      "propertyReferences": {},
+      "propertyReferenceCollections": {
+        "InputParameters": {
+          "items": [],
+          "total": 0,
+          "omitted": 0
+        },
+        "LocalVariables": {
+          "items": [],
+          "total": 0,
+          "omitted": 0
+        },
+        "Nodes": {
+          "items": [
+            {
+              "kind": "DestinationNode",
+              "name": "Common\\ExternalURL",
+              "label": null,
+              "key": "oPRkrk8NAEuemogHRBnb2g",
+              "reference": "@oPRkrk8NAEuemogHRBnb2g",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/DestinationNode:Common\\ExternalURL"
+            },
+            {
+              "kind": "ExecuteServerActionNode",
+              "name": "ExceptionFeedbackMessage",
+              "label": null,
+              "key": "36jp08dIvUeyxCJPevXRPg",
+              "reference": "@36jp08dIvUeyxCJPevXRPg",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:ExceptionFeedbackMessage"
+            },
+            {
+              "kind": "ExceptionHandlerNode",
+              "name": "AllExceptions",
+              "label": null,
+              "key": "X0_PJlpbfkKVrnoaW7aMQA",
+              "reference": "@X0_PJlpbfkKVrnoaW7aMQA",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExceptionHandlerNode:AllExceptions"
+            },
+            {
+              "kind": "EndNode",
+              "name": "",
+              "label": null,
+              "key": "M9zVLDsUKkaiwsQJI1DmQQ",
+              "reference": "@M9zVLDsUKkaiwsQJI1DmQQ",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/EndNode:"
+            },
+            {
+              "kind": "ExecuteServerActionNode",
+              "name": "User_Login",
+              "label": null,
+              "key": "CdLJu6H_fkaT4OlzK5HR8g",
+              "reference": "@CdLJu6H_fkaT4OlzK5HR8g",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:User_Login"
+            },
+            {
+              "kind": "StartNode",
+              "name": "",
+              "label": null,
+              "key": "j7lha0kPSUSfXKa5BSOVEQ",
+              "reference": "@j7lha0kPSUSfXKa5BSOVEQ",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/StartNode:"
+            },
+            {
+              "kind": "IfNode",
+              "name": "",
+              "label": "Not Pass or Not UserName?",
+              "key": "ncp4nAQzMkqIX2Dn1NV+DQ",
+              "reference": "@ncp4nAQzMkqIX2Dn1NV+DQ",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/IfNode:Not Pass or Not UserName?"
+            },
+            {
+              "kind": "EndNode",
+              "name": "",
+              "label": null,
+              "key": "YJ7vPujqjEqejwC7qshLQQ",
+              "reference": "@YJ7vPujqjEqejwC7qshLQQ",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/EndNode:"
+            }
+          ],
+          "total": 8,
+          "omitted": 0
+        },
+        "OutputParameters": {
+          "items": [],
+          "total": 0,
+          "omitted": 0
+        }
+      },
+      "propertiesOmitted": {},
+      "propertyErrors": {},
+      "propertiesMissing": [],
+      "children": [
+        {
+          "kind": "DestinationNode",
+          "name": "Common\\ExternalURL",
+          "modelName": "Common\\ExternalURL",
+          "label": null,
+          "key": "oPRkrk8NAEuemogHRBnb2g",
+          "reference": "@oPRkrk8NAEuemogHRBnb2g",
+          "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/DestinationNode:Common\\ExternalURL",
+          "properties": {
+            "ObjectKey": "oPRkrk8NAEuemogHRBnb2g",
+            "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*oPRkrk8NAEuemogHRBnb2g",
+            "WasDeleted": "False",
+            "IsValid": "True",
+            "HorizontalPosition": "1142",
+            "IsDisabled": "False",
+            "VerticalPosition": "4799",
+            "Connectors": "[]",
+            "IncomingConnectors": "[ActionConnector:]",
+            "Destination": "ExternalSite:ExternalURL",
+            "Transition": "Inherited",
+            "Arguments": "[Argument:]"
+          },
+          "propertyReferences": {
+            "Destination": {
+              "kind": "ExternalSite",
+              "name": "ExternalURL",
+              "label": null,
+              "key": "BbMHRqCXQkq1gjmwLdiXNA",
+              "reference": "@BbMHRqCXQkq1gjmwLdiXNA",
+              "path": "WebFlow:Common/ExternalSite:ExternalURL"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            },
+            "IncomingConnectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "QKWmpiFIVUOE+Ban_b0CAQ",
+                  "reference": "@QKWmpiFIVUOE+Ban_b0CAQ",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:User_Login/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            },
+            "Arguments": {
+              "items": [
+                {
+                  "kind": "Argument",
+                  "name": "",
+                  "label": null,
+                  "key": "DROAhwAPOEC70jQ++d3grw",
+                  "reference": "@DROAhwAPOEC70jQ++d3grw",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/DestinationNode:Common\\ExternalURL/Argument:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "Argument",
+              "name": "",
+              "modelName": "",
+              "label": null,
+              "key": "DROAhwAPOEC70jQ++d3grw",
+              "reference": "@DROAhwAPOEC70jQ++d3grw",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/DestinationNode:Common\\ExternalURL/Argument:",
+              "properties": {
+                "ObjectKey": "DROAhwAPOEC70jQ++d3grw",
+                "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*DROAhwAPOEC70jQ++d3grw",
+                "WasDeleted": "False",
+                "IsValid": "True",
+                "Value": "If(ReplaceURLDomain(OriginalURL) = \"\", GetOwnerURLPath(), ReplaceURLDomain(OriginalURL))",
+                "Parameter": "InputParameter:URL"
+              },
+              "propertyReferences": {
+                "Parameter": {
+                  "kind": "InputParameter",
+                  "name": "URL",
+                  "label": null,
+                  "key": "3pIwSWdYB0i7kIM3S0Ixhg",
+                  "reference": "@3pIwSWdYB0i7kIM3S0Ixhg",
+                  "path": "WebFlow:Common/ExternalSite:ExternalURL/InputParameter:URL"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 1,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 1,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "ExecuteServerActionNode",
+          "name": "ExceptionFeedbackMessage",
+          "modelName": "ExceptionFeedbackMessage",
+          "label": null,
+          "key": "36jp08dIvUeyxCJPevXRPg",
+          "reference": "@36jp08dIvUeyxCJPevXRPg",
+          "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:ExceptionFeedbackMessage",
+          "properties": {
+            "ObjectKey": "36jp08dIvUeyxCJPevXRPg",
+            "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*36jp08dIvUeyxCJPevXRPg",
+            "WasDeleted": "False",
+            "IsValid": "True",
+            "HorizontalPosition": "4114",
+            "IsDisabled": "False",
+            "VerticalPosition": "2057",
+            "Connectors": "[ActionConnector:]",
+            "IncomingConnectors": "[ActionConnector:]",
+            "Action": "ServerActionSignature:Feedback_Message",
+            "AnimationEffect": "None",
+            "Name": "ExceptionFeedbackMessage",
+            "Target": "EndNode:",
+            "Arguments": "[Argument:, Argument:]"
+          },
+          "propertyReferences": {
+            "Action": {
+              "kind": "ServerActionSignature",
+              "name": "Feedback_Message",
+              "label": null,
+              "key": "SF5RdMyx4E6flnu7loARpw",
+              "reference": "@SF5RdMyx4E6flnu7loARpw",
+              "path": "Reference:RichWidgets/ServerActionSignature:Feedback_Message"
+            },
+            "Target": {
+              "kind": "EndNode",
+              "name": "",
+              "label": null,
+              "key": "M9zVLDsUKkaiwsQJI1DmQQ",
+              "reference": "@M9zVLDsUKkaiwsQJI1DmQQ",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/EndNode:"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "CVtaEtQy3UG0zl3gj55tiw",
+                  "reference": "@CVtaEtQy3UG0zl3gj55tiw",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:ExceptionFeedbackMessage/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            },
+            "IncomingConnectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "kdvXB1QSM0mV6Vr+2Ru_tg",
+                  "reference": "@kdvXB1QSM0mV6Vr+2Ru_tg",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExceptionHandlerNode:AllExceptions/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            },
+            "Arguments": {
+              "items": [
+                {
+                  "kind": "Argument",
+                  "name": "",
+                  "label": null,
+                  "key": "8cofesHDbEKRDjJytdwmzQ",
+                  "reference": "@8cofesHDbEKRDjJytdwmzQ",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:ExceptionFeedbackMessage/Argument:"
+                },
+                {
+                  "kind": "Argument",
+                  "name": "",
+                  "label": null,
+                  "key": "hyuUYOmG3Uq5HHo6MRC7zQ",
+                  "reference": "@hyuUYOmG3Uq5HHo6MRC7zQ",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:ExceptionFeedbackMessage/Argument:"
+                }
+              ],
+              "total": 2,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "Argument",
+              "name": "",
+              "modelName": "",
+              "label": null,
+              "key": "8cofesHDbEKRDjJytdwmzQ",
+              "reference": "@8cofesHDbEKRDjJytdwmzQ",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:ExceptionFeedbackMessage/Argument:",
+              "properties": {
+                "ObjectKey": "8cofesHDbEKRDjJytdwmzQ",
+                "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*8cofesHDbEKRDjJytdwmzQ",
+                "WasDeleted": "False",
+                "IsValid": "True",
+                "Value": "Entities.MessageType.Error",
+                "Parameter": "InputParameterSignature:MessageType"
+              },
+              "propertyReferences": {
+                "Parameter": {
+                  "kind": "InputParameterSignature",
+                  "name": "MessageType",
+                  "label": null,
+                  "key": "vXShZZm9gUefkITTzQ3HNg",
+                  "reference": "@vXShZZm9gUefkITTzQ3HNg",
+                  "path": "Reference:RichWidgets/ServerActionSignature:Feedback_Message/InputParameterSignature:MessageType"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 1,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "Argument",
+              "name": "",
+              "modelName": "",
+              "label": null,
+              "key": "hyuUYOmG3Uq5HHo6MRC7zQ",
+              "reference": "@hyuUYOmG3Uq5HHo6MRC7zQ",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:ExceptionFeedbackMessage/Argument:",
+              "properties": {
+                "ObjectKey": "hyuUYOmG3Uq5HHo6MRC7zQ",
+                "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*hyuUYOmG3Uq5HHo6MRC7zQ",
+                "WasDeleted": "False",
+                "IsValid": "True",
+                "Value": "AllExceptions.ExceptionMessage",
+                "Parameter": "InputParameterSignature:MessageText"
+              },
+              "propertyReferences": {
+                "Parameter": {
+                  "kind": "InputParameterSignature",
+                  "name": "MessageText",
+                  "label": null,
+                  "key": "Qw+iQf9yREOBw9r8PWrt_A",
+                  "reference": "@Qw+iQf9yREOBw9r8PWrt_A",
+                  "path": "Reference:RichWidgets/ServerActionSignature:Feedback_Message/InputParameterSignature:MessageText"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 1,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": null,
+              "key": "CVtaEtQy3UG0zl3gj55tiw",
+              "reference": "@CVtaEtQy3UG0zl3gj55tiw",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:ExceptionFeedbackMessage/ActionConnector:",
+              "properties": {
+                "ObjectKey": "CVtaEtQy3UG0zl3gj55tiw",
+                "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*CVtaEtQy3UG0zl3gj55tiw",
+                "WasDeleted": "False",
+                "IsValid": "True",
+                "Source": "ExecuteServerActionNode:ExceptionFeedbackMessage",
+                "Target": "EndNode:"
+              },
+              "propertyReferences": {
+                "Source": {
+                  "kind": "ExecuteServerActionNode",
+                  "name": "ExceptionFeedbackMessage",
+                  "label": null,
+                  "key": "36jp08dIvUeyxCJPevXRPg",
+                  "reference": "@36jp08dIvUeyxCJPevXRPg",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:ExceptionFeedbackMessage"
+                },
+                "Target": {
+                  "kind": "EndNode",
+                  "name": "",
+                  "label": null,
+                  "key": "M9zVLDsUKkaiwsQJI1DmQQ",
+                  "reference": "@M9zVLDsUKkaiwsQJI1DmQQ",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/EndNode:"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 3,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "ExceptionHandlerNode",
+          "name": "AllExceptions",
+          "modelName": "AllExceptions",
+          "label": null,
+          "key": "X0_PJlpbfkKVrnoaW7aMQA",
+          "reference": "@X0_PJlpbfkKVrnoaW7aMQA",
+          "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExceptionHandlerNode:AllExceptions",
+          "properties": {
+            "ObjectKey": "X0_PJlpbfkKVrnoaW7aMQA",
+            "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*X0_PJlpbfkKVrnoaW7aMQA",
+            "WasDeleted": "False",
+            "IsValid": "True",
+            "HorizontalPosition": "4114",
+            "IsDisabled": "False",
+            "VerticalPosition": "685",
+            "Connectors": "[ActionConnector:]",
+            "IncomingConnectors": "[]",
+            "AbortTransaction": "True",
+            "Exception": "SystemException:All Exceptions",
+            "LogError": "True",
+            "Name": "AllExceptions",
+            "Target": "ExecuteServerActionNode:ExceptionFeedbackMessage"
+          },
+          "propertyReferences": {
+            "Exception": {
+              "kind": "SystemException",
+              "name": "All Exceptions",
+              "label": null,
+              "key": "VI1iiDkgT0Szaid0LqgP_w",
+              "reference": "@VI1iiDkgT0Szaid0LqgP_w",
+              "path": "SystemException:All Exceptions"
+            },
+            "Target": {
+              "kind": "ExecuteServerActionNode",
+              "name": "ExceptionFeedbackMessage",
+              "label": null,
+              "key": "36jp08dIvUeyxCJPevXRPg",
+              "reference": "@36jp08dIvUeyxCJPevXRPg",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:ExceptionFeedbackMessage"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "kdvXB1QSM0mV6Vr+2Ru_tg",
+                  "reference": "@kdvXB1QSM0mV6Vr+2Ru_tg",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExceptionHandlerNode:AllExceptions/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            },
+            "IncomingConnectors": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": null,
+              "key": "kdvXB1QSM0mV6Vr+2Ru_tg",
+              "reference": "@kdvXB1QSM0mV6Vr+2Ru_tg",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExceptionHandlerNode:AllExceptions/ActionConnector:",
+              "properties": {
+                "ObjectKey": "kdvXB1QSM0mV6Vr+2Ru_tg",
+                "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*kdvXB1QSM0mV6Vr+2Ru_tg",
+                "WasDeleted": "False",
+                "IsValid": "True",
+                "Source": "ExceptionHandlerNode:AllExceptions",
+                "Target": "ExecuteServerActionNode:ExceptionFeedbackMessage"
+              },
+              "propertyReferences": {
+                "Source": {
+                  "kind": "ExceptionHandlerNode",
+                  "name": "AllExceptions",
+                  "label": null,
+                  "key": "X0_PJlpbfkKVrnoaW7aMQA",
+                  "reference": "@X0_PJlpbfkKVrnoaW7aMQA",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExceptionHandlerNode:AllExceptions"
+                },
+                "Target": {
+                  "kind": "ExecuteServerActionNode",
+                  "name": "ExceptionFeedbackMessage",
+                  "label": null,
+                  "key": "36jp08dIvUeyxCJPevXRPg",
+                  "reference": "@36jp08dIvUeyxCJPevXRPg",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:ExceptionFeedbackMessage"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 1,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "EndNode",
+          "name": "",
+          "modelName": "",
+          "label": null,
+          "key": "M9zVLDsUKkaiwsQJI1DmQQ",
+          "reference": "@M9zVLDsUKkaiwsQJI1DmQQ",
+          "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/EndNode:",
+          "properties": {
+            "ObjectKey": "M9zVLDsUKkaiwsQJI1DmQQ",
+            "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*M9zVLDsUKkaiwsQJI1DmQQ",
+            "WasDeleted": "False",
+            "IsValid": "True",
+            "HorizontalPosition": "4114",
+            "IsDisabled": "False",
+            "VerticalPosition": "3427",
+            "Connectors": "[]",
+            "IncomingConnectors": "[ActionConnector:]"
+          },
+          "propertyReferences": {},
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            },
+            "IncomingConnectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "CVtaEtQy3UG0zl3gj55tiw",
+                  "reference": "@CVtaEtQy3UG0zl3gj55tiw",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:ExceptionFeedbackMessage/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "ExecuteServerActionNode",
+          "name": "User_Login",
+          "modelName": "User_Login",
+          "label": null,
+          "key": "CdLJu6H_fkaT4OlzK5HR8g",
+          "reference": "@CdLJu6H_fkaT4OlzK5HR8g",
+          "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:User_Login",
+          "properties": {
+            "ObjectKey": "CdLJu6H_fkaT4OlzK5HR8g",
+            "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*CdLJu6H_fkaT4OlzK5HR8g",
+            "WasDeleted": "False",
+            "IsValid": "True",
+            "HorizontalPosition": "1142",
+            "IsDisabled": "False",
+            "VerticalPosition": "3428",
+            "Connectors": "[ActionConnector:]",
+            "IncomingConnectors": "[ActionConnector:]",
+            "Action": "ServerActionSignature:User_Login",
+            "AnimationEffect": "None",
+            "Name": "User_Login",
+            "Target": "DestinationNode:Common\\ExternalURL",
+            "Arguments": "[Argument:, Argument:, Argument:]"
+          },
+          "propertyReferences": {
+            "Action": {
+              "kind": "ServerActionSignature",
+              "name": "User_Login",
+              "label": null,
+              "key": "zJVGe9DhvU2EcXsFjtyMMA",
+              "reference": "@zJVGe9DhvU2EcXsFjtyMMA",
+              "path": "Reference:Users/ServerActionSignature:User_Login"
+            },
+            "Target": {
+              "kind": "DestinationNode",
+              "name": "Common\\ExternalURL",
+              "label": null,
+              "key": "oPRkrk8NAEuemogHRBnb2g",
+              "reference": "@oPRkrk8NAEuemogHRBnb2g",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/DestinationNode:Common\\ExternalURL"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "QKWmpiFIVUOE+Ban_b0CAQ",
+                  "reference": "@QKWmpiFIVUOE+Ban_b0CAQ",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:User_Login/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            },
+            "IncomingConnectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "u+XCwUSvK0i6karccwK6Sw",
+                  "reference": "@u+XCwUSvK0i6karccwK6Sw",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/IfNode:Not Pass or Not UserName?/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            },
+            "Arguments": {
+              "items": [
+                {
+                  "kind": "Argument",
+                  "name": "",
+                  "label": null,
+                  "key": "ZQSNnChoi0GHXK_spCFs6Q",
+                  "reference": "@ZQSNnChoi0GHXK_spCFs6Q",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:User_Login/Argument:"
+                },
+                {
+                  "kind": "Argument",
+                  "name": "",
+                  "label": null,
+                  "key": "yA3s9giGeUaWujS61w5dBQ",
+                  "reference": "@yA3s9giGeUaWujS61w5dBQ",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:User_Login/Argument:"
+                },
+                {
+                  "kind": "Argument",
+                  "name": "",
+                  "label": null,
+                  "key": "siM1NxitnkWJ2kpxk1O39w",
+                  "reference": "@siM1NxitnkWJ2kpxk1O39w",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:User_Login/Argument:"
+                }
+              ],
+              "total": 3,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "Argument",
+              "name": "",
+              "modelName": "",
+              "label": null,
+              "key": "ZQSNnChoi0GHXK_spCFs6Q",
+              "reference": "@ZQSNnChoi0GHXK_spCFs6Q",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:User_Login/Argument:",
+              "properties": {
+                "ObjectKey": "ZQSNnChoi0GHXK_spCFs6Q",
+                "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*ZQSNnChoi0GHXK_spCFs6Q",
+                "WasDeleted": "False",
+                "IsValid": "True",
+                "Value": "Password",
+                "Parameter": "InputParameterSignature:Password"
+              },
+              "propertyReferences": {
+                "Parameter": {
+                  "kind": "InputParameterSignature",
+                  "name": "Password",
+                  "label": null,
+                  "key": "vNZe4cZLB0ekcVQGfEkH+w",
+                  "reference": "@vNZe4cZLB0ekcVQGfEkH+w",
+                  "path": "Reference:Users/ServerActionSignature:User_Login/InputParameterSignature:Password"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 1,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "Argument",
+              "name": "",
+              "modelName": "",
+              "label": null,
+              "key": "yA3s9giGeUaWujS61w5dBQ",
+              "reference": "@yA3s9giGeUaWujS61w5dBQ",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:User_Login/Argument:",
+              "properties": {
+                "ObjectKey": "yA3s9giGeUaWujS61w5dBQ",
+                "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*yA3s9giGeUaWujS61w5dBQ",
+                "WasDeleted": "False",
+                "IsValid": "True",
+                "Value": "UserName",
+                "Parameter": "InputParameterSignature:Username"
+              },
+              "propertyReferences": {
+                "Parameter": {
+                  "kind": "InputParameterSignature",
+                  "name": "Username",
+                  "label": null,
+                  "key": "FTZOg91RF0mijb2BpOBWsw",
+                  "reference": "@FTZOg91RF0mijb2BpOBWsw",
+                  "path": "Reference:Users/ServerActionSignature:User_Login/InputParameterSignature:Username"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 1,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "Argument",
+              "name": "",
+              "modelName": "",
+              "label": null,
+              "key": "siM1NxitnkWJ2kpxk1O39w",
+              "reference": "@siM1NxitnkWJ2kpxk1O39w",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:User_Login/Argument:",
+              "properties": {
+                "ObjectKey": "siM1NxitnkWJ2kpxk1O39w",
+                "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*siM1NxitnkWJ2kpxk1O39w",
+                "WasDeleted": "False",
+                "IsValid": "True",
+                "Value": "RememberLogin",
+                "Parameter": "InputParameterSignature:RememberLogin"
+              },
+              "propertyReferences": {
+                "Parameter": {
+                  "kind": "InputParameterSignature",
+                  "name": "RememberLogin",
+                  "label": null,
+                  "key": "qoY3MOHq7UiJfhOdWAZuyw",
+                  "reference": "@qoY3MOHq7UiJfhOdWAZuyw",
+                  "path": "Reference:Users/ServerActionSignature:User_Login/InputParameterSignature:RememberLogin"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 1,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": null,
+              "key": "QKWmpiFIVUOE+Ban_b0CAQ",
+              "reference": "@QKWmpiFIVUOE+Ban_b0CAQ",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:User_Login/ActionConnector:",
+              "properties": {
+                "ObjectKey": "QKWmpiFIVUOE+Ban_b0CAQ",
+                "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*QKWmpiFIVUOE+Ban_b0CAQ",
+                "WasDeleted": "False",
+                "IsValid": "True",
+                "Source": "ExecuteServerActionNode:User_Login",
+                "Target": "DestinationNode:Common\\ExternalURL"
+              },
+              "propertyReferences": {
+                "Source": {
+                  "kind": "ExecuteServerActionNode",
+                  "name": "User_Login",
+                  "label": null,
+                  "key": "CdLJu6H_fkaT4OlzK5HR8g",
+                  "reference": "@CdLJu6H_fkaT4OlzK5HR8g",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:User_Login"
+                },
+                "Target": {
+                  "kind": "DestinationNode",
+                  "name": "Common\\ExternalURL",
+                  "label": null,
+                  "key": "oPRkrk8NAEuemogHRBnb2g",
+                  "reference": "@oPRkrk8NAEuemogHRBnb2g",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/DestinationNode:Common\\ExternalURL"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 4,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "StartNode",
+          "name": "",
+          "modelName": "",
+          "label": null,
+          "key": "j7lha0kPSUSfXKa5BSOVEQ",
+          "reference": "@j7lha0kPSUSfXKa5BSOVEQ",
+          "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/StartNode:",
+          "properties": {
+            "ObjectKey": "j7lha0kPSUSfXKa5BSOVEQ",
+            "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*j7lha0kPSUSfXKa5BSOVEQ",
+            "WasDeleted": "False",
+            "IsValid": "True",
+            "HorizontalPosition": "1142",
+            "IsDisabled": "False",
+            "VerticalPosition": "685",
+            "Connectors": "[ActionConnector:]",
+            "IncomingConnectors": "[]",
+            "Target": "IfNode:Not Pass or Not UserName?"
+          },
+          "propertyReferences": {
+            "Target": {
+              "kind": "IfNode",
+              "name": "",
+              "label": "Not Pass or Not UserName?",
+              "key": "ncp4nAQzMkqIX2Dn1NV+DQ",
+              "reference": "@ncp4nAQzMkqIX2Dn1NV+DQ",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/IfNode:Not Pass or Not UserName?"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "R4nHwguKLUi4jgMi5c_S0A",
+                  "reference": "@R4nHwguKLUi4jgMi5c_S0A",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/StartNode:/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            },
+            "IncomingConnectors": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": null,
+              "key": "R4nHwguKLUi4jgMi5c_S0A",
+              "reference": "@R4nHwguKLUi4jgMi5c_S0A",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/StartNode:/ActionConnector:",
+              "properties": {
+                "ObjectKey": "R4nHwguKLUi4jgMi5c_S0A",
+                "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*R4nHwguKLUi4jgMi5c_S0A",
+                "WasDeleted": "False",
+                "IsValid": "True",
+                "Source": "StartNode:",
+                "Target": "IfNode:Not Pass or Not UserName?"
+              },
+              "propertyReferences": {
+                "Source": {
+                  "kind": "StartNode",
+                  "name": "",
+                  "label": null,
+                  "key": "j7lha0kPSUSfXKa5BSOVEQ",
+                  "reference": "@j7lha0kPSUSfXKa5BSOVEQ",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/StartNode:"
+                },
+                "Target": {
+                  "kind": "IfNode",
+                  "name": "",
+                  "label": "Not Pass or Not UserName?",
+                  "key": "ncp4nAQzMkqIX2Dn1NV+DQ",
+                  "reference": "@ncp4nAQzMkqIX2Dn1NV+DQ",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/IfNode:Not Pass or Not UserName?"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 1,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "IfNode",
+          "name": "Not Pass or Not UserName?",
+          "modelName": "",
+          "label": "Not Pass or Not UserName?",
+          "key": "ncp4nAQzMkqIX2Dn1NV+DQ",
+          "reference": "@ncp4nAQzMkqIX2Dn1NV+DQ",
+          "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/IfNode:Not Pass or Not UserName?",
+          "properties": {
+            "ObjectKey": "ncp4nAQzMkqIX2Dn1NV+DQ",
+            "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*ncp4nAQzMkqIX2Dn1NV+DQ",
+            "WasDeleted": "False",
+            "IsValid": "True",
+            "HorizontalPosition": "1142",
+            "IsDisabled": "False",
+            "VerticalPosition": "2056",
+            "Connectors": "[ActionConnector:, ActionConnector:]",
+            "IncomingConnectors": "[ActionConnector:]",
+            "TrueTarget": "EndNode:",
+            "FalseTarget": "ExecuteServerActionNode:User_Login",
+            "Condition": "not UserNameInput.Valid or not PasswordInput.Valid",
+            "Label": "Not Pass or Not UserName?"
+          },
+          "propertyReferences": {
+            "TrueTarget": {
+              "kind": "EndNode",
+              "name": "",
+              "label": null,
+              "key": "YJ7vPujqjEqejwC7qshLQQ",
+              "reference": "@YJ7vPujqjEqejwC7qshLQQ",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/EndNode:"
+            },
+            "FalseTarget": {
+              "kind": "ExecuteServerActionNode",
+              "name": "User_Login",
+              "label": null,
+              "key": "CdLJu6H_fkaT4OlzK5HR8g",
+              "reference": "@CdLJu6H_fkaT4OlzK5HR8g",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:User_Login"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "xx40BHoG_kWyUEkxedu03g",
+                  "reference": "@xx40BHoG_kWyUEkxedu03g",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/IfNode:Not Pass or Not UserName?/ActionConnector:"
+                },
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "u+XCwUSvK0i6karccwK6Sw",
+                  "reference": "@u+XCwUSvK0i6karccwK6Sw",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/IfNode:Not Pass or Not UserName?/ActionConnector:"
+                }
+              ],
+              "total": 2,
+              "omitted": 0
+            },
+            "IncomingConnectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "R4nHwguKLUi4jgMi5c_S0A",
+                  "reference": "@R4nHwguKLUi4jgMi5c_S0A",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/StartNode:/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": null,
+              "key": "xx40BHoG_kWyUEkxedu03g",
+              "reference": "@xx40BHoG_kWyUEkxedu03g",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/IfNode:Not Pass or Not UserName?/ActionConnector:",
+              "properties": {
+                "ObjectKey": "xx40BHoG_kWyUEkxedu03g",
+                "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*xx40BHoG_kWyUEkxedu03g",
+                "WasDeleted": "False",
+                "IsValid": "True",
+                "Source": "IfNode:Not Pass or Not UserName?",
+                "Target": "EndNode:"
+              },
+              "propertyReferences": {
+                "Source": {
+                  "kind": "IfNode",
+                  "name": "",
+                  "label": "Not Pass or Not UserName?",
+                  "key": "ncp4nAQzMkqIX2Dn1NV+DQ",
+                  "reference": "@ncp4nAQzMkqIX2Dn1NV+DQ",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/IfNode:Not Pass or Not UserName?"
+                },
+                "Target": {
+                  "kind": "EndNode",
+                  "name": "",
+                  "label": null,
+                  "key": "YJ7vPujqjEqejwC7qshLQQ",
+                  "reference": "@YJ7vPujqjEqejwC7qshLQQ",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/EndNode:"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": null,
+              "key": "u+XCwUSvK0i6karccwK6Sw",
+              "reference": "@u+XCwUSvK0i6karccwK6Sw",
+              "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/IfNode:Not Pass or Not UserName?/ActionConnector:",
+              "properties": {
+                "ObjectKey": "u+XCwUSvK0i6karccwK6Sw",
+                "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*u+XCwUSvK0i6karccwK6Sw",
+                "WasDeleted": "False",
+                "IsValid": "True",
+                "Source": "IfNode:Not Pass or Not UserName?",
+                "Target": "ExecuteServerActionNode:User_Login"
+              },
+              "propertyReferences": {
+                "Source": {
+                  "kind": "IfNode",
+                  "name": "",
+                  "label": "Not Pass or Not UserName?",
+                  "key": "ncp4nAQzMkqIX2Dn1NV+DQ",
+                  "reference": "@ncp4nAQzMkqIX2Dn1NV+DQ",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/IfNode:Not Pass or Not UserName?"
+                },
+                "Target": {
+                  "kind": "ExecuteServerActionNode",
+                  "name": "User_Login",
+                  "label": null,
+                  "key": "CdLJu6H_fkaT4OlzK5HR8g",
+                  "reference": "@CdLJu6H_fkaT4OlzK5HR8g",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/ExecuteServerActionNode:User_Login"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 3,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "EndNode",
+          "name": "",
+          "modelName": "",
+          "label": null,
+          "key": "YJ7vPujqjEqejwC7qshLQQ",
+          "reference": "@YJ7vPujqjEqejwC7qshLQQ",
+          "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/EndNode:",
+          "properties": {
+            "ObjectKey": "YJ7vPujqjEqejwC7qshLQQ",
+            "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*YJ7vPujqjEqejwC7qshLQQ",
+            "WasDeleted": "False",
+            "IsValid": "True",
+            "HorizontalPosition": "2515",
+            "IsDisabled": "False",
+            "VerticalPosition": "2056",
+            "Connectors": "[]",
+            "IncomingConnectors": "[ActionConnector:]"
+          },
+          "propertyReferences": {},
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            },
+            "IncomingConnectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": null,
+                  "key": "xx40BHoG_kWyUEkxedu03g",
+                  "reference": "@xx40BHoG_kWyUEkxedu03g",
+                  "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login/IfNode:Not Pass or Not UserName?/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        }
+      ],
+      "childrenTotal": 8,
+      "childrenOmitted": 0
+    },
+    "widgets": [
+      {
+        "kind": "InputWidget",
+        "name": "UserNameInput",
+        "modelName": "UserNameInput",
+        "label": null,
+        "key": "zFCcPAtBtUuRiV9a5MK2vA",
+        "reference": "@zFCcPAtBtUuRiV9a5MK2vA",
+        "path": "WebFlow:Common/WebScreen:Login/WebBlockInstanceWidget:/PlaceholderContentWidget:Login/WebBlockInstanceWidget:/PlaceholderContentWidget:Login/ContainerWidget:/ContainerWidget:/WebBlockInstanceWidget:/PlaceholderContentWidget:Input/InputWidget:UserNameInput",
+        "properties": {
+          "ObjectKey": "zFCcPAtBtUuRiV9a5MK2vA",
+          "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*zFCcPAtBtUuRiV9a5MK2vA",
+          "WasDeleted": "False",
+          "IsValid": "True",
+          "Owner": "WebScreen:Login",
+          "OwnerESpace": "ESpace:HeadlessTrad_UI",
+          "Name": "UserNameInput",
+          "Kind": "WebWidgets.Input",
+          "EffectiveMarginLeft": "UserDefined",
+          "EffectiveWidth": "FillParent",
+          "Mandatory": "False",
+          "TextLines": "1",
+          "Type": "Text",
+          "Variable": "UserName",
+          "Visible": "True",
+          "Width": "(fill parent)",
+          "ExtendedProperties": "[]",
+          "OnChange": "OnChange:",
+          "Height": "1",
+          "Style": "input",
+          "IsMandatory": "False"
+        },
+        "propertyReferences": {
+          "Owner": {
+            "kind": "WebScreen",
+            "name": "Login",
+            "label": null,
+            "key": "AB72AaFvZ0KHIik9GRLCWQ",
+            "reference": "@AB72AaFvZ0KHIik9GRLCWQ",
+            "path": "WebFlow:Common/WebScreen:Login"
+          },
+          "OwnerESpace": {
+            "kind": "ESpace",
+            "name": "HeadlessTrad_UI",
+            "label": null,
+            "key": "a67O2cgEPU67HKaCkxp9ZQ",
+            "reference": "@a67O2cgEPU67HKaCkxp9ZQ",
+            "path": ""
+          },
+          "OnChange": {
+            "kind": "OnChange",
+            "name": "",
+            "label": null,
+            "key": "zFCcPAtBtUuRiV9a5MK2vA.#OnChange",
+            "reference": "@zFCcPAtBtUuRiV9a5MK2vA.#OnChange",
+            "path": "WebFlow:Common/WebScreen:Login/WebBlockInstanceWidget:/PlaceholderContentWidget:Login/WebBlockInstanceWidget:/PlaceholderContentWidget:Login/ContainerWidget:/ContainerWidget:/WebBlockInstanceWidget:/PlaceholderContentWidget:Input/InputWidget:UserNameInput/OnChange:"
+          }
+        },
+        "propertyReferenceCollections": {
+          "ExtendedProperties": {
+            "items": [],
+            "total": 0,
+            "omitted": 0
+          }
+        },
+        "propertiesOmitted": {},
+        "propertyErrors": {},
+        "propertiesMissing": [],
+        "children": [
+          {
+            "kind": "OnChange",
+            "name": "",
+            "modelName": "",
+            "label": null,
+            "key": "zFCcPAtBtUuRiV9a5MK2vA.#OnChange",
+            "reference": "@zFCcPAtBtUuRiV9a5MK2vA.#OnChange",
+            "path": "WebFlow:Common/WebScreen:Login/WebBlockInstanceWidget:/PlaceholderContentWidget:Login/WebBlockInstanceWidget:/PlaceholderContentWidget:Login/ContainerWidget:/ContainerWidget:/WebBlockInstanceWidget:/PlaceholderContentWidget:Input/InputWidget:UserNameInput/OnChange:",
+            "properties": {
+              "ObjectKey": "zFCcPAtBtUuRiV9a5MK2vA.#OnChange",
+              "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*zFCcPAtBtUuRiV9a5MK2vA.#OnChange",
+              "WasDeleted": "False",
+              "IsValid": "True",
+              "Arguments": "[]"
+            },
+            "propertyReferences": {},
+            "propertyReferenceCollections": {
+              "Arguments": {
+                "items": [],
+                "total": 0,
+                "omitted": 0
+              }
+            },
+            "propertiesOmitted": {},
+            "propertyErrors": {},
+            "propertiesMissing": [],
+            "children": [],
+            "childrenTotal": 0,
+            "childrenOmitted": 0
+          }
+        ],
+        "childrenTotal": 4,
+        "childrenOmitted": 0
+      },
+      {
+        "kind": "InputPasswordWidget",
+        "name": "PasswordInput",
+        "modelName": "PasswordInput",
+        "label": null,
+        "key": "EMWy8Q8lukucqo2c43xGxA",
+        "reference": "@EMWy8Q8lukucqo2c43xGxA",
+        "path": "WebFlow:Common/WebScreen:Login/WebBlockInstanceWidget:/PlaceholderContentWidget:Login/WebBlockInstanceWidget:/PlaceholderContentWidget:Login/ContainerWidget:/ContainerWidget:/WebBlockInstanceWidget:/PlaceholderContentWidget:Input/InputPasswordWidget:PasswordInput",
+        "properties": {
+          "ObjectKey": "EMWy8Q8lukucqo2c43xGxA",
+          "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*EMWy8Q8lukucqo2c43xGxA",
+          "WasDeleted": "False",
+          "IsValid": "True",
+          "Owner": "WebScreen:Login",
+          "OwnerESpace": "ESpace:HeadlessTrad_UI",
+          "Name": "PasswordInput",
+          "Kind": "WebWidgets.InputPassword",
+          "EffectiveMarginLeft": "UserDefined",
+          "EffectiveWidth": "FillParent",
+          "Mandatory": "False",
+          "PasswordType": "Text",
+          "Variable": "Password",
+          "Visible": "True",
+          "Width": "(fill parent)",
+          "ExtendedProperties": "[]",
+          "OnChange": "OnChange:"
+        },
+        "propertyReferences": {
+          "Owner": {
+            "kind": "WebScreen",
+            "name": "Login",
+            "label": null,
+            "key": "AB72AaFvZ0KHIik9GRLCWQ",
+            "reference": "@AB72AaFvZ0KHIik9GRLCWQ",
+            "path": "WebFlow:Common/WebScreen:Login"
+          },
+          "OwnerESpace": {
+            "kind": "ESpace",
+            "name": "HeadlessTrad_UI",
+            "label": null,
+            "key": "a67O2cgEPU67HKaCkxp9ZQ",
+            "reference": "@a67O2cgEPU67HKaCkxp9ZQ",
+            "path": ""
+          },
+          "OnChange": {
+            "kind": "OnChange",
+            "name": "",
+            "label": null,
+            "key": "EMWy8Q8lukucqo2c43xGxA.#OnChange",
+            "reference": "@EMWy8Q8lukucqo2c43xGxA.#OnChange",
+            "path": "WebFlow:Common/WebScreen:Login/WebBlockInstanceWidget:/PlaceholderContentWidget:Login/WebBlockInstanceWidget:/PlaceholderContentWidget:Login/ContainerWidget:/ContainerWidget:/WebBlockInstanceWidget:/PlaceholderContentWidget:Input/InputPasswordWidget:PasswordInput/OnChange:"
+          }
+        },
+        "propertyReferenceCollections": {
+          "ExtendedProperties": {
+            "items": [],
+            "total": 0,
+            "omitted": 0
+          }
+        },
+        "propertiesOmitted": {},
+        "propertyErrors": {},
+        "propertiesMissing": [],
+        "children": [
+          {
+            "kind": "OnChange",
+            "name": "",
+            "modelName": "",
+            "label": null,
+            "key": "EMWy8Q8lukucqo2c43xGxA.#OnChange",
+            "reference": "@EMWy8Q8lukucqo2c43xGxA.#OnChange",
+            "path": "WebFlow:Common/WebScreen:Login/WebBlockInstanceWidget:/PlaceholderContentWidget:Login/WebBlockInstanceWidget:/PlaceholderContentWidget:Login/ContainerWidget:/ContainerWidget:/WebBlockInstanceWidget:/PlaceholderContentWidget:Input/InputPasswordWidget:PasswordInput/OnChange:",
+            "properties": {
+              "ObjectKey": "EMWy8Q8lukucqo2c43xGxA.#OnChange",
+              "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*EMWy8Q8lukucqo2c43xGxA.#OnChange",
+              "WasDeleted": "False",
+              "IsValid": "True",
+              "Arguments": "[]"
+            },
+            "propertyReferences": {},
+            "propertyReferenceCollections": {
+              "Arguments": {
+                "items": [],
+                "total": 0,
+                "omitted": 0
+              }
+            },
+            "propertiesOmitted": {},
+            "propertyErrors": {},
+            "propertiesMissing": [],
+            "children": [],
+            "childrenTotal": 0,
+            "childrenOmitted": 0
+          }
+        ],
+        "childrenTotal": 4,
+        "childrenOmitted": 0
+      },
+      {
+        "kind": "ButtonWidget",
+        "name": "\"Log In\" [Label[ServiceStudio.Expressions.AbstractExpression]]",
+        "modelName": "",
+        "label": "\"Log In\" [Label[ServiceStudio.Expressions.AbstractExpression]]",
+        "key": "owiqQp4KDkaiV11FT6aIpw",
+        "reference": "@owiqQp4KDkaiV11FT6aIpw",
+        "path": "WebFlow:Common/WebScreen:Login/WebBlockInstanceWidget:/PlaceholderContentWidget:Login/WebBlockInstanceWidget:/PlaceholderContentWidget:Login/ContainerWidget:/ButtonWidget:\"Log In\" [Label[ServiceStudio.Expressions.AbstractExpression]]",
+        "properties": {
+          "ObjectKey": "owiqQp4KDkaiV11FT6aIpw",
+          "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*owiqQp4KDkaiV11FT6aIpw",
+          "WasDeleted": "False",
+          "IsValid": "True",
+          "Owner": "WebScreen:Login",
+          "OwnerESpace": "ESpace:HeadlessTrad_UI",
+          "Kind": "WebWidgets.Button",
+          "EffectiveMarginLeft": "UserDefined",
+          "EffectiveWidth": "FillParent",
+          "IsDefault": "True",
+          "Label": "\"Log In\"",
+          "Visible": "True",
+          "Width": "(fill parent)",
+          "ExtendedProperties": "[]",
+          "OnClick": "BuiltinEvent:"
+        },
+        "propertyReferences": {
+          "Owner": {
+            "kind": "WebScreen",
+            "name": "Login",
+            "label": null,
+            "key": "AB72AaFvZ0KHIik9GRLCWQ",
+            "reference": "@AB72AaFvZ0KHIik9GRLCWQ",
+            "path": "WebFlow:Common/WebScreen:Login"
+          },
+          "OwnerESpace": {
+            "kind": "ESpace",
+            "name": "HeadlessTrad_UI",
+            "label": null,
+            "key": "a67O2cgEPU67HKaCkxp9ZQ",
+            "reference": "@a67O2cgEPU67HKaCkxp9ZQ",
+            "path": ""
+          },
+          "OnClick": {
+            "kind": "BuiltinEvent",
+            "name": "",
+            "label": null,
+            "key": "owiqQp4KDkaiV11FT6aIpw.#OnClick",
+            "reference": "@owiqQp4KDkaiV11FT6aIpw.#OnClick",
+            "path": "WebFlow:Common/WebScreen:Login/WebBlockInstanceWidget:/PlaceholderContentWidget:Login/WebBlockInstanceWidget:/PlaceholderContentWidget:Login/ContainerWidget:/ButtonWidget:\"Log In\" [Label[ServiceStudio.Expressions.AbstractExpression]]/BuiltinEvent:"
+          }
+        },
+        "propertyReferenceCollections": {
+          "ExtendedProperties": {
+            "items": [],
+            "total": 0,
+            "omitted": 0
+          }
+        },
+        "propertiesOmitted": {},
+        "propertyErrors": {},
+        "propertiesMissing": [],
+        "children": [
+          {
+            "kind": "BuiltinEvent",
+            "name": "",
+            "modelName": "",
+            "label": null,
+            "key": "owiqQp4KDkaiV11FT6aIpw.#OnClick",
+            "reference": "@owiqQp4KDkaiV11FT6aIpw.#OnClick",
+            "path": "WebFlow:Common/WebScreen:Login/WebBlockInstanceWidget:/PlaceholderContentWidget:Login/WebBlockInstanceWidget:/PlaceholderContentWidget:Login/ContainerWidget:/ButtonWidget:\"Log In\" [Label[ServiceStudio.Expressions.AbstractExpression]]/BuiltinEvent:",
+            "properties": {
+              "ObjectKey": "owiqQp4KDkaiV11FT6aIpw.#OnClick",
+              "GlobalKey": "a67O2cgEPU67HKaCkxp9ZQ*owiqQp4KDkaiV11FT6aIpw.#OnClick",
+              "WasDeleted": "False",
+              "IsValid": "True",
+              "Destination": "ScreenAction:Login",
+              "Arguments": "[]"
+            },
+            "propertyReferences": {
+              "Destination": {
+                "kind": "ScreenAction",
+                "name": "Login",
+                "label": null,
+                "key": "RWYXbeoMsEK3MeHdMBK_gw",
+                "reference": "@RWYXbeoMsEK3MeHdMBK_gw",
+                "path": "WebFlow:Common/WebScreen:Login/ScreenAction:Login"
+              }
+            },
+            "propertyReferenceCollections": {
+              "Arguments": {
+                "items": [],
+                "total": 0,
+                "omitted": 0
+              }
+            },
+            "propertiesOmitted": {},
+            "propertyErrors": {},
+            "propertiesMissing": [],
+            "children": [],
+            "childrenTotal": 0,
+            "childrenOmitted": 0
+          }
+        ],
+        "childrenTotal": 3,
+        "childrenOmitted": 0
+      }
+    ],
+    "routes": {
+      "source": "DebuggerService.GetEntryPointUri",
+      "urls": {
+        "ContactsWeb": "https://personal-2qqw9srv.outsystemscloud.com/HeadlessTrad_UI/ContactsWeb.aspx?_ts=639267457061501160",
+        "Login": "https://personal-2qqw9srv.outsystemscloud.com/HeadlessTrad_UI/Login.aspx?_ts=639267457061508317"
+      }
+    }
+  }
+}

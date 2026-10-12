@@ -18,6 +18,22 @@ internal static class MergeRollbackProof
 
     public static string Sha256Hex(byte[] bytes) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
 
+    /// <summary>The model identity of OML bytes (list_open_modules {model_sha256_of}, capability list_open_modules:model_sha256):
+    /// the SHA-256 of the bytes after the textual header ("OML", a 32-bit little-endian length N, N header bytes), where the
+    /// Studio writes its window state on every save; any other shape, the SHA-256 of all bytes. The same rule as the kernel's
+    /// PrebuiltCandidate.ModelSha256 and the facade's o11-capture-store.mjs, so a fingerprint read in the Studio names the
+    /// same model as a capture file on the server. Pure, here because this file is linked into both bridges and Anvil.Tests.</summary>
+    public static string ModelSha256Hex(byte[] bytes)
+    {
+        if (bytes.Length >= 7 && bytes[0] == (byte)'O' && bytes[1] == (byte)'M' && bytes[2] == (byte)'L')
+        {
+            var length = BitConverter.ToUInt32(bytes, 3);
+            if (length <= (uint)(bytes.Length - 7))
+                return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes.AsSpan(7 + (int)length))).ToLowerInvariant();
+        }
+        return Sha256Hex(bytes);
+    }
+
     public static bool SameHash(string? left, string? right)
         => !string.IsNullOrWhiteSpace(left) && !string.IsNullOrWhiteSpace(right)
            && string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);

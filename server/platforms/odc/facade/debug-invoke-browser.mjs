@@ -4,12 +4,17 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fail, describeParameters } from './debug-invoke-contract.mjs';
 import { privateRequest, checkNativeRequest } from './debug-invoke-http.mjs';
+import { localAppDataViews } from './debug-state-root.mjs';
 
-// A private transport, not a configurable DevTools proxy: only the user's isolated preview profile.
-export function isPreviewProfile(profile, local = process.env.LOCALAPPDATA) {
+// A private transport, not a configurable DevTools proxy: only the user's isolated preview profile. Accepted under
+// this process's %LOCALAPPDATA% view and under the real folder (an MSIX caller sees its own copy of the first).
+const previewRoots = () => { try { return localAppDataViews().map(view => view.path); } catch { return [process.env.LOCALAPPDATA]; } };
+export function isPreviewProfile(profile, local = previewRoots()) {
   if (!local || !profile) return false;
-  const relative = path.win32.relative(local, profile).toLowerCase();
-  return relative === 'codexbrowserpreview' || /^packages\\openai\.codex_[a-z0-9]+\\localcache\\local\\codexbrowserpreview$/.test(relative);
+  return [local].flat().filter(Boolean).some(root => {
+    const relative = path.win32.relative(root, profile).toLowerCase();
+    return relative === 'codexbrowserpreview' || /^packages\\openai\.codex_[a-z0-9]+\\localcache\\local\\codexbrowserpreview$/.test(relative);
+  });
 }
 export async function previewTarget(tabId, origin) {
   // Packaged Codex can virtualize LOCALAPPDATA. Verify the actual main-process profile first.

@@ -130,6 +130,41 @@ export { normalize, tokens };
 // list) and the positions a dropped word or a punctuation mark precedes (where a run of words such as "server action"
 // ends: "fluxo da acao de servidor NA ui").
 const GENITIVE = new Set(['de', 'do', 'da', 'dos', 'das', 'of']);
+// Paths, URLs and file names in an intent say where something is, not what to change (2026-10-11): the first discover
+// of the FarmaVirtual session (10/10/2026) named "C:\Users\andre\GitSSAM\prototypes\farmavirtual\index.html" and got
+// data.entity as a direct match focused on its role "index" (the file name). Their folders, host and file stem leave the
+// words every matcher of the discover reads; what the chunk says of its kind stays: a file is replaced by the word of its
+// extension and a URL by its scheme (with the extension it ends in), between gaps (a run of words is never read across
+// them); a folder leaves a gap only. The extension and the scheme are domain words: "importar o arquivo prototipo.html
+// como tela" asks the html page, "usar Chart.js" a script, a URL an http call (review of 2026-10-11: dropping them took
+// ui.html-page, ui.script-resource and integration.rest-consume's http out). The answer echoes the intent as written.
+// A path is a chunk between spaces (a quoted one may hold spaces) with a scheme (://), a drive (C:\), a UNC, home or
+// relative root (\\, ~/, ./, ../), a leading slash or a backslash, or that ends in the extension of a file (index.html,
+// src/app.js, *.css). Names with a slash or a dot (StyleSheet/WebStyleSheet, ui.html-page, Client.FvModal) are not paths.
+const FILE_EXTENSIONS = new Set(['html', 'htm', 'css', 'scss', 'sass', 'less', 'js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx', 'json', 'xml', 'svg', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'ico', 'bmp',
+  'woff', 'woff2', 'ttf', 'otf', 'eot', 'txt', 'md', 'csv', 'tsv', 'xls', 'xlsx', 'doc', 'docx', 'pdf', 'zip', 'oml', 'oap', 'osp', 'xif', 'dll', 'exe', 'cs', 'py', 'ps1', 'cmd', 'bat', 'sql', 'yml', 'yaml', 'mp3', 'mp4']);
+const QUOTED_PATH = /(["'`])((?:[A-Za-z][A-Za-z0-9+.-]*:\/\/|[A-Za-z]:[\\/]|\\\\|~[\\/]|\.{1,2}[\\/]|\/)[^"'`]*?)\1/g;
+const pathCore = chunk => chunk.replace(/^[("'`[{<]+/, '').replace(/[)"'`\]}>,;:.!?]+$/, '');
+const extensionOf = c => { const ext = /[\w*-]\.([A-Za-z0-9]{1,5})$/.exec(c.replace(/[?#].*$/, ''))?.[1]?.toLowerCase(); return ext && FILE_EXTENSIONS.has(ext) ? ext : null; };
+function isPath(chunk) {
+  const c = pathCore(chunk);
+  if (!c) return false;
+  if (c.includes('://') || /^[A-Za-z]:[\\/]/.test(c) || /^(?:\\\\|~[\\/]|\.{1,2}[\\/]|\/[^\s/])/.test(c) || c.includes('\\')) return true;
+  return extensionOf(c) != null;
+}
+// The words a path keeps: the scheme of a URL, the extension of a file; a folder keeps none.
+function pathWords(chunk) {
+  const c = pathCore(chunk);
+  const scheme = /^([A-Za-z][A-Za-z0-9+.-]*):\/\//.exec(c)?.[1]?.toLowerCase();
+  const ext = extensionOf(scheme ? c.slice(scheme.length + 3).replace(/^[^/]*/, '') : c);
+  const words = [scheme, ext].filter(Boolean).join(' ');
+  return words ? ` ; ${words} ; ` : ';';
+}
+export function withoutPaths(intent) {
+  const text = String(intent ?? '');
+  const out = text.replace(QUOTED_PATH, (_, _quote, quoted) => ` ${pathWords(quoted)} `).split(/(\s+)/).map(part => (part.trim() && isPath(part) ? pathWords(part) : part)).join('');
+  return out === text ? text : out;
+}
 function intentTokens(text) {
   const list = []; const genitive = new Set(); const gap = new Set(); let connector = false; let dropped = false;
   for (const part of normalize(text).split(/([^a-z0-9_]+)/)) {
@@ -1029,6 +1064,36 @@ function keywordOwners(index) {
   if (!OWNERS.has(index)) { const owners = new Map(); for (const c of index.capabilities ?? []) for (const k of capabilityText(c).keywords) if (!k.anchored && k.form && !k.form.includes(' ')) { if (!owners.has(k.form)) owners.set(k.form, new Set()); owners.get(k.form).add(c.id); } OWNERS.set(index, owners); }
   return OWNERS.get(index);
 }
+// The synonym groups that hold each one-word form, by its fold, once per index: fold(form) -> the canonicals (as the
+// intent produces them, tokens joined) of every group whose canonical or variant it is.
+const GROUPS = new WeakMap();
+function synonymGroups(index) {
+  if (!GROUPS.has(index)) {
+    const groups = new Map();
+    for (const [canonical, variants] of Object.entries(index.synonyms ?? {})) {
+      const key = phraseOf(canonical); if (!key) continue;
+      for (const v of [canonical, ...(variants ?? [])]) { const form = typeof v === 'string' ? phraseOf(v) : ''; if (!form || form.includes(' ')) continue; if (!groups.has(fold(form))) groups.set(fold(form), new Set()); groups.get(fold(form)).add(key); }
+    }
+    GROUPS.set(index, groups);
+  }
+  return GROUPS.get(index);
+}
+// A family word is said by the intent's own word for it too (2026-10-11): its translation, or the word that names the
+// capability when that word is a plain keyword of it and the canonical of a synonym group that holds the family word.
+// "tema" and "CSS" name the theme of ui.theme-css (its id says css; group css = estilo, style, tema, theme, stylesheet,
+// classe). The first discover of the FarmaVirtual session (10/10/2026) said "tema CSS" and ui.theme-css went to the
+// alternatives as "named through a generic element word only". The other words of the group never name it: they say the
+// style or the class of an attribute, an entity or a widget too ("criar entidade Aluno com atributo Classe", "entidade
+// Estilo com atributos Nome e Cor": the review of 2026-10-11 measured ui.theme-css promoted to a direct match there when
+// any word of the group named the family). Only the words the intent wrote count (`raw`), never a canonical it produced.
+const FAMILY_TRANSLATIONS = { theme: ['tema'] };
+function familyWordSaid(index, c, raw, word) {
+  const wrote = new Set(raw.map(fold));
+  if ((FAMILY_TRANSLATIONS[word] ?? []).some(t => tokens(t).length === 1 && wrote.has(fold(tokens(t)[0])))) return true;
+  const named = new Set(tokens(c.id.replace(/[._-]+/g, ' ')).map(fold));
+  const own = capabilityText(c).keywords;
+  return [...(synonymGroups(index).get(fold(word)) ?? [])].some(k => wrote.has(fold(k)) && named.has(fold(k)) && own.some(e => !e.anchored && e.form === k));
+}
 // The one-word synonym canonicals of an index, by their fold, once per index: an anchor term that is one is said by
 // every variant of its group on that lane, as a one-word keyword is.
 const CANONICALS = new WeakMap();
@@ -1241,7 +1306,7 @@ export function query(index, { intent = '', limit = 8 } = {}) {
   // as "variaveis"/"variables" never yields the family word "variable", and a derived-word table that made it do so
   // for every family measured new direct matches (security.settings-roles, whose role is "client variable", on
   // environment and monitoring intents); the anchored keyword names the family of its own capability only.
-  const namesFamily = x => isFamily(x.c) && (x.anchoredHits > 0 || [...familyWords(x.c)].some(w => terms.includes(w) || (w === 'entity' && terms.includes('entidade'))));
+  const namesFamily = x => isFamily(x.c) && (x.anchoredHits > 0 || [...familyWords(x.c)].some(w => terms.includes(w) || (w === 'entity' && terms.includes('entidade')) || familyWordSaid(index, x.c, raw, w)));
   let eligible = scored.filter(x => x.elementHits > 0 || (!isFamily(x.c) && x.score >= 3));
   const demoted = new Map();
   if (eligible.some(namesFamily)) for (const x of eligible) if (isFamily(x.c) && !namesFamily(x)) demoted.set(x.c.id, 'named through a generic element word only (attribute/record/value); the intent names another family');
@@ -1328,11 +1393,11 @@ export function query(index, { intent = '', limit = 8 } = {}) {
 }
 // A capability as a direct match of the work packet when the module holds the element the intent names exactly (W1): the
 // fields of a direct match of query() that the packet reads.
-export function packetMatch(index, id, why = []) {
+export function packetMatch(index, id, why = [], from = 'module') {
   const c = index.capabilities.find(k => k.id === id); if (!c) return null;
   return { id: c.id, category: c.category, title: c.title, via: 'match', score: 0, why, level: levelOf(index, c), route: { kind: c.route?.kind ?? null, operation: c.route?.operation ?? null },
     contract: c.contract ?? [], proofs: proofsOf(index, c), depends: (c.depends ?? []).map(d => (typeof d === 'string' ? { id: d } : { id: d.id, unless: d.unless ?? null })),
-    summary: c.summary, limits: (c.limits ?? []).slice(0, 2), guidance: c.guidance ?? null, from: 'module' };
+    summary: c.summary, limits: (c.limits ?? []).slice(0, 2), guidance: c.guidance ?? null, from };
 }
 function relatedNotes(index, c, terms) {
   const notes = [];
@@ -1505,7 +1570,8 @@ export async function applicationContext(index, sources, { app, matches, terms, 
 // 2026-09-23). Stages reduce whole sections in a fixed order, cheapest information first: A derived or duplicated
 // text, B capture context, C the lower tiers (alternatives, dependencies), D the parts of a direct match that are
 // not what the intent asked (bindings, examples, contracts, non-focused operations, limits beyond the first), E the
-// focused operations to their summary and per-role status/evidence/integrity caution. Every reduction is declared in
+// focused operations to their summary and per-role status/evidence/integrity caution, F the expansions the call asked
+// by name (expand, detail, type: last, 2026-10-11). Every reduction is declared in
 // size.truncated with the exact continuation. When even the minimal answer does not fit, an explicit insufficient
 // result is returned (size.status 'insufficient'): never an answer above the budget with a note.
 const OMITTED_PART = { examples: 'example', 'examples.all': 'example', contracts: 'contract', bindings: 'bindings', 'bindings.all': 'bindings', 'matches.operations': 'operations', 'matches.operations.focused': 'operations', 'matches.native': 'native', 'matches.limits': 'evidence', 'matches.notes': 'evidence', 'matches.summary': 'evidence', 'matches.direct.minimal': 'evidence' };
@@ -1562,7 +1628,6 @@ function budgetStages() {
     ['bindings.all', a => { if (a.bindings?.length) { a.bindingsOmitted = (a.bindingsOmitted ?? 0) + a.bindings.length; a.bindings = []; } }, () => 'continuation.omitted[].expand (bindings)'],
     ['examples.all', a => { for (const [id, ex] of Object.entries(a.examples ?? {})) if (ex?.ops?.length) a.examples[id] = { job: ex.job, path: ex.path, ...(ex.scope ? { scope: { role: ex.scope.role, op: ex.scope.op, ops: ex.scope.ops } } : {}), opsTotal: ex.opsTotal, opsShown: 0, ops: [], fragment: true, note: 'ops omitted by budget', expand: id + ':example' }; }, () => 'continuation.omitted[].expand (example)'],
     ['contracts.all', a => { const keys = Object.keys(a.contracts ?? {}); if (keys.length) { a.contracts = { reduced: { pointers: keys, expand: keys.map(k => 'contract:' + k).join(',') } }; } }, () => 'contracts.reduced.expand'],
-    ['expansions', a => { for (const [key, part] of Object.entries(a.expansions ?? {})) { if (part?.example?.ops?.length > 4) { part.example.ops = part.example.ops.slice(0, 4); part.example.opsShown = 4; part.example.fragment = true; part.example.note = 'FRAGMENT (reduced by budget)'; } if (part?.evidence?.proofs?.length > 2) { part.evidence.proofsOmitted = part.evidence.proofs.slice(2).map(p => p.job); part.evidence.proofs = part.evidence.proofs.slice(0, 2); } if (part?.bindings?.length > 8) { part.bindingsOmitted = part.bindings.length - 8; part.bindings = part.bindings.slice(0, 8); } } }, a => 'ask for fewer parts per call: ' + Object.keys(a.expansions ?? {}).map(k => 'expand ' + k).join(' | ')],
     ['matches.alternatives.drop', a => { const alts = (a.matches ?? []).filter(m => m.via === 'alternative'); if (alts.length) { a.composition = a.composition ?? {}; a.composition.alternativesOmitted = alts.map(m => m.id); a.matches = a.matches.filter(m => m.via !== 'alternative'); } }, () => 'composition.alternativesOmitted lists the ids; expand <id>'],
     // E. the focused operations themselves, to what must never be lost: the family summary and, per role, the
     // status, the evidence class, the alternative of a refusal and the integrity caution of an observed behaviour.
@@ -1570,12 +1635,18 @@ function budgetStages() {
     // What survives of validation is the delivery call (it validates inside itself), never the optional headless proof.
     ['envelope', a => { if (a.validation) a.validation = { deliver: a.validation.deliver ?? null }; delete a.routes; delete a.lexical; delete a.terms; if (a.coverage) a.coverage = { lane: a.coverage.lane, laneSpecific: a.coverage.laneSpecific, ...(a.coverage.shared ? { shared: a.coverage.shared } : { sharedCount: a.coverage.sharedCount }) }; if (a.continuation) delete a.continuation.expand; if (a.unavailable?.length) a.unavailable = a.unavailable.map(u => ({ id: u.id, ...(u.alternative ? { alternative: u.alternative } : {}) })); }, () => 'raise budgetBytes to read validation, routes, lexical, coverage.note, continuation.expand and the reasons of unavailable entries'],
     ['matches.direct.minimal', a => a.matches?.forEach(m => { if (m.via !== 'match') return; for (const k of ['category', 'why', 'proofs', 'depends', 'context', 'contract', 'negative', 'lanes', 'native', 'shared', 'score', 'summary', 'title']) delete m[k]; m.expand = `${m.id}:contract+example+evidence+operations+native+bindings`; }), () => 'continuation.omitted[].expand'],
+    // F. what the call asked by name (expand, detail, type) is the last thing cut, after the model part of an intent is at
+    // its minimal (2026-10-11): the example to four ops, the proofs to two, the bindings to eight. An answer whose
+    // expansions are the parts asked beside an intent (fitAsked) skips it: there each part is whole, reduced and named, or
+    // named as omitted, never cut here in silence (applyBudget `keepExpansions`).
+    ['expansions', a => { for (const [key, part] of Object.entries(a.expansions ?? {})) { if (part?.example?.ops?.length > 4) { part.example.ops = part.example.ops.slice(0, 4); part.example.opsShown = 4; part.example.fragment = true; part.example.note = 'FRAGMENT (reduced by budget)'; } if (part?.evidence?.proofs?.length > 2) { part.evidence.proofsOmitted = part.evidence.proofs.slice(2).map(p => p.job); part.evidence.proofs = part.evidence.proofs.slice(0, 2); } if (part?.bindings?.length > 8) { part.bindingsOmitted = part.bindings.length - 8; part.bindings = part.bindings.slice(0, 8); } } }, a => 'ask for fewer parts per call: ' + Object.keys(a.expansions ?? {}).map(k => 'expand ' + k).join(' | ')],
   ];
 }
-export function applyBudget(answer, budgetBytes) {
+// `keepExpansions`: the expansions are the parts asked, placed by fitAsked (whole, or reduced and named): stage F skips them.
+export function applyBudget(answer, budgetBytes, { keepExpansions = false } = {}) {
   const truncated = [];
   const direct = a => (a.matches ?? []).filter(m => m.via === 'match').map(m => m.id);
-  const stages = budgetStages();
+  const stages = budgetStages().filter(([name]) => !(keepExpansions && name === 'expansions'));
   // continuation.omitted names every part a direct match no longer carries, whatever reduced it (design or budget); it
   // is refreshed after every stage so the budget check always measures the answer that will be returned.
   const refreshOmitted = () => {
@@ -1609,13 +1680,20 @@ export function applyBudget(answer, budgetBytes) {
 function insufficientAnswer(answer, budgetBytes, truncated) {
   const minimalBytes = bytes(answer);
   const matches = (answer.matches ?? []).filter(m => m.via === 'match').map(m => ({ id: m.id, via: 'match', level: m.level ?? null, ...(m.focus ? { focus: { roles: m.focus.roles ?? [], ops: m.focus.ops ?? [] } } : {}), expand: `${m.id}:contract+example+evidence+operations+native+bindings` }));
+  // The parts asked by name beside an intent (fitAsked) are named one by one, with the call that returns them alone.
+  // Only the parts an expand can ask (EXPAND_PARTS): a marker beside them (stage F's bindingsOmitted) is no part, and an
+  // expand naming it is refused (review of 2026-10-11).
+  const asked = answer.intent != null ? Object.entries(answer.expansions ?? {}).flatMap(([key, v]) => (key.includes(':') ? [{ key, spec: key }]
+    : Object.keys(v ?? {}).filter(p => EXPAND_PARTS.includes(p)).map(part => ({ key, part, spec: `${key}:${part}` })))) : [];
+  const askedOmitted = asked.length ? { expansionsOmitted: [...asked.map(u => ({ expand: u.spec, why: `budget: the minimal answer needs ${minimalBytes} bytes and the budget is ${budgetBytes}` })), ...(answer.expansionsOmitted ?? []).filter(o => !asked.some(u => u.spec === o.expand))],
+    continuations: { next: { tool: 'ssam_discover', arguments: { lane: answer.lane ?? null, expand: unitsSpec(asked) }, why: 'the parts asked, alone' } } } : {};
   const out = { ok: true, schemaVersion: answer.schemaVersion ?? DISCOVERY_SCHEMA, lane: answer.lane ?? null, ...(answer.intent != null ? { intent: answer.intent } : {}),
     identity: answer.identity ? { lane: answer.identity.lane ?? null, index: answer.identity.index ?? null, kernel: answer.identity.kernel ?? null, studio: answer.identity.studio?.ideVersion ?? answer.identity.studio ?? null } : null,
     matches, contracts: {}, examples: {}, bindings: [], composition: { order: answer.composition?.order ?? [] },
     // Declared refusals and gaps survive the minimal result (their ids at least): an intent whose honest answer is a
     // refusal must not lose it to the budget.
     ...(answer.unavailable?.length ? { unavailable: answer.unavailable.map(u => ({ id: u.id, ...(u.alternative ? { alternative: u.alternative } : {}) })) } : {}),
-    ...(answer.expansions ? { expansions: Object.fromEntries(Object.keys(answer.expansions).map(k => [k, { omitted: 'budget', expand: k }])) } : {}),
+    ...(answer.expansions ? { expansions: Object.fromEntries(Object.keys(answer.expansions).map(k => [k, { omitted: 'budget', expand: k }])) } : {}), ...askedOmitted,
     continuation: { expand: answer.continuation?.expand ?? null, omitted: matches.map(m => ({ id: m.id, parts: ['contract', 'example', 'evidence', 'operations', 'native', 'bindings'], expand: m.expand })) },
     hint: `insufficient budget: the minimal answer needs ${minimalBytes} bytes and the budget is ${budgetBytes}; raise budgetBytes, or narrow with detail <id> / expand <id>:<part>`,
     size: { bytes: 0, budgetBytes, status: 'insufficient', minimalBytes, truncated, note: `insufficient budget: the minimal answer needs ${minimalBytes} bytes; raise budgetBytes or narrow the intent` } };
@@ -1625,7 +1703,7 @@ function insufficientAnswer(answer, budgetBytes, truncated) {
   const shed = [
     () => { out.size.truncatedStages = out.size.truncated.length; delete out.size.truncated; },
     () => { delete out.identity; },
-    () => { delete out.continuation; delete out.composition; delete out.expansions; },
+    () => { delete out.continuation; delete out.composition; delete out.expansions; delete out.expansionsOmitted; },
     () => { out.matches = out.matches.map(m => ({ id: m.id, via: m.via, expand: m.expand })); delete out.intent; if (out.unavailable) out.unavailable = out.unavailable.map(u => ({ id: u.id })); },
     () => { delete out.hint; out.size.note = `insufficient budget: minimal ${minimalBytes} bytes`; },
   ];
@@ -1648,7 +1726,8 @@ function insufficientAnswer(answer, budgetBytes, truncated) {
 // budget left them).
 const OSUI_YIELDS = ['relatedJobs', 'identity', 'notes', 'coverage.shared'];
 const OSUI_RECOVER = lane => `ssam_discover {lane:"${lane}", expand:"osui:<Category>,osui:<Pattern>"} (osui:<appType> lists every pattern of an app type with one line each)`;
-export async function outsystemsUiRequest({ lane, intent, matches, context = null, app = null, map = null }) {
+export async function outsystemsUiRequest({ lane, intent: written, matches, context = null, app = null, map = null }) {
+  const intent = withoutPaths(written); // a folder named mobile/ or a page.html says nothing of the screen asked
   if (!isScreenIntent(intent, matches) || !osuiCatalogAvailable()) return null;
   const request = await outsystemsUiAppTypes({ lane, intent, context, app, map });
   // The patterns the intent names (own name or a catalog synonym: deck -> StackedCards, slider -> RangeSlider).
@@ -1689,11 +1768,11 @@ export function osuiFloor(request, budgetBytes) {
 // The model part keeps the whole budget when the floor still fits beside it (then it is exactly the answer without the
 // section); only when it would leave less than the floor is it budgeted with the floor less (size.reserved says how
 // much), and never when that would make it insufficient.
-function budgetWithFloor(answer, budgetBytes, request) {
+function budgetWithFloor(answer, budgetBytes, request, options = {}) {
   const floor = osuiFloor(request, budgetBytes);
-  const whole = applyBudget(floor ? structuredClone(answer) : answer, budgetBytes);
+  const whole = applyBudget(floor ? structuredClone(answer) : answer, budgetBytes, options);
   if (!floor || whole.size?.status === 'insufficient' || budgetBytes - whole.size.bytes >= floor) return whole;
-  const floored = applyBudget(answer, budgetBytes - floor);
+  const floored = applyBudget(answer, budgetBytes - floor, options);
   if (floored.size?.status === 'insufficient') return whole;
   floored.size.budgetBytes = budgetBytes; floored.size.reserved = { outsystemsUi: floor };
   return floored;
@@ -1741,7 +1820,7 @@ export function fitOutsystemsUi(answer, request, budgetBytes) {
 // records, notes, coverage, negatives) and its proven bindings; `native:<Interface>` adds Model API metadata (A);
 // `element:` reads one element's signature from the capture (needs --app).
 export function parseExpand(spec) {
-  const requests = []; const problems = [];
+  const requests = []; const problems = []; const rejected = [];
   for (const item of String(spec ?? '').split(',').map(s => s.trim()).filter(Boolean)) {
     const at = item.indexOf(':');
     if (at < 0) { requests.push({ kind: 'capability', id: item, parts: ['contract', 'example', 'evidence', 'bindings'] }); continue; }
@@ -1752,13 +1831,14 @@ export function parseExpand(spec) {
     if (head === 'osui') { requests.push({ kind: 'osui', selector: tail }); continue; }
     const parts = tail.split('+').map(p => p.trim()).filter(Boolean);
     const unknown = parts.filter(p => p !== 'all' && !EXPAND_PARTS.includes(p));
-    if (unknown.length) { problems.push(`${item}: unknown part(s) ${unknown.join(', ')}; parts: ${EXPAND_PARTS.join(', ')}, all`); continue; }
+    if (unknown.length) { problems.push(`${item}: unknown part(s) ${unknown.join(', ')}; parts: ${EXPAND_PARTS.join(', ')}, all`); rejected.push({ expand: item, why: `unknown part(s) ${unknown.join(', ')}; parts: ${EXPAND_PARTS.join(', ')}, all` }); continue; }
     requests.push({ kind: 'capability', id: head, parts: parts.includes('all') ? ['contract', 'example', 'evidence', 'bindings'] : parts });
   }
   // The same capability named twice in one call (`a:example,...,a:operations`) is one request with the union of the
   // parts: the later request used to replace the earlier one silently (seen in the phase-3 evaluation, A-o11).
   const merged = []; for (const r of requests) { const same = r.kind === 'capability' ? merged.find(m => m.kind === 'capability' && m.id === r.id) : null; if (same) same.parts = [...new Set([...same.parts, ...r.parts])]; else merged.push(r); }
-  return { requests: merged, problems };
+  // `rejected`: the same problems by request ({expand, why}), for an answer that names them beside an intent.
+  return { requests: merged, problems, rejected };
 }
 function evidenceOf(index, c) {
   const proofs = proofsOf(index, c, { full: true }).map(p => { const job = index.jobs.find(j => j.name === p.job); return { ...p, description: job?.description, base: job?.base, ops: job?.ops, types: job?.types, props: job?.props, steps: job?.steps, notes: job?.notes?.slice(0, 6), coverage: job?.executed?.coverage ?? null, expectedMessages: job?.expectedMessages }; });
@@ -1799,6 +1879,268 @@ async function expandAnswer(index, sources, { requests, app, inspect, lane, osui
   }
   return { expansions, problems };
 }
+// ---- the parts a call asks by name, as units (2026-10-11): one per part of a capability (`ui.html-page:contract`) and
+// one per other request (`contract:<pointer>`, `native:<Type>`, `element:<selector>`, `osui:<selector>`), in the order
+// asked. A unit is what the budget keeps whole or leaves whole to the continuation, with its exact expand.
+export function expansionUnits(requests, expansions) {
+  const units = [];
+  for (const r of requests) {
+    if (r.kind === 'capability') { for (const part of r.parts) if (expansions[r.id] && part in expansions[r.id]) units.push({ key: r.id, part, spec: `${r.id}:${part}` }); continue; }
+    const key = { contract: 'contract:' + r.pointer, native: 'native:' + r.type, element: 'element:' + r.selector, osui: 'osui:' + r.selector }[r.kind];
+    if (key in expansions && !units.some(u => u.key === key)) units.push({ key, spec: key });
+  }
+  return units;
+}
+// The expansions section holding these units (a capability keeps its title and route with any part).
+export function unitsExpansions(units, expansions) {
+  const out = {};
+  for (const u of units) { const v = expansions[u.key]; if (!u.part) { out[u.key] = v; continue; } out[u.key] ??= { title: v.title, route: v.route }; out[u.key][u.part] = v[u.part]; }
+  return out;
+}
+// The expand of units: the parts of one capability joined by `+`, in the order asked.
+export function unitsSpec(units) {
+  const groups = new Map();
+  for (const u of units) groups.set(u.key, u.part ? [...(groups.get(u.key) ?? []), u.part] : null);
+  return [...groups].map(([key, parts]) => (parts ? `${key}:${parts.join('+')}` : key)).join(',');
+}
+// The bytes of a unit whole (what a continuation returns).
+const unitBytes = (u, expansions) => bytes(u.part ? expansions[u.key][u.part] : expansions[u.key]);
+// A part that does not fit whole beside the answer, in the form stage F used to cut it to (the example to its first four
+// ops, the proofs of the evidence to two, the bindings to eight), now said (review of 2026-10-11: calls 49, 59, 106 and
+// 142 got 4 of 12 ops, 8 of 20-27 bindings and 2 of 3 proofs counted as answered): the unit carries `reduced`, what it
+// keeps, and is named in expansionsReduced; the continuation returns it whole. Null when the part has no smaller form.
+function reducedUnit(u, expansions) {
+  const v = u.part ? expansions[u.key][u.part] : null;
+  if (u.part === 'example' && v?.ops?.length > 4) return { ...u, value: { ...v, ops: v.ops.slice(0, 4), opsShown: 4, fragment: true, note: 'FRAGMENT (reduced by budget): expansionsReduced names it and the continuation returns it whole' }, reduced: `the first 4 of ${v.ops.length} ops` };
+  if (u.part === 'evidence' && v?.proofs?.length > 2) return { ...u, value: { ...v, proofs: v.proofs.slice(0, 2), proofsOmitted: v.proofs.slice(2).map(p => p.job) }, reduced: `2 of ${v.proofs.length} proofs (the others by job in proofsOmitted)` };
+  if (u.part === 'bindings' && v?.length > 8) return { ...u, value: v.slice(0, 8), reduced: `8 of ${v.length} bindings` };
+  return null;
+}
+// The answer an expand-only call returns around its parts (identity, size, problems and the OutSystems UI floor of a ui.*
+// capability): the room a page leaves for them is the page less this.
+const PAGE_ENVELOPE = 6144;
+// The continuation of the units left out or reduced: one call with all of them, or, under a page size (the answer
+// ceiling), the pages of expand-only calls, each packed in the order asked to fit it (a unit larger than a page is a page
+// alone; that call reduces it, fitAsked `reduce`). `pages` lists every page after this answer, to the last, one call each
+// (to call them together); `next` asks every unit left from the next page on, so its answer is that page and carries
+// the continuations of the pages after it: following `next` alone reaches the last page (review of 2026-10-11: page 2
+// pointed nowhere and page 3 was reachable only by pages[1] of page 1).
+function continuationsOf(left, expansions, { lane, pageBytes = null }) {
+  if (!left.length) return undefined;
+  if (pageBytes == null) return { next: { tool: 'ssam_discover', arguments: { lane, expand: unitsSpec(left) }, why: 'the parts asked that are not whole in this answer' } };
+  const pages = []; let page = []; let used = 0;
+  for (const u of left) { const b = unitBytes(u, expansions) + 64; if (page.length && used + b > pageBytes - PAGE_ENVELOPE) { pages.push(page); page = []; used = 0; } page.push(u); used += b; }
+  if (page.length) pages.push(page);
+  const calls = pages.map((p, i) => ({ tool: 'ssam_discover', arguments: { lane, expand: unitsSpec(p), budgetBytes: pageBytes }, why: `page ${i + 2} of ${pages.length + 1}: parts asked that are not whole in this answer` }));
+  const next = calls.length === 1 ? calls[0] : { tool: 'ssam_discover', arguments: { lane, expand: unitsSpec(left), budgetBytes: pageBytes },
+    why: `pages 2 to ${pages.length + 1}: every part asked that is not whole in this answer; the answer is page 2 and its continuations name the pages after it (pages: one call per page, to call them together instead)` };
+  return { next, pages: calls };
+}
+// A unit larger than a whole answer (an expand-only page that cannot hold it alone), in smaller forms, largest first, each
+// with the call that returns it whole when there is one: an example keeps its first k ops (`k`, the caller halves on it)
+// and names the whole job by its id (ssam_reference); any other part its stage-F cut, then its size and keys. Such a unit
+// is never continued by the same page again.
+function oversizeForms(u, expansions, lane) {
+  const value = u.part ? expansions[u.key][u.part] : expansions[u.key];
+  const whole = unitBytes(u, expansions);
+  if (u.part === 'example' && Array.isArray(value?.ops) && value.job) {
+    const reference = { tool: 'ssam_reference', arguments: { lane, kind: 'example', query: { id: value.job } }, why: 'the whole job of this example, by its id' };
+    return { ops: value.ops.length, at: k => ({ ...u, value: { ...value, ops: value.ops.slice(0, k), opsShown: k, fragment: true, reference,
+      note: k ? `FRAGMENT (larger than one answer): the first ${k} ops; the whole job by its id (reference)` : 'larger than one answer: the whole job by its id (reference)' },
+    reduced: `the first ${k} of ${value.ops.length} ops (the whole example has ${whole} bytes)`, reference }) };
+  }
+  const cut = reducedUnit(u, expansions);
+  return { forms: [...(cut ? [{ ...cut, reduced: `${cut.reduced} (the whole part has ${whole} bytes)`, reference: null }] : []),
+    { ...u, value: { omitted: 'larger than one answer', bytes: whole, ...(value && typeof value === 'object' && !Array.isArray(value) ? { keys: Object.keys(value) } : {}) }, reduced: `its keys only (the whole part has ${whole} bytes)`, reference: null }] };
+}
+// The parts asked beside an intent (2026-10-11): the FarmaVirtual session of 10/10/2026 sent expand or detail with an
+// intent in 11 of its 22 discovers and got none of it, without a word. They ride in `expansions` and are the last thing
+// the budget cuts: `fit(B)` budgets the answer as it stands at B with the model part reduced first and the expansions
+// never cut by stage F (applyBudget keepExpansions). Each unit, in the order asked, is placed whole while the answer
+// still fits; else, with no page size, in its reduced form (reducedUnit), named in expansionsReduced {expand, kept, why};
+// else named in expansionsOmitted {expand, why}. continuations.next is the exact call that returns whole every unit
+// omitted or reduced; with `pageBytes` (the answer ceiling, atEntry) the calls are pages of that size and a unit is
+// never reduced on the page of an intent: it waits whole for its own page. A request the index does not know is named in
+// expansionsOmitted too. `reduce` (an expand-only page): a first unit that does not fit whole goes in its largest
+// oversize form that fits, named in expansionsReduced with the call that returns it whole (`next`), never the same page.
+// Returns {answer, minimalBytes, keptMinimalBytes}: minimalBytes, when a unit is not whole, is what the answer with every
+// unit whole needs; keptMinimalBytes, what the answer with the units it holds needs (the first page atEntry raises to).
+function fitAsked(answer, { expansions, units, rejected }, fit, { budgetBytes, lane, pageBytes = null, reduce = false }) {
+  const place = kept => {
+    const reduced = kept.filter(k => k.reduced);
+    const left = units.filter(u => !kept.some(k => k.spec === u.spec));
+    answer.expansions = unitsExpansions(kept, expansions);
+    for (const k of kept) if (k.value !== undefined) { if (k.part) answer.expansions[k.key][k.part] = k.value; else answer.expansions[k.key] = k.value; }
+    answer.expansionsReduced = reduced.length ? reduced.map(k => ({ expand: k.spec, kept: k.reduced,
+      why: k.reference !== undefined ? 'larger than one answer' : `budget: its ${unitBytes(k, expansions)} bytes do not fit whole beside this answer`, ...(k.reference ? { next: k.reference } : {}) })) : undefined;
+    const omitted = [...left.map(u => ({ expand: u.spec, why: `budget: its ${unitBytes(u, expansions)} bytes do not fit beside this answer` })), ...rejected];
+    answer.expansionsOmitted = omitted.length ? omitted : undefined;
+    // The units to return whole, in the order asked: the omitted ones and those reduced by the budget (an oversize one has
+    // its own `next`, never this page again).
+    answer.continuations = continuationsOf(units.filter(u => left.includes(u) || reduced.some(k => k.spec === u.spec && k.reference === undefined)), expansions, { lane, pageBytes });
+  };
+  const insufficient = a => a?.size?.status === 'insufficient';
+  const at = (kept, B = budgetBytes) => { place(kept); return fit(B); };
+  // The minimal of an answer is measured below any budget (every stage applied); its size.budgetBytes is written with the
+  // digits of the budget it will have, at most those of `budgetBytes`.
+  const minimalOf = kept => { const m = at(kept, 1).size?.minimalBytes; return m == null ? null : m + String(budgetBytes).length - 1; };
+  const all = at(units);
+  if (!units.length || !insufficient(all)) return { answer: all, minimalBytes: null, keptMinimalBytes: null };
+  const minimalBytes = all.size.minimalBytes ?? null;
+  let best = at([]);
+  // The model part alone does not fit: the explicit insufficient result (it names every part asked as omitted by budget).
+  if (insufficient(best)) return { answer: at(units), minimalBytes, keptMinimalBytes: null };
+  const kept = [];
+  const tryKeep = form => { const tried = at([...kept, form]); if (insufficient(tried)) return false; kept.push(form); best = tried; return true; };
+  for (const u of units) {
+    if (tryKeep(u)) continue;
+    if (pageBytes == null) { const cut = reducedUnit(u, expansions); if (cut) tryKeep(cut); continue; }
+    if (!reduce || kept.length) continue;
+    const forms = oversizeForms(u, expansions, lane);
+    if (forms.at) {
+      // The largest number of ops that fits, by halving (more ops, more bytes).
+      let lo = 0; let hi = forms.ops - 1; let fits = null;
+      while (lo <= hi) { const k = (lo + hi) >> 1; const tried = at([forms.at(k)]); if (insufficient(tried)) hi = k - 1; else { fits = k; lo = k + 1; } }
+      if (fits != null) tryKeep(forms.at(fits));
+    } else for (const form of forms.forms) if (tryKeep(form)) break;
+  }
+  const keptMinimalBytes = minimalOf(kept);
+  return { answer: best, minimalBytes, keptMinimalBytes };
+}
+
+// ---- the budget a call gave and the minimal answer (2026-10-11). Seven answers of the FarmaVirtual session of 10/10/2026
+// were 'insufficient' (calls 11, 31, 37, 40, 47, 67, 147: budgets of 6,000 to 24,000 bytes under minimals of 6,386 to
+// 47,274), each a lost round with no way out but to guess a bigger budget. At the entry (discoverAll: MCP ssam_discover
+// and the CLI, `ceilingBytes`) a budget below the minimal answer, every part asked whole (stage F never cuts them, so the
+// minimal is the one before it), is raised to it when it fits under the answer ceiling, and the answer says so:
+// inputAdjusted [{path:"/budgetBytes", from, to, rule:"raise-to-minimal"}], and size.budgetAdjusted {from, to, rule}. A
+// minimal above the ceiling is answered in pages: the first page holds what fits under the ceiling (the model part of an
+// intent at its minimal, then the parts asked in their order, whole), and the budget rises only to the minimal of that
+// page ("raise-to-page"; the caller's budget when it already holds it): raising it to the ceiling gave the room to the
+// model part, never to a part asked (review of 2026-10-11: +20 KB of matches, contracts and outsystemsUi in calls 15 and
+// 20). continuations.next / continuations.pages are the exact expand calls of the rest, each packed to fit the ceiling.
+// The ceiling of one answer is the MCP answer ceiling of ssam.mjs less the room its shaper keeps: budgetCeiling(
+// maxAnswerBytes()) there (SSAM_MAX_ANSWER_BYTES, 40960, less 2048), as module-map.mjs DEFAULT_MAP_BUDGET. It is written
+// again here because discovery.mjs never loads the server (ssam.mjs loads it); discover-asked.test.mjs holds the two equal.
+export const answerCeiling = (env = process.env) => { const n = Number(env.SSAM_MAX_ANSWER_BYTES); return Math.max(4096, (Number.isInteger(n) && n >= 4096 ? n : 40960) - 2048); };
+const neededBytes = r => (r.answer?.size?.status === 'insufficient' ? r.answer.size.minimalBytes ?? null : r.minimalBytes ?? null);
+// The adjustment, written right after the intent (or the lane), in place of the one the answer had (discoverAll restates
+// it), and in size.budgetAdjusted (the answer's own field: an input layer that writes its own inputAdjusted over the
+// answer's keeps this one), with the size restated for the adjusted budget (never below the bytes returned).
+export function withAdjustment(answer, adjustment) {
+  const out = {}; const after = 'intent' in answer ? 'intent' : 'lane'; const adjusted = { ...adjustment };
+  for (const [k, v] of Object.entries(answer)) { if (k === 'inputAdjusted') continue; out[k] = v; if (k === after) out.inputAdjusted = [adjusted]; }
+  if (!out.inputAdjusted) out.inputAdjusted = [adjusted];
+  if (!out.size) return out;
+  const { path: _path, ...own } = adjusted;
+  out.size = { ...out.size, budgetBytes: adjusted.to, bytes: 0, budgetAdjusted: own };
+  for (let round = 0; round < 3; round++) {
+    for (let i = 0, m = bytes(out); i < 6 && out.size.bytes !== m; i++) { out.size.bytes = m; m = bytes(out); }
+    if (out.size.bytes <= adjusted.to) break;
+    adjusted.to = own.to = out.size.budgetBytes = out.size.bytes;
+  }
+  return out;
+}
+// The parts an answer holds, whole or reduced, as `<key>:<part>` (the first page atEntry compares).
+const heldUnits = a => Object.entries(a?.expansions ?? {}).flatMap(([key, v]) => (key.includes(':') ? [key] : Object.keys(v ?? {}).filter(p => EXPAND_PARTS.includes(p)).map(p => `${key}:${p}`)));
+// ---- the sections after the model part (review of 2026-10-11, round 3). The OutSystems UI section and the C07 extras
+// (proven example, steps, values) go in after the model part was budgeted, in the room it leaves (fitOutsystemsUi,
+// fitC07), each named in size.truncated when it does not fit, if that note itself fits. A budget raised to the minimal
+// of the model part left them no room even for the note, and they were lost without a word, against the C07 rule "never
+// the first thing lost" ("criar tela de listagem de pedidos com tabela e filtro" at 9,000 rose to 17,321 without
+// outsystemsUi nor provenExample; "criar server action com if, foreach e assign ..." at 4,096 rose to 9,852 without
+// steps nor provenExample; calls 11, 15 and 37 the same). Their floor, which the minimal answer at the entry holds beside
+// the model part: the OutSystems UI counts with the room of their note (as osuiFloor), the steps in the form
+// fitWithSteps keeps as its floor (whole when that takes at most a quarter of the answer, else the example by
+// reference), the proven example by reference, the values whole, and the c07 note. `budgetBytes`: the answer's.
+const C07_NOTE = 160;
+export function sectionsFloor({ osui = null, extras = null } = {}, budgetBytes = 0) {
+  const outsystemsUi = osui ? bytes({ outsystemsUi: osuiSection(osui, 'counts') }) + OSUI_FLOOR_NOTE : 0;
+  const { provenExample: p = null, steps: s = null, values: v = null } = extras ?? {};
+  if (!p && !s && !v) return { outsystemsUi, c07: 0, bytes: outsystemsUi };
+  const whole = s ? bytes({ steps: s }) + 128 : 0;
+  const steps = !s || whole <= budgetBytes / 4 ? whole : bytes({ steps: s.example ? { ...s, example: byReference(s.example) } : s }) + 128;
+  const c07 = (p ? bytes({ provenExample: byReference(p) }) : 0) + steps + (v ? bytes({ values: v }) : 0) + C07_NOTE;
+  return { outsystemsUi, c07, bytes: outsystemsUi + c07 };
+}
+// A model part budgeted at `cap` bytes inside an answer of `budgetBytes`: the room above it is the sections' (atEntry),
+// said in size.reserved.sections.
+function withSectionsRoom(model, budgetBytes, cap) {
+  if (!model?.size || model.size.status === 'insufficient') return model;
+  model.size = { ...model.size, budgetBytes, reserved: { ...(model.size.reserved ?? {}), sections: budgetBytes - cap }, bytes: 0 };
+  for (let i = 0, m = bytes(model); i < 6 && model.size.bytes !== m; i++) { model.size.bytes = m; m = bytes(model); }
+  return model;
+}
+// The sections of a request an answer left out without a word: neither in it nor named in size.truncated. An
+// insufficient answer is the explicit result: it names no section, and the entry raises it.
+export function silentlyLost(answer, { osui = null, extras = null } = {}) {
+  if (!answer?.size || answer.ok === false || answer.size.status === 'insufficient') return [];
+  const truncated = answer.size.truncated ?? [];
+  const noted = k => truncated.some(t => t.section === 'c07' && (C07_LEFT_OUT.exec(String(t.recover))?.[1] ?? '').split(', ').includes(k));
+  return [...(osui && answer.outsystemsUi == null && !truncated.some(t => t.section === 'outsystemsUi') ? ['outsystemsUi'] : []),
+    ...['provenExample', 'steps', 'values'].filter(k => (extras?.[k] != null || extras?.omitted?.includes(k)) && answer[k] == null && !noted(k))];
+}
+// `fitAt(budget, {page, model})` -> {answer, minimalBytes, keptMinimalBytes}: the answer at that budget (page: the units
+// left out go to pages of the ceiling; model: the model part, with the parts asked, budgeted at that many bytes, the room
+// above it left to the sections). `sections` {floor(budget), lost(answer)}: the floor of the sections of the request and
+// whether an answer left one of them without a word. The minimal answer is the model part at its minimal (every part
+// asked whole) plus that floor; the budget raised is that plus the bytes of the adjustment itself, and the room above the
+// model part's minimal goes to the sections, never to the model part. A budget that holds the model part but leaves a
+// section without a word keeps the caller's budget with the model part under it less the floor; when the model part does
+// not fit there, the budget rises by the floor, the model part as the caller's budget gave it.
+function atEntry(fitAt, { budgetBytes, ceilingBytes, sections = null }) {
+  const first = fitAt(budgetBytes);
+  if (ceilingBytes == null) return first.answer;
+  const floorOf = B => (sections ? sections.floor(B) : 0);
+  const lost = a => !!sections && sections.lost(a);
+  const capped = (B, cap, options = {}) => fitAt(B, cap < B ? { ...options, model: cap } : options);
+  let need = neededBytes(first);
+  if (need == null || need <= budgetBytes) {
+    if (!lost(first.answer)) return first.answer;
+    const within = capped(budgetBytes, budgetBytes - floorOf(budgetBytes));
+    if (neededBytes(within) == null && !lost(within.answer)) return within.answer;
+    // The model part does not fit under the budget less the floor: it stays as the budget gave it, the floor above it.
+    need = budgetBytes;
+  }
+  const top = Math.max(budgetBytes, ceilingBytes);
+  const note = (to, rule) => bytes({ inputAdjusted: [{ path: '/budgetBytes', from: budgetBytes, to, rule }], budgetAdjusted: { from: budgetBytes, to, rule } }) + 8;
+  const adjust = (answer, to, rule) => withAdjustment(answer, { path: '/budgetBytes', from: budgetBytes, to, rule });
+  // Every part asked whole, every section at its floor. The minimal was measured at the budget given: a budget written
+  // with one more digit costs a byte, so a round may ask again; a section still without a word gets 256 bytes more.
+  for (let round = 0, extra = 0; round < 4; round++) {
+    const B = need + floorOf(need) + extra;
+    if (B + note(B, 'raise-to-minimal') > top) break;
+    const raised = capped(B, need);
+    const again = neededBytes(raised);
+    if (again != null) { need = Math.max(again, need + 1); continue; }
+    if (!lost(raised.answer)) return adjust(raised.answer, B + note(B, 'raise-to-minimal'), 'raise-to-minimal');
+    extra += 256;
+  }
+  // Pages: the first page is what fits under the ceiling beside the floor of its sections, at its own minimal. A budget
+  // at the ceiling is the page's own: nothing to adjust nor to declare (review of 2026-10-11: 38,912 answered 38,748).
+  const pageTop = top === budgetBytes ? top : top - note(top, 'raise-to-page');
+  const ceilingPage = capped(pageTop, pageTop - floorOf(pageTop), { page: true });
+  const pageNeed = ceilingPage.keptMinimalBytes;
+  // Nothing to page (no part asked), or the model part alone is above the ceiling: the answer at the budget given.
+  if (pageNeed == null || ceilingPage.answer?.size?.status === 'insufficient') return first.answer;
+  // A page holds the first page when it holds at least its parts, or as many bytes of parts (the parts that fit first in
+  // the order asked may differ from those of the page at the ceiling), and leaves no section without a word (review of
+  // 2026-10-11: a page that fit the caller's budget with more parts was refused for not holding the same ones).
+  const held = heldUnits(ceilingPage.answer); const heldBytes = bytes(ceilingPage.answer.expansions ?? {});
+  const holds = r => r.answer?.size?.status !== 'insufficient' && !lost(r.answer) && (held.every(u => heldUnits(r.answer).includes(u)) || bytes(r.answer.expansions ?? {}) >= heldBytes);
+  const pageFloor = floorOf(pageNeed);
+  if (pageNeed + pageFloor <= budgetBytes) {
+    const own = fitAt(budgetBytes, { page: true }); if (holds(own)) return own.answer;
+    const under = capped(budgetBytes, budgetBytes - floorOf(budgetBytes), { page: true }); if (holds(under)) return under.answer;
+  }
+  for (const extra of [0, 256]) {
+    const B = Math.max(budgetBytes, pageNeed + pageFloor + extra);
+    if (B + note(B, 'raise-to-page') > top) break;
+    const page = capped(B, B - pageFloor, { page: true });
+    if (holds(page)) return B === budgetBytes ? page.answer : adjust(page.answer, B + note(B, 'raise-to-page'), 'raise-to-page');
+  }
+  return top === budgetBytes ? ceilingPage.answer : adjust(ceilingPage.answer, top, 'raise-to-page');
+}
 
 // ---- what the intent names beyond the capability matches (C07 of the 2026-10-05 package). `steps`: the grammar of each
 // logic step the intent names (the logic op contract of the lane, one slice per step) and ONE whole proven job of the lane
@@ -1821,6 +2163,8 @@ const STEP_TERMS = [
   ['return', ['return', 'retornar', 'retorna']],
 ];
 const RECORD_STEPS = [['save', ['salvar', 'salva', 'gravar', 'grava', 'save']], ['create', ['inserir', 'insere', 'insert']], ['update', ['atualizar', 'atualiza', 'update', 'alterar', 'altera']], ['delete', ['apagar', 'apaga', 'excluir', 'exclui', 'delete', 'remover', 'remove']]];
+// The capability a logic step needs (the raise step throws a user exception the job declares).
+const STEP_CAPABILITIES = { raise: 'logic.exception' };
 export function stepKindsOf(intent) {
   const w = plainWords(intent); const has = list => list.some(t => w.includes(t));
   if (!w.some(t => ACTION_TERMS.has(t))) return [];
@@ -1880,8 +2224,8 @@ const VALUE_RULES = [
       set: Object.values(INPUT_TYPES), fragment: { attribute: 'type', values: INPUT_TYPES, rule: 'html fragment and page mode: <input type="..."> maps to these; without type the InputType follows the data type of the bound variable, else Text' },
       source: 'kernel HtmlVisual.InputTypes and ScreenVocabulary IInput.InputType' }) },
   { property: 'Schedule', lanes: ['o11'], when: w => ['timer', 'timers', 'schedule', 'agendamento', 'agendar', 'agendado', 'agendada'].some(t => w.includes(t)),
-    answer: () => ({ property: 'Schedule', element: 'ITimer', set: ['Every 60 minutes', 'Every day at 00:00', 'Every Monday at 00:05'],
-      rule: 'the O11 schedule is text as the Service Studio writes it: Every <n> minutes | Every day at HH:mm | Every <Weekday> at HH:mm; read it back by get',
+    answer: () => ({ property: 'Schedule', element: 'ITimer', set: ['00:00 01:00 02:00 03:00 04:00 05:00 06:00 07:00 08:00 09:00 10:00 11:00 12:00 13:00 14:00 15:00 16:00 17:00 18:00 19:00 20:00 21:00 22:00 23:00', '00:00', '00:05 Mon'],
+      rule: 'native HH:mm occurrences separated by spaces, optionally followed by weekdays (Sun..Sat); empty means on-demand. Prose is invalid. Read back the candidate and verify effective runtime scheduling separately.',
       proof: 'tests/jobs/pacote-laneE-timer-schedule.json' }) },
   { property: 'CronSchedule', lanes: ['odc'], when: w => ['timer', 'timers', 'schedule', 'cron', 'agendamento', 'agendar', 'agendado', 'agendada'].some(t => w.includes(t)),
     answer: () => ({ property: 'CronSchedule', element: 'ITimer', set: ['0 * * * *', '0 0 * * *', '5 0 * * 1'],
@@ -1894,7 +2238,8 @@ export function valuesFor(lane, intent) {
   return out.length ? out : null;
 }
 const PROVEN_CAP = 6144;
-const PROVEN_STOP = new Set(['criar', 'crie', 'create', 'com', 'uma', 'umas', 'uns', 'que', 'para', 'the', 'with', 'and', 'for', 'new', 'novo', 'nova', 'add', 'adicionar']);
+// Generic run phrasing must not prefer unrelated prose ("roda" vs "rodada").
+const PROVEN_STOP = new Set(['criar', 'crie', 'create', 'com', 'uma', 'umas', 'uns', 'que', 'para', 'the', 'with', 'and', 'for', 'new', 'novo', 'nova', 'add', 'adicionar', 'roda']);
 export function provenExample(sources, index, matches, intent, { unmatched = [] } = {}) {
   const words = [...new Set(plainWords(intent).filter(t => t.length > 2 && !PROVEN_STOP.has(t)))];
   if (!words.length) return null;
@@ -1935,12 +2280,18 @@ export function provenExample(sources, index, matches, intent, { unmatched = [] 
     reference: { tool: 'ssam_reference', arguments: { lane: index.lane, kind: 'example', query: { id: best.job.name } } } };
 }
 
-// The three sections out of an answer (discoverAll fits the tools first and puts them back in the room left).
+// A proven job by its id only (the smallest form of the proven example and of the steps example).
+const byReference = x => (x ? { job: x.job, path: x.path, reference: x.reference, note: 'reduced by budget: the whole job by its id' } : null);
+// The three sections out of an answer (discoverAll fits the tools first and puts them back in the room left). The ones its
+// c07 note named as left out ride along in `omitted`, so that fitC07 names them again.
+const C07_LEFT_OUT = /left out by the budget: ([^;]+);/;
 export function stripC07(answer) {
   if (!answer || !['provenExample', 'steps', 'values'].some(k => k in answer)) return { answer, extras: null };
   const { provenExample = null, steps = null, values = null, ...rest } = answer;
+  const noted = (rest.size?.truncated ?? []).find(t => t.section === 'c07');
+  const omitted = (C07_LEFT_OUT.exec(noted?.recover ?? '')?.[1] ?? '').split(', ').filter(k => ['provenExample', 'steps', 'values'].includes(k));
   if (rest.size?.truncated) rest.size = { ...rest.size, truncated: rest.size.truncated.filter(t => t.section !== 'c07') };
-  return { answer: rest, extras: { provenExample, steps, values } };
+  return { answer: rest, extras: { provenExample, steps, values, ...(omitted.length ? { omitted } : {}) } };
 }
 // The three sections go in AFTER the model part was budgeted and never change it (the same rule as the OutSystems UI
 // section): each at the richest form the room left allows. The proven example shrinks first (whole -> its first 6 ops ->
@@ -1948,11 +2299,10 @@ export function stripC07(answer) {
 // what does not fit is named once in size.truncated (section c07) when that note itself fits.
 export function fitC07(answer, extras, budgetBytes) {
   if (!answer?.size || answer.ok === false || !extras) return answer;
-  const { provenExample: p = null, steps: s = null, values: v = null } = extras;
+  const { provenExample: p = null, steps: s = null, values: v = null, omitted: before = [] } = extras;
   if (!p && !s && !v) return answer;
-  const ref = x => (x ? { job: x.job, path: x.path, reference: x.reference, note: 'reduced by budget: the whole job by its id' } : null);
-  const proven = p ? [p, p.ops?.length > 6 ? { ...p, ops: p.ops.slice(0, 6), opsShown: 6, whole: false, note: 'FRAGMENT (reduced by budget): the whole job by its id (reference)' } : null, ref(p), null].filter((x, i, all) => x !== null || i === all.length - 1) : [null];
-  const steps = s ? [s, s.example ? { ...s, example: ref(s.example) } : null, { kinds: s.kinds, grammar: s.grammar }, null].filter((x, i, all) => x !== null || i === all.length - 1) : [null];
+  const proven = p ? [p, p.ops?.length > 6 ? { ...p, ops: p.ops.slice(0, 6), opsShown: 6, whole: false, note: 'FRAGMENT (reduced by budget): the whole job by its id (reference)' } : null, byReference(p), null].filter((x, i, all) => x !== null || i === all.length - 1) : [null];
+  const steps = s ? [s, s.example ? { ...s, example: byReference(s.example) } : null, { kinds: s.kinds, grammar: s.grammar }, null].filter((x, i, all) => x !== null || i === all.length - 1) : [null];
   const values = v ? [v, null] : [null];
   const measure = out => { out.size.bytes = 0; let m = bytes(out); for (let i = 0; i < 6 && out.size.bytes !== m; i++) { out.size.bytes = m; m = bytes(out); } return m; };
   const place = (pe, st, va, omitted) => {
@@ -1965,7 +2315,8 @@ export function fitC07(answer, extras, budgetBytes) {
   };
   // Every combination in degradation order: the proven example first, then the logic example, then the values.
   for (const va of values) for (const st of steps) for (const pe of proven) {
-    const omitted = [...(p && !pe ? ['provenExample'] : []), ...(s && !st ? ['steps'] : []), ...(v && !va ? ['values'] : [])];
+    const left = { provenExample: p && !pe, steps: s && !st, values: v && !va };
+    const omitted = ['provenExample', 'steps', 'values'].filter(k => left[k] || before.includes(k));
     const out = place(pe, st, va, omitted);
     if (measure(out) <= budgetBytes) return out;
   }
@@ -1973,14 +2324,20 @@ export function fitC07(answer, extras, budgetBytes) {
 }
 
 // ---- public entry
-export async function discover({ lane = 'odc', intent = '', app = null, detail = null, expand = null, type = null, limit = 8, rebuild = false, budgetBytes = DEFAULT_BUDGET_BYTES, inspect = null, map = null, sources = laneSources(lane), descriptorFile = sources.descriptor, outsystemsUi = true, packet = false, digest = null, operations = null } = {}) {
+export async function discover({ lane = 'odc', intent = '', app = null, detail = null, expand = null, type = null, limit = 8, rebuild = false, budgetBytes = DEFAULT_BUDGET_BYTES, ceilingBytes = null, inspect = null, map = null, sources = laneSources(lane), descriptorFile = sources.descriptor, outsystemsUi = true, packet = false, digest = null, operations = null } = {}) {
+  // ceilingBytes: the entry's answer ceiling (discoverAll; atEntry): a budget below the minimal answer is raised to it, and
+  // a minimal above the ceiling answers in pages. Without it the budget is the hard limit it always was (engine, tests).
   const started = performance.now();
   const built = await buildIndex(lane, { sources, descriptorFile, rebuild });
   const index = built.index;
   const identity = { lane, index: index.key, builtAt: index.builtAt, cli: index.identity.cli.sha256, kernel: index.identity.cli.kernelSha256, studio: { platform: index.identity.studio.platform, ideVersion: index.identity.studio.ideVersion, verifyDefinitions: index.identity.studio.verifyDefinitions, assembliesCompared: Object.keys(index.identity.studio.assemblies ?? {}).length },
     fixture: index.identity.fixture?.sha256 ?? null, descriptor: index.identity.descriptor.sha256, jobs: index.identity.jobs, modelApi: index.identity.modelApi?.version ?? null, cache: built.cache.hit ? 'reused' : 'rebuilt', keyStrategy: index.identity.keyStrategy, warnings: [] };
   identity.nativeRuntime = index.identity.nativeRuntime ?? null;
-  identity.shared = index.identity.descriptor.shared ?? null;
+  // The shared descriptor by its hashes and counts: its capabilities are in coverage.shared and its fragment list is the
+  // index's business (2026-10-12: 4.7 KB of every expand answer, 22% of it, read by the model each time).
+  const sharedId = index.identity.descriptor.shared ?? null;
+  identity.shared = sharedId && typeof sharedId === 'object' ? { file: sharedId.file ?? null, sha256: sharedId.sha256 ?? null, ...(sharedId.catalogSha256 ? { catalogSha256: sharedId.catalogSha256 } : {}),
+    capabilities: Array.isArray(sharedId.capabilities) ? sharedId.capabilities.length : null, ...(Array.isArray(sharedId.fragments) ? { fragments: sharedId.fragments.length } : {}) } : sharedId;
   // Every source has its own version; when they disagree the answer says so instead of pretending one identity.
   if (identity.modelApi && identity.studio?.ideVersion && identity.modelApi !== identity.studio.ideVersion) identity.warnings.push(`native API metadata (A) was extracted from Studio ${identity.modelApi}; the installed Studio is ${identity.studio.ideVersion}: trust native.runtime (A-runtime, read from the installed Studio) over the index for the shared capabilities; regenerate the index (${lane === 'odc' ? 'platforms/odc/studio/apiindex' : 'anvil catalog --out kernel/catalog'}) before trusting any other difference`);
   if (index.identity.studio?.error) identity.warnings.push('Studio identity could not be measured: ' + index.identity.studio.error);
@@ -1992,40 +2349,60 @@ export async function discover({ lane = 'odc', intent = '', app = null, detail =
   else if (index.identity.jobs.current === 0) identity.warnings.push(`job results exist (${index.identity.jobs.results}) but none matches the current job/fixture/kernel/Studio combination: they are historical; rerun the lane suite for current proofs`);
   // `--detail <id>` is the single-capability form of `--expand`; `--type` adds the native metadata of one interface.
   const expandSpec = [expand, detail ? `${detail}:contract+example+evidence+bindings` : null, type ? `native:${type}` : null].filter(Boolean).join(',');
-  if (expandSpec && !intent.trim()) {
-    const { requests, problems: parseProblems } = parseExpand(expandSpec);
+  const parsed = expandSpec ? parseExpand(expandSpec) : null;
+  if (parsed && !intent.trim()) {
+    const { requests, problems: parseProblems } = parsed;
     if (parseProblems.length) return { ok: false, schemaVersion: DISCOVERY_SCHEMA, lane, error: 'invalid expand: ' + parseProblems.join('; '), identity };
     const { expansions, problems } = await expandAnswer(index, sources, { requests, app, inspect, lane });
     if (Object.keys(expansions).length === 0) return { ok: false, schemaVersion: DISCOVERY_SCHEMA, lane, error: 'nothing to expand: ' + problems.map(p => p.request + ': ' + p.error).join('; '), known: index.capabilities.map(k => k.id), identity };
-    const answer = { ok: true, schemaVersion: DISCOVERY_SCHEMA, lane, ...dropNote, identity, expansions, problems, elapsedMs: Math.round(performance.now() - started) };
-    // The OutSystems UI entries shape themselves (whole, brief, one line, names) to their share of the room the rest
-    // of the budgeted answer leaves: the budget stages do not know their parts.
-    const osuiKeys = Object.keys(expansions).filter(k => k.startsWith('osui:'));
-    if (osuiKeys.length) {
-      const bare = applyBudget(structuredClone({ ...answer, expansions: Object.fromEntries(Object.entries(expansions).filter(([k]) => !k.startsWith('osui:'))) }), budgetBytes);
-      const share = Math.max(1024, Math.floor((budgetBytes - (bare.size?.bytes ?? 0) - 256) / osuiKeys.length));
-      for (const k of osuiKeys) expansions[k] = osuiExpansion(lane, k.slice('osui:'.length), { capBytes: share });
-      return applyBudget(answer, budgetBytes);
-    }
+    const answer = { ok: true, schemaVersion: DISCOVERY_SCHEMA, lane, ...dropNote, identity, expansions, expansionsReduced: undefined, expansionsOmitted: undefined, continuations: undefined, problems, elapsedMs: Math.round(performance.now() - started) };
     // The expansion of a ui.* capability builds screens too: it carries the OutSystems UI section of the lane (every app
-    // type of the lane; the capture is not read here), under the same byte floor as a screen intent.
-    const ui = Object.keys(expansions).some(k => k.startsWith('ui.')) && osuiCatalogAvailable() ? { lane, appTypes: APP_TYPES[lane] ?? [], from: 'lane (expansion of a ui capability)' } : null;
-    return ui ? fitOutsystemsUi(budgetWithFloor(answer, budgetBytes, ui), ui, budgetBytes) : applyBudget(answer, budgetBytes);
+    // type of the lane; the capture is not read here), under the same byte floor as a screen intent (not beside osui:
+    // entries, which are that catalog already).
+    const laneUi = osuiCatalogAvailable() ? { lane, appTypes: APP_TYPES[lane] ?? [], from: 'lane (expansion of a ui capability)' } : null;
+    const uiOf = held => { const keys = Object.keys(held ?? {}); return laneUi && keys.some(k => k.startsWith('ui.')) && !keys.some(k => k.startsWith('osui:')) ? laneUi : null; };
+    // One budget over the answer as it stands (its expansions may be the units fitAsked placed: `keep`, stage F skips them;
+    // `cap`, atEntry: the expansions at that many bytes and the OutSystems UI section in the room above them).
+    const fitExpand = (B, keep = {}, cap = null) => {
+      const copy = structuredClone(answer); const keys = Object.keys(copy.expansions);
+      // The OutSystems UI entries shape themselves (whole, brief, one line, names) to their share of the room the rest
+      // of the budgeted answer leaves: the budget stages do not know their parts.
+      const osuiKeys = keys.filter(k => k.startsWith('osui:'));
+      if (osuiKeys.length) {
+        const bare = applyBudget(structuredClone({ ...copy, expansions: Object.fromEntries(Object.entries(copy.expansions).filter(([k]) => !k.startsWith('osui:'))) }), B, keep);
+        const share = Math.max(1024, Math.floor((B - (bare.size?.bytes ?? 0) - 256) / osuiKeys.length));
+        for (const k of osuiKeys) copy.expansions[k] = osuiExpansion(lane, k.slice('osui:'.length), { capBytes: share });
+        return applyBudget(copy, B, keep);
+      }
+      const ui = uiOf(copy.expansions);
+      if (ui && cap != null && cap < B) { const model = withSectionsRoom(applyBudget(copy, cap, keep), B, cap); return model.size?.status === 'insufficient' ? model : fitOutsystemsUi(model, ui, B); }
+      return ui ? fitOutsystemsUi(budgetWithFloor(copy, B, ui, keep), ui, B) : applyBudget(copy, B, keep);
+    };
+    // At the entry (atEntry) the parts asked are units placed by fitAsked: whole, or reduced and named, the rest to the
+    // continuation (pages of the ceiling, where a unit larger than a page goes in its oversize form, fitAsked `reduce`), so
+    // the minimal a budget rises to is the one with every part whole. The engine (no ceiling) keeps stage F.
+    const units = expansionUnits(requests, expansions);
+    const fitAt = (B, { page = false, model = null } = {}) => (ceilingBytes == null ? { answer: fitExpand(B), minimalBytes: null }
+      : fitAsked(answer, { expansions, units, rejected: [] }, b => fitExpand(b, { keepExpansions: true }, model), { budgetBytes: B, lane, pageBytes: page ? ceilingBytes : null, reduce: page }));
+    const requestUi = uiOf(expansions);
+    return atEntry(fitAt, { budgetBytes, ceilingBytes, sections: requestUi ? { floor: () => sectionsFloor({ osui: requestUi }).bytes, lost: a => silentlyLost(a, { osui: uiOf(a.expansions) }).length > 0 } : null });
   }
   // What this lane covers: its own capabilities plus the shared ones projected for it. Nothing is inherited from
   // another lane's descriptor: an intent outside this coverage answers with this list, not with the other lane's.
   const coverage = { lane, capabilities: index.capabilities.length, laneSpecific: index.identity.descriptor.laneCapabilities ?? index.capabilities.length, shared: index.shared?.capabilities ?? [],
     note: index.shared ? `shared capabilities (${index.shared.capabilities.join(', ')}) are defined once for lanes ${index.shared.lanes.join('/')} and answered here with this lane's proofs, native types and differences only` : 'no shared capabilities' };
   if (!intent.trim()) return { ok: false, schemaVersion: DISCOVERY_SCHEMA, lane, error: 'intent is required (or expand "<id>:<parts>" / detail "<capability>")', categories: [...new Set(index.capabilities.map(c => c.category))], capabilities: index.capabilities.map(c => ({ id: c.id, title: c.title, ...(c.shared ? { shared: true } : {}) })), coverage, identity };
-  const q = query(index, { intent, limit });
+  // The words the matchers read: the intent without its paths, URLs and file names (withoutPaths); the answer echoes it whole.
+  const said = withoutPaths(intent);
+  const q = query(index, { intent: said, limit });
   // Example excerpts for the direct matches (the first ops of the best proof job for the capability's verbs), so the
   // shape of a valid op is in the same answer as its contract.
   const examples = {};
   for (const m of q.matches.filter(x => x.via === 'match')) { const c = index.capabilities.find(k => k.id === m.id); const ex = exampleOps(sources, index, c, { maxOps: 8, focus: m.focus ?? null }); if (ex) examples[m.id] = ex; }
   // C07: one whole proven job chosen by the words of the intent, the grammar of the logic steps it names, closed values.
-  const proven = provenExample(sources, index, q.matches, intent, { unmatched: q.unmatched });
-  const steps = stepsSection(sources, index, stepKindsOf(intent));
-  const values = valuesFor(lane, intent);
+  const proven = provenExample(sources, index, q.matches, said, { unmatched: q.unmatched });
+  const steps = stepsSection(sources, index, stepKindsOf(said));
+  const values = valuesFor(lane, said);
   // packet:true (W1): the work packet an agent starts from (work-packet.mjs), from the same matches, contracts and proven
   // example, plus the elements of the capture the intent names (its module digest) and the team rules; nothing in it
   // depends on the time or the cache, so the same input gives the same bytes. Within the answer ceiling (PACKET_BUDGET).
@@ -2037,15 +2414,23 @@ export async function discover({ lane = 'odc', intent = '', app = null, detail =
     // again with them.
     const named = found?.ok ? namedCapabilities(found.digest, intent).filter(n => !q.matches.some(m => m.id === n.id && m.via === 'match')) : [];
     const extra = named.map(n => packetMatch(index, n.id, [n.element + ' (' + n.kind + ' of the module)'])).filter(Boolean);
-    const matches = [...extra, ...q.matches];
-    const chosen = extra.length ? provenExample(sources, index, matches, intent, { unmatched: q.unmatched }) ?? proven : proven;
+    // A logic step the intent names brings the capability that step needs when the words did not (2026-10-12: "exception"
+    // named the raise step but matched no capability, and the session expanded logic.exception in a second round).
+    const stepNeeds = (steps?.kinds ?? []).map(k => [k, STEP_CAPABILITIES[k]]).filter(([, id]) => id && index.capabilities.some(c => c.id === id) && ![...extra, ...q.matches].some(m => m.id === id && m.via === 'match'));
+    const byStep = stepNeeds.map(([k, id]) => packetMatch(index, id, ['the ' + k + ' step the intent names'], 'step')).filter(Boolean);
+    const matches = [...extra, ...q.matches, ...byStep];
+    const chosen = extra.length ? provenExample(sources, index, matches, said, { unmatched: q.unmatched }) ?? proven : proven;
     const first = matches.find(m => m.via === 'match');
     const firstExample = !first ? null : examples[first.id] ?? exampleOps(sources, index, index.capabilities.find(k => k.id === first.id), { maxOps: 8, focus: first.focus ?? null });
-    return workPacket({ lane, intent, app, basis: { index: index.key }, matches, unavailable: q.unavailable,
+    // The built-ins the intent names (and every date and time one when it speaks of dates), from the kernel's checked-in
+    // catalog (builtin-functions.mjs); O11 only.
+    const { loadBuiltins, intentFunctions } = await import('./builtin-functions.mjs');
+    const functions = lane === 'o11' ? intentFunctions(intent, loadBuiltins(sources.kernel), { lane }) : null;
+    return workPacket({ lane, intent, app, basis: { index: index.key }, matches, unavailable: q.unavailable, functions,
       categories: new Map(index.capabilities.map(c => [c.id, c.category])),
       slices: (pointers, form) => contractSlice(index, pointers, { full: form === 'full', capBytes: 3072 }),
       steps: steps ? { kinds: steps.kinds, shape: steps.shape, grammar: steps.grammar } : null,
-      proven: chosen, example: firstExample, exampleFor: first?.id ?? null, module: found, operations },
+      proven: chosen, example: firstExample, exampleFor: first?.id ?? null, module: found, operations, expand: expandSpec || null },
     { budgetBytes: Math.min(budgetBytes, PACKET_BUDGET) });
   }
   let context = null;
@@ -2065,8 +2450,14 @@ export async function discover({ lane = 'odc', intent = '', app = null, detail =
     gates: 'inside the deliver call: fresh capture of the live module -> candidate validation (no new errors or warnings, a change against that capture) -> check-base -> preview -> merge with strictlyEqual=true; an uncertain result is never retried: read receipt.json and the journal',
     prove: sources.prove('<job.json>') + (sources.fixture ? '  (only when the person asks for a headless proof on the lane fixture; delivers nothing)' : '  (only when the person asks for a headless proof on the base the job declares, or base: <capture.oml>; delivers nothing)'),
   };
+  // expand, detail and type beside the intent are answered too (fitAsked), never dropped in silence.
+  const asked = parsed ? await (async () => {
+    const { expansions, problems } = await expandAnswer(index, sources, { requests: parsed.requests, app, inspect, lane, osuiCap: Math.max(1024, Math.floor(budgetBytes / 4)) });
+    return { expansions, units: expansionUnits(parsed.requests, expansions), rejected: [...parsed.rejected, ...problems.map(p => ({ expand: p.request, why: p.error }))] };
+  })() : null;
   const answer = { ok: true, schemaVersion: DISCOVERY_SCHEMA, lane, intent, ...dropNote, identity, terms: q.terms,
-    matches: q.matches, contracts: q.contracts, examples, bindings: q.bindings, bindingsTotal: q.bindingsTotal, routes: q.routes,
+    matches: q.matches, contracts: q.contracts, examples, ...(asked ? { expansions: {}, expansionsReduced: undefined, expansionsOmitted: undefined, continuations: undefined } : {}),
+    bindings: q.bindings, bindingsTotal: q.bindingsTotal, routes: q.routes,
     composition: { order: q.order, decisions: q.decisions, recommended: q.recommended, cycles: q.cycles, invalidDependencies: q.invalidDependencies },
     unavailable: q.unavailable, relatedJobs: q.relatedJobs, coverage,
     lexical: { unmatched: q.unmatched, note: 'words of the intent that matched no keyword, title or summary; lexical coverage only, not a judgement on whether the intent was understood or is complete' },
@@ -2094,12 +2485,24 @@ export async function discover({ lane = 'odc', intent = '', app = null, detail =
   const osui = outsystemsUi ? await outsystemsUiRequest({ lane, intent, matches: q.matches, context, app, map }) : null;
   // The C07 sections take the room the model part and the OutSystems UI section left (fitC07); the grammar of the steps
   // the intent names keeps a floor in that room (fitWithSteps).
-  const fitModel = room => {
+  // The parts asked (fitAsked) are placed whole or reduced and named: stage F never cuts them (keepExpansions).
+  const keep = { keepExpansions: !!asked };
+  const extras = { provenExample: proven, steps, values };
+  // `cap` (atEntry): the model part, with the parts asked, at that many bytes; the OutSystems UI section in the room above
+  // it up to the floor of the C07 extras, which take the rest (sectionsFloor).
+  const fitModel = (room, cap = null) => {
     const copy = structuredClone(answer);
-    const budgeted = osui ? budgetWithFloor(copy, room, osui) : applyBudget(copy, room);
+    if (cap != null && cap < room) {
+      const model = withSectionsRoom(applyBudget(copy, cap, keep), room, cap);
+      return osui && model.size?.status !== 'insufficient' ? fitOutsystemsUi(model, osui, room - sectionsFloor({ extras }, room).c07) : model;
+    }
+    const budgeted = osui ? budgetWithFloor(copy, room, osui, keep) : applyBudget(copy, room, keep);
     return osui ? fitOutsystemsUi(budgeted, osui, room) : budgeted;
   };
-  return fitWithSteps(fitModel, { provenExample: proven, steps, values }, budgetBytes);
+  const fit = (B, cap = null) => fitWithSteps(room => fitModel(room, cap), extras, B);
+  const fitAt = (B, { page = false, model = null } = {}) => (asked ? fitAsked(answer, asked, b => fit(b, model), { budgetBytes: B, lane, pageBytes: page ? ceilingBytes : null }) : { answer: fit(B, model), minimalBytes: null });
+  const sections = osui || proven || steps || values ? { floor: B => sectionsFloor({ osui, extras }, B).bytes, lost: a => silentlyLost(a, { osui, extras }).length > 0 } : null;
+  return atEntry(fitAt, { budgetBytes, ceilingBytes, sections });
 }
 
 // The grammar of the logic steps an intent names (kinds, grammar and the proven job by reference) is what that intent
@@ -2120,7 +2523,7 @@ export function fitWithSteps(fitModel, extras, budgetBytes) {
   const whole = out => !!out?.steps && (!s.example || (!!out.steps.example && opsOf(out.steps.example) >= opsOf(s.example)));
   const partial = out => !!out?.steps && (!s.example || !!out.steps.example);
   if (whole(first)) return first;
-  const example = s.example ? { job: s.example.job, path: s.example.path, reference: s.example.reference, note: 'reduced by budget: the whole job by its id' } : null;
+  const example = byReference(s.example);
   const forms = [[s, whole], ...(example ? [[{ ...s, example }, partial]] : [])];
   for (const [form, enough] of forms) {
     if (enough === partial && partial(first)) return first; // the reference form is already in the first answer
@@ -2256,8 +2659,9 @@ export function parseDiscoverArguments(args) {
     else if (a === '--budget') input.budgetBytes = Number(args[++i]);
     else if (a === '--rebuild') input.rebuild = true;
     else if (a === '--packet') input.packet = true;
+    else if (a === '--catalog') input.catalog = true;
     else if (a === '--intent') input.intent = args[++i];
-    else if (a.startsWith('--')) throw new Error('Unknown discover option ' + a + '; usage: discover <intent words...> [--lane odc|o11] [--app <capture.oml|Module>] [--packet] [--expand <id>:<parts>,contract:<pointer>,element:<Kind:Name>] [--detail <capability>] [--type <Interface>] [--limit N] [--budget <bytes>] [--rebuild]');
+    else if (a.startsWith('--')) throw new Error('Unknown discover option ' + a + '; usage: discover <intent words...> [--lane odc|o11] [--app <capture.oml|Module>] [--packet] [--catalog] [--expand <id>:<parts>,contract:<pointer>,element:<Kind:Name>] [--detail <capability>] [--type <Interface>] [--limit N] [--budget <bytes>] [--rebuild]');
     else words.push(a);
   }
   if (input.expand != null && !String(input.expand).trim()) throw new Error('--expand needs a value, e.g. ui.list:example+evidence,logic.aggregate:example');

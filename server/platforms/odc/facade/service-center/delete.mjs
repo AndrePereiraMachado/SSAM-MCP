@@ -17,6 +17,7 @@
 // uncertain child read as gone closes confirmed; read as still there, unchanged, it allows exactly one new send. The
 // model never polls and never needs verify.
 import crypto from 'node:crypto';
+import { authorizationContext } from '../authorization-context.mjs';
 import { redact } from './bridge.mjs';
 import { guardWrite, hostClass, hostsFile, namesWhole } from './auth.mjs';
 import { BridgeError, ProtocolError, Refusal, connectStudio } from './errors.mjs';
@@ -137,7 +138,7 @@ export function deleteRequest(args) {
   const operationId = args.operation_id ? canonicalUuid(text(args.operation_id)) : null;
   if (args.operation_id && !operationId) throw new ProtocolError('operation-id must be a UUID');
   return { targets, prefix: prefix === null ? null : prefix.trim(), prefixKind, maxDeletes, words, confirmHost: args.confirm_host ?? null,
-    operationId, planOnly: Boolean(args.plan_only) };
+    operationId, planOnly: Boolean(args.plan_only), authorizationContext: args.authorization_context ?? undefined };
 }
 // What identifies a delete request across repetitions with the same operationId.
 const requestSpec = r => ({ targets: r.targets.map(t => `${t.kind}:${t.value}`).sort(), prefix: r.prefix, prefixKind: r.prefix ? r.prefixKind : null, maxDeletes: r.maxDeletes });
@@ -318,6 +319,7 @@ export class DeleteEngine {
     const suffixes = new Map();
     for (const t of targets) { const s = appSuffix(t); if (s) suffixes.set(fold(compact(s)), [...(suffixes.get(fold(compact(s))) ?? []), t]); }
     for (const t of targets) {
+      if (request.approval?.targets.includes(t.name)) { t.namedBy = 'approved-proposal'; continue; }
       if (namesWhole(words, t.name)) { t.namedBy = 'name'; continue; }
       if (t.protected) {
         problems.push(problem('PROTECTED_TARGET', `${t.name} is protected and the prefix "${request.prefix}" matches it`, `a narrower prefix that leaves ${t.name} out, or words that name ${t.name} by its whole name`, { target: t.name }));
@@ -426,6 +428,10 @@ export class DeleteEngine {
     problems.push(...this.pending(targets));
     problems.push(...await this.dependencies(targets));
     const { external, edges } = this.externals(targets, L);
+    if (execute && request.authorizationContext && targets.length) {
+      if (request.prefix) throw new ProtocolError('Context approval requires exact targets, never a prefix');
+      request.approval = authorizationContext(request.authorizationContext, words, { lane: 'o11', host: this.host, operation: 'delete', targets: targets.map(t => t.name) });
+    }
     if (execute) problems.push(...this.hostProblems(words, request.confirmHost), ...this.wordProblems(request, targets, external, words));
     const summary = this.summary(request, targets, external, gone);
     const base = { action: 'delete', ...(parent ? { operationId: parent.operationId } : {}) };
@@ -451,7 +457,7 @@ export class DeleteEngine {
     const operationId = parent?.operationId ?? (request.operationId ? request.operationId : this.uuid());
     const frozen = ordered.map(t => ({ ...entry(t), ...(t.moduleKind ? { moduleKind: t.moduleKind } : {}), ...(t.withApplication ? { withApplication: true, applicationKey: t.applicationKey } : {}) }));
     const receipt = parent ?? this.journal.create(operationId, { host: this.host, action: 'delete', target: frozen.map(t => `${t.kind}:${t.key}`).sort().join(',') }, words,
-      { host: this.host, action: 'delete', request: requestSpec(request), targets: frozen });
+      { host: this.host, action: 'delete', request: requestSpec(request), targets: frozen, ...(request.approval ? { authorizationContext: request.approval } : {}) });
     // Past the host rule, a write to a non-personal host tells the bridge it carries the explicit instruction.
     if (hostClass(this.host, this.registry) !== 'personal' && this.api.bridge) this.api.bridge.corporate = true;
     const deleted = [...gone.deleted]; const absent = [...gone.absent]; const notSent = []; const receipts = [receipt.receipt];

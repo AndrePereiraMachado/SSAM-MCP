@@ -39,6 +39,8 @@ public sealed partial class ModelSession
     private int? _anchorOp;
     private readonly Dictionary<object, int> _anchors = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<object, int> _failedAnchors = new(ReferenceEqualityComparer.Instance);
+    // The op that created each object (a later set of one property moves its anchor, never its creator).
+    private readonly Dictionary<object, int> _creators = new(ReferenceEqualityComparer.Instance);
     private readonly List<(object Target, int? Previous, bool Created)> _anchorJournal = [];
 
     private void Anchor(object? o, bool created = false)
@@ -46,6 +48,25 @@ public sealed partial class ModelSession
         if (_anchorOp is not { } op || o is not IObjectSignature) return;
         _anchorJournal.Add((o, _anchors.TryGetValue(o, out var previous) ? previous : null, created));
         _anchors[o] = op;
+        if (created) _creators[o] = op;
+    }
+
+    // The op whose set last wrote each property of an object (UI-Mockup, FarmaVirtual call 99): the anchor of the object is
+    // the last op that touched it, so the Verify of its Values pointed at the set of its Labels, or nowhere at all.
+    private readonly Dictionary<(object Target, string Prop), int> _propertyAnchors = new(new TargetProperty());
+
+    /// <summary>A set wrote <paramref name="op"/>.prop of <paramref name="target"/> (Set, after the write succeeded).</summary>
+    private void AnchorProperty(object target, JsonObject op)
+    {
+        if (_anchorOp is { } index && op["prop"]?.ToString() is { Length: > 0 } prop) _propertyAnchors[(target, prop)] = index;
+    }
+
+    private sealed class TargetProperty : IEqualityComparer<(object Target, string Prop)>
+    {
+        public bool Equals((object Target, string Prop) a, (object Target, string Prop) b)
+            => ReferenceEquals(a.Target, b.Target) && string.Equals(a.Prop, b.Prop, StringComparison.OrdinalIgnoreCase);
+        public int GetHashCode((object Target, string Prop) x)
+            => HashCode.Combine(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(x.Target), StringComparer.OrdinalIgnoreCase.GetHashCode(x.Prop));
     }
 
     /// <summary>Starts the anchors of one op (Apply, per top-level op).</summary>
@@ -59,7 +80,7 @@ public sealed partial class ModelSession
             for (var k = _anchorJournal.Count - 1; k >= 0; k--)
             {
                 var (target, previous, created) = _anchorJournal[k];
-                if (created) { _anchors.Remove(target); _failedAnchors[target] = op; }
+                if (created) { _anchors.Remove(target); _creators.Remove(target); _failedAnchors[target] = op; }
                 else if (previous is { } before) _anchors[target] = before;
                 else _anchors.Remove(target);
             }
@@ -290,10 +311,13 @@ public sealed partial class ModelSession
     private static readonly Regex Quoted = new(@"'([\p{L}_][\p{L}\p{N}_.]*)'|""([\p{L}_][\p{L}\p{N}_.]*)""", RegexOptions.Compiled);
     private static readonly Regex RequiredInstead = new(@"'([^']+)'\s+(?:data type\s+)?(?:is\s+)?required instead of\s+'([^']+)'", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-    /// <summary>One problem (phase "verify") per blocking message: the op whose write holds the message's element (the nearest
-    /// anchored ancestor of its owner), the pointer as deep as the job lets it be (the action of a logic op and, when its text
-    /// is in the job, the expression; the value of a set), the Verify id as the code and a fix. A message whose element no op
-    /// of the job wrote keeps op and pointer null, with the element's path.</summary>
+    /// <summary>One problem (phase "verify") per blocking message: the op whose write holds the message's element (the set
+    /// that wrote the property the message is about, by its name or by the text of its expression; for a property no set
+    /// wrote, the op that created its element; else the nearest anchored ancestor of its owner), the pointer as deep as the
+    /// job lets it be (the action of a logic op and, when its text is in the job, the expression; the value of the set that
+    /// wrote the property; the string of another op that holds the expression of the property the message names), the
+    /// Verify id as the code, a fix, and the patch when the fix is certain (an unknown function one built-in certainly
+    /// means). A message whose element no op of the job wrote keeps op and pointer null, with the element's path.</summary>
     public List<JsonObject> VerifyProblems(IReadOnlyList<MessageInfo> blocking, JsonArray ops, string? opsPointer, string lane, IReadOnlyDictionary<string, VerifyHint>? hints)
     {
         var problems = new List<JsonObject>();
@@ -314,29 +338,49 @@ public sealed partial class ModelSession
         var omitted = new SortedSet<int>();
         foreach (var m in blocking)
         {
-            var owner = Owner(m.OwnerKey);
+            // The owner the Verify gave (a CustomProperty is no child of its widget: the walk never finds it), else by its key.
+            var owner = m.Owner is IObjectSignature { WasDeleted: false } given ? given : Owner(m.OwnerKey);
             int? op = null, failed = null;
+            IObjectSignature? anchored = null;
             for (var o = owner; o != null && op == null && failed == null; o = o.Parent as IObjectSignature)
-                if (_anchors.TryGetValue(o, out var i)) op = i;
+                if (_anchors.TryGetValue(o, out var i)) { op = i; anchored = o; }
                 else if (_failedAnchors.TryGetValue(o, out var f)) failed = f;
             // What a failed op left half-built: its failure is already a problem of the apply.
             if (failed is { } failedOp) { omitted.Add(failedOp); continue; }
+            // The property the message is about, when a set of this job wrote it, is that set's (the anchor of the widget is
+            // the last op that touched it: the Values of a Dropdown pointed at the set of its Labels, or nowhere). The Verify
+            // may name it by its model name, not the one the set used (the StyleClasses of a Text is its Style): then the set
+            // on the owner whose value is the text of that expression. A property no set wrote is never the set of another
+            // property (an html fragment wrote the Values, then a set wrote the Labels): it is the op that created its
+            // element, else that set alone, never its value.
+            var alone = false;
+            if (owner != null && PropertySet(owner, anchored, m, ops) is { } written) op = written;
+            else if (owner != null && SetOfText(owner, m, ops) is { } same) op = same;
+            else if (owner != null && op is { } last && last < ops.Count && ops[last] is JsonObject touched && touched["op"]?.ToString() == "set"
+                && (m.Properties is { Count: > 0 } || PropertyObjects(owner, anchored).Any()))
+            {
+                if (CreatorOf(owner) is { } creator) op = creator;
+                else alone = true;
+            }
             var source = op is { } index && index < ops.Count ? ops[index] as JsonObject : null;
             var kind = source?["op"]?.ToString();
             var pointer = op is { } at && opsPointer != null ? $"{opsPointer}/{at}" : null;
+            string? inner = null;
             JsonObject? action = null;
-            if (kind == "logic" && owner != null && ActionOf(owner, source!) is { } found)
+            if (!alone && kind == "logic" && owner != null && ActionOf(owner, source!) is { } found)
             {
                 action = found.Declaration;
                 if (pointer != null)
                 {
                     pointer += $"/data/actions/{found.Index}";
-                    if (ExpressionPointer(owner, m, found.Declaration, found.Action) is { } inner) pointer += inner;
+                    if (ExpressionPointer(owner, m, found.Declaration, found.Action) is { } deeper) { inner = $"/data/actions/{found.Index}{deeper}"; pointer += deeper; }
                 }
             }
-            else if (kind == "set" && source!["value"] != null && pointer != null) pointer += "/value";
+            else if (!alone && kind == "set" && source!["value"] != null && pointer != null) { inner = "/value"; pointer += "/value"; }
+            else if (!alone && kind != "logic" && source != null && pointer != null && owner != null && PropertyPointer(owner, m, source) is { } held) { inner = held; pointer += held; }
+            var patch = inner != null && pointer != null && Text(source, inner) is { } text ? CertainPatch(m, pointer, text) : null;
             var message = $"{m.Type} {m.Id}: {VerifyHints.OneLine(m.Detail, 400)} @ {m.Path}";
-            var problem = JobPreflight.Problem(op, pointer, m.Id, "error", message, Fix(m, owner, action, lane, hints), null, kind ?? "verify");
+            var problem = JobPreflight.Problem(op, pointer, m.Id, "error", message, patch?.Fix ?? Fix(m, owner, action, source, lane, hints), patch?.Patch, kind ?? "verify");
             problem["phase"] = "verify";
             problem["element"] = m.Path;
             if (m.OwnerKey != null) problem["key"] = m.OwnerKey;
@@ -387,15 +431,115 @@ public sealed partial class ModelSession
         if (quoted.Success) texts.Insert(0, quoted.Groups[1].Value);
         foreach (var text in texts.Distinct(StringComparer.Ordinal))
         {
-            var wanted = Normal(text.EndsWith("...", StringComparison.Ordinal) ? text[..^3] : text);
+            var wanted = NormalText(text.EndsWith("...", StringComparison.Ordinal) ? text[..^3] : text);
             var prefix = text.EndsWith("...", StringComparison.Ordinal);
-            var found = Strings(declaration, "").Where(s => prefix ? Normal(s.Text).StartsWith(wanted, StringComparison.Ordinal) : Normal(s.Text) == wanted).Select(s => s.Pointer).Distinct().ToList();
+            var found = Strings(declaration, "").Where(s => prefix ? NormalText(s.Text).StartsWith(wanted, StringComparison.Ordinal) : NormalText(s.Text) == wanted).Select(s => s.Pointer).Distinct().ToList();
             if (found.Count == 1) return found[0];
         }
         return null;
 
         static string? Safe(Func<string?> read) { try { return read(); } catch { return null; } }
-        static string Normal(string s) => Regex.Replace(s, @"\s+", " ").Trim();
+    }
+
+    /// <summary>The top-level set of this job that wrote the property a message is about: a property object between the owner
+    /// and its anchored ancestor (no child of its parent: a CustomProperty such as the Values of a Dropdown) under the name
+    /// the set gave on that parent, or a property of the owner the message names (the Condition of an If). An op that writes
+    /// its widgets' properties itself (html, screen) is no such set: its widgets keep their anchor.</summary>
+    private int? PropertySet(IObjectSignature owner, IObjectSignature? anchored, MessageInfo m, JsonArray ops)
+    {
+        var candidates = (m.Properties ?? []).Select(name => ((object)owner, name)).Concat(PropertyObjects(owner, anchored).Select(p => ((object)p.Parent, p.Name)));
+        foreach (var candidate in candidates)
+            if (_propertyAnchors.TryGetValue(candidate, out var i) && i < ops.Count && ops[i] is JsonObject set && set["op"]?.ToString() == "set"
+                && string.Equals(set["prop"]?.ToString(), candidate.Item2, StringComparison.OrdinalIgnoreCase))
+                return i;
+        return null;
+    }
+
+    /// <summary>The property objects between the owner and its anchored ancestor (no child of their parent: a CustomProperty
+    /// such as the Values of a Dropdown), each with its parent and the name it has there.</summary>
+    private static IEnumerable<(IObjectSignature Parent, string Name)> PropertyObjects(IObjectSignature owner, IObjectSignature? anchored)
+    {
+        for (var o = owner; o != null && !ReferenceEquals(o, anchored); o = o.Parent as IObjectSignature)
+            if (o.Parent is IObjectSignature parent && TypeResolver.Name(o) is { Length: > 0 } name && !parent.Children.OfType<object>().Any(c => ReferenceEquals(c, o)))
+                yield return (parent, name);
+    }
+
+    /// <summary>The top-level set of this job on the owner itself whose value is the text of the expression of a property the
+    /// message names, compared as <see cref="PropertyPointer"/> compares (NormalText): the Verify names some properties by
+    /// their model name, not by the name the set used (a set of StyleClasses on a Text is its Style). Null when no set of the
+    /// owner holds that text, or more than one does.</summary>
+    private int? SetOfText(IObjectSignature owner, MessageInfo m, JsonArray ops)
+    {
+        var texts = (m.Properties ?? []).Select(name => PropertyText(owner, name)).OfType<string>().Where(t => !string.IsNullOrWhiteSpace(t))
+            .Select(NormalText).ToHashSet(StringComparer.Ordinal);
+        if (texts.Count == 0) return null;
+        var found = _propertyAnchors.Where(a => ReferenceEquals(a.Key.Target, owner)).Where(a => a.Value < ops.Count && ops[a.Value] is JsonObject set
+                && set["op"]?.ToString() == "set" && string.Equals(set["prop"]?.ToString(), a.Key.Prop, StringComparison.OrdinalIgnoreCase)
+                && set["value"] is JsonValue value && value.TryGetValue<string>(out var text) && texts.Contains(NormalText(text)))
+            .Select(a => a.Value).Distinct().ToList();
+        return found.Count == 1 ? found[0] : null;
+    }
+
+    /// <summary>The text of the expression <paramref name="owner"/>.<paramref name="name"/>, or null.</summary>
+    private static string? PropertyText(IObjectSignature owner, string name)
+    {
+        try { return (ModelHost.Prop(owner, name) as IExpression)?.Text; } catch { return null; }
+    }
+
+    /// <summary>The op of this job that created the owner or its nearest created ancestor (the html fragment that created a
+    /// Dropdown with its Values), or null when the job created none of them.</summary>
+    private int? CreatorOf(IObjectSignature owner)
+    {
+        for (var o = owner; o != null; o = o.Parent as IObjectSignature)
+            if (_creators.TryGetValue(o, out var op)) return op;
+        return null;
+    }
+
+    /// <summary>The pointer, relative to an op that is not a logic op, of the expression of the property the message names
+    /// (the Condition of an If, the ValueExpression of the CustomProperty of an Expression), when the op holds that text as
+    /// exactly one of its strings (the binding of an html page op). Null otherwise: the op stays the place.</summary>
+    private static string? PropertyPointer(IObjectSignature owner, MessageInfo m, JsonObject source)
+    {
+        foreach (var name in m.Properties ?? [])
+        {
+            var text = PropertyText(owner, name);
+            if (string.IsNullOrWhiteSpace(text)) continue;
+            var wanted = NormalText(text);
+            var found = Strings(source, "").Where(s => NormalText(s.Text) == wanted).Select(s => s.Pointer).Distinct().ToList();
+            if (found.Count == 1) return found[0];
+        }
+        return null;
+    }
+
+    private static string NormalText(string s) => Regex.Replace(s, @"\s+", " ").Trim();
+
+    /// <summary>The string at <paramref name="pointer"/> (relative to <paramref name="node"/>), or null.</summary>
+    private static string? Text(JsonNode? node, string pointer)
+    {
+        foreach (var segment in pointer.Split('/').Skip(1).Select(s => s.Replace("~1", "/").Replace("~0", "~")))
+            node = node switch
+            {
+                JsonObject o => o[segment],
+                JsonArray a when int.TryParse(segment, out var k) && k >= 0 && k < a.Count => a[k],
+                _ => null,
+            };
+        return node is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
+    }
+
+    /// <summary>The fix and the patch of a message whose correction is certain from the job alone: an unknown function one
+    /// built-in certainly means (FunctionCatalog.Certain, Lower -> ToLower), renamed in the expression at the pointer (a set
+    /// value the base check does not read). Null when the correction is not certain.</summary>
+    private static (string Fix, JsonArray Patch)? CertainPatch(MessageInfo m, string pointer, string text)
+    {
+        if (m.Id != "ExpressionUnknownFunction" || Quoted.Match(m.Detail) is not { Success: true } quoted) return null;
+        var name = quoted.Groups[1].Success ? quoted.Groups[1].Value : quoted.Groups[2].Value;
+        // No catalog in this host (it is read from the Studio's registry): no certain fix, the message keeps its advice.
+        string? certain;
+        try { certain = FunctionCatalog.Certain(name); } catch { certain = null; }
+        if (certain == null) return null;
+        var renamed = JobRunner.RenameCall(text, name, certain);
+        return renamed == text ? null
+            : ($"write {certain}(...), the built-in meant here (same arguments)", new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = pointer, ["value"] = renamed }));
     }
 
     private static IEnumerable<(string Pointer, string Text)> Strings(JsonNode? node, string at)
@@ -414,9 +558,12 @@ public sealed partial class ModelSession
         }
     }
 
-    /// <summary>The fix of a blocking Verify message: for an unknown name, the names in scope of the action; for a required
-    /// argument, its name; for a type mismatch, the conversion built-in when the lane has it; else the curated hint.</summary>
-    private static string Fix(MessageInfo m, IObjectSignature? owner, JsonObject? action, string lane, IReadOnlyDictionary<string, VerifyHint>? hints)
+    /// <summary>The fix of a blocking Verify message, the advice itself (never a command the app session cannot run): for an
+    /// unknown name, the names in scope of the action, the item scope of a Dropdown's Values and Labels (and of the type
+    /// 'None' its expression then has), the names of the page, or the scope of what holds the element (action, screen,
+    /// block, module); for a required argument, its name; for a type mismatch, the conversion built-in when the lane has it;
+    /// else the curated hint, else what to do with the message.</summary>
+    private static string Fix(MessageInfo m, IObjectSignature? owner, JsonObject? action, JsonObject? source, string lane, IReadOnlyDictionary<string, VerifyHint>? hints)
     {
         var text = m.Detail + " " + m.Path;
         switch (m.Id)
@@ -431,6 +578,22 @@ public sealed partial class ModelSession
                 return close.Count > 0 ? $"use {string.Join(", ", close)}, or declare '{unknown}' in {name} (inputs/vars)"
                     : $"the names in scope of {name} are {string.Join(", ", scope.Take(15))}{(scope.Count > 15 ? ", ..." : "")}; declare the name (inputs/vars), name the node that produces it, or qualify it (Site., Entities.)";
             }
+            // The Values and Labels of a Dropdown (UI-Mockup, FarmaVirtual call 99): an unknown name there, and the CustomObjectError
+            // of the type its expression then lacks ('...' required instead of 'None'), are the item scope (DropdownItemScopeRules
+            // refuses List.Current before). A CustomObjectError of another type is a wrong type, not the scope: its curated hint.
+            case "ExpressionUnknownObject" when DropdownItem(owner) is { } property:
+                return ItemScope(property);
+            case "CustomObjectError" when DropdownItem(owner) is { } property && RequiredInstead.Match(text) is { Success: true } untyped
+                && string.Equals(untyped.Groups[2].Value, "None", StringComparison.Ordinal):
+                return ItemScope(property);
+            case "ExpressionUnknownObject" when Unknown(m) is { } unknown && PageNames(source) is { Count: > 0 } names:
+            {
+                IReadOnlyList<string> close = NameSuggestions.Closest(unknown.Split('.').First(), names);
+                return close.Count > 0 ? $"use {string.Join(", ", close)}, or declare '{unknown}' in the vars of the page"
+                    : $"the names of the page are {string.Join(", ", names.Take(15))}{(names.Count > 15 ? ", ..." : "")}; declare '{unknown}' in its vars or sources, or qualify it (Site., Entities.)";
+            }
+            case "ExpressionUnknownObject" when Unknown(m) is { } unknown:
+                return $"'{unknown}' is no name in scope of this element: use {ScopeOf(owner)}, declare it, or qualify it (Site., Entities.)";
             case "ArgumentRequiredExpression" when owner != null && TypeResolver.Name(owner) is { Length: > 0 } argument:
                 return $"give the argument '{argument}' a value (\"args\": {{\"{argument}\": \"<expression>\"}} in the call), or make that input not mandatory";
             case "ExpressionInvalidExpressionType" or "OperatorIncompatibleTypes" when RequiredInstead.Match(text) is { Success: true } types:
@@ -442,8 +605,50 @@ public sealed partial class ModelSession
                     : $"the value is {given} and {wanted} is required: write a value of type {wanted} (no built-in {function} in this Studio)";
             }
         }
-        return VerifyHints.Fix(m.Id, hints) ?? $"fix the element as the Verify says (`anvil verify-message --name {m.Id}` explains the message)";
+        return VerifyHints.Fix(m.Id, hints) ?? $"correct the element at the pointer as the message says ({m.Id} has no curated advice)";
 
         static string Short(string type) => type.Trim().EndsWith(" Identifier", StringComparison.OrdinalIgnoreCase) ? "Identifier" : type.Replace(" ", "");
+    }
+
+    /// <summary>"Values" or "Labels" when the owner is that property (a CustomProperty) of a Dropdown, else null.</summary>
+    private static string? DropdownItem(IObjectSignature? owner)
+        => owner?.Parent is IObjectSignature widget && Implements(widget, "IDropdown") && TypeResolver.Name(owner) is "Values" or "Labels" ? TypeResolver.Name(owner) : null;
+
+    /// <summary>The item scope of the Values or Labels of a Dropdown.</summary>
+    private static string ItemScope(string property)
+        => $"the {property} of a Dropdown is evaluated per element of its List and reads only that element's attributes: "
+            + "Entity.Attribute for an aggregate (User.Id), Attribute for a list of records (Id); never the List itself, its Current, nor a screen variable";
+
+    /// <summary>Where the names in scope of an element come from, by what holds it: its action (inputs, outputs and local
+    /// variables), its screen or its block (variables, inputs, aggregates and data actions), else the module (a block widget
+    /// or an action is no screen's: "of its screen" sent the author to the wrong place).</summary>
+    private static string ScopeOf(IObjectSignature? owner)
+    {
+        var scopes = new List<string>();
+        for (var o = owner; o != null; o = o.Parent as IObjectSignature)
+        {
+            var type = o.GetInterface()?.Name ?? "";
+            if (scopes.Count == 0 && (ActionKinds.Contains(type) || type.EndsWith("Action", StringComparison.Ordinal)))
+                scopes.Add("an input, output or local variable of its action");
+            else if (ModelHost.IsScreen(o) || Implements(o, "IMobileBlock") || Implements(o, "IWebBlock"))
+            {
+                scopes.Add($"a variable, input, aggregate or data action of its {(ModelHost.IsScreen(o) ? "screen" : "block")}");
+                break;
+            }
+        }
+        return scopes.Count > 0 ? string.Join(", or ", scopes) : "a name of the module (an entity, a structure, a static record, a site property)";
+    }
+
+    /// <summary>The first name the message quotes (the unknown name of ExpressionUnknownObject), or null.</summary>
+    private static string? Unknown(MessageInfo m)
+        => Quoted.Matches(m.Detail).Select(q => q.Groups[1].Success ? q.Groups[1].Value : q.Groups[2].Value).FirstOrDefault();
+
+    /// <summary>The names an html page op declares (its vars and the aliases of its sources), or null for another op.</summary>
+    private static List<string>? PageNames(JsonObject? source)
+    {
+        if (source?["op"]?.ToString() != "html" || source["parent"] != null || source["data"] is not JsonObject data) return null;
+        var sources = (data["sources"] as JsonArray ?? new JsonArray()).Append(data["source"]).OfType<JsonObject>();
+        return (data["vars"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().Select(v => v["name"]?.ToString())
+            .Concat(sources.Select(s => s["as"]?.ToString())).OfType<string>().Where(n => n.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 }

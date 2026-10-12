@@ -93,6 +93,18 @@ Entrega O11 (`Delivery.cs`): o preflight puro nao recusa mais antes do Studio; a
 captura (modulo nao abre, bridge falha) a recusa e a do preflight, com `verifyRan:false` e o motivo.
 Provas: `pa4-pc-four-phases.json` e `pa4-pc-isolated-action.json` (`tests/jobs-negative` e `tests/jobs-odc-negative`),
 `tests/Anvil.Tests/PrimeiraCertaTests.cs` e `tests/Anvil.Tests/PrimeiraCertaCompleteTests.cs`.
+Normalizacoes (lentidao 12/10/2026, `Preflight/JobNormalizer.cs`): erro de forma com uma unica leitura e reescrito no job em
+memoria antes das checagens (o arquivo nunca muda) e listado em `normalizations` ([{rule, path, from, to, message}], no
+resultado aceito, no `check-job`, no envelope da recusa e no resultado da entrega recusada), nunca recusado:
+`SORT_KEYS_SPLIT` (sort `"A, B DESC"` vira `["A", "B DESC"]`, desempates mantidos), `LIST_ENTITY_SEGMENT_DROPPED`
+(`V.Current.T.X` e `V[i].T.X` numa `T List` de input/output/variavel ou output de call viram `V.Current.X`/`V[i].X`, so com os
+atributos de T conhecidos; `Agg.List` nunca), `NULL_FUNCTION_REWRITTEN` (com a base: `NullDateTime()`/`NullTime()` que nao sao
+funcao do modulo viram o nulo do tipo alvo de assign, argumento, campo de record ou comparacao: Date `NullDate()`, Date Time
+`DateToDateTime(NullDate())`, Time `NewTime(0, 0, 0)`; `NullTime()` sem tipo conhecido vira `NewTime(0, 0, 0)`) e
+`PROPERTY_SET_DROPPED` (set de propriedade de documentacao, hoje so `Description`, que o tipo nao escreve: aviso, a op vira
+nada; qualquer outra propriedade segue `PROPERTY_NOT_WRITABLE`). Ambiguo continua recusa: chave de sort vazia, segmento que
+pode ser atributo, `NullDateTime()` sem tipo alvo (dentro de If, argumento de builtin) ou com tipo que nao e data/hora. Job com
+`expectValid:false` nao e normalizado. Provas: `tests/Anvil.Tests/JobNormalizerTests.cs`.
 Correcao por nome (fachada, `platforms/odc/facade/job-patch.mjs`; o kernel segue recebendo o job inteiro): o patch aceita nomes
 no caminho (`actions/<Acao>/steps/<as>/...`; identidade = primeiro texto entre name, as, key, id, label; digitos sao indice) e
 `job` parcial + `basedOn` (mesmo nome substitui, nome novo entra; remover so por patch). A fachada gera o job completo, e o
@@ -348,8 +360,8 @@ Aqui `anvil` significa `dotnet .local/cli/anvil.dll` no SS4 ou `dotnet .local/la
 | Structure | Tipo composto para inputs/outputs, REST, listas em memoria; Public se sair do modulo | Todos | `producer-public.json`, `spec-data.json`; manutencao de uma structure herdada (atributo novo, DataType, rename de atributo com expressao consumidora, rename da structure): `structure-lifecycle.json`; refatoracao (move de atributo, duplicate da structure, replace entre structures = reapontamento provado, delete da origem sem force depois do replace; o registo anonimo da origem sobrevive orfao, limpeza nao provada): `structure-refactor.json` | usada como `DataType` sem erro; recusas em `tests/jobs-negative` (`delete-structure-attribute-in-use.json`, `delete-structure-in-use.json`, `rename-structure-clash.json`) |
 | Client entity (local storage) | Dados offline no dispositivo. Id Long Integer SEM AutoNumber (o Verify recusa `IsAutoNumber Yes` em client entity); gravar com `IExecuteClientActionNode` + `IEntityActionSignature:CreateOrUpdateX` numa client action | Mobile apenas | `local-storage-mobile.json`, `local-storage-notes-mobile.json` (com Accordion e recarga) | aggregate de tela com `args.isClientSide: true` |
 | Site property | Configuracao de servidor editavel no Service Center | Service, Reactive, Mobile, Traditional | `security-config-reactive.json` | `get` mostra DefaultValue |
-| Client variable | Estado no cliente que sobrevive a navegacao (filtro atual, preferencias) | Reactive, Mobile | `security-config-reactive.json` | usada numa expressao sem erro |
-| Session variable | Estado de sessao no servidor | Traditional apenas (sem job ainda: `ISessionVariable` no `@espace`) | - | Verify |
+| Client variable | Estado no cliente que sobrevive a navegacao (filtro atual, preferencias) | Reactive, Mobile | `security-config-reactive.json`; tipos de variavel do debugger: `debugger-client-variable-all-types.json` (os doze tipos aceitos) e `debugger-client-variable-compound-type.json` (Binary Data, Record e List: erro `UnallowedTypeForClientVariable` do Verify); Object e recusado ja no `set DataType` (`tests/jobs-negative/debugger-client-variable-object-type.json`); ODC: `tests/jobs-odc/debugger-client-variable-all-types.json`, `tests/jobs-odc/debugger-client-variable-compound-type.json` e `tests/jobs-odc-negative/debugger-client-variable-object-type.json` | usada numa expressao sem erro |
+| Session variable | Estado de sessao no servidor | Traditional apenas (`ISessionVariable` no `@espace`) | tipos de variavel do debugger: `debugger-session-variable-all-types.json` e `debugger-session-variable-compound-type.json` (session so em Traditional Web; Binary Data e List aceitos, com as sugestoes `BinaryDataSessionVariable` e `RecordListSessionVariable`) | Verify |
 | Role | Restringir tela ou action a um perfil | Reactive, Mobile, Traditional, Service | `security-config-reactive.json` (`link` em `Roles` da tela) | `get` da tela: `Roles` > 0 (no `get`, propriedades-expressao aparecem como `@chave.#Prop`; use `dump` para ver o texto) |
 | Server action | Logica de servidor: consultar, gravar, calcular, chamar REST. A tela chama um wrapper, nao a entity action (Security Warning) | Service, Reactive, Mobile, Traditional | `smoke-data-logic.json` (aggregate, If, Assign, Execute, Raise), `producer-public.json`, `aggregate-full.json` (join, sort, group) | `layout` sem sobreposicao; `find` da action |
 | Action por SPEC de logica (preferir para server/service actions de negocio) | Uma op `logic` declara inputs/outputs/vars e os passos (get, assign, call, save/create/update/delete, if/then/else, foreach, raise); Start, End, ligacoes e layout sao gerados; esquema FECHADO: chave errada, entidade/action/exception inexistente ou nome repetido falham na compilacao com a lista do permitido (secao 2.1) | Service, Reactive, Mobile, Traditional | `logic-spec-services.json` (5 actions: 4 service com call+assign, 1 server com todas as formas); negativo `logic-unknown-key.json`; `cat-a-reset-typed-values.json` (action nova que repoe saidas tipadas nos valores neutros com duas exclusoes, chamada inserida num ramo de um If herdado: liga-se primeiro o no novo ao sucessor e so depois se reaponta o conector do ramo); negativo `cat-a-link-unknown-connector.json` (conector que o no nao tem) | `find` da action; nos com os nomes do `as` |
@@ -374,6 +386,7 @@ Aqui `anvil` significa `dotnet .local/cli/anvil.dll` no SS4 ou `dotnet .local/la
 | Tela Reactive/Mobile | Secao 3.1 | Reactive, Mobile | `screen-reactive.json` (minima: layout, aggregate, List), `screen-form-reactive.json`, `screen-list-reactive.json`, `screen-search-refresh-reactive.json` (pesquisa com `like`, Table, Refresh Data), `table-if-reactive.json`, `widgets-reactive.json`, `gallery-native-reactive.json`; portas O11 da frente B de jobs ODC provados: `cat-b-app-events.json` (external site e eventos de aplicacao), `cat-b-block-placeholder.json` (placeholder de bloco com conteudo de exemplo e instancias), `cat-b-flow-comment-popover.json` (comentario do fluxo de UI e popover/metadata), `cat-b-theme-resource.json` (tema, script e recurso: nascimento, edicao, refatoracao e delecao) | `dump` da tela; TrueChange |
 | Tela Traditional | Secao 3.2 | Traditional | `screen-crud-traditional.json`, `osui-web-patterns.json`, `cat-b-traditional-gallery.json` (widgets web que nenhum job criava, a partir dos contratos de screen-coverage) | idem |
 | Padrao do OutSystems UI | Accordion, Tabs, Card, DatePicker, Carousel... (secao 3.3) | Reactive/Mobile: OutSystemsUI; Traditional: OutSystemsUIWeb | `osui-patterns.json`, `osui-datepicker-handler.json` (DatePicker, Tag, Tooltip, Counter), `osui-patterns-mobile.json`, `osui-web-patterns.json`; contrato em `docs/ui/<Modulo>/blocks/<Bloco>.md` | `docs/ui/gallery-reactive.md` diz se o bloco nasce limpo |
+| Pedido inteiro num job (lote unico) | Todas as mudancas de um pedido para um modulo num job so e numa chamada (separe so por modulo): excecao de usuario e site property (verbos crus), entidade e estrutura (`spec`) e quatro server actions publicas que se chamam numa op `logic` (get com filtros, sort de 2 chaves e max, if/raise, foreach com ListAppend, call, create, funcoes de data, GetUserId numa variavel antes do aggregate). E o exemplo do pacote do `ssam_discover` para pedidos de varias actions | Service | `single-job-actions.json` | 7 ops, Verify 0 mensagens |
 | App inteiro (referencia) | Data model de 20 entidades + 40 server actions + timers + service actions de um help desk, gerados por script (`scripts/gen_tickets.py`) em 8 jobs encadeados (para provar por partes) mais o job composto `tickets-all.json` (`jobs`: as 8 partes numa transacao; e ele que entrega tudo num merge so) | Service | `tickets-all.json`, `tickets-01-data.json`, `tickets-02-helpers.json`, `tickets-03-lifecycle.json`, `tickets-04-collab.json`, `tickets-05-org.json`, `tickets-06-sla.json`, `tickets-07-read.json`, `tickets-08-services.json` | cada parte com Verify 0 erros; specs em docs/specs/tickets-*.md |
 | Refatorar | Saber quem usa, renomear, repontar, apagar sem quebrar. `usages` devolve `count` (todos os referers), `real` (uso de verdade) e `entries` com `derived` true para o que o Studio mantem sozinho (lista de atributos de aggregate, sample records e, no ODC, o `IRecordAttributeValue` do registo de exemplo; tambem o que a plataforma gera com o alvo e acerta ao apaga-lo, secao 2 **Apagar com consumidores**); `rename` devolve `consumers` e `expressionsRewritten`; `replace` (secao 2) reponta todos os consumidores de um objeto para outro; `duplicate` copia no mesmo pai com o sufixo da plataforma e SEM consumidores; `move` reordena dentro do mesmo pai e devolve a ordem que ficou; `delete` devolve `brokenConsumers`; para reescrever uma action use `logic` com `replace:true`, que recria no mesmo comando e verifica os consumidores | Todos | `refactor-usages.json`, `refactor-contact-reactive.json`, `refactor-replace-action.json`, `rename-data-propagation.json`, `rename-logic-propagation.json`, `rename-interface-propagation.json`, `rename-indexed-attribute.json`, `refactor-duplicate.json`, `refactor-move.json`, `delete-data-consumers.json`, `delete-logic-consumers.json`, `delete-interface-consumers.json`, `cat-b-screen-replace-delete.json` (tela: `replace` dos consumidores, `move`, `delete` sem force; botao apagado, expressao reordenada, UI flow renomeado; o mesmo cenario em `tests/jobs-odc`) | `usages` antes e depois; Verify 0 erros |
 | Evento de bloco | O bloco fala com quem o instancia: `IBlockEvent` no bloco (um `IInputParameter` por parametro, `IsMandatory`), `ITriggerNode` numa screen action do bloco para disparar (`set $trg Event $ev`, argumentos em `$trg/<Param>`), e na tela `set $b/<Evento> Handler $acao` mais `set $b/<Evento>/<Param> Value`. O argumento e EXPRESSAO, num escopo SOMADO: enxerga os parametros do evento E as variaveis da tela, por isso o handler pode ter nomes fora do contrato. Tipos: lista e registo passam (lista de estrutura le-se `Var.Current.<Attr>`, SEM o nivel do aggregate). Mudar o contrato depois quebra **quem dispara**, nao quem consome (`ArgumentRequiredExpression` no ITriggerNode). Duas instancias do mesmo bloco tem handlers independentes e o bloco continua com UM trigger. O consumidor nao precisa de ser tela: um bloco instancia outro e o handler do evento de baixo dispara o de cima. `IsMandatory` sem handler NAO e recusa do kernel nem aviso: e **erro** do Verify (`EventHandlerRequiredAction`), cobrado por INSTANCIA. O `IEventHandler` nasce com a instancia mesmo vazio, logo conta em `usages` e o `delete` do evento e recusado ate sem handler ligado; para apagar, na ordem: o IEventHandler, religar o predecessor e tirar o ITriggerNode, o IBlockEvent, e por fim a screen action que ficou orfa (senao `UnusedAction`) | Blocos Reactive e Mobile | `block-events-reactive.json` (criar e consumir), `block-events-update.json` (mudar o contrato, por `job:`), `block-events-types-reactive.json` (lista, registo, identificador e mais cinco tipos), `block-events-two-instances-reactive.json` (duas instancias, escopo somado), `block-events-nested-reactive.json` (bloco dentro de bloco), `block-events-mandatory-reactive.json` (obrigatorio sem handler: erro), `block-events-delete-reactive.json` (apagar na ordem certa), `cat-b-block-rename.json` (renomear o evento e o no trigger: os consumidores seguem por chave) e `tests/jobs-negative/delete-block-event-in-use.json` (a recusa); na faixa ODC, `tests/jobs-odc/block-events` liga pela autoria visual (que liga por NOME, sem remapear), com `block-events-types`, `block-events-two-instances`, `block-events-nested`, `block-events-mandatory` e `tests/jobs-odc-negative/delete-block-event-in-use` | `usages` do evento: um ITriggerNode e um IEventHandler por instancia; Verify 0 erros |
@@ -732,7 +745,7 @@ Regras: Input `set Variable` = `GetX.List.Current.Entidade.Atributo` ou variavel
 argumentos exatamente como Button; navegacao `set $btn/OnClick prop Destination value $acao` ou
 `IMobileScreen:Tela` com argumentos `$btn/OnClick/<Input>`; ListItem nasce com swipe action sem destino (`delete
 $item/RightActions/#IListItemAction`); Dropdown ligado a lista: `List` = `GetX.List`, `Values`/`Labels` no escopo do alias
-(`User.Id`); widgets compostos nascem com itens de exemplo (`"empty": true`); IRadioButton e IButtonGroupItem so se criam
+(`User.Id`; numa variavel `T List`, o atributo: `Id`), nunca `GetX.List.Current.` nem variavel da tela (o Verify nao as identifica ali; o preflight recusa com `DROPDOWN_ITEM_SCOPE` e o patch); widgets compostos nascem com itens de exemplo (`"empty": true`); IRadioButton e IButtonGroupItem so se criam
 dentro do grupo (pai = o grupo, o Content dele ou algo dentro dele; fora, o create e recusado nas duas faixas:
 `tests/jobs-negative/create-radio-button-outside-group.json`). Roles: `link from $scr connector Roles to $role`.
 Galeria completa dos nativos: `gallery-native-reactive.json`.
@@ -852,7 +865,9 @@ TableRecords; `input type="date"` -> bloco DatePicker do OutSystemsUI com handle
 `data-*`, `role`, `title` e `style` inline sao preservados. A pagina nasce dentro de um Container `Page` com a classe `av-<tela>`;
 o CSS (`<style>` e `data.css`) e analisado, reescrito sob essa classe (`:root`/`body` viram a raiz) e instalado no CSS do
 AUTOR do tema padrao do modulo (a metade que o Studio edita; veja **CSS do tema** na secao 2) entre marcadores
-`/* anvil:html <Tela> */`, substituidos a cada compilacao (`stylesheet: "none"` desliga). `api --op html` lista tags, atributos, kinds e chaves. Fonte canonica: `tests/html/incidents-dashboard.html`
+`/* anvil:html <Tela> */` (o fragmento usa `/* anvil:html <dono>:<classe> */`, dono = tela ou bloco que recebe o fragmento; um bloco
+legado `/* anvil:html <classe> */` e adotado uma vez pelo primeiro dono, `adoptedLegacy`, nunca copiado), substituidos a cada
+compilacao (`stylesheet: "none"` desliga). `api --op html` lista tags, atributos, kinds e chaves. Fonte canonica: `tests/html/incidents-dashboard.html`
 + `.bindings.json` (+ `.fixture.json` com spec/logic/screen stand-ins das actions do Incidents_CS; `.product.json` com o `reference`).
 Jobs derivados por `scripts/gen_html_job.py --target fixture|update|product`: `html-dashboard-reactive.json` (cria a tela sobre
 reactive-ui.oml), `html-dashboard-update.json` (a mesma pagina outra vez sobre `job:html-dashboard-reactive`: delta) e
@@ -867,21 +882,42 @@ variavel tem de ser passada em `args`, senao e erro. `derived[]` (`name`, `type`
 variavel + screen action `Derive<Nome>` (ForEach/If/Assign) ligada ao OnAfterFetch da source: logica nativa no lugar de script.
 `scripts[]` (`name`, `inputs`, `outputs`, `code`) viram client actions Function com um no JavaScript (inputs so de tipos basicos:
 lista de estrutura e recusada pelo Verify), chamaveis nas expressoes dos bindings. Bindings por chave (`data-av="chave"`), esquema
-fechado: `text` (`value`), `list` (`source`, `output`; num `<table>` -> TableRecords com `<thead>` de um `<tr>` e `<tbody>` de UM
-`<tr>` template; num `<div>/<ul>/<ol>/<section>` -> List cujo unico filho e o template), `field` (so dentro de um `list`),
-`style`/`class` (expressao que se soma ao atributo estatico), `visible` (`condition`, so em `<div>`: vira um If nativo `If<Chave>` no
-lugar do elemento, Condition = expressao, o Container nasce no ramo True; nunca a propriedade Visible), `date` (`variable` Date/Date Time
-declarada em `vars`, `format`), `navigate` (`destination` tela existente + `args` conferidos), `call` (`action` + `args`; handler
-`<Nome>Handler` com Refresh Data) e `refresh` (`sources?`). Chave sem elemento, elemento `data-av` sem binding, chave repetida,
-botao sem binding, `<input>`/`<select>` sem search/filter/date sao erros com linha e coluna. Recusados com diagnostico, sem
-aproximacao: `<script>` inline, `<form>`, `<dialog>`, `<img>`, `<svg>`, `<link>`, `<textarea>`, tabela sem `list`, `@import`,
-atributos fora da lista fechada. `id` no HTML so serve a `<label for>` (vira `TargetWidget` nativo) e nunca e emitido: o OutSystems
-reserva o atributo (`InvalidHTMLAttribute_Id`); por isso seletor CSS por id (`#x`) e SEMPRE recusado, sem opcao: use classes.
-`<a>`/`<button>` so com texto usam a legenda do proprio widget; com elementos filhos (card `<div>`, icone `<i>`, `<span>` com
-`text`/`field`/`class`/`style`, `<div>` com `visible`) os filhos viram widgets filhos do Link/Button (a legenda nativa e apagada), nas
-duas faixas. Dentro deles sao recusados com elemento, posicao e o que fazer: outro `<a>`/`<button>`, `input`/`select`/`label`, `table`,
-`list`, `block`; um `data-av` dentro de `<label>` tambem. Provas: `tests/jobs/html-if-links-reactive.json`, `tests/jobs-odc/html-if-links.json`,
-`tests/jobs-negative/html-control-inside-link.json`.
+fechado: `text` (`value`), `list` (`source` = source declarada ou `{"variable":"<Lista de vars>"}`, `output`; num `<table>` ->
+TableRecords com `<thead>` de um `<tr>` e `<tbody>` de UM `<tr>` template; num `<div>/<ul>/<ol>/<section>` -> List cujo unico filho e
+o template), `field` (so dentro de um `list`), `style`/`class` (expressao que se soma ao atributo estatico), `visible` (`condition`,
+em QUALQUER elemento: vira um If nativo `If<Chave>` no lugar do elemento, Condition = expressao, o elemento nasce no ramo True; nunca a
+propriedade Visible), `date` (`variable` Date/Date Time declarada em `vars`, `format`), `navigate` (`destination` tela existente +
+`args` conferidos), `call` (`action` + `args`; server/service/client action do modulo ou de um op `logic` ANTERIOR do job -> handler
+`<Nome>Handler` com Refresh Data; screen action DESTA tela declarada por um op `logic` do mesmo job, antes ou depois -> a pagina cria a
+action primeiro (nome, inputs, outputs) e liga o OnClick direto nela; o op `logic` seguinte vira `replace` e preenche o corpo mantendo a
+chave, relatado em `sameJobScreenActions`) e `refresh` (`sources?`). Clique (`navigate`/`call`/`refresh`/`page`) num elemento que nao e
+`<a>`/`<button>` mantem o elemento e a tag (HTML Element com evento `onclick`; a lane compile prova no Verify; fallback
+`ElementWidgetMap.ElementEvents=false`: Link com `ssam-tag-<tag>`).
+Qual widget cada elemento vira e a tabela UNICA `Kernel/ElementWidgetMap.cs` (a mesma do fragmento e do importador de prototipo,
+`PrototypeSeams.Element`): tags do HTML Element congeladas por plataforma (103 O11, 100 ODC sem `data`/`main`/`picture`, um teste as
+reextrai das DLLs instaladas), substitutos fixos (`br` Container vazio; `main` no ODC, `search`, `menuitem`, elementos customizados ->
+div com `ssam-tag-<tag>`; `data`/`picture` no ODC -> span), tabela estatica = HTML Elements das suas tags, `<label>` com filhos = HTML
+Element `label` com os filhos (bindings inclusive), `<button>` vazio com `aria-label`/`title` aceito, botao de envio nunca `type=submit`
+(`IsDefault` + `ssam-submit`). Atributos: todos preservados; fora da antiga lista fechada (`tabindex`, `name`, `min`, `max`, `step`,
+`minlength`, `form`...) viram extended property literal, `disabled` vira `Enabled = False` num controle, JavaScript inline (`on*`) e
+recusado. `id`: nomeia o widget de um elemento sem `data-av` (sanitizado: `header-search` -> `header_search`; chave `data-av` repetida =
+o mesmo binding em cada elemento, `Fv284`, `Fv284_2`...) e nunca e emitido como atributo (o OutSystems reserva, `InvalidHTMLAttribute_Id`);
+seletor CSS por id (`#x`) continua recusado: use classes. `@import` (em qualquer linha, pelo parser) sobe para o topo do CSS do tema,
+uma vez (`cssImportsHoisted`), nas formas pagina e fragmento.
+Recusa: TODOS os problemas da pagina numa resposta (por elemento, por chave, por statement de CSS; o problema de um elemento nao esconde
+os filhos), cada um com codigo `HTML_*`, fix proprio e `patch` quando a correcao e certa (`HTML_BINDING_ORPHAN` -> `remove` do binding,
+`HTML_CALL_ORDER` -> `move` do op `logic` para antes do html). O preflight (check-job, sem modulo) roda a MESMA passada de widgets com
+escopo vazio e confere `call` contra os ops `logic` do job; o que ele ja recusou nao e aplicado de novo (`RefusedWhole`), e as
+construcoes que a forma antiga recusava saem como avisos com contagem (`CSS_IMPORT_HOISTED`, `HTML_KEY_SHARED`,
+`HTML_SCREEN_ACTION_SAME_JOB`, `HTML_CLICKABLE_ELEMENT`, `HTML_ATTRIBUTE_EXTENDED`, `HTML_VISIBLE_IF`, `HTML_TABLE_STATIC`,
+`HTML_LABEL_CHILDREN`, `HTML_CONTROL_LABELLED`). Continuam recusados com diagnostico: `<script>`, `<form>`, `<dialog>`, `<img>`, `<svg>`,
+`<link>`, `<textarea>` (a forma fragmento ou o importador compilam), tag fora das listas sem substituto, botao/link sem binding,
+`<input>`/`<select>` sem search/filter/date. `<a>`/`<button>` so com texto usam a legenda do proprio widget; com elementos filhos os
+filhos viram widgets filhos do Link/Button (a legenda nativa e apagada), nas duas faixas; dentro deles sao recusados outro clicavel,
+`input`/`select`/`label`, tabela com `list`, `list`, `block`. `api --op html` publica essas regras (`kindTags`, `platformTags`,
+`extendedAttributes`, `names`, `call`, `css`). Provas: `HtmlPageCollectAllTests` (H1-H16 sobre os jobs 79/88/105 da FarmaVirtual em
+`tests/Anvil.Tests/Fixtures/html-page`), `ElementWidgetMapTests`, `HtmlDeltaTests` (Verify da pagina com as nove causas, blocos do tema),
+`tests/jobs/html-if-links-reactive.json`, `tests/jobs-odc/html-if-links.json`, `tests/jobs-negative/html-control-inside-link.json`.
 
 Tela existente: o op limpa o conteudo, o titulo, as data actions, os aggregates e as screen actions da tela (tudo interno a ela;
 um evento de ciclo de vida ligado a uma screen action da tela e desligado no mesmo op e citado em `delta.removed.lifecycle`), mantem a chave da tela, inputs, roles e as variaveis que a pagina declara com o mesmo tipo
@@ -896,7 +932,8 @@ Autoria **visual** (fragmento HTML/CSS dentro de um pai que ja existe, sem logic
 nos verbos nativos): `{"op":"html","parent":"$tela/...","file":"tests/html/visual/alert.html"}`. Tabela fechada de tags/atributos e
 provas em `docs/UI-HTML-VISUAL.md`; jobs `html-visual-alert.json`, `html-visual-list.json`, `html-visual-block.json` (`HtmlVisualTests`).
 Pai = a propria tela: o fragmento vai para o placeholder de conteudo do layout. `{{ }}` na legenda de botao/link vira Expression;
-`<label>` com filhos vira Container + Label; botao so com icone e aceito; `<br>` vira Container vazio; `<ButtonGroup bind>` com
+`<label>` com filhos vira HTML Element `label` com eles; botao so com icone (ou vazio com `aria-label`/`title`) e aceito; toda tag do
+HTML Element da plataforma (tabela estatica inclusive) e `<form>` (Form) compilam pela tabela unica; `<br>` vira Container vazio; `<ButtonGroup bind>` com
 `<ButtonGroupItem value>` segue a rota nativa; o tipo da variavel decide o InputType. CSS: `light-dark()` e expandido, `color-mix()`
 e recusado com a cor calculada (`CSS_FUNCTION_UNSUPPORTED`; tambem em `set StyleSheet`). Todos os problemas do fragmento numa recusa so.
 O compilador JS de componentes (`HtmlComponents`, `data.components`) e legado: nao usar em trabalho novo.

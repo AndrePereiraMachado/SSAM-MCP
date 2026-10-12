@@ -1,0 +1,131 @@
+{
+  "captured": {
+    "consumerSha256": "83394aadea89732d46f50a89be9c234c110aa0f9752ab344b0f3514efba58be0",
+    "producerSha256": "1ea135ddd1e1376f08b0eb784a58386fb1b6c7dcb4ed37a4d9367f48adf191ae",
+    "consumerRevision": 293,
+    "producerRevision": 81
+  },
+  "signature": {
+    "kind": "ServerActionSignature",
+    "name": "GetFloodZoneAll",
+    "modelName": "GetFloodZoneAll",
+    "label": "GetFloodZoneAll",
+    "key": "wgIf4K9WMk6XdwFDRZ8ZSA",
+    "reference": "@wgIf4K9WMk6XdwFDRZ8ZSA",
+    "path": "Reference:FloodServices/ServerActionSignature:GetFloodZoneAll",
+    "properties": {
+      "Description": "Returns all active FloodZone records sorted by Order.",
+      "Folder": "FolderSignature:Aggregates",
+      "Function": "False",
+      "Name": "GetFloodZoneAll",
+      "ReadableIdentifier": "GetFloodZoneAll",
+      "OriginalKey": "HioLXLyDc0ScwPMJvTMeEQ"
+    },
+    "propertyReferences": {
+      "Folder": {
+        "kind": "FolderSignature",
+        "name": "Aggregates",
+        "label": "Aggregates",
+        "key": "P0+5pFwsnUufaoB0gscGmA",
+        "reference": "@P0+5pFwsnUufaoB0gscGmA",
+        "path": "Reference:FloodServices/FolderSignature:Aggregates"
+      }
+    },
+    "propertyReferenceCollections": {},
+    "propertiesOmitted": {},
+    "propertyErrors": {},
+    "propertiesMissing": [],
+    "children": [
+      {
+        "kind": "OutputParameterSignature",
+        "name": "FloodZoneList",
+        "modelName": "FloodZoneList",
+        "label": "FloodZoneList",
+        "key": "LNnR6DUlH0ybbQCgRVJHkA",
+        "reference": "@LNnR6DUlH0ybbQCgRVJHkA",
+        "path": "Reference:FloodServices/ServerActionSignature:GetFloodZoneAll/OutputParameterSignature:FloodZoneList",
+        "properties": {
+          "DataType": "ListType:FloodZone2 List",
+          "Description": "List of active FloodZone records sorted by Order",
+          "Name": "FloodZoneList",
+          "ReadableIdentifier": "FloodZoneList",
+          "OriginalKey": "7gKdgVEZiEegEHvOEKSOrA"
+        },
+        "propertyReferences": {
+          "DataType": {
+            "kind": "ListType",
+            "name": "",
+            "label": "FloodZone2 List",
+            "key": "nuWnlSqM40yJ7g44L4qG8A",
+            "reference": "@nuWnlSqM40yJ7g44L4qG8A",
+            "path": "ListType:FloodZone2 List"
+          }
+        },
+        "propertyReferenceCollections": {},
+        "propertiesOmitted": {},
+        "propertyErrors": {},
+        "propertiesMissing": [],
+        "children": [],
+        "childrenTotal": 0,
+        "childrenOmitted": 0
+      }
+    ],
+    "childrenTotal": 1,
+    "childrenOmitted": 0
+  },
+  "reference": {
+    "kind": "Reference",
+    "name": "FloodServices",
+    "modelName": "FloodServices",
+    "label": "FloodServices",
+    "key": "oxS8Ij5nRkmADlSCDyDssA",
+    "reference": "@oxS8Ij5nRkmADlSCDyDssA",
+    "path": "Reference:FloodServices",
+    "properties": {
+      "Description": "APIs available from WF Flood middleware.",
+      "ESpaceType": "Mobile",
+      "Hash": "8a4047d2-fee3-1361-a940-9351316d58d9",
+      "Icon": "25325 bytes",
+      "IsMobilePlugin": "False",
+      "JQueryVersion": "NotApplicable",
+      "Kind": "eSpace",
+      "ModuleKey": "a1v50MRqQEeD1eGUlx3SzQ",
+      "ModuleType": "ReactiveLibrary",
+      "Name": "FloodServices",
+      "Revision": "81",
+      "SpecificVersionHash": "f5f6ec9c-43a6-ca47-e335-e9bcceecbf67",
+      "ReadableIdentifier": "FloodServices"
+    },
+    "propertyReferences": {},
+    "propertyReferenceCollections": {},
+    "propertiesOmitted": {},
+    "propertyErrors": {},
+    "propertiesMissing": [],
+    "children": [],
+    "childrenTotal": 69,
+    "childrenOmitted": 69
+  },
+  "producer": {
+    "key": "HioLXLyDc0ScwPMJvTMeEQ",
+    "kind": "ServerAction",
+    "path": "ServerAction:GetFloodZoneAll",
+    "name": "GetFloodZoneAll",
+    "properties": {
+      "Description": "Returns all active FloodZone records sorted by Order.",
+      "Folder": "Folder:Aggregates",
+      "Function": "False",
+      "Name": "GetFloodZoneAll",
+      "Public": "True",
+      "Shareable": "True",
+      "ReadableIdentifier": "GetFloodZoneAll"
+    },
+    "observedStartKey": "IDfzS3jpaka53p7BWmYZbQ",
+    "observedOutputParameters": [
+      {
+        "key": "7gKdgVEZiEegEHvOEKSOrA",
+        "name": "FloodZoneList",
+        "kind": "OutputParameter"
+      }
+    ]
+  }
+}

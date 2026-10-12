@@ -185,6 +185,23 @@ test('an inline job becomes a file under the lane jobs folder and that file is w
   assert.equal(fs.readdirSync(inline).length, 2);
 });
 
+// 2026-10-12 (production test): after "entregue" the session read the whole module digest again (31 KB) to confirm the
+// names and signatures it had just written. The delivered answer now says what the job created.
+test('a delivery answers "entregue" with the summary of its job: each action with its inputs and outputs, each entity with its attributes', async t => {
+  const box = setup(t);
+  const { call, close } = await serve(box.deps); t.after(close);
+  const job = { ops: [
+    { op: 'spec', data: { entities: [{ name: 'Pedido', attributes: [{ name: 'Numero', type: 'Text' }, { name: 'Total', type: 'Decimal' }] }] } },
+    { op: 'logic', data: { actions: [{ name: 'Pedido_Get', inputs: [{ name: 'PedidoId', type: 'Pedido Identifier' }], outputs: [{ name: 'Pedido', type: 'Pedido' }], steps: [] }] } },
+  ] };
+  const result = await call('o11_deliver', { module: 'Orders', job, authorize: WORDS });
+  assert.equal(result.structuredContent.result, 'entregue');
+  assert.deepEqual(result.structuredContent.summary, { ops: 2, actions: ['Pedido_Get(PedidoId: Pedido Identifier) -> (Pedido: Pedido)'], entities: [{ name: 'Pedido', attributes: 2 }] });
+  // A job that only reads names nothing: no summary.
+  const read = await call('o11_deliver', { module: 'Orders', job: box.job, authorize: WORDS });
+  assert.equal(read.structuredContent.result, 'entregue'); assert.equal(read.structuredContent.summary, undefined);
+});
+
 test('deliver gets the exact argv: module, job, checks, producers, captures, environment, lane work and connection port', async t => {
   const box = setup(t);
   const avsig = path.join(box.base, 'Lib.avsig'); fs.writeFileSync(avsig, '{}');
@@ -656,10 +673,11 @@ test('refused, then corrected with a patch in one call: deliver gets a new file 
   assert.equal(start.job, first); assert.equal(start.jobSha256, sha256(fs.readFileSync(first)));
   assert.deepEqual(start.basedOn, { job: box.job, sha256: sha256(original) }); assert.equal(start.patchOps, 2);
   assert.equal(start.wordsSha256, sha256(WORDS)); assert.ok(!JSON.stringify(lines).includes(WORDS));
-  // a second attempt on the same base: another new file
-  await call('o11_deliver', { module: 'Orders', patch: RENAME, basedOn: { job: box.job, sha256: sha256(original) }, authorize: WORDS });
-  const second = jobUsed(box.runAnvil.calls[2]);
-  assert.notEqual(second, first); assert.equal(fs.readdirSync(INLINE(box)).length, 2);
+  // a second attempt on the same base after that delivery (G16, entrega-respostas.test.mjs): the corrected job is in the
+  // module, so its base is refused before anything runs; no file is written and the base stays intact
+  const again = (await call('o11_deliver', { module: 'Orders', patch: RENAME, basedOn: { job: box.job, sha256: sha256(original) }, authorize: WORDS })).structuredContent;
+  assert.equal(again.code, 'BASED_ON_DELIVERED'); assert.equal(again.delivered.job, first);
+  assert.equal(box.runAnvil.calls.length, 2); assert.equal(fs.readdirSync(INLINE(box)).length, 1);
   assert.ok(fs.readFileSync(box.job).equals(original));
 });
 

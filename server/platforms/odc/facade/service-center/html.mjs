@@ -294,13 +294,28 @@ export function secretRefs(secrets) {
   return refs;
 }
 
-export function formFields(form, clicked = null) {
+export function formFields(form, clicked = null, { nativeAjax = false } = {}) {
   const pairs = [];
+  const inCheckboxBag = node => {
+    for(let parent=node.parent;parent&&parent!==form;parent=parent.parent)
+      if(parent.attr('id')==='__CheckBoxBag')return true;
+    return false;
+  };
   for (const n of controls(form)) {
+    if(nativeAjax&&inCheckboxBag(n))continue;
     const kind = lower(n.attr('type', n.tag === 'button' ? 'submit' : 'text'));
     if (['submit', 'button', 'image', 'reset'].includes(kind) && n !== clicked) continue;
     if (['checkbox', 'radio'].includes(kind) && !n.has('checked')) continue;
     pairs.push([n.attr('name'), controlValue(n)]);
+  }
+  // OsAjaxBaseBackend calls OsPrepareCheckboxesForSubmit before serialization:
+  // unchecked boxes contribute "off", disabled checked boxes contribute "on".
+  // The native bag is rebuilt on every request; ordinary HTML submits retain
+  // their existing contract. Explicit caller updates are applied by Transport.
+  if(nativeAjax)for(const n of form.all('input')){
+    if(lower(n.attr('type',''))!=='checkbox'||!n.attr('name')||inCheckboxBag(n))continue;
+    if(!n.has('checked'))pairs.push([n.attr('name'),'off']);
+    else if(n.has('disabled'))pairs.push([n.attr('name'),'on']);
   }
   return pairs;
 }

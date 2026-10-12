@@ -2,6 +2,7 @@
 // sc_api, sc_web and studio_login over the JSON-lines bridge (o11-bridge.mjs) with the controller authority key. The
 // Studio's token, id_token and cookies never leave the Studio process; only projected business data comes back.
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { o11LaneOf, authorityKeyPath } from '../o11-lane.mjs';
 import { anvilRoot, o11Lane } from '../workspace.mjs';
@@ -10,24 +11,25 @@ import { readConnection } from '../studio-session.mjs';
 import { BridgeError, connectStudio } from './errors.mjs';
 import { hostName } from './http.mjs';
 import { canonicalUuid, falsyScalar } from './util.mjs';
+import { readOptions } from '../read-budget.mjs';
+import { withPrivateSessionHandoff } from '../../portal/runtime/private-session-pipe.mjs';
+import {withPrivateCookieExchange} from './private-cookie-pipe.mjs';
 
 export const VERBS = ['sc_session', 'sc_api', 'sc_web', 'studio_login'];
 // SECRET_NOT_FOUND: a sc_web secretRefs (or login) entry is missing from the vault (the bridge names its target, never a value).
-// WEB_LOGIN_REJECTED / WEB_SIGN_IN_INTERACTIVE: sc_web login submitted the stored login once and the form came back / the
-// sign-in needs the user (another identity provider, MFA); the hidden window is never shown.
-// WEB_SIGN_IN_NEEDS_LOGIN: sc_web login {session:"studio"} found no single sign-on session for the Studio's own session and
-// the page asks for a typed login; nothing was typed and the vault was not read (A13).
+// Legacy error names remain readable, but runtime authentication uses headless HTTP only.
+// WEB_SIGN_IN_NEEDS_LOGIN means the protected HTTP read did not prove an authenticated web session.
 export const CODES = ['STUDIO_NOT_SIGNED_IN', 'WEB_SIGN_IN_REQUIRED', 'NOT_ALLOWED', 'HOST_MISMATCH', 'UNCERTAIN', 'REMOTE_ERROR', 'BAD_REQUEST', 'SECRET_NOT_FOUND',
-  'WEB_LOGIN_REJECTED', 'WEB_SIGN_IN_INTERACTIVE', 'WEB_SIGN_IN_NEEDS_LOGIN'];
-// The bridge keeps its Service Center window hidden and signs it in with the vault login (sc_web open {hidden}, sc_web login).
+  'WEB_LOGIN_REJECTED', 'WEB_SIGN_IN_INTERACTIVE', 'WEB_SIGN_IN_NEEDS_LOGIN', 'STUDIO_WINDOWLESS'];
+// Retired capability names retained for compatibility checks; neither enables a UI fallback.
 export const HIDDEN_LOGIN = 'sc_web:login';
-// A13: sc_web login {session:"studio"} signs the hidden window in through the Studio's own session only (Dispatch.cs flag);
-// a bridge without it keeps the former path (silent re-entry, else the stored login).
 export const STUDIO_SESSION = 'sc_web:studioSession';
 // sc_api surfaces. integration-studio (IntegrationStudio.asmx, contract I2) only reads: a write there is refused here.
 export const SURFACES = ['soap', 'server-api', 'sc-rest', 'integration-studio'];
 export const READ_ONLY_SURFACES = ['integration-studio'];
-const SECRET_KEY = /pass(?:word|wd)|secret|token|cookie|authorization|connection_?string|credential|api_?key/i;
+// GetProperties can return opaque authentication material under this apparent
+// configuration flag. Its name is not evidence that its value is public.
+const SECRET_KEY = /pass(?:word|wd)|secret|token|cookie|authorization|connection_?string|credential|api_?key|activation_?code|HubServerSerial|^ForceSecureAlgorithmsInAuthentication$/i;
 
 export function redactText(text) {
   return String(text)
@@ -40,7 +42,9 @@ export function redactText(text) {
 export function redact(value) {
   if (Array.isArray(value)) return value.map(redact);
   if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, SECRET_KEY.test(k) && !falsyScalar(v) ? '<redacted>' : redact(v)]));
+    const namedSecret = Object.entries(value).some(([k, v]) => /^(name|key|propertyName)$/i.test(k) && typeof v === 'string' && SECRET_KEY.test(v));
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k,
+      (SECRET_KEY.test(k) || (namedSecret && /^(value|propertyValue)$/i.test(k))) && !falsyScalar(v) ? '<redacted>' : redact(v)]));
   }
   if (typeof value === 'string') return redactText(value);
   return value;
@@ -59,7 +63,7 @@ export async function seamRequest(target, method, params, options = {}) {
   const executor = currentExecutor();
   const { reply } = await executor.call('o11.bridge', executor.hosted
     ? { method, params: params ?? {}, ...(options?.timeoutMs ? { timeoutMs: options.timeoutMs } : {}) }
-    : { method, params, timeoutMs: options?.timeoutMs, port: target.port, authorization: target.authorization });
+    : { method, params, timeoutMs: options?.timeoutMs, ...(options?.signal ? { signal: options.signal } : {}), port: target.port, authorization: target.authorization });
   return reply;
 }
 
@@ -71,19 +75,25 @@ export class StudioBridge {
   }
 
   async exchange(method, params, write = false, authenticated = true) {
+    const budget = readOptions(method === 'sc_session' || method === 'studio_login' ? 'authentication' : 'transport');
     let authorizationKey;
     // Hosted the agent puts its own key: no key file is read here.
     if (authenticated && !currentExecutor().hosted) {
       try { authorizationKey = fs.readFileSync(this.keyFile, 'ascii').trim(); }
       catch { throw new BridgeError('NOT_ALLOWED', 'The local controller authority is unavailable; nothing was sent', { write }); }
     }
+    const startedAt = Date.now();
     try {
       return await this.request({ port: this.port, ...(authorizationKey !== undefined ? { authorization: authorizationKey } : {}) }, method, params,
-        this.timeoutMs ? { timeoutMs: this.timeoutMs } : {});
+        budget.timeoutMs ? { timeoutMs: Math.min(this.timeoutMs ?? Infinity, budget.timeoutMs), signal: budget.signal }
+          : this.timeoutMs ? { timeoutMs: this.timeoutMs } : {});
     } catch (error) {
-      if (error?.executed === false) throw new BridgeError('STUDIO_UNAVAILABLE', 'No bridge answers on the lane port; nothing was sent', { write });
-      if (write) throw new BridgeError('UNCERTAIN', 'The bridge connection broke after the write was sent; reconcile by a read, never repeat it', { write: true });
-      throw new BridgeError('STUDIO_UNAVAILABLE', 'The bridge connection broke during a read; nothing was changed');
+      const allowed = new Set(['BRIDGE_TIMEOUT','BRIDGE_NOT_LISTENING','BRIDGE_TRANSPORT','BRIDGE_PROTOCOL','BRIDGE_NO_REPLY','BRIDGE_REPLY_TOO_LARGE','READ_DEADLINE_EXCEEDED','CANCELLED']);
+      const transport = { code: allowed.has(error?.code) ? error.code : 'UNCLASSIFIED',
+        method: /^[a-z_]{1,40}$/.test(method) ? method : 'unknown', elapsedMs: Math.max(0,Date.now()-startedAt) };
+      if (error?.executed === false) throw new BridgeError('STUDIO_UNAVAILABLE', 'No bridge answers on the lane port; nothing was sent', { write, transport });
+      if (write) throw new BridgeError('UNCERTAIN', 'The bridge connection broke after the write was sent; reconcile by a read, never repeat it', { write: true, transport });
+      throw new BridgeError('STUDIO_UNAVAILABLE', 'The bridge connection broke during a read; nothing was changed', {transport});
     }
   }
 
@@ -141,7 +151,35 @@ export class StudioBridge {
   }
 
   session(host) { return this.verb('sc_session', { host: hostName(host) }); }
-  login(host) { return this.verb('studio_login', { host: hostName(host) }); }
+  async privateWeb(host, options, { principal, cookie, applyCookies, handoff = withPrivateSessionHandoff, cookieExchange = withPrivateCookieExchange } = {}) {
+    host = hostName(host);
+    // Hosted, the private transport (a local pipe and the server's vault) never crosses machines: refused before any call.
+    if (currentExecutor().hosted)
+      throw new BridgeError('HOSTED_STUDIO_SESSION_ONLY', 'The private Service Center HTTP transport is not available in hosted mode; only the user\'s Studio session is a path.',
+        { write: Boolean(options?.write), executed: false });
+    if (!(await this.capabilities()).has('sc_private_http:secretRefs'))
+      throw new BridgeError('STUDIO_BRIDGE_OUTDATED', 'The selected bridge has no private headless HTTP transport.', { write: Boolean(options.write), executed: false });
+    const { method, path: pagePath, form = null, accept = 'html', write = false, operationId, authorizeSha256, secretRefs = null } = options;
+    if (!['GET', 'POST'].includes(method) || !String(pagePath ?? '').toLowerCase().startsWith('/servicecenter/'))
+      throw new BridgeError('BAD_REQUEST', 'Private HTTP needs a Service Center GET/POST.', { write, executed: false });
+    const request = { host, method, path: pagePath, form, accept,
+      ...(write ? this.writeFields(operationId, authorizeSha256) : {}), ...(secretRefs?.length ? { secretRefs } : {}) };
+    const requestJson = JSON.stringify(request);
+    const requestSha256 = createHash('sha256').update(requestJson).digest('hex');
+    if(typeof applyCookies==='function'){
+      if(!(await this.capabilities()).has('sc_private_http:cookieUpdates'))
+        throw new BridgeError('STUDIO_BRIDGE_OUTDATED','The selected bridge cannot preserve private server cookie updates.',{write:Boolean(options.write),executed:false});
+      const url=new URL(pagePath,`https://${host}`).href;
+      return cookieExchange({host,principal,requestSha256,cookie,url,applyCookies},contextPipeId=>
+        this.verb('sc_private_http_cookie',{host,principal,requestJson,requestSha256,contextPipeId},write));
+    }
+    return handoff({ host, principal, requestSha256, cookie }, contextPipeId =>
+      this.verb('sc_private_http', { host, principal, requestJson, requestSha256, contextPipeId }, write));
+  }
+  login(host) {
+    hostName(host);
+    throw new BridgeError('STUDIO_NOT_SIGNED_IN', 'The selected Studio must already be authenticated. Headless tools never open its login dialog.');
+  }
 
   writeFields(operationId, authorizeSha256, target = null) {
     const fields = { write: true, ...authorization(operationId, authorizeSha256) };
@@ -165,12 +203,14 @@ export class StudioBridge {
   // an older bridge ignores it and signs in as before. studioSession (login only, bridge with sc_web:studioSession): sign
   // in through the Studio's own session only, never the vault (WEB_SIGN_IN_NEEDS_LOGIN when the page asks for a login).
   async web(host, action, { method = null, path: pagePath = null, form = null, accept = null, write = false, operationId = null,
-    authorizeSha256 = null, secretRefs = null, hidden = false, reenter = false, studioSession = false } = {}) {
+    authorizeSha256 = null, secretRefs = null, hidden = false, reenter = false, studioSession = false, credentialTarget = null, principal = null } = {}) {
     if (!['status', 'open', 'login', 'fetch', 'close'].includes(action)) throw new BridgeError('BAD_REQUEST', 'Unknown Service Center web action');
     const params = { host: hostName(host), action };
     if (action === 'open' && hidden) params.hidden = true;
     if (action === 'login' && reenter) params.reenter = true;
     if (action === 'login' && studioSession) params.session = 'studio';
+    if (action === 'login' && credentialTarget)
+      throw new BridgeError('HEADLESS_AUTH_UNAVAILABLE', 'The native HTTP transport cannot submit a credential profile for sign-in.');
     if (action === 'fetch') {
       if (!['GET', 'POST'].includes(method) || !String(pagePath ?? '').toLowerCase().startsWith('/servicecenter/'))
         throw new BridgeError('BAD_REQUEST', 'Studio web fetch needs GET/POST and a /ServiceCenter/ path', { write });
@@ -184,7 +224,9 @@ export class StudioBridge {
         params.secretRefs = secretRefs.map(r => ({ pointer: r.pointer, target: r.target, field: r.field }));
       }
     }
-    return this.verb('sc_web', params, write && action === 'fetch');
+    if (!(await this.capabilities()).has('sc_http:studioSession'))
+      throw new BridgeError('STUDIO_BRIDGE_OUTDATED', 'Headless Service Center HTTP requires sc_http:studioSession; no window was opened.');
+    return this.verb('sc_http', params, write && action === 'fetch');
   }
 }
 
@@ -212,7 +254,12 @@ export async function locateStudioBridge({ root = anvilRoot, lane = null, env = 
       throw new BridgeError('STUDIO_NOT_CONNECTED', 'Invalid Studio connection record; run ssam_connect {lane:"o11"}',
         { continuation: connectStudio('the connection record of the O11 lane is not valid') });
   }
-  const [port, keyFile] = record ? [record.port, path.join(record.authorityDir, 'bridge.key')]
+  if (record?.serviceCenter && (record.serviceCenter.pid !== record.pid
+      || record.serviceCenter.startedUtc !== record.startedUtc || !Number.isInteger(record.serviceCenter.port)
+      || record.serviceCenter.port < 1024 || record.serviceCenter.port > 65535
+      || !/^[a-f0-9]{64}$/.test(record.serviceCenter.sha256 ?? '')))
+    throw new BridgeError('STUDIO_NOT_CONNECTED', 'The isolated Service Center revision does not match the selected Studio.');
+  const [port, keyFile] = record ? [record.serviceCenter?.port ?? record.port, path.join(record.authorityDir, 'bridge.key')]
     : [o11LaneOf(laneName, { root, env }).bridge, authorityKeyPath({ env })];
   return pinged(new StudioBridge(port, keyFile, { timeoutMs, request }), record);
 }
@@ -222,6 +269,9 @@ async function pinged(bridge, record) {
   if (record && alive.pid !== record.pid)
     throw new BridgeError('STUDIO_NOT_CONNECTED', 'The Studio selected with ssam_connect is no longer the one on the bridge port; run ssam_connect {lane:"o11"} again',
       { continuation: connectStudio('another Studio answers on the bridge port') });
+  if (record?.serviceCenter && (alive.revisionSha256 !== record.serviceCenter.sha256
+      || alive.startedUtc !== record.serviceCenter.startedUtc))
+    throw new BridgeError('STUDIO_NOT_CONNECTED', 'The isolated Service Center listener does not match its revision and process receipt.');
   bridge.pid = alive.pid; bridge.version = alive.version ?? null;
   return bridge;
 }

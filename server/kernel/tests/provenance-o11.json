@@ -1,6 +1,6 @@
 {
   "schema": "anvil-provenance-subset/1",
-  "note": "Jobs of tests/jobs whose execution by the O11 suite (JobTests) leaves <job>.result.json with the anvil-job-provenance/2 stamp in .local/test-work. A declared subset (the shared-contract pilot: static entities, records, structures, structure attributes; the phase-3 data lot: entities, attributes, identifiers, indexes and the identity-anchored data contract); the catalog campaign INT-T2-001 (request B-004) adds the UI jobs of Reactive, Mobile and Traditional so their per-role evidence can be current, INT-T2-002 the screen/block lifecycle job of front B (request B-005), INT-T2-003 the existing O11 logic jobs and the composed logic scenario of front A (request A-002), and INT-T2-004 the UI jobs of front B for roles with no proof (request B-006) plus process-expense-traditional and consume-reference-screens, and the screen replace/delete pair of front B (request B-007) and its block rename job (request B-008), and the 2026-10-05 package the O11 timer Schedule job (lane E, C07); not the whole suite.",
+  "note": "Jobs of tests/jobs whose execution by the O11 suite (JobTests) leaves <job>.result.json with the anvil-job-provenance/2 stamp in .local/test-work. A declared subset (the shared-contract pilot: static entities, records, structures, structure attributes; the phase-3 data lot: entities, attributes, identifiers, indexes and the identity-anchored data contract); the catalog campaign INT-T2-001 (request B-004) adds the UI jobs of Reactive, Mobile and Traditional so their per-role evidence can be current, INT-T2-002 the screen/block lifecycle job of front B (request B-005), INT-T2-003 the existing O11 logic jobs and the composed logic scenario of front A (request A-002), and INT-T2-004 the UI jobs of front B for roles with no proof (request B-006) plus process-expense-traditional and consume-reference-screens, and the screen replace/delete pair of front B (request B-007) and its block rename job (request B-008), the 2026-10-05 package the O11 timer Schedule job (lane E, C07), and the single-job example of the logic capabilities (2026-10-12: one job per module with every change of the request); not the whole suite.",
   "jobs": [
     "static-entity",
     "spec-data",
@@ -96,6 +96,7 @@
     "consume-reference-screens",
     "cat-b-screen-replace-delete",
     "cat-b-block-rename",
-    "pacote-laneE-timer-schedule"
+    "pacote-laneE-timer-schedule",
+    "single-job-actions"
   ]
 }

@@ -22,6 +22,11 @@
     ],
     "debugger": [
       "depurador",
+      "depurar",
+      "depure",
+      "depuração",
+      "debugar",
+      "debugue",
       "breakpoint",
       "debug"
     ],
@@ -520,32 +525,76 @@
     {
       "id": "ops.debugger",
       "category": "operations",
-      "title": "Headless debugger: breakpoints on exact node keys, variables, stepping, with receipt and lock",
+      "title": "Headless debugger: scenarios, breakpoints, runtime trace, variables and stepping",
       "keywords": [
         "debugger",
         "breakpoint",
         "debug",
+        "headless debugger",
+        "debugger action",
+        "debugger server action",
+        "debugger client action",
+        "debugger data action",
+        {
+          "form": "server action",
+          "with": [
+            "debugger"
+          ]
+        },
+        {
+          "form": "client action",
+          "with": [
+            "debugger"
+          ]
+        },
+        {
+          "form": "data action",
+          "with": [
+            "debugger"
+          ]
+        },
+        {
+          "form": "screen action",
+          "with": [
+            "debugger"
+          ]
+        },
+        {
+          "form": "service action",
+          "with": [
+            "debugger"
+          ]
+        },
+        {
+          "form": "trace",
+          "with": [
+            "debugger",
+            "action",
+            "ação",
+            "acao"
+          ]
+        },
         "step over",
         "step into",
         "variables",
         "inspect variables at runtime",
         "watch"
       ],
-      "summary": "ssam_debug {op: start|watch|status|stop|variables|continue|step-over|step-into|step-out, lane, module, moduleKey, runtimeUrl, nodeKeys[1..20 without trace; 1..200 with trace or watch], trace, tenant (ODC), o11Auth (O11 native SSO), seconds, pauseSeconds, autoContinue, paths, frame, depth, threadId, eventId}: one session per target, manifest/receipt under .local/debugger/<sessionId>, a lock per target; status and stop answer from the receipt. watch traces external use and never invokes; sign-in only in a native English window, secrets never in arguments.",
+      "summary": "ssam_debug {op: start|watch|status|stop|variables|continue|step-over|step-into|step-out, lane, module, moduleKey, runtimeUrl, nodeKeys[1..20 without trace; 1..200 with trace or watch], trace (optional trace window), tenant (ODC), o11Auth (optional native SSO metadata), seconds, pauseSeconds, autoContinue, paths, frame, depth, threadId, eventId}: one debugger session per target, manifest/receipt under .local/debugger/<sessionId>, a lock per target; status and stop answer from the receipt. Start/watch opens an English native Username/Password window, with platform/application in its title and environment in its body; secrets never belong in arguments. Watch waits for external app use, invokes nothing and declares request isolation and app-request identity unproved.",
       "route": {
         "kind": "operations",
-        "operation": "ssam debug <op> ... / MCP ssam_debug; runner: ssam debug run|release|status|authorize|reconcile --request <json-file> / MCP ssam_debug_run (ODC default, explicit lane=o11 for O11; O11 also has prepare); ODC invocation: ssam debug invoke prepare|run|status|forget --request <json-file> / MCP ssam_debug_invoke"
+        "operation": "ssam debug prepare|run|status --request <json-file> / MCP ssam_debug_run; native-entry default on both lanes; ssam_debug remains the server-session tool; explicit legacy rest-wrapper for release/reconcile; read-only lock inventory: ssam debug locks [--lane o11|odc] / MCP ssam_debug_run op:locks; ssam_debug_invoke and execution:rest-wrapper are LEGACY (not interactive, not counted); interactive inspection: ssam_debug_server / ssam_debug_client (CLI ssam debug server|client --stdio); final matrix (req 19): ssam debug matrix [--check] / MCP ssam_debug_matrix (read-only; generated from platforms/odc/facade/debug-matrix/matrix-source.json, writes only .local/debugger/final-matrix/matrix.json|md; --check exits 1 on drift, including a pointer doc without its marker; git HEAD is reported, not hashed); bounded frame read: ssam_debug_server op read-frame (maxNodes default 2000, cap 20000; continuations nextOffset and pending) and ssam_debug op read-frame (CLI --max-nodes); whole-frame traversal: ssam_debug_server / ssam_debug_client op read-scope (maxNodes cap 20000, budget-omitted leaves, stale stop refuses); O11 reconcile by evidence class with verify:true (ssam_debug_server op reconcile)"
       },
       "contract": [],
-      "guidance": "A breakpoint pauses real requests of the runtime: use exact node keys (the action key is not the node key) and short windows. MCP start accepts 1-20 nodeKeys without trace, or 1-200 with the trace object; the direct debugger CLI has no trace flag. A start or execution with an uncertain outcome keeps the lock (debug_command_uncertain): reconcile with status/stop by receipt, never start again blindly. On ODC the runtimeUrl must belong to the tenant's environments. Developer debugger authorization and app-user login are separate; connection does not invoke an action or prove its user/roles. trace.requireFunctionKey filters actions, not another user's request executing the same action. ODC continuation ssam_debug_run op=run needs tenant, module, action and inputs or scenarios; op=authorize records the user's words per tenant before wrapper creation, publication or removal. ODC continuation ssam_debug_invoke op=prepare needs origin, snapshot, expectedSourceSha256, actionKey and a private requestFile or existing sourcePlanId for a path without browser bootstrap; op=run needs planId, stable operationId, authorization and debug or sessionId. Its inputs belong to the existing caller, not an arbitrary server action. Uncertain calls are never resent. The separate Node client proofs are experimental and are not a generic client/screen runner.",
+      "guidance": "Debug ODC/O11 actions through original published entries, as the signed-in app user. New run/prepare/status requests default to execution=native-entry: no wrapper and no publication. The code selects the entry by breadth-first caller search, fixed kind priority and model key; entry overrides must be reachable. Complete hash-bound reads are required; a cut graph is refused. prepare reads the deployed revision and public assets, reports entry/path, typed input bindings, effect evidence and required acknowledgements without login or action execution. run opens the private App User Sign In window, then executes scenarios serially in an isolated Node host using original generated callables. Supported adapters: native server stubs, data actions and client actions; server/library/service targets need a verified consumer route. Direct REST/SOAP, timers/processes, arbitrary screen lifecycle and navigation remain unsupported. An unreachable private action reports dead code: no public entry reaches <action>. Fields: lane odc|o11, action name or @key, inputs or scenarios [{name,inputs}], trace none|nodes|full and optional window. ODC needs tenant/module; acknowledgeEffects must include each reported effect, including unknown-call for an unread producer. O11 needs host/module/moduleKey/applicationKey/runtimeUrl; modules adds captured producers. Trace requires observing the target and terminal server thread; missing evidence is not success. Native login, real permissions and cross-action identity propagation are separate proofs; connection or preparation does not prove access. Cross-module O11 redaction is an internal same-origin credential filter, not authorization. DEV only; a breakpoint may catch another user request, so request isolation remains unproved. Uncertain executions stop the batch and retain the binding lock. status reads receipts; never replay uncertain requests. Credentials only in the private window. execution=rest-wrapper explicitly selects legacy ODC publication behavior; release/reconcile address old leases. Current live proof coverage and restrictions: docs/DEBUGGER-HEADLESS-FALTA.md. Wave 2 (implemented, live proof pending): read-frame reads a whole frame in one native EvaluateMany plus one batch per tree level; ODC library-reference runs may carry consumer- and library-owned breakpoints in one library-keyed session (nodeModuleKeys; whether the runtime honours the consumer-owned id is unproved, .local/debugger/odc-library-breakpoint-contract/findings.json); an ODC start whose read-only preflight fails before StartDebugSession is refused, lock-free and not uncertain; O11 Timer without a REST/SOAP caller: ssam_debug_server run trigger service-center-run-now (one Run Now, no request hold, debugger stopped before the read-only Service Center correlation); O11 contextMode endpoint-credential for REST Custom and SOAP WebServiceMethod literal request-header checks (ODC Custom stays refused: no qualified request-header API inside ODC OnAuthentication); O11 Traditional screen-action postbacks (Submit and the original OsAjax request) and block Preparations; runner-derived O11 REST/SOAP callback scopes; ssam_debug_client start.pauseOnExceptions with pause.reason exception and a redacted type; per-runtime scope categories (notApplicableToRuntime, emptyInModel, notEnumerated); ODC mounted navigate {screen,back:true} and initial deep links with Text/Integer/LongInteger screen inputs; debugger private state under %USERPROFILE%\\.ssam-hybrid\\debugger (SSAM_DEBUG_STATE_ROOT overrides; legacy %LOCALAPPDATA%\\SSAM copies, MSIX package stores included, are read only and reported per origin; cleanup claims hold across every store). Wave 3, all implemented, live proof pending: read-scope on ssam_debug_client and ssam_debug_server reads every root of the observed frame to its leaves in one command (children pages of 150, text pages, budget-omitted leaves; complete only when runtimeValuesComplete and no budget stopped it; a stale stop refuses the whole read); ODC ssam_debug_server run trigger portal-wake (native-background, words, trace full, no launch/inputs/workflow) binds the Timer scope before the single reserved Portal POST; ODC Timer and Workflow runs need a request-bound ThreadEnd for ok, and ODC Timer runs correlate the instance read-only in a separate Portal developer session (instanceCorrelation, executionCompleted, outcome, wakeOwnershipProved); ODC app-user anchor for private-compare anchor app-user, registered only after the original login proves identityMatches; producer End/response parity reported as counts only (End-stop capture not wired yet, so complete stays false); ODC mounted run.interactions [{target, event:click}] (one journaled trusted CDP click each, handlerInvoked null, handlerObserved from a native stop) and the read-only SDK error path (debug_odc_native_mount_lifecycle_exception, debug_odc_native_mount_error_page_observed); scopesFrom mount-lifecycle also covers the navigation target handlers; ODC REST callback scopes (OnAuthentication Basic/Custom, OnRequest/OnResponse, OnBeforeRequest/OnAfterResponse of consumed RestActions toward the app origin only; debug_odc_native_callback_scope_not_derived) and ODC Settings in category setting; contextMode endpoint-credential on both lanes for original endpoint entries: header scheme (O11 Custom, O11 SOAP header check, REST None with a literal OnRequest/method header guard) and basic scheme (qualified ODC Basic, O11 developer-logic Basic; O11 Basic with one platform User_Login stays app-user), scheme taken from the published capability only; InternalAccess=Yes refused before any GET (debug_native_endpoint_internal_access_only, platformRestriction), client-certificate and exposed OAuth2 typed refusals; O11 reconcile by evidence class (answered, confirmed-not-started archived to reconciled-prestart.lock, login-refusal; verify:true re-reads a prestart archive) and the O11 client aborted reconcile (zero business submissions only, reconciled-client-aborted.lock, executionOutcome aborted-unconfirmed); locks retained by user decision (RETAINED_LOCKS: the SSAMDebuggerProbe Timer wake 60aa32e5, a Timer wake, not a BPT launch) are refused by every reconcile, archive and neutralization with debug_lock_retained_by_decision; O11 Timer wake failures use debug_native_background_timer_* and BPT keeps debug_native_background_bpt_*; O11 BPT activity roots from the native scope (categories by owner key, launch bindings by key; valuesComplete stays false until interactive BPT inspection); ODC Process-like kinds are refused as not in the ODC product (debug_native_background_odc_bpt_not_in_product). Identity and role witnesses (debug-identity-witness.mjs) are trusted only when their published assignment is natively bound to GetUserId()/NullIdentifier() or the pinned role Check<Role>Role (roleKey + roleModuleKey), pinned by sourceSha256; name matches are never accepted; this qualifier is not wired into the sessions yet.",
       "platforms": {
         "odc": {
           "proofs": [],
           "negative": [],
           "limits": [
             {
-              "text": "Debugger needs the private API Client and tenant. App-user login uses its own private session and currently supports built-in Cognito in us-east-1; other providers/challenges are refused. A real DEV login to a client app read four role claims; the original Node client runtime matched GetUserId and returned true for the app's own role and Administrator checks, both false anonymously. Propagation between called actions/modules and the server wrapper identity still need live proof; this experiment is not a generic client runner. ssam_debug_run uses the published Development revision and a REST wrapper; native bearer identity on that REST path and ServiceAction execution remain unproved. ssam_debug_invoke uses an existing ODC screenservices entry and an observed native envelope, with no app edit/publication; authenticated invocation and target stack evidence still need live proof. Libraries and client/screen actions are not covered by the server runner.",
-              "origin": "platforms/odc/facade/debug-runtime.mjs; platforms/odc/facade/debug-app-user-odc.mjs; platforms/odc/facade/debug-run.mjs; platforms/odc/facade/debug-invoke.mjs; docs/DEBUGGER-HEADLESS.md"
+              "text": "ODC server adapters (generated from debug-adapter-registry and its evidence index). Live-qualified on MCP and CLI: server/DataAction chain. Live-qualified on MCP (CLI proof pending): Library producer frames; REST anonymous. Implemented, live qualification pending: Service producer frames; Timer through an original Wake caller; Portal Timer wake. Not interactive, refused with the code shown: REST Basic (debug_native_endpoint_basic_credentials_unavailable_after_odc_srp); REST Custom authentication (debug_native_endpoint_custom_authentication_unqualified); Workflow event (debug_odc_native_server_inspection_entry_required). Native limit: exposed SOAP (debug_native_endpoint_odc_exposed_soap_unavailable). Legacy, not interactive and not counted: ssam_debug_invoke one-shot invocation; execution:'rest-wrapper'. ODC client adapters (generated from debug-adapter-registry and its evidence index). Live-qualified on MCP and CLI: client/screen action. Live-qualified on MCP (CLI proof pending): mounted default-route screen. Capability manual pause (mode native-next-node, cooperative): live-qualified on MCP and CLI. Capability immediate JavaScript suspension: native limit (limit: DebuggerAdapterV3.SuspendAllThreads throws InvalidOperationException on the client side of the installed DLLs). Capability client private-read: live-qualified on MCP (CLI proof pending) (limit: private value observability and change detection unproved). Preparation is not a live execution proof; native login, roles and identity propagation are separate proofs; see docs/DEBUGGER-HEADLESS-FALTA.md.",
+              "origin": "generated from platforms/odc/facade/debug-adapter-registry.mjs by platforms/odc/facade/debug-catalog-qualification.mjs --write (never edit by hand); platforms/odc/facade/debug-runtime.mjs; platforms/odc/facade/debug-app-user-odc.mjs; platforms/odc/facade/debug-run.mjs; platforms/odc/facade/debug-invoke.mjs; docs/DEBUGGER-HEADLESS.md"
             }
           ]
         },
@@ -554,8 +603,8 @@
           "negative": [],
           "limits": [
             {
-              "text": "Native SSO uses o11Auth {applicationKey,publishedVersionId,publishedProof:{path,sha256}} and the selected connected Studio, with a fresh exact host/module/app/version inventory. Runtime entry and target currently must be the same module. The debug bearer and native username/server-call ID token travel only over the private pipe and worker stdin; uncertain exchange retains receipts and lock. Legacy mode instead uses a private developer credentials reference or configured environment. Real SOAP start and stop passed. ssam debug run --lane o11 now has execution=rest-wrapper (default; operational candidate/import still needs native and live qualification) and execution=native-entry, with nativeEntry {sourceContract:{path,sha256}}. The initial native-entry contract accepts one existing zero-input Refresh, trace=none and Boolean outputs; prepare verifies original published assets before the secure English login window opens. A real official-command Headless_UI5811 run passed original login, Refresh, DataAction and ServiceAction with seven true checks: caller/service UserId present and equal, Registered true on both sides, flow entered and service returned. Credentials/references were released and the owned lock removed, without browser or publication. This proves response-based diagnostic propagation; private client-to-server UID equality, named business-role guards, internal server/service frames and request isolation remain unproved. The new request-ownership transport/session integration passed offline fixtures only; real production and ODC ownership modes are refused. This is not a generic client/screen executor.",
-              "origin": "platforms/odc/facade/debug.mjs; platforms/odc/facade/debug-o11-auth.mjs; platforms/odc/facade/debug-runtime.mjs; platforms/odc/facade/debug-o11-run.mjs; platforms/odc/facade/debug-o11-native-entry.mjs; kernel/debug/o11/SoapTransport.cs; kernel/debug/shared/DebugRequestOwnership.cs; docs/DEBUGGER-HEADLESS.md"
+              "text": "O11 server adapters (generated from debug-adapter-registry and its evidence index). Live-qualified on MCP and CLI: native-background Timer (original launcher). Live-qualified on MCP (CLI proof pending): server stub/DataAction chain; producer/consumer group; Service Action chain; REST Basic app-user; REST anonymous; SOAP anonymous. Implemented, live qualification pending: native-background Timer (Service Center Run Now). Not interactive, refused with the code shown: REST Custom authentication (debug_native_endpoint_custom_authentication_unqualified); background launch plan (BPT process) (debug_native_background_bpt_original_launcher_contract_required); background launch plan (Timer wake) (debug_native_background_timer_original_launcher_contract_required); native-background direct Timer schedule (debug_o11_native_server_inspection_entry_required); traditional Preparation (debug_o11_native_server_inspection_entry_required); traditional screen action postback (debug_o11_native_server_inspection_entry_required). Excluded, not claimed: BPT original launch (debug_o11_native_server_inspection_entry_required). Legacy, not interactive and not counted: execution:'rest-wrapper'. O11 client adapters (generated from debug-adapter-registry and its evidence index). Live-qualified on MCP and CLI: client action. Excluded, not claimed: mounted screen (absent). Capability manual pause (mode native-next-node, cooperative): live-qualified on MCP and CLI. Capability immediate JavaScript suspension: native limit (limit: DebuggerAdapterV3.SuspendAllThreads throws InvalidOperationException on the client side of the installed DLLs). Capability client private-read: live-qualified on MCP (CLI proof pending) (limit: Integer client function boundary into a Library). Preparation is not a live execution proof; native login, roles and identity propagation are separate proofs; see docs/DEBUGGER-HEADLESS-FALTA.md.",
+              "origin": "generated from platforms/odc/facade/debug-adapter-registry.mjs by platforms/odc/facade/debug-catalog-qualification.mjs --write (never edit by hand); platforms/odc/facade/debug.mjs; platforms/odc/facade/debug-o11-auth.mjs; platforms/odc/facade/debug-runtime.mjs; platforms/odc/facade/debug-o11-run.mjs; platforms/odc/facade/debug-o11-native-entry.mjs; kernel/debug/o11/SoapTransport.cs; kernel/debug/shared/DebugRequestOwnership.cs; docs/DEBUGGER-HEADLESS.md"
             }
           ]
         }

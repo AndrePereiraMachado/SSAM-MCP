@@ -140,6 +140,7 @@ export const WRITE_TOOLS = Object.freeze({
   o11_extension: a => a.action === 'publish' || (a.action === 'delete' && hasWords(a)),
   // An ODC External Library uploaded and published, or a pending generation discarded; build and status are reads.
   odc_external_library: a => a.action === 'deploy' || a.action === 'discard',
+  odc_mcp_import: always,
   continue: always, // advances the accepted app task: snapshot, compilation, merge
   studio_deliver: a => !ODC_DELIVER_READS.has(a.until ?? 'merge'),
   studio_merge: always, studio_publish: always, studio_create: always, studio_close: always,

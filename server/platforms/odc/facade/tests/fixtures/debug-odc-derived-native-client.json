@@ -1,0 +1,2270 @@
+{
+  "provenance": "Real local ODC native reader projection of SSAMDbgServiceConsumer, proof-6-public-8; no application execution",
+  "originalSourceSha256": "19f89a1b6578e78e9376cfa62606ee6ffaaca93f139a46455b26fac19af4d516",
+  "resolution": {
+    "entry": {
+      "key": "tKxTQyGPZUC213AV5GhY+g"
+    },
+    "target": {
+      "key": "SWfHLlY6qU+P6fGcDbeB9A"
+    },
+    "path": [
+      {
+        "key": "tKxTQyGPZUC213AV5GhY+g",
+        "kind": "ClientAction",
+        "via": "ClientAction:RequestUserContext/ExecuteServerActionNode:ReadUserContext",
+        "callKind": "ExecuteServerActionNode"
+      },
+      {
+        "key": "SWfHLlY6qU+P6fGcDbeB9A",
+        "kind": "ServerAction"
+      }
+    ],
+    "bindings": [
+      {
+        "targetInput": "ExpectedUserId",
+        "targetKey": "awdBc21MAEenJiMYpi7lKw",
+        "dataType": "Text Identifier",
+        "control": "derived",
+        "entryInput": "ClientUserId"
+      },
+      {
+        "targetInput": "Seed",
+        "targetKey": "wXDwL6QIvUmaW8brlBfL+g",
+        "dataType": "Integer",
+        "control": "direct",
+        "entryInput": "Seed"
+      }
+    ]
+  },
+  "inputs": [
+    {
+      "key": "awdBc21MAEenJiMYpi7lKw",
+      "name": "ExpectedUserId",
+      "mandatory": true,
+      "defaultValue": null,
+      "dataType": "Text Identifier"
+    },
+    {
+      "key": "wXDwL6QIvUmaW8brlBfL+g",
+      "name": "Seed",
+      "mandatory": true,
+      "defaultValue": null,
+      "dataType": "Integer"
+    }
+  ],
+  "trees": [
+    {
+      "kind": "ClientAction",
+      "name": "RequestUserContext",
+      "modelName": "RequestUserContext",
+      "label": "RequestUserContext",
+      "key": "tKxTQyGPZUC213AV5GhY+g",
+      "reference": "@tKxTQyGPZUC213AV5GhY+g",
+      "path": "ClientAction:RequestUserContext",
+      "properties": {
+        "Description": "Original app-user client -> server -> Service Action. Reads GetUserId natively; never supplies a synthetic user or grants roles.",
+        "Function": "False",
+        "Name": "RequestUserContext",
+        "Public": "True",
+        "Shareable": "True",
+        "ReadableIdentifier": "RequestUserContext"
+      },
+      "propertyReferences": {},
+      "propertyReferenceCollections": {},
+      "propertiesOmitted": {},
+      "propertyErrors": {},
+      "propertiesMissing": [],
+      "children": [
+        {
+          "kind": "InputParameter",
+          "name": "Seed",
+          "modelName": "Seed",
+          "label": "Seed",
+          "key": "tA0vmGxSIECJ+t9atCpBPA",
+          "reference": "@tA0vmGxSIECJ+t9atCpBPA",
+          "path": "ClientAction:RequestUserContext/InputParameter:Seed",
+          "properties": {
+            "DataType": "BasicType:Integer",
+            "Name": "Seed",
+            "IsMandatory": "True",
+            "ReadableIdentifier": "Seed"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Integer",
+              "key": "j2Lc0phK0kuggij4gQYfAw",
+              "reference": "@j2Lc0phK0kuggij4gQYfAw",
+              "path": "BasicType:Integer"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "OutputParameter",
+          "name": "ClientHasUserId",
+          "modelName": "ClientHasUserId",
+          "label": "ClientHasUserId",
+          "key": "j79+mJvo10SEVJxzVRpCnw",
+          "reference": "@j79+mJvo10SEVJxzVRpCnw",
+          "path": "ClientAction:RequestUserContext/OutputParameter:ClientHasUserId",
+          "properties": {
+            "DataType": "BasicType:Boolean",
+            "Name": "ClientHasUserId",
+            "ReadableIdentifier": "ClientHasUserId"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Boolean",
+              "key": "oD0fxvc7hUOX_305zIXIlg",
+              "reference": "@oD0fxvc7hUOX_305zIXIlg",
+              "path": "BasicType:Boolean"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "OutputParameter",
+          "name": "ServerUserId",
+          "modelName": "ServerUserId",
+          "label": "ServerUserId",
+          "key": "ddfsW+TWEEOmWAvQSU1C4w",
+          "reference": "@ddfsW+TWEEOmWAvQSU1C4w",
+          "path": "ClientAction:RequestUserContext/OutputParameter:ServerUserId",
+          "properties": {
+            "DataType": "BasicType:Text Identifier",
+            "Name": "ServerUserId",
+            "ReadableIdentifier": "ServerUserId"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Text Identifier",
+              "key": "hR+HzvoUvkKth+waVG8Vww",
+              "reference": "@hR+HzvoUvkKth+waVG8Vww",
+              "path": "BasicType:Text Identifier"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "OutputParameter",
+          "name": "ServerUserIdMatchesClient",
+          "modelName": "ServerUserIdMatchesClient",
+          "label": "ServerUserIdMatchesClient",
+          "key": "d+1iDEgFu0mKIVRsZ6RN0g",
+          "reference": "@d+1iDEgFu0mKIVRsZ6RN0g",
+          "path": "ClientAction:RequestUserContext/OutputParameter:ServerUserIdMatchesClient",
+          "properties": {
+            "DataType": "BasicType:Boolean",
+            "Name": "ServerUserIdMatchesClient",
+            "ReadableIdentifier": "ServerUserIdMatchesClient"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Boolean",
+              "key": "oD0fxvc7hUOX_305zIXIlg",
+              "reference": "@oD0fxvc7hUOX_305zIXIlg",
+              "path": "BasicType:Boolean"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "OutputParameter",
+          "name": "ServiceUserIdMatchesClient",
+          "modelName": "ServiceUserIdMatchesClient",
+          "label": "ServiceUserIdMatchesClient",
+          "key": "AJiAW+TFwk+pIU+TrYhkEA",
+          "reference": "@AJiAW+TFwk+pIU+TrYhkEA",
+          "path": "ClientAction:RequestUserContext/OutputParameter:ServiceUserIdMatchesClient",
+          "properties": {
+            "DataType": "BasicType:Boolean",
+            "Name": "ServiceUserIdMatchesClient",
+            "ReadableIdentifier": "ServiceUserIdMatchesClient"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Boolean",
+              "key": "oD0fxvc7hUOX_305zIXIlg",
+              "reference": "@oD0fxvc7hUOX_305zIXIlg",
+              "path": "BasicType:Boolean"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "OutputParameter",
+          "name": "Result",
+          "modelName": "Result",
+          "label": "Result",
+          "key": "FRCyZY6QZEqtpGqrTEWMCg",
+          "reference": "@FRCyZY6QZEqtpGqrTEWMCg",
+          "path": "ClientAction:RequestUserContext/OutputParameter:Result",
+          "properties": {
+            "DataType": "BasicType:Integer",
+            "Name": "Result",
+            "ReadableIdentifier": "Result"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Integer",
+              "key": "j2Lc0phK0kuggij4gQYfAw",
+              "reference": "@j2Lc0phK0kuggij4gQYfAw",
+              "path": "BasicType:Integer"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "LocalVariable",
+          "name": "ClientUserId",
+          "modelName": "ClientUserId",
+          "label": "ClientUserId",
+          "key": "aH9XuNzLeUa6PlPH4PuJtA",
+          "reference": "@aH9XuNzLeUa6PlPH4PuJtA",
+          "path": "ClientAction:RequestUserContext/LocalVariable:ClientUserId",
+          "properties": {
+            "DataType": "BasicType:Text Identifier",
+            "Name": "ClientUserId",
+            "ReadableIdentifier": "ClientUserId"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Text Identifier",
+              "key": "hR+HzvoUvkKth+waVG8Vww",
+              "reference": "@hR+HzvoUvkKth+waVG8Vww",
+              "path": "BasicType:Text Identifier"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "StartNode",
+          "name": "Start",
+          "modelName": "",
+          "label": "Start",
+          "key": "TJ1cPgbI+k2083++gg3QEw",
+          "reference": "@TJ1cPgbI+k2083++gg3QEw",
+          "path": "ClientAction:RequestUserContext/StartNode:Start",
+          "properties": {
+            "Connectors": "[ActionConnector:]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Target": "AssignNode:Assign",
+            "VerticalPosition": "800",
+            "ReadableIdentifier": "(3200,800)"
+          },
+          "propertyReferences": {
+            "Target": {
+              "kind": "AssignNode",
+              "name": "",
+              "label": "Assign",
+              "key": "xBQEEqiINECcnpGBMqSElA",
+              "reference": "@xBQEEqiINECcnpGBMqSElA",
+              "path": "ClientAction:RequestUserContext/AssignNode:Assign"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "kpEdOaS1O02cpUDK0Eh4AQ",
+                  "reference": "@kpEdOaS1O02cpUDK0Eh4AQ",
+                  "path": "ClientAction:RequestUserContext/StartNode:Start/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "kpEdOaS1O02cpUDK0Eh4AQ",
+              "reference": "@kpEdOaS1O02cpUDK0Eh4AQ",
+              "path": "ClientAction:RequestUserContext/StartNode:Start/ActionConnector:",
+              "properties": {
+                "Target": "AssignNode:Assign"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "AssignNode",
+                  "name": "",
+                  "label": "Assign",
+                  "key": "xBQEEqiINECcnpGBMqSElA",
+                  "reference": "@xBQEEqiINECcnpGBMqSElA",
+                  "path": "ClientAction:RequestUserContext/AssignNode:Assign"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 1,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "ExecuteServerActionNode",
+          "name": "ReadUserContext",
+          "modelName": "ReadUserContext",
+          "label": "ReadUserContext",
+          "key": "VUUOp1+YKkaYTcY7cufa+A",
+          "reference": "@VUUOp1+YKkaYTcY7cufa+A",
+          "path": "ClientAction:RequestUserContext/ExecuteServerActionNode:ReadUserContext",
+          "properties": {
+            "Action": "ServerAction:ReadUserContext",
+            "AnimationEffect": "None",
+            "Connectors": "[ActionConnector:]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Name": "ReadUserContext",
+            "Target": "AssignNode:Assign",
+            "VerticalPosition": "4000",
+            "ReadableIdentifier": "ReadUserContext"
+          },
+          "propertyReferences": {
+            "Action": {
+              "kind": "ServerAction",
+              "name": "ReadUserContext",
+              "label": "ReadUserContext",
+              "key": "SWfHLlY6qU+P6fGcDbeB9A",
+              "reference": "@SWfHLlY6qU+P6fGcDbeB9A",
+              "path": "ServerAction:ReadUserContext"
+            },
+            "Target": {
+              "kind": "AssignNode",
+              "name": "",
+              "label": "Assign",
+              "key": "IkfBPWHKhEGjU3YED34ttQ",
+              "reference": "@IkfBPWHKhEGjU3YED34ttQ",
+              "path": "ClientAction:RequestUserContext/AssignNode:Assign"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "0RUO8IG09ESPx_dQdoViug",
+                  "reference": "@0RUO8IG09ESPx_dQdoViug",
+                  "path": "ClientAction:RequestUserContext/ExecuteServerActionNode:ReadUserContext/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "Argument",
+              "name": "ExpectedUserId",
+              "modelName": "",
+              "label": "ExpectedUserId",
+              "key": "InmBPmVk+UyqOm_nS07e8A",
+              "reference": "@InmBPmVk+UyqOm_nS07e8A",
+              "path": "ClientAction:RequestUserContext/ExecuteServerActionNode:ReadUserContext/Argument:ExpectedUserId",
+              "properties": {
+                "Value": "ClientUserId",
+                "Parameter": "InputParameter:ExpectedUserId"
+              },
+              "propertyReferences": {
+                "Parameter": {
+                  "kind": "InputParameter",
+                  "name": "ExpectedUserId",
+                  "label": "ExpectedUserId",
+                  "key": "awdBc21MAEenJiMYpi7lKw",
+                  "reference": "@awdBc21MAEenJiMYpi7lKw",
+                  "path": "ServerAction:ReadUserContext/InputParameter:ExpectedUserId"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "ClientUserId",
+                  "modelName": "",
+                  "label": "ClientUserId",
+                  "key": "InmBPmVk+UyqOm_nS07e8A.#Value",
+                  "reference": "@InmBPmVk+UyqOm_nS07e8A.#Value",
+                  "path": "ClientAction:RequestUserContext/ExecuteServerActionNode:ReadUserContext/Argument:ExpectedUserId/TextBasedExpression:ClientUserId",
+                  "properties": {
+                    "Type": "BasicType:Text Identifier"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Text Identifier",
+                      "key": "hR+HzvoUvkKth+waVG8Vww",
+                      "reference": "@hR+HzvoUvkKth+waVG8Vww",
+                      "path": "BasicType:Text Identifier"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 1,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "Argument",
+              "name": "Seed",
+              "modelName": "",
+              "label": "Seed",
+              "key": "A3qQ6TVhNEuWb02jKcllVA",
+              "reference": "@A3qQ6TVhNEuWb02jKcllVA",
+              "path": "ClientAction:RequestUserContext/ExecuteServerActionNode:ReadUserContext/Argument:Seed",
+              "properties": {
+                "Value": "Seed",
+                "Parameter": "InputParameter:Seed"
+              },
+              "propertyReferences": {
+                "Parameter": {
+                  "kind": "InputParameter",
+                  "name": "Seed",
+                  "label": "Seed",
+                  "key": "wXDwL6QIvUmaW8brlBfL+g",
+                  "reference": "@wXDwL6QIvUmaW8brlBfL+g",
+                  "path": "ServerAction:ReadUserContext/InputParameter:Seed"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "Seed",
+                  "modelName": "",
+                  "label": "Seed",
+                  "key": "A3qQ6TVhNEuWb02jKcllVA.#Value",
+                  "reference": "@A3qQ6TVhNEuWb02jKcllVA.#Value",
+                  "path": "ClientAction:RequestUserContext/ExecuteServerActionNode:ReadUserContext/Argument:Seed/TextBasedExpression:Seed",
+                  "properties": {
+                    "Type": "BasicType:Integer"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Integer",
+                      "key": "j2Lc0phK0kuggij4gQYfAw",
+                      "reference": "@j2Lc0phK0kuggij4gQYfAw",
+                      "path": "BasicType:Integer"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 1,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "0RUO8IG09ESPx_dQdoViug",
+              "reference": "@0RUO8IG09ESPx_dQdoViug",
+              "path": "ClientAction:RequestUserContext/ExecuteServerActionNode:ReadUserContext/ActionConnector:",
+              "properties": {
+                "Target": "AssignNode:Assign"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "AssignNode",
+                  "name": "",
+                  "label": "Assign",
+                  "key": "IkfBPWHKhEGjU3YED34ttQ",
+                  "reference": "@IkfBPWHKhEGjU3YED34ttQ",
+                  "path": "ClientAction:RequestUserContext/AssignNode:Assign"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 3,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "AssignNode",
+          "name": "Assign",
+          "modelName": "",
+          "label": "Assign",
+          "key": "IkfBPWHKhEGjU3YED34ttQ",
+          "reference": "@IkfBPWHKhEGjU3YED34ttQ",
+          "path": "ClientAction:RequestUserContext/AssignNode:Assign",
+          "properties": {
+            "Connectors": "[ActionConnector:]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Target": "EndNode:End",
+            "VerticalPosition": "5600",
+            "ReadableIdentifier": "(3200,5600)"
+          },
+          "propertyReferences": {
+            "Target": {
+              "kind": "EndNode",
+              "name": "",
+              "label": "End",
+              "key": "j1yZHdloikODcLa81wjkog",
+              "reference": "@j1yZHdloikODcLa81wjkog",
+              "path": "ClientAction:RequestUserContext/EndNode:End"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "REHfzcwBU0iunpLBvShGaA",
+                  "reference": "@REHfzcwBU0iunpLBvShGaA",
+                  "path": "ClientAction:RequestUserContext/AssignNode:Assign/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "Assignment",
+              "name": "ServerUserId = ReadUserContext.ServerUserId",
+              "modelName": "",
+              "label": "ServerUserId = ReadUserContext.ServerUserId",
+              "key": "WjrW5XWsl0qbhZuS8661Jw",
+              "reference": "@WjrW5XWsl0qbhZuS8661Jw",
+              "path": "ClientAction:RequestUserContext/AssignNode:Assign/Assignment:ServerUserId = ReadUserContext.ServerUserId",
+              "properties": {
+                "Value": "ReadUserContext.ServerUserId",
+                "Variable": "ServerUserId"
+              },
+              "propertyReferences": {},
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "ServerUserId",
+                  "modelName": "",
+                  "label": "ServerUserId",
+                  "key": "WjrW5XWsl0qbhZuS8661Jw.#Variable",
+                  "reference": "@WjrW5XWsl0qbhZuS8661Jw.#Variable",
+                  "path": "ClientAction:RequestUserContext/AssignNode:Assign/Assignment:ServerUserId = ReadUserContext.ServerUserId/TextBasedExpression:ServerUserId",
+                  "properties": {
+                    "Type": "BasicType:Text Identifier"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Text Identifier",
+                      "key": "hR+HzvoUvkKth+waVG8Vww",
+                      "reference": "@hR+HzvoUvkKth+waVG8Vww",
+                      "path": "BasicType:Text Identifier"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                },
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "ReadUserContext.ServerUserId",
+                  "modelName": "",
+                  "label": "ReadUserContext.ServerUserId",
+                  "key": "WjrW5XWsl0qbhZuS8661Jw.#Value",
+                  "reference": "@WjrW5XWsl0qbhZuS8661Jw.#Value",
+                  "path": "ClientAction:RequestUserContext/AssignNode:Assign/Assignment:ServerUserId = ReadUserContext.ServerUserId/TextBasedExpression:ReadUserContext.ServerUserId",
+                  "properties": {
+                    "Type": "BasicType:Text Identifier"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Text Identifier",
+                      "key": "hR+HzvoUvkKth+waVG8Vww",
+                      "reference": "@hR+HzvoUvkKth+waVG8Vww",
+                      "path": "BasicType:Text Identifier"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 2,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "Assignment",
+              "name": "ServerUserIdMatchesClient = ReadUserContext.ServerUserIdMatchesClient",
+              "modelName": "",
+              "label": "ServerUserIdMatchesClient = ReadUserContext.ServerUserIdMatchesClient",
+              "key": "Vo0NYhfBzUyF2vxxH2Cw6w",
+              "reference": "@Vo0NYhfBzUyF2vxxH2Cw6w",
+              "path": "ClientAction:RequestUserContext/AssignNode:Assign/Assignment:ServerUserIdMatchesClient = ReadUserContext.ServerUserIdMatchesClient",
+              "properties": {
+                "Value": "ReadUserContext.ServerUserIdMatchesClient",
+                "Variable": "ServerUserIdMatchesClient"
+              },
+              "propertyReferences": {},
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "ServerUserIdMatchesClient",
+                  "modelName": "",
+                  "label": "ServerUserIdMatchesClient",
+                  "key": "Vo0NYhfBzUyF2vxxH2Cw6w.#Variable",
+                  "reference": "@Vo0NYhfBzUyF2vxxH2Cw6w.#Variable",
+                  "path": "ClientAction:RequestUserContext/AssignNode:Assign/Assignment:ServerUserIdMatchesClient = ReadUserContext.ServerUserIdMatchesClient/TextBasedExpression:ServerUserIdMatchesClient",
+                  "properties": {
+                    "Type": "BasicType:Boolean"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Boolean",
+                      "key": "oD0fxvc7hUOX_305zIXIlg",
+                      "reference": "@oD0fxvc7hUOX_305zIXIlg",
+                      "path": "BasicType:Boolean"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                },
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "ReadUserContext.ServerUserIdMatchesClient",
+                  "modelName": "",
+                  "label": "ReadUserContext.ServerUserIdMatchesClient",
+                  "key": "Vo0NYhfBzUyF2vxxH2Cw6w.#Value",
+                  "reference": "@Vo0NYhfBzUyF2vxxH2Cw6w.#Value",
+                  "path": "ClientAction:RequestUserContext/AssignNode:Assign/Assignment:ServerUserIdMatchesClient = ReadUserContext.ServerUserIdMatchesClient/TextBasedExpression:ReadUserContext.ServerUserIdMatchesClient",
+                  "properties": {
+                    "Type": "BasicType:Boolean"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Boolean",
+                      "key": "oD0fxvc7hUOX_305zIXIlg",
+                      "reference": "@oD0fxvc7hUOX_305zIXIlg",
+                      "path": "BasicType:Boolean"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 2,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "Assignment",
+              "name": "ServiceUserIdMatchesClient = ReadUserContext.ServiceUserIdMatchesClient",
+              "modelName": "",
+              "label": "ServiceUserIdMatchesClient = ReadUserContext.ServiceUserIdMatchesClient",
+              "key": "Fe2CSFtzK06Ye4FAjpMilQ",
+              "reference": "@Fe2CSFtzK06Ye4FAjpMilQ",
+              "path": "ClientAction:RequestUserContext/AssignNode:Assign/Assignment:ServiceUserIdMatchesClient = ReadUserContext.ServiceUserIdMatchesClient",
+              "properties": {
+                "Value": "ReadUserContext.ServiceUserIdMatchesClient",
+                "Variable": "ServiceUserIdMatchesClient"
+              },
+              "propertyReferences": {},
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "ServiceUserIdMatchesClient",
+                  "modelName": "",
+                  "label": "ServiceUserIdMatchesClient",
+                  "key": "Fe2CSFtzK06Ye4FAjpMilQ.#Variable",
+                  "reference": "@Fe2CSFtzK06Ye4FAjpMilQ.#Variable",
+                  "path": "ClientAction:RequestUserContext/AssignNode:Assign/Assignment:ServiceUserIdMatchesClient = ReadUserContext.ServiceUserIdMatchesClient/TextBasedExpression:ServiceUserIdMatchesClient",
+                  "properties": {
+                    "Type": "BasicType:Boolean"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Boolean",
+                      "key": "oD0fxvc7hUOX_305zIXIlg",
+                      "reference": "@oD0fxvc7hUOX_305zIXIlg",
+                      "path": "BasicType:Boolean"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                },
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "ReadUserContext.ServiceUserIdMatchesClient",
+                  "modelName": "",
+                  "label": "ReadUserContext.ServiceUserIdMatchesClient",
+                  "key": "Fe2CSFtzK06Ye4FAjpMilQ.#Value",
+                  "reference": "@Fe2CSFtzK06Ye4FAjpMilQ.#Value",
+                  "path": "ClientAction:RequestUserContext/AssignNode:Assign/Assignment:ServiceUserIdMatchesClient = ReadUserContext.ServiceUserIdMatchesClient/TextBasedExpression:ReadUserContext.ServiceUserIdMatchesClient",
+                  "properties": {
+                    "Type": "BasicType:Boolean"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Boolean",
+                      "key": "oD0fxvc7hUOX_305zIXIlg",
+                      "reference": "@oD0fxvc7hUOX_305zIXIlg",
+                      "path": "BasicType:Boolean"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 2,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "Assignment",
+              "name": "Result = ReadUserContext.Result",
+              "modelName": "",
+              "label": "Result = ReadUserContext.Result",
+              "key": "Sua2FwySmkyW9YpPVnluKQ",
+              "reference": "@Sua2FwySmkyW9YpPVnluKQ",
+              "path": "ClientAction:RequestUserContext/AssignNode:Assign/Assignment:Result = ReadUserContext.Result",
+              "properties": {
+                "Value": "ReadUserContext.Result",
+                "Variable": "Result"
+              },
+              "propertyReferences": {},
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "Result",
+                  "modelName": "",
+                  "label": "Result",
+                  "key": "Sua2FwySmkyW9YpPVnluKQ.#Variable",
+                  "reference": "@Sua2FwySmkyW9YpPVnluKQ.#Variable",
+                  "path": "ClientAction:RequestUserContext/AssignNode:Assign/Assignment:Result = ReadUserContext.Result/TextBasedExpression:Result",
+                  "properties": {
+                    "Type": "BasicType:Integer"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Integer",
+                      "key": "j2Lc0phK0kuggij4gQYfAw",
+                      "reference": "@j2Lc0phK0kuggij4gQYfAw",
+                      "path": "BasicType:Integer"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                },
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "ReadUserContext.Result",
+                  "modelName": "",
+                  "label": "ReadUserContext.Result",
+                  "key": "Sua2FwySmkyW9YpPVnluKQ.#Value",
+                  "reference": "@Sua2FwySmkyW9YpPVnluKQ.#Value",
+                  "path": "ClientAction:RequestUserContext/AssignNode:Assign/Assignment:Result = ReadUserContext.Result/TextBasedExpression:ReadUserContext.Result",
+                  "properties": {
+                    "Type": "BasicType:Integer"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Integer",
+                      "key": "j2Lc0phK0kuggij4gQYfAw",
+                      "reference": "@j2Lc0phK0kuggij4gQYfAw",
+                      "path": "BasicType:Integer"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 2,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "REHfzcwBU0iunpLBvShGaA",
+              "reference": "@REHfzcwBU0iunpLBvShGaA",
+              "path": "ClientAction:RequestUserContext/AssignNode:Assign/ActionConnector:",
+              "properties": {
+                "Target": "EndNode:End"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "EndNode",
+                  "name": "",
+                  "label": "End",
+                  "key": "j1yZHdloikODcLa81wjkog",
+                  "reference": "@j1yZHdloikODcLa81wjkog",
+                  "path": "ClientAction:RequestUserContext/EndNode:End"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 5,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "AssignNode",
+          "name": "Assign",
+          "modelName": "",
+          "label": "Assign",
+          "key": "xBQEEqiINECcnpGBMqSElA",
+          "reference": "@xBQEEqiINECcnpGBMqSElA",
+          "path": "ClientAction:RequestUserContext/AssignNode:Assign",
+          "properties": {
+            "Connectors": "[ActionConnector:]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Target": "ExecuteServerActionNode:ReadUserContext",
+            "VerticalPosition": "2400",
+            "ReadableIdentifier": "(3200,2400)"
+          },
+          "propertyReferences": {
+            "Target": {
+              "kind": "ExecuteServerActionNode",
+              "name": "ReadUserContext",
+              "label": "ReadUserContext",
+              "key": "VUUOp1+YKkaYTcY7cufa+A",
+              "reference": "@VUUOp1+YKkaYTcY7cufa+A",
+              "path": "ClientAction:RequestUserContext/ExecuteServerActionNode:ReadUserContext"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "TfW4YYnSXkmZ+NccgCeQPg",
+                  "reference": "@TfW4YYnSXkmZ+NccgCeQPg",
+                  "path": "ClientAction:RequestUserContext/AssignNode:Assign/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "Assignment",
+              "name": "ClientUserId = GetUserId()",
+              "modelName": "",
+              "label": "ClientUserId = GetUserId()",
+              "key": "Rj55Fc+fuUOxmBH6b8tiUw",
+              "reference": "@Rj55Fc+fuUOxmBH6b8tiUw",
+              "path": "ClientAction:RequestUserContext/AssignNode:Assign/Assignment:ClientUserId = GetUserId()",
+              "properties": {
+                "Value": "GetUserId()",
+                "Variable": "ClientUserId"
+              },
+              "propertyReferences": {},
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "ClientUserId",
+                  "modelName": "",
+                  "label": "ClientUserId",
+                  "key": "Rj55Fc+fuUOxmBH6b8tiUw.#Variable",
+                  "reference": "@Rj55Fc+fuUOxmBH6b8tiUw.#Variable",
+                  "path": "ClientAction:RequestUserContext/AssignNode:Assign/Assignment:ClientUserId = GetUserId()/TextBasedExpression:ClientUserId",
+                  "properties": {
+                    "Type": "BasicType:Text Identifier"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Text Identifier",
+                      "key": "hR+HzvoUvkKth+waVG8Vww",
+                      "reference": "@hR+HzvoUvkKth+waVG8Vww",
+                      "path": "BasicType:Text Identifier"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                },
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "GetUserId()",
+                  "modelName": "",
+                  "label": "GetUserId()",
+                  "key": "Rj55Fc+fuUOxmBH6b8tiUw.#Value",
+                  "reference": "@Rj55Fc+fuUOxmBH6b8tiUw.#Value",
+                  "path": "ClientAction:RequestUserContext/AssignNode:Assign/Assignment:ClientUserId = GetUserId()/TextBasedExpression:GetUserId()",
+                  "properties": {
+                    "Type": "IdentifierType:User Identifier"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "IdentifierType",
+                      "name": "",
+                      "label": "User Identifier",
+                      "key": "NY4z0lcU5E278_O+JuYBdQ.#IdentifierType",
+                      "reference": "@NY4z0lcU5E278_O+JuYBdQ.#IdentifierType",
+                      "path": "Reference:(System)/ServerEntitySignature:User/IdentifierType:User Identifier"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 2,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "Assignment",
+              "name": "ClientHasUserId = GetUserId() <> NullTextIdentifier()",
+              "modelName": "",
+              "label": "ClientHasUserId = GetUserId() <> NullTextIdentifier()",
+              "key": "QuwBfOG0SkeUX3jazB46RQ",
+              "reference": "@QuwBfOG0SkeUX3jazB46RQ",
+              "path": "ClientAction:RequestUserContext/AssignNode:Assign/Assignment:ClientHasUserId = GetUserId() <> NullTextIdentifier()",
+              "properties": {
+                "Value": "GetUserId() <> NullTextIdentifier()",
+                "Variable": "ClientHasUserId"
+              },
+              "propertyReferences": {},
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "ClientHasUserId",
+                  "modelName": "",
+                  "label": "ClientHasUserId",
+                  "key": "QuwBfOG0SkeUX3jazB46RQ.#Variable",
+                  "reference": "@QuwBfOG0SkeUX3jazB46RQ.#Variable",
+                  "path": "ClientAction:RequestUserContext/AssignNode:Assign/Assignment:ClientHasUserId = GetUserId() <> NullTextIdentifier()/TextBasedExpression:ClientHasUserId",
+                  "properties": {
+                    "Type": "BasicType:Boolean"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Boolean",
+                      "key": "oD0fxvc7hUOX_305zIXIlg",
+                      "reference": "@oD0fxvc7hUOX_305zIXIlg",
+                      "path": "BasicType:Boolean"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                },
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "GetUserId() <> NullTextIdentifier()",
+                  "modelName": "",
+                  "label": "GetUserId() <> NullTextIdentifier()",
+                  "key": "QuwBfOG0SkeUX3jazB46RQ.#Value",
+                  "reference": "@QuwBfOG0SkeUX3jazB46RQ.#Value",
+                  "path": "ClientAction:RequestUserContext/AssignNode:Assign/Assignment:ClientHasUserId = GetUserId() <> NullTextIdentifier()/TextBasedExpression:GetUserId() <> NullTextIdentifier()",
+                  "properties": {
+                    "Type": "BasicType:Boolean"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Boolean",
+                      "key": "oD0fxvc7hUOX_305zIXIlg",
+                      "reference": "@oD0fxvc7hUOX_305zIXIlg",
+                      "path": "BasicType:Boolean"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 2,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "TfW4YYnSXkmZ+NccgCeQPg",
+              "reference": "@TfW4YYnSXkmZ+NccgCeQPg",
+              "path": "ClientAction:RequestUserContext/AssignNode:Assign/ActionConnector:",
+              "properties": {
+                "Target": "ExecuteServerActionNode:ReadUserContext"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "ExecuteServerActionNode",
+                  "name": "ReadUserContext",
+                  "label": "ReadUserContext",
+                  "key": "VUUOp1+YKkaYTcY7cufa+A",
+                  "reference": "@VUUOp1+YKkaYTcY7cufa+A",
+                  "path": "ClientAction:RequestUserContext/ExecuteServerActionNode:ReadUserContext"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 3,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "EndNode",
+          "name": "End",
+          "modelName": "",
+          "label": "End",
+          "key": "j1yZHdloikODcLa81wjkog",
+          "reference": "@j1yZHdloikODcLa81wjkog",
+          "path": "ClientAction:RequestUserContext/EndNode:End",
+          "properties": {
+            "Connectors": "[]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "VerticalPosition": "7200",
+            "ReadableIdentifier": "(3200,7200)"
+          },
+          "propertyReferences": {},
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        }
+      ],
+      "childrenTotal": 12,
+      "childrenOmitted": 0
+    },
+    {
+      "kind": "ServerAction",
+      "name": "ReadUserContext",
+      "modelName": "ReadUserContext",
+      "label": "ReadUserContext",
+      "key": "SWfHLlY6qU+P6fGcDbeB9A",
+      "reference": "@SWfHLlY6qU+P6fGcDbeB9A",
+      "path": "ServerAction:ReadUserContext",
+      "properties": {
+        "Description": "Original server caller of ObserveUserContext. Native identity reads only; no role claim.",
+        "Function": "False",
+        "Name": "ReadUserContext",
+        "Public": "False",
+        "Shareable": "False",
+        "ReadableIdentifier": "ReadUserContext"
+      },
+      "propertyReferences": {},
+      "propertyReferenceCollections": {},
+      "propertiesOmitted": {},
+      "propertyErrors": {},
+      "propertiesMissing": [],
+      "children": [
+        {
+          "kind": "InputParameter",
+          "name": "ExpectedUserId",
+          "modelName": "ExpectedUserId",
+          "label": "ExpectedUserId",
+          "key": "awdBc21MAEenJiMYpi7lKw",
+          "reference": "@awdBc21MAEenJiMYpi7lKw",
+          "path": "ServerAction:ReadUserContext/InputParameter:ExpectedUserId",
+          "properties": {
+            "DataType": "BasicType:Text Identifier",
+            "Name": "ExpectedUserId",
+            "IsMandatory": "True",
+            "ReadableIdentifier": "ExpectedUserId"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Text Identifier",
+              "key": "hR+HzvoUvkKth+waVG8Vww",
+              "reference": "@hR+HzvoUvkKth+waVG8Vww",
+              "path": "BasicType:Text Identifier"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "InputParameter",
+          "name": "Seed",
+          "modelName": "Seed",
+          "label": "Seed",
+          "key": "wXDwL6QIvUmaW8brlBfL+g",
+          "reference": "@wXDwL6QIvUmaW8brlBfL+g",
+          "path": "ServerAction:ReadUserContext/InputParameter:Seed",
+          "properties": {
+            "DataType": "BasicType:Integer",
+            "Name": "Seed",
+            "IsMandatory": "True",
+            "ReadableIdentifier": "Seed"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Integer",
+              "key": "j2Lc0phK0kuggij4gQYfAw",
+              "reference": "@j2Lc0phK0kuggij4gQYfAw",
+              "path": "BasicType:Integer"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "OutputParameter",
+          "name": "ServerUserId",
+          "modelName": "ServerUserId",
+          "label": "ServerUserId",
+          "key": "pNOfuiwN9UWJdrpY1HhucA",
+          "reference": "@pNOfuiwN9UWJdrpY1HhucA",
+          "path": "ServerAction:ReadUserContext/OutputParameter:ServerUserId",
+          "properties": {
+            "DataType": "BasicType:Text Identifier",
+            "Name": "ServerUserId",
+            "ReadableIdentifier": "ServerUserId"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Text Identifier",
+              "key": "hR+HzvoUvkKth+waVG8Vww",
+              "reference": "@hR+HzvoUvkKth+waVG8Vww",
+              "path": "BasicType:Text Identifier"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "OutputParameter",
+          "name": "ServerUserIdMatchesClient",
+          "modelName": "ServerUserIdMatchesClient",
+          "label": "ServerUserIdMatchesClient",
+          "key": "6sSfwkdGNkuzD9kQwzBozQ",
+          "reference": "@6sSfwkdGNkuzD9kQwzBozQ",
+          "path": "ServerAction:ReadUserContext/OutputParameter:ServerUserIdMatchesClient",
+          "properties": {
+            "DataType": "BasicType:Boolean",
+            "Name": "ServerUserIdMatchesClient",
+            "ReadableIdentifier": "ServerUserIdMatchesClient"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Boolean",
+              "key": "oD0fxvc7hUOX_305zIXIlg",
+              "reference": "@oD0fxvc7hUOX_305zIXIlg",
+              "path": "BasicType:Boolean"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "OutputParameter",
+          "name": "ServiceUserIdMatchesClient",
+          "modelName": "ServiceUserIdMatchesClient",
+          "label": "ServiceUserIdMatchesClient",
+          "key": "NVVOp458EUiD2lhEcTV5UA",
+          "reference": "@NVVOp458EUiD2lhEcTV5UA",
+          "path": "ServerAction:ReadUserContext/OutputParameter:ServiceUserIdMatchesClient",
+          "properties": {
+            "DataType": "BasicType:Boolean",
+            "Name": "ServiceUserIdMatchesClient",
+            "ReadableIdentifier": "ServiceUserIdMatchesClient"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Boolean",
+              "key": "oD0fxvc7hUOX_305zIXIlg",
+              "reference": "@oD0fxvc7hUOX_305zIXIlg",
+              "path": "BasicType:Boolean"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "OutputParameter",
+          "name": "Result",
+          "modelName": "Result",
+          "label": "Result",
+          "key": "qEbuhZm49kClRBLdHrBVSQ",
+          "reference": "@qEbuhZm49kClRBLdHrBVSQ",
+          "path": "ServerAction:ReadUserContext/OutputParameter:Result",
+          "properties": {
+            "DataType": "BasicType:Integer",
+            "Name": "Result",
+            "ReadableIdentifier": "Result"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Integer",
+              "key": "j2Lc0phK0kuggij4gQYfAw",
+              "reference": "@j2Lc0phK0kuggij4gQYfAw",
+              "path": "BasicType:Integer"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "AssignNode",
+          "name": "Assign",
+          "modelName": "",
+          "label": "Assign",
+          "key": "ALq6hMBfvU+EBXgZVfcCQg",
+          "reference": "@ALq6hMBfvU+EBXgZVfcCQg",
+          "path": "ServerAction:ReadUserContext/AssignNode:Assign",
+          "properties": {
+            "Connectors": "[ActionConnector:]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Target": "ExecuteServerActionNode:ObserveUserContext",
+            "VerticalPosition": "2400",
+            "ReadableIdentifier": "(3200,2400)"
+          },
+          "propertyReferences": {
+            "Target": {
+              "kind": "ExecuteServerActionNode",
+              "name": "ObserveUserContext",
+              "label": "ObserveUserContext",
+              "key": "K1GLcPFOc0+QLSOoWwnDVQ",
+              "reference": "@K1GLcPFOc0+QLSOoWwnDVQ",
+              "path": "ServerAction:ReadUserContext/ExecuteServerActionNode:ObserveUserContext"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "_eWzunlclEqb4b7SrKPL3w",
+                  "reference": "@_eWzunlclEqb4b7SrKPL3w",
+                  "path": "ServerAction:ReadUserContext/AssignNode:Assign/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "Assignment",
+              "name": "ServerUserId = GetUserId()",
+              "modelName": "",
+              "label": "ServerUserId = GetUserId()",
+              "key": "QbzG_NZzGkmqSysgzoJ44g",
+              "reference": "@QbzG_NZzGkmqSysgzoJ44g",
+              "path": "ServerAction:ReadUserContext/AssignNode:Assign/Assignment:ServerUserId = GetUserId()",
+              "properties": {
+                "Value": "GetUserId()",
+                "Variable": "ServerUserId"
+              },
+              "propertyReferences": {},
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "ServerUserId",
+                  "modelName": "",
+                  "label": "ServerUserId",
+                  "key": "QbzG_NZzGkmqSysgzoJ44g.#Variable",
+                  "reference": "@QbzG_NZzGkmqSysgzoJ44g.#Variable",
+                  "path": "ServerAction:ReadUserContext/AssignNode:Assign/Assignment:ServerUserId = GetUserId()/TextBasedExpression:ServerUserId",
+                  "properties": {
+                    "Type": "BasicType:Text Identifier"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Text Identifier",
+                      "key": "hR+HzvoUvkKth+waVG8Vww",
+                      "reference": "@hR+HzvoUvkKth+waVG8Vww",
+                      "path": "BasicType:Text Identifier"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                },
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "GetUserId()",
+                  "modelName": "",
+                  "label": "GetUserId()",
+                  "key": "QbzG_NZzGkmqSysgzoJ44g.#Value",
+                  "reference": "@QbzG_NZzGkmqSysgzoJ44g.#Value",
+                  "path": "ServerAction:ReadUserContext/AssignNode:Assign/Assignment:ServerUserId = GetUserId()/TextBasedExpression:GetUserId()",
+                  "properties": {
+                    "Type": "IdentifierType:User Identifier"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "IdentifierType",
+                      "name": "",
+                      "label": "User Identifier",
+                      "key": "NY4z0lcU5E278_O+JuYBdQ.#IdentifierType",
+                      "reference": "@NY4z0lcU5E278_O+JuYBdQ.#IdentifierType",
+                      "path": "Reference:(System)/ServerEntitySignature:User/IdentifierType:User Identifier"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 2,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "Assignment",
+              "name": "ServerUserIdMatchesClient = GetUserId() = ExpectedUserId",
+              "modelName": "",
+              "label": "ServerUserIdMatchesClient = GetUserId() = ExpectedUserId",
+              "key": "yRooxgUsgEuDiJrOePw5xQ",
+              "reference": "@yRooxgUsgEuDiJrOePw5xQ",
+              "path": "ServerAction:ReadUserContext/AssignNode:Assign/Assignment:ServerUserIdMatchesClient = GetUserId() = ExpectedUserId",
+              "properties": {
+                "Value": "GetUserId() = ExpectedUserId",
+                "Variable": "ServerUserIdMatchesClient"
+              },
+              "propertyReferences": {},
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "ServerUserIdMatchesClient",
+                  "modelName": "",
+                  "label": "ServerUserIdMatchesClient",
+                  "key": "yRooxgUsgEuDiJrOePw5xQ.#Variable",
+                  "reference": "@yRooxgUsgEuDiJrOePw5xQ.#Variable",
+                  "path": "ServerAction:ReadUserContext/AssignNode:Assign/Assignment:ServerUserIdMatchesClient = GetUserId() = ExpectedUserId/TextBasedExpression:ServerUserIdMatchesClient",
+                  "properties": {
+                    "Type": "BasicType:Boolean"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Boolean",
+                      "key": "oD0fxvc7hUOX_305zIXIlg",
+                      "reference": "@oD0fxvc7hUOX_305zIXIlg",
+                      "path": "BasicType:Boolean"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                },
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "GetUserId() = ExpectedUserId",
+                  "modelName": "",
+                  "label": "GetUserId() = ExpectedUserId",
+                  "key": "yRooxgUsgEuDiJrOePw5xQ.#Value",
+                  "reference": "@yRooxgUsgEuDiJrOePw5xQ.#Value",
+                  "path": "ServerAction:ReadUserContext/AssignNode:Assign/Assignment:ServerUserIdMatchesClient = GetUserId() = ExpectedUserId/TextBasedExpression:GetUserId() = ExpectedUserId",
+                  "properties": {
+                    "Type": "BasicType:Boolean"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Boolean",
+                      "key": "oD0fxvc7hUOX_305zIXIlg",
+                      "reference": "@oD0fxvc7hUOX_305zIXIlg",
+                      "path": "BasicType:Boolean"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 2,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "_eWzunlclEqb4b7SrKPL3w",
+              "reference": "@_eWzunlclEqb4b7SrKPL3w",
+              "path": "ServerAction:ReadUserContext/AssignNode:Assign/ActionConnector:",
+              "properties": {
+                "Target": "ExecuteServerActionNode:ObserveUserContext"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "ExecuteServerActionNode",
+                  "name": "ObserveUserContext",
+                  "label": "ObserveUserContext",
+                  "key": "K1GLcPFOc0+QLSOoWwnDVQ",
+                  "reference": "@K1GLcPFOc0+QLSOoWwnDVQ",
+                  "path": "ServerAction:ReadUserContext/ExecuteServerActionNode:ObserveUserContext"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 3,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "ExecuteServerActionNode",
+          "name": "ObserveUserContext",
+          "modelName": "ObserveUserContext",
+          "label": "ObserveUserContext",
+          "key": "K1GLcPFOc0+QLSOoWwnDVQ",
+          "reference": "@K1GLcPFOc0+QLSOoWwnDVQ",
+          "path": "ServerAction:ReadUserContext/ExecuteServerActionNode:ObserveUserContext",
+          "properties": {
+            "Action": "ServiceActionSignature:ObserveUserContext",
+            "AnimationEffect": "None",
+            "Connectors": "[ActionConnector:]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Name": "ObserveUserContext",
+            "Target": "AssignNode:Assign",
+            "VerticalPosition": "4000",
+            "ReadableIdentifier": "ObserveUserContext"
+          },
+          "propertyReferences": {
+            "Action": {
+              "kind": "ServiceActionSignature",
+              "name": "ObserveUserContext",
+              "label": "ObserveUserContext",
+              "key": "XU9b3WOm40GSdZOmNfLeiw",
+              "reference": "@XU9b3WOm40GSdZOmNfLeiw",
+              "path": "Reference:SSAMDbgWorkflowProducer/ServiceActionSignature:ObserveUserContext"
+            },
+            "Target": {
+              "kind": "AssignNode",
+              "name": "",
+              "label": "Assign",
+              "key": "Z32lMiHCv0ehWCIUQJkJjQ",
+              "reference": "@Z32lMiHCv0ehWCIUQJkJjQ",
+              "path": "ServerAction:ReadUserContext/AssignNode:Assign"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "PkWnZPDKb0+J_pZWHmkcmg",
+                  "reference": "@PkWnZPDKb0+J_pZWHmkcmg",
+                  "path": "ServerAction:ReadUserContext/ExecuteServerActionNode:ObserveUserContext/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "Argument",
+              "name": "Seed",
+              "modelName": "",
+              "label": "Seed",
+              "key": "t4CQm4QYwkK_8vXvvcEM7g",
+              "reference": "@t4CQm4QYwkK_8vXvvcEM7g",
+              "path": "ServerAction:ReadUserContext/ExecuteServerActionNode:ObserveUserContext/Argument:Seed",
+              "properties": {
+                "Value": "Seed",
+                "Parameter": "InputParameterSignature:Seed"
+              },
+              "propertyReferences": {
+                "Parameter": {
+                  "kind": "InputParameterSignature",
+                  "name": "Seed",
+                  "label": "Seed",
+                  "key": "QrxRnU4PsUi6uBaZhNd6mg",
+                  "reference": "@QrxRnU4PsUi6uBaZhNd6mg",
+                  "path": "Reference:SSAMDbgWorkflowProducer/ServiceActionSignature:ObserveUserContext/InputParameterSignature:Seed"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "Seed",
+                  "modelName": "",
+                  "label": "Seed",
+                  "key": "t4CQm4QYwkK_8vXvvcEM7g.#Value",
+                  "reference": "@t4CQm4QYwkK_8vXvvcEM7g.#Value",
+                  "path": "ServerAction:ReadUserContext/ExecuteServerActionNode:ObserveUserContext/Argument:Seed/TextBasedExpression:Seed",
+                  "properties": {
+                    "Type": "BasicType:Integer"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Integer",
+                      "key": "j2Lc0phK0kuggij4gQYfAw",
+                      "reference": "@j2Lc0phK0kuggij4gQYfAw",
+                      "path": "BasicType:Integer"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 1,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "Argument",
+              "name": "ExpectedUserId",
+              "modelName": "",
+              "label": "ExpectedUserId",
+              "key": "clRflKP5n02CEmF95PH+Jg",
+              "reference": "@clRflKP5n02CEmF95PH+Jg",
+              "path": "ServerAction:ReadUserContext/ExecuteServerActionNode:ObserveUserContext/Argument:ExpectedUserId",
+              "properties": {
+                "Value": "ExpectedUserId",
+                "Parameter": "InputParameterSignature:ExpectedUserId"
+              },
+              "propertyReferences": {
+                "Parameter": {
+                  "kind": "InputParameterSignature",
+                  "name": "ExpectedUserId",
+                  "label": "ExpectedUserId",
+                  "key": "TW16RwRimUCu8fIb3hH23g",
+                  "reference": "@TW16RwRimUCu8fIb3hH23g",
+                  "path": "Reference:SSAMDbgWorkflowProducer/ServiceActionSignature:ObserveUserContext/InputParameterSignature:ExpectedUserId"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "ExpectedUserId",
+                  "modelName": "",
+                  "label": "ExpectedUserId",
+                  "key": "clRflKP5n02CEmF95PH+Jg.#Value",
+                  "reference": "@clRflKP5n02CEmF95PH+Jg.#Value",
+                  "path": "ServerAction:ReadUserContext/ExecuteServerActionNode:ObserveUserContext/Argument:ExpectedUserId/TextBasedExpression:ExpectedUserId",
+                  "properties": {
+                    "Type": "BasicType:Text Identifier"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Text Identifier",
+                      "key": "hR+HzvoUvkKth+waVG8Vww",
+                      "reference": "@hR+HzvoUvkKth+waVG8Vww",
+                      "path": "BasicType:Text Identifier"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 1,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "PkWnZPDKb0+J_pZWHmkcmg",
+              "reference": "@PkWnZPDKb0+J_pZWHmkcmg",
+              "path": "ServerAction:ReadUserContext/ExecuteServerActionNode:ObserveUserContext/ActionConnector:",
+              "properties": {
+                "Target": "AssignNode:Assign"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "AssignNode",
+                  "name": "",
+                  "label": "Assign",
+                  "key": "Z32lMiHCv0ehWCIUQJkJjQ",
+                  "reference": "@Z32lMiHCv0ehWCIUQJkJjQ",
+                  "path": "ServerAction:ReadUserContext/AssignNode:Assign"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 3,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "StartNode",
+          "name": "Start",
+          "modelName": "",
+          "label": "Start",
+          "key": "8ZGV0grYh0iC+likOCsqSA",
+          "reference": "@8ZGV0grYh0iC+likOCsqSA",
+          "path": "ServerAction:ReadUserContext/StartNode:Start",
+          "properties": {
+            "Connectors": "[ActionConnector:]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Target": "AssignNode:Assign",
+            "VerticalPosition": "800",
+            "ReadableIdentifier": "(3200,800)"
+          },
+          "propertyReferences": {
+            "Target": {
+              "kind": "AssignNode",
+              "name": "",
+              "label": "Assign",
+              "key": "ALq6hMBfvU+EBXgZVfcCQg",
+              "reference": "@ALq6hMBfvU+EBXgZVfcCQg",
+              "path": "ServerAction:ReadUserContext/AssignNode:Assign"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "_uaXAAOfK0aFVvaO0tFhGQ",
+                  "reference": "@_uaXAAOfK0aFVvaO0tFhGQ",
+                  "path": "ServerAction:ReadUserContext/StartNode:Start/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "_uaXAAOfK0aFVvaO0tFhGQ",
+              "reference": "@_uaXAAOfK0aFVvaO0tFhGQ",
+              "path": "ServerAction:ReadUserContext/StartNode:Start/ActionConnector:",
+              "properties": {
+                "Target": "AssignNode:Assign"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "AssignNode",
+                  "name": "",
+                  "label": "Assign",
+                  "key": "ALq6hMBfvU+EBXgZVfcCQg",
+                  "reference": "@ALq6hMBfvU+EBXgZVfcCQg",
+                  "path": "ServerAction:ReadUserContext/AssignNode:Assign"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 1,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "EndNode",
+          "name": "End",
+          "modelName": "",
+          "label": "End",
+          "key": "lhK2JvPGmkuqsnlpJhVivg",
+          "reference": "@lhK2JvPGmkuqsnlpJhVivg",
+          "path": "ServerAction:ReadUserContext/EndNode:End",
+          "properties": {
+            "Connectors": "[]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "VerticalPosition": "7200",
+            "ReadableIdentifier": "(3200,7200)"
+          },
+          "propertyReferences": {},
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "AssignNode",
+          "name": "Assign",
+          "modelName": "",
+          "label": "Assign",
+          "key": "Z32lMiHCv0ehWCIUQJkJjQ",
+          "reference": "@Z32lMiHCv0ehWCIUQJkJjQ",
+          "path": "ServerAction:ReadUserContext/AssignNode:Assign",
+          "properties": {
+            "Connectors": "[ActionConnector:]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Target": "EndNode:End",
+            "VerticalPosition": "5600",
+            "ReadableIdentifier": "(3200,5600)"
+          },
+          "propertyReferences": {
+            "Target": {
+              "kind": "EndNode",
+              "name": "",
+              "label": "End",
+              "key": "lhK2JvPGmkuqsnlpJhVivg",
+              "reference": "@lhK2JvPGmkuqsnlpJhVivg",
+              "path": "ServerAction:ReadUserContext/EndNode:End"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "0FgbPlqJ_EKCuByhGb4d2w",
+                  "reference": "@0FgbPlqJ_EKCuByhGb4d2w",
+                  "path": "ServerAction:ReadUserContext/AssignNode:Assign/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "Assignment",
+              "name": "ServiceUserIdMatchesClient = ObserveUserContext.UserIdMatchesCaller",
+              "modelName": "",
+              "label": "ServiceUserIdMatchesClient = ObserveUserContext.UserIdMatchesCaller",
+              "key": "Iq0g85M7Pk+wUSv7TxQiYQ",
+              "reference": "@Iq0g85M7Pk+wUSv7TxQiYQ",
+              "path": "ServerAction:ReadUserContext/AssignNode:Assign/Assignment:ServiceUserIdMatchesClient = ObserveUserContext.UserIdMatchesCaller",
+              "properties": {
+                "Value": "ObserveUserContext.UserIdMatchesCaller",
+                "Variable": "ServiceUserIdMatchesClient"
+              },
+              "propertyReferences": {},
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "ServiceUserIdMatchesClient",
+                  "modelName": "",
+                  "label": "ServiceUserIdMatchesClient",
+                  "key": "Iq0g85M7Pk+wUSv7TxQiYQ.#Variable",
+                  "reference": "@Iq0g85M7Pk+wUSv7TxQiYQ.#Variable",
+                  "path": "ServerAction:ReadUserContext/AssignNode:Assign/Assignment:ServiceUserIdMatchesClient = ObserveUserContext.UserIdMatchesCaller/TextBasedExpression:ServiceUserIdMatchesClient",
+                  "properties": {
+                    "Type": "BasicType:Boolean"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Boolean",
+                      "key": "oD0fxvc7hUOX_305zIXIlg",
+                      "reference": "@oD0fxvc7hUOX_305zIXIlg",
+                      "path": "BasicType:Boolean"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                },
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "ObserveUserContext.UserIdMatchesCaller",
+                  "modelName": "",
+                  "label": "ObserveUserContext.UserIdMatchesCaller",
+                  "key": "Iq0g85M7Pk+wUSv7TxQiYQ.#Value",
+                  "reference": "@Iq0g85M7Pk+wUSv7TxQiYQ.#Value",
+                  "path": "ServerAction:ReadUserContext/AssignNode:Assign/Assignment:ServiceUserIdMatchesClient = ObserveUserContext.UserIdMatchesCaller/TextBasedExpression:ObserveUserContext.UserIdMatchesCaller",
+                  "properties": {
+                    "Type": "BasicType:Boolean"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Boolean",
+                      "key": "oD0fxvc7hUOX_305zIXIlg",
+                      "reference": "@oD0fxvc7hUOX_305zIXIlg",
+                      "path": "BasicType:Boolean"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 2,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "Assignment",
+              "name": "Result = ObserveUserContext.Result",
+              "modelName": "",
+              "label": "Result = ObserveUserContext.Result",
+              "key": "Hs9ziJGC4kqQDjeNL_gdkQ",
+              "reference": "@Hs9ziJGC4kqQDjeNL_gdkQ",
+              "path": "ServerAction:ReadUserContext/AssignNode:Assign/Assignment:Result = ObserveUserContext.Result",
+              "properties": {
+                "Value": "ObserveUserContext.Result",
+                "Variable": "Result"
+              },
+              "propertyReferences": {},
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "Result",
+                  "modelName": "",
+                  "label": "Result",
+                  "key": "Hs9ziJGC4kqQDjeNL_gdkQ.#Variable",
+                  "reference": "@Hs9ziJGC4kqQDjeNL_gdkQ.#Variable",
+                  "path": "ServerAction:ReadUserContext/AssignNode:Assign/Assignment:Result = ObserveUserContext.Result/TextBasedExpression:Result",
+                  "properties": {
+                    "Type": "BasicType:Integer"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Integer",
+                      "key": "j2Lc0phK0kuggij4gQYfAw",
+                      "reference": "@j2Lc0phK0kuggij4gQYfAw",
+                      "path": "BasicType:Integer"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                },
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "ObserveUserContext.Result",
+                  "modelName": "",
+                  "label": "ObserveUserContext.Result",
+                  "key": "Hs9ziJGC4kqQDjeNL_gdkQ.#Value",
+                  "reference": "@Hs9ziJGC4kqQDjeNL_gdkQ.#Value",
+                  "path": "ServerAction:ReadUserContext/AssignNode:Assign/Assignment:Result = ObserveUserContext.Result/TextBasedExpression:ObserveUserContext.Result",
+                  "properties": {
+                    "Type": "BasicType:Integer"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Integer",
+                      "key": "j2Lc0phK0kuggij4gQYfAw",
+                      "reference": "@j2Lc0phK0kuggij4gQYfAw",
+                      "path": "BasicType:Integer"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 2,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "0FgbPlqJ_EKCuByhGb4d2w",
+              "reference": "@0FgbPlqJ_EKCuByhGb4d2w",
+              "path": "ServerAction:ReadUserContext/AssignNode:Assign/ActionConnector:",
+              "properties": {
+                "Target": "EndNode:End"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "EndNode",
+                  "name": "",
+                  "label": "End",
+                  "key": "lhK2JvPGmkuqsnlpJhVivg",
+                  "reference": "@lhK2JvPGmkuqsnlpJhVivg",
+                  "path": "ServerAction:ReadUserContext/EndNode:End"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 3,
+          "childrenOmitted": 0
+        }
+      ],
+      "childrenTotal": 11,
+      "childrenOmitted": 0
+    }
+  ]
+}

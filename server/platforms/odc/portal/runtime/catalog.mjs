@@ -10,10 +10,21 @@ const defaultDirectory = fileURLToPath(new URL('../catalog/', import.meta.url));
 
 // The published .NET-generated contracts use nullable beside allOf/$ref without
 // a sibling type. Express that intent in JSON Schema without altering originals.
-function normalizeSchema(value) {
-  if (Array.isArray(value)) return value.map(normalizeSchema);
+function normalizeSchema(value, spec) {
+  if (Array.isArray(value)) return value.map(entry => normalizeSchema(entry, spec));
   if (!value || typeof value !== 'object') return value;
-  const copy = Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, normalizeSchema(entry)]));
+  const copy = Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, normalizeSchema(entry, spec)]));
+  // Generated closed wrappers around one object ref otherwise reject every
+  // declared field. Declare names here; keep all field constraints in allOf.
+  // Do not relax composed inheritance, explicit properties or open schemas.
+  if (copy.additionalProperties === false && !copy.properties && !copy.patternProperties
+      && copy.allOf?.length === 1 && Object.keys(copy.allOf[0]).length === 1
+      && copy.allOf[0].$ref?.startsWith('#/')) {
+    const target = resolveRef(spec, copy.allOf[0]);
+    if (target.type === 'object' && target.properties && !target.allOf && !target.anyOf && !target.oneOf) {
+      copy.properties = Object.fromEntries(Object.keys(target.properties).map(name => [name, {}]));
+    }
+  }
   if (ownNullableWithoutType(copy)) {
     const nullable = copy.nullable;
     delete copy.nullable;
@@ -49,7 +60,7 @@ export class Catalog {
       for (const name of ['binary', 'byte']) ajv.addFormat(name, true);
       for (const name of ['double', 'float']) ajv.addFormat(name, { type: 'number', validate: Number.isFinite });
       const rootId = `urn:odc:${api.id}`;
-      ajv.addSchema({ $id: rootId, components: normalizeSchema(spec.components ?? {}) });
+      ajv.addSchema({ $id: rootId, components: normalizeSchema(spec.components ?? {}, spec) });
       const basePath = new URL(api.servers[0].url.replace('ODC_PORTAL_DOMAIN', 'placeholder.invalid')).pathname.replace(/\/$/, '');
       if (!basePath.startsWith('/api/') || basePath.includes('..')) fail('CONTRACT_INVALID', 'Unexpected API base path.');
       this.apis.set(api.id, { ...api, spec, ajv, rootId, basePath });
@@ -111,7 +122,7 @@ export class Catalog {
         return Object.fromEntries(Object.entries(value).map(([k, v]) => [k,
           k === '$ref' && typeof v === 'string' && v.startsWith('#/') ? api.rootId + v : qualify(v)]));
       };
-      try { validator = api.ajv.compile(qualify(normalizeSchema(schema))); }
+      try { validator = api.ajv.compile(qualify(normalizeSchema(schema, api.spec))); }
       catch { fail('CONTRACT_INVALID', 'Cannot compile this pinned request schema.', { location }); }
       this.validators.set(key, validator);
     }

@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { workPacket, moduleItems, namedCapabilities, ruleUnits, rulesSection, intentTopics, PACKET_ORDER, PACKET_BUDGET, PACKET_SCHEMA } from '../work-packet.mjs';
+import { workPacket, moduleItems, namedCapabilities, ruleUnits, rulesSection, intentTopics, PACKET_ORDER, PACKET_BUDGET, PACKET_SCHEMA, BATCH_RULE } from '../work-packet.mjs';
 import { moduleDigest, digestFile } from '../module-map.mjs';
 import { DIGEST_EXTRACTOR, DIGEST_SECTIONS } from '../module-digest.mjs';
 import { discover, laneSources, parseDiscoverArguments } from '../discovery.mjs';
@@ -258,3 +258,68 @@ for (const lane of ['o11', 'odc']) {
     assert.ok(small.size.bytes <= 12000, String(small.size.bytes));
   });
 }
+
+// ---- 2026-10-12 (production test of the owner, 7 server actions): what the packet says and carries so the request goes in
+// one job, in one round of reading.
+test('next.deliver carries the batch rule: every change of the request for a module in ONE job, a refusal brings every problem', () => {
+  for (const next of [workPacket(inputOf()).next, workPacket(inputOf({ lane: 'odc', module: null, intent: 'criar uma tela' })).next]) {
+    assert.equal(next.deliver.batch, BATCH_RULE);
+    assert.match(next.deliver.batch, /ONE job and ONE call/); assert.match(next.deliver.batch, /separate jobs only for different modules/);
+    assert.match(next.deliver.batch, /every problem of the whole job at once/);
+    assert.match(next.deliver.why, /summary of what it created/);
+  }
+});
+
+test('a contract slice an earlier item wrote is named in contractAbove, never written twice', () => {
+  const p = workPacket(inputOf());
+  const [first, second] = p.capabilities.items;
+  assert.ok(first.contract['logic.action'] && first.contract['logic.steps.raise']);
+  assert.deepEqual(second.contract, {}); assert.deepEqual(second.contractAbove, ['logic.action', 'logic.steps.raise']);
+  assert.equal(JSON.stringify(p.capabilities).split('t'.repeat(400)).length - 1, 2, 'each slice text written once');
+});
+
+test('with logic steps a raw verb keeps its arguments; without steps it is whole', () => {
+  const verb = { kind: 'write', required: ['parent', 'type'], optional: ['name', 'as'], effect: 'e'.repeat(500) };
+  const slices = pointers => Object.fromEntries((pointers ?? []).map(p => [p, p.startsWith('verbs.verbs.') ? verb : ['k']]));
+  const input = { ...inputOf(), matches: [{ ...inputOf().matches[0], contract: ['logic.action', 'verbs.verbs.create'] }], slices };
+  const withSteps = workPacket(input).capabilities;
+  assert.equal(withSteps.items[0].contract['verbs.verbs.create'], 'write; required: parent, type; optional: name, as');
+  assert.deepEqual(withSteps.verbs.read, { tool: 'ssam_reference', arguments: { lane: 'o11', kind: 'api', query: { op: '<verb>' } } });
+  const without = workPacket({ ...input, steps: null }).capabilities;
+  assert.deepEqual(without.items[0].contract['verbs.verbs.create'], verb); assert.equal(without.verbs, undefined);
+});
+
+test('an intent with no screen noun keeps a ui match named only by words logic shares last, in its reduced form', () => {
+  const ui = { id: 'ui.list', category: 'ui', title: 'List', via: 'match', score: 9, why: ['list', 'sort', 'parameter'], level: 'C-suite', route: { operation: 'list widget' }, contract: ['ui.list'] };
+  const input = { ...inputOf({ intent: 'criar server actions com aggregate, sort e list' }), matches: [ui, ...inputOf().matches] };
+  const p = workPacket(input);
+  assert.deepEqual(p.capabilities.items.map(i => i.id), ['logic.exception', 'logic.server-action', 'ui.list']);
+  assert.ok(p.capabilities.items[2].expand && !p.capabilities.items[2].contract, 'reduced: operation and expand');
+  // A screen noun, or a ui word of its own (dropdown), keeps it where it ranked.
+  assert.equal(workPacket({ ...input, intent: 'criar uma tela com lista ordenada' }).capabilities.items[0].id, 'ui.list');
+  assert.equal(workPacket({ ...input, intent: 'criar um dropdown com busca', matches: [{ ...ui, why: ['dropdown', 'search'] }, ...inputOf().matches] }).capabilities.items[0].id, 'ui.list');
+});
+
+test('the built-ins the intent names ride in capabilities.functions: signatures within a third of the room, else names, else a cut', () => {
+  const functions = { from: 'kernel/catalog/functions-x.json', named: ['GetUserId'], signatures: ['GetUserId(): UserId', ...Array.from({ length: 30 }, (_, i) => `AddThing${i}(dt: Date Time, n: Integer): Date Time`)],
+    note: 'n', more: { tool: 'ssam_reference', arguments: { lane: 'o11', kind: 'functions', query: '<Name1 Name2 ...>' } } };
+  const full = workPacket({ ...inputOf(), functions });
+  assert.deepEqual(full.capabilities.functions.signatures, functions.signatures);
+  const small = workPacket({ ...inputOf(), functions }, { budgetBytes: 8192 });
+  const kept = small.capabilities.functions;
+  if (kept) { assert.ok(kept.names?.includes('GetUserId')); assert.equal(kept.signatures, undefined); }
+  const cut = small.cuts.find(c => c.section === 'capabilities');
+  assert.ok(cut?.left.functions, JSON.stringify(small.cuts));
+  assert.ok(bytes(small) <= 8192);
+});
+
+test('the room the last sections leave goes back to the first section with a cut', () => {
+  const big = i => ({ id: 'logic.c' + i, category: 'logic', title: 'c' + i, via: 'match', score: 9 - i, why: ['action'], level: 'C-suite', route: { operation: 'op' }, contract: ['p' + i], guidance: 'g'.repeat(500) });
+  const input = { ...inputOf({ module: null }), matches: Array.from({ length: 9 }, (_, i) => big(i)), proven: null, example: null,
+    slices: pointers => Object.fromEntries((pointers ?? []).map(p => [p, { text: p.repeat(300) }])) };
+  for (const budgetBytes of [16000, 24000, PACKET_BUDGET]) {
+    const p = workPacket(input, { budgetBytes });
+    assert.ok(p.size.bytes <= budgetBytes);
+    if (p.cuts.some(c => c.section === 'capabilities')) assert.ok(budgetBytes - p.size.bytes < 256 + 64 + 1600, `${budgetBytes}: ${budgetBytes - p.size.bytes} bytes left unused beside a cut`);
+  }
+});

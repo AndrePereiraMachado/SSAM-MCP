@@ -33,6 +33,12 @@
       "prove": null,
       "deliver": null,
       "entries": ["odc deliver / studio_deliver", "odc studio check-base|preview|merge", "odc studio authorize <manifest> publish \"<user words>\"", "odc studio publish <manifest> --wait"]
+    },
+    "prototype": {
+      "operation": "ONE studio_deliver call (through the ssam server) with the job op prototype: SSAM captures the prototype headless, builds one native screen per view, the shell block, popups, entities with the mock data and the logic, measures the fidelity on the module read back, merges, publishes and loads the demo data; the receipt is prototype",
+      "prove": null,
+      "deliver": "studio_deliver {feature, module, job:{ops:[{op:\"prototype\", data:{source}}]}, owners, changes, publish:true, authorize}",
+      "entries": [{"call":{"tool":"studio_deliver","arguments":{"feature":"Protótipo <Prefixo>","module":"<módulo aberto>","job":{"ops":[{"op":"prototype","data":{"source":"<pasta do protótipo, caminho absoluto>"}}]},"owners":["<Prefixo>"],"changes":["Protótipo <Prefixo> importado como telas nativas"],"publish":true,"authorize":"<palavras do usuário>"}},"rehearsal":{"tool":"studio_deliver","arguments":{"feature":"Protótipo <Prefixo>","module":"<módulo aberto>","job":{"ops":[{"op":"prototype","data":{"source":"<pasta do protótipo, caminho absoluto>"}}]},"owners":["<Prefixo>"],"changes":["Protótipo <Prefixo> importado como telas nativas"],"until":"preview"}},"slots":{"source":"the absolute folder of the prototype (or its .html entry)","module":"the module open in ODC Studio","Prefixo":"the prototype <title> up to the first separator, in PascalCase (FarmaVirtual); feature, owners and changes may be left out: the ssam server fills them from it"},"rules":["Do not read the prototype files and never convert them by hand: SSAM reads them.","One call; the owner's words in authorize cover the import, the publication and the demo data.","data.mapping only when a refusal asks for it: apply its patch as it is (one refusal brings every problem).","Rehearsal without merge only when the person asks: until:\"preview\" (ODC has no until apply).","Give the person the links of prototype.screens[].url."]}, "studio_deliver"]
     }
   },
   "synonyms": {

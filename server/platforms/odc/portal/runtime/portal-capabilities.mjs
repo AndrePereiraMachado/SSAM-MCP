@@ -1,6 +1,9 @@
 import fs from 'node:fs';
 import { fail } from './errors.mjs';
 import { PORTAL_GAPS, PORTAL_READS, PORTAL_WRITES } from './portal-routes.mjs';
+import { KNOWLEDGE_FILE_DOWNLOAD } from './knowledge-file-download-plan.mjs';
+import { MOBILE_FILE_DOWNLOAD } from './private-mobile-download.mjs';
+import { API_CLIENT_VAULT_STATUS } from './api-client-vault-status.mjs';
 
 const source = new URL('../catalog/portal-capabilities.json', import.meta.url);
 const kinds = new Set(['public', 'internal', 'gap']);
@@ -8,7 +11,7 @@ const kinds = new Set(['public', 'internal', 'gap']);
 // Evidence is independent of execution. Registering a description must never
 // make an unavailable backend appear authenticated or live-tested.
 // tenantAccess: the host registered the tenant-aware tools of the SSAM facade (facade/odc-access.mjs), which run the
-// internal routes an entry lists under `access` (portal-routes.mjs) over the Studio Portal window or the vault broker.
+// internal routes an entry lists under `access` (portal-routes.mjs) over a supported headless native transport or the vault broker.
 export class PortalCapabilities {
   constructor({ catalog, backends = new Map(), evidence, tenantAccess = false } = {}) {
     if (!catalog?.apis || !catalog?.operations) fail('CAPABILITY_CONFIG_INVALID', 'A verified public catalog is required.');
@@ -38,11 +41,12 @@ export class PortalCapabilities {
   // An entry's internal routes must be the ones portal-routes.mjs runs, its gaps the ones it refuses, and its paths
   // the ones the evidence describes: the inventory never claims a route the runtime does not have.
   checkAccess(entry) {
-    const { tools, paths, reads = [], writes = [], unmapped = [] } = entry.access;
+    const { tools, paths, reads = [], typedReads = [], writes = [], unmapped = [] } = entry.access;
     const known = (list, table) => Array.isArray(list) && list.every(id => Object.hasOwn(table, id));
     if (entry.kind !== 'internal' || !Array.isArray(tools) || !tools.length || !Array.isArray(paths) || !paths.length
       || !paths.every(p => Object.hasOwn(this.evidence.accessPaths ?? {}, p))
-      || !known(reads, PORTAL_READS) || !known(writes, PORTAL_WRITES) || !known(unmapped, PORTAL_GAPS)) {
+      || !known(reads, PORTAL_READS) || !Array.isArray(typedReads) || !typedReads.every(id => [KNOWLEDGE_FILE_DOWNLOAD,MOBILE_FILE_DOWNLOAD,API_CLIENT_VAULT_STATUS].includes(id))
+      || !known(writes, PORTAL_WRITES) || !known(unmapped, PORTAL_GAPS)) {
       fail('CAPABILITY_CONFIG_INVALID', 'Capability access does not match the internal route tables: ' + entry.id);
     }
   }
@@ -95,7 +99,7 @@ export class PortalCapabilities {
   execution(entry, { brief = false } = {}) {
     if (entry.kind === 'public') return this.tenantAccess ? {
       route: 'public_contract', implemented: true, tools: ['odc_read', 'odc_write'], authentication: 'studio_session_then_vault_api_client',
-      liveVerified: false, nextStep: 'Search/describe an exact operation, then odc_read or odc_write {tenant, operationId}: the ODC Studio session on the tenant first, then the vault API Client, a private prompt only with no Studio open. Writes need the user\'s words and a new operationUuid.',
+      liveVerified: false, nextStep: 'Search/describe an exact operation, then odc_read or odc_write {tenant, operationId}: the ODC Studio session on the tenant first, then the vault API Client, missing credentials refuse without a prompt. Writes need the user\'s words and a new operationUuid.',
     } : {
       route: 'public_contract', implemented: true, authentication: 'operator_configured_api_client',
       liveVerified: false, nextStep: 'Search/describe an exact operation and check connection/write-policy status. Discovery does not contact or authenticate the tenant.',
@@ -109,20 +113,21 @@ export class PortalCapabilities {
       nextStep: 'Use the host backend with an explicit target and tenant; internal compatibility and permissions are checked per call.',
     };
     if (entry.access) {
-      const { tools, paths, reads = [], writes = [], unmapped = [], secrets } = entry.access;
+      const { tools, paths, reads = [], typedReads = [], writes = [], unmapped = [], secrets } = entry.access;
       const routes = brief ? { reads: reads.length, writes: writes.length, ...(unmapped.length ? { unmapped } : {}) }
         : { reads, writes, ...(unmapped.length ? { unmapped: unmapped.map(id => ({ id, code: 'PORTAL_ROUTE_UNMAPPED', instruction: PORTAL_GAPS[id] })) } : {}),
           ...(secrets ? { secrets } : {}) };
+      if (typedReads.length) routes.typedReads = brief ? typedReads.length : typedReads;
       if (this.tenantAccess) return {
         route: 'tenant_access', implemented: true, tools,
         paths: brief ? paths : paths.map(path => ({ path, how: this.evidence.accessPaths[path] })),
-        authentication: 'studio_portal_window_then_vault_portal_account', liveVerified: false, ...routes,
-        nextStep: 'odc_auth_status {tenant} shows which session answers; odc_portal_login {tenant} opens the Portal window inside the ODC Studio once (SSO/MFA included); then ' + tools.join(', ')
+        authentication: 'native_headless_then_compatible_saved_profile', liveVerified: false, ...routes,
+        nextStep: 'odc_auth_status {tenant} shows which session answers; odc_portal_login {tenant} authenticates without UI; native headless SSO requires bridge support, otherwise a compatible stored profile is required; then ' + tools.join(', ')
           + ' with the operation IDs above. Writes need the user\'s words and a new operationUuid; internal contracts can change.',
       };
       return {
         route: 'unavailable', implemented: false, authentication: 'not_connected', liveVerified: false, code: 'PORTAL_BACKEND_NOT_CONNECTED', ...routes,
-        nextStep: 'Implemented by the tenant-aware tools of the SSAM facade (' + tools.join(', ') + ') over the Studio Portal window or the vault broker; this server does not register them. Use the ssam or ssam-hybrid-odc MCP.',
+        nextStep: 'Implemented by the tenant-aware tools of the SSAM facade (' + tools.join(', ') + ') over a supported headless native transport or the vault broker; this server does not register them. Use the ssam or ssam-hybrid-odc MCP.',
       };
     }
     return {

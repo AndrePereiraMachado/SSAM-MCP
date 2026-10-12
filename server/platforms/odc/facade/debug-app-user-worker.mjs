@@ -1,8 +1,10 @@
 // Private app authentication and wrapper transport. Never expose the opened vault record on stdout.
 import { pathToFileURL } from 'node:url';
-import { privateAppUserVault, appUserBinding, sameAppUserTarget } from './debug-app-user.mjs';
+import { privateAppUserVault, appUserBinding, sameAppUserTarget, endpointCredentialBinding, sameEndpointCredentialTarget,
+  redactionSecretBinding, sameRedactionSecretTarget } from './debug-app-user.mjs';
 import { APP_USER_HEADERS, APP_USER_FIELDS } from './debug-wrapper.mjs';
 import { maskUser } from './debug-guidance.mjs';
+import { createAppUserAuthDiagnostic } from './debug-app-user-diagnostic.mjs';
 
 const GUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const NAME = /^[A-Za-z_][A-Za-z0-9_]{0,120}$/;
@@ -13,6 +15,96 @@ export function validatePrivateDescriptor(descriptor) {
   const binding = appUserBinding(descriptor.binding ?? {}, descriptor.binding?.sessionId);
   if (!sameAppUserTarget(binding, descriptor.binding) || !Number.isFinite(Date.parse(descriptor.expiresAt))) fail('debug_app_user_scope_mismatch');
   return { credentialRef: descriptor.credentialRef, binding, expiresAt: descriptor.expiresAt };
+}
+
+// Endpoint-credential descriptor: the app binding plus revision, service key and exact header names.
+// A redact-only descriptor never validates here, so no endpoint worker can place it in a request.
+// A sendable record carries no use; an explicit use:'send' is the same thing.
+const SENDABLE = [undefined, 'send'];
+export function validateEndpointCredentialDescriptor(descriptor) {
+  if (!GUID.test(descriptor?.credentialRef ?? '') || !SENDABLE.includes(descriptor.use) || descriptor.binding?.use !== undefined) fail('debug_app_user_scope_mismatch');
+  let binding; try { binding = endpointCredentialBinding(descriptor.binding ?? {}, descriptor.binding?.sessionId); } catch { fail('debug_app_user_scope_mismatch'); }
+  if (!sameEndpointCredentialTarget(binding, descriptor.binding) || !Number.isFinite(Date.parse(descriptor.expiresAt))) fail('debug_app_user_scope_mismatch');
+  return { credentialRef: descriptor.credentialRef, binding, expiresAt: descriptor.expiresAt };
+}
+
+// Redact-only descriptor: the app binding plus revision and the exact declared role names.
+export function validateRedactionSecretDescriptor(descriptor) {
+  if (!GUID.test(descriptor?.credentialRef ?? '') || ![undefined, 'redact-only'].includes(descriptor.use)) fail('debug_app_user_scope_mismatch');
+  let binding; try { binding = redactionSecretBinding(descriptor.binding ?? {}, descriptor.binding?.sessionId); } catch { fail('debug_app_user_scope_mismatch'); }
+  if (descriptor.binding?.use !== 'redact-only' || !sameRedactionSecretTarget(binding, descriptor.binding) || !Number.isFinite(Date.parse(descriptor.expiresAt))) fail('debug_app_user_scope_mismatch');
+  return { credentialRef: descriptor.credentialRef, binding, expiresAt: descriptor.expiresAt };
+}
+
+// RFC 7617: the user-id holds no ':' and neither part holds a control character. Private callers only.
+export function basicAuthorizationForms(username, password) {
+  if (typeof username !== 'string' || !username.trim() || username.length > 512 || /[:\x00-\x1f\x7f]/.test(username) ||
+      typeof password !== 'string' || !password || password.length > 4096 || /[\x00-\x1f\x7f]/.test(password)) fail('debug_app_user_credentials_unavailable');
+  const b64 = Buffer.from(username + ':' + password, 'utf8').toString('base64');
+  return { username, password, b64, authorization: 'Basic ' + b64 };
+}
+
+function openedEndpointRecord(record, safe, now) {
+  if (!record?.ok || record.kind !== 'endpoint-credential' || !SENDABLE.includes(record.use) || record.scheme !== safe.binding.scheme ||
+      !sameEndpointCredentialTarget(record.binding, safe.binding) || !(Date.parse(record.expiresAt) > now)) fail('debug_app_user_credentials_unavailable');
+  return record;
+}
+
+// Private callers only: the opened record's headers, in the bound order, or a fixed refusal. A Basic record
+// composes its one Authorization header here and keeps it on record.headers, where the caller's finally zeroes it.
+export function endpointCredentialRecordHeaders(record, safe, now = Date.now()) {
+  const names = safe.binding.headers;
+  openedEndpointRecord(record, safe, now);
+  if (safe.binding.scheme === 'basic') {
+    if (record.headers !== undefined) fail('debug_app_user_credentials_unavailable');
+    record.headers = [{ name: 'Authorization', value: basicAuthorizationForms(record.username, record.password).authorization }];
+    return record.headers;
+  }
+  if (!Array.isArray(record.headers) || record.headers.length !== names.length ||
+      record.headers.some((header, i) => header?.name !== names[i] || typeof header.value !== 'string' || !header.value ||
+        header.value.length > 4096 || /[\x00-\x1f\x7f]/.test(header.value))) fail('debug_app_user_credentials_unavailable');
+  return record.headers;
+}
+
+// Private callers only: every private form of an opened endpoint record (Basic: username, password, b64, 'Basic '+b64).
+export function endpointCredentialRecordValues(record, safe, now = Date.now()) {
+  const values = [], add = value => { if (!values.includes(value)) values.push(value); };
+  openedEndpointRecord(record, safe, now);
+  if (safe.binding.scheme === 'basic') { const forms = basicAuthorizationForms(record.username, record.password); for (const key of ['username', 'password', 'b64', 'authorization']) add(forms[key]); }
+  else for (const header of endpointCredentialRecordHeaders(record, safe, now)) add(header.value);
+  return values;
+}
+
+// Private callers only: the opened redact-only record's values, in the declared role order.
+export function redactionSecretRecordValues(record, safe, now = Date.now()) {
+  const roles = safe.binding.roles, values = [];
+  if (!record?.ok || record.kind !== 'endpoint-credential' || record.use !== 'redact-only' || !sameRedactionSecretTarget(record.binding, safe.binding) ||
+      !(Date.parse(record.expiresAt) > now) || !Array.isArray(record.secrets) || record.secrets.length !== roles.length ||
+      record.secrets.some((item, i) => item?.role !== roles[i] || typeof item.value !== 'string' || !item.value || item.value.length > 4096 ||
+        /[\x00-\x1f\x7f]/.test(item.value))) fail('debug_app_user_credentials_unavailable');
+  for (const item of record.secrets) if (!values.includes(item.value)) values.push(item.value);
+  return values;
+}
+
+// Redaction evidence for a debugger session bound to an endpoint credential (header or Basic) or to a
+// redact-only record. Never public output, never a request value for the redact-only family.
+export async function privateEndpointCredentialValues(descriptor, { vault = privateAppUserVault, now = Date.now } = {}) {
+  const redactOnly = descriptor?.use === 'redact-only' || descriptor?.binding?.use === 'redact-only';
+  const safe = redactOnly ? validateRedactionSecretDescriptor(descriptor) : validateEndpointCredentialDescriptor(descriptor);
+  if (!(Date.parse(safe.expiresAt) > now())) fail('debug_app_user_credentials_unavailable');
+  let record, values = [];
+  try {
+    record = await vault('read', safe);
+    values = (redactOnly ? redactionSecretRecordValues : endpointCredentialRecordValues)(record, safe, now());
+    return values;
+  } catch { values.fill(''); fail('debug_app_user_credentials_unavailable'); }
+  finally {
+    if (record && typeof record === 'object') {
+      record.username = ''; record.password = '';
+      for (const list of [record.headers, record.secrets]) if (Array.isArray(list)) for (const item of list) if (item && typeof item === 'object') item.value = '';
+    }
+    record = null;
+  }
 }
 
 async function openRecord(descriptor, vault) {
@@ -34,7 +126,7 @@ export async function openOdcAppUserSession(descriptor, { vault = privateAppUser
 // A failure that also names the user, masked (maskUser): the answers say which account could not sign in.
 const failAs = (code, userHint) => { const error = new Error(code); if (userHint) error.userHint = userHint; throw error; };
 
-export async function authenticatePrivateAppUser(descriptor, { vault = privateAppUserVault, login } = {}) {
+export async function authenticatePrivateAppUser(descriptor, { vault = privateAppUserVault, login, diagnosticsRoot } = {}) {
   const safe = validatePrivateDescriptor(descriptor), record = await openRecord(safe, vault);
   if (record.kind !== 'credentials' || typeof record.username !== 'string' || !record.username || typeof record.password !== 'string' || !record.password) fail('debug_app_user_credentials_unavailable');
   const userHint = maskUser(record.username);
@@ -45,15 +137,16 @@ export async function authenticatePrivateAppUser(descriptor, { vault = privateAp
     return { ok: true, state: 'credentials-entered', binding: safe.binding, expiresAt: record.expiresAt, ...(userHint ? { userHint } : {}) };
   }
   const authenticate = login ?? (await import('./debug-app-user-odc.mjs')).authenticateOdcAppUser;
+  const diagnostic = createAppUserAuthDiagnostic(safe.binding.sessionId, { root: diagnosticsRoot });
   let session;
-  try { session = await authenticate({ binding: safe.binding, credentials: { username: record.username, password: record.password } }); }
+  try { session = await authenticate({ binding: safe.binding, credentials: { username: record.username, password: record.password }, observer: diagnostic.observe }); }
   catch (error) {
     const codes = { debug_app_auth_rejected: 'debug_app_user_authentication_rejected', debug_app_auth_challenge_required: 'debug_app_user_challenge_required',
       debug_app_auth_provider_unsupported: 'debug_app_user_provider_unsupported', debug_app_auth_scope_mismatch: 'debug_app_user_scope_mismatch',
       debug_app_auth_expired: 'debug_app_user_expired', debug_app_auth_unavailable: 'debug_app_user_authentication_unavailable' };
     failAs(codes[error?.code] ?? 'debug_app_user_authentication_failed', userHint);
   }
-  finally { record.username = ''; record.password = ''; }
+  finally { record.username = ''; record.password = ''; diagnostic.finish(); }
   if (!GUID.test(session?.userKey ?? '') || typeof session.accessToken !== 'string' || !session.accessToken || !sameAppUserTarget(session.binding, safe.binding)) failAs('debug_app_user_authentication_failed', userHint);
   const saved = await vault('seal-session', { ...safe, session });
   if (!saved.ok) fail('debug_app_user_credentials_unavailable');
@@ -132,7 +225,9 @@ async function main() {
   try {
     const input = await stdinJson(), op = process.argv[2];
     if (op === 'expire') {
-      const descriptor = validatePrivateDescriptor(input);
+      // An endpoint or redact-only record is forgotten only with its full binding.
+      const descriptor = input?.binding?.use !== undefined ? validateRedactionSecretDescriptor(input)
+        : input?.binding?.serviceKey !== undefined ? validateEndpointCredentialDescriptor(input) : validatePrivateDescriptor(input);
       const ms = Math.max(0, Math.min(3600000, Date.parse(descriptor.expiresAt) - Date.now()));
       await new Promise(resolve => setTimeout(resolve, ms));
       await privateAppUserVault('forget', descriptor).catch(() => {});

@@ -167,7 +167,8 @@ Transferência (`BlobRef = {transfer, sha256, size, parts, partBytes}`):
   `BLOB_HASH_MISMATCH`, nada é gravado. O destino da montagem é sempre um caminho já confinado por `fromAgent` (6.2).
 - Servidor → agente (`file.put` ou parâmetros grandes): o servidor registra a transferência e manda o `Call` com o
   `BlobRef`. O agente baixa as partes com `GET`, confere cada uma e o total, grava num `.part` temporário e renomeia.
-- Uma parte que falha é pedida de novo até 3 vezes. As partes são sequenciais (simples e suficiente).
+- Uma parte que falha é pedida de novo até 3 vezes. As partes são sequenciais (simples e suficiente). Cada pedido de
+  parte tem prazo próprio e a nova tentativa de uma parte sem resposta vai numa conexão nova (2.9).
 - As partes recebidas ficam em `customers/<tokenId>/state/transfers/<transfer>/` e são apagadas ao montar ou expirar.
 
 ### 2.7 Revogação e troca de credencial
@@ -190,6 +191,86 @@ Transferência (`BlobRef = {transfer, sha256, size, parts, partBytes}`):
   workspace de outro cliente.
 - O workspace de um cliente não aparece para outro: `ssam_evidence` e o confinamento de caminhos só enxergam o próprio,
   e dentro dele só `odc/`, `o11/` e `inbox/`.
+
+### 2.9 Rede do agente (fase4-24)
+
+Teste em produção de 2026-10-11: duas partes pequenas de resultado (60 KB e 75 KB, uma parte cada) levaram 26,8 s e
+48,3 s; um minuto depois, os mesmos tamanhos levaram 0,2 s. O IP público do dono mudou no meio do teste (NAT de
+operadora): a conexão TCP aberta vira um buraco negro (nada volta, nem reset) e o pedido esperava o sistema desistir
+(cerca de 20 a 30 s por conexão), porque o PUT de uma parte só desistia em 120 s.
+
+O agente 0.2.1 (`agent/lib/net.mjs`, `blobs.mjs`, `channel.mjs`):
+
+- Prazo por parte: `partTimeoutMs` = 10 s + 1 s por 64 KiB da parte (a mesma regra dos POSTs de mensagens do C03; uma
+  parte de 60 KB: 11 s; uma de 4 MiB: 74 s). O prazo cobre a resposta e o corpo dela, na subida e na descida.
+- Parte sem resposta (prazo vencido, conexão perdida) é pedida de novo numa conexão só dela, aberta para o pedido e
+  fechada depois, nunca na conexão do pool que travou; recuo de 250, 500 e 750 ms. Uma parte que voltou com status
+  (400, 5xx) continua no pool. Parte repetida não duplica: o servidor guarda a parte que já tem com o mesmo sha256 e
+  responde 204 de novo (`putPart`). As conferências de sha256 da parte e do arquivo não mudaram.
+- As conexões saem de `node:http`/`node:https`, com regras que o `fetch` embutido não deixa definir: conexão do pool
+  ociosa por mais de 2 s é fechada e nunca reaproveitada (o Node do servidor fecha as dele em 5 s e o Caddy não anuncia
+  prazo); sondas TCP keep-alive depois de 5 s sem tráfego em toda conexão (Windows: 10 sondas a 1 s), então um stream
+  morto cai em cerca de 15 s em vez de esperar o timer de 45 s; um pedido que falha fecha as outras conexões ociosas do
+  pool (podem estar no mesmo caminho morto).
+- O `hello` desiste em 15 s, como os cabeçalhos do stream (antes, 120 s). As mensagens continuam com 10 s + 1 s por
+  64 KiB e o pong no seu próprio POST. O recuo de reconexão e o timer de 45 s não mudaram.
+- Proxy: o mesmo do `fetch`. Com `--use-env-proxy` (`ssam-agent.ps1`) o Node dá aos agentes globais o `HTTPS_PROXY` e
+  o `NO_PROXY` do ambiente, e o `net.mjs` usa esse mesmo `proxyEnv`. Redirecionamento não é seguido (o servidor é https
+  e não redireciona `/agent/v1`).
+- Volta ao `fetch` embutido, se for preciso: `SSAM_AGENT_HTTP=fetch` no ambiente do agente (os prazos por parte ficam;
+  as regras de conexão, não).
+- Diário do agente: cada nova tentativa de parte grava `blob-retry` (`direction`, `index`, `attempt`, `reason`, `ms`,
+  `fresh`).
+- Testes: `agent/tests/net.test.mjs` (um relé TCP que vira buraco negro: a parte termina perto do prazo numa conexão
+  nova, sem parte duplicada no servidor).
+
+### 2.10 Teste de rede e jobs inline (fase4-24, velocidade hospedada)
+
+Análise do teste de produção de 2026-10-11 (`C:\t\lentidao\ANALISE.md`, 2.4 e 2.5): a rede do dono usava duas saídas
+públicas ao mesmo tempo, por conexão. Numa delas, pedidos pequenos passavam e corpos de 60 a 75 KB andavam a ~2,3 KB/s.
+Duas subidas travadas custaram 75 s; uma delas era o job, que só subiu pelo agente porque as instruções mandavam gravá-lo
+no inbox.
+
+Jobs inline:
+
+- `HOSTED_RULES` (`platforms/odc/facade/ssam.mjs`): o modelo manda o próprio job no argumento `job`, em JSON compacto,
+  qualquer que seja o tamanho. O pedido MCP vai direto ao servidor (até 16 MiB, `http-server.mjs`; o Caddy corta em
+  20 MB). Nada passa pelo agente. `agent:inbox/<arquivo>` fica para arquivos do usuário (OML, imagens, assets); um job
+  que já está no inbox ainda funciona.
+- O texto JSON de um job (`"{...}"` ou `"[...]"`) é o próprio job em qualquer ponteiro de caminho (`hosted/policy.mjs`
+  `pathOnlyWhen`): antes virava `ws:<faixa>/{"ops":...}` e a ferramenta não achava o arquivo. O proxy do
+  `studio_deliver` lê esse texto como o job (antes ia ao servidor ODC como caminho). O `o11_deliver` já lia
+  (`job-patch.mjs plainJob`).
+- `PATH_OUTSIDE_WORKSPACE` de um job (`agent-paths.mjs`): a correção é o job inline na mesma chamada (o marcador
+  `INLINE_JOB_MARKER` na continuação); outros arquivos continuam indo para o inbox.
+- `base_drift` de um `studio_deliver` com job inline: a continuação nomeia o arquivo que o proxy gravou
+  (`nextBasedOn.job`) em vez de devolver o job inteiro.
+
+Teste de rede (`ssam_doctor {network:true}`, só no hospedado, uns 5 s):
+
+- Tipo de chamada `net.probe` (`agent/lib/net-probe.mjs`; a lista fechada de `kinds.mjs` ganhou o tipo em
+  `servidor/fase4-24`, junto das listas do 24º, no agente 0.3.1). `params` `{probes?: [{bytes, count}], budgetMs?}`; padrão: 8 subidas de 1 KiB e depois
+  2 de 1 MiB, em 4,5 s. Cada subida vai numa conexão só dela (`net.mjs` `fresh`), então pode sair por outra saída da
+  internet. Um grupo que não é o último usa no máximo 40% do prazo. Os bytes são aleatórios; nada da máquina é lido ou
+  gravado. Limites: 24 subidas, 2 MiB cada, 8 MiB no total, prazo de 0,5 a 15 s.
+- Rota `PUT /agent/v1/probe/<id>?channel=<canal>` (`agent-hub.mjs probeUpload`): conta e descarta o corpo (até
+  `probeMaxBytes` = 2 MiB, acima disso 413), responde `{ok, bytes, ms, via}` e guarda na memória, por token (no máximo
+  64), de onde veio (`via`: o primeiro salto de X-Forwarded-For, sem o último número do IPv4, ou o /48 do IPv6), quanto
+  chegou e quando. O hub só manda `net.probe` a um agente cujo Hello lista o tipo (`link.supports`).
+- `hosted/network-check.mjs` junta o que o agente mediu com o que o hub viu e classifica cada subida: `ok`, `slow`,
+  `stalled` (chegou ao servidor e andou a menos de 32 KiB/s ou parou) ou `unreached` (a conexão nova nunca chegou).
+  Por saída: `boa`, `lenta` ou `perde`. Veredito em palavras simples: `ok`, `slow`, `one-exit-lossy` ("uma das suas
+  saídas de internet (177.26.87.x) perde pacotes nas subidas..."), `uploads-lossy` e `new-connections-fail` (um quarto
+  ou mais das conexões novas não chegou: o caso do 5G ancorado da nota da integradora).
+- Sem `network:true`, o hub mede cada parte de arquivo que sobe (`noteUpload`): uma parte acima de 3 s + 1 s por 128 KiB
+  é lenta (log `agent-upload-slow`). Com partes lentas nos últimos 30 min, o doctor mostra `agent.uploads` e
+  `network: {ran:false, code:"UPLOADS_SLOW", continuation: ssam_doctor {network:true}}`. O `ok` do doctor não muda.
+- Agente sem o tipo: `network: {ran:false, code:"AGENT_KIND_MISSING"}` com a versão do agente. Fora do hospedado:
+  `NOT_HOSTED`.
+- Testes: `agent/tests/net-probe.test.mjs` (o tipo sozinho) e
+  `platforms/odc/facade/tests/hosted-network.test.mjs` (rota do hub, classificação, um relé com duas saídas em que a
+  segunda trava corpos grandes, o doctor) e `hosted-inline-job.test.mjs` (job inline grande pelo servidor hospedado,
+  sem subida pelo agente).
 
 ## 3. Protocolo do canal (`ssam-agent/1`)
 
@@ -413,6 +494,7 @@ O agente recusa qualquer outro tipo (`KIND_NOT_ALLOWED`). O servidor nunca manda
 | `file.put` | `{path:"agent:<rel>", blob: BlobRef, json?:"agent-paths"}` | `{path, sha256, size, skipped}` | — (só existe entre servidor e agente) | grava só em pastas graváveis (6.2); `skipped:true` sem baixar quando o arquivo já tem o sha256 | 10 min |
 | `file.get` | `{path:"agent:<rel>", json?:"agent-paths"}` | `{path, blob: BlobRef}` | — | lê só pastas legíveis (6.2) | 10 min |
 | `file.list` | `{path:"agent:<pasta>", max?: ≤ 2000}` | `{entries:[{path, size, sha256, mtimeMs}], truncated}` (recursivo) | — | idem | 120 s |
+| `net.probe` (fase4-24, 2.10) | `{probes?: [{bytes, count}], budgetMs?}` | `{budgetMs, ms, probes:[{id, bytes, ms, ok, status, via?, serverMs?, error?}]}` | — | sobe bytes aleatórios para `/agent/v1/probe/<id>`, cada subida numa conexão nova; nada da máquina é lido ou gravado | `budgetMs` + 5 s |
 
 Saíram da lista da revisão anterior: `studio.locate` (nenhum chamador em tempo de execução: só
 `scripts/release/checkout-identity.mjs:30` usa `locateStudio`), `file.stat` (`file.put` já pula por sha256 e
@@ -600,20 +682,28 @@ controlador (`<ws>/state/relay-authority/bridge.key`, lida pelo worker na partid
 - Comandos ODC aceitos em `odc.pipe` (o primeiro argumento): `status`, `wait`, `authorize`, `open`, `snapshot`,
   `latest`, `check-base`, `preview`, `merge`, `publish`, `publish-status`, `publish-log`, `dismiss-dialog`, `close`,
   `module-info`, `assets`, `consumers`, `create`, `create-app`, `templates`, `template-download`,
-  `refresh-references`, `reference-snapshot`, `data`, `data-insert`, `data-update`, `data-delete`, `portal-call`,
-  `portal-session`, `auth-status`, `stop`. Qualquer outro: `COMMAND_NOT_ALLOWED`.
-- Métodos O11 aceitos em `o11.bridge`: `ping`, `bridge_manifest`, `get_active_module`, `list_open_modules`,
-  `get_errors`, `find_element`, `get_flow_nodes`, `open_module`, `close_module`, `windows`, `close_dialog`, `ui_alive`,
-  `publish`, `publish_log`, `snapshot_module`, `merge_from_oml`, `merge_status`, `environment_session`, `sc_api`,
-  `sc_web`, `sc_session`, `studio_login`. Qualquer outro: `METHOD_NOT_ALLOWED`. Desde a fase 3 a lista é a dos 20 verbos
-  da bridge fina, e desde a nona entrega também `refresh_references`, sem caminho
-  ([O11-BRIDGE-FINA.md](O11-BRIDGE-FINA.md) §3.2 e §14).
+  `refresh-references`, `reference-snapshot`, `reference-producers`, `data`, `data-insert`, `data-update`, `data-delete`,
+  `portal-call`, `portal-session`, `auth-status`, `stop`, `query-test`. Qualquer outro: `COMMAND_NOT_ALLOWED`.
+  `query-test` entrou com a bridge v45. `reference-producers <Módulo>` entrou no 24º (bridge v96): só lê, sem caminho.
+- Continuam fora da lista ODC: `portal-private-call`, `portal-private-download` e `portal-api-client-fixture-cleanup`
+  (usam um pipe local e o cofre do dono, que não atravessam máquinas) e `portal-upload` (só o `odc_external_library`
+  usa, e ela é indisponível no hospedado).
+- Métodos O11 aceitos em `o11.bridge`, os 23 verbos da bridge fina na ordem do `bridge_manifest`: `ping`,
+  `bridge_manifest`, `get_active_module`, `list_open_modules`, `get_errors`, `open_module`, `close_module`, `publish`,
+  `windows`, `ui_alive`, `close_dialog`, `snapshot_module`, `merge_from_oml`, `merge_status`, `environment_session`,
+  `sc_api`, `sc_web`, `sc_http`, `studio_login`, `sc_session`, `publish_log`, `refresh_references`,
+  `answer_dependencies_dialog`. Qualquer outro: `METHOD_NOT_ALLOWED`. `refresh_references` entrou na nona entrega,
+  `answer_dependencies_dialog` na `servidor/fase4` e `sc_http` no 24º, todos sem caminho
+  ([O11-BRIDGE-FINA.md](O11-BRIDGE-FINA.md) §3.2, §14 e §16).
+- Continuam fora da lista O11: `login`, `export_modules`, `export_status`, `find_element`, `get_flow_nodes`,
+  `integration_import` e `query_test` (lógica do kernel), e `sc_private_http` e `sc_private_http_cookie` (o transporte
+  privado do Service Center fica na máquina do dono).
 - Posições de caminho conferidas (o valor tem de começar com `agent:`; absoluto → `PATH_NOT_AGENT`), com o papel das
   tabelas 4.5 e 4.6: entrada exige prefixo legível, saída exige prefixo gravável. ODC: manifesto (`args[1]` dos
   comandos de manifesto; saída), `open args[2]`, `--records-file`, `portal-call args[1]`, `portal-session fetch args[2]`
   (entradas), `data --out`, `reference-snapshot` `output` (saídas). O11: `snapshot_module path` e `environment_session
   download outputDirectory` (saídas), `merge_from_oml foreign_path`/`base_path`/`first_pass_path` e `sc_api args.file` (entradas);
-  `sc_api`/`sc_web` `args.outFile` → `PATH_FORBIDDEN`.
+  `sc_api`/`sc_web`/`sc_http` `args.outFile` → `PATH_FORBIDDEN`.
 - **Linha final do `odc.pipe`.** A bridge lê UMA linha e divide o resto por espaços ela mesma (`StartupHook.cs:84-87`
   e os `Split(' ')` dos comandos), então conferir o array de argumentos não basta: `['open','Mod C:\\x.oml']` ou
   `['data-insert','M','E','--authorize','x --records-file C:\\segredo.json']` passariam um caminho nunca conferido. O
@@ -643,9 +733,26 @@ Igual a `connectO11` de hoje, sem compilar nada no cliente:
 A mesma trava por porta de hoje (`private\runtime-connect\port-<porta>.lock`) e a mesma recusa de reanexar uma bridge
 já carregada.
 
-## 5. Classificação das 82 ferramentas
+## 5. Classificação das 95 ferramentas
 
-Fonte: os registros reais. `createSsamServer` registra 78 ferramentas (26 próprias de O11/núcleo, com `ssam_grant`
+24º envio (`servidor/fase4-24`): o `catalog/tools.json` passa de 83 para 95 ferramentas, sem nenhuma removida.
+`createSsamServer` registra 90, mais as 4 do hook e a `ssam_friction`. O `hosted/tools.json` cobre as 95. As 12 novas
+são as linhas 82 a 93. Os totais passam a ser: servidor 23 (10 delas com um modo que usa o agente), agente 33,
+tenant-agente 22 e indisponível 17. No ar, o `tools/list` sem o hook mostra 91.
+
+Regras novas do 24º no portão (`hosted/policy.mjs`):
+
+- O portão confina os argumentos que a ferramenta roda. A camada de entrada do 24º (`tool-input.mjs`) roda um campo
+  corrigido com o nome certo (`targt` vira `target`). O `ssam.mjs` passa o `argsOf` dela ao portão. O portão resolve os
+  caminhos sobre `argsOf(cru) ?? cru` e entrega ao handler esses argumentos já resolvidos (risco R1).
+- Um job com o op `prototype` é recusado no portão, antes de qualquer captura, em `o11_deliver`, `studio_deliver`,
+  `ssam_job` e `o11_job`: `HOSTED_UNAVAILABLE`, `cause:"PROTOTYPE_SOURCE_LOCAL"`. A chave é uma só:
+  `HOSTED_PROTOTYPE_OP` (`'refuse'` no 24.0; `'allow'` libera). Vale para o job inline, o job parcial, o patch e os
+  arquivos de job (`/job`, `/basedOn/job`).
+- `authorizationContext` (novo no 24º) é caminho de entrada em toda ferramenta hospedada que o recebe. O arquivo de
+  proposta que ele cita também tem de estar na área visível do workspace (`authorization-context.mjs`).
+
+Fonte (até o 23º): os registros reais. `createSsamServer` registra 78 ferramentas (26 próprias de O11/núcleo, com `ssam_grant`
 desde a nona entrega, + 52 do proxy da fachada ODC: 3 `ssam_*` + 29 `studio_*` + 6 do catálogo do Portal + 13 de acesso
 + `hybrid_tenants`); o modo servido acrescenta `ssam_friction` (79), registrada pelo protótipo, por fora da troca de
 `registerTool`: o portão a envolve explicitamente. `catalog/tools.json` lista exatamente as mesmas 79.
@@ -659,12 +766,13 @@ Classes:
   `HOSTED_PROMPT_UNAVAILABLE`).
 - **indisponível**: recusada com `HOSTED_UNAVAILABLE` e o motivo.
 
-Décima sexta entrega (01cef95): o produto tem 78 ferramentas (77 de createSsamServer + ssam_friction). As 4 do hook
+Décima sexta entrega (`b01cef95`): o produto tem 78 ferramentas (77 de createSsamServer + ssam_friction). As 4 do hook
 (context, propose, continue, status) só aparecem com SSAM_APP_HOOK_TOOLS=1; aqui seguem classificadas como
 indisponíveis, listadas ou não. Entraram ssam_preview, o11_extension e odc_external_library, as três indisponíveis no
 hospedado (linhas 79 a 81). hosted/tools.json cobre as 82 (78 + 4 do hook).
 
-Totais: servidor 22 (10 delas com um modo que usa o agente), agente 31, tenant-agente 19, indisponível 10. A nona
+Totais até o 23º: servidor 22 (10 delas com um modo que usa o agente), agente 32 (31 mais a `ssam_query_test`, linha
+51a), tenant-agente 19, indisponível 10. A nona
 entrega (`ce7c6b25`) trouxe `ssam_grant` (79 com `ssam_friction`), `ssam_task close`, `publish:true` em `o11_deliver` e
 `studio_deliver`, o lote do `o11_data` e as respostas paginadas; as linhas abaixo e a seção 6.1 dizem onde cada uma fica.
 
@@ -679,7 +787,7 @@ seção 8), exceto `ssam_connect` e as de relatório.
 | 4 | `ssam_reference` | servidor | nunca | arg | catálogos do kernel |
 | 5 | `ssam_evidence` | servidor | nunca | nenhuma | lê só JSON de `odc/`, `o11/` e `inbox/` do workspace do cliente |
 | 6 | `ssam_task` | servidor | `close` presente | nenhuma | tarefas do workspace (`<ws>/o11/tasks`); `close` roda o fechamento do kernel numa tarefa da pasta de trabalho DO CLIENTE (`<ws>/o11/work`), e a prova por hash captura o módulo pelo relay. Id de outro cliente nunca é achado |
-| 7 | `ssam_job` | servidor | `captureProducers` não vazio (O11) | arg, padrão o11 | prova em fixture no servidor; captura de produtor pela sessão do Studio; `lane:"odc"` sem `base` roda na fixture neutra `blank-crossdevice.oml` no hospedado (pergunta 11, [O11-BRIDGE-FINA.md](O11-BRIDGE-FINA.md) §7.2) |
+| 7 | `ssam_job` | servidor | `captureProducers` não vazio (O11) | arg, padrão o11 | prova em fixture no servidor; captura de produtor pela sessão do Studio; `lane:"odc"` sem `base` roda na fixture neutra `blank-crossdevice.oml` no hospedado (pergunta 11, [O11-BRIDGE-FINA.md](O11-BRIDGE-FINA.md) §7.2); job com op `prototype` recusado (`PROTOTYPE_SOURCE_LOCAL`) |
 | 8 | `o11_job` | servidor | `captureProducers` não vazio | o11 | idem |
 | 9 | `o11_inspect` | servidor | `module` presente | o11 | leitor residente no servidor; `module` captura pelo bridge |
 | 10 | `studio_inspect` | servidor | `target` é nome de módulo | odc | leitor no servidor; nome de módulo captura pelo Studio |
@@ -699,7 +807,7 @@ seção 8), exceto `ssam_connect` e as de relatório.
 | 23 | `studio_doctor` | agente | relatório | odc | idem, lado ODC; nunca dotnet/builds/cofre do dono |
 | 24 | `ssam_connect` | agente | sempre | arg `lane` (`arg:none`) | attach nos Studios do cliente com os binários do pacote; sem `lane`, todas as faixas do token (cada Studio listado, sondado e anexado pelo agente) |
 | 25 | `studio_attach` | agente | sempre | odc | `odc.attach` |
-| 26 | `o11_deliver` | agente | sempre | o11 | CLI `deliver` no servidor; snapshot, refresh, merge e, com `publish:true`, a publicação pelo bridge do cliente via relay; sem `authorize`, só uma concessão DO CLIENTE |
+| 26 | `o11_deliver` | agente | sempre | o11 | CLI `deliver` no servidor; snapshot, refresh, merge e, com `publish:true`, a publicação pelo bridge do cliente via relay; sem `authorize`, só uma concessão DO CLIENTE; job com op `prototype` recusado (`PROTOTYPE_SOURCE_LOCAL`) |
 | 27 | `o11_studio` | agente | sempre | o11 | comandos do bridge |
 | 28 | `o11_publish` | agente | sempre | o11 | 1-Click Publish do Studio do cliente |
 | 29 | `studio_status` | agente | sempre | odc | bridge |
@@ -723,26 +831,27 @@ seção 8), exceto `ssam_connect` e as de relatório.
 | 47 | `studio_authorize` | agente | sempre | odc | a bridge grava a autorização no manifesto, que volta ao servidor |
 | 48 | `studio_publish` | agente | sempre | odc | idem |
 | 49 | `studio_create` | agente | sempre | odc | idem |
-| 50 | `studio_create_app` | agente | sempre | odc | modelo headless no servidor (evidência em `<ws>/odc/lab/create-app/`); `create-app`, abrir e publicar no Studio do cliente |
-| 51 | `studio_command` | agente | sempre | odc | passagem direta; a lista de comandos e a linha final são as do agente (4.8) |
-| 52 | `studio_deliver` | agente | sempre | odc | snapshot e merge no cliente; build no servidor; `publish:true` publica no Studio do cliente depois de um merge limpo, com as palavras ou uma concessão DO CLIENTE |
+| 50 | `studio_create_app` | agente | sempre | odc | modelo headless no servidor (evidência em `<ws>/odc/lab/create-app/`); `create-app`, abrir e publicar no Studio do cliente; `authorizationContext` é arquivo do workspace |
+| 51 | `studio_command` | agente | sempre | odc | passagem direta; a lista de comandos e a linha final são as do agente (4.8); `portal-private-*`, `portal-api-client-fixture-cleanup` e `portal-upload` são recusados no servidor antes de sair (`HOSTED_STUDIO_SESSION_ONLY`) |
+| 51a | `ssam_query_test` | agente | sempre | arg, padrão odc | ODC: o TestQuery nativo do ODC Studio do cliente, com a captura enviada por sha256; O11 recusado no hospedado (a bridge fina não tem teste de query) |
+| 52 | `studio_deliver` | agente | sempre | odc | snapshot e merge no cliente; build no servidor; `publish:true` publica no Studio do cliente depois de um merge limpo, com as palavras ou uma concessão DO CLIENTE; job com op `prototype` recusado (`PROTOTYPE_SOURCE_LOCAL`) |
 | 53 | `o11_data` | tenant-agente | sempre | o11 | Edit Data pela sessão do Studio do cliente (`data --studio` via relay); o lote com `$ref` é um arquivo de pedido em `<ws>/o11/data/requests`, e `$ref` nomeia registro, nunca caminho |
 | 54 | `o11_dependencies` | tenant-agente | `action` em `producers`, `list`, `capture` | o11 | assinaturas pela sessão do Studio (`environment_session`) |
 | 55 | `o11_environment` | tenant-agente | `action` diferente de `references` | o11 | `environment_session` no Studio do cliente |
-| 56 | `o11_service_center_session` | tenant-agente | sempre | o11 | `sc_session`/`studio_login` no Studio do cliente |
-| 57 | `o11_service_center_read` | tenant-agente | `action` diferente de `capabilities` e `receipt` | o11 | `sc_api`/`sc_web` no Studio do cliente |
-| 58 | `o11_service_center_write` | tenant-agente | sempre (preparar, executar e `verify` falam com o host) | o11 | idem; arquivos de valor/.osp/.xif lidos do workspace no servidor e, para o upload, espelhados no agente (4.6) |
+| 56 | `o11_service_center_session` | tenant-agente | sempre | o11 | `sc_session` e a sessão headless `sc_http` (capability `sc_http:studioSession`) do Studio do cliente; cofre, perfil e `credentialTarget` → `HOSTED_STUDIO_SESSION_ONLY`; janela de credencial e `authPrompt` nunca abrem |
+| 57 | `o11_service_center_read` | tenant-agente | `action` diferente de `capabilities` e `receipt` | o11 | `sc_api` e `sc_http` no Studio do cliente; `sc_private_http*`, SSO, LifeTime e `timer-events` recusados antes de tentar; registros do `solution-download` em `ws:o11/service-center/downloads` |
+| 58 | `o11_service_center_write` | tenant-agente | sempre (preparar, executar e `verify` falam com o host) | o11 | idem; arquivos de valor/.osp/.xif e o `authorizationContext` lidos do workspace no servidor e, para o upload, espelhados no agente (4.6) |
 | 59 | `odc_auth_status` | tenant-agente | relatório | odc | sessões do Studio do cliente (`auth-status`); colunas de cofre como "indisponível no hospedado" |
-| 60 | `odc_read` | tenant-agente | sempre | odc | `portal-call` no Studio do cliente |
-| 61 | `odc_write` | tenant-agente | sempre | odc | idem |
-| 62 | `odc_portal_read` | tenant-agente | sempre | odc | `portal-session fetch` na janela do Portal dentro do Studio do cliente |
-| 63 | `odc_portal_write` | tenant-agente | sempre | odc | idem |
-| 64 | `odc_portal_login` | tenant-agente | sempre | odc | abre a janela do Portal no Studio do cliente |
-| 65 | `odc_portal_routes` | tenant-agente | sempre | odc | GETs pela sessão do Portal no Studio |
+| 60 | `odc_read` | tenant-agente | sempre | odc | `portal-call` no Studio do cliente; o arquivo de pedido nasce em `ws:odc/journal/portal/requests` e o espelho o leva ao agente (nunca a raiz de uma bridge do servidor) |
+| 61 | `odc_write` | tenant-agente | sempre | odc | idem; `authorizationContext` é arquivo do workspace |
+| 62 | `odc_portal_read` | tenant-agente | sempre | odc | `portal-session fetch` pela sessão headless do ODC Studio do cliente (sem janela); pedido espelhado de `ws:odc/journal/portal/requests` |
+| 63 | `odc_portal_write` | tenant-agente | sempre | odc | idem; `portal-credential`, perfis e `portal-private-*` → `HOSTED_STUDIO_SESSION_ONLY` |
+| 64 | `odc_portal_login` | tenant-agente | sempre | odc | estado, abertura e fechamento da sessão headless (`portal-session`) no Studio do cliente; `select-profile` e `portal-credential` → `HOSTED_STUDIO_SESSION_ONLY` |
+| 65 | `odc_portal_routes` | tenant-agente | sempre | odc | GETs pela sessão headless do Portal no Studio |
 | 66 | `odc_operation_status` | tenant-agente | sempre | odc | idem |
-| 67 | `odc_deploy` | tenant-agente | sempre | odc | idem |
-| 68 | `odc_configurations` | tenant-agente | sempre | odc | idem |
-| 69 | `odc_asset_delete` | tenant-agente | sempre | odc | idem |
+| 67 | `odc_deploy` | tenant-agente | sempre | odc | idem; `authorizationContext` é arquivo do workspace |
+| 68 | `odc_configurations` | tenant-agente | sempre | odc | idem; segredo (`vaultSettings`, `vaultConfigurations`, inclusive o escopo `mobile-extensibility`) só do cofre DO CLIENTE, lido pela bridge dele; sem prompt e sem cofre do servidor |
+| 69 | `odc_asset_delete` | tenant-agente | sempre | odc | idem; `authorizationContext` é arquivo do workspace |
 | 70 | `odc_external_db_connection` | tenant-agente | sempre | odc | segredo só se já estiver no cofre DO CLIENTE (lido pela bridge); o prompt para guardar não existe no hospedado |
 | 71 | `hybrid_tenants` | tenant-agente | relatório | odc | sessões do Studio do cliente + `<ws>/odc/tenants.json`; nunca o `tenants.json` do dono |
 | 72 | `ssam_debug` | indisponível | — | — | publica um wrapper, usa o cofre privado de usuários de app, pipes `ssam-debug-<id>` e hooks locais da máquina do servidor |
@@ -755,18 +864,40 @@ seção 8), exceto `ssam_connect` e as de relatório.
 | 79 | `ssam_preview` | indisponível | — | — | a prévia local sobe processos e um endereço 127.0.0.1 na máquina do servidor, com perfis preparados nela; o cliente não a veria |
 | 80 | `o11_extension` | indisponível | — | — | compila código do cliente na máquina do servidor (motor do Integration Studio), com arquivos da máquina do servidor no spec e pastas de trabalho e recibos compartilhados; ainda sem isolamento por conta |
 | 81 | `odc_external_library` | indisponível | — | — | dotnet publish com pacotes NuGet escolhidos no spec roda na máquina do servidor (passos de build de pacote executam código); ainda sem isolamento por conta |
+| 82 | `studio_reference_producers` | agente | sempre | odc | comando novo da bridge `reference-producers <Module>` no Studio do cliente; só leitura |
+| 83 | `odc_mcp_connection` | tenant-agente | sempre | odc | `portalRead` pela sessão headless do Studio do cliente; `portal-credential` → `HOSTED_STUDIO_SESSION_ONLY` |
+| 84 | `odc_mcp_import` | tenant-agente | sempre | odc | `portalWrite` pela mesma sessão, recibo no workspace do cliente; mesmas recusas |
+| 85 | `odc_a2a_connection_delete` | tenant-agente | sempre | odc | `portalRead` e `portalWrite` pela sessão do Studio; `authorizationContext` é arquivo do workspace; mesmas recusas |
+| 86 | `odc_a2a_connection_plan` | servidor | nunca | odc | preparação pura: não autentica, não chama o endpoint, não reserva recibo |
+| 87 | `odc_native_package` | indisponível | — | — | só API Client do cofre do servidor e download para o diário dele; `cause:"API_CLIENT_ONLY"`, continuação para ler o build pela sessão do Studio |
+| 88 | `odc_generated_code` | indisponível | — | — | idem; continuação para ler builds e deploys pela sessão do Studio |
+| 89 | `odc_asset_source` | indisponível | — | — | idem (`auth` literal `api-client`); continuação para `studio_latest` |
+| 90 | `odc_asset_revision` | indisponível | — | — | idem, e ainda tem `file` e `candidateProof` como caminhos; continuação para `studio_deliver` |
+| 91 | `ssam_debug_server` | indisponível | — | — | o mesmo motivo do `ssam_debug` |
+| 92 | `ssam_debug_client` | indisponível | — | — | idem, mais perfis de navegador (CDP) da máquina do servidor |
+| 93 | `ssam_debug_matrix` | indisponível | — | — | lê e grava a evidência de `.local/debugger` da máquina do servidor (do dono) |
 
 Notas da tabela:
 
 - Linha 57: `capabilities` e `receipt` respondem do servidor (catálogo e diário do workspace); as demais leituras falam
   com o host. A faixa `hosted` codifica `{when:"not-in", arg:"action", values:["capabilities","receipt"]}`.
-- No hospedado o Service Center usa só o caminho do Studio: `session:"vault"` é recusado com
-  `HOSTED_STUDIO_SESSION_ONLY`; `auto` tenta `studio` e depois `studio-web`, nunca `vault` nem prompt. A necessidade
-  `lifetime` (que hoje sempre vai ao cofre, `service-center/auth.mjs:161`) responde `HOSTED_STUDIO_SESSION_ONLY` sem
-  ler cofre nenhum. O login da janela escondida (`hiddenSignIn`, `auth.mjs:109`) pula a checagem do cofre do SERVIDOR
-  (`present`) e chama direto `sc_web login` no Studio do cliente; `SECRET_NOT_FOUND` vira `HOSTED_PROMPT_UNAVAILABLE`.
-- No hospedado `odc_read`/`odc_write`/`odc_portal_*` com `auth:"api-client"` ou `auth:"portal-credential"` são
-  recusados com `HOSTED_STUDIO_SESSION_ONLY`; `auto` = só a sessão do Studio.
+- Linhas 56 a 58 (24º): no hospedado o Service Center usa só a sessão do Studio do cliente: `studio` para a API e
+  `studio-http` (o `sc_http` headless, capability `sc_http:studioSession`) para as páginas. São recusados antes de
+  qualquer tentativa, com `HOSTED_STUDIO_SESSION_ONLY`: `session:"vault"`, `credentialTarget`, os perfis guardados
+  (`CredentialProfiles` é nulo no hospedado, e os métodos dele recusam), `sc_private_http*` (no `bridge.mjs` e no
+  `AgentExecutor`), o SSO e o protocolo de identidade (`sso.mjs`, `community-identity.mjs`), o LifeTime e o
+  `timer-events`. A janela de credencial e o `authPrompt` nunca abrem: onde o fluxo local abriria a janela, a resposta é
+  `HOSTED_PROMPT_UNAVAILABLE`. O `hiddenSignIn` do 24º passa pela sessão headless do Studio (sem cofre e sem janela). Os
+  registros do `solution-download` ficam em `ws:o11/service-center/downloads` (`<id>.context`, sem PowerShell nem DPAPI
+  no servidor, fora do alcance da `ssam_evidence`).
+- Linhas 62 a 64 (24º): no hospedado `odc_read`/`odc_write`/`odc_portal_*` com `auth:"api-client"` ou
+  `auth:"portal-credential"` são recusados com `HOSTED_STUDIO_SESSION_ONLY`; `auto` = só a sessão headless do Studio
+  (`portal-session`, sem janela). `odc_portal_login action:"select-profile"` é recusado do mesmo jeito. O transporte
+  privado do Portal (`portal-private-call`, `portal-private-download`, `portal-api-client-fixture-cleanup` e
+  `portal-upload`) e os pipes de passagem de sessão nunca são usados: o `AgentExecutor` recusa os comandos antes de
+  preparar ou enviar. O `odc3-context.mjs` (conta do Portal do servidor e HTTP direto) recusa no cofre, no broker e no
+  contexto. O arquivo de pedido do `portal-call` e do `portal-session fetch` nasce em `ws:odc/journal/portal/requests`
+  e o espelho o leva ao agente (risco R4); a raiz da bridge do servidor nunca é consultada.
 - No hospedado toda escrita de tenant exige `confirmTenant` dos dois lados: o `<ws>/odc/tenants.json` nasce com
   `default:null`, e a bridge do cliente, sem `tenants.json` na raiz dela (`PortalCommands.cs:25`), também trata todo
   host como não padrão (`PortalCore.cs:162-165`). Um tenant padrão por cliente é a pergunta 12.
@@ -948,11 +1079,17 @@ Regras da faixa `hosted` (em `hosted/policy.mjs`):
 | `studio_manifest` | `/base`, `/candidate` | `/output` |
 | `studio_deliver` | `/job` (quando texto), `/producer`, `/basedOn/job` | `/output` |
 | `studio_check_base`, `studio_preview`, `studio_merge`, `studio_authorize`, `studio_publish`, `studio_create` | `/manifest` | — |
-| `studio_create_app` | `/icon` | — |
+| `studio_create_app` | `/icon`, `/authorizationContext` | — |
 | `studio_command` | `/args/*` (cada um que parecer caminho) | — |
+| `o11_service_center_write`, `odc_write`, `odc_portal_write`, `odc_deploy`, `odc_configurations`, `odc_asset_delete`, `odc_external_db_connection`, `odc_a2a_connection_delete` | `/authorizationContext` (24º) | — |
 
 - `/basedOn/job` entrou porque `job-patch.mjs:226` lê esse caminho (relativo à raiz, quando não é absoluto) e hoje ele
   não é confinado.
+- 24º: os ponteiros valem sobre os argumentos que a ferramenta roda (`argsOf` da camada de entrada), não só sobre os
+  enviados. `{targt}` é confinado como `/target`; um nome que a camada não corrige com certeza (`{fiel}`) é recusado por
+  ela (`INPUT_INVALID`) e nada roda.
+- 24º: o arquivo de proposta citado dentro de um `authorizationContext` tem de estar na área visível do workspace
+  (`ws:<rel>` ou caminho absoluto dentro dela); o resto é recusado como `AUTHORIZATION_CONTEXT_INVALID`.
 - `o11_service_center_read` `/path` é caminho de página do Service Center, não arquivo: não entra. As ferramentas
   indisponíveis não entram.
 - Gramática dos ponteiros (para `hosted-tools.test.mjs`): segmentos de JSON Pointer; `*` = toda chave de um objeto ou

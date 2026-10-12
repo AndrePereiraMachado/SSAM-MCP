@@ -1,0 +1,383 @@
+{
+  "provenance": {
+    "source": "Native WebService tree from SSAMDebuggerProbe candidate03, later published as version 5871",
+    "sourceSha256": "3e28170d851d89ff35d4726a3f5fbca088de85508d176fbfca0168be18d76fbb",
+    "projection": "Only properties used by SOAP contract compilation; all native children retained"
+  },
+  "tree": {
+    "kind": "WebService",
+    "name": "ProbeSoap",
+    "key": "oYbA7jqx+U2uUei8psZKKw",
+    "path": "WebService:ProbeSoap",
+    "properties": {
+      "GlobalKey": "bf7WCuRy7keTqvquautTGg*oYbA7jqx+U2uUei8psZKKw",
+      "HTTPSecurity": "SSL",
+      "IntegratedAuthentication": "False"
+    },
+    "children": [
+      {
+        "kind": "WebServiceMethod",
+        "name": "LaunchProcess",
+        "key": "1SRyqiLD50mFgo7lwxBa3A",
+        "path": "WebService:ProbeSoap/WebServiceMethod:LaunchProcess",
+        "properties": {
+          "GlobalKey": "bf7WCuRy7keTqvquautTGg*1SRyqiLD50mFgo7lwxBa3A"
+        },
+        "children": [
+          {
+            "kind": "OutputParameter",
+            "name": "ProcessId",
+            "key": "uGHjf6OSG0Coa_rb6QwzPQ",
+            "path": "WebService:ProbeSoap/WebServiceMethod:LaunchProcess/OutputParameter:ProcessId",
+            "properties": {
+              "GlobalKey": "bf7WCuRy7keTqvquautTGg*uGHjf6OSG0Coa_rb6QwzPQ",
+              "DataType": "BasicType:Long Integer"
+            },
+            "children": [],
+            "childrenTotal": 0,
+            "childrenOmitted": 0,
+            "propertyErrors": {},
+            "propertiesOmitted": {},
+            "propertiesMissing": []
+          },
+          {
+            "kind": "AssignNode",
+            "name": "",
+            "key": "+u8pmDRy506tJLdU547Www",
+            "path": "WebService:ProbeSoap/WebServiceMethod:LaunchProcess/AssignNode:",
+            "properties": {
+              "GlobalKey": "bf7WCuRy7keTqvquautTGg*+u8pmDRy506tJLdU547Www"
+            },
+            "children": [
+              {
+                "kind": "Assignment",
+                "name": "",
+                "key": "gpV_7rjHq0G2giQH3v8BrQ",
+                "path": "WebService:ProbeSoap/WebServiceMethod:LaunchProcess/AssignNode:/Assignment:",
+                "properties": {
+                  "GlobalKey": "bf7WCuRy7keTqvquautTGg*gpV_7rjHq0G2giQH3v8BrQ"
+                },
+                "children": [
+                  {
+                    "kind": "Expression",
+                    "name": "",
+                    "key": "gpV_7rjHq0G2giQH3v8BrQ.#Variable",
+                    "path": "WebService:ProbeSoap/WebServiceMethod:LaunchProcess/AssignNode:/Assignment:/Expression:",
+                    "properties": {
+                      "GlobalKey": "bf7WCuRy7keTqvquautTGg*gpV_7rjHq0G2giQH3v8BrQ.#Variable"
+                    },
+                    "children": [],
+                    "childrenTotal": 0,
+                    "childrenOmitted": 0,
+                    "propertyErrors": {},
+                    "propertiesOmitted": {},
+                    "propertiesMissing": []
+                  },
+                  {
+                    "kind": "Expression",
+                    "name": "",
+                    "key": "gpV_7rjHq0G2giQH3v8BrQ.#Value",
+                    "path": "WebService:ProbeSoap/WebServiceMethod:LaunchProcess/AssignNode:/Assignment:/Expression:",
+                    "properties": {
+                      "GlobalKey": "bf7WCuRy7keTqvquautTGg*gpV_7rjHq0G2giQH3v8BrQ.#Value"
+                    },
+                    "children": [],
+                    "childrenTotal": 0,
+                    "childrenOmitted": 0,
+                    "propertyErrors": {},
+                    "propertiesOmitted": {},
+                    "propertiesMissing": []
+                  }
+                ],
+                "childrenTotal": 2,
+                "childrenOmitted": 0,
+                "propertyErrors": {},
+                "propertiesOmitted": {},
+                "propertiesMissing": []
+              },
+              {
+                "kind": "ActionConnector",
+                "name": "",
+                "key": "lqxh4olmVkaxJQHrRl4ohg",
+                "path": "WebService:ProbeSoap/WebServiceMethod:LaunchProcess/AssignNode:/ActionConnector:",
+                "properties": {
+                  "GlobalKey": "bf7WCuRy7keTqvquautTGg*lqxh4olmVkaxJQHrRl4ohg"
+                },
+                "children": [],
+                "childrenTotal": 0,
+                "childrenOmitted": 0,
+                "propertyErrors": {},
+                "propertiesOmitted": {},
+                "propertiesMissing": []
+              }
+            ],
+            "childrenTotal": 2,
+            "childrenOmitted": 0,
+            "propertyErrors": {},
+            "propertiesOmitted": {},
+            "propertiesMissing": []
+          },
+          {
+            "kind": "StartNode",
+            "name": "",
+            "key": "aHRhsy9reUOFMrm1VaKRzA",
+            "path": "WebService:ProbeSoap/WebServiceMethod:LaunchProcess/StartNode:",
+            "properties": {
+              "GlobalKey": "bf7WCuRy7keTqvquautTGg*aHRhsy9reUOFMrm1VaKRzA"
+            },
+            "children": [
+              {
+                "kind": "ActionConnector",
+                "name": "",
+                "key": "b6fgx7aWuEyhE2bc55P4oQ",
+                "path": "WebService:ProbeSoap/WebServiceMethod:LaunchProcess/StartNode:/ActionConnector:",
+                "properties": {
+                  "GlobalKey": "bf7WCuRy7keTqvquautTGg*b6fgx7aWuEyhE2bc55P4oQ"
+                },
+                "children": [],
+                "childrenTotal": 0,
+                "childrenOmitted": 0,
+                "propertyErrors": {},
+                "propertiesOmitted": {},
+                "propertiesMissing": []
+              }
+            ],
+            "childrenTotal": 1,
+            "childrenOmitted": 0,
+            "propertyErrors": {},
+            "propertiesOmitted": {},
+            "propertiesMissing": []
+          },
+          {
+            "kind": "ExecuteServerActionNode",
+            "name": "LaunchNativeProcess",
+            "key": "2X5ZSmWn106ydM7C1X3l3A",
+            "path": "WebService:ProbeSoap/WebServiceMethod:LaunchProcess/ExecuteServerActionNode:LaunchNativeProcess",
+            "properties": {
+              "GlobalKey": "bf7WCuRy7keTqvquautTGg*2X5ZSmWn106ydM7C1X3l3A"
+            },
+            "children": [
+              {
+                "kind": "ActionConnector",
+                "name": "",
+                "key": "l9WurUnwYkmn+Yx+WJyclA",
+                "path": "WebService:ProbeSoap/WebServiceMethod:LaunchProcess/ExecuteServerActionNode:LaunchNativeProcess/ActionConnector:",
+                "properties": {
+                  "GlobalKey": "bf7WCuRy7keTqvquautTGg*l9WurUnwYkmn+Yx+WJyclA"
+                },
+                "children": [],
+                "childrenTotal": 0,
+                "childrenOmitted": 0,
+                "propertyErrors": {},
+                "propertiesOmitted": {},
+                "propertiesMissing": []
+              }
+            ],
+            "childrenTotal": 1,
+            "childrenOmitted": 0,
+            "propertyErrors": {},
+            "propertiesOmitted": {},
+            "propertiesMissing": []
+          },
+          {
+            "kind": "EndNode",
+            "name": "",
+            "key": "F8l0jqUREE+QxR9ZSQpA2g",
+            "path": "WebService:ProbeSoap/WebServiceMethod:LaunchProcess/EndNode:",
+            "properties": {
+              "GlobalKey": "bf7WCuRy7keTqvquautTGg*F8l0jqUREE+QxR9ZSQpA2g"
+            },
+            "children": [],
+            "childrenTotal": 0,
+            "childrenOmitted": 0,
+            "propertyErrors": {},
+            "propertiesOmitted": {},
+            "propertiesMissing": []
+          }
+        ],
+        "childrenTotal": 5,
+        "childrenOmitted": 0,
+        "propertyErrors": {},
+        "propertiesOmitted": {},
+        "propertiesMissing": []
+      },
+      {
+        "kind": "WebServiceMethod",
+        "name": "Scalar",
+        "key": "IGaRHxKOTEC3z3BtAfC2PA",
+        "path": "WebService:ProbeSoap/WebServiceMethod:Scalar",
+        "properties": {
+          "GlobalKey": "bf7WCuRy7keTqvquautTGg*IGaRHxKOTEC3z3BtAfC2PA"
+        },
+        "children": [
+          {
+            "kind": "InputParameter",
+            "name": "Value",
+            "key": "E0Xi+JkGCUWXGu97PF5x2A",
+            "path": "WebService:ProbeSoap/WebServiceMethod:Scalar/InputParameter:Value",
+            "properties": {
+              "GlobalKey": "bf7WCuRy7keTqvquautTGg*E0Xi+JkGCUWXGu97PF5x2A",
+              "IsMandatory": "True",
+              "DataType": "BasicType:Integer"
+            },
+            "children": [],
+            "childrenTotal": 0,
+            "childrenOmitted": 0,
+            "propertyErrors": {},
+            "propertiesOmitted": {},
+            "propertiesMissing": []
+          },
+          {
+            "kind": "OutputParameter",
+            "name": "Result",
+            "key": "jL0sfPWEOEas+3WsuWcNoA",
+            "path": "WebService:ProbeSoap/WebServiceMethod:Scalar/OutputParameter:Result",
+            "properties": {
+              "GlobalKey": "bf7WCuRy7keTqvquautTGg*jL0sfPWEOEas+3WsuWcNoA",
+              "DataType": "BasicType:Integer"
+            },
+            "children": [],
+            "childrenTotal": 0,
+            "childrenOmitted": 0,
+            "propertyErrors": {},
+            "propertiesOmitted": {},
+            "propertiesMissing": []
+          },
+          {
+            "kind": "EndNode",
+            "name": "",
+            "key": "q87Ud5Rg1EGxjNMiY84+GA",
+            "path": "WebService:ProbeSoap/WebServiceMethod:Scalar/EndNode:",
+            "properties": {
+              "GlobalKey": "bf7WCuRy7keTqvquautTGg*q87Ud5Rg1EGxjNMiY84+GA"
+            },
+            "children": [],
+            "childrenTotal": 0,
+            "childrenOmitted": 0,
+            "propertyErrors": {},
+            "propertiesOmitted": {},
+            "propertiesMissing": []
+          },
+          {
+            "kind": "StartNode",
+            "name": "",
+            "key": "Xj5KCOdPWU+lnrsxKzeFhQ",
+            "path": "WebService:ProbeSoap/WebServiceMethod:Scalar/StartNode:",
+            "properties": {
+              "GlobalKey": "bf7WCuRy7keTqvquautTGg*Xj5KCOdPWU+lnrsxKzeFhQ"
+            },
+            "children": [
+              {
+                "kind": "ActionConnector",
+                "name": "",
+                "key": "ssZ00UnVcECGNvFqpi8+ng",
+                "path": "WebService:ProbeSoap/WebServiceMethod:Scalar/StartNode:/ActionConnector:",
+                "properties": {
+                  "GlobalKey": "bf7WCuRy7keTqvquautTGg*ssZ00UnVcECGNvFqpi8+ng"
+                },
+                "children": [],
+                "childrenTotal": 0,
+                "childrenOmitted": 0,
+                "propertyErrors": {},
+                "propertiesOmitted": {},
+                "propertiesMissing": []
+              }
+            ],
+            "childrenTotal": 1,
+            "childrenOmitted": 0,
+            "propertyErrors": {},
+            "propertiesOmitted": {},
+            "propertiesMissing": []
+          },
+          {
+            "kind": "AssignNode",
+            "name": "",
+            "key": "F3nUyzYiIUiAzmcoFbovyg",
+            "path": "WebService:ProbeSoap/WebServiceMethod:Scalar/AssignNode:",
+            "properties": {
+              "GlobalKey": "bf7WCuRy7keTqvquautTGg*F3nUyzYiIUiAzmcoFbovyg"
+            },
+            "children": [
+              {
+                "kind": "Assignment",
+                "name": "",
+                "key": "CcRHPd9qbUecnx3nQCRrNA",
+                "path": "WebService:ProbeSoap/WebServiceMethod:Scalar/AssignNode:/Assignment:",
+                "properties": {
+                  "GlobalKey": "bf7WCuRy7keTqvquautTGg*CcRHPd9qbUecnx3nQCRrNA"
+                },
+                "children": [
+                  {
+                    "kind": "Expression",
+                    "name": "",
+                    "key": "CcRHPd9qbUecnx3nQCRrNA.#Variable",
+                    "path": "WebService:ProbeSoap/WebServiceMethod:Scalar/AssignNode:/Assignment:/Expression:",
+                    "properties": {
+                      "GlobalKey": "bf7WCuRy7keTqvquautTGg*CcRHPd9qbUecnx3nQCRrNA.#Variable"
+                    },
+                    "children": [],
+                    "childrenTotal": 0,
+                    "childrenOmitted": 0,
+                    "propertyErrors": {},
+                    "propertiesOmitted": {},
+                    "propertiesMissing": []
+                  },
+                  {
+                    "kind": "Expression",
+                    "name": "",
+                    "key": "CcRHPd9qbUecnx3nQCRrNA.#Value",
+                    "path": "WebService:ProbeSoap/WebServiceMethod:Scalar/AssignNode:/Assignment:/Expression:",
+                    "properties": {
+                      "GlobalKey": "bf7WCuRy7keTqvquautTGg*CcRHPd9qbUecnx3nQCRrNA.#Value"
+                    },
+                    "children": [],
+                    "childrenTotal": 0,
+                    "childrenOmitted": 0,
+                    "propertyErrors": {},
+                    "propertiesOmitted": {},
+                    "propertiesMissing": []
+                  }
+                ],
+                "childrenTotal": 2,
+                "childrenOmitted": 0,
+                "propertyErrors": {},
+                "propertiesOmitted": {},
+                "propertiesMissing": []
+              },
+              {
+                "kind": "ActionConnector",
+                "name": "",
+                "key": "Yq7dN35SP0uBNrW76hnPfA",
+                "path": "WebService:ProbeSoap/WebServiceMethod:Scalar/AssignNode:/ActionConnector:",
+                "properties": {
+                  "GlobalKey": "bf7WCuRy7keTqvquautTGg*Yq7dN35SP0uBNrW76hnPfA"
+                },
+                "children": [],
+                "childrenTotal": 0,
+                "childrenOmitted": 0,
+                "propertyErrors": {},
+                "propertiesOmitted": {},
+                "propertiesMissing": []
+              }
+            ],
+            "childrenTotal": 2,
+            "childrenOmitted": 0,
+            "propertyErrors": {},
+            "propertiesOmitted": {},
+            "propertiesMissing": []
+          }
+        ],
+        "childrenTotal": 5,
+        "childrenOmitted": 0,
+        "propertyErrors": {},
+        "propertiesOmitted": {},
+        "propertiesMissing": []
+      }
+    ],
+    "childrenTotal": 2,
+    "childrenOmitted": 0,
+    "propertyErrors": {},
+    "propertiesOmitted": {},
+    "propertiesMissing": []
+  }
+}

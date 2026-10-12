@@ -94,6 +94,14 @@ async function connector() {
   };
 }
 
+// Same verified diagnostics transport for independent, read-only, uniquely named components.
+// This transport neither requests debugger credentials nor replaces any loaded assembly.
+export async function createO11HookTransport() {
+  const run = await connector();
+  return { describe: pid => run(['describe', pid]),
+    attach: ({ pid, startedUtc, hook }) => run(['attach', pid, startedUtc, hook]), build: buildProject };
+}
+
 async function clientFacts() {
   try {
     const command = `[Diagnostics.Process]::GetProcessById(${process.pid}).StartTime.ToUniversalTime().ToString('O')`;

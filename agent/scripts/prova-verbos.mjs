@@ -1,5 +1,6 @@
-// Live proof 2 of docs/PROVAS-AO-VIVO.md (docs/O11-BRIDGE-FINA.md 8.8 item 2): each of the 21 verbs of the thin O11
-// bridge once, on the TEST CLIENT, through the agent's own connection record and key. A TypeLoadException,
+// Live proof 2 of docs/PROVAS-AO-VIVO.md (docs/O11-BRIDGE-FINA.md 8.8 item 2): each verb of the thin O11 bridge once
+// (answer_dependencies_dialog aside: it needs the dialog on screen), on the TEST CLIENT, through the agent's own
+// connection record and key. sc_http (24th release) reads the Service Center status through the Studio's own session. A TypeLoadException,
 // MissingMethodException or MissingFieldException only shows on the first JIT of a handler inside the real Service
 // Studio; any other answer (success, or a refusal by the handler itself) proves the verb runs there. Only the owner
 // runs it, with the Service Studio connected by the agent (ssam_connect {lane:"o11"}).
@@ -8,7 +9,7 @@
 // environment_session takes a read-only lease (connect, modules, close); merge_from_oml and close_dialog are sent with
 // a candidate or a title that do not exist, so the handler runs and refuses before touching the model; refresh_references
 // (ninth release) names a producer key no reference has, so the handler runs and refreshes nothing. Without --host
-// the Service Center verbs (sc_api, sc_web, studio_login) are skipped; studio_login runs only when sc_session says the
+// the Service Center verbs (sc_api, sc_web, sc_http, studio_login) are skipped; studio_login runs only when sc_session says the
 // Studio is already signed in on that host (otherwise it would open the sign-in dialog). --module <name> opens that
 // module and closes it (open_module, close_module); --publish also runs 1-Click Publish of it (publish): both change the
 // Studio, so they are opt-in and need a module the owner chose for the test.
@@ -21,7 +22,7 @@ import { bridgeRequest } from '../agent/lib/o11-wire.mjs';
 
 export const VERBS = Object.freeze(['ping', 'bridge_manifest', 'get_active_module', 'list_open_modules', 'get_errors', 'open_module',
   'close_module', 'publish', 'windows', 'ui_alive', 'close_dialog', 'snapshot_module', 'merge_from_oml', 'merge_status',
-  'environment_session', 'sc_api', 'sc_web', 'studio_login', 'sc_session', 'publish_log', 'refresh_references']);
+  'environment_session', 'sc_api', 'sc_web', 'sc_http', 'studio_login', 'sc_session', 'publish_log', 'refresh_references']);
 const LOAD_ERROR = /\b(TypeLoadException|MissingMethodException|MissingFieldException|FileNotFoundException: Could not load file or assembly|BadImageFormatException)\b/;
 
 export function parseArgs(argv) {
@@ -89,9 +90,10 @@ export async function run(options, { request = bridgeRequest, now = () => new Da
   if (options.host) {
     await step('sc_api', { host: options.host, surface: 'soap', operation: 'ListEspaces', args: {} });
     await step('sc_web', { host: options.host, action: 'status' });
+    await step('sc_http', { host: options.host, action: 'status' });
     if (session?.success === true && session.data?.studio?.signedIn === true) await step('studio_login', { host: options.host, waitMs: 0 });
     else skip('studio_login', 'the Studio is not signed in on ' + options.host + ': studio_login would open the sign-in dialog');
-  } else for (const verb of ['sc_api', 'sc_web', 'studio_login']) skip(verb, 'no --host');
+  } else for (const verb of ['sc_api', 'sc_web', 'sc_http', 'studio_login']) skip(verb, 'no --host');
   await step('publish_log', { max: 5 });
   await step('refresh_references', { producer_keys: ['ssam-prova-inexistente-' + randomUUID()], timeout: 10 });
   if (options.module) {

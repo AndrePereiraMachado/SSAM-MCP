@@ -41,7 +41,8 @@ public static class PreflightChecks
 
     private static void Run(Found found, string rule, Func<List<JsonObject>> check)
     {
-        try { found.Problems.AddRange(check()); }
+        // A rule's warning (PROPERTY_SET_DROPPED) blocks nothing: it goes with the warnings.
+        try { foreach (var p in check()) (p["severity"]?.ToString() == "warning" ? found.Warnings : found.Problems).Add(p); }
         catch (Exception ex)
         {
             found.Warnings.Add(JobPreflight.Problem(null, null, "PREFLIGHT_RULE_FAILED", "warning", $"preflight rule {rule} failed and was skipped: {Errors.Text(ex)}", null, null, "rule"));

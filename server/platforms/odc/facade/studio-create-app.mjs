@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import * as z from 'zod/v4';
+import { authorizationContext } from './authorization-context.mjs';
 import { anvilRoot, odcRoot } from './workspace.mjs';
 import { createAnvilRunner } from './anvil-cli.mjs';
 import { shapePublishLog } from './studio-publish-log.mjs';
@@ -31,7 +32,7 @@ const DEFAULT_TEMPLATE = { reactive: 'web', mobile: 'mobile-ui', agentic: 'agent
 const isLibrary = kind => kind === 'library' || kind === 'mobile-library';
 const FIELDS = {
   templates: { required: [], optional: ['kind', 'tenant', 'pid'] },
-  create: { required: ['kind', 'name', 'authorize'], optional: ['module', 'description', 'color', 'icon', 'template', 'templateKey', 'publish', 'tenant', 'pid'] },
+  create: { required: ['kind', 'name', 'authorize'], optional: ['module', 'description', 'color', 'icon', 'template', 'templateKey', 'publish', 'tenant', 'pid', 'authorizationContext'] },
 };
 const MODULE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const TIMEOUTS = { kernel: 600000 };
@@ -82,7 +83,12 @@ export function validateCreateAppInput(input) {
   if (input.template !== undefined && APP_TEMPLATES[input.template]?.kind !== input.kind)
     return refusal('BAD_VALUE', `template "${input.template}" is not a ${input.kind} template; ${input.kind} takes ${Object.entries(APP_TEMPLATES).filter(([, t]) => t.kind === input.kind).map(([k]) => k).join(', ')}`,
       self(withoutKeys(input, ['template'])));
-  if (!namesWhole(input.authorize, input.name)) return refusal('WORDS_MUST_NAME_APP', `the user's words must name the app "${input.name}"`,
+  let approval = null;
+  try {
+    approval = authorizationContext(input.authorizationContext, input.authorize, { lane: 'odc', host: input.tenant, operation: 'create-app', targets: [input.name, module] });
+    if (approval && input.publish) authorizationContext(input.authorizationContext, input.authorize, { lane: 'odc', host: input.tenant, operation: 'publish', targets: [input.name, module] });
+  } catch (error) { return refusal(error.code, error.message); }
+  if (!approval && !namesWhole(input.authorize, input.name)) return refusal('WORDS_MUST_NAME_APP', `the user's words must name the app "${input.name}"`,
     { tool: 'studio_create_app', arguments: { ...input, authorize: `<the user's words naming ${input.name}>` }, why: 'creating needs words that name what is created' });
   return null;
 }
@@ -201,7 +207,7 @@ export function createStudioCreateApp(deps = {}) {
     const chosen = sessions.find(s => s.host === (input.tenant ?? sessions[0].host));
     let klass = null;
     try { klass = (await tenants())?.tenants?.[chosen.host]?.class ?? null; } catch { klass = null; }
-    if (klass === 'corporate' && (!input.tenant || !namesWhole(input.authorize, chosen.host)))
+    if (klass === 'corporate' && (!input.tenant || (!input.authorizationContext && !namesWhole(input.authorize, chosen.host))))
       return { refused: refusal('CORPORATE_TENANT', `${chosen.host} is a corporate tenant: pass tenant explicitly and words that name it`,
         { tool: 'studio_create_app', arguments: { ...input, tenant: chosen.host, authorize: `<the user's words naming ${input.name} and ${chosen.host}>` }, why: 'a corporate tenant is never the default target' }) };
     return { host: chosen.host, user: chosen.user ?? null, class: klass };
@@ -271,13 +277,15 @@ export function createStudioCreateApp(deps = {}) {
     const manifestPath = built.manifest;
     // 3. The user's words, once, for creating and (when asked) publishing: the Studio's "Create app" publishes revision 1.
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const approval = authorizationContext(input.authorizationContext, input.authorize, { lane: 'odc', host: s.host, operation: 'create-app', targets: [input.name, module] });
+    if (approval) fs.writeFileSync(path.join(evidence, 'authorization-context.json'), JSON.stringify(approval, null, 2));
     const recorded = `${input.authorize.trim()} [recorded ${now().toISOString()} by studio_create_app]`;
     manifest.createAuthorization = recorded;
     if (input.publish === true) manifest.publishAuthorization = recorded;
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
 
     const operationId = uuid();
-    const record = { action: 'create', target: input.name, module, kind, tenant: s.host, operationId, wordsSha256: sha256(input.authorize), evidence };
+    const record = { action: 'create', target: input.name, module, kind, tenant: s.host, operationId, wordsSha256: sha256(input.authorize), evidence, ...(approval ? { authorizationContext: approval } : {}) };
     journal({ ...record, phase: 'reserved' });
     const finish = value => { journal({ ...record, phase: 'result', outcome: value.ok ? 'ok' : value.outcome ?? 'failed', ...(value.code ? { code: value.code } : {}) });
       // Hosted (servidor/fase4): the delivery processes are warmed again for the first delivery to the new app.
@@ -370,6 +378,7 @@ export function registerStudioCreateApp(server, deps = {}) {
       publish: z.boolean().describe('create: also publish revision 1 after opening (default false: only when the user asked to publish)').optional(),
       tenant: text('Tenant host among the Studio\'s signed-in sessions').optional(),
       authorize: z.string().describe('create: the user\'s literal words naming the app; only their sha256 is kept').optional(),
+      authorizationContext: z.string().describe('Optional absolute path to a scoped ssam-authorization-context/1 record of the verified human approval of the concrete proposal; authorize remains the exact human words. Requires explicit tenant.').optional(),
       pid: z.number().int().positive().describe('ODC Studio process id; detected when there is exactly one.').optional(),
     }).strict(),
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },

@@ -66,11 +66,14 @@ public sealed record HtmlVisualScope(
 /// </summary>
 public static class HtmlVisual
 {
-    // <div> is the only tag with a native container; these carry their own tag into an HTML Element widget. <br> is an empty
-    // Container (a block that breaks the line): the Verify refuses Tag br ("'br' is not a valid HTML tag"). It accepts Tag hr:
-    // the Cardapio BackOffice delivery of 2026-10-06 16:45 merged four <hr> with 0 new errors, so <hr> stays an HTML Element.
-    private static readonly HashSet<string> Elements = new(StringComparer.Ordinal)
-    { "section", "article", "header", "footer", "main", "nav", "aside", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "p", "span", "strong", "em", "small", "code", "hr" };
+    // <div> is the only tag with a native container; every other tag the HTML Element of the platform accepts (ElementWidgetMap,
+    // the one table of the html op and the importer: 103 in O11, 100 in ODC) carries its own tag into an HTML Element widget, a
+    // static table included. <br> is an empty Container (a block that breaks the line): the Verify refuses Tag br ("'br' is not a
+    // valid HTML tag"). A tag outside the list has the fixed substitute of the table (main in ODC, search, a custom element: a
+    // div with ssam-tag-<tag>) or is refused.
+    private static readonly string Platform = ElementWidgetMap.CurrentPlatform;
+    private static readonly HashSet<string> Elements = new(ElementWidgetMap.Tags(ElementWidgetMap.CurrentPlatform)
+        .Where(t => t is not ("div" or "i" or "img" or "input" or "textarea" or "select" or "button" or "a" or "label" or "style" or "form" or "option" or "optgroup" or "link")), StringComparer.Ordinal);
     private static readonly Dictionary<string, string> InputTypes = new(StringComparer.Ordinal)
     {
         ["text"] = "Text", ["password"] = "Password", ["number"] = "Number", ["time"] = "Time", ["date"] = "Date",
@@ -103,7 +106,8 @@ public static class HtmlVisual
         ["tags"] = new JsonObject
         {
             ["div"] = Row("IContainer", "class -> Style, id -> Name"),
-            ["(html element)"] = Row("IAdvancedHtml", "Tag = the tag, class -> extended property; " + Join(Elements) + "; br: an empty Container"),
+            ["(html element)"] = Row("IAdvancedHtml", "Tag = the tag, class -> extended property; any tag of the platform's HTML Element (api --op html, platformTags), tables too; br: an empty Container"),
+            ["form"] = Row("IForm", "class -> Style; children are its content"),
             ["(literal text)"] = Row("ITextWidget", "no class of its own; a space next to an inline element stays"),
             ["{{ expression }}"] = Row("IExpression", "OutSystems, copied as written (never JavaScript)"),
             ["i"] = Row("IIcon", "icon = the icon name; weight is mandatory"),
@@ -111,16 +115,16 @@ public static class HtmlVisual
                 + "; the bound data type decides the InputType"),
             ["input[type=checkbox]"] = Row("ICheckbox", "bind names an existing variable"),
             ["textarea"] = Row("ITextArea", "bind names an existing variable"),
-            ["select"] = Row("IDropdown", "bind -> Variable, options -> List, value -> Values, label -> Labels"),
-            ["button"] = Row("IButton", "onclick (or href): an action or screen, Name(args) or :Input passes inputs; children are its content"),
+            ["select"] = Row("IDropdown", "bind -> Variable, options -> List, value -> Values, label -> Labels; value and label read the element of options by its attributes (Item.Id for an aggregate over Item, Id for a list of records), never options.Current"),
+            ["button"] = Row("IButton", "onclick (or href): an action or screen, Name(args) or :Input passes inputs; children are its content; empty with aria-label/title"),
             ["a"] = Row("ILink", "as button"),
-            ["label"] = Row("ILabel", "for -> TargetWidget (an input id of the fragment); with child elements: a Container of the Label and them"),
+            ["label"] = Row("ILabel", "for -> TargetWidget (an input id of the fragment); with child elements: an HTML Element label with them"),
             ["img"] = Row("IImage", "src: module image, URL or {{ }}"),
             ["div[list]"] = Row("IList", "Source = list; as is mandatory and names the row inside {{ }}"),
             ["div[if]"] = Row("IIfWidget", "children: True branch; a <div else> right after: False branch"),
             ["Block"] = Row("IMobileBlockInstanceWidget", "name = an existing block, inputs by :Name, handlers by @Event, children by <slot name>"),
             ["ButtonGroup"] = Row("IButtonGroup", "bind -> Variable; each <ButtonGroupItem value> an IButtonGroupItem, its text an Expression"),
-            ["style"] = Row("(theme)", "scoped under the root class; light-dark() expanded, @keyframes kept"),
+            ["style"] = Row("(theme)", "scoped under the root class; light-dark() expanded, @keyframes kept, @import to the top"),
         },
         ["attributes"] = "any other attribute: an IExtendedProperty, {{ }} makes an expression",
         ["names"] = "id: name, alias $id; else Tag1, Tag2; Block none",
@@ -173,7 +177,11 @@ public static class HtmlVisual
     }
 
     private static readonly HashSet<string> CompiledTags = new(StringComparer.Ordinal)
-    { "div", "i", "img", "input", "textarea", "select", "button", "a", "label", "block", "slot", "style", "br", "buttongroup", "buttongroupitem" };
+    { "div", "i", "img", "input", "textarea", "select", "button", "a", "label", "block", "slot", "style", "br", "buttongroup", "buttongroupitem", "form" };
+
+    /// <summary>A tag outside the platform list that the one table replaces by a div (main in ODC, search, menuitem, a custom
+    /// element, a dialog) or a span (data, picture in ODC): the element keeps its class ssam-tag-&lt;tag&gt;.</summary>
+    private static bool Substituted(string tag) => ElementWidgetMap.Substitute(Platform, tag) is { Widget: "IContainer" or "IAdvancedHtml" } && tag != "br";
 
     /// <summary>The op as the job writes it: html inline, or file read next to the repository root. A fragment in a file is
     /// read here too (the same Source the apply reads), so its tags and attributes are checked before any model is loaded.</summary>
@@ -256,6 +264,7 @@ public static class HtmlVisual
         private readonly List<FragmentProblem> problems = [];
         private readonly Dictionary<HtmlNode, Target?> targets = [];
         private readonly JsonArray adjusted = [], implicitArguments = [], canvasSelectors = [];
+        private readonly List<string> importsHoisted = [];
         private int counter, lightDark;
 
         private void Record(InvalidOperationException error)
@@ -298,6 +307,7 @@ public static class HtmlVisual
             if (screens.Count > 0) report["screens"] = Names(screens);
             if (lightDark > 0) report["css"]!["lightDarkExpanded"] = lightDark;
             if (canvasSelectors.Count > 0) report["css"]!["cssRewrites"] = canvasSelectors;
+            if (importsHoisted.Count > 0) report["css"]!["cssImportsHoisted"] = new JsonArray(importsHoisted.Select(i => (JsonNode)i).ToArray());
             if (adjusted.Count > 0) report["inputTypes"] = adjusted;
             if (implicitArguments.Count > 0) report["implicitArguments"] = implicitArguments;
             if (root.Notes.Count > 0) report["notes"] = new JsonArray(root.Notes.Select(n => (JsonNode)n).ToArray());
@@ -328,7 +338,7 @@ public static class HtmlVisual
         }
         private static JsonArray Names(IEnumerable<string> values) => new(values.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).Select(v => (JsonNode)v).ToArray());
 
-        private static bool Allowed(HtmlNode node) => node.IsText || node.Tag == "script" || CompiledTags.Contains(node.Tag) || Elements.Contains(node.Tag);
+        private static bool Allowed(HtmlNode node) => node.IsText || node.Tag == "script" || CompiledTags.Contains(node.Tag) || Elements.Contains(node.Tag) || Substituted(node.Tag);
 
         /// <summary>The tag whitelist of the closed syntax, every tag at once, in one problem.</summary>
         private void Tags()
@@ -336,7 +346,7 @@ public static class HtmlVisual
             var outside = root.Descendants().Where(n => !Allowed(n)).ToArray();
             if (outside.Length == 0) return;
             var where = outside.Select(n => $"<{n.SourceTag}> at line {n.Line} col {n.Column}").Distinct();
-            Record(Error($"{string.Join(", ", where)} is not compiled; supported tags: div, {Join(Elements)}, br, i, img, input, textarea, select, button, a, label, Block, ButtonGroup, slot, style", TagNotAllowed, "use div or a tag of the table"));
+            Record(Error($"{string.Join(", ", where)} is not compiled; supported tags: div, the tags of the platform's HTML Element ({Join(Elements)}), br, i, img, input, textarea, select, button, a, label, form, Block, ButtonGroup, slot, style", TagNotAllowed, "use div or a tag of the table"));
         }
 
         // ---- names: nothing is emitted before every name the fragment mentions is known to exist ---------------------
@@ -568,9 +578,25 @@ public static class HtmlVisual
                 case "br": return Simple(node, parent, "IContainer", _ => { });
                 case "buttongroup": return ButtonGroup(node, parent);
                 case "buttongroupitem": throw Error($"{node.Where}: <ButtonGroupItem> only belongs directly inside a <ButtonGroup>");
+                case "form":
+                    var form = Create(parent, "IForm", node);
+                    Attributes(node, form, "IForm");
+                    Children(node, form);
+                    return form;
+            }
+            if (Substituted(node.Tag))
+            {
+                // The one table's substitute: a div (or a span) with the class ssam-tag-<tag>, so the author's CSS on the tag reaches it.
+                var mapping = ElementWidgetMap.Map(Platform, node, clickable: false);
+                var substitute = Create(parent, mapping.Widget, node);
+                if (mapping.Widget == "IAdvancedHtml") Set(substitute, "Tag", mapping.Tag!);
+                Attributes(node, substitute, mapping.Widget, extraClass: ElementWidgetMap.TagClass(node.Tag));
+                if (node.Tag == "main" && node.Attribute("role") == null) Extended(node, substitute, mapping.Widget, "role", Quote("main"));
+                Children(node, mapping.Widget == "IAdvancedHtml" ? substitute + "/Content" : substitute);
+                return substitute;
             }
             if (!Elements.Contains(node.Tag))
-                throw Error($"{node.Where}: <{node.SourceTag}> is not compiled; supported tags: div, {Join(Elements)}, br, i, img, input, textarea, select, button, a, label, Block, ButtonGroup, slot, style", TagNotAllowed);
+                throw Error($"{node.Where}: <{node.SourceTag}> is not compiled; supported tags: div, the tags of the platform's HTML Element, br, i, img, input, textarea, select, button, a, label, form, Block, ButtonGroup, slot, style", TagNotAllowed);
             var alias = Create(parent, "IAdvancedHtml", node);
             Set(alias, "Tag", node.Tag);
             Attributes(node, alias, "IAdvancedHtml");
@@ -723,6 +749,16 @@ public static class HtmlVisual
 
         private string Select(HtmlNode node, string parent) => Simple(node, parent, "IDropdown", alias =>
         {
+            // value and label are evaluated per element of options, where only the element's attributes are names: a read of
+            // options.Current is refused here, with the attribute path that compiles (PreflightRules.DropdownItemScopeRules).
+            if (MessageExpectations.Lane != "odc" && node.Attribute("options") is { Length: > 0 } options)
+                foreach (var attribute in new[] { "value", "label" })
+                    if (node.Attribute(attribute) is { Length: > 0 } text && PreflightRules.DropdownItemScopeRules.ReadsCurrent(options, text))
+                    {
+                        var bare = PreflightRules.DropdownItemScopeRules.Bare(options, text);
+                        Record(Error($"{node.Where}: {attribute}=\"{text}\" reads {options}.Current; value and label are evaluated per element of options, where only the element's attributes are names (the Verify cannot identify {options} there)",
+                            PreflightRules.DropdownItemScopeRules.Code, bare != null ? $"write {attribute}=\"{bare}\"" : "read the element's attributes: Entity.Attribute for an aggregate, Attribute for a list of records"));
+                    }
             Set(alias, "Variable", Expression(Required(node, "bind"), node));
             Set(alias, "List", Expression(Required(node, "options"), node));
             Set(alias, "Values", Expression(Required(node, "value"), node));
@@ -745,16 +781,21 @@ public static class HtmlVisual
         private string Clickable(HtmlNode node, string parent, string type)
         {
             var text = node.InnerText();
-            if (text.Length == 0 && !node.Elements.Any()) throw Error($"{node.Where}: a <{node.SourceTag}> needs text, {{{{ expression }}}}, an <i> icon or child elements");
+            // H5 (the one table): a control with no visible content is named by its aria-label or title (a CSS switch).
+            if (text.Length == 0 && !node.Elements.Any() && !ElementWidgetMap.Labelled(node.Attributes.Select(a => (a.Key, a.Value))))
+                throw Error($"{node.Where}: a <{node.SourceTag}> needs text, {{{{ expression }}}}, an <i> icon, child elements, an aria-label or a title");
             var target = Destination(node);
             var alias = Create(parent, type, node);
+            // The one table: a submit button is never type=submit; it is the default button and carries ssam-submit.
+            var submit = type == "IButton" && (node.Attribute("type") ?? "").Equals("submit", StringComparison.OrdinalIgnoreCase);
+            if (submit) Set(alias, "IsDefault", true);
             if (text.Length == 0 || node.Elements.Any(e => e.Tag != "i") || node.Children.Any(child => child.IsText && Interpolation.IsMatch(child.Text)))
             {
                 // Dynamic content uses the same compiler as other widgets: it keeps literal spacing, native expressions,
                 // list aliases, child elements and the authored order of the icons.
                 Add("delete", ("target", alias + "/#ITextWidget"));
                 Navigate(node, alias, target);
-                Attributes(node, alias, type);
+                Attributes(node, alias, type, submit ? "ssam-submit" : null);
                 // A control with no visible text (an icon) says what it does to a screen reader by its title.
                 if (text.Length == 0 && node.Attribute("title") is { Length: > 0 } title && node.Attribute("aria-label") == null)
                     Extended(node, alias, type, "aria-label", Quote(title));
@@ -763,7 +804,7 @@ public static class HtmlVisual
             }
             Set(alias + "/#ITextWidget", "Text", text);
             Navigate(node, alias, target);
-            Attributes(node, alias, type);
+            Attributes(node, alias, type, submit ? "ssam-submit" : null);
             var before = true;
             var leading = new List<string>();
             foreach (var child in node.Children)
@@ -837,8 +878,10 @@ public static class HtmlVisual
                 if (given.TryGetValue(input.Name, out var value)) Set(alias + "/OnClick/" + input.Name, "Value", value);
         }
 
-        /// <summary>A label with text is a Label. A label around other elements is a Container that holds the Label (its own
-        /// text and its for) and the elements, in the order written: no refusal (the Cardapio BackOffice hit "label takes text").</summary>
+        /// <summary>A label with text is a Label. A label around other elements is an HTML Element of tag label (in the list of
+        /// both platforms, H6 of the one table) with its text and its elements in the order written, so the DOM and the CSS of
+        /// the label stay (label.field > span); a for is kept as its attribute. No refusal (the Cardapio BackOffice hit "label
+        /// takes text").</summary>
         private string Label(HtmlNode node, string parent)
         {
             if (!node.Elements.Any(e => e.Tag != "style"))
@@ -851,26 +894,12 @@ public static class HtmlVisual
                 if (node.Attribute("for") is { Length: > 0 } target) labels.Add((alias, target, node));
                 return alias;
             }
-            var container = Create(parent, "IContainer", node);
-            Attributes(node, container, "IContainer");
-            var own = HtmlNode.CollapseSpaces(string.Concat(node.Children.Where(c => c.IsText).Select(c => c.Text)));
-            var placed = false;
-            foreach (var child in node.Children)
-            {
-                if (child.IsText)
-                {
-                    if (placed || own.Length == 0 || HtmlNode.CollapseSpaces(child.Text).Length == 0) continue;
-                    var label = Create(container, "ILabel", null);
-                    Set(label + "/#ITextWidget", "Text", own);
-                    if (node.Attribute("for") is { Length: > 0 } target) labels.Add((label, target, node));
-                    placed = true;
-                    continue;
-                }
-                if (child.Tag is "style" or "script" || !Allowed(child)) continue;
-                try { Widget(child, container); }
-                catch (InvalidOperationException ex) { Record(ex); }
-            }
-            return container;
+            var wrapper = Create(parent, "IAdvancedHtml", node);
+            Set(wrapper, "Tag", "label");
+            Attributes(node, wrapper, "IAdvancedHtml");
+            if (node.Attribute("for") is { Length: > 0 } wrapped) Extended(node, wrapper, "IAdvancedHtml", "for", Quote(wrapped));
+            Children(node, wrapper + "/Content");
+            return wrapper;
         }
 
         /// <summary>The native route of a button group (widgets-reactive): the group is created empty and bound to its
@@ -965,9 +994,11 @@ public static class HtmlVisual
 
         /// <summary>class goes to the native Style when the widget has one, otherwise to an extended property; every other
         /// attribute outside the closed list becomes an extended property with its literal value.</summary>
-        private void Attributes(HtmlNode node, string alias, string type)
+        private void Attributes(HtmlNode node, string alias, string type, string? extraClass = null)
         {
-            if (node.Attribute("class") is { Length: > 0 } css)
+            var authored = node.Attribute("class") is { Length: > 0 } written ? written : null;
+            var css = authored == null ? extraClass : extraClass == null ? authored : authored + " " + extraClass;
+            if (css != null)
             {
                 // class="chip {{ If(Selected, "on", "") }}" is a dynamic Style: the literal parts quoted, the {{ }} parts as written.
                 var value = HtmlNode.CollapseSpaces(css);
@@ -978,6 +1009,9 @@ public static class HtmlVisual
             foreach (var (attribute, value) in node.Attributes)
             {
                 if (Reserved.Contains(attribute) || attribute.StartsWith(':') || attribute.StartsWith('@')) continue;
+                // Inline JavaScript never becomes an attribute (the one table): onclick is the syntax of a destination.
+                if (ElementWidgetMap.IsInlineScript(attribute))
+                    throw Error($"{node.Where}: attribute '{attribute}' is inline JavaScript, which is not compiled; logic is native", TagNotAllowed, "remove it; a link or a button names its action with onclick=\"Action\"");
                 Extended(node, alias, type, attribute, value.Contains("{{", StringComparison.Ordinal) ? AttributeExpression(value, node) : Quote(value));
             }
             // An href that is a URL (not a screen) stays the attribute the author wrote.
@@ -1030,7 +1064,10 @@ public static class HtmlVisual
             foreach (var problem in compat.Problems) Record(Error(problem.Message, CssCompat.Code, problem.Fix));
             foreach (var selector in compat.Selectors) canvasSelectors.Add(new JsonObject { ["path"] = $"<style> line {selector.Line}", ["from"] = selector.From, ["to"] = selector.To });
             css = compat.Css; lightDark += compat.Expanded;
-            var sheet = CssStylesheet.Parse(css);
+            // H14: an @import goes to the top of the theme stylesheet (the theme install moves it there, once), found by the
+            // parser in any line of the stylesheet, never refused.
+            var (imports, others) = CssCompat.Imports(css);
+            var sheet = CssStylesheet.Parse(others);
             if (sheet.IdNames() is { Count: > 0 } ids)
                 throw Error($"css: selectors use {string.Join(", ", ids.Select(i => "#" + i))}, but OutSystems reserves the id attribute (Verify InvalidHTMLAttribute_Id); select by class instead");
             if (sheet.Statements.Count > 0) throw Error($"css: {sheet.Statements[0]} is not compiled; the stylesheet must be self-contained");
@@ -1038,7 +1075,13 @@ public static class HtmlVisual
             if (roots.Count != 1 || roots[0].Attribute("class") is not { Length: > 0 } scope)
                 throw Error("css: a fragment with a <style> needs exactly one root element carrying the class the stylesheet is scoped under");
             var scopeClass = HtmlNode.CollapseSpaces(scope).Split(' ')[0];
-            return (sheet.Scoped("." + scopeClass), scopeClass, sheet.Rules.Count);
+            var scoped = sheet.Scoped("." + scopeClass);
+            if (imports.Count > 0)
+            {
+                foreach (var import in imports) importsHoisted.Add(import.Statement);
+                scoped = string.Join("\n", imports.Select(i => i.Statement)) + "\n" + scoped;
+            }
+            return (scoped, scopeClass, sheet.Rules.Count);
         }
 
         // ---- helpers (the shape of the ops is the HtmlExpander's) -------------------------------------------------------
@@ -1158,8 +1201,18 @@ public sealed partial class ModelSession
         report["expanded"] = fragment.Ops.Count;
         if (aliases.Count > 0) report["aliases"] = aliases;
         if (parentRef != authoredParent) report["parentAuthored"] = authoredParent;
-        if (fragment.ScopedCss != null) report["css"]!["theme"] = InstallStylesheet(fragment.ScopeClass!, fragment.ScopedCss, report["css"]!.AsObject());
+        // The block of the theme is keyed by the screen or block that receives the fragment and the class of its stylesheet
+        // (docs/PROTOTIPO-NATIVO.md 4.3 item 2): the same class in two screens is two blocks.
+        if (fragment.ScopedCss != null) report["css"]!["theme"] = InstallStylesheet(OwnerName(parent) + ":" + fragment.ScopeClass!, fragment.ScopedCss, report["css"]!.AsObject());
         return report;
+    }
+
+    /// <summary>The name of the screen or block that holds the widget (the owner of a fragment).</summary>
+    private static string OwnerName(IObjectSignature widget)
+    {
+        var owner = widget;
+        while (owner != null && owner.GetInterface()?.Name is not ("IMobileScreen" or "IMobileBlock")) owner = owner.Parent as IObjectSignature;
+        return (owner == null ? null : TypeResolver.Name(owner)) ?? "module";
     }
 
     /// <summary>A screen with a layout receives the fragment in the layout's content placeholder (MainContent, else Content),

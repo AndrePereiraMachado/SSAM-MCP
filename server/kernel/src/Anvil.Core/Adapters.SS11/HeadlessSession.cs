@@ -159,16 +159,19 @@ public sealed class HeadlessSession : IDisposable
 
     /// <summary>Por nome (case-insensitive) ou chave. Se nao estiver no cache, recarrega UMA vez:
     /// a propria sessao cria modulos/apps e o inventario do servidor muda debaixo dela.</summary>
+    // Through the connected Studio there is no client cache: every list is already a fresh server read, so a miss is not
+    // read again (it was the same request a few milliseconds later: one environment call of ~3 s less per create-app,
+    // add-modules, create-module --replace and cached download).
     public ModuleSummary? FindModule(string nameOrKey, bool refreshOnMiss = true)
     {
         bool Match(ModuleSummary m) => string.Equals(m.Name, nameOrKey, StringComparison.OrdinalIgnoreCase) || m.Key == nameOrKey;
-        return ListModules().FirstOrDefault(Match) ?? (refreshOnMiss ? ListModules(refresh: true).FirstOrDefault(Match) : null);
+        return ListModules().FirstOrDefault(Match) ?? (refreshOnMiss && Connected == null ? ListModules(refresh: true).FirstOrDefault(Match) : null);
     }
 
     public ApplicationSummary? FindApplication(string nameOrKey, bool refreshOnMiss = true)
     {
         bool Match(ApplicationSummary a) => string.Equals(a.Name, nameOrKey, StringComparison.OrdinalIgnoreCase) || a.Key == nameOrKey;
-        return ListApplications().FirstOrDefault(Match) ?? (refreshOnMiss ? ListApplications(refresh: true).FirstOrDefault(Match) : null);
+        return ListApplications().FirstOrDefault(Match) ?? (refreshOnMiss && Connected == null ? ListApplications(refresh: true).FirstOrDefault(Match) : null);
     }
 
     /// <summary>Icone (PNG) de uma app existente; util para reaproveitar num app nova.</summary>
@@ -255,11 +258,34 @@ public sealed class HeadlessSession : IDisposable
 
     public string? LastTemplatesJson { get; private set; }
 
+    private IReadOnlyList<TemplateSummary>? _knownTemplates;
+
+    /// <summary>Templates read earlier from THIS environment (the o11_environment templates cache, create-app --templates):
+    /// FindTemplateForKind picks from them without an environment call when they hold a template of the kind asked (and the
+    /// preferred label, when one is given); otherwise it reads the server as before. False (nothing kept) for another host
+    /// or an empty list.</summary>
+    public bool UseKnownTemplates(string? host, IReadOnlyList<TemplateSummary>? templates)
+    {
+        if (templates is not { Count: > 0 } || !string.Equals(host?.Trim(), Host, StringComparison.OrdinalIgnoreCase)) return false;
+        _knownTemplates = templates;
+        return true;
+    }
+
     /// <summary>Template padrao por tipo de app: ReactiveWebApp, PhoneApp (ou TabletApp), TraditionalWeb.</summary>
     public TemplateSummary? FindTemplateForKind(string applicationKind, string? preferLabel = null)
     {
-        var all = ListApplicationTemplates();
-        var byKind = all.Where(x => string.Equals(x.ApplicationKind, applicationKind, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (_knownTemplates != null)
+        {
+            var known = _knownTemplates.Where(x => string.Equals(x.ApplicationKind, applicationKind, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (known.Count > 0 && (preferLabel == null || known.Any(x => string.Equals(x.Label, preferLabel, StringComparison.OrdinalIgnoreCase))))
+                return PickTemplate(known, applicationKind, preferLabel);
+        }
+        return PickTemplate(ListApplicationTemplates().Where(x => string.Equals(x.ApplicationKind, applicationKind, StringComparison.OrdinalIgnoreCase)).ToList(),
+            applicationKind, preferLabel);
+    }
+
+    private static TemplateSummary? PickTemplate(List<TemplateSummary> byKind, string applicationKind, string? preferLabel)
+    {
         if (preferLabel != null && byKind.FirstOrDefault(x => string.Equals(x.Label, preferLabel, StringComparison.OrdinalIgnoreCase)) is { } pref) return pref;
         var preferred = applicationKind.ToLowerInvariant() switch
         {

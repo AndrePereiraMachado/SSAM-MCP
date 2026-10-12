@@ -46,7 +46,7 @@ export const MCP_TOOLS = Object.freeze([
   // ODC lane: the 28 studio_* of platforms/odc/facade/mcp.mjs, the catalog, the tenant access and the Portal routes
   'studio_doctor', 'studio_attach', 'studio_status', 'studio_wait', 'studio_assets', 'studio_consumers', 'studio_data',
   'studio_data_insert', 'studio_data_update', 'studio_data_delete', 'studio_open', 'studio_close', 'studio_snapshot',
-  'studio_reference_snapshot', 'studio_latest', 'studio_refresh_references', 'studio_dismiss_dialog', 'studio_build',
+  'studio_reference_producers', 'studio_reference_snapshot', 'studio_latest', 'studio_refresh_references', 'studio_dismiss_dialog', 'studio_build',
   'studio_inspect', 'studio_check_base', 'studio_preview', 'studio_merge', 'studio_authorize', 'studio_publish',
   'studio_create', 'studio_create_app', 'studio_command', 'studio_manifest', 'studio_deliver',
   'odc_status', 'odc_portal_capabilities', 'odc_describe_capability', 'odc_list_apis', 'odc_search_operations',
@@ -183,7 +183,7 @@ const TABLE = {
   EVIDENCE_FILTER_INVALID: c('ssam_evidence', { file: '<file>', where: '<example>' }, 'a mesma leitura com a cláusula de exemplo, montada dos campos que as linhas do arquivo têm'),
   STUDIO_WINDOWLESS: c('ssam_connect', { lane: 'o11' }, 'este Service Studio não tem janela principal: o SSAM o ignora e o Studio com janela é o da faixa; o SSAM nunca fecha nem encerra um Studio'),
   DUPLICATE_MCP_ENTRY: c('ssam_doctor', {}, 'duas entradas MCP apontam para o mesmo servidor SSAM; use uma só (uma entrada MCP por servidor)'),
-  PATH_OUTSIDE_WORKSPACE: c(SAME_TOOL, { '<arguments>': '<the same, with agent:inbox/name>' }, 'grave o arquivo no inbox do agente com a ferramenta Write (UTF-8) e repita a mesma chamada com agent:inbox/<nome>'),
+  PATH_OUTSIDE_WORKSPACE: c(SAME_TOOL, { '<arguments>': '<the same, with the job inline or agent:inbox/name>' }, 'job: repita a mesma chamada com o próprio job inline (JSON compacto); outro arquivo do usuário: grave no inbox do agente com a ferramenta Write (UTF-8) e repita com agent:inbox/<nome>'),
 
   // ---- lane wp of the atritos 3 package (the build pool, studio-write-lock.mjs and build-pool.mjs): a delivery whose
   //      module guard or build worker did not come within the queue limit; nothing of it ran.

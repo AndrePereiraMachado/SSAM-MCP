@@ -5,16 +5,36 @@
 //   - a number out of range goes to the nearest edge (clamp);
 //   - a text longer than its limit is cut, and the answer keeps the sha256 of the whole text (truncate);
 //   - a `select` list above its limit runs as internal batches whose answers are merged (batch);
-//   - every adjustment comes back in `inputAdjusted: [{path, from, to, rule}]`;
+//   - budget and budgetBytes, the answer budget under its two names across the tools, are one field: on a tool that
+//     declares one of them only, the other name is taken as it (alias), on any tool;
+//   - every adjustment comes back in `inputAdjusted: [{path, from?, to, rule}]` (a rename or an alias has no `from`: path
+//     is the name sent, to the field's); an answer with entries of its own (discover's raise of a budget) keeps them,
+//     after the layer's;
 //   - what no adjustment can fix (a missing field, an unknown field, a value outside an enum, a wrong type, a limit on the
 //     user's words or on a job) answers INPUT_INVALID with every violation {path, message, accepted} and the corrected
-//     arguments, without calling the tool.
+//     arguments, without calling the tool;
+//   - except on a read-only tool (readOnlyHint true) whose every problem has a deterministic fix: a field renamed to the
+//     one name it surely is, a lossless type coercion ("8000" -> 8000). It runs the corrected arguments and reports each
+//     fix in inputAdjusted ({path, to, rule:'rename'}, {path, from, to, rule:'coerce'}). A name sent surely is a field when
+//     it is the field's but for case and separators (budget_bytes is budgetBytes), its plural (lanes is lane), or a slip of
+//     one letter inside a name of five letters or more (targt is target), and no other field is as close. Anything wider
+//     is a guess and refuses, with the field as its closest name: a name the field extends or one that extends a field
+//     (the rest is a unit, a count or another field: timeout is not timeoutSeconds, max is not maxPages, maxDepth is not
+//     max), a wider edit (dbServer is not server, keep is not deep), an identifier (pid, port, an id or key) under any
+//     other name than its own but for case and separators (id is not pid), and a number or a boolean the field would read
+//     as text (messages true, a switch, is not the text filter message "true"). G7 of the UI-Mockup diagnosis: a read
+//     refused for the very fix its refusal named cost a round. A tool that writes keeps refusing: a guessed name never
+//     reaches a write.
 // The user's words and the payloads are never adjusted (NEVER_ADJUSTED): a limit there is the person's or the job's to fix.
 //
-// relaxTool(name, config, handler) -> {config, handler}: the registration the SDK sees. Its schema lists exactly what the
-// tool always listed (the limits stay as guidance for the model) but validates nothing; the returned handler normalizes,
-// then runs the tool's own schema (defaults and transforms included) before calling the original handler. A schema it
-// cannot read comes back unchanged. F7b wires it into ssam.mjs (server.registerTool); this module never registers.
+// relaxTool(name, config, handler, {prepare}) -> {config, handler, argsOf}: the registration the SDK sees. Its schema lists
+// exactly what the tool always listed (the limits stay as guidance for the model) but validates nothing; the returned
+// handler normalizes, applies prepare (when given) to the normalized arguments, then runs the tool's own schema (defaults
+// and transforms included) before calling the original handler. argsOf(raw) is what that handler runs for raw (normalized,
+// then prepare; the tool's defaults left out), or null when it refuses them: a renamed, aliased or coerced field under the
+// name the tool knows. A schema it cannot read comes back unchanged (no argsOf). F7b wires it into ssam.mjs
+// (server.registerTool; prepare holds a budget under the answer ceiling; the lane, the Studio lock and the next steps of the
+// answer read argsOf); this module never registers.
 import { createHash } from 'node:crypto';
 import * as z from 'zod/v4';
 
@@ -26,7 +46,7 @@ export const WORDS_MARKER = '<palavras do usuário>';
 export const AS_SENT = '<como enviado>';
 const NEVER = new Set(NEVER_ADJUSTED);
 const WORDS = new Set(['authorize', 'words']);
-const LARGE_ECHO = 2048, MAX_VIOLATIONS = 50, MAX_REF_DEPTH = 32;
+const LARGE_ECHO = 2048, MAX_VIOLATIONS = 50, MAX_REF_DEPTH = 32, MAX_PASSES = 3;
 const SUMMED = new Set(['requested', 'count', 'total', 'bytes']);
 const IDENTIFIER = /^(?:pid|port)$|(?:Id|Key|Uuid)$/;
 
@@ -61,6 +81,34 @@ function coerce(types, v) {
   return undefined;
 }
 
+// A value the layer moves to another name keeps its kind there: a number or a boolean read as text is another tool's value,
+// not a slip of the name (odc_operation_status {messages: true} is a switch; o11_service_center_read {message} a text
+// filter, and ssam_map {key} an @key, never 7). True when the field, or what it holds (the item of the list it wraps the
+// value in included), would read a number or a boolean as text; a text read as a number or a boolean, a value wrapped in
+// its list and a number read as an integer keep their kind. A union coerces nothing (a branch that needs a fix is no match).
+function readAsText(schemaIn, value, root, depth = 0) {
+  const schema = deref(schemaIn, root);
+  if (!isObject(schema) || value === undefined || depth > MAX_REF_DEPTH) return false;
+  if (Array.isArray(schema.allOf) && schema.allOf.some(part => readAsText(part, value, root, depth + 1))) return true;
+  const branches = schema.anyOf ?? schema.oneOf;
+  if (Array.isArray(branches) && branches.length) return false;
+  const types = schema.type === undefined ? null : [].concat(schema.type);
+  if (types && !types.some(t => fitsType(t, value))) {
+    const fixed = coerce(types, value);
+    return typeof fixed === 'string' ? typeof value !== 'string' : Array.isArray(fixed) && readAsText(schema, fixed, root, depth + 1);
+  }
+  if (Array.isArray(value)) {
+    const items = schema.items;
+    const prefix = Array.isArray(schema.prefixItems) ? schema.prefixItems : Array.isArray(items) ? items : null;
+    return value.some((v, i) => readAsText(prefix && i < prefix.length ? prefix[i] : isObject(items) ? items : schema.additionalItems, v, root, depth + 1));
+  }
+  if (isObject(value)) {
+    const props = isObject(schema.properties) ? schema.properties : {};
+    return Object.entries(value).some(([k, v]) => readAsText(Object.hasOwn(props, k) ? props[k] : schema.additionalProperties, v, root, depth + 1));
+  }
+  return false;
+}
+
 // Optimal string alignment distance: insertion, deletion, substitution or an adjacent swap ("nmae" -> "name") count one.
 function distance(a, b) {
   const m = a.length, n = b.length;
@@ -73,20 +121,28 @@ function distance(a, b) {
   }
   return d[m][n];
 }
-// The closest candidate of a text: same text ignoring case and separators, a prefix of one, or a small edit distance.
-export function closest(value, candidates) {
-  if (typeof value !== 'string' || !value) return undefined;
-  const fold = s => String(s).toLowerCase().replace(/[\s_-]+/g, '');
+// The closest candidate of a text: same text ignoring case and separators, a prefix of one, or a small edit distance (the
+// closest name of a refusal). `sure` when the text is that candidate beyond doubt, the only rename a read runs by itself:
+// the same text but for case and separators, its plural, or a slip of one letter inside two names of five letters or more
+// (a substitution, an adjacent swap, one letter more or less, never at the end), with no other candidate as close. A
+// prefix is a guess (the field extends the text, or the text a field): the rest names a unit, a count or another field
+// (timeout -> timeoutSeconds is 30 s read as 30000 s, max -> maxPages a count of items read as pages, maxDepth -> max).
+const fold = s => String(s).toLowerCase().replace(/[\s_-]+/g, '');
+const plural = (a, b) => a === b + 's' || b === a + 's';
+const slip = (a, b, d) => d === 1 && a.length >= 5 && b.length >= 5 && !a.startsWith(b) && !b.startsWith(a);
+function nearest(value, candidates) {
+  if (typeof value !== 'string' || !value) return {};
   const wanted = fold(value);
   const texts = candidates.filter(c => typeof c === 'string');
-  const exact = texts.find(c => fold(c) === wanted);
-  if (exact !== undefined) return exact;
+  const exact = texts.filter(c => fold(c) === wanted);
+  if (exact.length) return { match: exact[0], sure: exact.length === 1, exact: true };
   const prefixed = texts.filter(c => fold(c).startsWith(wanted) || wanted.startsWith(fold(c)));
-  if (prefixed.length === 1 && Math.min(wanted.length, fold(prefixed[0]).length) >= 3) return prefixed[0];
-  let best; let score = Infinity;
-  for (const c of texts) { const d = distance(wanted, fold(c)); if (d < score) { score = d; best = c; } }
-  return best !== undefined && score <= Math.max(1, Math.min(3, Math.floor(wanted.length / 3))) ? best : undefined;
+  if (prefixed.length === 1 && Math.min(wanted.length, fold(prefixed[0]).length) >= 3) return { match: prefixed[0], sure: plural(wanted, fold(prefixed[0])) };
+  let best; let score = Infinity; let ties = 0;
+  for (const c of texts) { const d = distance(wanted, fold(c)); if (d < score) { score = d; best = c; ties = 1; } else if (d === score) ties++; }
+  return best !== undefined && score <= Math.max(1, Math.min(3, Math.floor(wanted.length / 3))) ? { match: best, sure: ties === 1 && slip(wanted, fold(best), score) } : {};
 }
+export function closest(value, candidates) { return nearest(value, candidates).match; }
 
 // A short sentence of what a schema accepts, for `accepted`.
 export function describe(schema, root = schema, depth = 0) {
@@ -123,11 +179,17 @@ function deref(schema, root, depth = 0) {
 }
 
 // ---- the walk: the normalized value; adjustments, violations, fixes and batches are collected in ctx.
+// A fix that is deterministic carries `auto`, the inputAdjusted entry a read-only tool reports when it runs it.
+const reporter = (schema, keys, ctx) => (message, fix, auto) => {
+  const path = pointer(keys);
+  ctx.violations.push({ path, message, accepted: describe(schema, ctx.root) });
+  if (fix) ctx.fixes.push({ keys, fix, ...(auto ? { auto: { path, ...auto } } : {}) });
+};
+
 function walk(schemaIn, value, keys, ctx, never) {
   const schema = deref(schemaIn, ctx.root);
   if (!isObject(schema) || value === undefined) return value;
-  const path = pointer(keys);
-  const violation = (message, fix) => { ctx.violations.push({ path, message, accepted: describe(schema, ctx.root) }); if (fix) ctx.fixes.push({ keys, fix }); };
+  const violation = reporter(schema, keys, ctx);
   if (Array.isArray(schema.allOf)) for (const part of schema.allOf) value = walk(part, value, keys, ctx, never);
   const branches = schema.anyOf ?? schema.oneOf;
   if (Array.isArray(branches) && branches.length) {
@@ -143,12 +205,14 @@ function walk(schemaIn, value, keys, ctx, never) {
 }
 
 function walkOwn(schema, value, keys, ctx, never, violation) {
-  const path = pointer(keys);
-  violation ??= (message, fix) => { ctx.violations.push({ path, message, accepted: describe(schema, ctx.root) }); if (fix) ctx.fixes.push({ keys, fix }); };
+  violation ??= reporter(schema, keys, ctx);
   const types = schema.type === undefined ? null : [].concat(schema.type);
   if (types && !types.some(t => fitsType(t, value))) {
     const fixed = coerce(types, value);
-    violation(`expected ${types.join(' or ')}, received ${typeName(value)}`, fixed !== undefined ? { set: fixed } : null);
+    // Deterministic when the value stays as written ("8000" -> 8000, "true" -> true, 7 -> "7", x -> [x]); a rounding is
+    // not, nor a text that reads as a list ("a,b" is one item or two), and a payload's value is never coerced by itself.
+    const lossless = fixed !== undefined && !never && (Array.isArray(fixed) ? !(typeof value === 'string' && /[,;\n]/.test(value)) : String(fixed) === String(value).trim());
+    violation(`expected ${types.join(' or ')}, received ${typeName(value)}`, fixed !== undefined ? { set: fixed } : null, lossless ? { from: value, to: fixed, rule: 'coerce' } : null);
     return value;
   }
   if (Array.isArray(schema.enum) && !schema.enum.some(e => same(e, value))) {
@@ -218,9 +282,32 @@ function list(schema, value, keys, ctx, never, violation) {
   return out;
 }
 
-function object(schema, value, keys, ctx, never, violation) {
+// A fixed alias (G7): budget and budgetBytes are the one answer budget under two names across the tools (o11_inspect and
+// studio_inspect declare budget; ssam_discover, ssam_map and ssam_evidence budgetBytes). On a tool that declares one of the
+// two only, the other name sent (any case or separators) is that field, on every tool, read or write: an adjustment
+// {path, to, rule:'alias'}, then the value is clamped or coerced like any other. Both sent: no alias, the extra one refuses;
+// a number or a boolean the field would read as text is no alias either (it keeps its kind, like a renamed value).
+const ALIASES = Object.freeze({ budget: 'budgetBytes', budgetbytes: 'budget' });
+function aliased(schema, props, patterns, value, ctx) {
+  if (isObject(schema.additionalProperties)) return value;
   let out = value;
+  for (const k of Object.keys(value)) {
+    const to = ALIASES[fold(k)];
+    if (!to || Object.hasOwn(props, k) || patterns.some(p => p.test(k)) || !Object.hasOwn(props, to) || Object.hasOwn(props, ALIASES[fold(to)]) || Object.hasOwn(out, to)
+      || readAsText(props[to], out[k], ctx.root)) continue;
+    const { [k]: moved, ...rest } = out;
+    out = { ...rest, [to]: moved };
+    ctx.adjusted.push({ path: pointer([k]), to: pointer([to]), rule: 'alias' });
+  }
+  return out;
+}
+
+function object(schema, sent, keys, ctx, never, violation) {
   const props = isObject(schema.properties) ? schema.properties : {};
+  const patterns = isObject(schema.patternProperties) ? Object.keys(schema.patternProperties).map(p => { try { return new RegExp(p, 'u'); } catch { return null; } }).filter(Boolean) : [];
+  // The alias applies to the tool's own arguments, never inside a payload.
+  const value = keys.length || never ? sent : aliased(schema, props, patterns, sent, ctx);
+  let out = value;
   for (const [k, s] of Object.entries(props)) {
     if (!Object.hasOwn(value, k) || value[k] === undefined) continue;
     const v = walk(s, value[k], [...keys, k], ctx, never || NEVER.has(k));
@@ -229,16 +316,26 @@ function object(schema, value, keys, ctx, never, violation) {
   for (const r of Array.isArray(schema.required) ? schema.required : []) {
     if (Object.hasOwn(value, r) && value[r] !== undefined) continue;
     ctx.violations.push({ path: pointer([...keys, r]), message: 'is required', accepted: describe(props[r] ?? {}, ctx.root) });
-    ctx.fixes.push({ keys: [...keys, r], fix: { set: '<' + r + '>' } });
+    ctx.fixes.push({ keys: [...keys, r], fix: { set: '<' + r + '>' }, required: true });
   }
-  const patterns = isObject(schema.patternProperties) ? Object.keys(schema.patternProperties).map(p => { try { return new RegExp(p, 'u'); } catch { return null; } }).filter(Boolean) : [];
   const extra = Object.keys(value).filter(k => !Object.hasOwn(props, k) && !patterns.some(p => p.test(k)));
   if (schema.additionalProperties === false) {
     const free = Object.keys(props).filter(p => !Object.hasOwn(value, p));
+    const initial = free.slice();
     for (const k of extra) {
       const near = closest(k, free);
-      ctx.violations.push({ path: pointer([...keys, k]), message: 'is not a field here' + (near ? `; closest: ${near}` : ''), accepted: 'fields: ' + Object.keys(props).join(', ') });
-      ctx.fixes.push({ keys: [...keys, k], fix: near ? { rename: near } : { remove: true } });
+      const path = pointer([...keys, k]);
+      ctx.violations.push({ path, message: 'is not a field here' + (near ? `; closest: ${near}` : ''), accepted: 'fields: ' + Object.keys(props).join(', ') });
+      // Deterministic only when the name sent surely is that field among the fields free before any rename (the order of
+      // the keys sent never decides) and the field is still free; an identifier only from its own name but for case and
+      // separators (another process or record is not a nearer name: id is not pid); no user's words or payload change name;
+      // and the value keeps its kind there (a number or a boolean is never read as text: messages true is not message "true").
+      const first = nearest(k, initial);
+      const identifier = !first.exact && (IDENTIFIER.test(k) || IDENTIFIER.test(near ?? ''));
+      const auto = near && first.sure && first.match === near && !identifier && !never && !NEVER.has(k) && !NEVER.has(near)
+        && !readAsText(props[near], value[k], ctx.root)
+        ? { auto: { path, to: pointer([...keys, near]), rule: 'rename' } } : {};
+      ctx.fixes.push({ keys: [...keys, k], fix: near ? { rename: near } : { remove: true }, ...auto });
       if (near) free.splice(free.indexOf(near), 1);
     }
   } else if (isObject(schema.additionalProperties)) {
@@ -269,13 +366,37 @@ function applyFixes(value, fixes) {
 }
 
 // Pure. The arguments normalized against the JSON Schema of a tool: {args, adjusted, violations} (plus corrected, the
-// arguments with every obvious fix applied, and batches, the internal batches of a select above its limit).
+// arguments with every obvious fix applied, batches, the internal batches of a select above its limit, and corrections,
+// the inputAdjusted entries of the fixes when every violation has a deterministic one, else null). A required field a
+// deterministic rename fills ({targt} -> target) leaves no placeholder: the rename is its fix.
 export function normalizeArguments(jsonSchema, args) {
   const ctx = { root: jsonSchema, adjusted: [], violations: [], fixes: [], batches: [] };
   const input = args === undefined || args === null ? {} : args;
   const value = walk(jsonSchema, input, [], ctx, false);
+  const fixed = ctx.violations.length > 0 && ctx.violations.every(v => ctx.fixes.some(f => pointer(f.keys) === v.path));
+  const renamed = new Set(ctx.fixes.filter(f => f.auto?.rule === 'rename').map(f => f.auto.to));
+  const deterministic = fixed && ctx.fixes.every(f => f.auto || (f.required && renamed.has(pointer(f.keys))));
   return { args: value, adjusted: ctx.adjusted, violations: ctx.violations, corrected: ctx.violations.length ? applyFixes(value, ctx.fixes) : value,
-    fixed: ctx.violations.length > 0 && ctx.violations.every(v => ctx.fixes.some(f => pointer(f.keys) === v.path)), batches: ctx.batches };
+    fixed, batches: ctx.batches, corrections: deterministic ? ctx.fixes.filter(f => f.auto).map(f => f.auto) : null };
+}
+
+// A read-only tool: the corrected arguments when every problem has a deterministic fix, normalized again (a renamed value
+// is clamped or coerced like any other, bounded passes), with every fix and adjustment in `adjusted`. A problem the
+// corrected arguments still have refuses the call with the violations of every pass and the arguments of the last one
+// ({limits: 8.5} names /limits and /limit, and corrects to {limit: 9}); without a deterministic fix in the first pass the
+// refusal is the same as for any tool.
+function readNormalized(jsonSchema, args) {
+  let n = normalizeArguments(jsonSchema, args);
+  const adjusted = [], violations = [];
+  const add = (into, list) => { for (const a of list) if (!into.some(b => same(a, b))) into.push(a); };
+  add(adjusted, n.adjusted);
+  for (let pass = 0; pass < MAX_PASSES && n.violations.length && n.corrections; pass++) {
+    add(adjusted, n.corrections); add(violations, n.violations);
+    n = normalizeArguments(jsonSchema, n.corrected); add(adjusted, n.adjusted);
+  }
+  if (!n.violations.length) return { ...n, adjusted };
+  add(violations, n.violations);
+  return { ...n, violations };
 }
 
 // ---- answers
@@ -324,16 +445,24 @@ export function mergeValues(values) {
   return out;
 }
 
+// One list: what the layer adjusted, then what the tool adjusted itself (discover raises a budget below its minimal
+// answer, U5), in the order applied; neither replaces the other.
+const joined = (own, adjusted) => {
+  const out = adjusted.slice();
+  for (const a of own === undefined || own === null ? [] : [].concat(own)) if (!out.some(b => same(a, b))) out.push(a);
+  return out;
+};
+
 export function withInputAdjusted(result, adjusted) {
   if (!result || typeof result !== 'object' || result.resultType === 'input_required' || !adjusted.length) return result;
   const content = Array.isArray(result.content) ? result.content : [];
   if (isObject(result.structuredContent)) {
     const before = JSON.stringify(result.structuredContent);
-    const structuredContent = { ...result.structuredContent, inputAdjusted: adjusted };
+    const structuredContent = { ...result.structuredContent, inputAdjusted: joined(result.structuredContent.inputAdjusted, adjusted) };
     return { ...result, structuredContent, content: content.map((c, i) => (i === 0 && c?.type === 'text' && c.text === before ? { ...c, text: JSON.stringify(structuredContent) } : c)) };
   }
   if (content[0]?.type === 'text') {
-    try { const v = JSON.parse(content[0].text); if (isObject(v)) return { ...result, content: [{ ...content[0], text: JSON.stringify({ ...v, inputAdjusted: adjusted }) }, ...content.slice(1)] }; } catch { /* plain text */ }
+    try { const v = JSON.parse(content[0].text); if (isObject(v)) return { ...result, content: [{ ...content[0], text: JSON.stringify({ ...v, inputAdjusted: joined(v.inputAdjusted, adjusted) }) }, ...content.slice(1)] }; } catch { /* plain text */ }
   }
   return { ...result, content: [...content, { type: 'text', text: JSON.stringify({ inputAdjusted: adjusted }) }] };
 }
@@ -353,7 +482,7 @@ function jsonSchemaOf(standard) {
   return null;
 }
 
-export function relaxTool(name, config, handler) {
+export function relaxTool(name, config, handler, { prepare } = {}) {
   try {
     if (!config || typeof handler !== 'function') return { config, handler };
     const standard = standardOf(config.inputSchema);
@@ -362,6 +491,8 @@ export function relaxTool(name, config, handler) {
     const json = jsonSchemaOf(standard);
     if (!isObject(json)) return { config, handler };
     const words = name === 'studio_authorize' ? new Set([...WORDS, 'text']) : WORDS;
+    // Only a tool that declares it changes nothing runs corrected arguments (G7); no annotation is a write.
+    const normalize = config.annotations?.readOnlyHint === true ? readNormalized : normalizeArguments;
     // Listed exactly as before (the SDK reads jsonSchema.input for tools/list); validated by the handler below.
     const relaxed = { '~standard': { version: 1, vendor: 'ssam-relaxed',
       jsonSchema: { input: options => (std.jsonSchema?.input ? std.jsonSchema.input(options) : json), output: options => (std.jsonSchema?.output ? std.jsonSchema.output(options) : json) },
@@ -374,18 +505,23 @@ export function relaxTool(name, config, handler) {
       }
       return { result: await handler(parsed?.value ?? args, ctx) };
     };
+    // What the layer renamed or coerced is held like what was sent (ssam.mjs: a budget under the answer ceiling).
+    const prepared = raw => {
+      const n = normalize(json, raw);
+      return { n, args: n.violations.length ? null : typeof prepare === 'function' ? prepare(n.args) : n.args };
+    };
     const relaxedHandler = async (raw, ctx) => {
-      const n = normalizeArguments(json, raw);
+      const { n, args } = prepared(raw);
       if (n.violations.length) return inputInvalidAnswer(name, n.violations, forEcho(n.corrected, words), { fixed: n.fixed });
       if (!n.batches.length) {
-        const r = await run(n.args, ctx);
+        const r = await run(args, ctx);
         return r.refused ?? withInputAdjusted(r.result, n.adjusted);
       }
       // select above its limit: one call per batch, in order; a refused batch ends it and answers for the call.
       const [{ key, size }] = n.batches;
-      const all = n.args[key]; const results = [];
+      const all = args[key]; const results = [];
       for (let i = 0; i < all.length; i += size) {
-        const r = await run({ ...n.args, [key]: all.slice(i, i + size) }, ctx);
+        const r = await run({ ...args, [key]: all.slice(i, i + size) }, ctx);
         if (r.refused) return r.refused;
         const value = structuredOf(r.result);
         if (r.result?.resultType === 'input_required' || r.result?.isError === true || value?.ok === false || value === undefined) return withInputAdjusted(r.result, n.adjusted);
@@ -395,7 +531,7 @@ export function relaxTool(name, config, handler) {
       const structured = results.every(r => r.structuredContent !== undefined);
       return withInputAdjusted({ content: [{ type: 'text', text: JSON.stringify(merged) }], ...(structured ? { structuredContent: merged } : {}) }, n.adjusted);
     };
-    return { config: { ...config, inputSchema: relaxed }, handler: relaxedHandler };
+    return { config: { ...config, inputSchema: relaxed }, handler: relaxedHandler, argsOf: raw => prepared(raw).args };
   } catch {
     return { config, handler };
   }

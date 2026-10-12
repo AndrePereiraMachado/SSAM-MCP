@@ -45,6 +45,7 @@ function tenantFake({ assets = [], consumers = {}, elements = {}, jobs = [], hig
     const route = request.basePath + request.path, query = new URLSearchParams(request.query ?? '');
     (request.method === 'GET' ? t.reads : t.writes).push(request.method + ' ' + route);
     let m;
+    if (route === '/api/portfolios/v2/environments') return json({ results: [{ key: 'dev' }, { key: 'test' }, { key: 'prod' }] });
     if (route === '/api/asset-repository/v1/assets') return json({ results: t.assets.filter(a => a.name.toLowerCase().includes(String(query.get('nameContains')).toLowerCase())) });
     if ((m = /^\/api\/asset-repository\/v1\/assets\/([^/]+)\/highest-tag-revision$/.exec(route))) return highest[m[1]] ? json({ tag: highest[m[1]] }) : notFound();
     if ((m = /^\/api\/asset-repository\/v1\/assets\/([^/]+)\/revisions$/.exec(route))) return json({ results: Object.entries(t.tags).filter(([, tag]) => tag === query.get('tag')).map(([revision, tag]) => ({ revision: Number(revision), tag })) });
@@ -80,21 +81,23 @@ function tenantFake({ assets = [], consumers = {}, elements = {}, jobs = [], hig
   return t;
 }
 
-function harness({ tenant = tenantFake(), signedIn = true, capabilities = ['portal-call', 'portal-session', 'auth-status', 'portal-upload', 'reference-snapshot:external-library'],
-  apiClient = false, upload, metadata, grants = { findGrant: () => null } } = {}) {
+function harness({ tenant = tenantFake(), signedIn = true, capabilities = ['portal-call', 'portal-session', 'portal-session:headless', 'auth-status', 'portal-upload', 'reference-snapshot:external-library'],
+  apiClient = false, upload, metadata, responseHost=PERSONAL, grants = { findGrant: () => null } } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'odc-extlib-'));
+  fs.mkdirSync(path.join(dir, 'studio')); fs.writeFileSync(path.join(dir, 'README.md'), 'Fake bridge root');
   const requests = new Map(), calls = [], kernelCalls = [], vaultFetches = [];
   let n = 0;
   const studio = {
     running: async () => true,
     call: async args => {
       calls.push(args);
+      if (args[0] === 'status' && args[1] === 'root') return { ok: true, field: 'root', value: dir };
       if (args[0] === 'auth-status') return { ok: true, bridge: 'v38', sessions: [{ host: PERSONAL, loggedIn: true, user: 'dev@example.test' }, { host: CORP, loggedIn: true, user: 'dev@example.test' }], portalWindows: [], capabilities };
       if (args[0] === 'portal-call') return tenant.call(requests.get(args[1]));
       if (args[0] === 'portal-session') {
         if (args[1] !== 'fetch') return { ok: true, host: args.at(-1), signedIn };
         const request = requests.get(args[2]);
-        if (/ActionExternalLibraryPublishJob$/.test(request.path)) { const op = tenant.publish(request.body.inputParameters.JobKey); return { ok: true, status: 200, host: PERSONAL, body: { data: { PublicationKey: op.key } } }; }
+        if (/ActionExternalLibraryPublishJob$/.test(request.path)) { const op = tenant.publish(request.body.inputParameters.JobKey); return { ok: true, status: 200, host: responseHost, body: { data: { PublicationKey: op.key } } }; }
         return { ok: false, code: 'BAD_REQUEST' };
       }
       if (args[0] === 'portal-upload') {
@@ -145,6 +148,48 @@ function harness({ tenant = tenantFake(), signedIn = true, capabilities = ['port
 }
 const deploy = (h, extra = {}) => h.tool({ action: 'deploy', spec: SPEC, tenant: PERSONAL, authorize: WORDS, operationUuid: uuid(), ...extra });
 
+test('proposal-bound corporate lifecycle creates, resumes without replay, and updates only its own revision',async t=>{
+ const tenant=tenantFake(),call=tenant.call,createJob=tenant.createJob;
+ tenant.createJob=file=>{const job=createJob(file);job.key=uuid();job.isNewLibrary=tenant.assets.length===0;return job;};
+ tenant.call=request=>{
+  const r=call(request);
+  if(request.basePath+request.path==='/api/asset-repository/v1/assets')r.body.page={totalResults:r.body.results.length};
+  r.host=CORP;return r;
+ };
+ const h=harness({tenant,responseHost:CORP});t.after(()=>fs.rmSync(h.dir,{recursive:true,force:true}));
+ const words='Standing authorization for fixtures created by this test';
+ const proposal=path.join(h.dir,'proposal.md');fs.writeFileSync(proposal,'Synthetic own fixture create and update');
+ const sha=x=>crypto.createHash('sha256').update(x).digest('hex');
+ const approve=(tag,origin=null,revision=null)=>{
+  const file=path.join(h.dir,'approval-'+tag+'.json');
+  fs.writeFileSync(file,JSON.stringify({schema:'ssam-authorization-context/1',decision:'approved',words,
+   source:{kind:'human-conversation',threadId:LIBKEY,messageId:CONSUMER,question:'Own-fixture test'},
+   proposal:{file:proposal,sha256:sha(fs.readFileSync(proposal))},
+   constraints:{packageSha256:sha(Buffer.from('PK fake package of '+SPEC.name)),releaseTag:tag,releaseNotes:null,originOperationUuid:origin,expectedRevision:revision},
+   scope:[{lane:'odc',host:CORP,operation:'external-library:deploy',targets:[SPEC.name]}]}));return file;
+ };
+ const first={action:'deploy',spec:SPEC,tenant:CORP,confirmTenant:CORP,authorize:words,operationUuid:uuid(),releaseTag:'1.0.0',authorizationContext:approve('1.0.0')};
+ const created=await h.tool(first);assert.equal(created.ok,true,JSON.stringify(created));assert.equal(created.revision,1);
+ const sends=h.sent().length;
+ assert.equal((await h.tool(first)).existingReceipt,true);assert.equal(h.sent().length,sends);
+ for(const job of tenant.jobs)job.status='Completed';
+ const update={...first,operationUuid:uuid(),releaseTag:'1.0.1',originOperationUuid:first.operationUuid,expectedRevision:1,authorizationContext:approve('1.0.1',first.operationUuid,1)};
+ const updated=await h.tool(update);assert.equal(updated.ok,true,JSON.stringify(updated));assert.equal(updated.revision,2);
+ const sentAfter=h.sent().length;
+ const drift=await h.tool({...update,operationUuid:uuid()});assert.equal(drift.code,'EXTERNAL_LIBRARY_CHANGED');assert.equal(h.sent().length,sentAfter);
+ const altered=await h.tool({...update,releaseNotes:'unapproved'});assert.equal(altered.code,'AUTHORIZATION_CONTEXT_INVALID');assert.equal(h.sent().length,sentAfter);
+ const origin=h.access.receipts.lookup(update.operationUuid),jobKey=origin.progress.upload.operationKey;
+ const cleanupFile=path.join(h.dir,'cleanup.json'),cleanup=JSON.parse(fs.readFileSync(update.authorizationContext,'utf8'));
+ cleanup.scope[0].operation='external-library-generation-api-v1:delete:/generation-operations/{operationKey}';
+ cleanup.constraints={originOperationUuid:update.operationUuid,jobKey};fs.writeFileSync(cleanupFile,JSON.stringify(cleanup));
+ const discard={action:'discard',tenant:CORP,confirmTenant:CORP,authorize:words,library:SPEC.name,jobKey,
+  operationUuid:uuid(),authorizationContext:cleanupFile,originOperationUuid:update.operationUuid};
+ const refused=await h.tool({...discard,originOperationUuid:uuid()});assert.equal(refused.ok,false);assert.equal(h.sent().length,sentAfter);
+ const deleted=await h.tool(discard);assert.equal(deleted.ok,true,JSON.stringify(deleted));assert.equal(deleted.readBack.gone,true);
+ const cleanedSends=h.sent().length;
+ const repeated=await h.tool(discard);assert.equal(repeated.readBack.gone,true);assert.equal(h.sent().length,cleanedSends);
+});
+
 test('1. a spec with bad identifiers, a duplicate action, an unknown type, an undeclared structure and a package without version: five problems, zero calls', async () => {
   const h = harness();
   const spec = JSON.parse(fs.readFileSync(path.join(fixtures, 'spec-invalid.json'), 'utf8'));
@@ -175,10 +220,11 @@ test('2. words without the library name, no words without a grant, a corporate t
   assert.equal(viaGrant.ok, true, JSON.stringify(viaGrant)); assert.deepEqual(viaGrant.authorization, { source: 'standing-grant', grantId: 'g-1' });
 });
 
-test('3. the Portal window not signed in, or the publish route missing from the Portal: refused before any portal-upload', async () => {
+test('3. no authenticated headless Portal session, or publish route missing: refused before any portal-upload', async () => {
   const h = harness({ signedIn: false });
   const out = await deploy(h);
-  assert.equal(out.code, 'WEB_SIGN_IN_REQUIRED'); assert.equal(out.continuation.tool, 'odc_portal_login'); assert.equal(out.sent, false);
+  assert.equal(out.code, 'PORTAL_AUTH_REQUIRED'); assert.equal(out.sent, false);
+  assert.equal(h.calls.filter(c => c[0] === 'portal-session' && c[1] === 'open').length, 0);
   assert.equal(h.calls.filter(c => c[0] === 'portal-upload').length, 0); assert.deepEqual(h.receipts(), []);
   const changed = harness({ metadata: async () => { const e = new Error('The exact allowed action was not found in its current view.'); e.code = 'PORTAL_CONTRACT_CHANGED'; throw e; } });
   const refused = await deploy(changed);
@@ -187,7 +233,7 @@ test('3. the Portal window not signed in, or the publish route missing from the 
 });
 
 test('4. a bridge without portal-upload: the vault API Client uploads (the PUT carries no Authorization); without it BRIDGE_UPGRADE_REQUIRED, nothing sent', async () => {
-  const old = ['portal-call', 'portal-session', 'auth-status'];
+  const old = ['portal-call', 'portal-session', 'portal-session:headless', 'auth-status'];
   const h = harness({ capabilities: old, apiClient: true });
   const out = await deploy(h);
   assert.equal(out.ok, true, JSON.stringify(out)); assert.equal(out.upload.auth, 'vault');
@@ -198,7 +244,7 @@ test('4. a bridge without portal-upload: the vault API Client uploads (the PUT c
   assert.doesNotMatch(JSON.stringify(out), /amazonaws|uploadUrl|downloadUrl|X-Amz/);
   const none = harness({ capabilities: old, apiClient: false });
   const refused = await deploy(none);
-  assert.equal(refused.code, 'BRIDGE_UPGRADE_REQUIRED'); assert.equal(refused.continuation.tool, 'studio_attach');
+  assert.equal(refused.code, 'BRIDGE_UPGRADE_REQUIRED'); assert.equal(refused.continuation.tool, 'ssam_doctor');
   assert.deepEqual(none.sent(), []); assert.deepEqual(none.receipts(), []); assert.deepEqual(none.vaultFetches, []);
 });
 
@@ -301,6 +347,13 @@ test('9. a lost portal-upload answer is UNCERTAIN, never resent; the same operat
   assert.equal(a.calls.filter(c => c[0] === 'portal-upload').length, 1);
 });
 
+test('an invisible upload after a lost answer is never retried under a new step UUID', async () => {
+  const h = harness({ upload: () => { throw new Error('lost answer'); } });
+  const request = {action:'deploy',spec:SPEC,tenant:PERSONAL,authorize:WORDS,operationUuid:uuid()};
+  for (let i=0;i<3;i++) assert.equal((await h.tool(request)).code,'UNCERTAIN');
+  assert.equal(h.calls.filter(c=>c[0]==='portal-upload').length,1);
+});
+
 test('status reads the library, its revisions, runtime, consumers and open jobs; discard deletes an open job with words naming the library', async () => {
   const tenant = tenantFake({ assets: [{ assetKey: LIBKEY, name: 'SSAMTextTools', assetType: 'ExternalLibrary', revision: 2, tag: '1.0.1' }],
     consumers: { [LIBKEY]: [{ key: CONSUMER, name: 'OrdersApp' }] }, jobs: [{ key: 'job-9', filename: 'SSAMTextTools-bbbbbbbbbbbbbbbb.zip', libraryName: 'SSAMTextTools', status: 'ReadyForReview' }] });
@@ -322,4 +375,9 @@ test('the tool refuses unknown fields per action and build needs no tenant', asy
   const built = await h.tool({ action: 'build', spec: SPEC });
   assert.equal(built.ok, true); assert.equal(built.package.fileName.startsWith('SSAMTextTools-'), true); assert.equal(h.calls.length, 0);
   assert.equal(built.next.tool, 'odc_external_library');
+  assert.deepEqual(JSON.parse(fs.readFileSync(built.next.arguments.specFile, 'utf8')), SPEC);
+  assert.equal(built.next.arguments.spec, undefined);
+  const released = await h.tool({ ...built.next.arguments, tenant: PERSONAL, authorize: WORDS, operationUuid: uuid() });
+  assert.equal(released.ok, true);
+  assert.equal(released.state, 'released');
 });

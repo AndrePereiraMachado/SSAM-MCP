@@ -10,7 +10,11 @@ import { listen } from '../listen.mjs';
 
 export const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const CONSOLE_DIR = path.resolve(HERE, '..');
+// The token module of this box: the 24th image's (tokens.json.lock, renew and setLanes).
 export const REAL_MODULE = path.resolve(HERE, '..', '..', '..', 'platforms', 'odc', 'facade', 'server-tokens.mjs');
+// The token module of the 23rd image (prod-20261011-ed0f94b, the rollback image of the 24th), byte for byte
+// (ed0f94b:server/platforms/odc/facade/server-tokens.mjs): no lock, no renew, no setLanes, PARSE on a broken file.
+export const IMAGE23_MODULE = path.join(HERE, 'fixtures', 'server-tokens-23.mjs');
 export const FAKE_MODULE = path.join(HERE, 'fixtures', 'fake-tokens.mjs');
 export const RACING_MODULE = path.join(HERE, 'fixtures', 'racing-tokens.mjs');
 export const SECRET = /ssam_[A-Za-z0-9_-]{20,}/;

@@ -219,6 +219,7 @@ public sealed partial class ModelSession
             "agent" => Agent(op),
             "screen" => Screen(op),
             "html" => Html(op),
+            "prototype" => Prototype(op),
             // Integration ops (Verbs.Integration.cs): consumed REST, exposed REST, SOAP (O11).
             "rest" => Rest(op),
             "rest-expose" => RestExpose(op),
@@ -612,16 +613,27 @@ public sealed partial class ModelSession
         // Categorias2) and says nothing; every expression of the job that names it then reads the other element. The rename
         // is the platform's own verdict, observed here; widgets and flow nodes (named by aliases, never by expressions of
         // the job) keep the Studio's choice.
+        // The Studio numbers the newcomer from the name without its trailing digits (Adicionar2 taken becomes Adicionar3, Wv1
+        // becomes Wv2), so the rename is the name's stem followed by digits, never only the name followed by digits.
         if (name != null && created is not IWidget && created is not OutSystems.Model.IFlowNode && TypeResolver.Name(created) is { Length: > 0 } actual
-            && !string.Equals(actual, name, StringComparison.OrdinalIgnoreCase) && System.Text.RegularExpressions.Regex.IsMatch(actual, "^" + System.Text.RegularExpressions.Regex.Escape(name) + @"\d+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            && !string.Equals(actual, name, StringComparison.OrdinalIgnoreCase)
+            && System.Text.RegularExpressions.Regex.IsMatch(actual, "^" + System.Text.RegularExpressions.Regex.Escape(System.Text.RegularExpressions.Regex.Replace(name, @"\d+$", "")) + @"\d+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
         {
             var taken = (parent as IObjectSignature)?.Children.FirstOrDefault(c => !ReferenceEquals(c, created) && string.Equals(TypeResolver.Name(c), name, StringComparison.OrdinalIgnoreCase));
             // primeira-certa A6: what the Studio created is this failed op's: anchored, so the isolation of a logic op removes
             // it and the Verify of the refusal never reports the renamed element (a flow without Start) as a fault of its own.
             Anchor(created, created: true);
-            throw new InvalidOperationException($"create {typeName.Split('.').Last()} '{name}' under {Describe(parent)}: the name collides with "
+            var collision = new InvalidOperationException($"create {typeName.Split('.').Last()} '{name}' under {Describe(parent)}: the name collides with "
                 + (taken != null ? $"{Describe(taken)}" : "an element of the same name in that scope") + $" and the Studio renamed it to '{actual}'; "
                 + $"every expression of this job that names '{name}' would read the other element. Fix: give it another name (or '{actual}' explicitly), or use the existing '{name}' instead of creating it");
+            // The facts of the collision for a caller that generated the op (the prototype importer turns them into its name map).
+            collision.Data[NameCollisionData] = new JsonObject
+            {
+                ["type"] = typeName.Split('.').Last(), ["name"] = name, ["actual"] = actual,
+                ["parentType"] = parent is IObjectSignature ps ? ShortType(ps) : null, ["parentName"] = TypeResolver.Name(parent),
+                ["taken"] = taken != null ? Describe(taken) : null,
+            }.ToJsonString();
+            throw collision;
         }
         Anchor(created, created: true);
         if (op["as"]?.GetValue<string>() is { } alias) Register(alias, created);
@@ -682,10 +694,11 @@ public sealed partial class ModelSession
         written = CodeFormatRule(target, written);
         // C27: Style on a widget that keeps its classes in StyleClasses or in the extended property `class`.
         (written, var done) = StyleRule(target, written);
-        if (done != null) { Touch(target); return done; }
+        if (done != null) { Touch(target); AnchorProperty(target, op); return done; }
         var result = InClientFlow(clientFlow || _preferClient, () => SetCore(target, written));
         // The weight the conversion table gives goes with the converted name, as the merge writes it.
         if (weight != null) SetCore(target, new JsonObject { ["op"] = "set", ["target"] = op["target"]?.DeepClone(), ["prop"] = "Weight", ["value"] = weight });
+        AnchorProperty(target, op);
         return result;
     }
 
@@ -733,6 +746,12 @@ public sealed partial class ModelSession
         Touch(target);
         var prop = Req(op, "prop");
         var value = op["value"];
+        if (prop == "Schedule" && target is OutSystems.Model.Processes.ITimer)
+        {
+            var schedule = TimerScheduleValue.Prepare(value, FindProperty(target, "CronSchedule") != null);
+            prop = schedule.Property;
+            value = JsonValue.Create(schedule.Value);
+        }
         // Names the Studio shows for an enum value (Changed Attributes) are the value it stores (Optimized).
         if (value is JsonValue enumText && enumText.TryGetValue<string>(out var shown) && ValueAliases.Normalize(prop, shown) is var stored && stored != shown)
             value = JsonValue.Create(stored);
@@ -911,6 +930,15 @@ public sealed partial class ModelSession
             preparationTiming.Dispose();
             using (NativePerformanceCapture.MeasureSet(target.GetType(), prop, "parser.Invoke")) parser.Invoke(target, new object[] { parsed.GetValue<string>() });
             return new JsonObject { ["set"] = prop, ["via"] = parser.Name, ["readBack"] = FindMethod(target, "To" + prop, 0)?.Invoke(target, null)?.ToString() };
+        }
+        // lentidao 2026-10-12 (cause 2): a documentation property this type has no way to write (IUserException.Description) is
+        // dropped and listed (normalizations), never refused; any other property stays PROPERTY_NOT_WRITABLE.
+        if (Preflight.JobNormalizer.Droppable(prop))
+        {
+            var raw = _applyOps != null && _applyIndex < _applyOps.Count && _applyOps[_applyIndex]?["op"]?.ToString() == "set";
+            var at = OpsPointer != null && _applyOps != null && _applyIndex < _applyOps.Count ? $"{OpsPointer}/{_applyIndex}" + (raw ? "/prop" : "") : null;
+            Normalized([Preflight.JobNormalizer.Dropped(at, ShortType(target), prop, op["target"]?.ToString() ?? Describe(target))]);
+            return new JsonObject { ["set"] = prop, ["dropped"] = true, ["via"] = $"dropped: {ShortType(target)} has no way to write {prop}" };
         }
         throw new InvalidOperationException(PropertyError(target, prop));
     }

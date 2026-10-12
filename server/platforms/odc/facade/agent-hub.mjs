@@ -39,10 +39,12 @@ export const PROTOCOL = 'ssam-agent/1';
 // streamed to disk part by part); the same 16 MiB as an MCP request body and an O11 relay line.
 export const LIMITS = Object.freeze({ heartbeatMs: 15000, deadAfterMs: 45000, maxMessageBytes: 1048576, inlineMaxBytes: 524288,
   partBytes: 4194304, maxFileBytes: 536870912, maxValueBytes: 16777216, maxTransfers: 4, maxPending: 32, transferIdleMs: 600000,
-  ratePerMinute: 3000, sweepMs: 500, callTimeoutMs: 60000, acceptMs: 15000, reconnectGraceMs: 60000, reconnectWaitMs: 45000, recentMs: 300000 });
+  ratePerMinute: 3000, sweepMs: 500, callTimeoutMs: 60000, acceptMs: 15000, reconnectGraceMs: 60000, reconnectWaitMs: 45000, recentMs: 300000,
+  probeMaxBytes: 2097152, probeRecords: 64, uploadWindowMs: 1800000, uploadSlowMs: 3000 });
 // The closed list of call kinds (section 4.4). The agent refuses anything else; the hub never sends anything else.
+// net.probe (fase4-24, 2.10): the network check of ssam_doctor {network:true}; only to an agent whose Hello lists it.
 export const CALL_KINDS = Object.freeze(['studio.processes', 'odc.pipe', 'odc.attach', 'o11.bridge', 'o11.connect', 'o11.selected',
-  'file.put', 'file.get', 'file.list', 'file.sync']);
+  'file.put', 'file.get', 'file.list', 'file.sync', 'net.probe']);
 const LANES = ['odc', 'o11'];
 const STUDIO = { odc: 'ODC Studio', o11: 'Service Studio' };
 const HEX32 = /^[0-9a-f]{32}$/;
@@ -52,6 +54,37 @@ const SIZE = /^(0|[1-9][0-9]{0,15})$/;
 const INSTANCE = /^[A-Za-z0-9-]{1,64}$/;
 const CODE = /^[A-Z][A-Z0-9_]{1,63}$/;
 const sha256Of = bytes => createHash('sha256').update(bytes).digest('hex');
+// prazos B: the bridge method of an o11.bridge call and the operation of an environment_session, only when they are verbs.
+const VERB = /^[a-z][a-z0-9_-]{0,47}$/;
+export const callVerbs = (kind, params) => kind !== 'o11.bridge' || !params ? {} : {
+  ...(VERB.test(String(params.method ?? '')) ? { method: params.method } : {}),
+  ...(params.method === 'environment_session' && VERB.test(String(params.operation ?? '')) ? { operation: params.operation } : {}) };
+// The public address a request came from: the first X-Forwarded-For hop (Caddy sets it), else the socket's.
+const addressOf = req => (String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() || req.socket?.remoteAddress || '').slice(0, 64);
+// The exit of the customer's internet an address stands for, as the doctor shows it (fase4-24, 2.10): an IPv4 address
+// without its last number (177.26.87.x), an IPv6 address by its /48, never the whole address.
+export function maskAddress(address) {
+  const value = String(address ?? '').trim().replace(/^::ffff:/i, '');
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.\d{1,3}$/.exec(value);
+  if (v4) return v4[1] + '.' + v4[2] + '.' + v4[3] + '.x';
+  if (value.includes(':')) return value.split('%')[0].split(':').slice(0, 3).map(g => g || '0').join(':') + '::/48';
+  return value ? 'desconhecida' : null;
+}
+// An upload part that took longer than 3 s plus 1 s per 128 KiB (a floor of about 1 Mbit/s) is slow: the production test of
+// 2026-10-11 had parts of 60 KB in 26 s and of 2.2 MB in 135 s on one exit, 0.2-0.7 s on the other.
+export const slowUpload = (bytes, ms, baseMs = 3000) => ms > baseMs + Math.ceil(Math.max(0, Number(bytes) || 0) / 131072) * 1000;
+// Reads a probe body, counting what arrives (onData sees each chunk's size at once), until it ends, is aborted or passes
+// limit (the rest is drained, not kept).
+function readProbe(req, limit, onData = () => {}) {
+  return new Promise(resolve => {
+    let size = 0, done = false;
+    const finish = value => { if (!done) { done = true; resolve({ ...value, size }); } };
+    req.on('data', chunk => { size += chunk.length; if (!done) onData(chunk.length); if (size > limit) finish({ tooLarge: true }); });
+    req.on('end', () => finish({ complete: true }));
+    req.on('error', () => finish({ aborted: true }));
+    req.on('close', () => finish({ aborted: true }));
+  });
+}
 
 // The first three numbers of a version ("11.55.91.65012" -> "11.55.91"), or null.
 export const threePart = value => { const m = /^(\d+)\.(\d+)\.(\d+)/.exec(String(value ?? '').trim()); return m ? m[1] + '.' + m[2] + '.' + m[3] : null; };
@@ -164,6 +197,7 @@ export function createAgentHub({ dir, store, kernel, log = () => {}, now = () =>
     const rec = record(tokenId);
     state = { tokenId, customer: rec?.customer ?? null, lanes: rec?.lanes ?? [], channel: null, instance: null, hello: null,
       connectedAt: null, lastSeenAt: null, pending: new Map(), transfers: new Map(), listeners: new Set(), closedFor: null, seq: 0, api: null,
+      probes: new Map(), uploads: { parts: 0, slow: [] },
       previousChannel: null, waiters: new Set() };
     state.api = linkApi(state);
     links.set(tokenId, state);
@@ -219,12 +253,14 @@ export function createAgentHub({ dir, store, kernel, log = () => {}, now = () =>
   }
 
   // C33: one agent-call line per settled call {kind, ms, ok, code}: the relay's own timing, never arguments or values.
+  // prazos B: an o11.bridge call also names its bridge method and, for environment_session, the environment operation
+  // (protocol verbs, never values): the 89.8 s and 60 s calls of 2026-10-12 were only "o11.bridge" in this log.
   function settle(state, pending, outcome = {}) {
     if (state.pending.get(pending.id) !== pending) return false;
     state.pending.delete(pending.id);
     clearTimeout(pending.timer); clearTimeout(pending.acceptTimer);
     if (pending.blob) dropTransfer(state, pending.blob);
-    log({ event: 'agent-call', token: state.tokenId, kind: pending.kind, ms: nowMs() - pending.startedAt, ...outcome });
+    log({ event: 'agent-call', token: state.tokenId, kind: pending.kind, ...callVerbs(pending.kind, pending.params), ms: nowMs() - pending.startedAt, ...outcome });
     return true;
   }
   // Never written to a stream: nothing can have run (executed:false). Written: the outcome is unknown (executed:null).
@@ -381,7 +417,8 @@ export function createAgentHub({ dir, store, kernel, log = () => {}, now = () =>
           line = JSON.stringify({ t: 'call', id, kind, paramsBlob: { ...blob.ref }, deadline });
         }
         return new Promise((resolve, reject) => {
-          const pending = { id, kind, line, written: false, accepted: false, blob, resolve, reject, timer: null, acceptTimer: null, deadline, graced: false, startedAt: nowMs() };
+          const pending = { id, kind, line, written: false, accepted: false, blob, resolve, reject, timer: null, acceptTimer: null, deadline, graced: false, startedAt: nowMs(),
+            params: kind === 'o11.bridge' ? { method: params?.method, operation: params?.params?.operation } : null };
           pending.timer = setTimeout(() => fail(state, pending, 'AGENT_TIMEOUT', 'The agent did not answer ' + kind + ' before the deadline.'),
             Math.min(2147483647, Math.max(0, deadline - nowMs())));
           state.pending.set(id, pending);
@@ -396,6 +433,18 @@ export function createAgentHub({ dir, store, kernel, log = () => {}, now = () =>
         return { ...transfer.ref };
       },
       receiveBlob: (ref, destAbsPath) => receiveBlob(state, ref, destAbsPath),
+      // fase4-24 (2.10): what the hub saw of the network check's uploads (by id, each taken once), and the upload parts of
+      // this token with the slow ones of the last uploadWindowMs.
+      probes(ids) {
+        const out = [];
+        for (const id of Array.isArray(ids) ? ids : []) { const record = state.probes.get(id); if (record) { out.push({ ...record }); state.probes.delete(id); } }
+        return out;
+      },
+      uploads() {
+        const since = nowMs() - limits.uploadWindowMs;
+        const slow = state.uploads.slow.filter(entry => entry.atMs >= since);
+        return { parts: state.uploads.parts, slow: slow.length, recent: slow.slice(-5).map(({ atMs, ...rest }) => ({ ...rest, at: new Date(atMs).toISOString() })) };
+      },
       protocolError(message) { closeChannel(state, 'protocol-error', String(message ?? 'Protocol error').slice(0, 500)); },
       onClose(fn) { state.listeners.add(fn); return () => state.listeners.delete(fn); },
     };
@@ -543,7 +592,9 @@ export function createAgentHub({ dir, store, kernel, log = () => {}, now = () =>
     if (!known && [...state.transfers.values()].filter(t => t.direction === 'up').length >= limits.maxTransfers)
       return reply(res, 429, 'TRANSFER_LIMIT', 'At most ' + limits.maxTransfers + ' uploads at a time.', { 'retry-after': '1' });
     const expected = index < count - 1 ? limits.partBytes : size - (count - 1) * limits.partBytes;
+    const startedAt = performance.now();
     const read = await readBody(req, limits.partBytes);
+    if (!read.tooLarge) noteUpload(state, read.body.length, performance.now() - startedAt, addressOf(req));
     if (read.tooLarge) return reply(res, 413, 'MESSAGE_TOO_LARGE', 'Parts are limited to ' + limits.partBytes + ' bytes.', { connection: 'close' });
     if (read.body.length !== expected) return reply(res, 400, 'TRANSFER_INVALID', 'Part ' + index + ' must have ' + expected + ' bytes.');
     if (sha256Of(read.body) !== partSha) return reply(res, 400, 'PART_HASH_MISMATCH', 'The part does not match x-ssam-part-sha256.');
@@ -563,6 +614,35 @@ export function createAgentHub({ dir, store, kernel, log = () => {}, now = () =>
     await fs.promises.rename(temp, partFile(transfer, index));
     transfer.received.set(index, partSha); transfer.lastAccess = nowMs();
     res.writeHead(204); res.end();
+    return true;
+  }
+
+  // fase4-24 (2.10): how long each upload part took, per token. The slow ones of the last uploadWindowMs (at most 32) go to
+  // ssam_doctor (agent.uploads), so a session that lost seconds to a stalled exit is told to run the network check.
+  function noteUpload(state, bytes, ms, address) {
+    state.uploads.parts++;
+    if (!slowUpload(bytes, ms, limits.uploadSlowMs)) return;
+    state.uploads.slow.push({ atMs: nowMs(), bytes, ms: Math.round(ms), via: maskAddress(address) });
+    if (state.uploads.slow.length > 32) state.uploads.slow.shift();
+    log({ event: 'agent-upload-slow', token: state.tokenId, bytes, ms: Math.round(ms), via: maskAddress(address) });
+  }
+
+  // PUT /agent/v1/probe/<id> (fase4-24, 2.10): one upload of the network check (kind net.probe). The bytes are counted and
+  // discarded; the hub keeps, per token and in memory only, where the upload came from (the exit, masked), what arrived and
+  // when, so the doctor can tell an upload that reached the server and stalled from one that never got here.
+  async function probeUpload(state, id, req, res) {
+    const startedAt = performance.now();
+    const record = { id, via: maskAddress(addressOf(req)), at: iso(), received: 0, complete: false, ms: null };
+    state.probes.set(id, record);
+    while (state.probes.size > limits.probeRecords) state.probes.delete(state.probes.keys().next().value);
+    // received grows while the body arrives: a doctor that asks before a stalled upload is closed reads what came so far.
+    const read = await readProbe(req, limits.probeMaxBytes, bytes => { record.received += bytes; record.ms = Math.round(performance.now() - startedAt); });
+    record.received = Math.min(read.size, limits.probeMaxBytes + 1); record.ms = Math.round(performance.now() - startedAt);
+    if (read.tooLarge) return reply(res, 413, 'PROBE_TOO_LARGE', 'Probe uploads are limited to ' + limits.probeMaxBytes + ' bytes.', { connection: 'close' });
+    if (!read.complete) { res.destroy(); return true; }
+    record.complete = true;
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    res.end(JSON.stringify({ ok: true, bytes: read.size, ms: record.ms, via: record.via }));
     return true;
   }
 
@@ -610,11 +690,14 @@ export function createAgentHub({ dir, store, kernel, log = () => {}, now = () =>
     if (route === 'hello' && transferId === undefined && method === 'POST') return hello(state, auth, req, res);
     const known = (route === 'stream' && method === 'GET') || (route === 'messages' && method === 'POST') || (route === 'channel' && method === 'DELETE');
     const blob = route === 'blobs' && (method === 'PUT' || method === 'GET');
-    if (!(known && transferId === undefined) && !(blob && index !== undefined && extra === undefined)) return reply(res, 404, 'NOT_FOUND', 'Not found.');
+    const probe = route === 'probe' && method === 'PUT';
+    if (!(known && transferId === undefined) && !(blob && index !== undefined && extra === undefined) && !(probe && transferId !== undefined && index === undefined))
+      return reply(res, 404, 'NOT_FOUND', 'Not found.');
     // Raw formats first, then memory, then (only for a valid part) the disk.
     if (blob && (!HEX32.test(transferId) || !INDEX.test(index))) return reply(res, 400, 'TRANSFER_INVALID', 'Transfer id or part index out of format.');
+    if (probe && !HEX32.test(transferId)) return reply(res, 400, 'PROBE_INVALID', 'Probe id out of format.');
     // The previous channel of the same instance still takes the POSTs and the blob parts already on their way (C03).
-    const previous = channel !== null && channel === state.previousChannel && !!state.instance && (route === 'messages' || blob);
+    const previous = channel !== null && channel === state.previousChannel && !!state.instance && (route === 'messages' || blob || probe);
     if (channel === null || !HEX32.test(channel) || (state.channel?.id !== channel && !previous)) {
       log({ event: 'agent-route-refused', token: auth.id, route: String(route ?? '').slice(0, 16), status: 404, code: 'CHANNEL_UNKNOWN' });
       return reply(res, 404, 'CHANNEL_UNKNOWN', 'Unknown channel.');
@@ -632,6 +715,7 @@ export function createAgentHub({ dir, store, kernel, log = () => {}, now = () =>
     }
     if (state.channel?.id === channel) state.channel.lastPostAt = nowMs();
     state.lastSeenAt = iso();
+    if (probe) return probeUpload(state, transferId, req, res);
     return method === 'PUT' ? putPart(state, transferId, Number(index), req, res) : getPart(state, transferId, Number(index), res);
   }
 

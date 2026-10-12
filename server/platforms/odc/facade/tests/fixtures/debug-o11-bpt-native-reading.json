@@ -1,0 +1,644 @@
+{
+  "schema": "ssam-reading/1",
+  "path": "@1dW5q2DsOUWm2SeDgACE9Q",
+  "tree": {
+    "kind": "Process",
+    "name": "ApproveBooking",
+    "modelName": "ApproveBooking",
+    "label": "Approve Booking",
+    "key": "1dW5q2DsOUWm2SeDgACE9Q",
+    "reference": "@1dW5q2DsOUWm2SeDgACE9Q",
+    "path": "Process:ApproveBooking",
+    "properties": {
+      "ObjectKey": "1dW5q2DsOUWm2SeDgACE9Q",
+      "GlobalKey": "Kawk_WFx5USxo7qFAB0lCQ*1dW5q2DsOUWm2SeDgACE9Q",
+      "WasDeleted": "False",
+      "IsValid": "True",
+      "Key": "/Processes.1dW5q2DsOUWm2SeDgACE9Q",
+      "Name": "ApproveBooking",
+      "LaunchOn": "ServiceStudio.Model.API.V1.ProcessTrigger",
+      "ExposeProcessEntity": "False",
+      "Label": "Approve Booking",
+      "Public": "False",
+      "InputParameters": "[]",
+      "Nodes": "[AutomaticActivityNode:Notify, EndNode:, StartNode:]",
+      "OutputParameters": "[]",
+      "ProcessEntities": "[]",
+      "LaunchProcessAction": "ActionSignature:LaunchApproveBooking",
+      "LaunchOnAction": "None"
+    },
+    "propertyReferences": {
+      "LaunchProcessAction": {
+        "kind": "ActionSignature",
+        "name": "LaunchApproveBooking",
+        "label": null,
+        "key": "1dW5q2DsOUWm2SeDgACE9Q.#LaunchProcess",
+        "reference": "@1dW5q2DsOUWm2SeDgACE9Q.#LaunchProcess",
+        "path": "Process:ApproveBooking/ActionSignature:LaunchApproveBooking"
+      }
+    },
+    "propertyReferenceCollections": {
+      "InputParameters": {
+        "items": [],
+        "total": 0,
+        "omitted": 0
+      },
+      "Nodes": {
+        "items": [
+          {
+            "kind": "AutomaticActivityNode",
+            "name": "Notify",
+            "label": "Notify",
+            "key": "4g5q+CpcFUqZEKg0sBKQDw",
+            "reference": "@4g5q+CpcFUqZEKg0sBKQDw",
+            "path": "Process:ApproveBooking/AutomaticActivityNode:Notify"
+          },
+          {
+            "kind": "EndNode",
+            "name": "",
+            "label": null,
+            "key": "m6aX3yBhm0qVMeU0xmZQRQ",
+            "reference": "@m6aX3yBhm0qVMeU0xmZQRQ",
+            "path": "Process:ApproveBooking/EndNode:"
+          },
+          {
+            "kind": "StartNode",
+            "name": "",
+            "label": null,
+            "key": "M6PjIflXhUWQjwGGxM_I5w",
+            "reference": "@M6PjIflXhUWQjwGGxM_I5w",
+            "path": "Process:ApproveBooking/StartNode:"
+          }
+        ],
+        "total": 3,
+        "omitted": 0
+      },
+      "OutputParameters": {
+        "items": [],
+        "total": 0,
+        "omitted": 0
+      },
+      "ProcessEntities": {
+        "items": [],
+        "total": 0,
+        "omitted": 0
+      }
+    },
+    "propertiesOmitted": {},
+    "propertyErrors": {},
+    "propertiesMissing": [],
+    "children": [
+      {
+        "kind": "ActionSignature",
+        "name": "LaunchApproveBooking",
+        "modelName": "LaunchApproveBooking",
+        "label": null,
+        "key": "1dW5q2DsOUWm2SeDgACE9Q.#LaunchProcess",
+        "reference": "@1dW5q2DsOUWm2SeDgACE9Q.#LaunchProcess",
+        "path": "Process:ApproveBooking/ActionSignature:LaunchApproveBooking",
+        "properties": {
+          "ObjectKey": "1dW5q2DsOUWm2SeDgACE9Q.#LaunchProcess",
+          "GlobalKey": "Kawk_WFx5USxo7qFAB0lCQ*1dW5q2DsOUWm2SeDgACE9Q.#LaunchProcess",
+          "WasDeleted": "False",
+          "IsValid": "True",
+          "Key": "/Processes.1dW5q2DsOUWm2SeDgACE9Q/ProcessActions.#LaunchProcess",
+          "InputParameters": "[]",
+          "OutputParameters": "[OutputParameter:ProcessId]",
+          "Name": "LaunchApproveBooking"
+        },
+        "propertyReferences": {},
+        "propertyReferenceCollections": {
+          "InputParameters": {
+            "items": [],
+            "total": 0,
+            "omitted": 0
+          },
+          "OutputParameters": {
+            "items": [
+              {
+                "kind": "OutputParameter",
+                "name": "ProcessId",
+                "label": null,
+                "key": "1dW5q2DsOUWm2SeDgACE9Q.#LaunchProcess.#ProcessId",
+                "reference": "@1dW5q2DsOUWm2SeDgACE9Q.#LaunchProcess.#ProcessId",
+                "path": "Process:ApproveBooking/ActionSignature:LaunchApproveBooking/OutputParameter:ProcessId"
+              }
+            ],
+            "total": 1,
+            "omitted": 0
+          }
+        },
+        "propertiesOmitted": {},
+        "propertyErrors": {},
+        "propertiesMissing": [],
+        "children": [
+          {
+            "kind": "OutputParameter",
+            "name": "ProcessId",
+            "modelName": "ProcessId",
+            "label": null,
+            "key": "1dW5q2DsOUWm2SeDgACE9Q.#LaunchProcess.#ProcessId",
+            "reference": "@1dW5q2DsOUWm2SeDgACE9Q.#LaunchProcess.#ProcessId",
+            "path": "Process:ApproveBooking/ActionSignature:LaunchApproveBooking/OutputParameter:ProcessId",
+            "properties": {
+              "ObjectKey": "1dW5q2DsOUWm2SeDgACE9Q.#LaunchProcess.#ProcessId",
+              "GlobalKey": "Kawk_WFx5USxo7qFAB0lCQ*1dW5q2DsOUWm2SeDgACE9Q.#LaunchProcess.#ProcessId",
+              "WasDeleted": "False",
+              "IsValid": "True",
+              "Key": "/Processes.1dW5q2DsOUWm2SeDgACE9Q/ProcessActions.#LaunchProcess/OutputParameters.#ProcessId",
+              "DataType": "IdentifierType:Process Identifier",
+              "Name": "ProcessId"
+            },
+            "propertyReferences": {
+              "DataType": {
+                "kind": "IdentifierType",
+                "name": "Process Identifier",
+                "label": null,
+                "key": "zRCrakxQAUWZ7LvjkAlq6g.#IdentifierType",
+                "reference": "@zRCrakxQAUWZ7LvjkAlq6g.#IdentifierType",
+                "path": "Reference:(System)/ServerEntitySignature:Process/IdentifierType:Process Identifier"
+              }
+            },
+            "propertyReferenceCollections": {},
+            "propertiesOmitted": {},
+            "propertyErrors": {},
+            "propertiesMissing": [],
+            "children": [],
+            "childrenTotal": 0,
+            "childrenOmitted": 0
+          }
+        ],
+        "childrenTotal": 1,
+        "childrenOmitted": 0
+      },
+      {
+        "kind": "AutomaticActivityNode",
+        "name": "Notify",
+        "modelName": "Notify",
+        "label": "Notify",
+        "key": "4g5q+CpcFUqZEKg0sBKQDw",
+        "reference": "@4g5q+CpcFUqZEKg0sBKQDw",
+        "path": "Process:ApproveBooking/AutomaticActivityNode:Notify",
+        "properties": {
+          "ObjectKey": "4g5q+CpcFUqZEKg0sBKQDw",
+          "GlobalKey": "Kawk_WFx5USxo7qFAB0lCQ*4g5q+CpcFUqZEKg0sBKQDw",
+          "WasDeleted": "False",
+          "IsValid": "True",
+          "Key": "/Processes.1dW5q2DsOUWm2SeDgACE9Q/NodesShownInESpaceTree.4g5q+CpcFUqZEKg0sBKQDw",
+          "HorizontalPosition": "3196",
+          "IsDisabled": "False",
+          "VerticalPosition": "800",
+          "Connectors": "[ActionConnector:]",
+          "IncomingConnectors": "[ActionConnector:]",
+          "Nodes": "[EndNode:, StartNode:]",
+          "LocalVariables": "[]",
+          "Label": "Notify",
+          "Name": "Notify",
+          "Targets": "[EndNode:]",
+          "OutputParameters": "[]"
+        },
+        "propertyReferences": {},
+        "propertyReferenceCollections": {
+          "Connectors": {
+            "items": [
+              {
+                "kind": "ActionConnector",
+                "name": "",
+                "label": null,
+                "key": "6touAejDSEu_XPorCqaH1w",
+                "reference": "@6touAejDSEu_XPorCqaH1w",
+                "path": "Process:ApproveBooking/AutomaticActivityNode:Notify/ActionConnector:"
+              }
+            ],
+            "total": 1,
+            "omitted": 0
+          },
+          "IncomingConnectors": {
+            "items": [
+              {
+                "kind": "ActionConnector",
+                "name": "",
+                "label": null,
+                "key": "r88mjbwobUWC4Kz9DV3aQQ",
+                "reference": "@r88mjbwobUWC4Kz9DV3aQQ",
+                "path": "Process:ApproveBooking/StartNode:/ActionConnector:"
+              }
+            ],
+            "total": 1,
+            "omitted": 0
+          },
+          "Nodes": {
+            "items": [
+              {
+                "kind": "EndNode",
+                "name": "",
+                "label": null,
+                "key": "d_pP+MGb0UiDR3p64BI+dA",
+                "reference": "@d_pP+MGb0UiDR3p64BI+dA",
+                "path": "Process:ApproveBooking/AutomaticActivityNode:Notify/Activity:/EndNode:"
+              },
+              {
+                "kind": "StartNode",
+                "name": "",
+                "label": null,
+                "key": "tYnx5xiHeES0yb1JK_l9SQ",
+                "reference": "@tYnx5xiHeES0yb1JK_l9SQ",
+                "path": "Process:ApproveBooking/AutomaticActivityNode:Notify/Activity:/StartNode:"
+              }
+            ],
+            "total": 2,
+            "omitted": 0
+          },
+          "LocalVariables": {
+            "items": [],
+            "total": 0,
+            "omitted": 0
+          },
+          "Targets": {
+            "items": [
+              {
+                "kind": "EndNode",
+                "name": "",
+                "label": null,
+                "key": "m6aX3yBhm0qVMeU0xmZQRQ",
+                "reference": "@m6aX3yBhm0qVMeU0xmZQRQ",
+                "path": "Process:ApproveBooking/EndNode:"
+              }
+            ],
+            "total": 1,
+            "omitted": 0
+          },
+          "OutputParameters": {
+            "items": [],
+            "total": 0,
+            "omitted": 0
+          }
+        },
+        "propertiesOmitted": {},
+        "propertyErrors": {},
+        "propertiesMissing": [],
+        "children": [
+          {
+            "kind": "ActionConnector",
+            "name": "",
+            "modelName": "",
+            "label": null,
+            "key": "6touAejDSEu_XPorCqaH1w",
+            "reference": "@6touAejDSEu_XPorCqaH1w",
+            "path": "Process:ApproveBooking/AutomaticActivityNode:Notify/ActionConnector:",
+            "properties": {
+              "ObjectKey": "6touAejDSEu_XPorCqaH1w",
+              "GlobalKey": "Kawk_WFx5USxo7qFAB0lCQ*6touAejDSEu_XPorCqaH1w",
+              "WasDeleted": "False",
+              "IsValid": "True",
+              "Key": "/Processes.1dW5q2DsOUWm2SeDgACE9Q/NodesShownInESpaceTree.4g5q+CpcFUqZEKg0sBKQDw/Links.6touAejDSEu_XPorCqaH1w",
+              "Source": "AutomaticActivityNode:Notify",
+              "Target": "EndNode:"
+            },
+            "propertyReferences": {
+              "Source": {
+                "kind": "AutomaticActivityNode",
+                "name": "Notify",
+                "label": "Notify",
+                "key": "4g5q+CpcFUqZEKg0sBKQDw",
+                "reference": "@4g5q+CpcFUqZEKg0sBKQDw",
+                "path": "Process:ApproveBooking/AutomaticActivityNode:Notify"
+              },
+              "Target": {
+                "kind": "EndNode",
+                "name": "",
+                "label": null,
+                "key": "m6aX3yBhm0qVMeU0xmZQRQ",
+                "reference": "@m6aX3yBhm0qVMeU0xmZQRQ",
+                "path": "Process:ApproveBooking/EndNode:"
+              }
+            },
+            "propertyReferenceCollections": {},
+            "propertiesOmitted": {},
+            "propertyErrors": {},
+            "propertiesMissing": [],
+            "children": [],
+            "childrenTotal": 0,
+            "childrenOmitted": 0
+          },
+          {
+            "kind": "EndNode",
+            "name": "",
+            "modelName": "",
+            "label": null,
+            "key": "d_pP+MGb0UiDR3p64BI+dA",
+            "reference": "@d_pP+MGb0UiDR3p64BI+dA",
+            "path": "Process:ApproveBooking/AutomaticActivityNode:Notify/Activity:/EndNode:",
+            "properties": {
+              "ObjectKey": "d_pP+MGb0UiDR3p64BI+dA",
+              "GlobalKey": "Kawk_WFx5USxo7qFAB0lCQ*d_pP+MGb0UiDR3p64BI+dA",
+              "WasDeleted": "False",
+              "IsValid": "True",
+              "Key": "/Processes.1dW5q2DsOUWm2SeDgACE9Q/NodesShownInESpaceTree.4g5q+CpcFUqZEKg0sBKQDw/Flow/NodesNotShownInESpaceTree.d_pP+MGb0UiDR3p64BI+dA",
+              "HorizontalPosition": "3196",
+              "IsDisabled": "False",
+              "VerticalPosition": "5120",
+              "Connectors": "[]",
+              "IncomingConnectors": "[ActionConnector:]"
+            },
+            "propertyReferences": {},
+            "propertyReferenceCollections": {
+              "Connectors": {
+                "items": [],
+                "total": 0,
+                "omitted": 0
+              },
+              "IncomingConnectors": {
+                "items": [
+                  {
+                    "kind": "ActionConnector",
+                    "name": "",
+                    "label": null,
+                    "key": "zN3NcIpHn0S6et8dtiLfoQ",
+                    "reference": "@zN3NcIpHn0S6et8dtiLfoQ",
+                    "path": "Process:ApproveBooking/AutomaticActivityNode:Notify/Activity:/StartNode:/ActionConnector:"
+                  }
+                ],
+                "total": 1,
+                "omitted": 0
+              }
+            },
+            "propertiesOmitted": {},
+            "propertyErrors": {},
+            "propertiesMissing": [],
+            "children": [],
+            "childrenTotal": 0,
+            "childrenOmitted": 0
+          },
+          {
+            "kind": "StartNode",
+            "name": "",
+            "modelName": "",
+            "label": null,
+            "key": "tYnx5xiHeES0yb1JK_l9SQ",
+            "reference": "@tYnx5xiHeES0yb1JK_l9SQ",
+            "path": "Process:ApproveBooking/AutomaticActivityNode:Notify/Activity:/StartNode:",
+            "properties": {
+              "ObjectKey": "tYnx5xiHeES0yb1JK_l9SQ",
+              "GlobalKey": "Kawk_WFx5USxo7qFAB0lCQ*tYnx5xiHeES0yb1JK_l9SQ",
+              "WasDeleted": "False",
+              "IsValid": "True",
+              "Key": "/Processes.1dW5q2DsOUWm2SeDgACE9Q/NodesShownInESpaceTree.4g5q+CpcFUqZEKg0sBKQDw/Flow/NodesNotShownInESpaceTree.tYnx5xiHeES0yb1JK_l9SQ",
+              "HorizontalPosition": "3196",
+              "IsDisabled": "False",
+              "VerticalPosition": "800",
+              "Connectors": "[ActionConnector:]",
+              "IncomingConnectors": "[]",
+              "Target": "EndNode:"
+            },
+            "propertyReferences": {
+              "Target": {
+                "kind": "EndNode",
+                "name": "",
+                "label": null,
+                "key": "d_pP+MGb0UiDR3p64BI+dA",
+                "reference": "@d_pP+MGb0UiDR3p64BI+dA",
+                "path": "Process:ApproveBooking/AutomaticActivityNode:Notify/Activity:/EndNode:"
+              }
+            },
+            "propertyReferenceCollections": {
+              "Connectors": {
+                "items": [
+                  {
+                    "kind": "ActionConnector",
+                    "name": "",
+                    "label": null,
+                    "key": "zN3NcIpHn0S6et8dtiLfoQ",
+                    "reference": "@zN3NcIpHn0S6et8dtiLfoQ",
+                    "path": "Process:ApproveBooking/AutomaticActivityNode:Notify/Activity:/StartNode:/ActionConnector:"
+                  }
+                ],
+                "total": 1,
+                "omitted": 0
+              },
+              "IncomingConnectors": {
+                "items": [],
+                "total": 0,
+                "omitted": 0
+              }
+            },
+            "propertiesOmitted": {},
+            "propertyErrors": {},
+            "propertiesMissing": [],
+            "children": [
+              {
+                "kind": "ActionConnector",
+                "name": "",
+                "modelName": "",
+                "label": null,
+                "key": "zN3NcIpHn0S6et8dtiLfoQ",
+                "reference": "@zN3NcIpHn0S6et8dtiLfoQ",
+                "path": "Process:ApproveBooking/AutomaticActivityNode:Notify/Activity:/StartNode:/ActionConnector:",
+                "properties": {
+                  "ObjectKey": "zN3NcIpHn0S6et8dtiLfoQ",
+                  "GlobalKey": "Kawk_WFx5USxo7qFAB0lCQ*zN3NcIpHn0S6et8dtiLfoQ",
+                  "WasDeleted": "False",
+                  "IsValid": "True",
+                  "Key": "/Processes.1dW5q2DsOUWm2SeDgACE9Q/NodesShownInESpaceTree.4g5q+CpcFUqZEKg0sBKQDw/Flow/NodesNotShownInESpaceTree.tYnx5xiHeES0yb1JK_l9SQ/Links.zN3NcIpHn0S6et8dtiLfoQ",
+                  "Source": "StartNode:",
+                  "Target": "EndNode:"
+                },
+                "propertyReferences": {
+                  "Source": {
+                    "kind": "StartNode",
+                    "name": "",
+                    "label": null,
+                    "key": "tYnx5xiHeES0yb1JK_l9SQ",
+                    "reference": "@tYnx5xiHeES0yb1JK_l9SQ",
+                    "path": "Process:ApproveBooking/AutomaticActivityNode:Notify/Activity:/StartNode:"
+                  },
+                  "Target": {
+                    "kind": "EndNode",
+                    "name": "",
+                    "label": null,
+                    "key": "d_pP+MGb0UiDR3p64BI+dA",
+                    "reference": "@d_pP+MGb0UiDR3p64BI+dA",
+                    "path": "Process:ApproveBooking/AutomaticActivityNode:Notify/Activity:/EndNode:"
+                  }
+                },
+                "propertyReferenceCollections": {},
+                "propertiesOmitted": {},
+                "propertyErrors": {},
+                "propertiesMissing": [],
+                "children": [],
+                "childrenTotal": 0,
+                "childrenOmitted": 0
+              }
+            ],
+            "childrenTotal": 1,
+            "childrenOmitted": 0
+          }
+        ],
+        "childrenTotal": 3,
+        "childrenOmitted": 0
+      },
+      {
+        "kind": "EndNode",
+        "name": "",
+        "modelName": "",
+        "label": null,
+        "key": "m6aX3yBhm0qVMeU0xmZQRQ",
+        "reference": "@m6aX3yBhm0qVMeU0xmZQRQ",
+        "path": "Process:ApproveBooking/EndNode:",
+        "properties": {
+          "ObjectKey": "m6aX3yBhm0qVMeU0xmZQRQ",
+          "GlobalKey": "Kawk_WFx5USxo7qFAB0lCQ*m6aX3yBhm0qVMeU0xmZQRQ",
+          "WasDeleted": "False",
+          "IsValid": "True",
+          "Key": "/Processes.1dW5q2DsOUWm2SeDgACE9Q/NodesNotShownInESpaceTree.m6aX3yBhm0qVMeU0xmZQRQ",
+          "HorizontalPosition": "3196",
+          "IsDisabled": "False",
+          "VerticalPosition": "800",
+          "Connectors": "[]",
+          "IncomingConnectors": "[ActionConnector:]",
+          "TerminateProcess": "False"
+        },
+        "propertyReferences": {},
+        "propertyReferenceCollections": {
+          "Connectors": {
+            "items": [],
+            "total": 0,
+            "omitted": 0
+          },
+          "IncomingConnectors": {
+            "items": [
+              {
+                "kind": "ActionConnector",
+                "name": "",
+                "label": null,
+                "key": "6touAejDSEu_XPorCqaH1w",
+                "reference": "@6touAejDSEu_XPorCqaH1w",
+                "path": "Process:ApproveBooking/AutomaticActivityNode:Notify/ActionConnector:"
+              }
+            ],
+            "total": 1,
+            "omitted": 0
+          }
+        },
+        "propertiesOmitted": {},
+        "propertyErrors": {},
+        "propertiesMissing": [],
+        "children": [],
+        "childrenTotal": 0,
+        "childrenOmitted": 0
+      },
+      {
+        "kind": "StartNode",
+        "name": "",
+        "modelName": "",
+        "label": null,
+        "key": "M6PjIflXhUWQjwGGxM_I5w",
+        "reference": "@M6PjIflXhUWQjwGGxM_I5w",
+        "path": "Process:ApproveBooking/StartNode:",
+        "properties": {
+          "ObjectKey": "M6PjIflXhUWQjwGGxM_I5w",
+          "GlobalKey": "Kawk_WFx5USxo7qFAB0lCQ*M6PjIflXhUWQjwGGxM_I5w",
+          "WasDeleted": "False",
+          "IsValid": "True",
+          "Key": "/Processes.1dW5q2DsOUWm2SeDgACE9Q/NodesNotShownInESpaceTree.M6PjIflXhUWQjwGGxM_I5w",
+          "HorizontalPosition": "3196",
+          "IsDisabled": "False",
+          "VerticalPosition": "800",
+          "Connectors": "[ActionConnector:]",
+          "IncomingConnectors": "[]",
+          "Targets": "[AutomaticActivityNode:Notify]"
+        },
+        "propertyReferences": {},
+        "propertyReferenceCollections": {
+          "Connectors": {
+            "items": [
+              {
+                "kind": "ActionConnector",
+                "name": "",
+                "label": null,
+                "key": "r88mjbwobUWC4Kz9DV3aQQ",
+                "reference": "@r88mjbwobUWC4Kz9DV3aQQ",
+                "path": "Process:ApproveBooking/StartNode:/ActionConnector:"
+              }
+            ],
+            "total": 1,
+            "omitted": 0
+          },
+          "IncomingConnectors": {
+            "items": [],
+            "total": 0,
+            "omitted": 0
+          },
+          "Targets": {
+            "items": [
+              {
+                "kind": "AutomaticActivityNode",
+                "name": "Notify",
+                "label": "Notify",
+                "key": "4g5q+CpcFUqZEKg0sBKQDw",
+                "reference": "@4g5q+CpcFUqZEKg0sBKQDw",
+                "path": "Process:ApproveBooking/AutomaticActivityNode:Notify"
+              }
+            ],
+            "total": 1,
+            "omitted": 0
+          }
+        },
+        "propertiesOmitted": {},
+        "propertyErrors": {},
+        "propertiesMissing": [],
+        "children": [
+          {
+            "kind": "ActionConnector",
+            "name": "",
+            "modelName": "",
+            "label": null,
+            "key": "r88mjbwobUWC4Kz9DV3aQQ",
+            "reference": "@r88mjbwobUWC4Kz9DV3aQQ",
+            "path": "Process:ApproveBooking/StartNode:/ActionConnector:",
+            "properties": {
+              "ObjectKey": "r88mjbwobUWC4Kz9DV3aQQ",
+              "GlobalKey": "Kawk_WFx5USxo7qFAB0lCQ*r88mjbwobUWC4Kz9DV3aQQ",
+              "WasDeleted": "False",
+              "IsValid": "True",
+              "Key": "/Processes.1dW5q2DsOUWm2SeDgACE9Q/NodesNotShownInESpaceTree.M6PjIflXhUWQjwGGxM_I5w/Links.r88mjbwobUWC4Kz9DV3aQQ",
+              "Source": "StartNode:",
+              "Target": "AutomaticActivityNode:Notify"
+            },
+            "propertyReferences": {
+              "Source": {
+                "kind": "StartNode",
+                "name": "",
+                "label": null,
+                "key": "M6PjIflXhUWQjwGGxM_I5w",
+                "reference": "@M6PjIflXhUWQjwGGxM_I5w",
+                "path": "Process:ApproveBooking/StartNode:"
+              },
+              "Target": {
+                "kind": "AutomaticActivityNode",
+                "name": "Notify",
+                "label": "Notify",
+                "key": "4g5q+CpcFUqZEKg0sBKQDw",
+                "reference": "@4g5q+CpcFUqZEKg0sBKQDw",
+                "path": "Process:ApproveBooking/AutomaticActivityNode:Notify"
+              }
+            },
+            "propertyReferenceCollections": {},
+            "propertiesOmitted": {},
+            "propertyErrors": {},
+            "propertiesMissing": [],
+            "children": [],
+            "childrenTotal": 0,
+            "childrenOmitted": 0
+          }
+        ],
+        "childrenTotal": 1,
+        "childrenOmitted": 0
+      }
+    ],
+    "childrenTotal": 4,
+    "childrenOmitted": 0
+  },
+  "sourceSha256": "94DC0BBEE426F0AB22A9326D8E2C11C7405E8F518E2D80876066FED0E5D4B672",
+  "identityScope": "Keys belong to this snapshot. Resolve again after a new capture or save/reload; paths can be ambiguous."
+}

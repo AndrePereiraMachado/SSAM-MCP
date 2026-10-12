@@ -13,7 +13,7 @@ import { hostName } from './http.mjs';
 export const SURFACE = 'integration-studio';
 // The bridge manifest capability of the surface (written in Dispatch.cs by the restsoap lane, contract I3).
 export const CAPABILITY = 'sc_api:integration-studio';
-export const OPERATIONS = Object.freeze(['Handshake', 'GenerateSourceCodeStubs', 'GetSourceCodeDependencies', 'UploadNeeded']);
+export const OPERATIONS = Object.freeze(['Handshake', 'GenerateSourceCodeStubs', 'GetSourceCodeDependencies', 'UploadNeeded', 'TranslateLogicalDatabaseToDbConnection']);
 
 // A row of ListExtensions/ListEspaces: name, key, active version, id (the projection keeps the .NET member names).
 export const row = r => ({ name: field(r, 'Name'), key: field(r, 'Key', 'SS_Key', 'ESpaceKey', 'ModuleKey', 'ExtensionKey'),
@@ -39,5 +39,6 @@ export async function studioReads(host, { locate, root, env, running } = {}) {
     stubs: (file, outFile) => call(SURFACE, 'GenerateSourceCodeStubs', { file, outFile }),
     dependencies: outFile => call(SURFACE, 'GetSourceCodeDependencies', { outFile }),
     uploadNeeded: (extensionKey, extensionHash) => call(SURFACE, 'UploadNeeded', { extensionKey, extensionHash }),
+    databaseProvider: (extensionKey, logicalDatabase) => call(SURFACE, 'TranslateLogicalDatabaseToDbConnection', { extensionKey, logicalDatabase }),
   };
 }

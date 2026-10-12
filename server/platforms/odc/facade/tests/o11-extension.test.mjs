@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {createHash} from 'node:crypto';
 import { McpServer, InMemoryTransport } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
 import { createO11Extension, registerO11Extension, extensionSchema } from '../o11-extension.mjs';
@@ -275,6 +276,33 @@ test('delete goes to the delete engine of the Service Center once, with the targ
   assert.deepEqual(h.kernelCalls, []); assert.deepEqual(h.bridgeCalls, []);
 });
 
+test('proposal context preserves broad human words for a new standalone fixture and exact deletion', async t => {
+  const h=harness(t),dir=sandbox(t),proposal=path.join(dir,'proposal.md'),file=path.join(dir,'approval.json');
+  const words='Autorizo criar e excluir qualquer fixture O11 para testes.';
+  fs.writeFileSync(proposal,'One standalone '+NAME+' publication and deletion; no consumers.');
+  const record={schema:'ssam-authorization-context/1',decision:'approved',words,
+    source:{kind:'human-conversation',threadId:'11111111-2222-3333-4444-555555555555',messageId:'22222222-2222-3333-4444-555555555555',question:'Express fixture test authorization'},
+    proposal:{file:proposal,sha256:createHash('sha256').update(fs.readFileSync(proposal)).digest('hex')},constraints:{createOnly:true},
+    scope:['extension-publish','delete'].map(operation=>({lane:'o11',host:HOST,operation,targets:[NAME]}))};
+  const save=()=>fs.writeFileSync(file,JSON.stringify(record));save();
+  const input={action:'publish',host:HOST,spec:SPEC,words,authorizationContext:file};
+  const value=await h.run(input);assert.equal(value.ok,true,JSON.stringify(value));
+  assert.equal(value.authorization.source,'human-context');assert.equal(flag(h.publishes()[0],'words'),words);
+  assert.equal(flag(h.publishes()[0],'authorization-context'),file);
+  for(const extra of [{application:'Existing'},{applicationKey:'key'},{consumers:true}])
+    assert.equal((await h.run({...input,...extra})).code,'AUTHORIZATION_CONTEXT_INVALID');
+  record.scope[0].targets=['Other'];save();assert.equal((await h.run(input)).code,'AUTHORIZATION_CONTEXT_INVALID');
+  record.scope[0].targets=[NAME];record.constraints.createOnly=false;save();assert.equal((await h.run(input)).code,'AUTHORIZATION_CONTEXT_INVALID');
+  record.constraints.createOnly=true;save();
+  assert.equal((await harness(t,{extensions:[CURRENT]}).run(input)).code,'AUTHORIZATION_CONTEXT_INVALID');
+  const removed=await h.run({action:'delete',host:HOST,extension:NAME,words,authorizationContext:file});
+  assert.equal(removed.ok,true);assert.equal(flag(h.scCalls.at(-1),'authorization-context'),file);
+  assert.equal(flag(h.scCalls.at(-1),'words'),words);
+  record.scope[1].operation='extension-publish';save();
+  assert.equal((await h.run({action:'delete',host:HOST,extension:NAME,words,authorizationContext:file})).code,'AUTHORIZATION_CONTEXT_INVALID');
+  assert.equal(h.scCalls.length,2,'one publication and one deletion; no invalid request sent');
+});
+
 test('read: the active version downloaded, read by the kernel, with its consumers', async t => {
   const h = harness(t, { extensions: [CURRENT], consumers: () => [{ Name: 'Orders_CS' }] });
   const value = await h.run({ action: 'read', host: HOST, extension: NAME });
@@ -318,7 +346,7 @@ test('the tool is listed with the schema of the contract and destructive annotat
   t.after(async () => { await client.close(); await server.close(); });
   const tool = (await client.listTools()).tools.find(x => x.name === 'o11_extension');
   assert.ok(tool);
-  assert.deepEqual(Object.keys(tool.inputSchema.properties).sort(), ['action', 'application', 'applicationKey', 'commitMessage', 'confirmHost', 'consumers',
+  assert.deepEqual(Object.keys(tool.inputSchema.properties).sort(), ['action', 'application', 'applicationKey', 'authorizationContext', 'commitMessage', 'confirmHost', 'consumers',
     'expectedVersionId', 'extension', 'host', 'operationId', 'spec', 'specFile', 'words']);
   assert.deepEqual(tool.inputSchema.required.sort(), ['action', 'host']);
   assert.deepEqual(tool.inputSchema.properties.action.enum, ['read', 'publish', 'delete']);

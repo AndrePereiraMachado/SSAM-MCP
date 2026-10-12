@@ -16,10 +16,11 @@
 // An answer lost after a send is uncertain and never resent: the same call (same operationUuid) reads the exact state of
 // each step (the job by its file name, the publication by the library, the tag by the revision) and continues only
 // from what it proved; two candidates are AMBIGUOUS with the evidence.
-import crypto from 'node:crypto';
 import { guardTenant, namesWhole } from './access.mjs';
 import { sha256 } from './write-journal.mjs';
 import { publicError } from './errors.mjs';
+import {externalLibraryStepUuid,externalLibraryProofApproval,EXTERNAL_LIBRARY_DEPLOY} from './external-library-approval.mjs';
+import {authorizationContext as readApproval} from '../../facade/authorization-context.mjs';
 
 export const OPS = Object.freeze({
   assets: 'asset-repository-api-v1:get:/assets',
@@ -49,8 +50,7 @@ const rows = data => Array.isArray(data?.results) ? data.results : Array.isArray
 
 // UUID derived from the operation's own: the same deploy always names the same step, so a repeat never sends twice.
 export function stepUuid(operationUuid, step) {
-  const h = crypto.createHash('sha256').update(String(operationUuid).toLowerCase() + ':' + step).digest('hex');
-  return h.slice(0, 8) + '-' + h.slice(8, 12) + '-4' + h.slice(13, 16) + '-8' + h.slice(17, 20) + '-' + h.slice(20, 32);
+  return externalLibraryStepUuid(operationUuid,step);
 }
 export function nextPatch(tag) {
   const m = SEMVER.exec(String(tag ?? '').replace(/^v/, ''));
@@ -104,12 +104,15 @@ export class ExternalLibraryDeployer {
 
   // plan: {name, package:{path, fileName, sha256, bytes}, contents}. words: the user's words or the standing grant's;
   // userWords false (a grant) never covers a change that breaks consumers.
-  async deploy(plan, { tenant, auth = 'auto', words, userWords = true, operationUuid, confirmTenant, releaseTag, releaseNotes, authorization = null }) {
+  async deploy(plan, { tenant, auth = 'auto', words, userWords = true, operationUuid, confirmTenant, releaseTag, releaseNotes, authorization = null, authorizationContext,originOperationUuid=null,expectedRevision=null }) {
     const access = this.access;
-    let host;
+    let host,approval;
     try {
       host = await access.pickTenant(tenant);
-      guardTenant(access.tenantInfo(host), words, confirmTenant);
+      if(authorizationContext)approval=readApproval(authorizationContext,words,{lane:'odc',host,operation:EXTERNAL_LIBRARY_DEPLOY,targets:[plan.name],
+        constraints:{packageSha256:plan.package.sha256,releaseTag,releaseNotes:releaseNotes??null,originOperationUuid,expectedRevision}});
+      else if(originOperationUuid!==null || expectedRevision!==null)throw Object.assign(new Error('Fixture origin requires a proposal-bound authorization context.'),{code:'AUTHORIZATION_CONTEXT_INVALID'});
+      guardTenant(access.tenantInfo(host), words, confirmTenant,approval);
     } catch (error) { return { ok: false, code: error.code ?? 'INPUT_INVALID', error: publicError(error).message, ...(host ? { tenant: host } : {}), sent: false }; }
     const publicAuth = auth;
     const portalAuth = auth === 'api-client' ? 'portal-credential' : auth;
@@ -117,6 +120,11 @@ export class ExternalLibraryDeployer {
     let existing;
     try { existing = access.receipts.lookup(operationUuid, identity); }
     catch (error) { return { ok: false, code: error.code, error: error.message, tenant: host, sent: false }; }
+    if(existing && (approval || existing.progress?.authorization?.context)) {
+      const saved=existing.progress?.authorization?.context;
+      if(!approval || !saved || saved.sha256!==approval.sha256 || saved.wordsSha256!==approval.wordsSha256)
+        return refusal('AUTHORIZATION_CONTEXT_INVALID','A resumed deploy must keep its exact approval, package and release.',{sent:false});
+    }
     if (existing && ['confirmed', 'rejected', 'not-sent'].includes(existing.state))
       return { ok: existing.state === 'confirmed', code: existing.state === 'confirmed' ? undefined : 'OPERATION_ENDED', state: existing.state, tenant: host, existingReceipt: true,
         receipt: this.receiptOf(existing), ...(existing.result ? { result: existing.result } : {}),
@@ -139,8 +147,19 @@ export class ExternalLibraryDeployer {
     if (existing) return this.resume(plan, existing, { host, publicAuth, portalAuth, words, userWords, confirmTenant, releaseNotes, uploader: uploader.uploader });
 
     // 2. Reads, every problem at once.
+    if(approval) {
+      try {
+        approval=await externalLibraryProofApproval({file:authorizationContext,words,host,name:plan.name,packageSha256:plan.package.sha256,
+          releaseTag,releaseNotes:releaseNotes??null,originOperationUuid,expectedRevision,lookup:id=>access.receipts.lookup(id),
+          readAssets:query=>this.read(host,publicAuth,OPS.assets,{query}),readDependents:key=>access.dependentsOf(host,publicPlane,key)});
+        authorization={source:'proposal-context',context:approval};
+      } catch(error) {return refusal(error.code??'AUTHORIZATION_CONTEXT_INVALID',error.message,{sent:false});}
+    }
     const facts = await this.readFacts(plan, { host, publicPlane, publicAuth, words, userWords, releaseTag });
     if (!facts.ok) return { ...facts, tenant: host, sent: false };
+    if(approval && (facts.consumers.length || facts.library.isNew!==approval.fixture.isNew
+      || !facts.library.isNew && (facts.library.key!==approval.fixture.key || facts.library.revision!==approval.fixture.revision)))
+      return refusal('EXTERNAL_LIBRARY_CHANGED','Fixture changed between authorization and deployment preflight.',{sent:false});
 
     // 3. The receipt, then the steps.
     let receipt;
@@ -148,7 +167,8 @@ export class ExternalLibraryDeployer {
       receipt = access.receipts.reserve({ operationUuid, identity, wordsSha256: sha256(words),
         plan: { fileName: plan.package.fileName, sha256: identity.packageSha256, bytes: plan.package.bytes, tag: facts.tag, library: facts.library, uploader: uploader.uploader.kind } });
     } catch (error) { return { ok: false, code: error.code, error: error.message, tenant: host, sent: false, ...(error.details ?? {}) }; }
-    receipt.progress = { startedAt: new Date(this.now()).toISOString(), tag: facts.tag, library: facts.library, consumers: facts.consumers, uploadAttempt: 1, authorization };
+    receipt.progress = { startedAt: new Date(this.now()).toISOString(), tag: facts.tag, library: facts.library, consumers: facts.consumers, uploadAttempt: 1, authorization,
+      package:{fileName:plan.package.fileName,sha256:identity.packageSha256} };
     this.save(receipt);
     return this.run(plan, receipt, { host, publicAuth, portalAuth, words, userWords, confirmTenant, releaseNotes, uploader: uploader.uploader });
   }
@@ -162,8 +182,8 @@ export class ExternalLibraryDeployer {
     if ((state.capabilities ?? []).includes('portal-upload')) { const studio = this.uploaders.studio(); if (studio) return { ok: true, uploader: studio }; }
     if (await this.access.apiClientAvailable(host)) { const vault = await this.uploaders.vault(host); if (vault) return { ok: true, uploader: vault }; }
     return refusal('BRIDGE_UPGRADE_REQUIRED', 'The attached bridge cannot upload an External Library (no portal-upload capability) and the vault holds no API Client for ' + host + '; nothing was sent.',
-      { problems: [problem('BRIDGE_UPGRADE_REQUIRED', 'The bridge loaded in the ODC Studio is older than portal-upload.', 'Close and reopen the ODC Studio, then studio_attach loads the newest bridge; or store an API Client of the tenant in the vault (odc_auth_status names the entry).')],
-        continuation: { tool: 'studio_attach', arguments: {}, why: 'After the ODC Studio is reopened, loads the newest bridge (portal-upload); then repeat this call.' } });
+      { problems: [problem('BRIDGE_UPGRADE_REQUIRED', 'The attached bridge does not advertise portal-upload.', 'Preserve the open Studio. The integrator must provide a compatible isolated bridge revision or a configured API Client uploader for this tenant; do not replace loaded DLLs.')],
+        continuation: { tool: 'ssam_doctor', arguments: { lane: 'odc' }, why: 'Inspect the existing ODC session and capability gap without closing or reopening the Studio.' } });
   }
 
   async readFacts(plan, { host, publicPlane, publicAuth, words, userWords, releaseTag }) {
@@ -296,12 +316,37 @@ export class ExternalLibraryDeployer {
   async publish(plan, receipt, ctx, jobKey) {
     const p = receipt.progress;
     if (!p.publish?.operationKey) {
+      if(p.authorization?.context) {
+        const job=await this.read(ctx.host,ctx.publicAuth,OPS.job,{path:{operationKey:jobKey}});
+        const expectedKey=p.library.key??p.generation?.libraryKey;
+        if(!job.ok || !READY.has(job.data?.status) || job.data?.libraryName!==plan.name
+          || job.data?.libraryKey!==expectedKey || job.data?.isNewLibrary!==p.library.isNew)
+          return this.uncertain(receipt,'pre-publication','The generated job no longer matches this own fixture.',{code:'EXTERNAL_LIBRARY_CHANGED',jobKey});
+        const assets=await this.read(ctx.host,ctx.publicAuth,OPS.assets,{query:{nameContains:plan.name,limit:1000,offset:0}});
+        const list=assets.data?.results;
+        if(!assets.ok || !Array.isArray(list) || assets.data?.page?.totalResults!==list.length)
+          return this.uncertain(receipt,'pre-publication','Complete asset inventory could not be verified.',{code:'ASSET_INVENTORY_UNAVAILABLE',jobKey});
+        const same=list.filter(a=>lower(a.name)===lower(plan.name));
+        const current=same[0];
+        const exact=current && current.name===plan.name && current.assetType==='ExternalLibrary'
+          && current.assetKey===expectedKey && current.revision===(p.library.isNew?0:p.library.revision);
+        if(p.library.isNew ? same.length>0 && !(same.length===1&&exact) : same.length!==1 || !exact)
+          return this.uncertain(receipt,'pre-publication','The library changed after upload; publication was not sent.',{code:'EXTERNAL_LIBRARY_CHANGED',jobKey});
+        if(current) {
+          const plane=await this.access.resolvePublic(ctx.host,ctx.publicAuth);
+          const deps=plane.ok===false?{ok:false}:await this.access.dependentsOf(ctx.host,plane,current.assetKey);
+          if(!deps.ok || !Array.isArray(deps.consumers) || deps.consumers.length)
+            return this.uncertain(receipt,'pre-publication','Absence of consumers could not be confirmed; publication was not sent.',{code:'EXTERNAL_LIBRARY_HAS_CONSUMERS',jobKey});
+        }
+      }
       const attempt = p.publish?.attempt ?? 1;
       const uuid = stepUuid(receipt.operationUuid, 'publish-' + attempt);
+      const startedAt = p.publish?.startedAt ?? new Date(this.now()).toISOString();
       const answer = await this.access.portalWrite({ tenant: ctx.host, auth: ctx.portalAuth, operationId: PUBLISH_ROUTE.id, input: { inputParameters: { JobKey: jobKey } },
-        authorize: ctx.words, operationUuid: uuid, confirmTenant: ctx.confirmTenant, target: { jobKey, libraryName: plan.name } });
+        authorize: ctx.words, operationUuid: uuid, confirmTenant: ctx.confirmTenant, target: { jobKey, libraryName: plan.name } },
+        p.authorization?.context?{externalLibraryParent:receipt.operationUuid}:{});
       const state = answer.receipt?.state ?? (answer.ok ? 'accepted' : 'not-sent');
-      p.publish = { attempt, uuid, state, startedAt: p.publish?.startedAt ?? new Date(this.now()).toISOString() };
+      p.publish = { attempt, uuid, state, startedAt };
       if (!answer.ok && state !== 'uncertain' && !answer.existingReceipt) {
         return this.close(receipt, state === 'rejected' ? 'rejected' : 'not-sent', refusal('PUBLISH_FAILED', 'The publish of the job was refused (' + (answer.error?.code ?? 'error') + '); the job stays ready.', { jobKey, step: 'publish', publishError: answer.error ?? null }));
       }
@@ -333,7 +378,7 @@ export class ExternalLibraryDeployer {
     const key = p.library.key ?? p.generation?.libraryKey ?? (await this.libraryKey(ctx, p.library.name));
     if (!key) return {};
     p.library.key = key;
-    const ops = await this.read(ctx.host, ctx.publicAuth, OPS.publishOps, { query: { assetKey: key, createdDateSince: p.publish?.startedAt ?? p.startedAt, limit: 10 } });
+    const ops = await this.read(ctx.host, ctx.publicAuth, OPS.publishOps, { query: { assetKey: key, createdDateSince: p.startedAt ?? p.publish?.startedAt, limit: 10 } });
     const list = rows(ops.data);
     if (list.length > 1) return { ambiguous: list.map(o => ({ key: o.key, status: o.status, revision: o.revision ?? null })) };
     return list.length === 1 ? { key: list[0].key } : {};
@@ -354,10 +399,12 @@ export class ExternalLibraryDeployer {
       if (p.publish.revision == null) return this.uncertain(receipt, 'release', 'The published revision could not be read.');
     }
     const revision = p.publish.revision;
+    if(p.authorization?.context)this.save(receipt);
     if (!p.release?.done) {
       const uuid = stepUuid(receipt.operationUuid, 'release');
       const tagged = await this.access.write({ tenant: ctx.host, auth: ctx.publicAuth, operationId: OPS.tag, path: { assetKey: key, revisionNumber: revision },
-        body: { tag: p.tag, ...(ctx.releaseNotes ? { releaseNotes: ctx.releaseNotes } : {}) }, authorize: ctx.words, operationUuid: uuid, confirmTenant: ctx.confirmTenant });
+        body: { tag: p.tag, ...(ctx.releaseNotes ? { releaseNotes: ctx.releaseNotes } : {}) }, authorize: ctx.words, operationUuid: uuid, confirmTenant: ctx.confirmTenant },
+        p.authorization?.context?{externalLibraryParent:receipt.operationUuid}:{});
       const state = tagged.receipt?.state ?? (tagged.ok ? 'accepted' : 'not-sent');
       p.release = { uuid, state };
       if (!tagged.ok && state !== 'uncertain' && !tagged.existingReceipt) {
@@ -405,16 +452,14 @@ export class ExternalLibraryDeployer {
       if (mine.length > 1) return refusal('AMBIGUOUS', 'Two generation jobs carry the file ' + plan.package.fileName + '; nothing was sent.', { tenant: ctx.host, candidates: mine.map(j => ({ key: j.key, status: j.status, createdAt: j.createdAt ?? null })),
         problems: [problem('AMBIGUOUS', 'Several jobs carry the uploaded file name.', 'Discard the extra jobs (odc_external_library discard, words naming the library) and repeat this call.')], receipt: this.receiptOf(receipt) });
       if (mine.length === 1) { p.upload.operationKey = mine[0].key; p.upload.state = 'confirmed'; p.upload.reconciled = 'job by file name'; }
-      else if ((p.uploadAttempt ?? 1) >= 2) return this.uncertain(receipt, 'upload', 'No job carries the file after two attempts; nothing more is sent.');
-      else { p.uploadAttempt = (p.uploadAttempt ?? 1) + 1; delete p.upload; }
+      else return this.uncertain(receipt, 'upload', 'No job carries the file yet; absence does not authorize repeating the upload.');
       this.save(receipt);
     }
-    if (p.publish && !p.publish.operationKey && p.publish.state === 'uncertain') {
+    if (p.publish && !p.publish.operationKey && ['uncertain', 'accepted'].includes(p.publish.state)) {
       const found = await this.findPublication(ctx, p);
       if (found.ambiguous) return refusal('AMBIGUOUS', 'Several publications of ' + plan.name + ' started after this deploy.', { tenant: ctx.host, candidates: found.ambiguous, receipt: this.receiptOf(receipt) });
       if (found.key) { p.publish.operationKey = found.key; p.publish.reconciled = 'publication by library'; }
-      else if ((p.publish.attempt ?? 1) >= 2) return this.uncertain(receipt, 'publish', 'No publication of the library after two attempts; nothing more is sent.');
-      else p.publish = { attempt: (p.publish.attempt ?? 1) + 1, startedAt: p.publish.startedAt };
+      else return this.uncertain(receipt, 'publish', 'No publication is visible yet; absence does not authorize repeating publication.');
       this.save(receipt);
     }
     return this.run(plan, receipt, ctx);
@@ -445,11 +490,17 @@ export class ExternalLibraryDeployer {
     if (!assets.ok) return { ...assets, tenant: host };
     const found = rows(assets.data).find(a => a.name === library && /externallibrary/i.test(String(a.assetType ?? ''))) ?? null;
     const jobs = await this.read(host, auth, OPS.jobs);
+    if (!jobs.ok) return { ...jobs, ok: false, tenant: host, library, exists: found !== null, jobs: null,
+      incomplete: true, failedRead: 'generation-jobs' };
     const open = rows(jobs.data).filter(j => (lower(j.libraryName) === lower(library) || lower(j.filename).startsWith(lower(library) + '-')))
       .map(j => ({ jobKey: j.key, status: j.status, filename: j.filename ?? null, createdAt: j.createdAt ?? null, pending: PENDING.has(j.status) }));
     if (!found) return { ok: true, tenant: host, library, exists: false, jobs: open };
     const revisions = await this.read(host, auth, OPS.revisions, { path: { assetKey: found.assetKey }, query: { limit: 10 } });
+    if (!revisions.ok) return { ...revisions, ok: false, tenant: host, library, exists: true, key: found.assetKey,
+      jobs: open, incomplete: true, failedRead: 'revisions' };
     const meta = await this.read(host, auth, OPS.revisionMetadata, { path: { assetKey: found.assetKey, revisionNumber: found.revision } });
+    if (!meta.ok) return { ...meta, ok: false, tenant: host, library, exists: true, key: found.assetKey,
+      jobs: open, incomplete: true, failedRead: 'revision-metadata' };
     const resolved = await this.access.resolvePublic(host, auth).catch(() => ({ ok: false }));
     const dependents = resolved.ok === false ? { ok: false } : await this.access.dependentsOf(host, resolved, found.assetKey);
     return { ok: true, tenant: host, library, exists: true, key: found.assetKey, revision: found.revision ?? null, tag: found.tag ?? null, runtime: meta.data?.runtime ?? null,
@@ -458,7 +509,7 @@ export class ExternalLibraryDeployer {
   }
 
   // ---- discard: deletes an open job (destructive: the words name its library, read first by access.write).
-  async discard({ tenant, auth = 'auto', jobKey, library, authorize, operationUuid, confirmTenant }) {
+  async discard({ tenant, auth = 'auto', jobKey, library, authorize, operationUuid, confirmTenant,authorizationContext,originOperationUuid }) {
     let host;
     try { host = await this.access.pickTenant(tenant); } catch (error) { return { ok: false, error: publicError(error) }; }
     let key = jobKey;
@@ -470,11 +521,15 @@ export class ExternalLibraryDeployer {
         { tenant: host, jobs: open.map(j => ({ jobKey: j.key, status: j.status, filename: j.filename })) });
       key = open[0].key;
     }
-    const deleted = await this.access.write({ tenant: host, auth, operationId: OPS.jobDelete, path: { operationKey: key }, authorize, operationUuid, confirmTenant });
-    if (!deleted.ok || deleted.existingReceipt) return deleted;
+    const deleted = await this.access.write({ tenant: host, auth, operationId: OPS.jobDelete, path: { operationKey: key }, authorize, operationUuid, confirmTenant },
+      authorizationContext?{externalLibraryDiscard:{file:authorizationContext,originOperationUuid}}:{});
+    if (!deleted.ok && !deleted.existingReceipt) return deleted;
     const after = await this.read(host, auth, OPS.job, { path: { operationKey: key } });
     const gone = !after.ok && after.status === 404;
-    if (gone) this.access.receipts.reconcile(this.access.receipts.lookup(deleted.receipt.operationUuid), { state: 'confirmed', observation: { operationId: OPS.job, status: 404 } });
+    if (gone) {
+      const recorded=this.access.receipts.lookup(deleted.receipt.operationUuid);
+      if(['accepted','uncertain'].includes(recorded.state))this.access.receipts.reconcile(recorded, { state: 'confirmed', observation: { operationId: OPS.job, status: 404 } });
+    }
     return { ...deleted, jobKey: key, readBack: { gone, status: after.status ?? null } };
   }
 }

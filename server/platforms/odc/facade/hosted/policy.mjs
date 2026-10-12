@@ -8,6 +8,12 @@
 // presented: workspace paths become ws:<rel>, other paths
 // of this server become <servidor>. Nothing here touches a Studio or the agent by itself, except bringing an
 // agent:<rel> the LLM named (executor.pullFile).
+// servidor/fase4-24 (R1 of PLANO-24-PRODUCAO): every rule here reads the arguments the tool RUNS, not the ones sent. The
+// input layer of the 24th release (tool-input.mjs) runs a renamed field under the tool's own name ({targt} runs as
+// target); ssam.mjs hands its argsOf to the gate, which resolves the path pointers on argsOf(raw) ?? raw and gives the
+// handler those arguments, normalized and resolved (normalizing them again changes nothing).
+// D2 (G4 of the plan): a job with the prototype op is refused here in hosted mode, before any capture, by one switch
+// (HOSTED_PROTOTYPE_OP).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -112,6 +118,124 @@ const workspaceFull = () => ({ ok: false, code: 'WORKSPACE_FULL',
 const pathRefused = (code, error) => ({ ok: false, code, error,
   continuation: doctor('Pass paths as SSAM tools return them (ws:odc/..., ws:o11/..., ws:inbox/...), or agent:inbox/<file> for a file the user put in the agent inbox folder.') });
 
+// ---- R1: the arguments the tool runs
+// argsOf (tool-input.mjs relaxTool, through ssam.mjs) gives the arguments the handler runs for the ones sent: a renamed,
+// aliased or coerced field under the name the tool knows, or null when the layer refuses them (the handler then refuses
+// too, with INPUT_INVALID, and runs nothing). Without argsOf, or when it fails, the arguments are the ones sent.
+export function effectiveArgs(argsOf, raw) {
+  if (typeof argsOf !== 'function') return raw;
+  try {
+    const value = argsOf(raw);
+    return value !== null && typeof value === 'object' && !Array.isArray(value) ? value : raw;
+  } catch { return raw; }
+}
+
+// ---- D2: the prototype op (docs/PROTOTIPO-NATIVO.md, PLANO-24-PRODUCAO G4 and R2)
+// THE switch. 'refuse' (24.0): a hosted job, delivery or proof that carries an op "prototype" is refused at the gate,
+// before any capture: its data.source is a folder of the job that this gate does not confine, and its capture runs the
+// prototype's JavaScript on the server machine. 'allow': the gate lets it through (for a 24.x with the folder brought by
+// agent:inbox and a capture pool per customer).
+export const HOSTED_PROTOTYPE_OP = 'refuse';
+export const PROTOTYPE_TOOLS = Object.freeze(['o11_deliver', 'studio_deliver', 'ssam_job', 'o11_job']);
+const JOB_POINTERS = ['/job', '/basedOn/job'];
+const MAX_JOB_BYTES = 16 * 1024 * 1024;
+const isPrototypeName = value => typeof value === 'string' && value.trim().toLowerCase() === 'prototype';
+const looksLikeJson = value => typeof value === 'string' && /^\s*[[{]/.test(value);
+// Whether a value (an inline job, a partial job, a patch, a basedOn) names the prototype op anywhere: an op
+// {op:"prototype"}, or a patch entry that turns an op into one ({path:".../op", value:"prototype"}). JSON text is read
+// as JSON. A value too large or too deep to read whole counts as naming it (the gate fails closed). This is the
+// STRUCTURAL scan: it sees ops written inline, but not the ops a COMPOSITE job {jobs:["job:a","b.json",...]} pulls from
+// its part FILES (those are strings here); compositeNamesPrototype below follows those parts in the workspace.
+export function namesPrototype(value, budget = { left: 4000000 }, depth = 0) {
+  if (looksLikeJson(value)) { try { return namesPrototype(JSON.parse(value), budget, depth + 1); } catch { return false; } }
+  if (value === null || typeof value !== 'object') return false;
+  if (--budget.left < 0 || depth > 128) return true;
+  if (Array.isArray(value)) return value.some(item => namesPrototype(item, budget, depth + 1));
+  if (isPrototypeName(value.op)) return true;
+  if (typeof value.path === 'string' && /(^|[/.])op$/.test(value.path) && isPrototypeName(value.value)) return true;
+  return Object.values(value).some(item => namesPrototype(item, budget, depth + 1));
+}
+// A part a composite job ({jobs:["job:a","b.json","C:\\...\\c.json",...]}) names, resolved STRICTLY inside the customer's
+// workspace with the kernel's rule (JobRunner.ResolveJobFile): job:<name> -> <name>.json in the part's folder (and the
+// positive folder of a -negative track); otherwise an absolute path, or a path relative to the part's folder. The kernel
+// also falls back to the repository's tests/jobs, but those live outside the workspace, so the gate does not follow them:
+// a part that only resolves there (or anywhere else outside the workspace) returns null and the caller fails closed.
+function resolvePartInWorkspace(spec, dir, workspace) {
+  if (typeof spec !== 'string' || !spec) return null;
+  const candidates = [];
+  if (spec.startsWith('job:')) {
+    const name = spec.slice(4) + '.json';
+    candidates.push(path.resolve(dir, name));
+    const folder = path.basename(path.resolve(dir));
+    if (/-negative$/i.test(folder)) candidates.push(path.resolve(path.dirname(path.resolve(dir)), folder.replace(/-negative$/i, ''), name));
+  } else if (path.isAbsolute(spec) || /^[A-Za-z]:[\\/]/.test(spec)) {
+    candidates.push(path.resolve(spec));
+  } else {
+    candidates.push(path.resolve(dir, spec));
+  }
+  for (const candidate of candidates) {
+    if (!insideVisible(workspace, candidate)) continue;
+    try { if (fs.statSync(candidate).isFile()) return candidate; } catch { /* next candidate */ }
+  }
+  return null;
+}
+// Whether a job DOCUMENT (an inline object, or the parsed content of a job file) names the prototype op anywhere the
+// kernel's CollectOps would gather it, following a composite job's {jobs} parts. Each part is resolved strictly inside
+// the workspace (resolvePartInWorkspace) and scanned the same way; a part that resolves outside the workspace, is missing,
+// is unreadable, is too large, or sits too deep makes this return true (the gate fails closed on a composite job it cannot
+// fully read). dir is the folder the part specs resolve against (the folder of the job file, or the workspace root for an
+// inline object the facade has not written yet).
+function compositeNamesPrototype(document, dir, workspace, seen = new Set(), depth = 0) {
+  if (looksLikeJson(document)) { try { return compositeNamesPrototype(JSON.parse(document), dir, workspace, seen, depth); } catch { return false; } }
+  if (document === null || typeof document !== 'object') return false;
+  const parts = Array.isArray(document) ? null : document.jobs;
+  if (!Array.isArray(parts)) return namesPrototype(document); // an array job, {ops:[...]}, a partial job or a patch: structural
+  if (depth > 64) return true;
+  for (const spec of parts) {
+    if (spec !== null && typeof spec === 'object') { if (namesPrototype(spec)) return true; continue; } // a part written inline
+    const file = resolvePartInWorkspace(spec, dir, workspace);
+    if (!file) return true; // outside the workspace, or it does not resolve there: fail closed
+    const key = file.toLowerCase();
+    if (seen.has(key)) continue; // a cycle is the kernel's own refusal, not a prototype
+    let stat = null;
+    try { stat = fs.statSync(file); } catch { return true; } // unreadable part: fail closed
+    if (!stat.isFile() || stat.size > MAX_JOB_BYTES) return true;
+    let part;
+    try { part = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')); } catch { return true; } // unparseable: fail closed
+    if (compositeNamesPrototype(part, path.dirname(file), workspace, new Set([...seen, key]), depth + 1)) return true;
+  }
+  return false;
+}
+// The jobs a resolved call names (/job, /basedOn/job): whether one names the prototype op, directly or through the parts
+// of a composite job, every part resolved inside the customer's workspace. An inline job object is scanned as the facade
+// will write it (its own parts resolve inside the workspace too); a job file is read and scanned the same way.
+function jobFilesNamePrototype(resolved, workspace) {
+  for (const pointer of JOB_POINTERS) {
+    for (const { value } of locations(resolved, segmentsOf(pointer))) {
+      // An inline job object (resolvePaths leaves non-strings untouched): its composite parts, if any, resolve against the
+      // workspace root (the facade writes the inline job inside the workspace); absolute parts are confined all the same.
+      if (value !== null && typeof value === 'object') { if (compositeNamesPrototype(value, workspace, workspace)) return true; continue; }
+      if (typeof value !== 'string' || looksLikeJson(value) || !path.isAbsolute(value)) continue;
+      let stat = null;
+      try { stat = fs.statSync(value); } catch { continue; } // a missing job is the tool's own answer
+      if (!stat.isFile()) continue;
+      if (stat.size > MAX_JOB_BYTES) return true;
+      let document;
+      try { document = JSON.parse(fs.readFileSync(value, 'utf8').replace(/^\uFEFF/, '')); } catch { continue; }
+      if (compositeNamesPrototype(document, path.dirname(value), workspace)) return true;
+    }
+  }
+  return false;
+}
+export function prototypeUnavailable(name, lane) {
+  return { ok: false, code: 'HOSTED_UNAVAILABLE', cause: 'PROTOTYPE_SOURCE_LOCAL', policy: 'HOSTED_PROTOTYPE_OP', tool: name, outcome: 'not-sent',
+    error: 'The prototype import (op "prototype") is available only in local use for now: on a hosted server its source folder and the capture '
+      + 'of its JavaScript would run on the server machine. Nothing ran. / O importador de protótipo (op "prototype") por enquanto só funciona '
+      + 'no uso local: no servidor hospedado a pasta dele e a captura do seu JavaScript rodariam na máquina do servidor. Nada rodou.',
+    continuation: { tool: 'ssam_discover', arguments: { intent: 'port an approved prototype screen 1:1 with the html op and its style in the theme', lane: lane === 'odc' ? 'odc' : 'o11' },
+      why: 'Builds the same screens with the ops this server runs (html op plus its <style>), without the prototype op; or import the prototype with an SSAM installed on the user\'s own machine.' } };
+}
+
 // ---- paths (6.3, 6.4)
 // The concrete locations of a pointer in an argument object: '*' is every key of an object or item of an array.
 function locations(node, segments) {
@@ -130,6 +254,9 @@ const isJsonText = value => /^\s*[[{]/.test(value);
 const patchedQuery = args => args?.kind === 'check-job' && args?.query !== null && typeof args?.query === 'object' && !Array.isArray(args.query)
   && (args.query.basedOn !== undefined || args.query.patch !== undefined);
 const pathOnlyWhen = (name, entry, pointer, args, value) => {
+  // fase4-24: a hosted job travels inline, and the JSON text of a job ("{...}" or "[...]") is the job itself in every
+  // pointer: never resolved as a path (it was taken as ws:<lane>/{"ops":...} and the tool found no such file).
+  if (isJsonText(value)) return false;
   if (entry.agent?.when === 'module-target' && (pointer === '/' + entry.agent.arg || pointer === '/' + entry.agent.arg + '/*')) return looksLikePath(value);
   if (name === 'studio_command' && pointer === '/args/*') return looksLikePath(value);
   if (name === 'ssam_reference' && pointer === '/query') return ['check-job', 'check-delivery'].includes(args?.kind);
@@ -260,17 +387,23 @@ export function presenter({ workspace, serverRoots = [workspaceRoot, os.homedir(
 }
 
 // ---- the gate
-// wrapHostedTool(name, config, handler, {context, link, lanes, run}) -> the handler to register. run(context, fn) puts
-// the hosted context around the handler (runWithExecutor in ssam.mjs; tests pass (ctx, fn) => fn()).
+// wrapHostedTool(name, config, handler, {context, link, lanes, run, argsOf}) -> the handler to register. run(context, fn)
+// puts the hosted context around the handler (runWithExecutor in ssam.mjs; tests pass (ctx, fn) => fn()). argsOf: the
+// input layer's arguments for the ones sent (R1); every rule below and the handler read them. prototypeOp: the D2 switch
+// (HOSTED_PROTOTYPE_OP by default; tests pass the other value).
 export function wrapHostedTool(name, config, handler, { context, link = context?.agent, lanes = context?.lanes ?? [], run = (ctx, fn) => fn(),
-  tools = hostedTools(), serverRoots, waitMs = RECONNECT_WAIT_MS } = {}) {
+  tools = hostedTools(), serverRoots, waitMs = RECONNECT_WAIT_MS, argsOf = null, prototypeOp = HOSTED_PROTOTYPE_OP } = {}) {
   const entry = tools[name];
   const present = presenter({ workspace: context.workspace, ...(serverRoots ? { serverRoots } : {}) });
+  const refusesPrototype = prototypeOp !== 'allow' && PROTOTYPE_TOOLS.includes(name);
   return async (...params) => {
     const hasArgs = config?.inputSchema != null && params.length > 1;
-    const args = hasArgs ? (params[0] ?? {}) : {};
+    // R1: the arguments the tool runs (a field the input layer renames is confined under its own name).
+    const args = hasArgs ? effectiveArgs(argsOf, params[0] ?? {}) : {};
     if (!entry || entry.class === 'unavailable') return refusal(unavailable(name, entry, config));
     const lane = laneOf(entry, args);
+    // D2: an inline job, partial job or patch with the prototype op, before the agent, the lane checks and any capture.
+    if (refusesPrototype && hasArgs && namesPrototype(args)) return refusal(prototypeUnavailable(name, lane));
     if (LANED.has(lane) && !lanes.includes(lane)) return refusal(laneDisabled(lane));
     const need = agentNeed(entry.agent, args);
     let info = null;
@@ -301,6 +434,9 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
         }
         return refusal(pathRefused(error.code, error.message));
       }
+      // D2: a job file (or the job of basedOn) of the workspace with the prototype op, directly or through a composite
+      // job's parts, before the handler and any capture.
+      if (refusesPrototype && jobFilesNamePrototype(resolved, context.workspace)) return refusal(prototypeUnavailable(name, lane));
       if (name === 'ssam_job' && lane === 'odc' && (resolved.base === undefined || resolved.base === null || resolved.base === ''))
         resolved = { ...resolved, base: NEUTRAL_ODC_BASE };
     }

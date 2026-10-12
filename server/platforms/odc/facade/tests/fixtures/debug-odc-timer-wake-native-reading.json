@@ -1,0 +1,1019 @@
+{
+  "schema": "ssam-debug-native-reading-fixture/1",
+  "provenance": "Local ODC SDK candidate proof-5; unpublished native projection. No live claim.",
+  "trees": [
+    {
+      "kind": "Timer",
+      "name": "ManualDebuggerProbe",
+      "modelName": "ManualDebuggerProbe",
+      "label": "ManualDebuggerProbe",
+      "key": "vDFxJr0BpU2dT_t3MFr4uA",
+      "reference": "@vDFxJr0BpU2dT_t3MFr4uA",
+      "path": "Timer:ManualDebuggerProbe",
+      "properties": {
+        "Action": "ServerAction:ObserveManualTimer",
+        "Description": "Manual Wake only. No recurring or WhenPublished schedule; no business side effects.",
+        "IsMultiTenant": "Inherited",
+        "Name": "ManualDebuggerProbe",
+        "Priority": "Normal",
+        "TimeoutInMinutes": "1",
+        "ReadableIdentifier": "ManualDebuggerProbe"
+      },
+      "propertyReferences": {
+        "Action": {
+          "kind": "ServerAction",
+          "name": "ObserveManualTimer",
+          "label": "ObserveManualTimer",
+          "key": "enYyh0j2rU+mJNNtMLmr_A",
+          "reference": "@enYyh0j2rU+mJNNtMLmr_A",
+          "path": "ServerAction:ObserveManualTimer"
+        }
+      },
+      "propertyReferenceCollections": {},
+      "propertiesOmitted": {},
+      "propertyErrors": {},
+      "propertiesMissing": [],
+      "children": [
+        {
+          "kind": "Schedule",
+          "name": "Schedule",
+          "modelName": "",
+          "label": "Schedule",
+          "key": "vDFxJr0BpU2dT_t3MFr4uA.#ScheduleConfiguration",
+          "reference": "@vDFxJr0BpU2dT_t3MFr4uA.#ScheduleConfiguration",
+          "path": "Timer:ManualDebuggerProbe/Schedule:Schedule",
+          "properties": {
+            "WhenPublished": "False"
+          },
+          "propertyReferences": {},
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "ActionSignature",
+          "name": "WakeManualDebuggerProbe",
+          "modelName": "WakeManualDebuggerProbe",
+          "label": "WakeManualDebuggerProbe",
+          "key": "vDFxJr0BpU2dT_t3MFr4uA.#WakeTimer",
+          "reference": "@vDFxJr0BpU2dT_t3MFr4uA.#WakeTimer",
+          "path": "Timer:ManualDebuggerProbe/ActionSignature:WakeManualDebuggerProbe",
+          "properties": {
+            "Name": "WakeManualDebuggerProbe",
+            "ReadableIdentifier": "WakeManualDebuggerProbe"
+          },
+          "propertyReferences": {},
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        }
+      ],
+      "childrenTotal": 2,
+      "childrenOmitted": 0
+    },
+    {
+      "kind": "ServerAction",
+      "name": "WakeManualTimer",
+      "modelName": "WakeManualTimer",
+      "label": "WakeManualTimer",
+      "key": "urnMDNjf+Uez2lw9hLc75A",
+      "reference": "@urnMDNjf+Uez2lw9hLc75A",
+      "path": "ServerAction:WakeManualTimer",
+      "properties": {
+        "Description": "Invokes this fixture Timer's original native WakeTimer signature once. Scheduling is not execution completion.",
+        "Function": "False",
+        "Name": "WakeManualTimer",
+        "Public": "False",
+        "Shareable": "False",
+        "ReadableIdentifier": "WakeManualTimer"
+      },
+      "propertyReferences": {},
+      "propertyReferenceCollections": {},
+      "propertiesOmitted": {},
+      "propertyErrors": {},
+      "propertiesMissing": [],
+      "children": [
+        {
+          "kind": "EndNode",
+          "name": "End",
+          "modelName": "",
+          "label": "End",
+          "key": "68ff46erLUGwDA+52nTHxA",
+          "reference": "@68ff46erLUGwDA+52nTHxA",
+          "path": "ServerAction:WakeManualTimer/EndNode:End",
+          "properties": {
+            "Connectors": "[]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "VerticalPosition": "4000",
+            "ReadableIdentifier": "(3200,4000)"
+          },
+          "propertyReferences": {},
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "ExecuteServerActionNode",
+          "name": "WakeManualDebuggerProbe",
+          "modelName": "WakeManualDebuggerProbe",
+          "label": "WakeManualDebuggerProbe",
+          "key": "p14XpAVHJke7e9dmlDRwrQ",
+          "reference": "@p14XpAVHJke7e9dmlDRwrQ",
+          "path": "ServerAction:WakeManualTimer/ExecuteServerActionNode:WakeManualDebuggerProbe",
+          "properties": {
+            "Action": "ActionSignature:WakeManualDebuggerProbe",
+            "AnimationEffect": "None",
+            "Connectors": "[ActionConnector:]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Name": "WakeManualDebuggerProbe",
+            "Target": "EndNode:End",
+            "VerticalPosition": "2400",
+            "ReadableIdentifier": "WakeManualDebuggerProbe"
+          },
+          "propertyReferences": {
+            "Action": {
+              "kind": "ActionSignature",
+              "name": "WakeManualDebuggerProbe",
+              "label": "WakeManualDebuggerProbe",
+              "key": "vDFxJr0BpU2dT_t3MFr4uA.#WakeTimer",
+              "reference": "@vDFxJr0BpU2dT_t3MFr4uA.#WakeTimer",
+              "path": "Timer:ManualDebuggerProbe/ActionSignature:WakeManualDebuggerProbe"
+            },
+            "Target": {
+              "kind": "EndNode",
+              "name": "",
+              "label": "End",
+              "key": "68ff46erLUGwDA+52nTHxA",
+              "reference": "@68ff46erLUGwDA+52nTHxA",
+              "path": "ServerAction:WakeManualTimer/EndNode:End"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "hVByNZl4pUaIa5KKir3vVg",
+                  "reference": "@hVByNZl4pUaIa5KKir3vVg",
+                  "path": "ServerAction:WakeManualTimer/ExecuteServerActionNode:WakeManualDebuggerProbe/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "hVByNZl4pUaIa5KKir3vVg",
+              "reference": "@hVByNZl4pUaIa5KKir3vVg",
+              "path": "ServerAction:WakeManualTimer/ExecuteServerActionNode:WakeManualDebuggerProbe/ActionConnector:",
+              "properties": {
+                "Target": "EndNode:End"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "EndNode",
+                  "name": "",
+                  "label": "End",
+                  "key": "68ff46erLUGwDA+52nTHxA",
+                  "reference": "@68ff46erLUGwDA+52nTHxA",
+                  "path": "ServerAction:WakeManualTimer/EndNode:End"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 1,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "StartNode",
+          "name": "Start",
+          "modelName": "",
+          "label": "Start",
+          "key": "LPvtX+m+DkiUkM9HRC2omQ",
+          "reference": "@LPvtX+m+DkiUkM9HRC2omQ",
+          "path": "ServerAction:WakeManualTimer/StartNode:Start",
+          "properties": {
+            "Connectors": "[ActionConnector:]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Target": "ExecuteServerActionNode:WakeManualDebuggerProbe",
+            "VerticalPosition": "800",
+            "ReadableIdentifier": "(3200,800)"
+          },
+          "propertyReferences": {
+            "Target": {
+              "kind": "ExecuteServerActionNode",
+              "name": "WakeManualDebuggerProbe",
+              "label": "WakeManualDebuggerProbe",
+              "key": "p14XpAVHJke7e9dmlDRwrQ",
+              "reference": "@p14XpAVHJke7e9dmlDRwrQ",
+              "path": "ServerAction:WakeManualTimer/ExecuteServerActionNode:WakeManualDebuggerProbe"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "1ySIq7S5d0+LgRQXPBN6Sw",
+                  "reference": "@1ySIq7S5d0+LgRQXPBN6Sw",
+                  "path": "ServerAction:WakeManualTimer/StartNode:Start/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "1ySIq7S5d0+LgRQXPBN6Sw",
+              "reference": "@1ySIq7S5d0+LgRQXPBN6Sw",
+              "path": "ServerAction:WakeManualTimer/StartNode:Start/ActionConnector:",
+              "properties": {
+                "Target": "ExecuteServerActionNode:WakeManualDebuggerProbe"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "ExecuteServerActionNode",
+                  "name": "WakeManualDebuggerProbe",
+                  "label": "WakeManualDebuggerProbe",
+                  "key": "p14XpAVHJke7e9dmlDRwrQ",
+                  "reference": "@p14XpAVHJke7e9dmlDRwrQ",
+                  "path": "ServerAction:WakeManualTimer/ExecuteServerActionNode:WakeManualDebuggerProbe"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 1,
+          "childrenOmitted": 0
+        }
+      ],
+      "childrenTotal": 3,
+      "childrenOmitted": 0
+    },
+    {
+      "kind": "ClientAction",
+      "name": "RequestManualTimer",
+      "modelName": "RequestManualTimer",
+      "label": "RequestManualTimer",
+      "key": "28_s55xnKkKIVMs04pebsQ",
+      "reference": "@28_s55xnKkKIVMs04pebsQ",
+      "path": "ClientAction:RequestManualTimer",
+      "properties": {
+        "Description": "Original client caller of the fixture native Timer wake. Explicit app-user invocation; no lifecycle trigger or timer inputs.",
+        "Function": "False",
+        "Name": "RequestManualTimer",
+        "Public": "True",
+        "Shareable": "True",
+        "ReadableIdentifier": "RequestManualTimer"
+      },
+      "propertyReferences": {},
+      "propertyReferenceCollections": {},
+      "propertiesOmitted": {},
+      "propertyErrors": {},
+      "propertiesMissing": [],
+      "children": [
+        {
+          "kind": "StartNode",
+          "name": "Start",
+          "modelName": "",
+          "label": "Start",
+          "key": "kV03fuWQBECl00GP1wKrxA",
+          "reference": "@kV03fuWQBECl00GP1wKrxA",
+          "path": "ClientAction:RequestManualTimer/StartNode:Start",
+          "properties": {
+            "Connectors": "[ActionConnector:]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Target": "ExecuteServerActionNode:WakeManualTimer",
+            "VerticalPosition": "800",
+            "ReadableIdentifier": "(3200,800)"
+          },
+          "propertyReferences": {
+            "Target": {
+              "kind": "ExecuteServerActionNode",
+              "name": "WakeManualTimer",
+              "label": "WakeManualTimer",
+              "key": "4hv3vA8Fk0eMIzjTbUbspQ",
+              "reference": "@4hv3vA8Fk0eMIzjTbUbspQ",
+              "path": "ClientAction:RequestManualTimer/ExecuteServerActionNode:WakeManualTimer"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "VALaytQz+kK5rE6O9KsonQ",
+                  "reference": "@VALaytQz+kK5rE6O9KsonQ",
+                  "path": "ClientAction:RequestManualTimer/StartNode:Start/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "VALaytQz+kK5rE6O9KsonQ",
+              "reference": "@VALaytQz+kK5rE6O9KsonQ",
+              "path": "ClientAction:RequestManualTimer/StartNode:Start/ActionConnector:",
+              "properties": {
+                "Target": "ExecuteServerActionNode:WakeManualTimer"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "ExecuteServerActionNode",
+                  "name": "WakeManualTimer",
+                  "label": "WakeManualTimer",
+                  "key": "4hv3vA8Fk0eMIzjTbUbspQ",
+                  "reference": "@4hv3vA8Fk0eMIzjTbUbspQ",
+                  "path": "ClientAction:RequestManualTimer/ExecuteServerActionNode:WakeManualTimer"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 1,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "ExecuteServerActionNode",
+          "name": "WakeManualTimer",
+          "modelName": "WakeManualTimer",
+          "label": "WakeManualTimer",
+          "key": "4hv3vA8Fk0eMIzjTbUbspQ",
+          "reference": "@4hv3vA8Fk0eMIzjTbUbspQ",
+          "path": "ClientAction:RequestManualTimer/ExecuteServerActionNode:WakeManualTimer",
+          "properties": {
+            "Action": "ServerAction:WakeManualTimer",
+            "AnimationEffect": "None",
+            "Connectors": "[ActionConnector:]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Name": "WakeManualTimer",
+            "Target": "EndNode:End",
+            "VerticalPosition": "2400",
+            "ReadableIdentifier": "WakeManualTimer"
+          },
+          "propertyReferences": {
+            "Action": {
+              "kind": "ServerAction",
+              "name": "WakeManualTimer",
+              "label": "WakeManualTimer",
+              "key": "urnMDNjf+Uez2lw9hLc75A",
+              "reference": "@urnMDNjf+Uez2lw9hLc75A",
+              "path": "ServerAction:WakeManualTimer"
+            },
+            "Target": {
+              "kind": "EndNode",
+              "name": "",
+              "label": "End",
+              "key": "Kiti8xYltk6Re21FHKGRsA",
+              "reference": "@Kiti8xYltk6Re21FHKGRsA",
+              "path": "ClientAction:RequestManualTimer/EndNode:End"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "4A4R4u1e00K_njxO_DbOzQ",
+                  "reference": "@4A4R4u1e00K_njxO_DbOzQ",
+                  "path": "ClientAction:RequestManualTimer/ExecuteServerActionNode:WakeManualTimer/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "4A4R4u1e00K_njxO_DbOzQ",
+              "reference": "@4A4R4u1e00K_njxO_DbOzQ",
+              "path": "ClientAction:RequestManualTimer/ExecuteServerActionNode:WakeManualTimer/ActionConnector:",
+              "properties": {
+                "Target": "EndNode:End"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "EndNode",
+                  "name": "",
+                  "label": "End",
+                  "key": "Kiti8xYltk6Re21FHKGRsA",
+                  "reference": "@Kiti8xYltk6Re21FHKGRsA",
+                  "path": "ClientAction:RequestManualTimer/EndNode:End"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 1,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "EndNode",
+          "name": "End",
+          "modelName": "",
+          "label": "End",
+          "key": "Kiti8xYltk6Re21FHKGRsA",
+          "reference": "@Kiti8xYltk6Re21FHKGRsA",
+          "path": "ClientAction:RequestManualTimer/EndNode:End",
+          "properties": {
+            "Connectors": "[]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "VerticalPosition": "4000",
+            "ReadableIdentifier": "(3200,4000)"
+          },
+          "propertyReferences": {},
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        }
+      ],
+      "childrenTotal": 3,
+      "childrenOmitted": 0
+    },
+    {
+      "kind": "ServerAction",
+      "name": "ObserveManualTimer",
+      "modelName": "ObserveManualTimer",
+      "label": "ObserveManualTimer",
+      "key": "enYyh0j2rU+mJNNtMLmr_A",
+      "reference": "@enYyh0j2rU+mJNNtMLmr_A",
+      "path": "ServerAction:ObserveManualTimer",
+      "properties": {
+        "Description": "Manual diagnostic Timer only: local Counter=40 then Counter=Counter+2. No inputs, events, entities, integrations or recurring schedule.",
+        "Function": "False",
+        "Name": "ObserveManualTimer",
+        "Public": "False",
+        "Shareable": "False",
+        "ReadableIdentifier": "ObserveManualTimer"
+      },
+      "propertyReferences": {},
+      "propertyReferenceCollections": {},
+      "propertiesOmitted": {},
+      "propertyErrors": {},
+      "propertiesMissing": [],
+      "children": [
+        {
+          "kind": "LocalVariable",
+          "name": "Counter",
+          "modelName": "Counter",
+          "label": "Counter",
+          "key": "DbYXZknt6UOXeLDXrueXzg",
+          "reference": "@DbYXZknt6UOXeLDXrueXzg",
+          "path": "ServerAction:ObserveManualTimer/LocalVariable:Counter",
+          "properties": {
+            "DataType": "BasicType:Integer",
+            "Name": "Counter",
+            "ReadableIdentifier": "Counter"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Integer",
+              "key": "j2Lc0phK0kuggij4gQYfAw",
+              "reference": "@j2Lc0phK0kuggij4gQYfAw",
+              "path": "BasicType:Integer"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "AssignNode",
+          "name": "Observe value change",
+          "modelName": "",
+          "label": "Observe value change",
+          "key": "0f2+BFB1Z0OgaZs6017TVA",
+          "reference": "@0f2+BFB1Z0OgaZs6017TVA",
+          "path": "ServerAction:ObserveManualTimer/AssignNode:Observe value change",
+          "properties": {
+            "Connectors": "[ActionConnector:]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Label": "Observe value change",
+            "Target": "EndNode:End",
+            "VerticalPosition": "4000",
+            "ReadableIdentifier": "(3200,4000)"
+          },
+          "propertyReferences": {
+            "Target": {
+              "kind": "EndNode",
+              "name": "",
+              "label": "End",
+              "key": "CW_W+10Y1UW27mAqwy2e0A",
+              "reference": "@CW_W+10Y1UW27mAqwy2e0A",
+              "path": "ServerAction:ObserveManualTimer/EndNode:End"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "zDexTtsK50mJUIQnEt1xYg",
+                  "reference": "@zDexTtsK50mJUIQnEt1xYg",
+                  "path": "ServerAction:ObserveManualTimer/AssignNode:Observe value change/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "Assignment",
+              "name": "Counter = Counter + 2",
+              "modelName": "",
+              "label": "Counter = Counter + 2",
+              "key": "bPDAkRA8nU26qBu5z43umw",
+              "reference": "@bPDAkRA8nU26qBu5z43umw",
+              "path": "ServerAction:ObserveManualTimer/AssignNode:Observe value change/Assignment:Counter = Counter + 2",
+              "properties": {
+                "Value": "Counter + 2",
+                "Variable": "Counter"
+              },
+              "propertyReferences": {},
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "Counter",
+                  "modelName": "",
+                  "label": "Counter",
+                  "key": "bPDAkRA8nU26qBu5z43umw.#Variable",
+                  "reference": "@bPDAkRA8nU26qBu5z43umw.#Variable",
+                  "path": "ServerAction:ObserveManualTimer/AssignNode:Observe value change/Assignment:Counter = Counter + 2/TextBasedExpression:Counter",
+                  "properties": {
+                    "Type": "BasicType:Integer"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Integer",
+                      "key": "j2Lc0phK0kuggij4gQYfAw",
+                      "reference": "@j2Lc0phK0kuggij4gQYfAw",
+                      "path": "BasicType:Integer"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                },
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "Counter + 2",
+                  "modelName": "",
+                  "label": "Counter + 2",
+                  "key": "bPDAkRA8nU26qBu5z43umw.#Value",
+                  "reference": "@bPDAkRA8nU26qBu5z43umw.#Value",
+                  "path": "ServerAction:ObserveManualTimer/AssignNode:Observe value change/Assignment:Counter = Counter + 2/TextBasedExpression:Counter + 2",
+                  "properties": {
+                    "Type": "BasicType:Integer"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Integer",
+                      "key": "j2Lc0phK0kuggij4gQYfAw",
+                      "reference": "@j2Lc0phK0kuggij4gQYfAw",
+                      "path": "BasicType:Integer"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 2,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "zDexTtsK50mJUIQnEt1xYg",
+              "reference": "@zDexTtsK50mJUIQnEt1xYg",
+              "path": "ServerAction:ObserveManualTimer/AssignNode:Observe value change/ActionConnector:",
+              "properties": {
+                "Target": "EndNode:End"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "EndNode",
+                  "name": "",
+                  "label": "End",
+                  "key": "CW_W+10Y1UW27mAqwy2e0A",
+                  "reference": "@CW_W+10Y1UW27mAqwy2e0A",
+                  "path": "ServerAction:ObserveManualTimer/EndNode:End"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 2,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "StartNode",
+          "name": "Start",
+          "modelName": "",
+          "label": "Start",
+          "key": "k5xNfMPOwE+eE6_71cSZQQ",
+          "reference": "@k5xNfMPOwE+eE6_71cSZQQ",
+          "path": "ServerAction:ObserveManualTimer/StartNode:Start",
+          "properties": {
+            "Connectors": "[ActionConnector:]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Target": "AssignNode:Set synthetic value",
+            "VerticalPosition": "800",
+            "ReadableIdentifier": "(3200,800)"
+          },
+          "propertyReferences": {
+            "Target": {
+              "kind": "AssignNode",
+              "name": "",
+              "label": "Set synthetic value",
+              "key": "pZCkFyKc+kGbXj9NF3ZyVA",
+              "reference": "@pZCkFyKc+kGbXj9NF3ZyVA",
+              "path": "ServerAction:ObserveManualTimer/AssignNode:Set synthetic value"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "VAHB7rFgc0aW0feHaDs25w",
+                  "reference": "@VAHB7rFgc0aW0feHaDs25w",
+                  "path": "ServerAction:ObserveManualTimer/StartNode:Start/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "VAHB7rFgc0aW0feHaDs25w",
+              "reference": "@VAHB7rFgc0aW0feHaDs25w",
+              "path": "ServerAction:ObserveManualTimer/StartNode:Start/ActionConnector:",
+              "properties": {
+                "Target": "AssignNode:Set synthetic value"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "AssignNode",
+                  "name": "",
+                  "label": "Set synthetic value",
+                  "key": "pZCkFyKc+kGbXj9NF3ZyVA",
+                  "reference": "@pZCkFyKc+kGbXj9NF3ZyVA",
+                  "path": "ServerAction:ObserveManualTimer/AssignNode:Set synthetic value"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 1,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "EndNode",
+          "name": "End",
+          "modelName": "",
+          "label": "End",
+          "key": "CW_W+10Y1UW27mAqwy2e0A",
+          "reference": "@CW_W+10Y1UW27mAqwy2e0A",
+          "path": "ServerAction:ObserveManualTimer/EndNode:End",
+          "properties": {
+            "Connectors": "[]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "VerticalPosition": "5600",
+            "ReadableIdentifier": "(3200,5600)"
+          },
+          "propertyReferences": {},
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "AssignNode",
+          "name": "Set synthetic value",
+          "modelName": "",
+          "label": "Set synthetic value",
+          "key": "pZCkFyKc+kGbXj9NF3ZyVA",
+          "reference": "@pZCkFyKc+kGbXj9NF3ZyVA",
+          "path": "ServerAction:ObserveManualTimer/AssignNode:Set synthetic value",
+          "properties": {
+            "Connectors": "[ActionConnector:]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Label": "Set synthetic value",
+            "Target": "AssignNode:Observe value change",
+            "VerticalPosition": "2400",
+            "ReadableIdentifier": "(3200,2400)"
+          },
+          "propertyReferences": {
+            "Target": {
+              "kind": "AssignNode",
+              "name": "",
+              "label": "Observe value change",
+              "key": "0f2+BFB1Z0OgaZs6017TVA",
+              "reference": "@0f2+BFB1Z0OgaZs6017TVA",
+              "path": "ServerAction:ObserveManualTimer/AssignNode:Observe value change"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "kP8lvsKYFUaKMfXcRjOF4w",
+                  "reference": "@kP8lvsKYFUaKMfXcRjOF4w",
+                  "path": "ServerAction:ObserveManualTimer/AssignNode:Set synthetic value/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "Assignment",
+              "name": "Counter = 40",
+              "modelName": "",
+              "label": "Counter = 40",
+              "key": "JvtWj6T34UOsX7Bff5c9RQ",
+              "reference": "@JvtWj6T34UOsX7Bff5c9RQ",
+              "path": "ServerAction:ObserveManualTimer/AssignNode:Set synthetic value/Assignment:Counter = 40",
+              "properties": {
+                "Value": "40",
+                "Variable": "Counter"
+              },
+              "propertyReferences": {},
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "Counter",
+                  "modelName": "",
+                  "label": "Counter",
+                  "key": "JvtWj6T34UOsX7Bff5c9RQ.#Variable",
+                  "reference": "@JvtWj6T34UOsX7Bff5c9RQ.#Variable",
+                  "path": "ServerAction:ObserveManualTimer/AssignNode:Set synthetic value/Assignment:Counter = 40/TextBasedExpression:Counter",
+                  "properties": {
+                    "Type": "BasicType:Integer"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Integer",
+                      "key": "j2Lc0phK0kuggij4gQYfAw",
+                      "reference": "@j2Lc0phK0kuggij4gQYfAw",
+                      "path": "BasicType:Integer"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                },
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "40",
+                  "modelName": "",
+                  "label": "40",
+                  "key": "JvtWj6T34UOsX7Bff5c9RQ.#Value",
+                  "reference": "@JvtWj6T34UOsX7Bff5c9RQ.#Value",
+                  "path": "ServerAction:ObserveManualTimer/AssignNode:Set synthetic value/Assignment:Counter = 40/TextBasedExpression:40",
+                  "properties": {
+                    "Type": "BasicType:Integer"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Integer",
+                      "key": "j2Lc0phK0kuggij4gQYfAw",
+                      "reference": "@j2Lc0phK0kuggij4gQYfAw",
+                      "path": "BasicType:Integer"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 2,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "kP8lvsKYFUaKMfXcRjOF4w",
+              "reference": "@kP8lvsKYFUaKMfXcRjOF4w",
+              "path": "ServerAction:ObserveManualTimer/AssignNode:Set synthetic value/ActionConnector:",
+              "properties": {
+                "Target": "AssignNode:Observe value change"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "AssignNode",
+                  "name": "",
+                  "label": "Observe value change",
+                  "key": "0f2+BFB1Z0OgaZs6017TVA",
+                  "reference": "@0f2+BFB1Z0OgaZs6017TVA",
+                  "path": "ServerAction:ObserveManualTimer/AssignNode:Observe value change"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 2,
+          "childrenOmitted": 0
+        }
+      ],
+      "childrenTotal": 5,
+      "childrenOmitted": 0
+    }
+  ]
+}

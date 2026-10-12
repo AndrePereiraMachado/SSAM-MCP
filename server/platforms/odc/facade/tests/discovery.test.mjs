@@ -716,7 +716,7 @@ test('the ODC index is built from the kernel CLI and the job suite, classifies r
     const index = first.index;
     assert.equal(index.schemaVersion, INDEX_SCHEMA);
     for (const op of ['agent', 'verbs', 'spec', 'logic', 'screen', 'html', 'html-visual', 'rest', 'rest-expose', 'soap']) assert.ok(index.contracts[op] && !index.contracts[op].error, op);
-    assert.deepEqual(Object.keys(index.contracts.verbs.verbs).sort(), ['agent', 'create', 'delete', 'dump', 'duplicate', 'find', 'get', 'html', 'layout', 'link', 'logic', 'move', 'reference', 'rename', 'replace', 'rest', 'rest-expose', 'screen', 'set', 'soap', 'spec', 'usages']);
+    assert.deepEqual(Object.keys(index.contracts.verbs.verbs).sort(), ['agent', 'create', 'delete', 'dump', 'duplicate', 'find', 'get', 'html', 'layout', 'link', 'logic', 'move', 'prototype', 'reference', 'rename', 'replace', 'rest', 'rest-expose', 'screen', 'set', 'soap', 'spec', 'usages']);
     assert.ok(index.jobs.length >= 67, 'jobs: ' + index.jobs.length);
     assert.ok(index.jobs.every(j => typeof j.description === 'string' && j.opCount > 0 && /^[0-9a-f]{64}$/.test(j.sha256) && Array.isArray(j.bindings)));
     for (const j of index.jobs.filter(j => j.executed)) {

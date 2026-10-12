@@ -203,6 +203,14 @@ test('no template carries a real authorization, words, uuid or credential, and n
   assert.doesNotMatch(JSON.stringify(emitted), /python |\.ps1\b|dotnet build|\bssam (job|deliver|inspect|map|discover)\b|\bodc (studio|deliver|build)\b/);
 });
 
+test('the authPrompt reason says what the option does since 012e263e: the private window only with nothing stored; never refuses', () => {
+  const reasons = data.nonVerbEnums.filter(n => n.path === 'authPrompt').map(n => n.reason);
+  assert.equal(reasons.length, 1);
+  assert.match(reasons[0], /auto \(default\) opens the private Windows prompt in its own window only when the host has nothing stored/);
+  assert.match(reasons[0], /never refuses instead/);
+  assert.doesNotMatch(reasons[0], /never opens a prompt|headless compatibility/);
+});
+
 test('references inside tools.json resolve: equivalents, superseded unavailable entries, groups, intents', () => {
   const unavailable = new Set();
   const dir = path.join(here, '..', 'catalog', 'fragments', 'C');

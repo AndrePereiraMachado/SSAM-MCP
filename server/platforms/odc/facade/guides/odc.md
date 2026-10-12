@@ -16,7 +16,7 @@ With several ODC Studios open, pass `pid`. Never ask the person to close or rest
 - `studio_assets {}`: the tenant's assets, the same service as the Studio's Open dialog. Call it before any claim about what exists.
 - `ssam_map {lane:"odc", target}`: every element of the capture with its `@key`; then `studio_inspect {target, path:"@<key>", expectedSourceSha256}` for one element.
 - `studio_open {module}` opens a module from the organization (the upload link Publish needs); `studio_close {module}` closes unmodified copies.
-- `studio_snapshot {module}`, `studio_latest {module}`, `studio_consumers {module}`, `studio_reference_snapshot {module, producer, output}`.
+- `studio_snapshot {module}`, `studio_latest {module}`, `studio_consumers {module}`, `studio_reference_producers {module}` (the producers the open consumer can reference, read only), `studio_reference_snapshot {module, producer, output}`.
 - `ssam_app_url {app, screen}`: the home and screen URLs of an app; it opens nothing.
 - `studio_data {module, entity}`: development database records; writes are `studio_data_insert`, `studio_data_update`, `studio_data_delete` with the user's words.
 
@@ -38,6 +38,19 @@ Jobs: grave com Write (UTF-8) num arquivo e passe o caminho; nunca heredoc.
 What the ODC Studio rewrites on merge is refused before the build with the fix: a structure made public in an app (`ODC_STRUCTURE_PUBLIC_IN_APP`: flat outputs, a public entity, or a library) and a Refresh Data `MaxRecords` other than its aggregate's (`ODC_REFRESH_MAXRECORDS`: omit it; set Max. Records on the aggregate).
 
 While a merge or a publication runs, `studio_status {}` answers at once from that delivery's evidence (`fromEvidence:true`, `busy {command, since}`, stage, `merge-started.json`); the call that started it answers when it ends.
+
+## Protótipo HTML → telas nativas
+
+A prototype folder (index.html, app.js, styles.css, mock data, icons, images) becomes native screens in ONE call through the ssam server (it takes the job inline), with no reading and no conversion by the model:
+
+`studio_deliver {feature:"Protótipo <Prefixo>", module:"<módulo aberto>", job:{ops:[{op:"prototype", data:{source:"<pasta do protótipo, caminho absoluto>"}}]}, owners:["<Prefixo>"], changes:["Protótipo <Prefixo> importado como telas nativas"], publish:true, authorize:"<palavras do dono>"}`
+
+- `feature`, `owners` and `changes` may be left out: the ssam server fills them from the prototype's prefix (its `<title>` up to the first separator, in PascalCase).
+- Do not read `app.js`, `model.js`, `styles.css` or the HTML, and never split the views into several calls: SSAM renders the prototype headless and builds one screen per view in a flow of its own, a shell block, native popups, entities with the mock data, aggregates and server actions, with the prototype CSS verbatim in a theme of its own; `main`, `data` and `picture` (not HTML Element tags on ODC) are substituted. A name already taken by an element the import does not own becomes `<Prefix><Name>` (`renamedFrom`), never a refusal.
+- The owner's words in `authorize` cover the import, the publication and the demo data: after a clean publication the mock rows go into the empty regular entities the import created (`studio_data_insert`). `data.seed:false` leaves the data out.
+- A refusal of the prototype (`PROTOTYPE_*`) comes ONCE, before the Studio is touched, with every problem, the ready `patch` over `/ops/<i>/data` and `correctedJob`: send the patch as it is (`patch` + `basedOn`). `data.mapping` only when a refusal asks for it. A build problem on a generated item rebuilds once without it (`prototype.degraded`); a second failure is `VALIDATION_REFUSED` with `ssamDefect:true` and the `mapping.ignore` patch.
+- The answer carries the receipt in `prototype` (screens with `url`, popups, blocks, data, events, fidelity per state, Verify warnings, seed, timings). Give the person the screen links.
+- A rehearsal without merge only when the person asks: `until:"preview"` (ODC has no `until:"apply"`).
 
 ## Dialogs
 

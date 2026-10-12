@@ -46,6 +46,30 @@ internal static class ScIntegrationStudioSoap
 
     public static Uri Endpoint(string host) => new($"https://{ScGuard.Host(host)}{Path}");
 
+    // ExtensionDBProvider in the live IntegrationStudio WSDL: Name and ProviderName only.
+    // A nil/empty provider is not evidence that a mapping was removed.
+    public static JsonObject DatabaseProvider(ScSoapAnswer answer)
+    {
+        ScFailure Invalid() => new(ScCodes.RemoteError, "IntegrationStudio.asmx returned an invalid ExtensionDBProvider contract", true);
+        if (answer.Fields.Count != 1 || !answer.Fields.TryGetValue("dbConnection", out var value)
+            || value.Name != Ns + "dbConnection") throw Invalid();
+        XNamespace xsi = "http://www.w3.org/2001/XMLSchema-instance";
+        var nil = (string?)value.Attribute(xsi + "nil");
+        if (nil is "true" or "1")
+        {
+            if (value.HasElements || value.Value.Length != 0) throw Invalid();
+            return new JsonObject { ["providerObserved"] = false, ["mappingAbsentProven"] = false, ["dbConnection"] = null };
+        }
+        if (nil != null && nil is not "false" and not "0") throw Invalid();
+        var children = value.Elements().ToArray();
+        if (children.Length != 2 || children.Count(e => e.Name == Ns + "Name") != 1
+            || children.Count(e => e.Name == Ns + "ProviderName") != 1
+            || children.Any(e => e.HasElements || e.HasAttributes)) throw Invalid();
+        return new JsonObject { ["providerObserved"] = true, ["mappingAbsentProven"] = false,
+            ["dbConnection"] = new JsonObject { ["name"] = children.Single(e => e.Name == Ns + "Name").Value,
+                ["providerName"] = children.Single(e => e.Name == Ns + "ProviderName").Value } };
+    }
+
     /// <summary>The SOAP 1.1 envelope of one operation: username, password, then the operation's own fields in order.</summary>
     public static ScSoapRequest Request(string host, string operation, string user, string secret, params (string Name, string Value)[] fields)
     {
@@ -76,8 +100,15 @@ internal static class ScIntegrationStudioSoap
             return new ScSoapAnswer(status, text.Trim(), fields, messages);
         }
         var response = soapBody?.Elements().FirstOrDefault(e => e.Name.LocalName == operation + "Response");
+        if (operation == "TranslateLogicalDatabaseToDbConnection"
+            && (document.Root?.Name != Soap + "Envelope" || soapBody?.Name != Soap + "Body"
+                || soapBody.Elements().Count() != 1 || response?.Name != Ns + operation + "Response"
+                || response.Elements().Count() != 1))
+            throw new ScFailure(ScCodes.RemoteError, "IntegrationStudio.asmx returned an invalid database provider response", true);
         foreach (var field in response?.Elements() ?? [])
         {
+            if (operation == "TranslateLogicalDatabaseToDbConnection" && fields.ContainsKey(field.Name.LocalName))
+                throw new ScFailure(ScCodes.RemoteError, "IntegrationStudio.asmx returned duplicate database provider fields", true);
             if (string.Equals(field.Name.LocalName, "messages", StringComparison.OrdinalIgnoreCase))
                 messages.AddRange(field.Elements().Select(Message));
             else fields[field.Name.LocalName] = field;

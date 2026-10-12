@@ -101,7 +101,7 @@
   },
   {
     "id": "InvalidFlow_MalformedAction",
-    "hint": "Garantir um unico caminho ate ao no: remover conectores duplicados/ambiguos que chegam a {1}.",
+    "hint": "Garantir um unico caminho ate ao no da mensagem: remover conectores duplicados/ambiguos que chegam a ele.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
@@ -111,17 +111,17 @@
   },
   {
     "id": "InvalidFlow_TooManyNodes",
-    "hint": "Deixar apenas um no {1} (ex.: um so Start) no fluxo.",
+    "hint": "Deixar no fluxo apenas um no do tipo que a mensagem cita (ex.: um so Start).",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "RequiredConnector_In",
-    "hint": "Ligar um conector de entrada ao no {1} (ou apagar o no solto).",
+    "hint": "Ligar um conector de entrada ao no da mensagem (ou apagar o no solto).",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "RequiredConnector_Out",
-    "hint": "Ligar a saida do no {1} ao proximo no (End, Assign, ...).",
+    "hint": "Ligar a saida do no da mensagem ao proximo no (End, Assign, ...).",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
@@ -241,7 +241,7 @@
   },
   {
     "id": "RequiredPropertyValue_PropertyIn",
-    "hint": "Preencher a propriedade obrigatoria {0} em {1}.",
+    "hint": "Preencher a propriedade obrigatoria que a mensagem cita, no elemento do caminho.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
@@ -261,12 +261,12 @@
   },
   {
     "id": "InvalidVariable_UnknownVarIn",
-    "hint": "Criar a variavel/parametro referenciado ou corrigir o nome em {0}.",
+    "hint": "Criar a variavel/parametro referenciado ou corrigir o nome que a mensagem cita.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "InvalidVariable_UnknownObjInVar",
-    "hint": "Corrigir a referencia ao objeto {0} (foi apagado/renomeado) na variavel.",
+    "hint": "Corrigir a referencia ao objeto que a mensagem cita (foi apagado/renomeado) na variavel.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
@@ -291,7 +291,7 @@
   },
   {
     "id": "ParserUnexpectedElement",
-    "hint": "Corrigir a sintaxe da expressao junto do elemento {0}.",
+    "hint": "Corrigir a sintaxe da expressao junto do elemento que a mensagem cita.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
@@ -336,12 +336,12 @@
   },
   {
     "id": "ExpressionUnknownFunction",
-    "hint": "Corrigir o nome da funcao {0} ou marcar a action como Function e adicionar a dependencia.",
+    "hint": "Corrigir o nome da funcao que a mensagem cita (uma built-in deste Studio, uma action do modulo ou de uma dependencia marcada como Function) ou marcar a action como Function e adicionar a dependencia.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "ExpressionWrongNumberArguments",
-    "hint": "Passar o numero correto de argumentos a funcao {0}.",
+    "hint": "Passar o numero correto de argumentos a funcao que a mensagem cita.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
@@ -356,7 +356,7 @@
   },
   {
     "id": "ExpressionDuplicateParameter",
-    "hint": "Remover o argumento repetido {0} na chamada da funcao.",
+    "hint": "Remover o argumento repetido que a mensagem cita na chamada da funcao.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
@@ -371,7 +371,7 @@
   },
   {
     "id": "InvalidCSSStyle",
-    "hint": "Corrigir o nome da classe CSS {0} na propriedade Style Classes.",
+    "hint": "Corrigir o nome da classe CSS que a mensagem cita na propriedade Style Classes.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
@@ -391,12 +391,12 @@
   },
   {
     "id": "ExpressionUnknownAttribute",
-    "hint": "Corrigir o nome do atributo/record {0} (renomeado ou apagado) na expressao.",
+    "hint": "Corrigir o nome do atributo/record que a mensagem cita (renomeado ou apagado) na expressao.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "SitePropertyDefaultValueTooLarge",
-    "hint": "Encurtar o Default Value da Site Property para {1} caracteres.",
+    "hint": "Encurtar o Default Value da Site Property ao numero de caracteres que a mensagem da.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
@@ -446,27 +446,27 @@
   },
   {
     "id": "InvalidSQL_ReservedPrefix",
-    "hint": "Renomear: {0} e prefixo reservado no SQL.",
+    "hint": "Renomear o nome que a mensagem cita: e prefixo reservado no SQL.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "InvalidSQL_UnknownAttribute",
-    "hint": "Corrigir o nome do atributo {0} no SQL (ou usar {Entity}.[Attr]).",
+    "hint": "Corrigir o nome do atributo que a mensagem cita no SQL (ou usar {Entity}.[Attr]).",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "SQL_TenantId_wo_show_tenant_id",
-    "hint": "Ligar Show Tenant Identifier = Yes na Entity {1} antes de usar TenantId no SQL.",
+    "hint": "Ligar Show Tenant Identifier = Yes na Entity que a mensagem cita antes de usar TenantId no SQL.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "InvalidSQL_UnknownEntity",
-    "hint": "Corrigir a Entity {0} no SQL: usar {EntityName} e adicionar a dependencia.",
+    "hint": "Corrigir a Entity que a mensagem cita no SQL: usar {EntityName} e adicionar a dependencia.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "InvalidSQL_UnknownParam",
-    "hint": "Criar o parametro {0} no SQL node ou corrigir o nome no texto SQL.",
+    "hint": "Criar o parametro que a mensagem cita no SQL node ou corrigir o nome no texto SQL.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
@@ -506,12 +506,12 @@
   },
   {
     "id": "AmbiguousRelationsQuery",
-    "hint": "Escolher explicitamente a condicao de Join entre {0} e {1} (ha mais de uma FK).",
+    "hint": "Escolher explicitamente a condicao de Join entre as duas Entities que a mensagem cita (ha mais de uma FK).",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "CrossJoinQuery",
-    "hint": "Adicionar condicao de Join/filtro sobre a Entity {0} para evitar cross join.",
+    "hint": "Adicionar condicao de Join/filtro sobre a Entity que a mensagem cita para evitar cross join.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
@@ -531,12 +531,12 @@
   },
   {
     "id": "MissingWidgetContent",
-    "hint": "Colocar conteudo dentro do widget {0} ou apaga-lo.",
+    "hint": "Colocar conteudo dentro do widget da mensagem ou apaga-lo.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "MissingContent",
-    "hint": "Colocar conteudo em {0} ou apagar.",
+    "hint": "Colocar conteudo no elemento da mensagem ou apaga-lo.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
@@ -571,7 +571,7 @@
   },
   {
     "id": "InvalidPublic_ThemeOnExceptionNotPublic",
-    "hint": "Marcar como Public o elemento {1} usado pelo Theme publico.",
+    "hint": "Marcar como Public o elemento que a mensagem cita, usado pelo Theme publico.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
@@ -581,7 +581,7 @@
   },
   {
     "id": "InvalidRefecenceInSystemESpace",
-    "hint": "Remover a referencia {0} (nao permitida dentro de {1}).",
+    "hint": "Remover a referencia que a mensagem cita (nao permitida dentro do modulo que ela nomeia).",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
@@ -591,7 +591,7 @@
   },
   {
     "id": "ParserExpectedElement",
-    "hint": "Corrigir a sintaxe da expressao: esperado {0} em vez de {1}.",
+    "hint": "Corrigir a sintaxe da expressao: escrever o que a mensagem diz esperado no lugar do que ela cita.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
@@ -626,12 +626,12 @@
   },
   {
     "id": "ParentOfPublicActivityMustBePublic",
-    "hint": "Marcar o Process {1} como Public ou a atividade como nao publica.",
+    "hint": "Marcar o Process que a mensagem cita como Public ou a atividade como nao publica.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "InvalidEntityIndex_LongText",
-    "hint": "Retirar do index o atributo Text com Length > {2} (ou reduzir o Length).",
+    "hint": "Retirar do index o atributo Text mais longo que o limite da mensagem (ou reduzir o Length).",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
@@ -651,12 +651,12 @@
   },
   {
     "id": "InvalidPublic_BlockLinkParameterType",
-    "hint": "Nao passar {0} (ex.: Record/List) em links a partir de Blocks publicos; usar Id.",
+    "hint": "Nao passar o parametro que a mensagem cita (ex.: Record/List) em links a partir de Blocks publicos; usar Id.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "InvalidParameter_InEmailLink",
-    "hint": "Nao passar {0} em links de Email; usar identificadores/basicos.",
+    "hint": "Nao passar o parametro que a mensagem cita em links de Email; usar identificadores/basicos.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
@@ -696,17 +696,17 @@
   },
   {
     "id": "DescriptionMissing",
-    "hint": "Preencher Description do Tutorial {0}.",
+    "hint": "Preencher Description do Tutorial que a mensagem cita.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "RecursiveTutorialBlocks",
-    "hint": "Quebrar o ciclo de Tutorial Blocks: {0}.",
+    "hint": "Quebrar o ciclo de Tutorial Blocks que a mensagem lista.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "RecursiveThemeHierarchy",
-    "hint": "Quebrar o ciclo de Base Theme: {0}.",
+    "hint": "Quebrar o ciclo de Base Theme que a mensagem lista.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
@@ -736,7 +736,7 @@
   },
   {
     "id": "InvalidDataSet_InvalidExecutionContext",
-    "hint": "Mover o Aggregate {0} para um contexto suportado (ex.: Data Action/Server Action).",
+    "hint": "Mover o Aggregate que a mensagem cita para um contexto suportado (ex.: Data Action/Server Action).",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
@@ -751,37 +751,37 @@
   },
   {
     "id": "CustomObjectError",
-    "hint": "Erro de plugin/objeto custom: ler {1} no proprio texto.",
+    "hint": "Erro de plugin/objeto custom (widget como Dropdown): a mensagem diz o que falta; um tipo exigido em vez de 'None' vem de uma expressao sem tipo (nome desconhecido) na mesma propriedade.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "CustomObjectWarning",
-    "hint": "Warning de plugin/objeto custom: ler {1} no proprio texto.",
+    "hint": "Warning de plugin/objeto custom: a correcao esta no texto da mensagem.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "JavascriptNode_UnknownParam",
-    "hint": "Criar o parametro {0} no no JavaScript ou corrigir o nome no codigo ($parameters.X).",
+    "hint": "Criar o parametro que a mensagem cita no no JavaScript ou corrigir o nome no codigo ($parameters.X).",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "JavascriptNode_EmptyJs",
-    "hint": "Escrever codigo no no JavaScript {0} ou apaga-lo.",
+    "hint": "Escrever codigo no no JavaScript da mensagem ou apaga-lo.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "JavascriptNode_SyntaxErrors",
-    "hint": "Corrigir a sintaxe do JavaScript em {0}.",
+    "hint": "Corrigir a sintaxe do JavaScript no no da mensagem.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "LightweightExpression_UnknownObj",
-    "hint": "Corrigir a referencia ao objeto {0} (apagado/renomeado) em {1}.",
+    "hint": "Corrigir a referencia ao objeto que a mensagem cita (apagado/renomeado) no elemento que ela nomeia.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "LightweightExpression_ResourceNotDeployed",
-    "hint": "Definir Deploy Action do Resource {0} (Deploy to Target Directory) ou nao o referenciar.",
+    "hint": "Definir Deploy Action do Resource que a mensagem cita (Deploy to Target Directory) ou nao o referenciar.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
@@ -791,12 +791,12 @@
   },
   {
     "id": "InvalidRecursiveScript",
-    "hint": "Quebrar a dependencia circular entre Scripts: {0}.",
+    "hint": "Quebrar a dependencia circular entre os Scripts que a mensagem lista.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "Script_SyntaxErrors",
-    "hint": "Corrigir a sintaxe do Script {0}.",
+    "hint": "Corrigir a sintaxe do Script que a mensagem cita.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
@@ -811,17 +811,17 @@
   },
   {
     "id": "ModelFeature_InDevelopmentFeature",
-    "hint": "Funcionalidade em desenvolvimento: aceitar limitacoes ou nao usar {0}.",
+    "hint": "Funcionalidade em desenvolvimento: aceitar limitacoes ou nao usar a funcionalidade que a mensagem cita.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "ModelFeature_TechnicalPreview",
-    "hint": "Technical Preview: aceitar limitacoes ou nao usar {0}.",
+    "hint": "Technical Preview: aceitar limitacoes ou nao usar a funcionalidade que a mensagem cita.",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {
     "id": "ModelFeature_RemovedFeature",
-    "hint": "Remover o uso de {0} (nao suportado nesta versao).",
+    "hint": "Remover o uso da funcionalidade que a mensagem cita (nao suportada nesta versao).",
     "origin": "curada (texto da mensagem + codigo do verificador)"
   },
   {

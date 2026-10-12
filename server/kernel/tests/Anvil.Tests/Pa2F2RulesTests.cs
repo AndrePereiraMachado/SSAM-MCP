@@ -132,10 +132,14 @@ public sealed class Pa2F2RulesTests
     [Fact]
     public void AListOfAnEntityReadsTheAttributesDirectly()
     {
-        // The real case: `Horarios.Current.RestauranteHorario.DiaSemana` -> Can't identify 'RestauranteHorario'.
-        var wrong = Analyze(Logic("""{"name":"Horarios_Validar","inputs":[{"name":"Horarios","type":"RestauranteHorario List"}],"outputs":[{"name":"Ok","type":"Boolean"}],"steps":[{"assign":{"Ok":"Horarios.Current.RestauranteHorario.DiaSemana >= 0"}}]}""", Restaurants));
-        var problem = Assert.Single(Problems(wrong, "EXPR_UNKNOWN_IDENTIFIER"));
-        Assert.Contains("write Horarios.Current.DiaSemana", problem["fix"]!.GetValue<string>());
+        // The real case: `Horarios.Current.RestauranteHorario.DiaSemana` -> Can't identify 'RestauranteHorario'. The patch is
+        // certain, so the engine writes it (lentidao 2026-10-12, JobNormalizer) and lists it instead of refusing.
+        var job = JsonNode.Parse(Logic("""{"name":"Horarios_Validar","inputs":[{"name":"Horarios","type":"RestauranteHorario List"}],"outputs":[{"name":"Ok","type":"Boolean"}],"steps":[{"assign":{"Ok":"Horarios.Current.RestauranteHorario.DiaSemana >= 0"}}]}""", Restaurants))!;
+        var wrong = JobPreflight.Analyze(job["ops"]!.AsArray(), job, []);
+        Assert.Empty(Problems(wrong, "EXPR_UNKNOWN_IDENTIFIER"));
+        var normalized = Assert.Single(wrong["normalizations"]!.AsArray().OfType<JsonObject>());
+        Assert.Equal("Horarios.Current.DiaSemana >= 0", normalized["to"]!.GetValue<string>());
+        Assert.Equal("Horarios.Current.DiaSemana >= 0", job["ops"]![1]!["data"]!["actions"]![0]!["steps"]![0]!["assign"]!["Ok"]!.GetValue<string>());
         var right = Analyze(Logic("""{"name":"Horarios_Validar","inputs":[{"name":"Horarios","type":"RestauranteHorario List"}],"outputs":[{"name":"Ok","type":"Boolean"}],"steps":[{"assign":{"Ok":"Horarios.Current.DiaSemana >= 0"}}]}""", Restaurants));
         Assert.Empty(Problems(right, "EXPR_UNKNOWN_IDENTIFIER"));
     }

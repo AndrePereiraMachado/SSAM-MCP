@@ -25,6 +25,21 @@ export async function windowsApiClientCredential(mode, origin = DEFAULT_PORTAL_O
   }
 }
 
+// Status only: neither secret nor client identity is marshalled to stdout.
+export async function windowsApiClientFixtureStatus(host,operationUuid){
+ if(process.platform!=='win32')fail('API_CLIENT_VAULT_UNAVAILABLE','Fixture vault status requires the managed Windows host.');
+ if(!/^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$/.test(host??'')||!host.includes('.')
+  ||!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(operationUuid??''))fail('INPUT_INVALID','Exact host and canonical fixture operation UUID are required.');
+ try{
+  const {stdout}=await run(apiClientPowerShell,['-NoProfile','-NonInteractive','-File',apiClientCredentialHelper,'-Mode','status','-Origin','https://'+host,'-FixtureOperationUuid',operationUuid],
+   {windowsHide:true,timeout:15000,maxBuffer:2000});
+  const value=JSON.parse(stdout.replace(/^\uFEFF/,''));
+  const entry='SSAM/ODC3/'+host+'/APIClientFixture/'+operationUuid;
+  if(typeof value.available!=='boolean'||value.target!=='odc3-api-client-fixture'||value.fixtureOperationUuid!==operationUuid||value.entry!==entry)throw new Error();
+  return {available:value.available,target:entry,operationUuid};
+ }catch{fail('API_CLIENT_VAULT_UNAVAILABLE','The exact fixture credential presence could not be verified. No private value was exposed.');}
+}
+
 export async function resolvePublicApiEnvironment(env = process.env, credentialProvider = windowsApiClientCredential) {
   const configuredId = typeof env.ODC_CLIENT_ID === 'string' && env.ODC_CLIENT_ID.length > 0;
   const configuredSecret = typeof env.ODC_CLIENT_SECRET === 'string' && env.ODC_CLIENT_SECRET.length > 0;

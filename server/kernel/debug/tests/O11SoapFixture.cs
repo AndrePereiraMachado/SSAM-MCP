@@ -11,6 +11,19 @@ using OutSystems.RuntimeCommon;
 // real SoapTransport against the installed native SOAP client and ServerDebuggerEventFactory. No live environment.
 internal static class O11SoapFixture
 {
+    // Synthetic XML in the attribute names ServerDebuggerEventFactory/DebuggerExtensions.LoadAttributes bind by field
+    // name (installed ServiceStudio.ServerCommunications.API: ServerDebuggerEvent + ThreadEndEvent, see
+    // .local/debugger/o11-threadend-contract/findings.json). ThreadEnd carries no success/failure field.
+    internal static string StopEventXml(string threadId, long eventId, string? requestId, string node, bool longLived = true, string name = "AtBreakpointEvent") =>
+        "<" + name + " threadId=\"" + threadId + "\" eventId=\"" + eventId + "\"" + (requestId == null ? "" : " requestId=\"" + requestId + "\"") +
+        " threadName=\"Timer\" breakpointType=\"Normal\" isLongLivedRequest=\"" + (longLived ? "true" : "false") + "\" inPTA=\"false\"" +
+        (name == "AtBreakpointEvent" ? "><Stack><StackElem eSpaceName=\"Fixture\" functionName=\"Timer\" functionId=\"" + Tests.ModuleKey + ":" + Tests.NodeKey +
+            "::\" functionType=\"ServerAction\" breakpoint=\"" + Tests.ModuleKey + ":" + node + "::\" breakpointType=\"Normal\"/></Stack></" + name + ">" : "/>");
+    internal static string ThreadEndEventXml(string threadId, long eventId, string? requestId, string lastBreakpoint, bool longLived = true) =>
+        "<ThreadEndEvent threadId=\"" + threadId + "\" eventId=\"" + eventId + "\"" + (requestId == null ? "" : " requestId=\"" + requestId + "\"") +
+        " threadName=\"Timer\" clientThreadId=\"7\" isLongLivedRequest=\"" + (longLived ? "true" : "false") + "\" inPTA=\"false\" userName=\"PRIVATE-USER\"" +
+        " lastBreakpoint=\"" + lastBreakpoint + "\" lastCommand=\"ContinueThread\"/>";
+
     internal static void CheckFailureClassification()
     {
         Tests.Check(SoapTransport.DefiniteStartFailure(new System.ServiceModel.EndpointNotFoundException("SECRET")) == "debug_start_unreachable:EndpointNotFound", "SOAP unreachable is definite and sanitized");
@@ -24,7 +37,26 @@ internal static class O11SoapFixture
         }) Tests.Check(SoapTransport.DefiniteStartFailure(error) == null, "unanswered/reset SOAP start remains uncertain");
     }
 
-    internal static async Task Run(bool slowEvaluation = false, bool rejectStart = false, bool bearer = false, bool missingRawRequestId = false)
+    internal static void CheckBreakpointOwners()
+    {
+        const string producer = "AwMDAwMDAwMDAwMDAwMDAw", producerNode = "BAQEBAQEBAQEBAQEBAQEBA";
+        var config = new Configuration { ModuleKey = Tests.ModuleKey, NodeKeys = [Tests.NodeKey, producerNode] };
+        Tests.Check(SoapTransport.BreakpointIds(config) == Tests.ModuleKey + ":" + Tests.NodeKey + "::," + Tests.ModuleKey + ":" + producerNode + "::", "legacy breakpoint owner preserved");
+        config.Inspection = new() { Scopes = [
+            new() { ModuleKey = Tests.ModuleKey, FunctionKey = Tests.NodeKey, NodeKey = Tests.NodeKey, SourceSha256 = new string('a', 64) },
+            new() { ModuleKey = producer, FunctionKey = producerNode, NodeKey = producerNode, SourceSha256 = new string('b', 64) }
+        ] };
+        Tests.Check(SoapTransport.BreakpointIds(config) == Tests.ModuleKey + ":" + Tests.NodeKey + "::," + producer + ":" + producerNode + "::", "native breakpoint serialization preserves both module owners");
+        var valid = config.Inspection.Scopes;
+        foreach (var scopes in new InspectionScopeBinding[][] { [valid[0]], [valid[0], valid[1],
+            new() { ModuleKey = producer, FunctionKey = producerNode, NodeKey = Tests.NodeKey, SourceSha256 = new string('b', 64) }] }) {
+            config.Inspection.Scopes = scopes;
+            try { SoapTransport.BreakpointIds(config); throw new Exception("unbound or ambiguous owner accepted"); }
+            catch (DebugFailure e) { Tests.Check(e.Message == "debug_breakpoint_owner_required", "ambiguous owner is refused before authentication"); }
+        }
+    }
+
+    internal static async Task Run(bool slowEvaluation = false, bool rejectStart = false, bool bearer = false, bool missingRawRequestId = false, bool separateEntry = false)
     {
         var reservation = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
         reservation.Start();
@@ -115,6 +147,8 @@ internal static class O11SoapFixture
         {
             Module = "Fixture",
             ModuleKey = Tests.ModuleKey,
+            EntryModule = separateEntry ? "Consumer" : null,
+            EntryModuleKey = separateEntry ? "B".PadRight(22, 'x') : null,
             RuntimeUrl = $"http://127.0.0.1:{port}/App/",
             NodeKeys = [Tests.NodeKey],
             Token = bearer ? token : null,
@@ -154,11 +188,12 @@ internal static class O11SoapFixture
             Tests.Check(startEspaceUid == ObjectKeyUtils.DatabaseValue(ObjectKey.Parse(Tests.ModuleKey)), "StartDebugSession eSpaceUID is the module DatabaseValue");
             Tests.Check(authenticationCalls == (bearer ? 0 : 1), "bearer path must not request developer credentials");
             var startRequest = requests.Single(r => r.Operation == "StartDebugSession");
-            Tests.Check(startRequest.Path == "/Fixture/_debugger.asmx", "SOAP endpoint belongs to the configured entry/target module");
+            var entryName = separateEntry ? "Consumer" : "Fixture";
+            Tests.Check(startRequest.Path == "/" + entryName + "/_debugger.asmx", "SOAP endpoint belongs to the declared consumer while breakpoints retain their producer");
             Tests.Check(startRequest.Authorization == (bearer ? "Bearer " + token : null), "bearer header only on the SSO token path");
             Tests.Check(bearer ? !startRequest.Values.Contains("TEST_PASSWORD") && !startRequest.Values.Contains("TEST_USER") : startRequest.Values.Contains("TEST_USER") && startRequest.Values.Contains("TEST_PASSWORD"), "bearer and developer authentication are separate");
             Tests.Check(bearer ? startRequest.Values.Contains("TEST_SSO_USER") && startRequest.Values.Contains("TEST_SSO_ID_TOKEN") : !startRequest.Values.Contains("TEST_SSO_ID_TOKEN"), "native SSO body contains its username and distinct server-call ID token");
-            Tests.Check(eventRequests.All(r => r.Path == "/Fixture/_debuggerEvents.ashx" && r.Session == token && r.Module == Tests.ModuleKey && r.Authorization == null), "native polling has its session/module identity and no developer bearer");
+            Tests.Check(eventRequests.All(r => r.Path == "/" + entryName + "/_debuggerEvents.ashx" && r.Session == token && r.Module == Tests.ModuleKey && r.Authorization == null), "native polling has its session/module identity and no developer bearer");
             Tests.Check(eventRequests.Any(r => r.Last == "0") && eventRequests.Any(r => r.Last == "42"), "polling resumes with the exact event cursor");
             try { await transport.Start(); throw new Exception("successful start retried"); }
             catch (DebugFailure failure) { Tests.Check(failure.Message == "debug_start_already_attempted", "successful start cannot replay"); }

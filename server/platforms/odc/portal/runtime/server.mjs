@@ -36,7 +36,7 @@ export function registerOdcTools(server, bridge, { capabilities, portalRead, exe
   }));
   server.registerTool('odc_portal_capabilities', {
     title: 'Find Portal capability coverage', description: capabilities.tenantAccess
-      ? 'Discover Portal features and how each one runs here: public operations through odc_read/odc_write, internal routes through odc_portal_read/odc_portal_write and the typed helpers (the Portal window inside the ODC Studio, else the vault Portal account), and the routes still unmapped (refused with the instruction to capture them in the live proof). Discovery itself contacts no tenant and proves no live access.'
+      ? 'Discover Portal features and how each one runs here: public operations through odc_read/odc_write, internal routes through odc_portal_read/odc_portal_write and the typed helpers (authenticated native headless transport when supported, otherwise a compatible stored Portal profile), and the routes still unmapped (refused with the instruction to capture them in the live proof). Discovery itself contacts no tenant and proves no live access. No browser or credential prompt is opened.'
       : 'Discover Portal features and their public API, internal/experimental or unavailable integration routes. This is inventory only: a mapped internal route does not prove authenticated ODC3 access or enable execution.',
     inputSchema: z.object({ search: z.string().max(500).optional(), kind: z.enum(['public', 'internal', 'gap']).optional(),
       offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(100).default(30) }).strict(), annotations: readAnnotations,

@@ -10,6 +10,9 @@ export const TYPES = {
   ServerAction: ['IServerAction', 'IAction'], InputParameter: ['IInputParameter', 'IParameter'], Expression: ['IExpression'],
   AnonymousStructure: ['IAnonymousStructure'], Attribute: ['IAttribute'], LocalVariable: ['ILocalVariable'],
   Aggregate: ['IAggregate'], AddSourceOperation: ['IAddSourceOperation'], DataTable: ['IObject'],
+  // O11 widgets: a widget's children hang from its MobileWidget "content" placeholder, which no Children list holds.
+  Container: ['IContainer', 'IMobileWidget', 'IWidget'], MobileWidget: ['IMobileWidget', 'IWidget'], AdvancedHtml: ['IAdvancedHtml', 'IWidget'],
+  Input: ['IInput', 'IWidget'], CustomProperty: ['ICustomProperty', 'IObject'],
 };
 export const ROLE_NAMES = ['module', 'flow', 'screen', 'block', 'action', 'actionRef', 'aggregate', 'entity', 'staticEntity', 'structure',
   'attribute', 'parameter', 'variable', 'widget', 'event', 'flowNode', 'expression', 'reference', 'other'];

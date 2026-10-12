@@ -1,0 +1,4765 @@
+{
+"_source": "op html (and the logic ops around it) of job cfb79d98-8d22-42fe-973e-d5d18e5fbf5b, ops [244, 245, 246] of the original job; the image ops are not here",
+"ops": [
+{
+"op": "logic",
+"data": {
+"actions": [
+{
+"name": "Pagina_catalogo",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvPage": "\"catalogo\""
+}
+}
+]
+},
+{
+"name": "Pagina_carrinho",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvPage": "\"carrinho\""
+}
+}
+]
+},
+{
+"name": "Pagina_meus_pedidos",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvPage": "\"meus-pedidos\""
+}
+}
+]
+},
+{
+"name": "Pagina_gestao_produtos",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvPage": "\"gestao-produtos\""
+}
+}
+]
+},
+{
+"name": "Pagina_gestao_pedidos",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvPage": "\"gestao-pedidos\""
+}
+}
+]
+},
+{
+"name": "AbrirPedido",
+"kind": "client",
+"inputs": [
+{
+"name": "Id",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"assign": {
+"Client.FvPedidoId": "Id",
+"Client.FvPage": "\"pedido\""
+}
+}
+]
+},
+{
+"name": "FecharModal",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvModal": "\"\""
+}
+}
+]
+},
+{
+"name": "FecharAviso",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvNotice": "\"\""
+}
+}
+]
+},
+{
+"name": "LimparFiltros",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvBusca": "\"\"",
+"Client.FvCategoria": "0",
+"Client.FvDisponiveis": "False",
+"Client.FvOrdenacao": "0"
+}
+}
+]
+},
+{
+"name": "CategoriaFiltro",
+"kind": "client",
+"inputs": [
+{
+"name": "Id",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"assign": {
+"Client.FvCategoria": "Id"
+}
+}
+]
+},
+{
+"name": "ToggleFiltros",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvFiltrosAbertos": "not Client.FvFiltrosAbertos"
+}
+}
+]
+},
+{
+"name": "AbrirProduto",
+"kind": "client",
+"inputs": [
+{
+"name": "Id",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"assign": {
+"Client.FvProdutoId": "Id",
+"Client.FvModal": "\"produto\"",
+"Client.FvQuantidadeProduto": "1"
+}
+}
+]
+},
+{
+"name": "FiltrarMeusPedidos",
+"kind": "client",
+"inputs": [
+{
+"name": "Status",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"assign": {
+"Client.FvCustomerStatusFilter": "Status"
+}
+}
+]
+},
+{
+"name": "FiltrarPedidosGestao",
+"kind": "client",
+"inputs": [
+{
+"name": "Status",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"assign": {
+"Client.FvOrderStatusFilter": "Status"
+}
+}
+]
+},
+{
+"name": "Adicionar1",
+"kind": "client",
+"inputs": [
+{
+"name": "Quantidade",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"if": "Client.FvUser = 1 or Client.FvUser = 2",
+"then": [
+{
+"if": "Quantidade > 0 and If(Client.FvUser = 2, Client.FvQL1, Client.FvQ1) + Quantidade <= Client.FvStock1 and Client.FvAtivo1",
+"then": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL1": "Client.FvQL1 + Quantidade"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ1": "Client.FvQ1 + Quantidade"
+}
+}
+]
+},
+{
+"assign": {
+"Client.FvNotice": "\"Produto adicionado ao carrinho.\"",
+"Client.FvModal": "\"\""
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvNotice": "\"Quantidade indisponível em estoque.\""
+}
+}
+]
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvModal": "\"login\""
+}
+}
+]
+}
+]
+},
+{
+"name": "Quantidade1",
+"kind": "client",
+"inputs": [
+{
+"name": "Delta",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"if": "If(Client.FvUser = 2, Client.FvQL1, Client.FvQ1) + Delta > 0 and If(Client.FvUser = 2, Client.FvQL1, Client.FvQ1) + Delta <= Client.FvStock1",
+"then": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL1": "Client.FvQL1 + Delta"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ1": "Client.FvQ1 + Delta"
+}
+}
+]
+}
+]
+}
+]
+},
+{
+"name": "Remover1",
+"kind": "client",
+"steps": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL1": "0"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ1": "0"
+}
+}
+]
+}
+]
+},
+{
+"name": "AtivarProduto1",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvAtivo1": "not Client.FvAtivo1"
+}
+}
+]
+},
+{
+"name": "DestacarProduto1",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvDestaque1": "not Client.FvDestaque1"
+}
+}
+]
+},
+{
+"name": "Adicionar2",
+"kind": "client",
+"inputs": [
+{
+"name": "Quantidade",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"if": "Client.FvUser = 1 or Client.FvUser = 2",
+"then": [
+{
+"if": "Quantidade > 0 and If(Client.FvUser = 2, Client.FvQL2, Client.FvQ2) + Quantidade <= Client.FvStock2 and Client.FvAtivo2",
+"then": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL2": "Client.FvQL2 + Quantidade"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ2": "Client.FvQ2 + Quantidade"
+}
+}
+]
+},
+{
+"assign": {
+"Client.FvNotice": "\"Produto adicionado ao carrinho.\"",
+"Client.FvModal": "\"\""
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvNotice": "\"Quantidade indisponível em estoque.\""
+}
+}
+]
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvModal": "\"login\""
+}
+}
+]
+}
+]
+},
+{
+"name": "Quantidade2",
+"kind": "client",
+"inputs": [
+{
+"name": "Delta",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"if": "If(Client.FvUser = 2, Client.FvQL2, Client.FvQ2) + Delta > 0 and If(Client.FvUser = 2, Client.FvQL2, Client.FvQ2) + Delta <= Client.FvStock2",
+"then": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL2": "Client.FvQL2 + Delta"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ2": "Client.FvQ2 + Delta"
+}
+}
+]
+}
+]
+}
+]
+},
+{
+"name": "Remover2",
+"kind": "client",
+"steps": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL2": "0"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ2": "0"
+}
+}
+]
+}
+]
+},
+{
+"name": "AtivarProduto2",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvAtivo2": "not Client.FvAtivo2"
+}
+}
+]
+},
+{
+"name": "DestacarProduto2",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvDestaque2": "not Client.FvDestaque2"
+}
+}
+]
+},
+{
+"name": "Adicionar3",
+"kind": "client",
+"inputs": [
+{
+"name": "Quantidade",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"if": "Client.FvUser = 1 or Client.FvUser = 2",
+"then": [
+{
+"if": "Quantidade > 0 and If(Client.FvUser = 2, Client.FvQL3, Client.FvQ3) + Quantidade <= Client.FvStock3 and Client.FvAtivo3",
+"then": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL3": "Client.FvQL3 + Quantidade"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ3": "Client.FvQ3 + Quantidade"
+}
+}
+]
+},
+{
+"assign": {
+"Client.FvNotice": "\"Produto adicionado ao carrinho.\"",
+"Client.FvModal": "\"\""
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvNotice": "\"Quantidade indisponível em estoque.\""
+}
+}
+]
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvModal": "\"login\""
+}
+}
+]
+}
+]
+},
+{
+"name": "Quantidade3",
+"kind": "client",
+"inputs": [
+{
+"name": "Delta",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"if": "If(Client.FvUser = 2, Client.FvQL3, Client.FvQ3) + Delta > 0 and If(Client.FvUser = 2, Client.FvQL3, Client.FvQ3) + Delta <= Client.FvStock3",
+"then": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL3": "Client.FvQL3 + Delta"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ3": "Client.FvQ3 + Delta"
+}
+}
+]
+}
+]
+}
+]
+},
+{
+"name": "Remover3",
+"kind": "client",
+"steps": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL3": "0"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ3": "0"
+}
+}
+]
+}
+]
+},
+{
+"name": "AtivarProduto3",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvAtivo3": "not Client.FvAtivo3"
+}
+}
+]
+},
+{
+"name": "DestacarProduto3",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvDestaque3": "not Client.FvDestaque3"
+}
+}
+]
+},
+{
+"name": "Adicionar4",
+"kind": "client",
+"inputs": [
+{
+"name": "Quantidade",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"if": "Client.FvUser = 1 or Client.FvUser = 2",
+"then": [
+{
+"if": "Quantidade > 0 and If(Client.FvUser = 2, Client.FvQL4, Client.FvQ4) + Quantidade <= Client.FvStock4 and Client.FvAtivo4",
+"then": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL4": "Client.FvQL4 + Quantidade"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ4": "Client.FvQ4 + Quantidade"
+}
+}
+]
+},
+{
+"assign": {
+"Client.FvNotice": "\"Produto adicionado ao carrinho.\"",
+"Client.FvModal": "\"\""
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvNotice": "\"Quantidade indisponível em estoque.\""
+}
+}
+]
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvModal": "\"login\""
+}
+}
+]
+}
+]
+},
+{
+"name": "Quantidade4",
+"kind": "client",
+"inputs": [
+{
+"name": "Delta",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"if": "If(Client.FvUser = 2, Client.FvQL4, Client.FvQ4) + Delta > 0 and If(Client.FvUser = 2, Client.FvQL4, Client.FvQ4) + Delta <= Client.FvStock4",
+"then": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL4": "Client.FvQL4 + Delta"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ4": "Client.FvQ4 + Delta"
+}
+}
+]
+}
+]
+}
+]
+},
+{
+"name": "Remover4",
+"kind": "client",
+"steps": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL4": "0"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ4": "0"
+}
+}
+]
+}
+]
+},
+{
+"name": "AtivarProduto4",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvAtivo4": "not Client.FvAtivo4"
+}
+}
+]
+},
+{
+"name": "DestacarProduto4",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvDestaque4": "not Client.FvDestaque4"
+}
+}
+]
+},
+{
+"name": "Adicionar5",
+"kind": "client",
+"inputs": [
+{
+"name": "Quantidade",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"if": "Client.FvUser = 1 or Client.FvUser = 2",
+"then": [
+{
+"if": "Quantidade > 0 and If(Client.FvUser = 2, Client.FvQL5, Client.FvQ5) + Quantidade <= Client.FvStock5 and Client.FvAtivo5",
+"then": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL5": "Client.FvQL5 + Quantidade"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ5": "Client.FvQ5 + Quantidade"
+}
+}
+]
+},
+{
+"assign": {
+"Client.FvNotice": "\"Produto adicionado ao carrinho.\"",
+"Client.FvModal": "\"\""
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvNotice": "\"Quantidade indisponível em estoque.\""
+}
+}
+]
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvModal": "\"login\""
+}
+}
+]
+}
+]
+},
+{
+"name": "Quantidade5",
+"kind": "client",
+"inputs": [
+{
+"name": "Delta",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"if": "If(Client.FvUser = 2, Client.FvQL5, Client.FvQ5) + Delta > 0 and If(Client.FvUser = 2, Client.FvQL5, Client.FvQ5) + Delta <= Client.FvStock5",
+"then": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL5": "Client.FvQL5 + Delta"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ5": "Client.FvQ5 + Delta"
+}
+}
+]
+}
+]
+}
+]
+},
+{
+"name": "Remover5",
+"kind": "client",
+"steps": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL5": "0"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ5": "0"
+}
+}
+]
+}
+]
+},
+{
+"name": "AtivarProduto5",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvAtivo5": "not Client.FvAtivo5"
+}
+}
+]
+},
+{
+"name": "DestacarProduto5",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvDestaque5": "not Client.FvDestaque5"
+}
+}
+]
+},
+{
+"name": "Adicionar6",
+"kind": "client",
+"inputs": [
+{
+"name": "Quantidade",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"if": "Client.FvUser = 1 or Client.FvUser = 2",
+"then": [
+{
+"if": "Quantidade > 0 and If(Client.FvUser = 2, Client.FvQL6, Client.FvQ6) + Quantidade <= Client.FvStock6 and Client.FvAtivo6",
+"then": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL6": "Client.FvQL6 + Quantidade"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ6": "Client.FvQ6 + Quantidade"
+}
+}
+]
+},
+{
+"assign": {
+"Client.FvNotice": "\"Produto adicionado ao carrinho.\"",
+"Client.FvModal": "\"\""
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvNotice": "\"Quantidade indisponível em estoque.\""
+}
+}
+]
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvModal": "\"login\""
+}
+}
+]
+}
+]
+},
+{
+"name": "Quantidade6",
+"kind": "client",
+"inputs": [
+{
+"name": "Delta",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"if": "If(Client.FvUser = 2, Client.FvQL6, Client.FvQ6) + Delta > 0 and If(Client.FvUser = 2, Client.FvQL6, Client.FvQ6) + Delta <= Client.FvStock6",
+"then": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL6": "Client.FvQL6 + Delta"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ6": "Client.FvQ6 + Delta"
+}
+}
+]
+}
+]
+}
+]
+},
+{
+"name": "Remover6",
+"kind": "client",
+"steps": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL6": "0"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ6": "0"
+}
+}
+]
+}
+]
+},
+{
+"name": "AtivarProduto6",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvAtivo6": "not Client.FvAtivo6"
+}
+}
+]
+},
+{
+"name": "DestacarProduto6",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvDestaque6": "not Client.FvDestaque6"
+}
+}
+]
+},
+{
+"name": "Adicionar7",
+"kind": "client",
+"inputs": [
+{
+"name": "Quantidade",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"if": "Client.FvUser = 1 or Client.FvUser = 2",
+"then": [
+{
+"if": "Quantidade > 0 and If(Client.FvUser = 2, Client.FvQL7, Client.FvQ7) + Quantidade <= Client.FvStock7 and Client.FvAtivo7",
+"then": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL7": "Client.FvQL7 + Quantidade"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ7": "Client.FvQ7 + Quantidade"
+}
+}
+]
+},
+{
+"assign": {
+"Client.FvNotice": "\"Produto adicionado ao carrinho.\"",
+"Client.FvModal": "\"\""
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvNotice": "\"Quantidade indisponível em estoque.\""
+}
+}
+]
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvModal": "\"login\""
+}
+}
+]
+}
+]
+},
+{
+"name": "Quantidade7",
+"kind": "client",
+"inputs": [
+{
+"name": "Delta",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"if": "If(Client.FvUser = 2, Client.FvQL7, Client.FvQ7) + Delta > 0 and If(Client.FvUser = 2, Client.FvQL7, Client.FvQ7) + Delta <= Client.FvStock7",
+"then": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL7": "Client.FvQL7 + Delta"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ7": "Client.FvQ7 + Delta"
+}
+}
+]
+}
+]
+}
+]
+},
+{
+"name": "Remover7",
+"kind": "client",
+"steps": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL7": "0"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ7": "0"
+}
+}
+]
+}
+]
+},
+{
+"name": "AtivarProduto7",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvAtivo7": "not Client.FvAtivo7"
+}
+}
+]
+},
+{
+"name": "DestacarProduto7",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvDestaque7": "not Client.FvDestaque7"
+}
+}
+]
+},
+{
+"name": "Adicionar8",
+"kind": "client",
+"inputs": [
+{
+"name": "Quantidade",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"if": "Client.FvUser = 1 or Client.FvUser = 2",
+"then": [
+{
+"if": "Quantidade > 0 and If(Client.FvUser = 2, Client.FvQL8, Client.FvQ8) + Quantidade <= Client.FvStock8 and Client.FvAtivo8",
+"then": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL8": "Client.FvQL8 + Quantidade"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ8": "Client.FvQ8 + Quantidade"
+}
+}
+]
+},
+{
+"assign": {
+"Client.FvNotice": "\"Produto adicionado ao carrinho.\"",
+"Client.FvModal": "\"\""
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvNotice": "\"Quantidade indisponível em estoque.\""
+}
+}
+]
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvModal": "\"login\""
+}
+}
+]
+}
+]
+},
+{
+"name": "Quantidade8",
+"kind": "client",
+"inputs": [
+{
+"name": "Delta",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"if": "If(Client.FvUser = 2, Client.FvQL8, Client.FvQ8) + Delta > 0 and If(Client.FvUser = 2, Client.FvQL8, Client.FvQ8) + Delta <= Client.FvStock8",
+"then": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL8": "Client.FvQL8 + Delta"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ8": "Client.FvQ8 + Delta"
+}
+}
+]
+}
+]
+}
+]
+},
+{
+"name": "Remover8",
+"kind": "client",
+"steps": [
+{
+"if": "Client.FvUser = 2",
+"then": [
+{
+"assign": {
+"Client.FvQL8": "0"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvQ8": "0"
+}
+}
+]
+}
+]
+},
+{
+"name": "AtivarProduto8",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvAtivo8": "not Client.FvAtivo8"
+}
+}
+]
+},
+{
+"name": "DestacarProduto8",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvDestaque8": "not Client.FvDestaque8"
+}
+}
+]
+},
+{
+"name": "AbrirStatusPedido",
+"kind": "client",
+"inputs": [
+{
+"name": "Id",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"assign": {
+"Client.FvPedidoId": "Id",
+"Client.FvModal": "\"status\"",
+"Client.FvNovoStatus": "2"
+}
+}
+]
+},
+{
+"name": "ConfirmarStatus",
+"kind": "client",
+"steps": [
+{
+"if": "Client.FvPedidoId = 1002 and (Client.FvStatus1002 = 1 or Client.FvStatus1002 = 2)",
+"then": [
+{
+"if": "Client.FvNovoStatus = 4",
+"then": [
+{
+"assign": {
+"Client.FvStock3": "Client.FvStock3 + 2",
+"Client.FvStock7": "Client.FvStock7 + 1"
+}
+}
+]
+},
+{
+"if": "Client.FvNovoStatus = 4 or (Client.FvStatus1002 = 1 and Client.FvNovoStatus = 2) or (Client.FvStatus1002 = 2 and Client.FvNovoStatus = 3)",
+"then": [
+{
+"assign": {
+"Client.FvStatus1002": "Client.FvNovoStatus",
+"Client.FvModal": "\"\"",
+"Client.FvNotice": "\"Status do pedido atualizado.\""
+}
+}
+]
+}
+]
+},
+{
+"if": "Client.FvPedidoId = 1003 and (Client.FvStatus1003 = 1 or Client.FvStatus1003 = 2)",
+"then": [
+{
+"if": "Client.FvNovoStatus = 4",
+"then": [
+{
+"assign": {
+"Client.FvStock2": "Client.FvStock2 + 1",
+"Client.FvStock4": "Client.FvStock4 + 1"
+}
+}
+]
+},
+{
+"if": "Client.FvNovoStatus = 4 or (Client.FvStatus1003 = 1 and Client.FvNovoStatus = 2) or (Client.FvStatus1003 = 2 and Client.FvNovoStatus = 3)",
+"then": [
+{
+"assign": {
+"Client.FvStatus1003": "Client.FvNovoStatus",
+"Client.FvModal": "\"\"",
+"Client.FvNotice": "\"Status do pedido atualizado.\""
+}
+}
+]
+}
+]
+},
+{
+"if": "Client.FvPedidoId = 1004 and (Client.FvStatus1004 = 1 or Client.FvStatus1004 = 2)",
+"then": [
+{
+"if": "Client.FvNovoStatus = 4",
+"then": [
+{
+"assign": {
+"Client.FvStock5": "Client.FvStock5 + 1"
+}
+}
+]
+},
+{
+"if": "Client.FvNovoStatus = 4 or (Client.FvStatus1004 = 1 and Client.FvNovoStatus = 2) or (Client.FvStatus1004 = 2 and Client.FvNovoStatus = 3)",
+"then": [
+{
+"assign": {
+"Client.FvStatus1004": "Client.FvNovoStatus",
+"Client.FvModal": "\"\"",
+"Client.FvNotice": "\"Status do pedido atualizado.\""
+}
+}
+]
+}
+]
+}
+]
+},
+{
+"name": "EditarProduto",
+"kind": "client",
+"inputs": [
+{
+"name": "Id",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"assign": {
+"Client.FvProdutoId": "Id",
+"Client.FvModal": "\"editar\""
+}
+},
+{
+"if": "Id = 1",
+"then": [
+{
+"assign": {
+"Client.FvEditNome": "Client.FvNome1",
+"Client.FvEditDescricao": "Client.FvDescricao1",
+"Client.FvEditPreco": "Client.FvPreco1",
+"Client.FvEditStock": "Client.FvStock1",
+"Client.FvEditCategoria": "Client.FvCat1",
+"Client.FvEditAtivo": "Client.FvAtivo1",
+"Client.FvEditDestaque": "Client.FvDestaque1",
+"Client.FvEditImagem": "\"\""
+}
+}
+]
+},
+{
+"if": "Id = 2",
+"then": [
+{
+"assign": {
+"Client.FvEditNome": "Client.FvNome2",
+"Client.FvEditDescricao": "Client.FvDescricao2",
+"Client.FvEditPreco": "Client.FvPreco2",
+"Client.FvEditStock": "Client.FvStock2",
+"Client.FvEditCategoria": "Client.FvCat2",
+"Client.FvEditAtivo": "Client.FvAtivo2",
+"Client.FvEditDestaque": "Client.FvDestaque2",
+"Client.FvEditImagem": "\"\""
+}
+}
+]
+},
+{
+"if": "Id = 3",
+"then": [
+{
+"assign": {
+"Client.FvEditNome": "Client.FvNome3",
+"Client.FvEditDescricao": "Client.FvDescricao3",
+"Client.FvEditPreco": "Client.FvPreco3",
+"Client.FvEditStock": "Client.FvStock3",
+"Client.FvEditCategoria": "Client.FvCat3",
+"Client.FvEditAtivo": "Client.FvAtivo3",
+"Client.FvEditDestaque": "Client.FvDestaque3",
+"Client.FvEditImagem": "\"\""
+}
+}
+]
+},
+{
+"if": "Id = 4",
+"then": [
+{
+"assign": {
+"Client.FvEditNome": "Client.FvNome4",
+"Client.FvEditDescricao": "Client.FvDescricao4",
+"Client.FvEditPreco": "Client.FvPreco4",
+"Client.FvEditStock": "Client.FvStock4",
+"Client.FvEditCategoria": "Client.FvCat4",
+"Client.FvEditAtivo": "Client.FvAtivo4",
+"Client.FvEditDestaque": "Client.FvDestaque4",
+"Client.FvEditImagem": "\"\""
+}
+}
+]
+},
+{
+"if": "Id = 5",
+"then": [
+{
+"assign": {
+"Client.FvEditNome": "Client.FvNome5",
+"Client.FvEditDescricao": "Client.FvDescricao5",
+"Client.FvEditPreco": "Client.FvPreco5",
+"Client.FvEditStock": "Client.FvStock5",
+"Client.FvEditCategoria": "Client.FvCat5",
+"Client.FvEditAtivo": "Client.FvAtivo5",
+"Client.FvEditDestaque": "Client.FvDestaque5",
+"Client.FvEditImagem": "\"\""
+}
+}
+]
+},
+{
+"if": "Id = 6",
+"then": [
+{
+"assign": {
+"Client.FvEditNome": "Client.FvNome6",
+"Client.FvEditDescricao": "Client.FvDescricao6",
+"Client.FvEditPreco": "Client.FvPreco6",
+"Client.FvEditStock": "Client.FvStock6",
+"Client.FvEditCategoria": "Client.FvCat6",
+"Client.FvEditAtivo": "Client.FvAtivo6",
+"Client.FvEditDestaque": "Client.FvDestaque6",
+"Client.FvEditImagem": "\"\""
+}
+}
+]
+},
+{
+"if": "Id = 7",
+"then": [
+{
+"assign": {
+"Client.FvEditNome": "Client.FvNome7",
+"Client.FvEditDescricao": "Client.FvDescricao7",
+"Client.FvEditPreco": "Client.FvPreco7",
+"Client.FvEditStock": "Client.FvStock7",
+"Client.FvEditCategoria": "Client.FvCat7",
+"Client.FvEditAtivo": "Client.FvAtivo7",
+"Client.FvEditDestaque": "Client.FvDestaque7",
+"Client.FvEditImagem": "\"\""
+}
+}
+]
+},
+{
+"if": "Id = 8",
+"then": [
+{
+"assign": {
+"Client.FvEditNome": "Client.FvNome8",
+"Client.FvEditDescricao": "Client.FvDescricao8",
+"Client.FvEditPreco": "Client.FvPreco8",
+"Client.FvEditStock": "Client.FvStock8",
+"Client.FvEditCategoria": "Client.FvCat8",
+"Client.FvEditAtivo": "Client.FvAtivo8",
+"Client.FvEditDestaque": "Client.FvDestaque8",
+"Client.FvEditImagem": "\"\""
+}
+}
+]
+}
+]
+},
+{
+"name": "NovoProduto",
+"kind": "client",
+"steps": [
+{
+"assign": {
+"Client.FvProdutoId": "8",
+"Client.FvModal": "\"editar\"",
+"Client.FvEditNome": "\"\"",
+"Client.FvEditDescricao": "\"\"",
+"Client.FvEditPreco": "0",
+"Client.FvEditStock": "0",
+"Client.FvEditCategoria": "1",
+"Client.FvEditAtivo": "True",
+"Client.FvEditDestaque": "False",
+"Client.FvEditImagem": "\"\""
+}
+}
+]
+},
+{
+"name": "SalvarProdutoMock",
+"kind": "client",
+"steps": [
+{
+"if": "Length(Trim(Client.FvEditNome)) >= 3 and Client.FvEditPreco > 0 and Client.FvEditStock >= 0",
+"then": [
+{
+"if": "Client.FvProdutoId = 1",
+"then": [
+{
+"assign": {
+"Client.FvNome1": "Client.FvEditNome",
+"Client.FvDescricao1": "Client.FvEditDescricao",
+"Client.FvPreco1": "Client.FvEditPreco",
+"Client.FvStock1": "Client.FvEditStock",
+"Client.FvCat1": "Client.FvEditCategoria",
+"Client.FvAtivo1": "Client.FvEditAtivo",
+"Client.FvDestaque1": "Client.FvEditDestaque"
+}
+}
+]
+},
+{
+"if": "Client.FvProdutoId = 2",
+"then": [
+{
+"assign": {
+"Client.FvNome2": "Client.FvEditNome",
+"Client.FvDescricao2": "Client.FvEditDescricao",
+"Client.FvPreco2": "Client.FvEditPreco",
+"Client.FvStock2": "Client.FvEditStock",
+"Client.FvCat2": "Client.FvEditCategoria",
+"Client.FvAtivo2": "Client.FvEditAtivo",
+"Client.FvDestaque2": "Client.FvEditDestaque"
+}
+}
+]
+},
+{
+"if": "Client.FvProdutoId = 3",
+"then": [
+{
+"assign": {
+"Client.FvNome3": "Client.FvEditNome",
+"Client.FvDescricao3": "Client.FvEditDescricao",
+"Client.FvPreco3": "Client.FvEditPreco",
+"Client.FvStock3": "Client.FvEditStock",
+"Client.FvCat3": "Client.FvEditCategoria",
+"Client.FvAtivo3": "Client.FvEditAtivo",
+"Client.FvDestaque3": "Client.FvEditDestaque"
+}
+}
+]
+},
+{
+"if": "Client.FvProdutoId = 4",
+"then": [
+{
+"assign": {
+"Client.FvNome4": "Client.FvEditNome",
+"Client.FvDescricao4": "Client.FvEditDescricao",
+"Client.FvPreco4": "Client.FvEditPreco",
+"Client.FvStock4": "Client.FvEditStock",
+"Client.FvCat4": "Client.FvEditCategoria",
+"Client.FvAtivo4": "Client.FvEditAtivo",
+"Client.FvDestaque4": "Client.FvEditDestaque"
+}
+}
+]
+},
+{
+"if": "Client.FvProdutoId = 5",
+"then": [
+{
+"assign": {
+"Client.FvNome5": "Client.FvEditNome",
+"Client.FvDescricao5": "Client.FvEditDescricao",
+"Client.FvPreco5": "Client.FvEditPreco",
+"Client.FvStock5": "Client.FvEditStock",
+"Client.FvCat5": "Client.FvEditCategoria",
+"Client.FvAtivo5": "Client.FvEditAtivo",
+"Client.FvDestaque5": "Client.FvEditDestaque"
+}
+}
+]
+},
+{
+"if": "Client.FvProdutoId = 6",
+"then": [
+{
+"assign": {
+"Client.FvNome6": "Client.FvEditNome",
+"Client.FvDescricao6": "Client.FvEditDescricao",
+"Client.FvPreco6": "Client.FvEditPreco",
+"Client.FvStock6": "Client.FvEditStock",
+"Client.FvCat6": "Client.FvEditCategoria",
+"Client.FvAtivo6": "Client.FvEditAtivo",
+"Client.FvDestaque6": "Client.FvEditDestaque"
+}
+}
+]
+},
+{
+"if": "Client.FvProdutoId = 7",
+"then": [
+{
+"assign": {
+"Client.FvNome7": "Client.FvEditNome",
+"Client.FvDescricao7": "Client.FvEditDescricao",
+"Client.FvPreco7": "Client.FvEditPreco",
+"Client.FvStock7": "Client.FvEditStock",
+"Client.FvCat7": "Client.FvEditCategoria",
+"Client.FvAtivo7": "Client.FvEditAtivo",
+"Client.FvDestaque7": "Client.FvEditDestaque"
+}
+}
+]
+},
+{
+"if": "Client.FvProdutoId = 8",
+"then": [
+{
+"assign": {
+"Client.FvNome8": "Client.FvEditNome",
+"Client.FvDescricao8": "Client.FvEditDescricao",
+"Client.FvPreco8": "Client.FvEditPreco",
+"Client.FvStock8": "Client.FvEditStock",
+"Client.FvCat8": "Client.FvEditCategoria",
+"Client.FvAtivo8": "Client.FvEditAtivo",
+"Client.FvDestaque8": "Client.FvEditDestaque"
+}
+}
+]
+},
+{
+"assign": {
+"Client.FvModal": "\"\"",
+"Client.FvNotice": "\"Produto salvo com sucesso.\""
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvNotice": "\"Informe nome, preço e estoque válidos.\""
+}
+}
+]
+}
+]
+},
+{
+"name": "EntrarMock",
+"kind": "client",
+"inputs": [
+{
+"name": "Id",
+"type": "Integer"
+}
+],
+"steps": [
+{
+"assign": {
+"Client.FvUser": "Id",
+"Client.FvModal": "\"\""
+}
+}
+]
+},
+{
+"name": "ConfirmarPedido",
+"kind": "client",
+"steps": [
+{
+"if": "Length(Trim(Client.FvNomeEntrega)) >= 3 and Length(Trim(Client.FvEnderecoEntrega)) >= 10 and ((If(Client.FvUser = 2, Client.FvQL1, Client.FvQ1)) + (If(Client.FvUser = 2, Client.FvQL2, Client.FvQ2)) + (If(Client.FvUser = 2, Client.FvQL3, Client.FvQ3)) + (If(Client.FvUser = 2, Client.FvQL4, Client.FvQ4)) + (If(Client.FvUser = 2, Client.FvQL5, Client.FvQ5)) + (If(Client.FvUser = 2, Client.FvQL6, Client.FvQ6)) + (If(Client.FvUser = 2, Client.FvQL7, Client.FvQ7)) + (If(Client.FvUser = 2, Client.FvQL8, Client.FvQ8))) > 0 and If(Client.FvUser = 2, Client.FvQL1, Client.FvQ1) <= Client.FvStock1 and If(Client.FvUser = 2, Client.FvQL2, Client.FvQ2) <= Client.FvStock2 and If(Client.FvUser = 2, Client.FvQL3, Client.FvQ3) <= Client.FvStock3 and If(Client.FvUser = 2, Client.FvQL4, Client.FvQ4) <= Client.FvStock4 and If(Client.FvUser = 2, Client.FvQL5, Client.FvQ5) <= Client.FvStock5 and If(Client.FvUser = 2, Client.FvQL6, Client.FvQ6) <= Client.FvStock6 and If(Client.FvUser = 2, Client.FvQL7, Client.FvQ7) <= Client.FvStock7 and If(Client.FvUser = 2, Client.FvQL8, Client.FvQ8) <= Client.FvStock8",
+"then": [
+{
+"assign": {
+"Client.FvLastTotal": "(If(Client.FvUser = 2, Client.FvQL1, Client.FvQ1)) * Client.FvPreco1 + (If(Client.FvUser = 2, Client.FvQL2, Client.FvQ2)) * Client.FvPreco2 + (If(Client.FvUser = 2, Client.FvQL3, Client.FvQ3)) * Client.FvPreco3 + (If(Client.FvUser = 2, Client.FvQL4, Client.FvQ4)) * Client.FvPreco4 + (If(Client.FvUser = 2, Client.FvQL5, Client.FvQ5)) * Client.FvPreco5 + (If(Client.FvUser = 2, Client.FvQL6, Client.FvQ6)) * Client.FvPreco6 + (If(Client.FvUser = 2, Client.FvQL7, Client.FvQ7)) * Client.FvPreco7 + (If(Client.FvUser = 2, Client.FvQL8, Client.FvQ8)) * Client.FvPreco8",
+"Client.FvLastUser": "Client.FvUser",
+"Client.FvLastNome": "Client.FvNomeEntrega",
+"Client.FvLastEndereco": "Client.FvEnderecoEntrega",
+"Client.FvLastObservacao": "Client.FvObservacaoEntrega",
+"Client.FvLastCreated": "True",
+"Client.FvPedidoId": "1005",
+"Client.FvPage": "\"pedido\"",
+"Client.FvNotice": "\"Seu pedido foi registrado! Esta é uma demonstração.\"",
+"Client.FvLastQ1": "If(Client.FvUser = 2, Client.FvQL1, Client.FvQ1)",
+"Client.FvLastQ2": "If(Client.FvUser = 2, Client.FvQL2, Client.FvQ2)",
+"Client.FvLastQ3": "If(Client.FvUser = 2, Client.FvQL3, Client.FvQ3)",
+"Client.FvLastQ4": "If(Client.FvUser = 2, Client.FvQL4, Client.FvQ4)",
+"Client.FvLastQ5": "If(Client.FvUser = 2, Client.FvQL5, Client.FvQ5)",
+"Client.FvLastQ6": "If(Client.FvUser = 2, Client.FvQL6, Client.FvQ6)",
+"Client.FvLastQ7": "If(Client.FvUser = 2, Client.FvQL7, Client.FvQ7)",
+"Client.FvLastQ8": "If(Client.FvUser = 2, Client.FvQL8, Client.FvQ8)"
+}
+},
+{
+"assign": {
+"Client.FvStock1": "Client.FvStock1 - If(Client.FvUser = 2, Client.FvQL1, Client.FvQ1)",
+"Client.FvQ1": "If(Client.FvUser = 1, 0, Client.FvQ1)",
+"Client.FvQL1": "If(Client.FvUser = 2, 0, Client.FvQL1)",
+"Client.FvStock2": "Client.FvStock2 - If(Client.FvUser = 2, Client.FvQL2, Client.FvQ2)",
+"Client.FvQ2": "If(Client.FvUser = 1, 0, Client.FvQ2)",
+"Client.FvQL2": "If(Client.FvUser = 2, 0, Client.FvQL2)",
+"Client.FvStock3": "Client.FvStock3 - If(Client.FvUser = 2, Client.FvQL3, Client.FvQ3)",
+"Client.FvQ3": "If(Client.FvUser = 1, 0, Client.FvQ3)",
+"Client.FvQL3": "If(Client.FvUser = 2, 0, Client.FvQL3)",
+"Client.FvStock4": "Client.FvStock4 - If(Client.FvUser = 2, Client.FvQL4, Client.FvQ4)",
+"Client.FvQ4": "If(Client.FvUser = 1, 0, Client.FvQ4)",
+"Client.FvQL4": "If(Client.FvUser = 2, 0, Client.FvQL4)",
+"Client.FvStock5": "Client.FvStock5 - If(Client.FvUser = 2, Client.FvQL5, Client.FvQ5)",
+"Client.FvQ5": "If(Client.FvUser = 1, 0, Client.FvQ5)",
+"Client.FvQL5": "If(Client.FvUser = 2, 0, Client.FvQL5)",
+"Client.FvStock6": "Client.FvStock6 - If(Client.FvUser = 2, Client.FvQL6, Client.FvQ6)",
+"Client.FvQ6": "If(Client.FvUser = 1, 0, Client.FvQ6)",
+"Client.FvQL6": "If(Client.FvUser = 2, 0, Client.FvQL6)",
+"Client.FvStock7": "Client.FvStock7 - If(Client.FvUser = 2, Client.FvQL7, Client.FvQ7)",
+"Client.FvQ7": "If(Client.FvUser = 1, 0, Client.FvQ7)",
+"Client.FvQL7": "If(Client.FvUser = 2, 0, Client.FvQL7)",
+"Client.FvStock8": "Client.FvStock8 - If(Client.FvUser = 2, Client.FvQL8, Client.FvQ8)",
+"Client.FvQ8": "If(Client.FvUser = 1, 0, Client.FvQ8)",
+"Client.FvQL8": "If(Client.FvUser = 2, 0, Client.FvQL8)"
+}
+}
+],
+"else": [
+{
+"assign": {
+"Client.FvNotice": "\"Revise o nome, endereço e a disponibilidade dos produtos.\""
+}
+}
+]
+}
+]
+}
+]
+}
+},
+{
+"op": "html",
+"data": {
+"screen": "FarmaVirtual",
+"title": "FarmaVirtual | Higiene, beleza e bem-estar",
+"layout": "blank",
+"roles": [
+"Anonymous",
+"Registered"
+],
+"vars": [
+{
+"name": "AccountsOptions",
+"type": "FvOption List"
+},
+{
+"name": "SortOptions",
+"type": "FvOption List"
+},
+{
+"name": "CategoriesOptions",
+"type": "FvOption List"
+},
+{
+"name": "ActiveOptions",
+"type": "FvOption List"
+},
+{
+"name": "StatusesOptions",
+"type": "FvOption List"
+},
+{
+"name": "Option",
+"type": "FvOption"
+}
+],
+"html": "<div class=\"fv-prototype\"><div class=\"demo-strip\"><span class=\"icon lucide-info\" aria-hidden=\"true\"></span>Ambiente de demonstração · Sem pagamento ou entrega real</div>\n      <header class=\"site-header\"><div class=\"container header-inner\">\n        <a class=\"brand\" href=\"#\" data-av=\"fv.463\" aria-label=\"FarmaVirtual, catálogo\"><span class=\"brand-mark\"><span class=\"icon lucide-plus\" aria-hidden=\"true\"></span></span><div>Farma<span>Virtual</span></div></a>\n        <div class=\"search-header\" id=\"header-search\" role=\"search\"><span class=\"icon lucide-search\" aria-hidden=\"true\"></span><div id=\"FvSearch\" class=\"fv-control-mount\" data-av=\"MountFvSearch\"></div></div>\n        <div class=\"header-links\">\n          <a class=\"header-link orders-link\" href=\"#\" data-av=\"fv.464\"><span class=\"icon lucide-package\" aria-hidden=\"true\"></span><span>Meus pedidos</span></a><a class=\"header-link\" href=\"#\" data-av=\"fv.465\"><div class=\"cart-icon\"><span class=\"icon lucide-shopping-bag\" aria-hidden=\"true\"></span><span class=\"cart-number\" id=\"cart-count\"><span data-av=\"fv.472\"></span></span></div><span>Carrinho</span></a>\n          <div class=\"account\"><span class=\"avatar\"><span data-av=\"fv.470\"></span></span><div class=\"account-text\"><small><span data-av=\"fv.471\"></span></small>\n          <div id=\"FvAccount\" class=\"fv-control-mount\" data-av=\"MountFvAccount\"></div></div></div>\n        </div>\n      </div></header>\n      <nav class=\"main-nav\" aria-label=\"Navegação principal\"><div class=\"container nav-inner\"><div class=\"fv-visibility\" data-av=\"UiState1\"><a class=\"nav-link active\" href=\"#\" data-av=\"fv.473\"><span class=\"icon lucide-grid-2x2\" aria-hidden=\"true\"></span>Catálogo</a></div><div class=\"fv-visibility\" data-av=\"UiState2\"><a class=\"nav-link\" href=\"#\" data-av=\"fv.473Copy11\"><span class=\"icon lucide-grid-2x2\" aria-hidden=\"true\"></span>Catálogo</a></div><div class=\"fv-visibility\" data-av=\"UiState3\"><a class=\"nav-link active\" href=\"#\" data-av=\"fv.474\"><span class=\"icon lucide-shopping-bag\" aria-hidden=\"true\"></span>Meu carrinho</a></div><div class=\"fv-visibility\" data-av=\"UiState4\"><a class=\"nav-link\" href=\"#\" data-av=\"fv.474Copy15\"><span class=\"icon lucide-shopping-bag\" aria-hidden=\"true\"></span>Meu carrinho</a></div><div class=\"fv-visibility\" data-av=\"UiState5\"><a class=\"nav-link active\" href=\"#\" data-av=\"fv.475\"><span class=\"icon lucide-package\" aria-hidden=\"true\"></span>Meus pedidos</a></div><div class=\"fv-visibility\" data-av=\"UiState6\"><a class=\"nav-link\" href=\"#\" data-av=\"fv.475Copy19\"><span class=\"icon lucide-package\" aria-hidden=\"true\"></span>Meus pedidos</a></div><div class=\"fv-visibility\" data-av=\"fv.478\"><div class=\"nav-management\"><div class=\"fv-visibility\" data-av=\"UiState7\"><a class=\"nav-link active\" href=\"#\" data-av=\"fv.476\"><span class=\"icon lucide-boxes\" aria-hidden=\"true\"></span>Gestão de produtos</a></div><div class=\"fv-visibility\" data-av=\"UiState8\"><a class=\"nav-link\" href=\"#\" data-av=\"fv.476Copy24\"><span class=\"icon lucide-boxes\" aria-hidden=\"true\"></span>Gestão de produtos</a></div><div class=\"fv-visibility\" data-av=\"UiState9\"><a class=\"nav-link active\" href=\"#\" data-av=\"fv.477\"><span class=\"icon lucide-clipboard-list\" aria-hidden=\"true\"></span>Gestão de pedidos</a></div><div class=\"fv-visibility\" data-av=\"UiState10\"><a class=\"nav-link\" href=\"#\" data-av=\"fv.477Copy28\"><span class=\"icon lucide-clipboard-list\" aria-hidden=\"true\"></span>Gestão de pedidos</a></div></div></div></div></nav>\n      <main class=\"container main\" id=\"main-content\"><div class=\"fv-visibility\" data-av=\"fv.479\"><nav class=\"breadcrumbs\" aria-label=\"Localização\"><a href=\"#\" data-av=\"fv.1\"><span class=\"icon lucide-house\" aria-hidden=\"true\"></span></a><span class=\"icon lucide-chevron-right\" aria-hidden=\"true\"></span><span aria-current=\"page\">Catálogo</span></nav><div class=\"page-heading\"><div><span class=\"eyebrow\">Seu bem-estar, por perto</span><h1>Cuidado para todos os dias</h1><p>Encontre seus essenciais de higiene, beleza e bem-estar.</p></div><span class=\"subtle\"><span class=\"icon lucide-leaf\" aria-hidden=\"true\"></span> Seleção FarmaVirtual</span></div><div class=\"catalog-layout\"><aside class=\"filters\" data-av=\"fv.62\" aria-label=\"Filtros do catálogo\"><div class=\"filter-heading\"><h2>Filtros</h2><button class=\"text-button\" data-av=\"fv.2\">Limpar</button></div>\n      <span class=\"filter-label\">Categorias</span><div class=\"category-options\"><div class=\"fv-visibility\" data-av=\"UiState11\"><button class=\"category-button active\"  data-av=\"fv.3\"><span class=\"icon lucide-grid-2x2\" aria-hidden=\"true\"></span>Todos os produtos<small>7</small></button></div><div class=\"fv-visibility\" data-av=\"UiState12\"><button class=\"category-button\"  data-av=\"fv.3Copy36\"><span class=\"icon lucide-grid-2x2\" aria-hidden=\"true\"></span>Todos os produtos<small>7</small></button></div>\n      <div class=\"fv-visibility\" data-av=\"UiState13\"><button class=\"category-button active\"  data-av=\"fv.4\"><span class=\"icon lucide-droplets\" aria-hidden=\"true\"></span>Higiene<small>4</small></button></div><div class=\"fv-visibility\" data-av=\"UiState14\"><button class=\"category-button\"  data-av=\"fv.4Copy40\"><span class=\"icon lucide-droplets\" aria-hidden=\"true\"></span>Higiene<small>4</small></button></div><div class=\"fv-visibility\" data-av=\"UiState15\"><button class=\"category-button active\"  data-av=\"fv.5\"><span class=\"icon lucide-sparkles\" aria-hidden=\"true\"></span>Beleza<small>2</small></button></div><div class=\"fv-visibility\" data-av=\"UiState16\"><button class=\"category-button\"  data-av=\"fv.5Copy44\"><span class=\"icon lucide-sparkles\" aria-hidden=\"true\"></span>Beleza<small>2</small></button></div><div class=\"fv-visibility\" data-av=\"UiState17\"><button class=\"category-button active\"  data-av=\"fv.6\"><span class=\"icon lucide-leaf\" aria-hidden=\"true\"></span>Bem-estar<small>1</small></button></div><div class=\"fv-visibility\" data-av=\"UiState18\"><button class=\"category-button\"  data-av=\"fv.6Copy48\"><span class=\"icon lucide-leaf\" aria-hidden=\"true\"></span>Bem-estar<small>1</small></button></div></div>\n      <div class=\"filter-section\"><span class=\"filter-label\">Disponibilidade</span><div class=\"checkbox-label\"><div id=\"FvAvailable\" class=\"fv-control-mount\" data-av=\"MountFvAvailable\"></div>Apenas disponíveis</div></div>\n      <div class=\"filter-note\"><span class=\"icon lucide-shield-check\" aria-hidden=\"true\"></span><span>Escolhas para sua rotina de cuidado e bem-estar.</span></div></aside>\n      <section aria-label=\"Produtos\"><div class=\"catalog-toolbar\"><span><strong><span data-av=\"fv.60\"></span></strong> encontrados</span>\n      <button class=\"btn secondary mobile-filter-toggle\" data-av=\"fv.7\" aria-expanded=\"false\"><span class=\"icon lucide-sliders-horizontal\" aria-hidden=\"true\"></span>Filtros</button>\n      <div class=\"sort-control\"><span>Ordenar por</span><div id=\"FvSort\" class=\"fv-control-mount\" data-av=\"MountFvSort\"></div></div></div>\n      <div class=\"product-grid fv-grid\"><div class=\"fv-visibility\" data-av=\"fv.33\"><article class=\"product-card\" data-av=\"fv.32\">\n      <button class=\"product-image-wrap\" data-av=\"fv.8\" role=\"button\" aria-label=\"Ver detalhes de Hidratante facial 50 g\"><div class=\"fv-visibility\" data-av=\"fv.31\"><span class=\"feature-tag\">Seleção FarmaVirtual</span></div><div class=\"product-photo tile-0 \" role=\"img\" aria-label=\"Hidratante facial 50 g\"></div></button>\n      <div class=\"product-copy\"><span class=\"product-category\">Beleza</span><button class=\"product-title\" data-av=\"fv.9\"><span data-av=\"fv.29\"></span></button>\n      <span class=\"stock-label \"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span>Disponível em estoque</span>\n      <div class=\"price\"><span data-av=\"fv.30\"></span></div><button class=\"btn full\" data-av=\"fv.10\"  ><span class=\"icon lucide-shopping-bag\" aria-hidden=\"true\"></span>Adicionar</button></div>\n    </article></div><div class=\"fv-visibility\" data-av=\"fv.38\"><article class=\"product-card\" data-av=\"fv.37\">\n      <button class=\"product-image-wrap\" data-av=\"fv.11\" role=\"button\" aria-label=\"Ver detalhes de Protetor solar FPS 50 120 ml\"><div class=\"fv-visibility\" data-av=\"fv.36\"><span class=\"feature-tag\">Seleção FarmaVirtual</span></div><div class=\"product-photo tile-1 \" role=\"img\" aria-label=\"Protetor solar FPS 50 120 ml\"></div></button>\n      <div class=\"product-copy\"><span class=\"product-category\">Bem-estar</span><button class=\"product-title\" data-av=\"fv.12\"><span data-av=\"fv.34\"></span></button>\n      <span class=\"stock-label \"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span>Disponível em estoque</span>\n      <div class=\"price\"><span data-av=\"fv.35\"></span></div><button class=\"btn full\" data-av=\"fv.13\"  ><span class=\"icon lucide-shopping-bag\" aria-hidden=\"true\"></span>Adicionar</button></div>\n    </article></div><div class=\"fv-visibility\" data-av=\"fv.43\"><article class=\"product-card\" data-av=\"fv.42\">\n      <button class=\"product-image-wrap\" data-av=\"fv.14\" role=\"button\" aria-label=\"Ver detalhes de Sabonete líquido 250 ml\"><div class=\"fv-visibility\" data-av=\"fv.41\"><span class=\"feature-tag\">Seleção FarmaVirtual</span></div><div class=\"product-photo tile-2 \" role=\"img\" aria-label=\"Sabonete líquido 250 ml\"></div></button>\n      <div class=\"product-copy\"><span class=\"product-category\">Higiene</span><button class=\"product-title\" data-av=\"fv.15\"><span data-av=\"fv.39\"></span></button>\n      <span class=\"stock-label \"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span>Disponível em estoque</span>\n      <div class=\"price\"><span data-av=\"fv.40\"></span></div><button class=\"btn full\" data-av=\"fv.16\"  ><span class=\"icon lucide-shopping-bag\" aria-hidden=\"true\"></span>Adicionar</button></div>\n    </article></div><div class=\"fv-visibility\" data-av=\"fv.47\"><article class=\"product-card\" data-av=\"fv.46\">\n      <button class=\"product-image-wrap\" data-av=\"fv.17\" role=\"button\" aria-label=\"Ver detalhes de Creme para mãos 75 g\"><div class=\"product-photo tile-3 \" role=\"img\" aria-label=\"Creme para mãos 75 g\"></div></button>\n      <div class=\"product-copy\"><span class=\"product-category\">Beleza</span><button class=\"product-title\" data-av=\"fv.18\"><span data-av=\"fv.44\"></span></button>\n      <span class=\"stock-label \"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span>Últimas 8 unidades</span>\n      <div class=\"price\"><span data-av=\"fv.45\"></span></div><button class=\"btn full\" data-av=\"fv.19\"  ><span class=\"icon lucide-shopping-bag\" aria-hidden=\"true\"></span>Adicionar</button></div>\n    </article></div><div class=\"fv-visibility\" data-av=\"fv.51\"><article class=\"product-card\" data-av=\"fv.50\">\n      <button class=\"product-image-wrap\" data-av=\"fv.20\" role=\"button\" aria-label=\"Ver detalhes de Shampoo suave 300 ml\"><div class=\"product-photo tile-4 \" role=\"img\" aria-label=\"Shampoo suave 300 ml\"></div></button>\n      <div class=\"product-copy\"><span class=\"product-category\">Higiene</span><button class=\"product-title\" data-av=\"fv.21\"><span data-av=\"fv.48\"></span></button>\n      <span class=\"stock-label \"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span>Disponível em estoque</span>\n      <div class=\"price\"><span data-av=\"fv.49\"></span></div><button class=\"btn full\" data-av=\"fv.22\"  ><span class=\"icon lucide-shopping-bag\" aria-hidden=\"true\"></span>Adicionar</button></div>\n    </article></div><div class=\"fv-visibility\" data-av=\"fv.55\"><article class=\"product-card\" data-av=\"fv.54\">\n      <button class=\"product-image-wrap\" data-av=\"fv.23\" role=\"button\" aria-label=\"Ver detalhes de Fio dental 50 m\"><div class=\"product-photo tile-5 \" role=\"img\" aria-label=\"Fio dental 50 m\"></div></button>\n      <div class=\"product-copy\"><span class=\"product-category\">Higiene</span><button class=\"product-title\" data-av=\"fv.24\"><span data-av=\"fv.52\"></span></button>\n      <span class=\"stock-label out\"><span class=\"icon lucide-circle-minus\" aria-hidden=\"true\"></span>Indisponível no momento</span>\n      <div class=\"price\"><span data-av=\"fv.53\"></span></div><button class=\"btn secondary full fv-disabled\" data-av=\"fv.25\" ><span class=\"icon lucide-circle-minus\" aria-hidden=\"true\"></span>Indisponível</button></div>\n    </article></div><div class=\"fv-visibility\" data-av=\"fv.59\"><article class=\"product-card\" data-av=\"fv.58\">\n      <button class=\"product-image-wrap\" data-av=\"fv.26\" role=\"button\" aria-label=\"Ver detalhes de Sabonete vegetal 90 g\"><div class=\"product-photo tile-6 \" role=\"img\" aria-label=\"Sabonete vegetal 90 g\"></div></button>\n      <div class=\"product-copy\"><span class=\"product-category\">Higiene</span><button class=\"product-title\" data-av=\"fv.27\"><span data-av=\"fv.56\"></span></button>\n      <span class=\"stock-label \"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span>Disponível em estoque</span>\n      <div class=\"price\"><span data-av=\"fv.57\"></span></div><button class=\"btn full\" data-av=\"fv.28\"  ><span class=\"icon lucide-shopping-bag\" aria-hidden=\"true\"></span>Adicionar</button></div>\n    </article></div></div><div class=\"catalog-bottom\"><span class=\"icon lucide-check\" aria-hidden=\"true\"></span>Você está vendo todos os <span data-av=\"fv.61\"></span> produtos desta seleção</div></section></div><div class=\"fv-visibility\" data-av=\"fv.64\"><div class=\"empty-state\"><div class=\"empty-icon\"><span class=\"icon lucide-search\" aria-hidden=\"true\"></span></div><h2>Nenhum produto encontrado</h2><p>Tente outra busca ou selecione uma categoria diferente.</p><button class=\"btn secondary\" data-av=\"fv.63\">Limpar filtros</button></div></div></div><div class=\"fv-visibility\" data-av=\"fv.480\"><nav class=\"breadcrumbs\" aria-label=\"Localização\"><a href=\"#\" data-av=\"fv.65\"><span class=\"icon lucide-house\" aria-hidden=\"true\"></span></a><span class=\"icon lucide-chevron-right\" aria-hidden=\"true\"></span><span aria-current=\"page\">Meu carrinho</span></nav><div class=\"page-heading\"><div><h1>Meu carrinho</h1><p>Revise seus produtos e confirme seu pedido de demonstração.</p></div><a class=\"back-link\" href=\"#\" data-av=\"fv.66\"><span class=\"icon lucide-arrow-left\" aria-hidden=\"true\"></span>Continuar escolhendo</a></div><div class=\"fv-visibility\" data-av=\"fv.138\"><div class=\"split-layout\"><div><section><div class=\"section-line\"><h2>Seus produtos</h2><span class=\"subtle\"><span data-av=\"fv.133\"></span></span></div><div class=\"fv-visibility\" data-av=\"fv.76\"><div class=\"cart-row\"><div class=\"product-photo tile-0\"></div><div><div class=\"item-name\"><span data-av=\"fv.69\"></span></div><div class=\"item-meta\"><span data-av=\"fv.70\"></span> / unidade</div></div><div class=\"stepper\"><button data-av=\"fv.71\"><span class=\"icon lucide-minus\" aria-hidden=\"true\"></span></button><span class=\"step-value\"><span data-av=\"fv.72\"></span></span><button data-av=\"fv.73\"><span class=\"icon lucide-plus\" aria-hidden=\"true\"></span></button></div><span class=\"row-total\"><span data-av=\"fv.74\"></span></span><button class=\"icon-btn danger\" data-av=\"fv.75\"><span class=\"icon lucide-trash-2\" aria-hidden=\"true\"></span></button></div></div><div class=\"fv-visibility\" data-av=\"fv.84\"><div class=\"cart-row\"><div class=\"product-photo tile-1\"></div><div><div class=\"item-name\"><span data-av=\"fv.77\"></span></div><div class=\"item-meta\"><span data-av=\"fv.78\"></span> / unidade</div></div><div class=\"stepper\"><button data-av=\"fv.79\"><span class=\"icon lucide-minus\" aria-hidden=\"true\"></span></button><span class=\"step-value\"><span data-av=\"fv.80\"></span></span><button data-av=\"fv.81\"><span class=\"icon lucide-plus\" aria-hidden=\"true\"></span></button></div><span class=\"row-total\"><span data-av=\"fv.82\"></span></span><button class=\"icon-btn danger\" data-av=\"fv.83\"><span class=\"icon lucide-trash-2\" aria-hidden=\"true\"></span></button></div></div><div class=\"fv-visibility\" data-av=\"fv.92\"><div class=\"cart-row\"><div class=\"product-photo tile-2\"></div><div><div class=\"item-name\"><span data-av=\"fv.85\"></span></div><div class=\"item-meta\"><span data-av=\"fv.86\"></span> / unidade</div></div><div class=\"stepper\"><button data-av=\"fv.87\"><span class=\"icon lucide-minus\" aria-hidden=\"true\"></span></button><span class=\"step-value\"><span data-av=\"fv.88\"></span></span><button data-av=\"fv.89\"><span class=\"icon lucide-plus\" aria-hidden=\"true\"></span></button></div><span class=\"row-total\"><span data-av=\"fv.90\"></span></span><button class=\"icon-btn danger\" data-av=\"fv.91\"><span class=\"icon lucide-trash-2\" aria-hidden=\"true\"></span></button></div></div><div class=\"fv-visibility\" data-av=\"fv.100\"><div class=\"cart-row\"><div class=\"product-photo tile-3\"></div><div><div class=\"item-name\"><span data-av=\"fv.93\"></span></div><div class=\"item-meta\"><span data-av=\"fv.94\"></span> / unidade</div></div><div class=\"stepper\"><button data-av=\"fv.95\"><span class=\"icon lucide-minus\" aria-hidden=\"true\"></span></button><span class=\"step-value\"><span data-av=\"fv.96\"></span></span><button data-av=\"fv.97\"><span class=\"icon lucide-plus\" aria-hidden=\"true\"></span></button></div><span class=\"row-total\"><span data-av=\"fv.98\"></span></span><button class=\"icon-btn danger\" data-av=\"fv.99\"><span class=\"icon lucide-trash-2\" aria-hidden=\"true\"></span></button></div></div><div class=\"fv-visibility\" data-av=\"fv.108\"><div class=\"cart-row\"><div class=\"product-photo tile-4\"></div><div><div class=\"item-name\"><span data-av=\"fv.101\"></span></div><div class=\"item-meta\"><span data-av=\"fv.102\"></span> / unidade</div></div><div class=\"stepper\"><button data-av=\"fv.103\"><span class=\"icon lucide-minus\" aria-hidden=\"true\"></span></button><span class=\"step-value\"><span data-av=\"fv.104\"></span></span><button data-av=\"fv.105\"><span class=\"icon lucide-plus\" aria-hidden=\"true\"></span></button></div><span class=\"row-total\"><span data-av=\"fv.106\"></span></span><button class=\"icon-btn danger\" data-av=\"fv.107\"><span class=\"icon lucide-trash-2\" aria-hidden=\"true\"></span></button></div></div><div class=\"fv-visibility\" data-av=\"fv.116\"><div class=\"cart-row\"><div class=\"product-photo tile-5\"></div><div><div class=\"item-name\"><span data-av=\"fv.109\"></span></div><div class=\"item-meta\"><span data-av=\"fv.110\"></span> / unidade</div></div><div class=\"stepper\"><button data-av=\"fv.111\"><span class=\"icon lucide-minus\" aria-hidden=\"true\"></span></button><span class=\"step-value\"><span data-av=\"fv.112\"></span></span><button data-av=\"fv.113\"><span class=\"icon lucide-plus\" aria-hidden=\"true\"></span></button></div><span class=\"row-total\"><span data-av=\"fv.114\"></span></span><button class=\"icon-btn danger\" data-av=\"fv.115\"><span class=\"icon lucide-trash-2\" aria-hidden=\"true\"></span></button></div></div><div class=\"fv-visibility\" data-av=\"fv.124\"><div class=\"cart-row\"><div class=\"product-photo tile-6\"></div><div><div class=\"item-name\"><span data-av=\"fv.117\"></span></div><div class=\"item-meta\"><span data-av=\"fv.118\"></span> / unidade</div></div><div class=\"stepper\"><button data-av=\"fv.119\"><span class=\"icon lucide-minus\" aria-hidden=\"true\"></span></button><span class=\"step-value\"><span data-av=\"fv.120\"></span></span><button data-av=\"fv.121\"><span class=\"icon lucide-plus\" aria-hidden=\"true\"></span></button></div><span class=\"row-total\"><span data-av=\"fv.122\"></span></span><button class=\"icon-btn danger\" data-av=\"fv.123\"><span class=\"icon lucide-trash-2\" aria-hidden=\"true\"></span></button></div></div><div class=\"fv-visibility\" data-av=\"fv.132\"><div class=\"cart-row\"><div class=\"product-photo tile-7\"></div><div><div class=\"item-name\"><span data-av=\"fv.125\"></span></div><div class=\"item-meta\"><span data-av=\"fv.126\"></span> / unidade</div></div><div class=\"stepper\"><button data-av=\"fv.127\"><span class=\"icon lucide-minus\" aria-hidden=\"true\"></span></button><span class=\"step-value\"><span data-av=\"fv.128\"></span></span><button data-av=\"fv.129\"><span class=\"icon lucide-plus\" aria-hidden=\"true\"></span></button></div><span class=\"row-total\"><span data-av=\"fv.130\"></span></span><button class=\"icon-btn danger\" data-av=\"fv.131\"><span class=\"icon lucide-trash-2\" aria-hidden=\"true\"></span></button></div></div></section><section class=\"section-spaced\"><h2>Dados de entrega</h2><p>Endereço fictício para este pedido de demonstração.</p><div class=\"fields\"><div class=\"field\"><span>Nome do destinatário</span><div id=\"FvDeliveryName\" class=\"fv-control-mount\" data-av=\"MountFvDeliveryName\"></div></div><div class=\"field\"><span>Endereço de entrega</span><div id=\"FvDeliveryAddress\" class=\"fv-control-mount\" data-av=\"MountFvDeliveryAddress\"></div></div><div class=\"field\"><span>Observação <span class=\"optional\">(opcional)</span></span><div id=\"FvDeliveryNote\" class=\"fv-control-mount\" data-av=\"MountFvDeliveryNote\"></div></div></div></section></div><aside class=\"summary-panel\"><h2>Resumo do pedido</h2><div class=\"summary-row\"><span>Produtos</span><b><span data-av=\"fv.134\"></span></b></div><div class=\"summary-row\"><span>Quantidade</span><b><span data-av=\"fv.135\"></span></b></div><div class=\"summary-total\"><span>Total</span><strong><span data-av=\"fv.136\"></span></strong></div><button class=\"btn full\" data-av=\"fv.137\">Confirmar pedido simulado<span class=\"icon lucide-arrow-right\" aria-hidden=\"true\"></span></button><div class=\"notice\"><span class=\"icon lucide-info\" aria-hidden=\"true\"></span><span>Pedido de demonstração: nenhum pagamento ou entrega será realizado.</span></div></aside></div></div><div class=\"fv-visibility\" data-av=\"fv.140\"><div class=\"empty-state\"><div class=\"empty-icon\"><span class=\"icon lucide-shopping-bag\" aria-hidden=\"true\"></span></div><h2>Seu carrinho está vazio</h2><p>Escolha seus produtos favoritos e cuide da sua rotina.</p><button class=\"btn\" data-av=\"fv.139\">Explorar catálogo</button></div></div></div><div class=\"fv-visibility\" data-av=\"fv.481\"><nav class=\"breadcrumbs\" aria-label=\"Localização\"><a href=\"#\" data-av=\"fv.141\"><span class=\"icon lucide-house\" aria-hidden=\"true\"></span></a><span class=\"icon lucide-chevron-right\" aria-hidden=\"true\"></span><span aria-current=\"page\">Meus pedidos</span></nav><div class=\"page-heading\"><div><h1>Meus pedidos</h1><p>Acompanhe os produtos que fazem parte da sua rotina.</p></div><a class=\"btn secondary\" href=\"#\" data-av=\"fv.142\"><span class=\"icon lucide-shopping-bag\" aria-hidden=\"true\"></span>Explorar catálogo</a></div><div class=\"management-toolbar\"><div class=\"filter-tabs\" role=\"group\" aria-label=\"Filtrar pedidos por status\"><button class=\"filter-tab active\" data-av=\"fv.149\" aria-pressed=\"true\">Todos<small>3</small></button><button class=\"filter-tab \" data-av=\"fv.150\" aria-pressed=\"false\">Recebido<small>1</small></button><button class=\"filter-tab \" data-av=\"fv.151\" aria-pressed=\"false\">Em separação<small>1</small></button><button class=\"filter-tab \" data-av=\"fv.152\" aria-pressed=\"false\">Concluído<small>1</small></button><button class=\"filter-tab \" data-av=\"fv.153\" aria-pressed=\"false\">Cancelado<small>0</small></button></div><span class=\"subtle\">3 pedidos no seu histórico</span></div><div class=\"table-frame\"><div class=\"table-scroll\"><div class=\"data-table fv-table\" role=\"table\"><div class=\"fv-thead\" role=\"rowgroup\"><div class=\"fv-tr\" role=\"row\"><div class=\"fv-th\" role=\"columnheader\">Pedido</div><div class=\"fv-th\" role=\"columnheader\">Data</div><div class=\"fv-th\" role=\"columnheader\">Itens</div><div class=\"fv-th\" role=\"columnheader\">Total</div><div class=\"fv-th\" role=\"columnheader\">Status</div><div class=\"fv-th\" role=\"columnheader\"></div></div></div><div class=\"fv-tbody\" role=\"rowgroup\"><div class=\"fv-visibility\" data-av=\"fv.458\"><div class=\"fv-tr\" role=\"row\"><div class=\"fv-td\" role=\"cell\"><button class=\"text-button\" data-av=\"fv.459\">#1005</button></div><div class=\"muted-cell fv-td\" role=\"cell\">Hoje</div><div class=\"fv-td\" role=\"cell\"><span data-av=\"fv.460\"></span></div><div class=\"fv-td\" role=\"cell\"><strong><span data-av=\"fv.461\"></span></strong></div><div class=\"fv-td\" role=\"cell\"><span class=\"badge status-1\">Recebido</span></div><div class=\"fv-td\" role=\"cell\"><button class=\"icon-btn\" data-av=\"fv.462\"><span class=\"icon lucide-arrow-up-right\" aria-hidden=\"true\"></span></button></div></div></div>\n      <div class=\"fv-visibility\" data-av=\"fv.160\"><div class=\"fv-tr\" role=\"row\"><div class=\"fv-td\" role=\"cell\"><a class=\"table-id\" href=\"#\" data-av=\"fv.143\">#1003</a></div><div class=\"muted-cell fv-td\" role=\"cell\">09 de out. de 2026</div><div class=\"muted-cell fv-td\" role=\"cell\">2 unidades</div><div class=\"fv-td\" role=\"cell\"><strong>R$ 109,80</strong></div><div class=\"fv-td\" role=\"cell\"><span class=\"badge\" data-av=\"fv.158\"><span data-av=\"fv.159\"></span></span></div><div class=\"fv-td\" role=\"cell\"><div class=\"table-actions\"><a class=\"icon-btn\" href=\"#\" data-av=\"fv.144\" title=\"Ver detalhes\" aria-label=\"Ver pedido 1003\"><span class=\"icon lucide-arrow-up-right\" aria-hidden=\"true\"></span></a></div></div></div></div><div class=\"fv-visibility\" data-av=\"fv.163\"><div class=\"fv-tr\" role=\"row\"><div class=\"fv-td\" role=\"cell\"><a class=\"table-id\" href=\"#\" data-av=\"fv.145\">#1002</a></div><div class=\"muted-cell fv-td\" role=\"cell\">07 de out. de 2026</div><div class=\"muted-cell fv-td\" role=\"cell\">3 unidades</div><div class=\"fv-td\" role=\"cell\"><strong>R$ 59,70</strong></div><div class=\"fv-td\" role=\"cell\"><span class=\"badge\" data-av=\"fv.161\"><span data-av=\"fv.162\"></span></span></div><div class=\"fv-td\" role=\"cell\"><div class=\"table-actions\"><a class=\"icon-btn\" href=\"#\" data-av=\"fv.146\" title=\"Ver detalhes\" aria-label=\"Ver pedido 1002\"><span class=\"icon lucide-arrow-up-right\" aria-hidden=\"true\"></span></a></div></div></div></div><div class=\"fv-visibility\" data-av=\"fv.166\"><div class=\"fv-tr\" role=\"row\"><div class=\"fv-td\" role=\"cell\"><a class=\"table-id\" href=\"#\" data-av=\"fv.147\">#1001</a></div><div class=\"muted-cell fv-td\" role=\"cell\">02 de out. de 2026</div><div class=\"muted-cell fv-td\" role=\"cell\">2 unidades</div><div class=\"fv-td\" role=\"cell\"><strong>R$ 82,80</strong></div><div class=\"fv-td\" role=\"cell\"><span class=\"badge\" data-av=\"fv.164\"><span data-av=\"fv.165\"></span></span></div><div class=\"fv-td\" role=\"cell\"><div class=\"table-actions\"><a class=\"icon-btn\" href=\"#\" data-av=\"fv.148\" title=\"Ver detalhes\" aria-label=\"Ver pedido 1001\"><span class=\"icon lucide-arrow-up-right\" aria-hidden=\"true\"></span></a></div></div></div></div>\n      <div class=\"fv-visibility\" data-av=\"fv.169\"><div class=\"fv-tr\" role=\"row\"><div class=\"fv-td\" role=\"cell\"><a class=\"table-id\" href=\"#\" data-av=\"fv.154\">#1004</a></div><div class=\"muted-cell fv-td\" role=\"cell\">10 de out. de 2026</div><div class=\"muted-cell fv-td\" role=\"cell\">1 unidades</div><div class=\"fv-td\" role=\"cell\"><strong>R$ 32,90</strong></div><div class=\"fv-td\" role=\"cell\"><span class=\"badge\" data-av=\"fv.167\"><span data-av=\"fv.168\"></span></span></div><div class=\"fv-td\" role=\"cell\"><div class=\"table-actions\"><a class=\"icon-btn\" href=\"#\" data-av=\"fv.155\" title=\"Ver detalhes\" aria-label=\"Ver pedido 1004\"><span class=\"icon lucide-arrow-up-right\" aria-hidden=\"true\"></span></a></div></div></div></div><div class=\"fv-visibility\" data-av=\"fv.172\"><div class=\"fv-tr\" role=\"row\"><div class=\"fv-td\" role=\"cell\"><a class=\"table-id\" href=\"#\" data-av=\"fv.156\">#1000</a></div><div class=\"muted-cell fv-td\" role=\"cell\">28 de set. de 2026</div><div class=\"muted-cell fv-td\" role=\"cell\">1 unidades</div><div class=\"fv-td\" role=\"cell\"><strong>R$ 24,90</strong></div><div class=\"fv-td\" role=\"cell\"><span class=\"badge\" data-av=\"fv.170\"><span data-av=\"fv.171\"></span></span></div><div class=\"fv-td\" role=\"cell\"><div class=\"table-actions\"><a class=\"icon-btn\" href=\"#\" data-av=\"fv.157\" title=\"Ver detalhes\" aria-label=\"Ver pedido 1000\"><span class=\"icon lucide-arrow-up-right\" aria-hidden=\"true\"></span></a></div></div></div></div></div></div></div><div class=\"table-footer\"><span>3 pedidos</span><span>Pedidos de demonstração</span></div></div></div><div class=\"fv-visibility\" data-av=\"fv.482\"><div class=\"fv-visibility\" data-av=\"fv.291\"><nav class=\"breadcrumbs\" aria-label=\"Localização\"><a href=\"#\" data-av=\"fv.281\"><span class=\"icon lucide-house\" aria-hidden=\"true\"></span></a><span class=\"icon lucide-chevron-right\" aria-hidden=\"true\"></span><a href=\"#\" data-av=\"fv.282\">Gestão de pedidos</a><span class=\"icon lucide-chevron-right\" aria-hidden=\"true\"></span><span aria-current=\"page\">Pedido #1000</span></nav>\n      <div class=\"page-heading detail-heading\"><div><span class=\"eyebrow\">Gestão de pedidos</span><h1>Pedido #1000</h1><div class=\"detail-meta\"><span>28 de set. de 2026 às 17:31</span><span>·</span><span class=\"badge\" data-av=\"fv.284\"><span data-av=\"fv.285\"></span></span></div></div><a class=\"back-link\" href=\"#\" data-av=\"fv.283\"><span class=\"icon lucide-arrow-left\" aria-hidden=\"true\"></span>Voltar aos pedidos</a></div>\n      <div class=\"split-layout\"><div><section><div class=\"section-line\"><h2>Acompanhamento do pedido</h2></div><div class=\"fv-visibility\" data-av=\"fv.286\"><div class=\"cancel-message\"><span class=\"badge status-4\">Cancelado</span><p style=\"margin-top:13px\">Este pedido foi cancelado. Os produtos foram devolvidos ao estoque.</p></div></div><div class=\"fv-visibility\" data-av=\"fv.290\"><div class=\"timeline\"><div class=\"timeline-step\" data-av=\"fv.287\"><span class=\"timeline-marker\"><span class=\"icon lucide-clipboard-check\" aria-hidden=\"true\"></span></span><span>Recebido</span></div><div class=\"timeline-step\" data-av=\"fv.288\"><span class=\"timeline-marker\"><span class=\"icon lucide-package\" aria-hidden=\"true\"></span></span><span>Em separação</span></div><div class=\"timeline-step\" data-av=\"fv.289\"><span class=\"timeline-marker\"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span></span><span>Concluído</span></div></div></div></section>\n      <section class=\"section-spaced\"><div class=\"section-line\"><h2>Produtos do pedido</h2><span class=\"subtle\">1 itens</span></div><div class=\"cart-row detail-item-row\"><div class=\"product-photo tile-2 \" role=\"img\" aria-label=\"Sabonete líquido 250 ml\"></div><div><div class=\"item-name\">Sabonete líquido 250 ml</div><div class=\"item-meta\">R$ 24,90 / unidade</div></div><span class=\"subtle\">Qtd. 1</span><strong class=\"row-total\">R$ 24,90</strong></div></section>\n      <section class=\"address-detail\"><div><h3><span class=\"icon lucide-map-pin\" aria-hidden=\"true\"></span>Dados de entrega</h3><p><strong>Lucas Oliveira</strong><br>Rua das Flores, 90, Centro, Campinas - SP</p></div><div><h3><span class=\"icon lucide-message-square\" aria-hidden=\"true\"></span>Observação</h3><p>Nenhuma observação informada.</p></div></section></div>\n      <aside class=\"summary-panel\"><h2>Resumo do pedido</h2><div class=\"summary-row\"><span>Pedido</span><b>#1000</b></div><div class=\"summary-row\"><span>Quantidade</span><b>1 unidades</b></div><div class=\"summary-row\"><span>Status</span><span class=\"badge\" data-av=\"fv.284.copy202\"><span data-av=\"fv.285.copy203\"></span></span></div><div class=\"summary-total\"><span>Total</span><strong>R$ 24,90</strong></div><div class=\"notice\"><span class=\"icon lucide-info\" aria-hidden=\"true\"></span><span>Pedido de demonstração: nenhum pagamento ou entrega será realizado.</span></div></aside></div></div><div class=\"fv-visibility\" data-av=\"fv.302\"><nav class=\"breadcrumbs\" aria-label=\"Localização\"><a href=\"#\" data-av=\"fv.292\"><span class=\"icon lucide-house\" aria-hidden=\"true\"></span></a><span class=\"icon lucide-chevron-right\" aria-hidden=\"true\"></span><a href=\"#\" data-av=\"fv.293\">Gestão de pedidos</a><span class=\"icon lucide-chevron-right\" aria-hidden=\"true\"></span><span aria-current=\"page\">Pedido #1001</span></nav>\n      <div class=\"page-heading detail-heading\"><div><span class=\"eyebrow\">Gestão de pedidos</span><h1>Pedido #1001</h1><div class=\"detail-meta\"><span>02 de out. de 2026 às 17:31</span><span>·</span><span class=\"badge\" data-av=\"fv.295\"><span data-av=\"fv.296\"></span></span></div></div><a class=\"back-link\" href=\"#\" data-av=\"fv.294\"><span class=\"icon lucide-arrow-left\" aria-hidden=\"true\"></span>Voltar aos pedidos</a></div>\n      <div class=\"split-layout\"><div><section><div class=\"section-line\"><h2>Acompanhamento do pedido</h2></div><div class=\"fv-visibility\" data-av=\"fv.297\"><div class=\"cancel-message\"><span class=\"badge status-4\">Cancelado</span><p style=\"margin-top:13px\">Este pedido foi cancelado. Os produtos foram devolvidos ao estoque.</p></div></div><div class=\"fv-visibility\" data-av=\"fv.301\"><div class=\"timeline\"><div class=\"timeline-step\" data-av=\"fv.298\"><span class=\"timeline-marker\"><span class=\"icon lucide-clipboard-check\" aria-hidden=\"true\"></span></span><span>Recebido</span></div><div class=\"timeline-step\" data-av=\"fv.299\"><span class=\"timeline-marker\"><span class=\"icon lucide-package\" aria-hidden=\"true\"></span></span><span>Em separação</span></div><div class=\"timeline-step\" data-av=\"fv.300\"><span class=\"timeline-marker\"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span></span><span>Concluído</span></div></div></div></section>\n      <section class=\"section-spaced\"><div class=\"section-line\"><h2>Produtos do pedido</h2><span class=\"subtle\">2 itens</span></div><div class=\"cart-row detail-item-row\"><div class=\"product-photo tile-0 \" role=\"img\" aria-label=\"Hidratante facial 50 g\"></div><div><div class=\"item-name\">Hidratante facial 50 g</div><div class=\"item-meta\">R$ 49,90 / unidade</div></div><span class=\"subtle\">Qtd. 1</span><strong class=\"row-total\">R$ 49,90</strong></div><div class=\"cart-row detail-item-row\"><div class=\"product-photo tile-4 \" role=\"img\" aria-label=\"Shampoo suave 300 ml\"></div><div><div class=\"item-name\">Shampoo suave 300 ml</div><div class=\"item-meta\">R$ 32,90 / unidade</div></div><span class=\"subtle\">Qtd. 1</span><strong class=\"row-total\">R$ 32,90</strong></div></section>\n      <section class=\"address-detail\"><div><h3><span class=\"icon lucide-map-pin\" aria-hidden=\"true\"></span>Dados de entrega</h3><p><strong>Marina Costa</strong><br>Rua dos Jardins, 245, apto. 32, São Paulo - SP</p></div><div><h3><span class=\"icon lucide-message-square\" aria-hidden=\"true\"></span>Observação</h3><p>Nenhuma observação informada.</p></div></section></div>\n      <aside class=\"summary-panel\"><h2>Resumo do pedido</h2><div class=\"summary-row\"><span>Pedido</span><b>#1001</b></div><div class=\"summary-row\"><span>Quantidade</span><b>2 unidades</b></div><div class=\"summary-row\"><span>Status</span><span class=\"badge\" data-av=\"fv.295.copy215\"><span data-av=\"fv.296.copy216\"></span></span></div><div class=\"summary-total\"><span>Total</span><strong>R$ 82,80</strong></div><div class=\"notice\"><span class=\"icon lucide-info\" aria-hidden=\"true\"></span><span>Pedido de demonstração: nenhum pagamento ou entrega será realizado.</span></div></aside></div></div><div class=\"fv-visibility\" data-av=\"fv.314\"><nav class=\"breadcrumbs\" aria-label=\"Localização\"><a href=\"#\" data-av=\"fv.303\"><span class=\"icon lucide-house\" aria-hidden=\"true\"></span></a><span class=\"icon lucide-chevron-right\" aria-hidden=\"true\"></span><a href=\"#\" data-av=\"fv.304\">Gestão de pedidos</a><span class=\"icon lucide-chevron-right\" aria-hidden=\"true\"></span><span aria-current=\"page\">Pedido #1002</span></nav>\n      <div class=\"page-heading detail-heading\"><div><span class=\"eyebrow\">Gestão de pedidos</span><h1>Pedido #1002</h1><div class=\"detail-meta\"><span>07 de out. de 2026 às 17:31</span><span>·</span><span class=\"badge\" data-av=\"fv.306\"><span data-av=\"fv.307\"></span></span></div></div><div class=\"fv-visibility\" data-av=\"fv.308\"><button class=\"btn secondary\" data-av=\"fv.305\"><span class=\"icon lucide-square-pen\" aria-hidden=\"true\"></span>Alterar status</button></div></div>\n      <div class=\"split-layout\"><div><section><div class=\"section-line\"><h2>Acompanhamento do pedido</h2></div><div class=\"fv-visibility\" data-av=\"fv.309\"><div class=\"cancel-message\"><span class=\"badge status-4\">Cancelado</span><p style=\"margin-top:13px\">Este pedido foi cancelado. Os produtos foram devolvidos ao estoque.</p></div></div><div class=\"fv-visibility\" data-av=\"fv.313\"><div class=\"timeline\"><div class=\"timeline-step\" data-av=\"fv.310\"><span class=\"timeline-marker\"><span class=\"icon lucide-clipboard-check\" aria-hidden=\"true\"></span></span><span>Recebido</span></div><div class=\"timeline-step\" data-av=\"fv.311\"><span class=\"timeline-marker\"><span class=\"icon lucide-package\" aria-hidden=\"true\"></span></span><span>Em separação</span></div><div class=\"timeline-step\" data-av=\"fv.312\"><span class=\"timeline-marker\"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span></span><span>Concluído</span></div></div></div></section>\n      <section class=\"section-spaced\"><div class=\"section-line\"><h2>Produtos do pedido</h2><span class=\"subtle\">2 itens</span></div><div class=\"cart-row detail-item-row\"><div class=\"product-photo tile-2 \" role=\"img\" aria-label=\"Sabonete líquido 250 ml\"></div><div><div class=\"item-name\">Sabonete líquido 250 ml</div><div class=\"item-meta\">R$ 24,90 / unidade</div></div><span class=\"subtle\">Qtd. 2</span><strong class=\"row-total\">R$ 49,80</strong></div><div class=\"cart-row detail-item-row\"><div class=\"product-photo tile-6 \" role=\"img\" aria-label=\"Sabonete vegetal 90 g\"></div><div><div class=\"item-name\">Sabonete vegetal 90 g</div><div class=\"item-meta\">R$ 9,90 / unidade</div></div><span class=\"subtle\">Qtd. 1</span><strong class=\"row-total\">R$ 9,90</strong></div></section>\n      <section class=\"address-detail\"><div><h3><span class=\"icon lucide-map-pin\" aria-hidden=\"true\"></span>Dados de entrega</h3><p><strong>Marina Costa</strong><br>Rua dos Jardins, 245, apto. 32, São Paulo - SP</p></div><div><h3><span class=\"icon lucide-message-square\" aria-hidden=\"true\"></span>Observação</h3><p>Nenhuma observação informada.</p></div></section></div>\n      <aside class=\"summary-panel\"><h2>Resumo do pedido</h2><div class=\"summary-row\"><span>Pedido</span><b>#1002</b></div><div class=\"summary-row\"><span>Quantidade</span><b>3 unidades</b></div><div class=\"summary-row\"><span>Status</span><span class=\"badge\" data-av=\"fv.306.copy229\"><span data-av=\"fv.307.copy230\"></span></span></div><div class=\"summary-total\"><span>Total</span><strong>R$ 59,70</strong></div><div class=\"notice\"><span class=\"icon lucide-info\" aria-hidden=\"true\"></span><span>Pedido de demonstração: nenhum pagamento ou entrega será realizado.</span></div></aside></div></div><div class=\"fv-visibility\" data-av=\"fv.326\"><nav class=\"breadcrumbs\" aria-label=\"Localização\"><a href=\"#\" data-av=\"fv.315\"><span class=\"icon lucide-house\" aria-hidden=\"true\"></span></a><span class=\"icon lucide-chevron-right\" aria-hidden=\"true\"></span><a href=\"#\" data-av=\"fv.316\">Gestão de pedidos</a><span class=\"icon lucide-chevron-right\" aria-hidden=\"true\"></span><span aria-current=\"page\">Pedido #1003</span></nav>\n      <div class=\"page-heading detail-heading\"><div><span class=\"eyebrow\">Gestão de pedidos</span><h1>Pedido #1003</h1><div class=\"detail-meta\"><span>09 de out. de 2026 às 17:31</span><span>·</span><span class=\"badge\" data-av=\"fv.318\"><span data-av=\"fv.319\"></span></span></div></div><div class=\"fv-visibility\" data-av=\"fv.320\"><button class=\"btn secondary\" data-av=\"fv.317\"><span class=\"icon lucide-square-pen\" aria-hidden=\"true\"></span>Alterar status</button></div></div>\n      <div class=\"split-layout\"><div><section><div class=\"section-line\"><h2>Acompanhamento do pedido</h2></div><div class=\"fv-visibility\" data-av=\"fv.321\"><div class=\"cancel-message\"><span class=\"badge status-4\">Cancelado</span><p style=\"margin-top:13px\">Este pedido foi cancelado. Os produtos foram devolvidos ao estoque.</p></div></div><div class=\"fv-visibility\" data-av=\"fv.325\"><div class=\"timeline\"><div class=\"timeline-step\" data-av=\"fv.322\"><span class=\"timeline-marker\"><span class=\"icon lucide-clipboard-check\" aria-hidden=\"true\"></span></span><span>Recebido</span></div><div class=\"timeline-step\" data-av=\"fv.323\"><span class=\"timeline-marker\"><span class=\"icon lucide-package\" aria-hidden=\"true\"></span></span><span>Em separação</span></div><div class=\"timeline-step\" data-av=\"fv.324\"><span class=\"timeline-marker\"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span></span><span>Concluído</span></div></div></div></section>\n      <section class=\"section-spaced\"><div class=\"section-line\"><h2>Produtos do pedido</h2><span class=\"subtle\">2 itens</span></div><div class=\"cart-row detail-item-row\"><div class=\"product-photo tile-1 \" role=\"img\" aria-label=\"Protetor solar FPS 50 120 ml\"></div><div><div class=\"item-name\">Protetor solar FPS 50 120 ml</div><div class=\"item-meta\">R$ 89,90 / unidade</div></div><span class=\"subtle\">Qtd. 1</span><strong class=\"row-total\">R$ 89,90</strong></div><div class=\"cart-row detail-item-row\"><div class=\"product-photo tile-3 \" role=\"img\" aria-label=\"Creme para mãos 75 g\"></div><div><div class=\"item-name\">Creme para mãos 75 g</div><div class=\"item-meta\">R$ 19,90 / unidade</div></div><span class=\"subtle\">Qtd. 1</span><strong class=\"row-total\">R$ 19,90</strong></div></section>\n      <section class=\"address-detail\"><div><h3><span class=\"icon lucide-map-pin\" aria-hidden=\"true\"></span>Dados de entrega</h3><p><strong>Marina Costa</strong><br>Rua dos Jardins, 245, apto. 32, São Paulo - SP</p></div><div><h3><span class=\"icon lucide-message-square\" aria-hidden=\"true\"></span>Observação</h3><p>Portaria no térreo.</p></div></section></div>\n      <aside class=\"summary-panel\"><h2>Resumo do pedido</h2><div class=\"summary-row\"><span>Pedido</span><b>#1003</b></div><div class=\"summary-row\"><span>Quantidade</span><b>2 unidades</b></div><div class=\"summary-row\"><span>Status</span><span class=\"badge\" data-av=\"fv.318.copy243\"><span data-av=\"fv.319.copy244\"></span></span></div><div class=\"summary-total\"><span>Total</span><strong>R$ 109,80</strong></div><div class=\"notice\"><span class=\"icon lucide-info\" aria-hidden=\"true\"></span><span>Pedido de demonstração: nenhum pagamento ou entrega será realizado.</span></div></aside></div></div><div class=\"fv-visibility\" data-av=\"fv.338\"><nav class=\"breadcrumbs\" aria-label=\"Localização\"><a href=\"#\" data-av=\"fv.327\"><span class=\"icon lucide-house\" aria-hidden=\"true\"></span></a><span class=\"icon lucide-chevron-right\" aria-hidden=\"true\"></span><a href=\"#\" data-av=\"fv.328\">Gestão de pedidos</a><span class=\"icon lucide-chevron-right\" aria-hidden=\"true\"></span><span aria-current=\"page\">Pedido #1004</span></nav>\n      <div class=\"page-heading detail-heading\"><div><span class=\"eyebrow\">Gestão de pedidos</span><h1>Pedido #1004</h1><div class=\"detail-meta\"><span>10 de out. de 2026 às 05:31</span><span>·</span><span class=\"badge\" data-av=\"fv.330\"><span data-av=\"fv.331\"></span></span></div></div><div class=\"fv-visibility\" data-av=\"fv.332\"><button class=\"btn secondary\" data-av=\"fv.329\"><span class=\"icon lucide-square-pen\" aria-hidden=\"true\"></span>Alterar status</button></div></div>\n      <div class=\"split-layout\"><div><section><div class=\"section-line\"><h2>Acompanhamento do pedido</h2></div><div class=\"fv-visibility\" data-av=\"fv.333\"><div class=\"cancel-message\"><span class=\"badge status-4\">Cancelado</span><p style=\"margin-top:13px\">Este pedido foi cancelado. Os produtos foram devolvidos ao estoque.</p></div></div><div class=\"fv-visibility\" data-av=\"fv.337\"><div class=\"timeline\"><div class=\"timeline-step\" data-av=\"fv.334\"><span class=\"timeline-marker\"><span class=\"icon lucide-clipboard-check\" aria-hidden=\"true\"></span></span><span>Recebido</span></div><div class=\"timeline-step\" data-av=\"fv.335\"><span class=\"timeline-marker\"><span class=\"icon lucide-package\" aria-hidden=\"true\"></span></span><span>Em separação</span></div><div class=\"timeline-step\" data-av=\"fv.336\"><span class=\"timeline-marker\"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span></span><span>Concluído</span></div></div></div></section>\n      <section class=\"section-spaced\"><div class=\"section-line\"><h2>Produtos do pedido</h2><span class=\"subtle\">1 itens</span></div><div class=\"cart-row detail-item-row\"><div class=\"product-photo tile-4 \" role=\"img\" aria-label=\"Shampoo suave 300 ml\"></div><div><div class=\"item-name\">Shampoo suave 300 ml</div><div class=\"item-meta\">R$ 32,90 / unidade</div></div><span class=\"subtle\">Qtd. 1</span><strong class=\"row-total\">R$ 32,90</strong></div></section>\n      <section class=\"address-detail\"><div><h3><span class=\"icon lucide-map-pin\" aria-hidden=\"true\"></span>Dados de entrega</h3><p><strong>Lucas Oliveira</strong><br>Rua das Flores, 90, Centro, Campinas - SP</p></div><div><h3><span class=\"icon lucide-message-square\" aria-hidden=\"true\"></span>Observação</h3><p>Nenhuma observação informada.</p></div></section></div>\n      <aside class=\"summary-panel\"><h2>Resumo do pedido</h2><div class=\"summary-row\"><span>Pedido</span><b>#1004</b></div><div class=\"summary-row\"><span>Quantidade</span><b>1 unidades</b></div><div class=\"summary-row\"><span>Status</span><span class=\"badge\" data-av=\"fv.330.copy257\"><span data-av=\"fv.331.copy258\"></span></span></div><div class=\"summary-total\"><span>Total</span><strong>R$ 32,90</strong></div><div class=\"notice\"><span class=\"icon lucide-info\" aria-hidden=\"true\"></span><span>Pedido de demonstração: nenhum pagamento ou entrega será realizado.</span></div></aside></div></div><div class=\"fv-visibility\" data-av=\"fv.457\"><nav class=\"breadcrumbs\"><button class=\"text-button\" data-av=\"fv.420\">Meus pedidos</button><span class=\"icon lucide-chevron-right\" aria-hidden=\"true\"></span>Pedido #1005</nav><div class=\"success-banner\"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span><div><h3>Seu pedido foi registrado!</h3><p>Esta é uma demonstração. Nenhum pagamento ou entrega será realizado.</p></div></div><div class=\"page-heading\"><div><span class=\"eyebrow\">Meus pedidos</span><h1>Pedido #1005</h1><div class=\"detail-meta\"><span class=\"badge status-1\">Recebido</span></div></div></div><div class=\"split-layout\"><div><section class=\"section-line\"><h2>Produtos do pedido</h2></section><div class=\"fv-visibility\" data-av=\"fv.424\"><div class=\"cart-row detail-item-row\"><div class=\"product-photo tile-0\"></div><div class=\"item-name\"><span data-av=\"fv.421\"></span></div><span class=\"subtle\">Qtd. <span data-av=\"fv.422\"></span></span><strong class=\"row-total\"><span data-av=\"fv.423\"></span></strong></div></div><div class=\"fv-visibility\" data-av=\"fv.428\"><div class=\"cart-row detail-item-row\"><div class=\"product-photo tile-1\"></div><div class=\"item-name\"><span data-av=\"fv.425\"></span></div><span class=\"subtle\">Qtd. <span data-av=\"fv.426\"></span></span><strong class=\"row-total\"><span data-av=\"fv.427\"></span></strong></div></div><div class=\"fv-visibility\" data-av=\"fv.432\"><div class=\"cart-row detail-item-row\"><div class=\"product-photo tile-2\"></div><div class=\"item-name\"><span data-av=\"fv.429\"></span></div><span class=\"subtle\">Qtd. <span data-av=\"fv.430\"></span></span><strong class=\"row-total\"><span data-av=\"fv.431\"></span></strong></div></div><div class=\"fv-visibility\" data-av=\"fv.436\"><div class=\"cart-row detail-item-row\"><div class=\"product-photo tile-3\"></div><div class=\"item-name\"><span data-av=\"fv.433\"></span></div><span class=\"subtle\">Qtd. <span data-av=\"fv.434\"></span></span><strong class=\"row-total\"><span data-av=\"fv.435\"></span></strong></div></div><div class=\"fv-visibility\" data-av=\"fv.440\"><div class=\"cart-row detail-item-row\"><div class=\"product-photo tile-4\"></div><div class=\"item-name\"><span data-av=\"fv.437\"></span></div><span class=\"subtle\">Qtd. <span data-av=\"fv.438\"></span></span><strong class=\"row-total\"><span data-av=\"fv.439\"></span></strong></div></div><div class=\"fv-visibility\" data-av=\"fv.444\"><div class=\"cart-row detail-item-row\"><div class=\"product-photo tile-5\"></div><div class=\"item-name\"><span data-av=\"fv.441\"></span></div><span class=\"subtle\">Qtd. <span data-av=\"fv.442\"></span></span><strong class=\"row-total\"><span data-av=\"fv.443\"></span></strong></div></div><div class=\"fv-visibility\" data-av=\"fv.448\"><div class=\"cart-row detail-item-row\"><div class=\"product-photo tile-6\"></div><div class=\"item-name\"><span data-av=\"fv.445\"></span></div><span class=\"subtle\">Qtd. <span data-av=\"fv.446\"></span></span><strong class=\"row-total\"><span data-av=\"fv.447\"></span></strong></div></div><div class=\"fv-visibility\" data-av=\"fv.452\"><div class=\"cart-row detail-item-row\"><div class=\"product-photo tile-7\"></div><div class=\"item-name\"><span data-av=\"fv.449\"></span></div><span class=\"subtle\">Qtd. <span data-av=\"fv.450\"></span></span><strong class=\"row-total\"><span data-av=\"fv.451\"></span></strong></div></div><section class=\"address-detail\"><div><h3><span class=\"icon lucide-map-pin\" aria-hidden=\"true\"></span>Dados de entrega</h3><p><span data-av=\"fv.453\"></span><br><span data-av=\"fv.454\"></span></p></div><div><h3>Observação</h3><p><span data-av=\"fv.455\"></span></p></div></section></div><aside class=\"summary-panel\"><h2>Resumo do pedido</h2><div class=\"summary-total\"><span>Total</span><strong><span data-av=\"fv.456\"></span></strong></div><div class=\"notice\"><span class=\"icon lucide-info\" aria-hidden=\"true\"></span>Pedido de demonstração: nenhum pagamento ou entrega será realizado.</div></aside></div></div></div><div class=\"fv-visibility\" data-av=\"fv.483\"><nav class=\"breadcrumbs\" aria-label=\"Localização\"><a href=\"#\" data-av=\"fv.207\"><span class=\"icon lucide-house\" aria-hidden=\"true\"></span></a><span class=\"icon lucide-chevron-right\" aria-hidden=\"true\"></span><span aria-current=\"page\">Administração</span><span class=\"icon lucide-chevron-right\" aria-hidden=\"true\"></span><span aria-current=\"page\">Gestão de produtos</span></nav><div class=\"page-heading\"><div><span class=\"eyebrow\">Administração</span><h1>Gestão de produtos</h1><p>Mantenha seu catálogo, preços e estoque em dia.</p></div><button class=\"btn \" data-av=\"fv.208\"><span class=\"icon lucide-plus\" aria-hidden=\"true\"></span>Novo produto</button></div><div class=\"stats-band\"><div class=\"stat\"><div class=\"stat-icon\"><span class=\"icon lucide-boxes\" aria-hidden=\"true\"></span></div><div><strong class=\"stat-value\">8</strong><span class=\"stat-label\">Produtos cadastrados</span></div></div><div class=\"stat\"><div class=\"stat-icon\"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span></div><div><strong class=\"stat-value\">7</strong><span class=\"stat-label\">Produtos ativos</span></div></div><div class=\"stat\"><div class=\"stat-icon\"><span class=\"icon lucide-triangle-alert\" aria-hidden=\"true\"></span></div><div><strong class=\"stat-value\">1</strong><span class=\"stat-label\">Com estoque baixo</span></div></div><div class=\"stat\"><div class=\"stat-icon\"><span class=\"icon lucide-package-x\" aria-hidden=\"true\"></span></div><div><strong class=\"stat-value\">1</strong><span class=\"stat-label\">Sem estoque</span></div></div></div><div class=\"management-toolbar\"><div class=\"management-filters\"><div class=\"input-search\"><span class=\"icon lucide-search\" aria-hidden=\"true\"></span><div id=\"FvManagementSearch\" class=\"fv-control-mount\" data-av=\"MountFvManagementSearch\"></div></div><div id=\"FvManagementCategory\" class=\"fv-control-mount\" data-av=\"MountFvManagementCategory\"></div><div id=\"FvManagementActive\" class=\"fv-control-mount\" data-av=\"MountFvManagementActive\"></div></div><span class=\"subtle\">8 produtos</span></div>\n      <div class=\"table-frame\"><div class=\"table-scroll\"><div class=\"data-table fv-table\" role=\"table\"><div class=\"fv-thead\" role=\"rowgroup\"><div class=\"fv-tr\" role=\"row\"><div class=\"fv-th\" role=\"columnheader\">Produto</div><div class=\"fv-th\" role=\"columnheader\">Categoria</div><div class=\"fv-th\" role=\"columnheader\">Preço</div><div class=\"fv-th\" role=\"columnheader\">Estoque</div><div class=\"fv-th\" role=\"columnheader\">Destaque</div><div class=\"fv-th\" role=\"columnheader\">Ativo</div><div class=\"fv-th\" role=\"columnheader\"></div></div></div><div class=\"fv-tbody\" role=\"rowgroup\"><div class=\"fv-visibility\" data-av=\"fv.238\"><div class=\"fv-tr\" role=\"row\"><div class=\"fv-td\" role=\"cell\"><div class=\"table-product\"><div class=\"product-photo tile-0 \" role=\"img\" aria-label=\"Hidratante facial 50 g\"></div><div><strong><span data-av=\"fv.233\"></span></strong><small>#001</small></div></div></div><div class=\"muted-cell fv-td\" role=\"cell\">Beleza</div><div class=\"fv-td\" role=\"cell\"><strong><span data-av=\"fv.234\"></span></strong></div><div class=\"muted-cell fv-td\" role=\"cell\"><span data-av=\"fv.235\"></span></div><div class=\"fv-td\" role=\"cell\"><button class=\"icon-btn\" data-av=\"fv.209\" aria-label=\"Remover destaque de Hidratante facial 50 g\" title=\"Remover destaque\" aria-pressed=\"true\" style=\"color:#b49343\"><span class=\"icon lucide-star\" aria-hidden=\"true\"></span></button></div><div class=\"fv-td\" role=\"cell\"><div class=\"fv-visibility\" data-av=\"fv.236\"><button class=\"switch on\" role=\"switch\" aria-checked=\"true\" data-av=\"fv.210\" aria-label=\"Ativar Hidratante facial 50 g\" title=\"Desativar produto\"><span class=\"fv-sr-only\">Alterar</span></button></div><div class=\"fv-visibility\" data-av=\"fv.237\"><button class=\"switch\" role=\"switch\" aria-checked=\"true\" data-av=\"fv.210.copy308\" aria-label=\"Ativar Hidratante facial 50 g\" title=\"Desativar produto\"><span class=\"fv-sr-only\">Alterar</span></button></div></div><div class=\"fv-td\" role=\"cell\"><button class=\"icon-btn\" data-av=\"fv.211\" title=\"Editar produto\" aria-label=\"Editar Hidratante facial 50 g\"><span class=\"icon lucide-square-pen\" aria-hidden=\"true\"></span></button></div></div></div><div class=\"fv-visibility\" data-av=\"fv.244\"><div class=\"fv-tr\" role=\"row\"><div class=\"fv-td\" role=\"cell\"><div class=\"table-product\"><div class=\"product-photo tile-1 \" role=\"img\" aria-label=\"Protetor solar FPS 50 120 ml\"></div><div><strong><span data-av=\"fv.239\"></span></strong><small>#002</small></div></div></div><div class=\"muted-cell fv-td\" role=\"cell\">Bem-estar</div><div class=\"fv-td\" role=\"cell\"><strong><span data-av=\"fv.240\"></span></strong></div><div class=\"muted-cell fv-td\" role=\"cell\"><span data-av=\"fv.241\"></span></div><div class=\"fv-td\" role=\"cell\"><button class=\"icon-btn\" data-av=\"fv.212\" aria-label=\"Remover destaque de Protetor solar FPS 50 120 ml\" title=\"Remover destaque\" aria-pressed=\"true\" style=\"color:#b49343\"><span class=\"icon lucide-star\" aria-hidden=\"true\"></span></button></div><div class=\"fv-td\" role=\"cell\"><div class=\"fv-visibility\" data-av=\"fv.242\"><button class=\"switch on\" role=\"switch\" aria-checked=\"true\" data-av=\"fv.213\" aria-label=\"Ativar Protetor solar FPS 50 120 ml\" title=\"Desativar produto\"><span class=\"fv-sr-only\">Alterar</span></button></div><div class=\"fv-visibility\" data-av=\"fv.243\"><button class=\"switch\" role=\"switch\" aria-checked=\"true\" data-av=\"fv.213.copy318\" aria-label=\"Ativar Protetor solar FPS 50 120 ml\" title=\"Desativar produto\"><span class=\"fv-sr-only\">Alterar</span></button></div></div><div class=\"fv-td\" role=\"cell\"><button class=\"icon-btn\" data-av=\"fv.214\" title=\"Editar produto\" aria-label=\"Editar Protetor solar FPS 50 120 ml\"><span class=\"icon lucide-square-pen\" aria-hidden=\"true\"></span></button></div></div></div><div class=\"fv-visibility\" data-av=\"fv.250\"><div class=\"fv-tr\" role=\"row\"><div class=\"fv-td\" role=\"cell\"><div class=\"table-product\"><div class=\"product-photo tile-2 \" role=\"img\" aria-label=\"Sabonete líquido 250 ml\"></div><div><strong><span data-av=\"fv.245\"></span></strong><small>#003</small></div></div></div><div class=\"muted-cell fv-td\" role=\"cell\">Higiene</div><div class=\"fv-td\" role=\"cell\"><strong><span data-av=\"fv.246\"></span></strong></div><div class=\"muted-cell fv-td\" role=\"cell\"><span data-av=\"fv.247\"></span></div><div class=\"fv-td\" role=\"cell\"><button class=\"icon-btn\" data-av=\"fv.215\" aria-label=\"Remover destaque de Sabonete líquido 250 ml\" title=\"Remover destaque\" aria-pressed=\"true\" style=\"color:#b49343\"><span class=\"icon lucide-star\" aria-hidden=\"true\"></span></button></div><div class=\"fv-td\" role=\"cell\"><div class=\"fv-visibility\" data-av=\"fv.248\"><button class=\"switch on\" role=\"switch\" aria-checked=\"true\" data-av=\"fv.216\" aria-label=\"Ativar Sabonete líquido 250 ml\" title=\"Desativar produto\"><span class=\"fv-sr-only\">Alterar</span></button></div><div class=\"fv-visibility\" data-av=\"fv.249\"><button class=\"switch\" role=\"switch\" aria-checked=\"true\" data-av=\"fv.216.copy328\" aria-label=\"Ativar Sabonete líquido 250 ml\" title=\"Desativar produto\"><span class=\"fv-sr-only\">Alterar</span></button></div></div><div class=\"fv-td\" role=\"cell\"><button class=\"icon-btn\" data-av=\"fv.217\" title=\"Editar produto\" aria-label=\"Editar Sabonete líquido 250 ml\"><span class=\"icon lucide-square-pen\" aria-hidden=\"true\"></span></button></div></div></div><div class=\"fv-visibility\" data-av=\"fv.256\"><div class=\"fv-tr\" role=\"row\"><div class=\"fv-td\" role=\"cell\"><div class=\"table-product\"><div class=\"product-photo tile-3 \" role=\"img\" aria-label=\"Creme para mãos 75 g\"></div><div><strong><span data-av=\"fv.251\"></span></strong><small>#004</small></div></div></div><div class=\"muted-cell fv-td\" role=\"cell\">Beleza</div><div class=\"fv-td\" role=\"cell\"><strong><span data-av=\"fv.252\"></span></strong></div><div class=\"low-stock fv-td\" role=\"cell\"><span data-av=\"fv.253\"></span></div><div class=\"fv-td\" role=\"cell\"><button class=\"icon-btn\" data-av=\"fv.218\" aria-label=\"Marcar destaque de Creme para mãos 75 g\" title=\"Marcar como destaque\" aria-pressed=\"false\" style=\"\"><span class=\"icon lucide-star\" aria-hidden=\"true\"></span></button></div><div class=\"fv-td\" role=\"cell\"><div class=\"fv-visibility\" data-av=\"fv.254\"><button class=\"switch on\" role=\"switch\" aria-checked=\"true\" data-av=\"fv.219\" aria-label=\"Ativar Creme para mãos 75 g\" title=\"Desativar produto\"><span class=\"fv-sr-only\">Alterar</span></button></div><div class=\"fv-visibility\" data-av=\"fv.255\"><button class=\"switch\" role=\"switch\" aria-checked=\"true\" data-av=\"fv.219.copy338\" aria-label=\"Ativar Creme para mãos 75 g\" title=\"Desativar produto\"><span class=\"fv-sr-only\">Alterar</span></button></div></div><div class=\"fv-td\" role=\"cell\"><button class=\"icon-btn\" data-av=\"fv.220\" title=\"Editar produto\" aria-label=\"Editar Creme para mãos 75 g\"><span class=\"icon lucide-square-pen\" aria-hidden=\"true\"></span></button></div></div></div><div class=\"fv-visibility\" data-av=\"fv.262\"><div class=\"fv-tr\" role=\"row\"><div class=\"fv-td\" role=\"cell\"><div class=\"table-product\"><div class=\"product-photo tile-4 \" role=\"img\" aria-label=\"Shampoo suave 300 ml\"></div><div><strong><span data-av=\"fv.257\"></span></strong><small>#005</small></div></div></div><div class=\"muted-cell fv-td\" role=\"cell\">Higiene</div><div class=\"fv-td\" role=\"cell\"><strong><span data-av=\"fv.258\"></span></strong></div><div class=\"muted-cell fv-td\" role=\"cell\"><span data-av=\"fv.259\"></span></div><div class=\"fv-td\" role=\"cell\"><button class=\"icon-btn\" data-av=\"fv.221\" aria-label=\"Marcar destaque de Shampoo suave 300 ml\" title=\"Marcar como destaque\" aria-pressed=\"false\" style=\"\"><span class=\"icon lucide-star\" aria-hidden=\"true\"></span></button></div><div class=\"fv-td\" role=\"cell\"><div class=\"fv-visibility\" data-av=\"fv.260\"><button class=\"switch on\" role=\"switch\" aria-checked=\"true\" data-av=\"fv.222\" aria-label=\"Ativar Shampoo suave 300 ml\" title=\"Desativar produto\"><span class=\"fv-sr-only\">Alterar</span></button></div><div class=\"fv-visibility\" data-av=\"fv.261\"><button class=\"switch\" role=\"switch\" aria-checked=\"true\" data-av=\"fv.222.copy348\" aria-label=\"Ativar Shampoo suave 300 ml\" title=\"Desativar produto\"><span class=\"fv-sr-only\">Alterar</span></button></div></div><div class=\"fv-td\" role=\"cell\"><button class=\"icon-btn\" data-av=\"fv.223\" title=\"Editar produto\" aria-label=\"Editar Shampoo suave 300 ml\"><span class=\"icon lucide-square-pen\" aria-hidden=\"true\"></span></button></div></div></div><div class=\"fv-visibility\" data-av=\"fv.268\"><div class=\"fv-tr\" role=\"row\"><div class=\"fv-td\" role=\"cell\"><div class=\"table-product\"><div class=\"product-photo tile-5 \" role=\"img\" aria-label=\"Fio dental 50 m\"></div><div><strong><span data-av=\"fv.263\"></span></strong><small>#006</small></div></div></div><div class=\"muted-cell fv-td\" role=\"cell\">Higiene</div><div class=\"fv-td\" role=\"cell\"><strong><span data-av=\"fv.264\"></span></strong></div><div class=\"zero-stock fv-td\" role=\"cell\"><span data-av=\"fv.265\"></span></div><div class=\"fv-td\" role=\"cell\"><button class=\"icon-btn\" data-av=\"fv.224\" aria-label=\"Marcar destaque de Fio dental 50 m\" title=\"Marcar como destaque\" aria-pressed=\"false\" style=\"\"><span class=\"icon lucide-star\" aria-hidden=\"true\"></span></button></div><div class=\"fv-td\" role=\"cell\"><div class=\"fv-visibility\" data-av=\"fv.266\"><button class=\"switch on\" role=\"switch\" aria-checked=\"true\" data-av=\"fv.225\" aria-label=\"Ativar Fio dental 50 m\" title=\"Desativar produto\"><span class=\"fv-sr-only\">Alterar</span></button></div><div class=\"fv-visibility\" data-av=\"fv.267\"><button class=\"switch\" role=\"switch\" aria-checked=\"true\" data-av=\"fv.225.copy358\" aria-label=\"Ativar Fio dental 50 m\" title=\"Desativar produto\"><span class=\"fv-sr-only\">Alterar</span></button></div></div><div class=\"fv-td\" role=\"cell\"><button class=\"icon-btn\" data-av=\"fv.226\" title=\"Editar produto\" aria-label=\"Editar Fio dental 50 m\"><span class=\"icon lucide-square-pen\" aria-hidden=\"true\"></span></button></div></div></div><div class=\"fv-visibility\" data-av=\"fv.274\"><div class=\"fv-tr\" role=\"row\"><div class=\"fv-td\" role=\"cell\"><div class=\"table-product\"><div class=\"product-photo tile-6 \" role=\"img\" aria-label=\"Sabonete vegetal 90 g\"></div><div><strong><span data-av=\"fv.269\"></span></strong><small>#007</small></div></div></div><div class=\"muted-cell fv-td\" role=\"cell\">Higiene</div><div class=\"fv-td\" role=\"cell\"><strong><span data-av=\"fv.270\"></span></strong></div><div class=\"muted-cell fv-td\" role=\"cell\"><span data-av=\"fv.271\"></span></div><div class=\"fv-td\" role=\"cell\"><button class=\"icon-btn\" data-av=\"fv.227\" aria-label=\"Marcar destaque de Sabonete vegetal 90 g\" title=\"Marcar como destaque\" aria-pressed=\"false\" style=\"\"><span class=\"icon lucide-star\" aria-hidden=\"true\"></span></button></div><div class=\"fv-td\" role=\"cell\"><div class=\"fv-visibility\" data-av=\"fv.272\"><button class=\"switch on\" role=\"switch\" aria-checked=\"true\" data-av=\"fv.228\" aria-label=\"Ativar Sabonete vegetal 90 g\" title=\"Desativar produto\"><span class=\"fv-sr-only\">Alterar</span></button></div><div class=\"fv-visibility\" data-av=\"fv.273\"><button class=\"switch\" role=\"switch\" aria-checked=\"true\" data-av=\"fv.228.copy368\" aria-label=\"Ativar Sabonete vegetal 90 g\" title=\"Desativar produto\"><span class=\"fv-sr-only\">Alterar</span></button></div></div><div class=\"fv-td\" role=\"cell\"><button class=\"icon-btn\" data-av=\"fv.229\" title=\"Editar produto\" aria-label=\"Editar Sabonete vegetal 90 g\"><span class=\"icon lucide-square-pen\" aria-hidden=\"true\"></span></button></div></div></div><div class=\"fv-visibility\" data-av=\"fv.280\"><div class=\"fv-tr\" role=\"row\"><div class=\"fv-td\" role=\"cell\"><div class=\"table-product\"><div class=\"product-photo tile-7 \" role=\"img\" aria-label=\"Álcool em gel 70% 250 ml\"></div><div><strong><span data-av=\"fv.275\"></span></strong><small>#008</small></div></div></div><div class=\"muted-cell fv-td\" role=\"cell\">Higiene</div><div class=\"fv-td\" role=\"cell\"><strong><span data-av=\"fv.276\"></span></strong></div><div class=\"muted-cell fv-td\" role=\"cell\"><span data-av=\"fv.277\"></span></div><div class=\"fv-td\" role=\"cell\"><button class=\"icon-btn\" data-av=\"fv.230\" aria-label=\"Marcar destaque de Álcool em gel 70% 250 ml\" title=\"Marcar como destaque\" aria-pressed=\"false\" style=\"\"><span class=\"icon lucide-star\" aria-hidden=\"true\"></span></button></div><div class=\"fv-td\" role=\"cell\"><div class=\"fv-visibility\" data-av=\"fv.278\"><button class=\"switch on\" role=\"switch\" aria-checked=\"false\" data-av=\"fv.231\" aria-label=\"Ativar Álcool em gel 70% 250 ml\" title=\"Ativar produto\"><span class=\"fv-sr-only\">Alterar</span></button></div><div class=\"fv-visibility\" data-av=\"fv.279\"><button class=\"switch\" role=\"switch\" aria-checked=\"false\" data-av=\"fv.231.copy378\" aria-label=\"Ativar Álcool em gel 70% 250 ml\" title=\"Ativar produto\"><span class=\"fv-sr-only\">Alterar</span></button></div></div><div class=\"fv-td\" role=\"cell\"><button class=\"icon-btn\" data-av=\"fv.232\" title=\"Editar produto\" aria-label=\"Editar Álcool em gel 70% 250 ml\"><span class=\"icon lucide-square-pen\" aria-hidden=\"true\"></span></button></div></div></div></div></div></div><div class=\"table-footer\"><span>8 produtos encontrados</span><span>Catálogo FarmaVirtual</span></div></div></div><div class=\"fv-visibility\" data-av=\"fv.484\"><nav class=\"breadcrumbs\" aria-label=\"Localização\"><a href=\"#\" data-av=\"fv.173\"><span class=\"icon lucide-house\" aria-hidden=\"true\"></span></a><span class=\"icon lucide-chevron-right\" aria-hidden=\"true\"></span><span aria-current=\"page\">Administração</span><span class=\"icon lucide-chevron-right\" aria-hidden=\"true\"></span><span aria-current=\"page\">Gestão de pedidos</span></nav><div class=\"page-heading\"><div><span class=\"eyebrow\">Administração</span><h1>Gestão de pedidos</h1><p>Acompanhe e organize os pedidos da FarmaVirtual.</p></div></div><div class=\"stats-band\"><div class=\"stat\"><div class=\"stat-icon\"><span class=\"icon lucide-clipboard-list\" aria-hidden=\"true\"></span></div><div><strong class=\"stat-value\">5</strong><span class=\"stat-label\">Pedidos registrados</span></div></div><div class=\"stat\"><div class=\"stat-icon\"><span class=\"icon lucide-clock-3\" aria-hidden=\"true\"></span></div><div><strong class=\"stat-value\">2</strong><span class=\"stat-label\">Aguardando separação</span></div></div><div class=\"stat\"><div class=\"stat-icon\"><span class=\"icon lucide-package\" aria-hidden=\"true\"></span></div><div><strong class=\"stat-value\">1</strong><span class=\"stat-label\">Em separação</span></div></div><div class=\"stat\"><div class=\"stat-icon\"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span></div><div><strong class=\"stat-value\">1</strong><span class=\"stat-label\">Concluídos</span></div></div></div><div class=\"management-toolbar\"><div class=\"filter-tabs\" role=\"group\" aria-label=\"Filtrar pedidos por status\"><button class=\"filter-tab active\" data-av=\"fv.184\" aria-pressed=\"true\">Todos<small>5</small></button><button class=\"filter-tab \" data-av=\"fv.185\" aria-pressed=\"false\">Recebido<small>2</small></button><button class=\"filter-tab \" data-av=\"fv.186\" aria-pressed=\"false\">Em separação<small>1</small></button><button class=\"filter-tab \" data-av=\"fv.187\" aria-pressed=\"false\">Concluído<small>1</small></button><button class=\"filter-tab \" data-av=\"fv.188\" aria-pressed=\"false\">Cancelado<small>1</small></button></div><span class=\"subtle\">5 pedidos encontrados</span></div><div class=\"table-frame\"><div class=\"table-scroll\"><div class=\"data-table fv-table\" role=\"table\"><div class=\"fv-thead\" role=\"rowgroup\"><div class=\"fv-tr\" role=\"row\"><div class=\"fv-th\" role=\"columnheader\">Pedido</div><div class=\"fv-th\" role=\"columnheader\">Cliente</div><div class=\"fv-th\" role=\"columnheader\">Data</div><div class=\"fv-th\" role=\"columnheader\">Itens</div><div class=\"fv-th\" role=\"columnheader\">Total</div><div class=\"fv-th\" role=\"columnheader\">Status</div><div class=\"fv-th\" role=\"columnheader\"></div></div></div><div class=\"fv-tbody\" role=\"rowgroup\">\n      <div class=\"fv-visibility\" data-av=\"fv.194\"><div class=\"fv-tr\" role=\"row\"><div class=\"fv-td\" role=\"cell\"><a class=\"table-id\" href=\"#\" data-av=\"fv.174\">#1004</a></div><div class=\"fv-td\" role=\"cell\">Lucas Oliveira</div><div class=\"muted-cell fv-td\" role=\"cell\">10 de out. de 2026</div><div class=\"muted-cell fv-td\" role=\"cell\">1 unidades</div><div class=\"fv-td\" role=\"cell\"><strong>R$ 32,90</strong></div><div class=\"fv-td\" role=\"cell\"><span class=\"badge\" data-av=\"fv.192\"><span data-av=\"fv.193\"></span></span></div><div class=\"fv-td\" role=\"cell\"><div class=\"table-actions\"><a class=\"icon-btn\" href=\"#\" data-av=\"fv.175\" title=\"Ver detalhes\" aria-label=\"Ver pedido 1004\"><span class=\"icon lucide-arrow-up-right\" aria-hidden=\"true\"></span></a><button class=\"icon-btn\" data-av=\"fv.189\" title=\"Alterar status\" aria-label=\"Alterar status do pedido 1004\"><span class=\"icon lucide-square-pen\" aria-hidden=\"true\"></span></button></div></div></div></div><div class=\"fv-visibility\" data-av=\"fv.197\"><div class=\"fv-tr\" role=\"row\"><div class=\"fv-td\" role=\"cell\"><a class=\"table-id\" href=\"#\" data-av=\"fv.176\">#1003</a></div><div class=\"fv-td\" role=\"cell\">Marina Costa</div><div class=\"muted-cell fv-td\" role=\"cell\">09 de out. de 2026</div><div class=\"muted-cell fv-td\" role=\"cell\">2 unidades</div><div class=\"fv-td\" role=\"cell\"><strong>R$ 109,80</strong></div><div class=\"fv-td\" role=\"cell\"><span class=\"badge\" data-av=\"fv.195\"><span data-av=\"fv.196\"></span></span></div><div class=\"fv-td\" role=\"cell\"><div class=\"table-actions\"><a class=\"icon-btn\" href=\"#\" data-av=\"fv.177\" title=\"Ver detalhes\" aria-label=\"Ver pedido 1003\"><span class=\"icon lucide-arrow-up-right\" aria-hidden=\"true\"></span></a><button class=\"icon-btn\" data-av=\"fv.190\" title=\"Alterar status\" aria-label=\"Alterar status do pedido 1003\"><span class=\"icon lucide-square-pen\" aria-hidden=\"true\"></span></button></div></div></div></div><div class=\"fv-visibility\" data-av=\"fv.200\"><div class=\"fv-tr\" role=\"row\"><div class=\"fv-td\" role=\"cell\"><a class=\"table-id\" href=\"#\" data-av=\"fv.178\">#1002</a></div><div class=\"fv-td\" role=\"cell\">Marina Costa</div><div class=\"muted-cell fv-td\" role=\"cell\">07 de out. de 2026</div><div class=\"muted-cell fv-td\" role=\"cell\">3 unidades</div><div class=\"fv-td\" role=\"cell\"><strong>R$ 59,70</strong></div><div class=\"fv-td\" role=\"cell\"><span class=\"badge\" data-av=\"fv.198\"><span data-av=\"fv.199\"></span></span></div><div class=\"fv-td\" role=\"cell\"><div class=\"table-actions\"><a class=\"icon-btn\" href=\"#\" data-av=\"fv.179\" title=\"Ver detalhes\" aria-label=\"Ver pedido 1002\"><span class=\"icon lucide-arrow-up-right\" aria-hidden=\"true\"></span></a><button class=\"icon-btn\" data-av=\"fv.191\" title=\"Alterar status\" aria-label=\"Alterar status do pedido 1002\"><span class=\"icon lucide-square-pen\" aria-hidden=\"true\"></span></button></div></div></div></div><div class=\"fv-visibility\" data-av=\"fv.203\"><div class=\"fv-tr\" role=\"row\"><div class=\"fv-td\" role=\"cell\"><a class=\"table-id\" href=\"#\" data-av=\"fv.180\">#1001</a></div><div class=\"fv-td\" role=\"cell\">Marina Costa</div><div class=\"muted-cell fv-td\" role=\"cell\">02 de out. de 2026</div><div class=\"muted-cell fv-td\" role=\"cell\">2 unidades</div><div class=\"fv-td\" role=\"cell\"><strong>R$ 82,80</strong></div><div class=\"fv-td\" role=\"cell\"><span class=\"badge\" data-av=\"fv.201\"><span data-av=\"fv.202\"></span></span></div><div class=\"fv-td\" role=\"cell\"><div class=\"table-actions\"><a class=\"icon-btn\" href=\"#\" data-av=\"fv.181\" title=\"Ver detalhes\" aria-label=\"Ver pedido 1001\"><span class=\"icon lucide-arrow-up-right\" aria-hidden=\"true\"></span></a></div></div></div></div><div class=\"fv-visibility\" data-av=\"fv.206\"><div class=\"fv-tr\" role=\"row\"><div class=\"fv-td\" role=\"cell\"><a class=\"table-id\" href=\"#\" data-av=\"fv.182\">#1000</a></div><div class=\"fv-td\" role=\"cell\">Lucas Oliveira</div><div class=\"muted-cell fv-td\" role=\"cell\">28 de set. de 2026</div><div class=\"muted-cell fv-td\" role=\"cell\">1 unidades</div><div class=\"fv-td\" role=\"cell\"><strong>R$ 24,90</strong></div><div class=\"fv-td\" role=\"cell\"><span class=\"badge\" data-av=\"fv.204\"><span data-av=\"fv.205\"></span></span></div><div class=\"fv-td\" role=\"cell\"><div class=\"table-actions\"><a class=\"icon-btn\" href=\"#\" data-av=\"fv.183\" title=\"Ver detalhes\" aria-label=\"Ver pedido 1000\"><span class=\"icon lucide-arrow-up-right\" aria-hidden=\"true\"></span></a></div></div></div></div>\n      </div></div></div><div class=\"table-footer\"><span>5 pedidos</span><span>Pedidos de demonstração</span></div></div></div></main>\n      <footer class=\"site-footer\"><div class=\"container footer-inner\"><div><a href=\"#\" data-av=\"fv.469\" class=\"footer-brand\"><span class=\"icon lucide-plus\" aria-hidden=\"true\"></span>FarmaVirtual</a><p>Higiene, beleza e bem-estar. Cuidado em cada escolha.</p></div><span class=\"footer-status\">Loja demonstrativa · Todos os pedidos são simulados</span></div></footer><div class=\"fv-visibility\" data-av=\"fv.419\"><div class=\"fv-modal-overlay\"><div class=\"fv-modal-dialog\" data-av=\"fv.414\"><div class=\"fv-visibility\" data-av=\"fv.415\"><div class=\"fv-visibility\" data-av=\"fv.346\"><div class=\"modal-head\"><h2>Detalhes do produto</h2><button class=\"icon-btn\" data-av=\"fv.339\"><span class=\"icon lucide-x\" aria-hidden=\"true\"></span></button></div><div class=\"modal-body\"><div class=\"product-detail-grid\"><div class=\"product-photo tile-0\"></div><div class=\"product-detail-copy\"><span class=\"product-category\">Beleza</span><h2><span data-av=\"fv.340\"></span></h2><p><span data-av=\"fv.341\"></span></p><div class=\"price\"><span data-av=\"fv.342\"></span></div><span class=\"stock-label\"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span><span data-av=\"fv.343\"></span></span><div class=\"fv-visibility\" data-av=\"fv.345\"><div class=\"product-add-row\"><div id=\"FvProductQty1\" class=\"fv-control-mount\" data-av=\"MountFvProductQty1\"></div><button class=\"btn\" data-av=\"fv.344\"><span class=\"icon lucide-shopping-bag\" aria-hidden=\"true\"></span>Adicionar</button></div></div></div></div></div></div><div class=\"fv-visibility\" data-av=\"fv.354\"><div class=\"modal-head\"><h2>Detalhes do produto</h2><button class=\"icon-btn\" data-av=\"fv.347\"><span class=\"icon lucide-x\" aria-hidden=\"true\"></span></button></div><div class=\"modal-body\"><div class=\"product-detail-grid\"><div class=\"product-photo tile-1\"></div><div class=\"product-detail-copy\"><span class=\"product-category\">Bem-estar</span><h2><span data-av=\"fv.348\"></span></h2><p><span data-av=\"fv.349\"></span></p><div class=\"price\"><span data-av=\"fv.350\"></span></div><span class=\"stock-label\"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span><span data-av=\"fv.351\"></span></span><div class=\"fv-visibility\" data-av=\"fv.353\"><div class=\"product-add-row\"><div id=\"FvProductQty2\" class=\"fv-control-mount\" data-av=\"MountFvProductQty2\"></div><button class=\"btn\" data-av=\"fv.352\"><span class=\"icon lucide-shopping-bag\" aria-hidden=\"true\"></span>Adicionar</button></div></div></div></div></div></div><div class=\"fv-visibility\" data-av=\"fv.362\"><div class=\"modal-head\"><h2>Detalhes do produto</h2><button class=\"icon-btn\" data-av=\"fv.355\"><span class=\"icon lucide-x\" aria-hidden=\"true\"></span></button></div><div class=\"modal-body\"><div class=\"product-detail-grid\"><div class=\"product-photo tile-2\"></div><div class=\"product-detail-copy\"><span class=\"product-category\">Higiene</span><h2><span data-av=\"fv.356\"></span></h2><p><span data-av=\"fv.357\"></span></p><div class=\"price\"><span data-av=\"fv.358\"></span></div><span class=\"stock-label\"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span><span data-av=\"fv.359\"></span></span><div class=\"fv-visibility\" data-av=\"fv.361\"><div class=\"product-add-row\"><div id=\"FvProductQty3\" class=\"fv-control-mount\" data-av=\"MountFvProductQty3\"></div><button class=\"btn\" data-av=\"fv.360\"><span class=\"icon lucide-shopping-bag\" aria-hidden=\"true\"></span>Adicionar</button></div></div></div></div></div></div><div class=\"fv-visibility\" data-av=\"fv.370\"><div class=\"modal-head\"><h2>Detalhes do produto</h2><button class=\"icon-btn\" data-av=\"fv.363\"><span class=\"icon lucide-x\" aria-hidden=\"true\"></span></button></div><div class=\"modal-body\"><div class=\"product-detail-grid\"><div class=\"product-photo tile-3\"></div><div class=\"product-detail-copy\"><span class=\"product-category\">Beleza</span><h2><span data-av=\"fv.364\"></span></h2><p><span data-av=\"fv.365\"></span></p><div class=\"price\"><span data-av=\"fv.366\"></span></div><span class=\"stock-label\"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span><span data-av=\"fv.367\"></span></span><div class=\"fv-visibility\" data-av=\"fv.369\"><div class=\"product-add-row\"><div id=\"FvProductQty4\" class=\"fv-control-mount\" data-av=\"MountFvProductQty4\"></div><button class=\"btn\" data-av=\"fv.368\"><span class=\"icon lucide-shopping-bag\" aria-hidden=\"true\"></span>Adicionar</button></div></div></div></div></div></div><div class=\"fv-visibility\" data-av=\"fv.378\"><div class=\"modal-head\"><h2>Detalhes do produto</h2><button class=\"icon-btn\" data-av=\"fv.371\"><span class=\"icon lucide-x\" aria-hidden=\"true\"></span></button></div><div class=\"modal-body\"><div class=\"product-detail-grid\"><div class=\"product-photo tile-4\"></div><div class=\"product-detail-copy\"><span class=\"product-category\">Higiene</span><h2><span data-av=\"fv.372\"></span></h2><p><span data-av=\"fv.373\"></span></p><div class=\"price\"><span data-av=\"fv.374\"></span></div><span class=\"stock-label\"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span><span data-av=\"fv.375\"></span></span><div class=\"fv-visibility\" data-av=\"fv.377\"><div class=\"product-add-row\"><div id=\"FvProductQty5\" class=\"fv-control-mount\" data-av=\"MountFvProductQty5\"></div><button class=\"btn\" data-av=\"fv.376\"><span class=\"icon lucide-shopping-bag\" aria-hidden=\"true\"></span>Adicionar</button></div></div></div></div></div></div><div class=\"fv-visibility\" data-av=\"fv.386\"><div class=\"modal-head\"><h2>Detalhes do produto</h2><button class=\"icon-btn\" data-av=\"fv.379\"><span class=\"icon lucide-x\" aria-hidden=\"true\"></span></button></div><div class=\"modal-body\"><div class=\"product-detail-grid\"><div class=\"product-photo tile-5\"></div><div class=\"product-detail-copy\"><span class=\"product-category\">Higiene</span><h2><span data-av=\"fv.380\"></span></h2><p><span data-av=\"fv.381\"></span></p><div class=\"price\"><span data-av=\"fv.382\"></span></div><span class=\"stock-label\"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span><span data-av=\"fv.383\"></span></span><div class=\"fv-visibility\" data-av=\"fv.385\"><div class=\"product-add-row\"><div id=\"FvProductQty6\" class=\"fv-control-mount\" data-av=\"MountFvProductQty6\"></div><button class=\"btn\" data-av=\"fv.384\"><span class=\"icon lucide-shopping-bag\" aria-hidden=\"true\"></span>Adicionar</button></div></div></div></div></div></div><div class=\"fv-visibility\" data-av=\"fv.394\"><div class=\"modal-head\"><h2>Detalhes do produto</h2><button class=\"icon-btn\" data-av=\"fv.387\"><span class=\"icon lucide-x\" aria-hidden=\"true\"></span></button></div><div class=\"modal-body\"><div class=\"product-detail-grid\"><div class=\"product-photo tile-6\"></div><div class=\"product-detail-copy\"><span class=\"product-category\">Higiene</span><h2><span data-av=\"fv.388\"></span></h2><p><span data-av=\"fv.389\"></span></p><div class=\"price\"><span data-av=\"fv.390\"></span></div><span class=\"stock-label\"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span><span data-av=\"fv.391\"></span></span><div class=\"fv-visibility\" data-av=\"fv.393\"><div class=\"product-add-row\"><div id=\"FvProductQty7\" class=\"fv-control-mount\" data-av=\"MountFvProductQty7\"></div><button class=\"btn\" data-av=\"fv.392\"><span class=\"icon lucide-shopping-bag\" aria-hidden=\"true\"></span>Adicionar</button></div></div></div></div></div></div><div class=\"fv-visibility\" data-av=\"fv.402\"><div class=\"modal-head\"><h2>Detalhes do produto</h2><button class=\"icon-btn\" data-av=\"fv.395\"><span class=\"icon lucide-x\" aria-hidden=\"true\"></span></button></div><div class=\"modal-body\"><div class=\"product-detail-grid\"><div class=\"product-photo tile-7\"></div><div class=\"product-detail-copy\"><span class=\"product-category\">Higiene</span><h2><span data-av=\"fv.396\"></span></h2><p><span data-av=\"fv.397\"></span></p><div class=\"price\"><span data-av=\"fv.398\"></span></div><span class=\"stock-label\"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span><span data-av=\"fv.399\"></span></span><div class=\"fv-visibility\" data-av=\"fv.401\"><div class=\"product-add-row\"><div id=\"FvProductQty8\" class=\"fv-control-mount\" data-av=\"MountFvProductQty8\"></div><button class=\"btn\" data-av=\"fv.400\"><span class=\"icon lucide-shopping-bag\" aria-hidden=\"true\"></span>Adicionar</button></div></div></div></div></div></div></div><div class=\"fv-visibility\" data-av=\"fv.416\"><div class=\"modal-head\"><h2>Editar produto</h2><button class=\"icon-btn\" data-av=\"fv.403\"><span class=\"icon lucide-x\" aria-hidden=\"true\"></span></button></div><div class=\"modal-body\"><div class=\"fields\"><div class=\"field\"><span>Nome do produto</span><div id=\"FvEditNome\" class=\"fv-control-mount\" data-av=\"MountFvEditNome\"></div></div><div class=\"field\"><span>Categoria</span><div id=\"FvEditCategoria\" class=\"fv-control-mount\" data-av=\"MountFvEditCategoria\"></div></div><div class=\"field\"><span>Descrição</span><div id=\"FvEditDescricao\" class=\"fv-control-mount\" data-av=\"MountFvEditDescricao\"></div></div><div class=\"field\"><span>Preço (R$)</span><div id=\"FvEditPreco\" class=\"fv-control-mount\" data-av=\"MountFvEditPreco\"></div></div><div class=\"field\"><span>Estoque</span><div id=\"FvEditStock\" class=\"fv-control-mount\" data-av=\"MountFvEditStock\"></div></div><div class=\"field\"><span>URL da imagem (opcional)</span><div id=\"FvEditImagem\" class=\"fv-control-mount\" data-av=\"MountFvEditImagem\"></div></div><div class=\"modal-options\"><div class=\"checkbox-label\"><div id=\"FvEditDestaque\" class=\"fv-control-mount\" data-av=\"MountFvEditDestaque\"></div>Produto em destaque</div><div class=\"checkbox-label\"><div id=\"FvEditAtivo\" class=\"fv-control-mount\" data-av=\"MountFvEditAtivo\"></div>Produto ativo</div></div></div></div><div class=\"modal-foot\"><button class=\"btn secondary\" data-av=\"fv.404\">Cancelar</button><button class=\"btn\" data-av=\"fv.405\"><span class=\"icon lucide-check\" aria-hidden=\"true\"></span>Salvar produto</button></div></div><div class=\"fv-visibility\" data-av=\"fv.417\"><div class=\"modal-head\"><h2>Atualizar pedido</h2><button class=\"icon-btn\" data-av=\"fv.406\"><span class=\"icon lucide-x\" aria-hidden=\"true\"></span></button></div><div class=\"modal-body\"><div class=\"summary-row\"><span>Pedido</span><b>#<span data-av=\"fv.407\"></span></b></div><div class=\"field\"><span>Novo status</span><div id=\"FvNewStatus\" class=\"fv-control-mount\" data-av=\"MountFvNewStatus\"></div></div><div class=\"fv-visibility\" data-av=\"fv.408\"><div class=\"notice\"><span class=\"icon lucide-info\" aria-hidden=\"true\"></span>Os produtos deste pedido serão devolvidos ao estoque. O cancelamento é definitivo.</div></div></div><div class=\"modal-foot\"><button class=\"btn secondary\" data-av=\"fv.409\">Voltar</button><button class=\"btn\" data-av=\"fv.410\">Confirmar alteração</button></div></div><div class=\"fv-visibility\" data-av=\"fv.418\"><div class=\"modal-head\"><h2>Entre na sua conta</h2><button class=\"icon-btn\" data-av=\"fv.411\"><span class=\"icon lucide-x\" aria-hidden=\"true\"></span></button></div><div class=\"modal-body\"><div class=\"fields\"><button class=\"btn secondary\" data-av=\"fv.412\"><span class=\"icon lucide-user-round\" aria-hidden=\"true\"></span>Marina Costa</button><button class=\"btn secondary\" data-av=\"fv.413\"><span class=\"icon lucide-user-round\" aria-hidden=\"true\"></span>Lucas Oliveira</button></div></div></div></div></div></div><div class=\"fv-visibility\" data-av=\"fv.487\"><div class=\"notifications\" role=\"status\"><div class=\"toast\"><span class=\"icon lucide-circle-check\" aria-hidden=\"true\"></span><span><span data-av=\"fv.485\"></span></span><button data-av=\"fv.486\" aria-label=\"Fechar notificação\"><span class=\"icon lucide-x\" aria-hidden=\"true\"></span></button></div></div></div></div>",
+"css": "",
+"bindings": {
+"fv.463": {
+"kind": "call",
+"action": "Pagina_catalogo"
+},
+"MountFvSearch": {
+"kind": "style",
+"value": "\"\""
+},
+"fv.464": {
+"kind": "call",
+"action": "Pagina_meus_pedidos"
+},
+"fv.465": {
+"kind": "call",
+"action": "Pagina_carrinho"
+},
+"fv.472": {
+"kind": "text",
+"value": "IntegerToText((If(Client.FvUser = 2, Client.FvQL1, Client.FvQ1)) + (If(Client.FvUser = 2, Client.FvQL2, Client.FvQ2)) + (If(Client.FvUser = 2, Client.FvQL3, Client.FvQ3)) + (If(Client.FvUser = 2, Client.FvQL4, Client.FvQ4)) + (If(Client.FvUser = 2, Client.FvQL5, Client.FvQ5)) + (If(Client.FvUser = 2, Client.FvQL6, Client.FvQ6)) + (If(Client.FvUser = 2, Client.FvQL7, Client.FvQ7)) + (If(Client.FvUser = 2, Client.FvQL8, Client.FvQ8)))"
+},
+"fv.470": {
+"kind": "text",
+"value": "If(Client.FvUser = 3, \"RL\", If(Client.FvUser = 2, \"LO\", If(Client.FvUser = 1, \"MC\", \"V\")))"
+},
+"fv.471": {
+"kind": "text",
+"value": "If(Client.FvUser = 3, \"Administrador\", If(Client.FvUser = 2, \"Olá, Lucas\", If(Client.FvUser = 1, \"Olá, Marina\", \"Minha conta\")))"
+},
+"MountFvAccount": {
+"kind": "style",
+"value": "\"\""
+},
+"UiState1": {
+"kind": "visible",
+"condition": "Client.FvPage = \"catalogo\""
+},
+"fv.473": {
+"kind": "call",
+"action": "Pagina_catalogo"
+},
+"UiState2": {
+"kind": "visible",
+"condition": "Client.FvPage <> \"catalogo\""
+},
+"fv.473Copy11": {
+"kind": "call",
+"action": "Pagina_catalogo"
+},
+"UiState3": {
+"kind": "visible",
+"condition": "Client.FvPage = \"carrinho\""
+},
+"fv.474": {
+"kind": "call",
+"action": "Pagina_carrinho"
+},
+"UiState4": {
+"kind": "visible",
+"condition": "Client.FvPage <> \"carrinho\""
+},
+"fv.474Copy15": {
+"kind": "call",
+"action": "Pagina_carrinho"
+},
+"UiState5": {
+"kind": "visible",
+"condition": "Client.FvPage = \"meus-pedidos\""
+},
+"fv.475": {
+"kind": "call",
+"action": "Pagina_meus_pedidos"
+},
+"UiState6": {
+"kind": "visible",
+"condition": "Client.FvPage <> \"meus-pedidos\""
+},
+"fv.475Copy19": {
+"kind": "call",
+"action": "Pagina_meus_pedidos"
+},
+"fv.478": {
+"kind": "visible",
+"condition": "Client.FvUser = 3"
+},
+"UiState7": {
+"kind": "visible",
+"condition": "Client.FvPage = \"gestao-produtos\""
+},
+"fv.476": {
+"kind": "call",
+"action": "Pagina_gestao_produtos"
+},
+"UiState8": {
+"kind": "visible",
+"condition": "Client.FvPage <> \"gestao-produtos\""
+},
+"fv.476Copy24": {
+"kind": "call",
+"action": "Pagina_gestao_produtos"
+},
+"UiState9": {
+"kind": "visible",
+"condition": "Client.FvPage = \"gestao-pedidos\""
+},
+"fv.477": {
+"kind": "call",
+"action": "Pagina_gestao_pedidos"
+},
+"UiState10": {
+"kind": "visible",
+"condition": "Client.FvPage <> \"gestao-pedidos\""
+},
+"fv.477Copy28": {
+"kind": "call",
+"action": "Pagina_gestao_pedidos"
+},
+"fv.479": {
+"kind": "visible",
+"condition": "Client.FvPage = \"catalogo\""
+},
+"fv.1": {
+"kind": "call",
+"action": "Pagina_catalogo"
+},
+"fv.62": {
+"kind": "class",
+"value": "\"filters \" + If(Client.FvFiltrosAbertos, \"open\", \"\")"
+},
+"fv.2": {
+"kind": "call",
+"action": "LimparFiltros"
+},
+"UiState11": {
+"kind": "visible",
+"condition": "Client.FvCategoria = 0"
+},
+"fv.3": {
+"kind": "call",
+"action": "CategoriaFiltro",
+"args": {
+"Id": "0"
+}
+},
+"UiState12": {
+"kind": "visible",
+"condition": "Client.FvCategoria <> 0"
+},
+"fv.3Copy36": {
+"kind": "call",
+"action": "CategoriaFiltro",
+"args": {
+"Id": "0"
+}
+},
+"UiState13": {
+"kind": "visible",
+"condition": "Client.FvCategoria = 1"
+},
+"fv.4": {
+"kind": "call",
+"action": "CategoriaFiltro",
+"args": {
+"Id": "1"
+}
+},
+"UiState14": {
+"kind": "visible",
+"condition": "Client.FvCategoria <> 1"
+},
+"fv.4Copy40": {
+"kind": "call",
+"action": "CategoriaFiltro",
+"args": {
+"Id": "1"
+}
+},
+"UiState15": {
+"kind": "visible",
+"condition": "Client.FvCategoria = 2"
+},
+"fv.5": {
+"kind": "call",
+"action": "CategoriaFiltro",
+"args": {
+"Id": "2"
+}
+},
+"UiState16": {
+"kind": "visible",
+"condition": "Client.FvCategoria <> 2"
+},
+"fv.5Copy44": {
+"kind": "call",
+"action": "CategoriaFiltro",
+"args": {
+"Id": "2"
+}
+},
+"UiState17": {
+"kind": "visible",
+"condition": "Client.FvCategoria = 3"
+},
+"fv.6": {
+"kind": "call",
+"action": "CategoriaFiltro",
+"args": {
+"Id": "3"
+}
+},
+"UiState18": {
+"kind": "visible",
+"condition": "Client.FvCategoria <> 3"
+},
+"fv.6Copy48": {
+"kind": "call",
+"action": "CategoriaFiltro",
+"args": {
+"Id": "3"
+}
+},
+"MountFvAvailable": {
+"kind": "style",
+"value": "\"\""
+},
+"fv.60": {
+"kind": "text",
+"value": "IntegerToText(If(Client.FvAtivo1 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat1) and (not Client.FvDisponiveis or Client.FvStock1 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome1 + \" \" + Client.FvDescricao1), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0) + If(Client.FvAtivo2 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat2) and (not Client.FvDisponiveis or Client.FvStock2 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome2 + \" \" + Client.FvDescricao2), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0) + If(Client.FvAtivo3 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat3) and (not Client.FvDisponiveis or Client.FvStock3 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome3 + \" \" + Client.FvDescricao3), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0) + If(Client.FvAtivo4 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat4) and (not Client.FvDisponiveis or Client.FvStock4 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome4 + \" \" + Client.FvDescricao4), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0) + If(Client.FvAtivo5 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat5) and (not Client.FvDisponiveis or Client.FvStock5 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome5 + \" \" + Client.FvDescricao5), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0) + If(Client.FvAtivo6 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat6) and (not Client.FvDisponiveis or Client.FvStock6 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome6 + \" \" + Client.FvDescricao6), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0) + If(Client.FvAtivo7 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat7) and (not Client.FvDisponiveis or Client.FvStock7 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome7 + \" \" + Client.FvDescricao7), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0) + If(Client.FvAtivo8 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat8) and (not Client.FvDisponiveis or Client.FvStock8 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome8 + \" \" + Client.FvDescricao8), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0)) + \" produtos\""
+},
+"fv.7": {
+"kind": "call",
+"action": "ToggleFiltros"
+},
+"MountFvSort": {
+"kind": "style",
+"value": "\"\""
+},
+"fv.33": {
+"kind": "visible",
+"condition": "Client.FvAtivo1 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat1) and (not Client.FvDisponiveis or Client.FvStock1 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome1 + \" \" + Client.FvDescricao1), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0)"
+},
+"fv.32": {
+"kind": "style",
+"value": "\"order:\" + IntegerToText(If(Client.FvOrdenacao = 1, DecimalToInteger(Client.FvPreco1 * 100), If(Client.FvOrdenacao = 2, 100000 - DecimalToInteger(Client.FvPreco1 * 100), If(Client.FvOrdenacao = 3, 3, If(Client.FvDestaque1, 1, 100 + 1)))))"
+},
+"fv.8": {
+"kind": "call",
+"action": "AbrirProduto",
+"args": {
+"Id": "1"
+}
+},
+"fv.31": {
+"kind": "visible",
+"condition": "Client.FvDestaque1"
+},
+"fv.9": {
+"kind": "call",
+"action": "AbrirProduto",
+"args": {
+"Id": "1"
+}
+},
+"fv.29": {
+"kind": "text",
+"value": "Client.FvNome1"
+},
+"fv.30": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco1, 2, \",\", \".\")"
+},
+"fv.10": {
+"kind": "call",
+"action": "Adicionar1",
+"args": {
+"Quantidade": "1"
+}
+},
+"fv.38": {
+"kind": "visible",
+"condition": "Client.FvAtivo2 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat2) and (not Client.FvDisponiveis or Client.FvStock2 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome2 + \" \" + Client.FvDescricao2), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0)"
+},
+"fv.37": {
+"kind": "style",
+"value": "\"order:\" + IntegerToText(If(Client.FvOrdenacao = 1, DecimalToInteger(Client.FvPreco2 * 100), If(Client.FvOrdenacao = 2, 100000 - DecimalToInteger(Client.FvPreco2 * 100), If(Client.FvOrdenacao = 3, 4, If(Client.FvDestaque2, 2, 100 + 2)))))"
+},
+"fv.11": {
+"kind": "call",
+"action": "AbrirProduto",
+"args": {
+"Id": "2"
+}
+},
+"fv.36": {
+"kind": "visible",
+"condition": "Client.FvDestaque2"
+},
+"fv.12": {
+"kind": "call",
+"action": "AbrirProduto",
+"args": {
+"Id": "2"
+}
+},
+"fv.34": {
+"kind": "text",
+"value": "Client.FvNome2"
+},
+"fv.35": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco2, 2, \",\", \".\")"
+},
+"fv.13": {
+"kind": "call",
+"action": "Adicionar2",
+"args": {
+"Quantidade": "1"
+}
+},
+"fv.43": {
+"kind": "visible",
+"condition": "Client.FvAtivo3 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat3) and (not Client.FvDisponiveis or Client.FvStock3 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome3 + \" \" + Client.FvDescricao3), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0)"
+},
+"fv.42": {
+"kind": "style",
+"value": "\"order:\" + IntegerToText(If(Client.FvOrdenacao = 1, DecimalToInteger(Client.FvPreco3 * 100), If(Client.FvOrdenacao = 2, 100000 - DecimalToInteger(Client.FvPreco3 * 100), If(Client.FvOrdenacao = 3, 5, If(Client.FvDestaque3, 3, 100 + 3)))))"
+},
+"fv.14": {
+"kind": "call",
+"action": "AbrirProduto",
+"args": {
+"Id": "3"
+}
+},
+"fv.41": {
+"kind": "visible",
+"condition": "Client.FvDestaque3"
+},
+"fv.15": {
+"kind": "call",
+"action": "AbrirProduto",
+"args": {
+"Id": "3"
+}
+},
+"fv.39": {
+"kind": "text",
+"value": "Client.FvNome3"
+},
+"fv.40": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco3, 2, \",\", \".\")"
+},
+"fv.16": {
+"kind": "call",
+"action": "Adicionar3",
+"args": {
+"Quantidade": "1"
+}
+},
+"fv.47": {
+"kind": "visible",
+"condition": "Client.FvAtivo4 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat4) and (not Client.FvDisponiveis or Client.FvStock4 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome4 + \" \" + Client.FvDescricao4), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0)"
+},
+"fv.46": {
+"kind": "style",
+"value": "\"order:\" + IntegerToText(If(Client.FvOrdenacao = 1, DecimalToInteger(Client.FvPreco4 * 100), If(Client.FvOrdenacao = 2, 100000 - DecimalToInteger(Client.FvPreco4 * 100), If(Client.FvOrdenacao = 3, 1, If(Client.FvDestaque4, 4, 100 + 4)))))"
+},
+"fv.17": {
+"kind": "call",
+"action": "AbrirProduto",
+"args": {
+"Id": "4"
+}
+},
+"fv.18": {
+"kind": "call",
+"action": "AbrirProduto",
+"args": {
+"Id": "4"
+}
+},
+"fv.44": {
+"kind": "text",
+"value": "Client.FvNome4"
+},
+"fv.45": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco4, 2, \",\", \".\")"
+},
+"fv.19": {
+"kind": "call",
+"action": "Adicionar4",
+"args": {
+"Quantidade": "1"
+}
+},
+"fv.51": {
+"kind": "visible",
+"condition": "Client.FvAtivo5 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat5) and (not Client.FvDisponiveis or Client.FvStock5 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome5 + \" \" + Client.FvDescricao5), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0)"
+},
+"fv.50": {
+"kind": "style",
+"value": "\"order:\" + IntegerToText(If(Client.FvOrdenacao = 1, DecimalToInteger(Client.FvPreco5 * 100), If(Client.FvOrdenacao = 2, 100000 - DecimalToInteger(Client.FvPreco5 * 100), If(Client.FvOrdenacao = 3, 7, If(Client.FvDestaque5, 5, 100 + 5)))))"
+},
+"fv.20": {
+"kind": "call",
+"action": "AbrirProduto",
+"args": {
+"Id": "5"
+}
+},
+"fv.21": {
+"kind": "call",
+"action": "AbrirProduto",
+"args": {
+"Id": "5"
+}
+},
+"fv.48": {
+"kind": "text",
+"value": "Client.FvNome5"
+},
+"fv.49": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco5, 2, \",\", \".\")"
+},
+"fv.22": {
+"kind": "call",
+"action": "Adicionar5",
+"args": {
+"Quantidade": "1"
+}
+},
+"fv.55": {
+"kind": "visible",
+"condition": "Client.FvAtivo6 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat6) and (not Client.FvDisponiveis or Client.FvStock6 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome6 + \" \" + Client.FvDescricao6), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0)"
+},
+"fv.54": {
+"kind": "style",
+"value": "\"order:\" + IntegerToText(If(Client.FvOrdenacao = 1, DecimalToInteger(Client.FvPreco6 * 100), If(Client.FvOrdenacao = 2, 100000 - DecimalToInteger(Client.FvPreco6 * 100), If(Client.FvOrdenacao = 3, 2, If(Client.FvDestaque6, 6, 100 + 6)))))"
+},
+"fv.23": {
+"kind": "call",
+"action": "AbrirProduto",
+"args": {
+"Id": "6"
+}
+},
+"fv.24": {
+"kind": "call",
+"action": "AbrirProduto",
+"args": {
+"Id": "6"
+}
+},
+"fv.52": {
+"kind": "text",
+"value": "Client.FvNome6"
+},
+"fv.53": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco6, 2, \",\", \".\")"
+},
+"fv.25": {
+"kind": "call",
+"action": "Adicionar6",
+"args": {
+"Quantidade": "1"
+}
+},
+"fv.59": {
+"kind": "visible",
+"condition": "Client.FvAtivo7 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat7) and (not Client.FvDisponiveis or Client.FvStock7 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome7 + \" \" + Client.FvDescricao7), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0)"
+},
+"fv.58": {
+"kind": "style",
+"value": "\"order:\" + IntegerToText(If(Client.FvOrdenacao = 1, DecimalToInteger(Client.FvPreco7 * 100), If(Client.FvOrdenacao = 2, 100000 - DecimalToInteger(Client.FvPreco7 * 100), If(Client.FvOrdenacao = 3, 6, If(Client.FvDestaque7, 7, 100 + 7)))))"
+},
+"fv.26": {
+"kind": "call",
+"action": "AbrirProduto",
+"args": {
+"Id": "7"
+}
+},
+"fv.27": {
+"kind": "call",
+"action": "AbrirProduto",
+"args": {
+"Id": "7"
+}
+},
+"fv.56": {
+"kind": "text",
+"value": "Client.FvNome7"
+},
+"fv.57": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco7, 2, \",\", \".\")"
+},
+"fv.28": {
+"kind": "call",
+"action": "Adicionar7",
+"args": {
+"Quantidade": "1"
+}
+},
+"fv.61": {
+"kind": "text",
+"value": "IntegerToText(If(Client.FvAtivo1 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat1) and (not Client.FvDisponiveis or Client.FvStock1 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome1 + \" \" + Client.FvDescricao1), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0) + If(Client.FvAtivo2 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat2) and (not Client.FvDisponiveis or Client.FvStock2 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome2 + \" \" + Client.FvDescricao2), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0) + If(Client.FvAtivo3 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat3) and (not Client.FvDisponiveis or Client.FvStock3 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome3 + \" \" + Client.FvDescricao3), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0) + If(Client.FvAtivo4 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat4) and (not Client.FvDisponiveis or Client.FvStock4 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome4 + \" \" + Client.FvDescricao4), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0) + If(Client.FvAtivo5 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat5) and (not Client.FvDisponiveis or Client.FvStock5 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome5 + \" \" + Client.FvDescricao5), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0) + If(Client.FvAtivo6 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat6) and (not Client.FvDisponiveis or Client.FvStock6 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome6 + \" \" + Client.FvDescricao6), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0) + If(Client.FvAtivo7 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat7) and (not Client.FvDisponiveis or Client.FvStock7 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome7 + \" \" + Client.FvDescricao7), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0) + If(Client.FvAtivo8 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat8) and (not Client.FvDisponiveis or Client.FvStock8 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome8 + \" \" + Client.FvDescricao8), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0))"
+},
+"fv.64": {
+"kind": "visible",
+"condition": "(If(Client.FvAtivo1 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat1) and (not Client.FvDisponiveis or Client.FvStock1 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome1 + \" \" + Client.FvDescricao1), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0) + If(Client.FvAtivo2 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat2) and (not Client.FvDisponiveis or Client.FvStock2 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome2 + \" \" + Client.FvDescricao2), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0) + If(Client.FvAtivo3 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat3) and (not Client.FvDisponiveis or Client.FvStock3 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome3 + \" \" + Client.FvDescricao3), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0) + If(Client.FvAtivo4 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat4) and (not Client.FvDisponiveis or Client.FvStock4 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome4 + \" \" + Client.FvDescricao4), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0) + If(Client.FvAtivo5 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat5) and (not Client.FvDisponiveis or Client.FvStock5 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome5 + \" \" + Client.FvDescricao5), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0) + If(Client.FvAtivo6 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat6) and (not Client.FvDisponiveis or Client.FvStock6 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome6 + \" \" + Client.FvDescricao6), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0) + If(Client.FvAtivo7 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat7) and (not Client.FvDisponiveis or Client.FvStock7 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome7 + \" \" + Client.FvDescricao7), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0) + If(Client.FvAtivo8 and (Client.FvCategoria = 0 or Client.FvCategoria = Client.FvCat8) and (not Client.FvDisponiveis or Client.FvStock8 > 0) and (Client.FvBusca = \"\" or Index(Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvNome8 + \" \" + Client.FvDescricao8), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\"), Replace(Replace(Replace(Replace(Replace(ToLower(Client.FvBusca), \"á\", \"a\"), \"é\", \"e\"), \"í\", \"i\"), \"ó\", \"o\"), \"ú\", \"u\")) >= 0), 1, 0)) = 0"
+},
+"fv.63": {
+"kind": "call",
+"action": "LimparFiltros"
+},
+"fv.480": {
+"kind": "visible",
+"condition": "Client.FvPage = \"carrinho\""
+},
+"fv.65": {
+"kind": "call",
+"action": "Pagina_catalogo"
+},
+"fv.66": {
+"kind": "call",
+"action": "Pagina_catalogo"
+},
+"fv.138": {
+"kind": "visible",
+"condition": "((If(Client.FvUser = 2, Client.FvQL1, Client.FvQ1)) + (If(Client.FvUser = 2, Client.FvQL2, Client.FvQ2)) + (If(Client.FvUser = 2, Client.FvQL3, Client.FvQ3)) + (If(Client.FvUser = 2, Client.FvQL4, Client.FvQ4)) + (If(Client.FvUser = 2, Client.FvQL5, Client.FvQ5)) + (If(Client.FvUser = 2, Client.FvQL6, Client.FvQ6)) + (If(Client.FvUser = 2, Client.FvQL7, Client.FvQ7)) + (If(Client.FvUser = 2, Client.FvQL8, Client.FvQ8))) > 0"
+},
+"fv.133": {
+"kind": "text",
+"value": "IntegerToText((If(Client.FvUser = 2, Client.FvQL1, Client.FvQ1)) + (If(Client.FvUser = 2, Client.FvQL2, Client.FvQ2)) + (If(Client.FvUser = 2, Client.FvQL3, Client.FvQ3)) + (If(Client.FvUser = 2, Client.FvQL4, Client.FvQ4)) + (If(Client.FvUser = 2, Client.FvQL5, Client.FvQ5)) + (If(Client.FvUser = 2, Client.FvQL6, Client.FvQ6)) + (If(Client.FvUser = 2, Client.FvQL7, Client.FvQ7)) + (If(Client.FvUser = 2, Client.FvQL8, Client.FvQ8))) + \" unidades\""
+},
+"fv.76": {
+"kind": "visible",
+"condition": "If(Client.FvUser = 2, Client.FvQL1, Client.FvQ1) > 0"
+},
+"fv.69": {
+"kind": "text",
+"value": "Client.FvNome1"
+},
+"fv.70": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco1, 2, \",\", \".\")"
+},
+"fv.71": {
+"kind": "call",
+"action": "Quantidade1",
+"args": {
+"Delta": "-1"
+}
+},
+"fv.72": {
+"kind": "text",
+"value": "IntegerToText(If(Client.FvUser = 2, Client.FvQL1, Client.FvQ1))"
+},
+"fv.73": {
+"kind": "call",
+"action": "Quantidade1",
+"args": {
+"Delta": "1"
+}
+},
+"fv.74": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal((If(Client.FvUser = 2, Client.FvQL1, Client.FvQ1)) * Client.FvPreco1, 2, \",\", \".\")"
+},
+"fv.75": {
+"kind": "call",
+"action": "Remover1"
+},
+"fv.84": {
+"kind": "visible",
+"condition": "If(Client.FvUser = 2, Client.FvQL2, Client.FvQ2) > 0"
+},
+"fv.77": {
+"kind": "text",
+"value": "Client.FvNome2"
+},
+"fv.78": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco2, 2, \",\", \".\")"
+},
+"fv.79": {
+"kind": "call",
+"action": "Quantidade2",
+"args": {
+"Delta": "-1"
+}
+},
+"fv.80": {
+"kind": "text",
+"value": "IntegerToText(If(Client.FvUser = 2, Client.FvQL2, Client.FvQ2))"
+},
+"fv.81": {
+"kind": "call",
+"action": "Quantidade2",
+"args": {
+"Delta": "1"
+}
+},
+"fv.82": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal((If(Client.FvUser = 2, Client.FvQL2, Client.FvQ2)) * Client.FvPreco2, 2, \",\", \".\")"
+},
+"fv.83": {
+"kind": "call",
+"action": "Remover2"
+},
+"fv.92": {
+"kind": "visible",
+"condition": "If(Client.FvUser = 2, Client.FvQL3, Client.FvQ3) > 0"
+},
+"fv.85": {
+"kind": "text",
+"value": "Client.FvNome3"
+},
+"fv.86": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco3, 2, \",\", \".\")"
+},
+"fv.87": {
+"kind": "call",
+"action": "Quantidade3",
+"args": {
+"Delta": "-1"
+}
+},
+"fv.88": {
+"kind": "text",
+"value": "IntegerToText(If(Client.FvUser = 2, Client.FvQL3, Client.FvQ3))"
+},
+"fv.89": {
+"kind": "call",
+"action": "Quantidade3",
+"args": {
+"Delta": "1"
+}
+},
+"fv.90": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal((If(Client.FvUser = 2, Client.FvQL3, Client.FvQ3)) * Client.FvPreco3, 2, \",\", \".\")"
+},
+"fv.91": {
+"kind": "call",
+"action": "Remover3"
+},
+"fv.100": {
+"kind": "visible",
+"condition": "If(Client.FvUser = 2, Client.FvQL4, Client.FvQ4) > 0"
+},
+"fv.93": {
+"kind": "text",
+"value": "Client.FvNome4"
+},
+"fv.94": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco4, 2, \",\", \".\")"
+},
+"fv.95": {
+"kind": "call",
+"action": "Quantidade4",
+"args": {
+"Delta": "-1"
+}
+},
+"fv.96": {
+"kind": "text",
+"value": "IntegerToText(If(Client.FvUser = 2, Client.FvQL4, Client.FvQ4))"
+},
+"fv.97": {
+"kind": "call",
+"action": "Quantidade4",
+"args": {
+"Delta": "1"
+}
+},
+"fv.98": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal((If(Client.FvUser = 2, Client.FvQL4, Client.FvQ4)) * Client.FvPreco4, 2, \",\", \".\")"
+},
+"fv.99": {
+"kind": "call",
+"action": "Remover4"
+},
+"fv.108": {
+"kind": "visible",
+"condition": "If(Client.FvUser = 2, Client.FvQL5, Client.FvQ5) > 0"
+},
+"fv.101": {
+"kind": "text",
+"value": "Client.FvNome5"
+},
+"fv.102": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco5, 2, \",\", \".\")"
+},
+"fv.103": {
+"kind": "call",
+"action": "Quantidade5",
+"args": {
+"Delta": "-1"
+}
+},
+"fv.104": {
+"kind": "text",
+"value": "IntegerToText(If(Client.FvUser = 2, Client.FvQL5, Client.FvQ5))"
+},
+"fv.105": {
+"kind": "call",
+"action": "Quantidade5",
+"args": {
+"Delta": "1"
+}
+},
+"fv.106": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal((If(Client.FvUser = 2, Client.FvQL5, Client.FvQ5)) * Client.FvPreco5, 2, \",\", \".\")"
+},
+"fv.107": {
+"kind": "call",
+"action": "Remover5"
+},
+"fv.116": {
+"kind": "visible",
+"condition": "If(Client.FvUser = 2, Client.FvQL6, Client.FvQ6) > 0"
+},
+"fv.109": {
+"kind": "text",
+"value": "Client.FvNome6"
+},
+"fv.110": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco6, 2, \",\", \".\")"
+},
+"fv.111": {
+"kind": "call",
+"action": "Quantidade6",
+"args": {
+"Delta": "-1"
+}
+},
+"fv.112": {
+"kind": "text",
+"value": "IntegerToText(If(Client.FvUser = 2, Client.FvQL6, Client.FvQ6))"
+},
+"fv.113": {
+"kind": "call",
+"action": "Quantidade6",
+"args": {
+"Delta": "1"
+}
+},
+"fv.114": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal((If(Client.FvUser = 2, Client.FvQL6, Client.FvQ6)) * Client.FvPreco6, 2, \",\", \".\")"
+},
+"fv.115": {
+"kind": "call",
+"action": "Remover6"
+},
+"fv.124": {
+"kind": "visible",
+"condition": "If(Client.FvUser = 2, Client.FvQL7, Client.FvQ7) > 0"
+},
+"fv.117": {
+"kind": "text",
+"value": "Client.FvNome7"
+},
+"fv.118": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco7, 2, \",\", \".\")"
+},
+"fv.119": {
+"kind": "call",
+"action": "Quantidade7",
+"args": {
+"Delta": "-1"
+}
+},
+"fv.120": {
+"kind": "text",
+"value": "IntegerToText(If(Client.FvUser = 2, Client.FvQL7, Client.FvQ7))"
+},
+"fv.121": {
+"kind": "call",
+"action": "Quantidade7",
+"args": {
+"Delta": "1"
+}
+},
+"fv.122": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal((If(Client.FvUser = 2, Client.FvQL7, Client.FvQ7)) * Client.FvPreco7, 2, \",\", \".\")"
+},
+"fv.123": {
+"kind": "call",
+"action": "Remover7"
+},
+"fv.132": {
+"kind": "visible",
+"condition": "If(Client.FvUser = 2, Client.FvQL8, Client.FvQ8) > 0"
+},
+"fv.125": {
+"kind": "text",
+"value": "Client.FvNome8"
+},
+"fv.126": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco8, 2, \",\", \".\")"
+},
+"fv.127": {
+"kind": "call",
+"action": "Quantidade8",
+"args": {
+"Delta": "-1"
+}
+},
+"fv.128": {
+"kind": "text",
+"value": "IntegerToText(If(Client.FvUser = 2, Client.FvQL8, Client.FvQ8))"
+},
+"fv.129": {
+"kind": "call",
+"action": "Quantidade8",
+"args": {
+"Delta": "1"
+}
+},
+"fv.130": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal((If(Client.FvUser = 2, Client.FvQL8, Client.FvQ8)) * Client.FvPreco8, 2, \",\", \".\")"
+},
+"fv.131": {
+"kind": "call",
+"action": "Remover8"
+},
+"MountFvDeliveryName": {
+"kind": "style",
+"value": "\"\""
+},
+"MountFvDeliveryAddress": {
+"kind": "style",
+"value": "\"\""
+},
+"MountFvDeliveryNote": {
+"kind": "style",
+"value": "\"\""
+},
+"fv.134": {
+"kind": "text",
+"value": "IntegerToText(If(If(Client.FvUser = 2, Client.FvQL1, Client.FvQ1) > 0, 1, 0) + If(If(Client.FvUser = 2, Client.FvQL2, Client.FvQ2) > 0, 1, 0) + If(If(Client.FvUser = 2, Client.FvQL3, Client.FvQ3) > 0, 1, 0) + If(If(Client.FvUser = 2, Client.FvQL4, Client.FvQ4) > 0, 1, 0) + If(If(Client.FvUser = 2, Client.FvQL5, Client.FvQ5) > 0, 1, 0) + If(If(Client.FvUser = 2, Client.FvQL6, Client.FvQ6) > 0, 1, 0) + If(If(Client.FvUser = 2, Client.FvQL7, Client.FvQ7) > 0, 1, 0) + If(If(Client.FvUser = 2, Client.FvQL8, Client.FvQ8) > 0, 1, 0)) + \" itens\""
+},
+"fv.135": {
+"kind": "text",
+"value": "IntegerToText((If(Client.FvUser = 2, Client.FvQL1, Client.FvQ1)) + (If(Client.FvUser = 2, Client.FvQL2, Client.FvQ2)) + (If(Client.FvUser = 2, Client.FvQL3, Client.FvQ3)) + (If(Client.FvUser = 2, Client.FvQL4, Client.FvQ4)) + (If(Client.FvUser = 2, Client.FvQL5, Client.FvQ5)) + (If(Client.FvUser = 2, Client.FvQL6, Client.FvQ6)) + (If(Client.FvUser = 2, Client.FvQL7, Client.FvQ7)) + (If(Client.FvUser = 2, Client.FvQL8, Client.FvQ8))) + \" unidades\""
+},
+"fv.136": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal((If(Client.FvUser = 2, Client.FvQL1, Client.FvQ1)) * Client.FvPreco1 + (If(Client.FvUser = 2, Client.FvQL2, Client.FvQ2)) * Client.FvPreco2 + (If(Client.FvUser = 2, Client.FvQL3, Client.FvQ3)) * Client.FvPreco3 + (If(Client.FvUser = 2, Client.FvQL4, Client.FvQ4)) * Client.FvPreco4 + (If(Client.FvUser = 2, Client.FvQL5, Client.FvQ5)) * Client.FvPreco5 + (If(Client.FvUser = 2, Client.FvQL6, Client.FvQ6)) * Client.FvPreco6 + (If(Client.FvUser = 2, Client.FvQL7, Client.FvQ7)) * Client.FvPreco7 + (If(Client.FvUser = 2, Client.FvQL8, Client.FvQ8)) * Client.FvPreco8, 2, \",\", \".\")"
+},
+"fv.137": {
+"kind": "call",
+"action": "ConfirmarPedido"
+},
+"fv.140": {
+"kind": "visible",
+"condition": "((If(Client.FvUser = 2, Client.FvQL1, Client.FvQ1)) + (If(Client.FvUser = 2, Client.FvQL2, Client.FvQ2)) + (If(Client.FvUser = 2, Client.FvQL3, Client.FvQ3)) + (If(Client.FvUser = 2, Client.FvQL4, Client.FvQ4)) + (If(Client.FvUser = 2, Client.FvQL5, Client.FvQ5)) + (If(Client.FvUser = 2, Client.FvQL6, Client.FvQ6)) + (If(Client.FvUser = 2, Client.FvQL7, Client.FvQ7)) + (If(Client.FvUser = 2, Client.FvQL8, Client.FvQ8))) = 0"
+},
+"fv.139": {
+"kind": "call",
+"action": "Pagina_catalogo"
+},
+"fv.481": {
+"kind": "visible",
+"condition": "Client.FvPage = \"meus-pedidos\""
+},
+"fv.141": {
+"kind": "call",
+"action": "Pagina_catalogo"
+},
+"fv.142": {
+"kind": "call",
+"action": "Pagina_catalogo"
+},
+"fv.149": {
+"kind": "call",
+"action": "FiltrarMeusPedidos",
+"args": {
+"Status": "0"
+}
+},
+"fv.150": {
+"kind": "call",
+"action": "FiltrarMeusPedidos",
+"args": {
+"Status": "1"
+}
+},
+"fv.151": {
+"kind": "call",
+"action": "FiltrarMeusPedidos",
+"args": {
+"Status": "2"
+}
+},
+"fv.152": {
+"kind": "call",
+"action": "FiltrarMeusPedidos",
+"args": {
+"Status": "3"
+}
+},
+"fv.153": {
+"kind": "call",
+"action": "FiltrarMeusPedidos",
+"args": {
+"Status": "4"
+}
+},
+"fv.458": {
+"kind": "visible",
+"condition": "Client.FvLastCreated and Client.FvLastUser = Client.FvUser"
+},
+"fv.459": {
+"kind": "call",
+"action": "AbrirPedido",
+"args": {
+"Id": "1005"
+}
+},
+"fv.460": {
+"kind": "text",
+"value": "IntegerToText(Client.FvLastQ1 + Client.FvLastQ2 + Client.FvLastQ3 + Client.FvLastQ4 + Client.FvLastQ5 + Client.FvLastQ6 + Client.FvLastQ7 + Client.FvLastQ8) + \" unidades\""
+},
+"fv.461": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvLastTotal, 2, \",\", \".\")"
+},
+"fv.462": {
+"kind": "call",
+"action": "AbrirPedido",
+"args": {
+"Id": "1005"
+}
+},
+"fv.160": {
+"kind": "visible",
+"condition": "(Client.FvCustomerStatusFilter = 0 or Client.FvCustomerStatusFilter = Client.FvStatus1003) and Client.FvUser = 1"
+},
+"fv.143": {
+"kind": "call",
+"action": "AbrirPedido",
+"args": {
+"Id": "1003"
+}
+},
+"fv.158": {
+"kind": "class",
+"value": "\"badge status-\" + IntegerToText(Client.FvStatus1003)"
+},
+"fv.159": {
+"kind": "text",
+"value": "If(Client.FvStatus1003 = 1, \"Recebido\", If(Client.FvStatus1003 = 2, \"Em separação\", If(Client.FvStatus1003 = 3, \"Concluído\", \"Cancelado\")))"
+},
+"fv.144": {
+"kind": "call",
+"action": "AbrirPedido",
+"args": {
+"Id": "1003"
+}
+},
+"fv.163": {
+"kind": "visible",
+"condition": "(Client.FvCustomerStatusFilter = 0 or Client.FvCustomerStatusFilter = Client.FvStatus1002) and Client.FvUser = 1"
+},
+"fv.145": {
+"kind": "call",
+"action": "AbrirPedido",
+"args": {
+"Id": "1002"
+}
+},
+"fv.161": {
+"kind": "class",
+"value": "\"badge status-\" + IntegerToText(Client.FvStatus1002)"
+},
+"fv.162": {
+"kind": "text",
+"value": "If(Client.FvStatus1002 = 1, \"Recebido\", If(Client.FvStatus1002 = 2, \"Em separação\", If(Client.FvStatus1002 = 3, \"Concluído\", \"Cancelado\")))"
+},
+"fv.146": {
+"kind": "call",
+"action": "AbrirPedido",
+"args": {
+"Id": "1002"
+}
+},
+"fv.166": {
+"kind": "visible",
+"condition": "(Client.FvCustomerStatusFilter = 0 or Client.FvCustomerStatusFilter = Client.FvStatus1001) and Client.FvUser = 1"
+},
+"fv.147": {
+"kind": "call",
+"action": "AbrirPedido",
+"args": {
+"Id": "1001"
+}
+},
+"fv.164": {
+"kind": "class",
+"value": "\"badge status-\" + IntegerToText(Client.FvStatus1001)"
+},
+"fv.165": {
+"kind": "text",
+"value": "If(Client.FvStatus1001 = 1, \"Recebido\", If(Client.FvStatus1001 = 2, \"Em separação\", If(Client.FvStatus1001 = 3, \"Concluído\", \"Cancelado\")))"
+},
+"fv.148": {
+"kind": "call",
+"action": "AbrirPedido",
+"args": {
+"Id": "1001"
+}
+},
+"fv.169": {
+"kind": "visible",
+"condition": "(Client.FvCustomerStatusFilter = 0 or Client.FvCustomerStatusFilter = Client.FvStatus1004) and Client.FvUser = 2"
+},
+"fv.154": {
+"kind": "call",
+"action": "AbrirPedido",
+"args": {
+"Id": "1004"
+}
+},
+"fv.167": {
+"kind": "class",
+"value": "\"badge status-\" + IntegerToText(Client.FvStatus1004)"
+},
+"fv.168": {
+"kind": "text",
+"value": "If(Client.FvStatus1004 = 1, \"Recebido\", If(Client.FvStatus1004 = 2, \"Em separação\", If(Client.FvStatus1004 = 3, \"Concluído\", \"Cancelado\")))"
+},
+"fv.155": {
+"kind": "call",
+"action": "AbrirPedido",
+"args": {
+"Id": "1004"
+}
+},
+"fv.172": {
+"kind": "visible",
+"condition": "(Client.FvCustomerStatusFilter = 0 or Client.FvCustomerStatusFilter = Client.FvStatus1000) and Client.FvUser = 2"
+},
+"fv.156": {
+"kind": "call",
+"action": "AbrirPedido",
+"args": {
+"Id": "1000"
+}
+},
+"fv.170": {
+"kind": "class",
+"value": "\"badge status-\" + IntegerToText(Client.FvStatus1000)"
+},
+"fv.171": {
+"kind": "text",
+"value": "If(Client.FvStatus1000 = 1, \"Recebido\", If(Client.FvStatus1000 = 2, \"Em separação\", If(Client.FvStatus1000 = 3, \"Concluído\", \"Cancelado\")))"
+},
+"fv.157": {
+"kind": "call",
+"action": "AbrirPedido",
+"args": {
+"Id": "1000"
+}
+},
+"fv.482": {
+"kind": "visible",
+"condition": "Client.FvPage = \"pedido\""
+},
+"fv.291": {
+"kind": "visible",
+"condition": "Client.FvPedidoId = 1000"
+},
+"fv.281": {
+"kind": "call",
+"action": "Pagina_catalogo"
+},
+"fv.282": {
+"kind": "call",
+"action": "Pagina_gestao_pedidos"
+},
+"fv.284": {
+"kind": "class",
+"value": "\"badge status-\" + IntegerToText(Client.FvStatus1000)"
+},
+"fv.285": {
+"kind": "text",
+"value": "If(Client.FvStatus1000 = 1, \"Recebido\", If(Client.FvStatus1000 = 2, \"Em separação\", If(Client.FvStatus1000 = 3, \"Concluído\", \"Cancelado\")))"
+},
+"fv.283": {
+"kind": "call",
+"action": "Pagina_gestao_pedidos"
+},
+"fv.286": {
+"kind": "visible",
+"condition": "Client.FvStatus1000 = 4"
+},
+"fv.290": {
+"kind": "visible",
+"condition": "Client.FvStatus1000 <> 4"
+},
+"fv.287": {
+"kind": "class",
+"value": "\"timeline-step \" + If(Client.FvStatus1000 > 1, \"done\", If(Client.FvStatus1000 = 1, \"current\", \"\"))"
+},
+"fv.288": {
+"kind": "class",
+"value": "\"timeline-step \" + If(Client.FvStatus1000 > 2, \"done\", If(Client.FvStatus1000 = 2, \"current\", \"\"))"
+},
+"fv.289": {
+"kind": "class",
+"value": "\"timeline-step \" + If(Client.FvStatus1000 > 3, \"done\", If(Client.FvStatus1000 = 3, \"current\", \"\"))"
+},
+"fv.284.copy202": {
+"kind": "class",
+"value": "\"badge status-\" + IntegerToText(Client.FvStatus1000)"
+},
+"fv.285.copy203": {
+"kind": "text",
+"value": "If(Client.FvStatus1000 = 1, \"Recebido\", If(Client.FvStatus1000 = 2, \"Em separação\", If(Client.FvStatus1000 = 3, \"Concluído\", \"Cancelado\")))"
+},
+"fv.302": {
+"kind": "visible",
+"condition": "Client.FvPedidoId = 1001"
+},
+"fv.292": {
+"kind": "call",
+"action": "Pagina_catalogo"
+},
+"fv.293": {
+"kind": "call",
+"action": "Pagina_gestao_pedidos"
+},
+"fv.295": {
+"kind": "class",
+"value": "\"badge status-\" + IntegerToText(Client.FvStatus1001)"
+},
+"fv.296": {
+"kind": "text",
+"value": "If(Client.FvStatus1001 = 1, \"Recebido\", If(Client.FvStatus1001 = 2, \"Em separação\", If(Client.FvStatus1001 = 3, \"Concluído\", \"Cancelado\")))"
+},
+"fv.294": {
+"kind": "call",
+"action": "Pagina_gestao_pedidos"
+},
+"fv.297": {
+"kind": "visible",
+"condition": "Client.FvStatus1001 = 4"
+},
+"fv.301": {
+"kind": "visible",
+"condition": "Client.FvStatus1001 <> 4"
+},
+"fv.298": {
+"kind": "class",
+"value": "\"timeline-step \" + If(Client.FvStatus1001 > 1, \"done\", If(Client.FvStatus1001 = 1, \"current\", \"\"))"
+},
+"fv.299": {
+"kind": "class",
+"value": "\"timeline-step \" + If(Client.FvStatus1001 > 2, \"done\", If(Client.FvStatus1001 = 2, \"current\", \"\"))"
+},
+"fv.300": {
+"kind": "class",
+"value": "\"timeline-step \" + If(Client.FvStatus1001 > 3, \"done\", If(Client.FvStatus1001 = 3, \"current\", \"\"))"
+},
+"fv.295.copy215": {
+"kind": "class",
+"value": "\"badge status-\" + IntegerToText(Client.FvStatus1001)"
+},
+"fv.296.copy216": {
+"kind": "text",
+"value": "If(Client.FvStatus1001 = 1, \"Recebido\", If(Client.FvStatus1001 = 2, \"Em separação\", If(Client.FvStatus1001 = 3, \"Concluído\", \"Cancelado\")))"
+},
+"fv.314": {
+"kind": "visible",
+"condition": "Client.FvPedidoId = 1002"
+},
+"fv.303": {
+"kind": "call",
+"action": "Pagina_catalogo"
+},
+"fv.304": {
+"kind": "call",
+"action": "Pagina_gestao_pedidos"
+},
+"fv.306": {
+"kind": "class",
+"value": "\"badge status-\" + IntegerToText(Client.FvStatus1002)"
+},
+"fv.307": {
+"kind": "text",
+"value": "If(Client.FvStatus1002 = 1, \"Recebido\", If(Client.FvStatus1002 = 2, \"Em separação\", If(Client.FvStatus1002 = 3, \"Concluído\", \"Cancelado\")))"
+},
+"fv.308": {
+"kind": "visible",
+"condition": "Client.FvUser = 3 and Client.FvStatus1002 < 3"
+},
+"fv.305": {
+"kind": "call",
+"action": "AbrirStatusPedido",
+"args": {
+"Id": "1002"
+}
+},
+"fv.309": {
+"kind": "visible",
+"condition": "Client.FvStatus1002 = 4"
+},
+"fv.313": {
+"kind": "visible",
+"condition": "Client.FvStatus1002 <> 4"
+},
+"fv.310": {
+"kind": "class",
+"value": "\"timeline-step \" + If(Client.FvStatus1002 > 1, \"done\", If(Client.FvStatus1002 = 1, \"current\", \"\"))"
+},
+"fv.311": {
+"kind": "class",
+"value": "\"timeline-step \" + If(Client.FvStatus1002 > 2, \"done\", If(Client.FvStatus1002 = 2, \"current\", \"\"))"
+},
+"fv.312": {
+"kind": "class",
+"value": "\"timeline-step \" + If(Client.FvStatus1002 > 3, \"done\", If(Client.FvStatus1002 = 3, \"current\", \"\"))"
+},
+"fv.306.copy229": {
+"kind": "class",
+"value": "\"badge status-\" + IntegerToText(Client.FvStatus1002)"
+},
+"fv.307.copy230": {
+"kind": "text",
+"value": "If(Client.FvStatus1002 = 1, \"Recebido\", If(Client.FvStatus1002 = 2, \"Em separação\", If(Client.FvStatus1002 = 3, \"Concluído\", \"Cancelado\")))"
+},
+"fv.326": {
+"kind": "visible",
+"condition": "Client.FvPedidoId = 1003"
+},
+"fv.315": {
+"kind": "call",
+"action": "Pagina_catalogo"
+},
+"fv.316": {
+"kind": "call",
+"action": "Pagina_gestao_pedidos"
+},
+"fv.318": {
+"kind": "class",
+"value": "\"badge status-\" + IntegerToText(Client.FvStatus1003)"
+},
+"fv.319": {
+"kind": "text",
+"value": "If(Client.FvStatus1003 = 1, \"Recebido\", If(Client.FvStatus1003 = 2, \"Em separação\", If(Client.FvStatus1003 = 3, \"Concluído\", \"Cancelado\")))"
+},
+"fv.320": {
+"kind": "visible",
+"condition": "Client.FvUser = 3 and Client.FvStatus1003 < 3"
+},
+"fv.317": {
+"kind": "call",
+"action": "AbrirStatusPedido",
+"args": {
+"Id": "1003"
+}
+},
+"fv.321": {
+"kind": "visible",
+"condition": "Client.FvStatus1003 = 4"
+},
+"fv.325": {
+"kind": "visible",
+"condition": "Client.FvStatus1003 <> 4"
+},
+"fv.322": {
+"kind": "class",
+"value": "\"timeline-step \" + If(Client.FvStatus1003 > 1, \"done\", If(Client.FvStatus1003 = 1, \"current\", \"\"))"
+},
+"fv.323": {
+"kind": "class",
+"value": "\"timeline-step \" + If(Client.FvStatus1003 > 2, \"done\", If(Client.FvStatus1003 = 2, \"current\", \"\"))"
+},
+"fv.324": {
+"kind": "class",
+"value": "\"timeline-step \" + If(Client.FvStatus1003 > 3, \"done\", If(Client.FvStatus1003 = 3, \"current\", \"\"))"
+},
+"fv.318.copy243": {
+"kind": "class",
+"value": "\"badge status-\" + IntegerToText(Client.FvStatus1003)"
+},
+"fv.319.copy244": {
+"kind": "text",
+"value": "If(Client.FvStatus1003 = 1, \"Recebido\", If(Client.FvStatus1003 = 2, \"Em separação\", If(Client.FvStatus1003 = 3, \"Concluído\", \"Cancelado\")))"
+},
+"fv.338": {
+"kind": "visible",
+"condition": "Client.FvPedidoId = 1004"
+},
+"fv.327": {
+"kind": "call",
+"action": "Pagina_catalogo"
+},
+"fv.328": {
+"kind": "call",
+"action": "Pagina_gestao_pedidos"
+},
+"fv.330": {
+"kind": "class",
+"value": "\"badge status-\" + IntegerToText(Client.FvStatus1004)"
+},
+"fv.331": {
+"kind": "text",
+"value": "If(Client.FvStatus1004 = 1, \"Recebido\", If(Client.FvStatus1004 = 2, \"Em separação\", If(Client.FvStatus1004 = 3, \"Concluído\", \"Cancelado\")))"
+},
+"fv.332": {
+"kind": "visible",
+"condition": "Client.FvUser = 3 and Client.FvStatus1004 < 3"
+},
+"fv.329": {
+"kind": "call",
+"action": "AbrirStatusPedido",
+"args": {
+"Id": "1004"
+}
+},
+"fv.333": {
+"kind": "visible",
+"condition": "Client.FvStatus1004 = 4"
+},
+"fv.337": {
+"kind": "visible",
+"condition": "Client.FvStatus1004 <> 4"
+},
+"fv.334": {
+"kind": "class",
+"value": "\"timeline-step \" + If(Client.FvStatus1004 > 1, \"done\", If(Client.FvStatus1004 = 1, \"current\", \"\"))"
+},
+"fv.335": {
+"kind": "class",
+"value": "\"timeline-step \" + If(Client.FvStatus1004 > 2, \"done\", If(Client.FvStatus1004 = 2, \"current\", \"\"))"
+},
+"fv.336": {
+"kind": "class",
+"value": "\"timeline-step \" + If(Client.FvStatus1004 > 3, \"done\", If(Client.FvStatus1004 = 3, \"current\", \"\"))"
+},
+"fv.330.copy257": {
+"kind": "class",
+"value": "\"badge status-\" + IntegerToText(Client.FvStatus1004)"
+},
+"fv.331.copy258": {
+"kind": "text",
+"value": "If(Client.FvStatus1004 = 1, \"Recebido\", If(Client.FvStatus1004 = 2, \"Em separação\", If(Client.FvStatus1004 = 3, \"Concluído\", \"Cancelado\")))"
+},
+"fv.457": {
+"kind": "visible",
+"condition": "Client.FvPedidoId = 1005"
+},
+"fv.420": {
+"kind": "call",
+"action": "Pagina_meus_pedidos"
+},
+"fv.424": {
+"kind": "visible",
+"condition": "Client.FvLastQ1 > 0"
+},
+"fv.421": {
+"kind": "text",
+"value": "Client.FvNome1"
+},
+"fv.422": {
+"kind": "text",
+"value": "IntegerToText(Client.FvLastQ1)"
+},
+"fv.423": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvLastQ1 * Client.FvPreco1, 2, \",\", \".\")"
+},
+"fv.428": {
+"kind": "visible",
+"condition": "Client.FvLastQ2 > 0"
+},
+"fv.425": {
+"kind": "text",
+"value": "Client.FvNome2"
+},
+"fv.426": {
+"kind": "text",
+"value": "IntegerToText(Client.FvLastQ2)"
+},
+"fv.427": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvLastQ2 * Client.FvPreco2, 2, \",\", \".\")"
+},
+"fv.432": {
+"kind": "visible",
+"condition": "Client.FvLastQ3 > 0"
+},
+"fv.429": {
+"kind": "text",
+"value": "Client.FvNome3"
+},
+"fv.430": {
+"kind": "text",
+"value": "IntegerToText(Client.FvLastQ3)"
+},
+"fv.431": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvLastQ3 * Client.FvPreco3, 2, \",\", \".\")"
+},
+"fv.436": {
+"kind": "visible",
+"condition": "Client.FvLastQ4 > 0"
+},
+"fv.433": {
+"kind": "text",
+"value": "Client.FvNome4"
+},
+"fv.434": {
+"kind": "text",
+"value": "IntegerToText(Client.FvLastQ4)"
+},
+"fv.435": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvLastQ4 * Client.FvPreco4, 2, \",\", \".\")"
+},
+"fv.440": {
+"kind": "visible",
+"condition": "Client.FvLastQ5 > 0"
+},
+"fv.437": {
+"kind": "text",
+"value": "Client.FvNome5"
+},
+"fv.438": {
+"kind": "text",
+"value": "IntegerToText(Client.FvLastQ5)"
+},
+"fv.439": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvLastQ5 * Client.FvPreco5, 2, \",\", \".\")"
+},
+"fv.444": {
+"kind": "visible",
+"condition": "Client.FvLastQ6 > 0"
+},
+"fv.441": {
+"kind": "text",
+"value": "Client.FvNome6"
+},
+"fv.442": {
+"kind": "text",
+"value": "IntegerToText(Client.FvLastQ6)"
+},
+"fv.443": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvLastQ6 * Client.FvPreco6, 2, \",\", \".\")"
+},
+"fv.448": {
+"kind": "visible",
+"condition": "Client.FvLastQ7 > 0"
+},
+"fv.445": {
+"kind": "text",
+"value": "Client.FvNome7"
+},
+"fv.446": {
+"kind": "text",
+"value": "IntegerToText(Client.FvLastQ7)"
+},
+"fv.447": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvLastQ7 * Client.FvPreco7, 2, \",\", \".\")"
+},
+"fv.452": {
+"kind": "visible",
+"condition": "Client.FvLastQ8 > 0"
+},
+"fv.449": {
+"kind": "text",
+"value": "Client.FvNome8"
+},
+"fv.450": {
+"kind": "text",
+"value": "IntegerToText(Client.FvLastQ8)"
+},
+"fv.451": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvLastQ8 * Client.FvPreco8, 2, \",\", \".\")"
+},
+"fv.453": {
+"kind": "text",
+"value": "Client.FvLastNome"
+},
+"fv.454": {
+"kind": "text",
+"value": "Client.FvLastEndereco"
+},
+"fv.455": {
+"kind": "text",
+"value": "Client.FvLastObservacao"
+},
+"fv.456": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvLastTotal, 2, \",\", \".\")"
+},
+"fv.483": {
+"kind": "visible",
+"condition": "Client.FvPage = \"gestao-produtos\""
+},
+"fv.207": {
+"kind": "call",
+"action": "Pagina_catalogo"
+},
+"fv.208": {
+"kind": "call",
+"action": "NovoProduto"
+},
+"MountFvManagementSearch": {
+"kind": "style",
+"value": "\"\""
+},
+"MountFvManagementCategory": {
+"kind": "style",
+"value": "\"\""
+},
+"MountFvManagementActive": {
+"kind": "style",
+"value": "\"\""
+},
+"fv.238": {
+"kind": "visible",
+"condition": "(Client.FvGestaoBusca = \"\" or Index(ToLower(Client.FvNome1), ToLower(Client.FvGestaoBusca)) >= 0) and (Client.FvGestaoCategoria = 0 or Client.FvGestaoCategoria = Client.FvCat1) and (Client.FvGestaoAtivo = 0 or (Client.FvGestaoAtivo = 1 and Client.FvAtivo1) or (Client.FvGestaoAtivo = 2 and not Client.FvAtivo1))"
+},
+"fv.233": {
+"kind": "text",
+"value": "Client.FvNome1"
+},
+"fv.234": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco1, 2, \",\", \".\")"
+},
+"fv.235": {
+"kind": "text",
+"value": "IntegerToText(Client.FvStock1) + \" un.\""
+},
+"fv.209": {
+"kind": "call",
+"action": "DestacarProduto1"
+},
+"fv.236": {
+"kind": "visible",
+"condition": "Client.FvAtivo1"
+},
+"fv.210": {
+"kind": "call",
+"action": "AtivarProduto1"
+},
+"fv.237": {
+"kind": "visible",
+"condition": "not Client.FvAtivo1"
+},
+"fv.210.copy308": {
+"kind": "call",
+"action": "AtivarProduto1"
+},
+"fv.211": {
+"kind": "call",
+"action": "EditarProduto",
+"args": {
+"Id": "1"
+}
+},
+"fv.244": {
+"kind": "visible",
+"condition": "(Client.FvGestaoBusca = \"\" or Index(ToLower(Client.FvNome2), ToLower(Client.FvGestaoBusca)) >= 0) and (Client.FvGestaoCategoria = 0 or Client.FvGestaoCategoria = Client.FvCat2) and (Client.FvGestaoAtivo = 0 or (Client.FvGestaoAtivo = 1 and Client.FvAtivo2) or (Client.FvGestaoAtivo = 2 and not Client.FvAtivo2))"
+},
+"fv.239": {
+"kind": "text",
+"value": "Client.FvNome2"
+},
+"fv.240": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco2, 2, \",\", \".\")"
+},
+"fv.241": {
+"kind": "text",
+"value": "IntegerToText(Client.FvStock2) + \" un.\""
+},
+"fv.212": {
+"kind": "call",
+"action": "DestacarProduto2"
+},
+"fv.242": {
+"kind": "visible",
+"condition": "Client.FvAtivo2"
+},
+"fv.213": {
+"kind": "call",
+"action": "AtivarProduto2"
+},
+"fv.243": {
+"kind": "visible",
+"condition": "not Client.FvAtivo2"
+},
+"fv.213.copy318": {
+"kind": "call",
+"action": "AtivarProduto2"
+},
+"fv.214": {
+"kind": "call",
+"action": "EditarProduto",
+"args": {
+"Id": "2"
+}
+},
+"fv.250": {
+"kind": "visible",
+"condition": "(Client.FvGestaoBusca = \"\" or Index(ToLower(Client.FvNome3), ToLower(Client.FvGestaoBusca)) >= 0) and (Client.FvGestaoCategoria = 0 or Client.FvGestaoCategoria = Client.FvCat3) and (Client.FvGestaoAtivo = 0 or (Client.FvGestaoAtivo = 1 and Client.FvAtivo3) or (Client.FvGestaoAtivo = 2 and not Client.FvAtivo3))"
+},
+"fv.245": {
+"kind": "text",
+"value": "Client.FvNome3"
+},
+"fv.246": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco3, 2, \",\", \".\")"
+},
+"fv.247": {
+"kind": "text",
+"value": "IntegerToText(Client.FvStock3) + \" un.\""
+},
+"fv.215": {
+"kind": "call",
+"action": "DestacarProduto3"
+},
+"fv.248": {
+"kind": "visible",
+"condition": "Client.FvAtivo3"
+},
+"fv.216": {
+"kind": "call",
+"action": "AtivarProduto3"
+},
+"fv.249": {
+"kind": "visible",
+"condition": "not Client.FvAtivo3"
+},
+"fv.216.copy328": {
+"kind": "call",
+"action": "AtivarProduto3"
+},
+"fv.217": {
+"kind": "call",
+"action": "EditarProduto",
+"args": {
+"Id": "3"
+}
+},
+"fv.256": {
+"kind": "visible",
+"condition": "(Client.FvGestaoBusca = \"\" or Index(ToLower(Client.FvNome4), ToLower(Client.FvGestaoBusca)) >= 0) and (Client.FvGestaoCategoria = 0 or Client.FvGestaoCategoria = Client.FvCat4) and (Client.FvGestaoAtivo = 0 or (Client.FvGestaoAtivo = 1 and Client.FvAtivo4) or (Client.FvGestaoAtivo = 2 and not Client.FvAtivo4))"
+},
+"fv.251": {
+"kind": "text",
+"value": "Client.FvNome4"
+},
+"fv.252": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco4, 2, \",\", \".\")"
+},
+"fv.253": {
+"kind": "text",
+"value": "IntegerToText(Client.FvStock4) + \" un.\""
+},
+"fv.218": {
+"kind": "call",
+"action": "DestacarProduto4"
+},
+"fv.254": {
+"kind": "visible",
+"condition": "Client.FvAtivo4"
+},
+"fv.219": {
+"kind": "call",
+"action": "AtivarProduto4"
+},
+"fv.255": {
+"kind": "visible",
+"condition": "not Client.FvAtivo4"
+},
+"fv.219.copy338": {
+"kind": "call",
+"action": "AtivarProduto4"
+},
+"fv.220": {
+"kind": "call",
+"action": "EditarProduto",
+"args": {
+"Id": "4"
+}
+},
+"fv.262": {
+"kind": "visible",
+"condition": "(Client.FvGestaoBusca = \"\" or Index(ToLower(Client.FvNome5), ToLower(Client.FvGestaoBusca)) >= 0) and (Client.FvGestaoCategoria = 0 or Client.FvGestaoCategoria = Client.FvCat5) and (Client.FvGestaoAtivo = 0 or (Client.FvGestaoAtivo = 1 and Client.FvAtivo5) or (Client.FvGestaoAtivo = 2 and not Client.FvAtivo5))"
+},
+"fv.257": {
+"kind": "text",
+"value": "Client.FvNome5"
+},
+"fv.258": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco5, 2, \",\", \".\")"
+},
+"fv.259": {
+"kind": "text",
+"value": "IntegerToText(Client.FvStock5) + \" un.\""
+},
+"fv.221": {
+"kind": "call",
+"action": "DestacarProduto5"
+},
+"fv.260": {
+"kind": "visible",
+"condition": "Client.FvAtivo5"
+},
+"fv.222": {
+"kind": "call",
+"action": "AtivarProduto5"
+},
+"fv.261": {
+"kind": "visible",
+"condition": "not Client.FvAtivo5"
+},
+"fv.222.copy348": {
+"kind": "call",
+"action": "AtivarProduto5"
+},
+"fv.223": {
+"kind": "call",
+"action": "EditarProduto",
+"args": {
+"Id": "5"
+}
+},
+"fv.268": {
+"kind": "visible",
+"condition": "(Client.FvGestaoBusca = \"\" or Index(ToLower(Client.FvNome6), ToLower(Client.FvGestaoBusca)) >= 0) and (Client.FvGestaoCategoria = 0 or Client.FvGestaoCategoria = Client.FvCat6) and (Client.FvGestaoAtivo = 0 or (Client.FvGestaoAtivo = 1 and Client.FvAtivo6) or (Client.FvGestaoAtivo = 2 and not Client.FvAtivo6))"
+},
+"fv.263": {
+"kind": "text",
+"value": "Client.FvNome6"
+},
+"fv.264": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco6, 2, \",\", \".\")"
+},
+"fv.265": {
+"kind": "text",
+"value": "IntegerToText(Client.FvStock6) + \" un.\""
+},
+"fv.224": {
+"kind": "call",
+"action": "DestacarProduto6"
+},
+"fv.266": {
+"kind": "visible",
+"condition": "Client.FvAtivo6"
+},
+"fv.225": {
+"kind": "call",
+"action": "AtivarProduto6"
+},
+"fv.267": {
+"kind": "visible",
+"condition": "not Client.FvAtivo6"
+},
+"fv.225.copy358": {
+"kind": "call",
+"action": "AtivarProduto6"
+},
+"fv.226": {
+"kind": "call",
+"action": "EditarProduto",
+"args": {
+"Id": "6"
+}
+},
+"fv.274": {
+"kind": "visible",
+"condition": "(Client.FvGestaoBusca = \"\" or Index(ToLower(Client.FvNome7), ToLower(Client.FvGestaoBusca)) >= 0) and (Client.FvGestaoCategoria = 0 or Client.FvGestaoCategoria = Client.FvCat7) and (Client.FvGestaoAtivo = 0 or (Client.FvGestaoAtivo = 1 and Client.FvAtivo7) or (Client.FvGestaoAtivo = 2 and not Client.FvAtivo7))"
+},
+"fv.269": {
+"kind": "text",
+"value": "Client.FvNome7"
+},
+"fv.270": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco7, 2, \",\", \".\")"
+},
+"fv.271": {
+"kind": "text",
+"value": "IntegerToText(Client.FvStock7) + \" un.\""
+},
+"fv.227": {
+"kind": "call",
+"action": "DestacarProduto7"
+},
+"fv.272": {
+"kind": "visible",
+"condition": "Client.FvAtivo7"
+},
+"fv.228": {
+"kind": "call",
+"action": "AtivarProduto7"
+},
+"fv.273": {
+"kind": "visible",
+"condition": "not Client.FvAtivo7"
+},
+"fv.228.copy368": {
+"kind": "call",
+"action": "AtivarProduto7"
+},
+"fv.229": {
+"kind": "call",
+"action": "EditarProduto",
+"args": {
+"Id": "7"
+}
+},
+"fv.280": {
+"kind": "visible",
+"condition": "(Client.FvGestaoBusca = \"\" or Index(ToLower(Client.FvNome8), ToLower(Client.FvGestaoBusca)) >= 0) and (Client.FvGestaoCategoria = 0 or Client.FvGestaoCategoria = Client.FvCat8) and (Client.FvGestaoAtivo = 0 or (Client.FvGestaoAtivo = 1 and Client.FvAtivo8) or (Client.FvGestaoAtivo = 2 and not Client.FvAtivo8))"
+},
+"fv.275": {
+"kind": "text",
+"value": "Client.FvNome8"
+},
+"fv.276": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco8, 2, \",\", \".\")"
+},
+"fv.277": {
+"kind": "text",
+"value": "IntegerToText(Client.FvStock8) + \" un.\""
+},
+"fv.230": {
+"kind": "call",
+"action": "DestacarProduto8"
+},
+"fv.278": {
+"kind": "visible",
+"condition": "Client.FvAtivo8"
+},
+"fv.231": {
+"kind": "call",
+"action": "AtivarProduto8"
+},
+"fv.279": {
+"kind": "visible",
+"condition": "not Client.FvAtivo8"
+},
+"fv.231.copy378": {
+"kind": "call",
+"action": "AtivarProduto8"
+},
+"fv.232": {
+"kind": "call",
+"action": "EditarProduto",
+"args": {
+"Id": "8"
+}
+},
+"fv.484": {
+"kind": "visible",
+"condition": "Client.FvPage = \"gestao-pedidos\""
+},
+"fv.173": {
+"kind": "call",
+"action": "Pagina_catalogo"
+},
+"fv.184": {
+"kind": "call",
+"action": "FiltrarPedidosGestao",
+"args": {
+"Status": "0"
+}
+},
+"fv.185": {
+"kind": "call",
+"action": "FiltrarPedidosGestao",
+"args": {
+"Status": "1"
+}
+},
+"fv.186": {
+"kind": "call",
+"action": "FiltrarPedidosGestao",
+"args": {
+"Status": "2"
+}
+},
+"fv.187": {
+"kind": "call",
+"action": "FiltrarPedidosGestao",
+"args": {
+"Status": "3"
+}
+},
+"fv.188": {
+"kind": "call",
+"action": "FiltrarPedidosGestao",
+"args": {
+"Status": "4"
+}
+},
+"fv.194": {
+"kind": "visible",
+"condition": "(Client.FvOrderStatusFilter = 0 or Client.FvOrderStatusFilter = Client.FvStatus1004)"
+},
+"fv.174": {
+"kind": "call",
+"action": "AbrirPedido",
+"args": {
+"Id": "1004"
+}
+},
+"fv.192": {
+"kind": "class",
+"value": "\"badge status-\" + IntegerToText(Client.FvStatus1004)"
+},
+"fv.193": {
+"kind": "text",
+"value": "If(Client.FvStatus1004 = 1, \"Recebido\", If(Client.FvStatus1004 = 2, \"Em separação\", If(Client.FvStatus1004 = 3, \"Concluído\", \"Cancelado\")))"
+},
+"fv.175": {
+"kind": "call",
+"action": "AbrirPedido",
+"args": {
+"Id": "1004"
+}
+},
+"fv.189": {
+"kind": "call",
+"action": "AbrirStatusPedido",
+"args": {
+"Id": "1004"
+}
+},
+"fv.197": {
+"kind": "visible",
+"condition": "(Client.FvOrderStatusFilter = 0 or Client.FvOrderStatusFilter = Client.FvStatus1003)"
+},
+"fv.176": {
+"kind": "call",
+"action": "AbrirPedido",
+"args": {
+"Id": "1003"
+}
+},
+"fv.195": {
+"kind": "class",
+"value": "\"badge status-\" + IntegerToText(Client.FvStatus1003)"
+},
+"fv.196": {
+"kind": "text",
+"value": "If(Client.FvStatus1003 = 1, \"Recebido\", If(Client.FvStatus1003 = 2, \"Em separação\", If(Client.FvStatus1003 = 3, \"Concluído\", \"Cancelado\")))"
+},
+"fv.177": {
+"kind": "call",
+"action": "AbrirPedido",
+"args": {
+"Id": "1003"
+}
+},
+"fv.190": {
+"kind": "call",
+"action": "AbrirStatusPedido",
+"args": {
+"Id": "1003"
+}
+},
+"fv.200": {
+"kind": "visible",
+"condition": "(Client.FvOrderStatusFilter = 0 or Client.FvOrderStatusFilter = Client.FvStatus1002)"
+},
+"fv.178": {
+"kind": "call",
+"action": "AbrirPedido",
+"args": {
+"Id": "1002"
+}
+},
+"fv.198": {
+"kind": "class",
+"value": "\"badge status-\" + IntegerToText(Client.FvStatus1002)"
+},
+"fv.199": {
+"kind": "text",
+"value": "If(Client.FvStatus1002 = 1, \"Recebido\", If(Client.FvStatus1002 = 2, \"Em separação\", If(Client.FvStatus1002 = 3, \"Concluído\", \"Cancelado\")))"
+},
+"fv.179": {
+"kind": "call",
+"action": "AbrirPedido",
+"args": {
+"Id": "1002"
+}
+},
+"fv.191": {
+"kind": "call",
+"action": "AbrirStatusPedido",
+"args": {
+"Id": "1002"
+}
+},
+"fv.203": {
+"kind": "visible",
+"condition": "(Client.FvOrderStatusFilter = 0 or Client.FvOrderStatusFilter = Client.FvStatus1001)"
+},
+"fv.180": {
+"kind": "call",
+"action": "AbrirPedido",
+"args": {
+"Id": "1001"
+}
+},
+"fv.201": {
+"kind": "class",
+"value": "\"badge status-\" + IntegerToText(Client.FvStatus1001)"
+},
+"fv.202": {
+"kind": "text",
+"value": "If(Client.FvStatus1001 = 1, \"Recebido\", If(Client.FvStatus1001 = 2, \"Em separação\", If(Client.FvStatus1001 = 3, \"Concluído\", \"Cancelado\")))"
+},
+"fv.181": {
+"kind": "call",
+"action": "AbrirPedido",
+"args": {
+"Id": "1001"
+}
+},
+"fv.206": {
+"kind": "visible",
+"condition": "(Client.FvOrderStatusFilter = 0 or Client.FvOrderStatusFilter = Client.FvStatus1000)"
+},
+"fv.182": {
+"kind": "call",
+"action": "AbrirPedido",
+"args": {
+"Id": "1000"
+}
+},
+"fv.204": {
+"kind": "class",
+"value": "\"badge status-\" + IntegerToText(Client.FvStatus1000)"
+},
+"fv.205": {
+"kind": "text",
+"value": "If(Client.FvStatus1000 = 1, \"Recebido\", If(Client.FvStatus1000 = 2, \"Em separação\", If(Client.FvStatus1000 = 3, \"Concluído\", \"Cancelado\")))"
+},
+"fv.183": {
+"kind": "call",
+"action": "AbrirPedido",
+"args": {
+"Id": "1000"
+}
+},
+"fv.469": {
+"kind": "call",
+"action": "Pagina_catalogo"
+},
+"fv.419": {
+"kind": "visible",
+"condition": "Client.FvModal <> \"\""
+},
+"fv.414": {
+"kind": "class",
+"value": "\"fv-modal-dialog \" + If(Client.FvModal = \"produto\", \"product-modal\", \"\")"
+},
+"fv.415": {
+"kind": "visible",
+"condition": "Client.FvModal = \"produto\""
+},
+"fv.346": {
+"kind": "visible",
+"condition": "Client.FvProdutoId = 1"
+},
+"fv.339": {
+"kind": "call",
+"action": "FecharModal"
+},
+"fv.340": {
+"kind": "text",
+"value": "Client.FvNome1"
+},
+"fv.341": {
+"kind": "text",
+"value": "Client.FvDescricao1"
+},
+"fv.342": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco1, 2, \",\", \".\")"
+},
+"fv.343": {
+"kind": "text",
+"value": "IntegerToText(Client.FvStock1) + \" unidades disponíveis\""
+},
+"fv.345": {
+"kind": "visible",
+"condition": "Client.FvStock1 > 0 and Client.FvUser <> 3"
+},
+"MountFvProductQty1": {
+"kind": "style",
+"value": "\"\""
+},
+"fv.344": {
+"kind": "call",
+"action": "Adicionar1",
+"args": {
+"Quantidade": "Client.FvQuantidadeProduto"
+}
+},
+"fv.354": {
+"kind": "visible",
+"condition": "Client.FvProdutoId = 2"
+},
+"fv.347": {
+"kind": "call",
+"action": "FecharModal"
+},
+"fv.348": {
+"kind": "text",
+"value": "Client.FvNome2"
+},
+"fv.349": {
+"kind": "text",
+"value": "Client.FvDescricao2"
+},
+"fv.350": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco2, 2, \",\", \".\")"
+},
+"fv.351": {
+"kind": "text",
+"value": "IntegerToText(Client.FvStock2) + \" unidades disponíveis\""
+},
+"fv.353": {
+"kind": "visible",
+"condition": "Client.FvStock2 > 0 and Client.FvUser <> 3"
+},
+"MountFvProductQty2": {
+"kind": "style",
+"value": "\"\""
+},
+"fv.352": {
+"kind": "call",
+"action": "Adicionar2",
+"args": {
+"Quantidade": "Client.FvQuantidadeProduto"
+}
+},
+"fv.362": {
+"kind": "visible",
+"condition": "Client.FvProdutoId = 3"
+},
+"fv.355": {
+"kind": "call",
+"action": "FecharModal"
+},
+"fv.356": {
+"kind": "text",
+"value": "Client.FvNome3"
+},
+"fv.357": {
+"kind": "text",
+"value": "Client.FvDescricao3"
+},
+"fv.358": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco3, 2, \",\", \".\")"
+},
+"fv.359": {
+"kind": "text",
+"value": "IntegerToText(Client.FvStock3) + \" unidades disponíveis\""
+},
+"fv.361": {
+"kind": "visible",
+"condition": "Client.FvStock3 > 0 and Client.FvUser <> 3"
+},
+"MountFvProductQty3": {
+"kind": "style",
+"value": "\"\""
+},
+"fv.360": {
+"kind": "call",
+"action": "Adicionar3",
+"args": {
+"Quantidade": "Client.FvQuantidadeProduto"
+}
+},
+"fv.370": {
+"kind": "visible",
+"condition": "Client.FvProdutoId = 4"
+},
+"fv.363": {
+"kind": "call",
+"action": "FecharModal"
+},
+"fv.364": {
+"kind": "text",
+"value": "Client.FvNome4"
+},
+"fv.365": {
+"kind": "text",
+"value": "Client.FvDescricao4"
+},
+"fv.366": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco4, 2, \",\", \".\")"
+},
+"fv.367": {
+"kind": "text",
+"value": "IntegerToText(Client.FvStock4) + \" unidades disponíveis\""
+},
+"fv.369": {
+"kind": "visible",
+"condition": "Client.FvStock4 > 0 and Client.FvUser <> 3"
+},
+"MountFvProductQty4": {
+"kind": "style",
+"value": "\"\""
+},
+"fv.368": {
+"kind": "call",
+"action": "Adicionar4",
+"args": {
+"Quantidade": "Client.FvQuantidadeProduto"
+}
+},
+"fv.378": {
+"kind": "visible",
+"condition": "Client.FvProdutoId = 5"
+},
+"fv.371": {
+"kind": "call",
+"action": "FecharModal"
+},
+"fv.372": {
+"kind": "text",
+"value": "Client.FvNome5"
+},
+"fv.373": {
+"kind": "text",
+"value": "Client.FvDescricao5"
+},
+"fv.374": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco5, 2, \",\", \".\")"
+},
+"fv.375": {
+"kind": "text",
+"value": "IntegerToText(Client.FvStock5) + \" unidades disponíveis\""
+},
+"fv.377": {
+"kind": "visible",
+"condition": "Client.FvStock5 > 0 and Client.FvUser <> 3"
+},
+"MountFvProductQty5": {
+"kind": "style",
+"value": "\"\""
+},
+"fv.376": {
+"kind": "call",
+"action": "Adicionar5",
+"args": {
+"Quantidade": "Client.FvQuantidadeProduto"
+}
+},
+"fv.386": {
+"kind": "visible",
+"condition": "Client.FvProdutoId = 6"
+},
+"fv.379": {
+"kind": "call",
+"action": "FecharModal"
+},
+"fv.380": {
+"kind": "text",
+"value": "Client.FvNome6"
+},
+"fv.381": {
+"kind": "text",
+"value": "Client.FvDescricao6"
+},
+"fv.382": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco6, 2, \",\", \".\")"
+},
+"fv.383": {
+"kind": "text",
+"value": "IntegerToText(Client.FvStock6) + \" unidades disponíveis\""
+},
+"fv.385": {
+"kind": "visible",
+"condition": "Client.FvStock6 > 0 and Client.FvUser <> 3"
+},
+"MountFvProductQty6": {
+"kind": "style",
+"value": "\"\""
+},
+"fv.384": {
+"kind": "call",
+"action": "Adicionar6",
+"args": {
+"Quantidade": "Client.FvQuantidadeProduto"
+}
+},
+"fv.394": {
+"kind": "visible",
+"condition": "Client.FvProdutoId = 7"
+},
+"fv.387": {
+"kind": "call",
+"action": "FecharModal"
+},
+"fv.388": {
+"kind": "text",
+"value": "Client.FvNome7"
+},
+"fv.389": {
+"kind": "text",
+"value": "Client.FvDescricao7"
+},
+"fv.390": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco7, 2, \",\", \".\")"
+},
+"fv.391": {
+"kind": "text",
+"value": "IntegerToText(Client.FvStock7) + \" unidades disponíveis\""
+},
+"fv.393": {
+"kind": "visible",
+"condition": "Client.FvStock7 > 0 and Client.FvUser <> 3"
+},
+"MountFvProductQty7": {
+"kind": "style",
+"value": "\"\""
+},
+"fv.392": {
+"kind": "call",
+"action": "Adicionar7",
+"args": {
+"Quantidade": "Client.FvQuantidadeProduto"
+}
+},
+"fv.402": {
+"kind": "visible",
+"condition": "Client.FvProdutoId = 8"
+},
+"fv.395": {
+"kind": "call",
+"action": "FecharModal"
+},
+"fv.396": {
+"kind": "text",
+"value": "Client.FvNome8"
+},
+"fv.397": {
+"kind": "text",
+"value": "Client.FvDescricao8"
+},
+"fv.398": {
+"kind": "text",
+"value": "\"R$ \" + FormatDecimal(Client.FvPreco8, 2, \",\", \".\")"
+},
+"fv.399": {
+"kind": "text",
+"value": "IntegerToText(Client.FvStock8) + \" unidades disponíveis\""
+},
+"fv.401": {
+"kind": "visible",
+"condition": "Client.FvStock8 > 0 and Client.FvUser <> 3"
+},
+"MountFvProductQty8": {
+"kind": "style",
+"value": "\"\""
+},
+"fv.400": {
+"kind": "call",
+"action": "Adicionar8",
+"args": {
+"Quantidade": "Client.FvQuantidadeProduto"
+}
+},
+"fv.416": {
+"kind": "visible",
+"condition": "Client.FvModal = \"editar\""
+},
+"fv.403": {
+"kind": "call",
+"action": "FecharModal"
+},
+"MountFvEditNome": {
+"kind": "style",
+"value": "\"\""
+},
+"MountFvEditCategoria": {
+"kind": "style",
+"value": "\"\""
+},
+"MountFvEditDescricao": {
+"kind": "style",
+"value": "\"\""
+},
+"MountFvEditPreco": {
+"kind": "style",
+"value": "\"\""
+},
+"MountFvEditStock": {
+"kind": "style",
+"value": "\"\""
+},
+"MountFvEditImagem": {
+"kind": "style",
+"value": "\"\""
+},
+"MountFvEditDestaque": {
+"kind": "style",
+"value": "\"\""
+},
+"MountFvEditAtivo": {
+"kind": "style",
+"value": "\"\""
+},
+"fv.404": {
+"kind": "call",
+"action": "FecharModal"
+},
+"fv.405": {
+"kind": "call",
+"action": "SalvarProdutoMock"
+},
+"fv.417": {
+"kind": "visible",
+"condition": "Client.FvModal = \"status\""
+},
+"fv.406": {
+"kind": "call",
+"action": "FecharModal"
+},
+"fv.407": {
+"kind": "text",
+"value": "IntegerToText(Client.FvPedidoId)"
+},
+"MountFvNewStatus": {
+"kind": "style",
+"value": "\"\""
+},
+"fv.408": {
+"kind": "visible",
+"condition": "Client.FvNovoStatus = 4"
+},
+"fv.409": {
+"kind": "call",
+"action": "FecharModal"
+},
+"fv.410": {
+"kind": "call",
+"action": "ConfirmarStatus"
+},
+"fv.418": {
+"kind": "visible",
+"condition": "Client.FvModal = \"login\""
+},
+"fv.411": {
+"kind": "call",
+"action": "FecharModal"
+},
+"fv.412": {
+"kind": "call",
+"action": "EntrarMock",
+"args": {
+"Id": "1"
+}
+},
+"fv.413": {
+"kind": "call",
+"action": "EntrarMock",
+"args": {
+"Id": "2"
+}
+},
+"fv.487": {
+"kind": "visible",
+"condition": "Client.FvNotice <> \"\""
+},
+"fv.485": {
+"kind": "text",
+"value": "Client.FvNotice"
+},
+"fv.486": {
+"kind": "call",
+"action": "FecharAviso"
+}
+},
+"stylesheet": "none"
+}
+},
+{
+"op": "logic",
+"data": {
+"actions": [
+{
+"name": "InitializeMock",
+"kind": "screen",
+"owner": "IMobileScreen:FarmaVirtual",
+"steps": [
+{
+"if": "not Client.FvInitialized",
+"then": [
+{
+"assign": {
+"Client.FvInitialized": "True",
+"Client.FvUser": "1",
+"Client.FvPage": "\"catalogo\"",
+"Client.FvModal": "\"\"",
+"Client.FvProdutoId": "1",
+"Client.FvPedidoId": "1003",
+"Client.FvCustomerStatusFilter": "0",
+"Client.FvOrderStatusFilter": "0",
+"Client.FvNotice": "\"\"",
+"Client.FvNome1": "\"Hidratante facial 50 g\"",
+"Client.FvDescricao1": "\"Hidratante facial de uso diário em embalagem de 50 g.\"",
+"Client.FvPreco1": "49.9",
+"Client.FvStock1": "24",
+"Client.FvCat1": "2",
+"Client.FvAtivo1": "True",
+"Client.FvDestaque1": "True",
+"Client.FvQ1": "1",
+"Client.FvQL1": "0",
+"Client.FvNome2": "\"Protetor solar FPS 50 120 ml\"",
+"Client.FvDescricao2": "\"Protetor solar FPS 50 em embalagem de 120 ml. Consulte as orientações do fabricante no rótulo.\"",
+"Client.FvPreco2": "89.9",
+"Client.FvStock2": "18",
+"Client.FvCat2": "3",
+"Client.FvAtivo2": "True",
+"Client.FvDestaque2": "True",
+"Client.FvQ2": "0",
+"Client.FvQL2": "0",
+"Client.FvNome3": "\"Sabonete líquido 250 ml\"",
+"Client.FvDescricao3": "\"Sabonete líquido para higiene diária em frasco com dosador de 250 ml.\"",
+"Client.FvPreco3": "24.9",
+"Client.FvStock3": "42",
+"Client.FvCat3": "1",
+"Client.FvAtivo3": "True",
+"Client.FvDestaque3": "True",
+"Client.FvQ3": "2",
+"Client.FvQL3": "0",
+"Client.FvNome4": "\"Creme para mãos 75 g\"",
+"Client.FvDescricao4": "\"Creme para os cuidados diários das mãos, em bisnaga de 75 g.\"",
+"Client.FvPreco4": "19.9",
+"Client.FvStock4": "8",
+"Client.FvCat4": "2",
+"Client.FvAtivo4": "True",
+"Client.FvDestaque4": "False",
+"Client.FvQ4": "0",
+"Client.FvQL4": "0",
+"Client.FvNome5": "\"Shampoo suave 300 ml\"",
+"Client.FvDescricao5": "\"Shampoo para higiene dos cabelos em frasco de 300 ml.\"",
+"Client.FvPreco5": "32.9",
+"Client.FvStock5": "31",
+"Client.FvCat5": "1",
+"Client.FvAtivo5": "True",
+"Client.FvDestaque5": "False",
+"Client.FvQ5": "0",
+"Client.FvQL5": "0",
+"Client.FvNome6": "\"Fio dental 50 m\"",
+"Client.FvDescricao6": "\"Fio dental para higiene bucal diária. Embalagem com 50 metros.\"",
+"Client.FvPreco6": "12.9",
+"Client.FvStock6": "0",
+"Client.FvCat6": "1",
+"Client.FvAtivo6": "True",
+"Client.FvDestaque6": "False",
+"Client.FvQ6": "0",
+"Client.FvQL6": "0",
+"Client.FvNome7": "\"Sabonete vegetal 90 g\"",
+"Client.FvDescricao7": "\"Sabonete vegetal em barra de 90 g para higiene pessoal.\"",
+"Client.FvPreco7": "9.9",
+"Client.FvStock7": "56",
+"Client.FvCat7": "1",
+"Client.FvAtivo7": "True",
+"Client.FvDestaque7": "False",
+"Client.FvQ7": "0",
+"Client.FvQL7": "0",
+"Client.FvNome8": "\"Álcool em gel 70% 250 ml\"",
+"Client.FvDescricao8": "\"Álcool em gel para higiene das mãos. Frasco com dosador de 250 ml.\"",
+"Client.FvPreco8": "17.9",
+"Client.FvStock8": "12",
+"Client.FvCat8": "1",
+"Client.FvAtivo8": "False",
+"Client.FvDestaque8": "False",
+"Client.FvQ8": "0",
+"Client.FvQL8": "0",
+"Client.FvStatus1000": "4",
+"Client.FvStatus1001": "3",
+"Client.FvStatus1002": "2",
+"Client.FvStatus1003": "1",
+"Client.FvStatus1004": "1",
+"Client.FvLastTotal": "0",
+"Client.FvLastUser": "1",
+"Client.FvLastNome": "\"\"",
+"Client.FvLastEndereco": "\"\"",
+"Client.FvLastObservacao": "\"\"",
+"Client.FvLastCreated": "False",
+"Client.FvLastQ1": "0",
+"Client.FvLastQ2": "0",
+"Client.FvLastQ3": "0",
+"Client.FvLastQ4": "0",
+"Client.FvLastQ5": "0",
+"Client.FvLastQ6": "0",
+"Client.FvLastQ7": "0",
+"Client.FvLastQ8": "0",
+"Client.FvBusca": "\"\"",
+"Client.FvCategoria": "0",
+"Client.FvDisponiveis": "False",
+"Client.FvOrdenacao": "0",
+"Client.FvFiltrosAbertos": "False",
+"Client.FvNomeEntrega": "\"\"",
+"Client.FvEnderecoEntrega": "\"\"",
+"Client.FvObservacaoEntrega": "\"\"",
+"Client.FvQuantidadeProduto": "1",
+"Client.FvGestaoBusca": "\"\"",
+"Client.FvGestaoCategoria": "0",
+"Client.FvGestaoAtivo": "0",
+"Client.FvEditNome": "\"\"",
+"Client.FvEditDescricao": "\"\"",
+"Client.FvEditPreco": "0",
+"Client.FvEditStock": "0",
+"Client.FvEditCategoria": "0",
+"Client.FvEditImagem": "\"\"",
+"Client.FvEditAtivo": "False",
+"Client.FvEditDestaque": "False",
+"Client.FvNovoStatus": "2"
+}
+}
+]
+},
+{
+"assign": {
+"Option.Value": "0",
+"Option.Label": "\"Visitante\""
+}
+},
+{
+"call": "ListAppend",
+"args": {
+"List": "AccountsOptions",
+"Element": "Option"
+}
+},
+{
+"assign": {
+"Option.Value": "1",
+"Option.Label": "\"Marina Costa\""
+}
+},
+{
+"call": "ListAppend",
+"args": {
+"List": "AccountsOptions",
+"Element": "Option"
+}
+},
+{
+"assign": {
+"Option.Value": "2",
+"Option.Label": "\"Lucas Oliveira\""
+}
+},
+{
+"call": "ListAppend",
+"args": {
+"List": "AccountsOptions",
+"Element": "Option"
+}
+},
+{
+"assign": {
+"Option.Value": "3",
+"Option.Label": "\"Rafael Lima · Admin\""
+}
+},
+{
+"call": "ListAppend",
+"args": {
+"List": "AccountsOptions",
+"Element": "Option"
+}
+},
+{
+"assign": {
+"Option.Value": "0",
+"Option.Label": "\"Destaques\""
+}
+},
+{
+"call": "ListAppend",
+"args": {
+"List": "SortOptions",
+"Element": "Option"
+}
+},
+{
+"assign": {
+"Option.Value": "1",
+"Option.Label": "\"Menor preço\""
+}
+},
+{
+"call": "ListAppend",
+"args": {
+"List": "SortOptions",
+"Element": "Option"
+}
+},
+{
+"assign": {
+"Option.Value": "2",
+"Option.Label": "\"Maior preço\""
+}
+},
+{
+"call": "ListAppend",
+"args": {
+"List": "SortOptions",
+"Element": "Option"
+}
+},
+{
+"assign": {
+"Option.Value": "3",
+"Option.Label": "\"Nome do produto\""
+}
+},
+{
+"call": "ListAppend",
+"args": {
+"List": "SortOptions",
+"Element": "Option"
+}
+},
+{
+"assign": {
+"Option.Value": "0",
+"Option.Label": "\"Todas as categorias\""
+}
+},
+{
+"call": "ListAppend",
+"args": {
+"List": "CategoriesOptions",
+"Element": "Option"
+}
+},
+{
+"assign": {
+"Option.Value": "1",
+"Option.Label": "\"Higiene\""
+}
+},
+{
+"call": "ListAppend",
+"args": {
+"List": "CategoriesOptions",
+"Element": "Option"
+}
+},
+{
+"assign": {
+"Option.Value": "2",
+"Option.Label": "\"Beleza\""
+}
+},
+{
+"call": "ListAppend",
+"args": {
+"List": "CategoriesOptions",
+"Element": "Option"
+}
+},
+{
+"assign": {
+"Option.Value": "3",
+"Option.Label": "\"Bem-estar\""
+}
+},
+{
+"call": "ListAppend",
+"args": {
+"List": "CategoriesOptions",
+"Element": "Option"
+}
+},
+{
+"assign": {
+"Option.Value": "0",
+"Option.Label": "\"Todas as situações\""
+}
+},
+{
+"call": "ListAppend",
+"args": {
+"List": "ActiveOptions",
+"Element": "Option"
+}
+},
+{
+"assign": {
+"Option.Value": "1",
+"Option.Label": "\"Ativos\""
+}
+},
+{
+"call": "ListAppend",
+"args": {
+"List": "ActiveOptions",
+"Element": "Option"
+}
+},
+{
+"assign": {
+"Option.Value": "2",
+"Option.Label": "\"Inativos\""
+}
+},
+{
+"call": "ListAppend",
+"args": {
+"List": "ActiveOptions",
+"Element": "Option"
+}
+},
+{
+"assign": {
+"Option.Value": "2",
+"Option.Label": "\"Em separação\""
+}
+},
+{
+"call": "ListAppend",
+"args": {
+"List": "StatusesOptions",
+"Element": "Option"
+}
+},
+{
+"assign": {
+"Option.Value": "3",
+"Option.Label": "\"Concluído\""
+}
+},
+{
+"call": "ListAppend",
+"args": {
+"List": "StatusesOptions",
+"Element": "Option"
+}
+},
+{
+"assign": {
+"Option.Value": "4",
+"Option.Label": "\"Cancelado\""
+}
+},
+{
+"call": "ListAppend",
+"args": {
+"List": "StatusesOptions",
+"Element": "Option"
+}
+}
+]
+}
+]
+}
+}
+]
+}

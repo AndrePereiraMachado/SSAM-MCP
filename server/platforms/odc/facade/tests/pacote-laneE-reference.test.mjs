@@ -49,7 +49,7 @@ test('a job example comes back whole by id from the lane suite; find lists the i
   assert.deepEqual(odc.data, JSON.parse(fs.readFileSync(path.join(kernel, 'tests', 'jobs-odc', 'timer-action.json'), 'utf8').replace(/^\uFEFF/, '')));
   const o11 = await h.ask('o11', 'example', { id: 'pacote-laneE-timer-schedule' });
   assert.equal(o11.ok, true, JSON.stringify(o11));
-  assert.ok(JSON.stringify(o11.data).includes('Every 60 minutes'));
+  assert.ok(JSON.stringify(o11.data).includes('00:00 01:00 02:00 03:00 04:00 05:00 06:00 07:00 08:00 09:00 10:00 11:00 12:00 13:00 14:00 15:00 16:00 17:00 18:00 19:00 20:00 21:00 22:00 23:00'));
   const listed = await h.ask('odc', 'example', { find: 'timer' });
   assert.ok(listed.matches.some(m => m.id === 'jobs-odc/timer-action'), JSON.stringify(listed.matches));
   assert.equal(listed.continuation.tool, 'ssam_reference');

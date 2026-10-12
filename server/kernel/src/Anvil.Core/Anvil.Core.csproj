@@ -19,6 +19,7 @@
     <Reference Include="OutSystems.Communication"><HintPath>$(SSDir)\OutSystems.Communication.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="OutSystems.Communication.Identity"><HintPath>$(SSDir)\OutSystems.Communication.Identity.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="OutSystems.RuntimeCommon"><HintPath>$(SSDir)\OutSystems.RuntimeCommon.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.FrameworkExtensions"><HintPath>$(SSDir)\OutSystems.FrameworkExtensions.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="OutSystems.MetaModel"><HintPath>$(SSDir)\OutSystems.MetaModel.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="OutSystems.Model.V1"><HintPath>$(SSDir)\OutSystems.Model.V1.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="OutSystems.Model.Implementation"><HintPath>$(SSDir)\OutSystems.Model.Implementation.dll</HintPath><Private>false</Private></Reference>

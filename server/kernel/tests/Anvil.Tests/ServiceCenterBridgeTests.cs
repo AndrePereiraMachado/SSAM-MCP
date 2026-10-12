@@ -22,6 +22,24 @@ public sealed class ServiceCenterBridgeTests
 
     public ServiceCenterBridgeTests() => StudioAssemblies.Bind();
 
+    [Fact]
+    public void PlatformSettingsIsAFixedAuthenticatedGetWithoutRetry()
+    {
+        var (rest, fake) = Fake<IRestService>();
+        fake.Handler = (_, _) => new HttpResponseMessage(HttpStatusCode.OK)
+            { Content = new StringContent("{\"Setting\":\"Value\",\"Token\":\"" + Secret + "\"}") };
+        var studio = new ScBound { Host = Host, User = "test-user", Secret = () => Secret, RestService = rest };
+        var result = ScApi.Execute(ScApi.Prepare(Request("sc-rest", "platform-settings", new JsonObject()), Host), studio);
+        Assert.Equal(new[] { "Get" }, fake.Calls);
+        var parameters = Assert.IsType<HttpRequestParameters>(fake.Arguments.Single()[0]);
+        Assert.Equal("https://" + Host + "/ServiceCenter/rest/PlatformServices/PlatformSettings", parameters.Uri.AbsoluteUri);
+        Assert.False(parameters.RetryOnCommunicationError);
+        Assert.False(parameters.HandleCommunicationError);
+        Assert.StartsWith("Basic ", parameters.RequestHeaders["Authorization"]);
+        Assert.DoesNotContain(Secret, result.ToJsonString());
+        Assert.Equal("Value", result["result"]!["body"]!["Setting"]!.GetValue<string>());
+    }
+
     // ---- allowlist ---------------------------------------------------------------------------
 
     [Theory]
@@ -284,16 +302,23 @@ public sealed class ServiceCenterBridgeTests
         {
             ["HubServerVersion"] = "11.41.0", ["DBPassword"] = "fictional-password", ["Token"] = "fictional-token",
             ["Connection"] = "Server=db;User Id=sa;Password=fictional-password;", ["Echo"] = "issued " + Secret,
+            ["ForceSecureAlgorithmsInAuthentication"] = "fictional-opaque-auth-material",
         };
         var studio = new ScBound { Host = Host, User = "test-user", Secret = () => Secret, Soap = api };
         var result = ScApi.Execute(ScApi.Prepare(Request("soap", "GetProperties", new JsonObject()), Host), studio)["result"]!.AsObject();
         Assert.Equal("11.41.0", result["HubServerVersion"]!.ToString());
         Assert.Equal(ScRedaction.Mask, result["DBPassword"]!.ToString());
         Assert.Equal(ScRedaction.Mask, result["Token"]!.ToString());
+        Assert.Equal(ScRedaction.Mask, result["ForceSecureAlgorithmsInAuthentication"]!.ToString());
+        Assert.DoesNotContain("fictional-opaque-auth-material", result.ToJsonString());
         Assert.DoesNotContain("fictional-password", result.ToJsonString());
         Assert.DoesNotContain(Secret, result.ToJsonString());
         var pairs = ScRedaction.Node(new JsonArray(new JsonObject { ["Key"] = "ApiKey", ["Value"] = "fictional" }), null)!;
         Assert.Equal(ScRedaction.Mask, pairs[0]!["Value"]!.ToString());
+        var authPair = ScRedaction.Node(new JsonArray(new JsonObject {
+            ["Key"] = "ForceSecureAlgorithmsInAuthentication", ["Value"] = "fictional-opaque-auth-material"
+        }), null)!;
+        Assert.Equal(ScRedaction.Mask, authPair[0]!["Value"]!.ToString());
         Assert.Equal("Authorization: Bearer " + ScRedaction.Mask, ScRedaction.Text("Authorization: Bearer abc.def-123", null));
     }
 
@@ -516,7 +541,7 @@ public sealed class ServiceCenterBridgeTests
     public void TheIntegrationStudioSurfaceIsReadOnlyAndListedInTheCatalog()
     {
         var catalog = ScApi.Catalog();
-        Assert.Equal(["GenerateSourceCodeStubs", "GetSourceCodeDependencies", "Handshake", "UploadNeeded"], catalog["integration-studio"]!.AsArray().Select(x => x!.ToString()));
+        Assert.Equal(["GenerateSourceCodeStubs", "GetSourceCodeDependencies", "Handshake", "TranslateLogicalDatabaseToDbConnection", "UploadNeeded"], catalog["integration-studio"]!.AsArray().Select(x => x!.ToString()));
         Assert.All(ScApi.IntegrationStudioOperations.Values, op => Assert.False(op.Write || op.Destroys != null || op.WriteWhen != null));
         // The write fields change nothing: no operationId is claimed and the write guard does not run.
         var handshake = ScApi.Prepare(Write(Request("integration-studio", "Handshake", new JsonObject { ["version"] = "11.14.25.134" })), Host);
@@ -528,6 +553,64 @@ public sealed class ServiceCenterBridgeTests
         Assert.Equal(ScCodes.NotAllowed, unknown.Code);
         Assert.Equal(ScCodes.NotAllowed, Assert.Throws<ScFailure>(() => ScApi.Prepare(Request("integration-studio", "Publish", new JsonObject()), Host)).Code);
         Assert.Contains("integration-studio", Assert.Throws<ScFailure>(() => ScApi.Prepare(Request("ldap", "Handshake", new JsonObject()), Host)).Message);
+    }
+
+    private static string ProviderResponse(string fields) =>
+        "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"><soap:Body><TranslateLogicalDatabaseToDbConnectionResponse xmlns=\"http://www.outsystems.com\">"
+        + fields + "</TranslateLogicalDatabaseToDbConnectionResponse></soap:Body></soap:Envelope>";
+
+    [Fact]
+    public void DatabaseProviderReadUsesBoundLoginAndExactWsdlFieldsOnce()
+    {
+        var (studio, sent) = IntegrationStudio(_ => new ScHttp(200, "text/xml", ProviderResponse(
+            "<dbConnection><Name>ProofDatabase</Name><ProviderName>SqlServer</ProviderName></dbConnection>")));
+        var key = Key();
+        var prepared = ScApi.Prepare(Request("integration-studio", "TranslateLogicalDatabaseToDbConnection",
+            new JsonObject { ["extensionKey"] = key, ["logicalDatabase"] = "Cargo<&" }), Host);
+        Assert.False(prepared.Write);
+        var result = ScApi.Execute(prepared, studio)["result"]!;
+        Assert.True(result["providerObserved"]!.GetValue<bool>());
+        Assert.False(result["mappingAbsentProven"]!.GetValue<bool>());
+        Assert.Equal("ProofDatabase", result["dbConnection"]!["name"]!.ToString());
+        Assert.Equal("SqlServer", result["dbConnection"]!["providerName"]!.ToString());
+        var request = Assert.Single(sent);
+        Assert.Equal(ScIntegrationStudioSoap.ActionPrefix + "TranslateLogicalDatabaseToDbConnection", request.SoapAction);
+        var wrapper = System.Xml.Linq.XDocument.Parse(request.Body).Descendants().Single(e => e.Name.LocalName == "TranslateLogicalDatabaseToDbConnection");
+        Assert.Equal(new[] { "username", "password", "extensionKey", "logicalDatabase" }, wrapper.Elements().Select(e => e.Name.LocalName));
+        Assert.Equal("Cargo<&", wrapper.Elements().Last().Value);
+        Assert.DoesNotContain(Secret, result.ToJsonString());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("<dbConnection />")]
+    [InlineData("<dbConnection><Name>A</Name></dbConnection>")]
+    [InlineData("<dbConnection><Name>A</Name><Name>B</Name><ProviderName>SqlServer</ProviderName></dbConnection>")]
+    [InlineData("<dbConnection><Name><Password>private</Password></Name><ProviderName>SqlServer</ProviderName></dbConnection>")]
+    [InlineData("<dbConnection><Name>A</Name><ProviderName>SqlServer</ProviderName><Password>private</Password></dbConnection>")]
+    [InlineData("<dbConnection xmlns='urn:wrong'><Name>A</Name><ProviderName>SqlServer</ProviderName></dbConnection>")]
+    [InlineData("<dbConnection xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance' xsi:nil='true'><Name>A</Name></dbConnection>")]
+    [InlineData("<dbConnection /><dbConnection />")]
+    public void InvalidProviderAnswersNeverProveMappingAbsence(string fields)
+    {
+        var (studio, sent) = IntegrationStudio(_ => new ScHttp(200, "text/xml", ProviderResponse(fields)));
+        var failure = Assert.Throws<ScFailure>(() => ScApi.Execute(ScApi.Prepare(Request("integration-studio",
+            "TranslateLogicalDatabaseToDbConnection", new JsonObject { ["extensionKey"] = Key(), ["logicalDatabase"] = "Cargo" }), Host), studio));
+        Assert.Equal(ScCodes.RemoteError, failure.Code);
+        Assert.True(failure.Sent);
+        Assert.DoesNotContain("private", failure.Message);
+        Assert.Single(sent);
+    }
+
+    [Fact]
+    public void NilProviderIsUnobservedAndNotProofOfUnmapping()
+    {
+        var answer = ScIntegrationStudioSoap.Parse("TranslateLogicalDatabaseToDbConnection", 200, ProviderResponse(
+            "<dbConnection xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance' xsi:nil='true' />"));
+        var result = ScIntegrationStudioSoap.DatabaseProvider(answer);
+        Assert.False(result["providerObserved"]!.GetValue<bool>());
+        Assert.False(result["mappingAbsentProven"]!.GetValue<bool>());
+        Assert.Null(result["dbConnection"]);
     }
 
     [Fact]

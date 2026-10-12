@@ -1,0 +1,7 @@
+body{margin:0;font-family:Georgia,serif}
+.masthead{padding:32px;background:url('harbor.svg') right center/80px no-repeat #f3efe6}
+.tagline{color:#7a6a55}
+.menu{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:24px}
+.group h2{font-size:18px}
+.photo{width:120px}
+.footer{padding:16px;text-align:center}

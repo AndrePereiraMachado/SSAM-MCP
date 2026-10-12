@@ -1,0 +1,2381 @@
+{
+  "schema": "ssam-debug-native-reading-fixture/1",
+  "provenance": "Local ODC SDK candidate proof-3; unpublished native projection. Tests add a synthetic published reference Revision explicitly.",
+  "trees": [
+    {
+      "kind": "ServerAction",
+      "name": "EmitWorkflowProbe",
+      "modelName": "EmitWorkflowProbe",
+      "label": "EmitWorkflowProbe",
+      "key": "5QuK3N0Ox0qmhouoNbTXIQ",
+      "reference": "@5QuK3N0Ox0qmhouoNbTXIQ",
+      "path": "ServerAction:EmitWorkflowProbe",
+      "properties": {
+        "Description": "Original event-producing server action, invoked through the native client caller. Candidate only; not deployed.",
+        "Function": "False",
+        "Name": "EmitWorkflowProbe",
+        "Public": "False",
+        "Shareable": "False",
+        "ReadableIdentifier": "EmitWorkflowProbe"
+      },
+      "propertyReferences": {},
+      "propertyReferenceCollections": {},
+      "propertiesOmitted": {},
+      "propertyErrors": {},
+      "propertiesMissing": [],
+      "children": [
+        {
+          "kind": "InputParameter",
+          "name": "Correlation",
+          "modelName": "Correlation",
+          "label": "Correlation",
+          "key": "Vh_G+CO2FEClRVN3WxiW8g",
+          "reference": "@Vh_G+CO2FEClRVN3WxiW8g",
+          "path": "ServerAction:EmitWorkflowProbe/InputParameter:Correlation",
+          "properties": {
+            "DataType": "BasicType:Text",
+            "Name": "Correlation",
+            "IsMandatory": "True",
+            "ReadableIdentifier": "Correlation"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Text",
+              "key": "uROOBXPvQEyU76NWO+1uxQ",
+              "reference": "@uROOBXPvQEyU76NWO+1uxQ",
+              "path": "BasicType:Text"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "InputParameter",
+          "name": "Seed",
+          "modelName": "Seed",
+          "label": "Seed",
+          "key": "YNB7UnvYsUyYdSEf2aN60g",
+          "reference": "@YNB7UnvYsUyYdSEf2aN60g",
+          "path": "ServerAction:EmitWorkflowProbe/InputParameter:Seed",
+          "properties": {
+            "DataType": "BasicType:Integer",
+            "Name": "Seed",
+            "IsMandatory": "True",
+            "ReadableIdentifier": "Seed"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Integer",
+              "key": "j2Lc0phK0kuggij4gQYfAw",
+              "reference": "@j2Lc0phK0kuggij4gQYfAw",
+              "path": "BasicType:Integer"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "TriggerGlobalNode",
+          "name": "TriggerWorkflowProbe",
+          "modelName": "TriggerWorkflowProbe",
+          "label": "TriggerWorkflowProbe",
+          "key": "zoxypXXQEEStzyEYWTRo+Q",
+          "reference": "@zoxypXXQEEStzyEYWTRo+Q",
+          "path": "ServerAction:EmitWorkflowProbe/TriggerGlobalNode:TriggerWorkflowProbe",
+          "properties": {
+            "Connectors": "[ActionConnector:]",
+            "Event": "GlobalEvent:WorkflowProbeRequested",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Name": "TriggerWorkflowProbe",
+            "Target": "EndNode:End",
+            "VerticalPosition": "2400",
+            "ReadableIdentifier": "TriggerWorkflowProbe"
+          },
+          "propertyReferences": {
+            "Event": {
+              "kind": "GlobalEvent",
+              "name": "WorkflowProbeRequested",
+              "label": "WorkflowProbeRequested",
+              "key": "oH6LwRgokka+eFKXJ+jdTQ",
+              "reference": "@oH6LwRgokka+eFKXJ+jdTQ",
+              "path": "GlobalEvent:WorkflowProbeRequested"
+            },
+            "Target": {
+              "kind": "EndNode",
+              "name": "",
+              "label": "End",
+              "key": "dElo31NVPkOLriCLDLSKEA",
+              "reference": "@dElo31NVPkOLriCLDLSKEA",
+              "path": "ServerAction:EmitWorkflowProbe/EndNode:End"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "+PiRGvHf5kWBF7a62sgFlA",
+                  "reference": "@+PiRGvHf5kWBF7a62sgFlA",
+                  "path": "ServerAction:EmitWorkflowProbe/TriggerGlobalNode:TriggerWorkflowProbe/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "Argument",
+              "name": "Seed",
+              "modelName": "",
+              "label": "Seed",
+              "key": "1NvV0GFIOk2on+XmDHC91w",
+              "reference": "@1NvV0GFIOk2on+XmDHC91w",
+              "path": "ServerAction:EmitWorkflowProbe/TriggerGlobalNode:TriggerWorkflowProbe/Argument:Seed",
+              "properties": {
+                "Value": "Seed",
+                "Parameter": "InputParameter:Seed"
+              },
+              "propertyReferences": {
+                "Parameter": {
+                  "kind": "InputParameter",
+                  "name": "Seed",
+                  "label": "Seed",
+                  "key": "ovTmxiXfdkSUW+CWWGu2AQ",
+                  "reference": "@ovTmxiXfdkSUW+CWWGu2AQ",
+                  "path": "GlobalEvent:WorkflowProbeRequested/InputParameter:Seed"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "Seed",
+                  "modelName": "",
+                  "label": "Seed",
+                  "key": "1NvV0GFIOk2on+XmDHC91w.#Value",
+                  "reference": "@1NvV0GFIOk2on+XmDHC91w.#Value",
+                  "path": "ServerAction:EmitWorkflowProbe/TriggerGlobalNode:TriggerWorkflowProbe/Argument:Seed/TextBasedExpression:Seed",
+                  "properties": {
+                    "Type": "BasicType:Integer"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Integer",
+                      "key": "j2Lc0phK0kuggij4gQYfAw",
+                      "reference": "@j2Lc0phK0kuggij4gQYfAw",
+                      "path": "BasicType:Integer"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 1,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "Argument",
+              "name": "Correlation",
+              "modelName": "",
+              "label": "Correlation",
+              "key": "a4UB0Gaf6UGL2_7mdxRWbw",
+              "reference": "@a4UB0Gaf6UGL2_7mdxRWbw",
+              "path": "ServerAction:EmitWorkflowProbe/TriggerGlobalNode:TriggerWorkflowProbe/Argument:Correlation",
+              "properties": {
+                "Value": "Correlation",
+                "Parameter": "InputParameter:Correlation"
+              },
+              "propertyReferences": {
+                "Parameter": {
+                  "kind": "InputParameter",
+                  "name": "Correlation",
+                  "label": "Correlation",
+                  "key": "JSFbOvdYuUSrLpvUMHdXhg",
+                  "reference": "@JSFbOvdYuUSrLpvUMHdXhg",
+                  "path": "GlobalEvent:WorkflowProbeRequested/InputParameter:Correlation"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "Correlation",
+                  "modelName": "",
+                  "label": "Correlation",
+                  "key": "a4UB0Gaf6UGL2_7mdxRWbw.#Value",
+                  "reference": "@a4UB0Gaf6UGL2_7mdxRWbw.#Value",
+                  "path": "ServerAction:EmitWorkflowProbe/TriggerGlobalNode:TriggerWorkflowProbe/Argument:Correlation/TextBasedExpression:Correlation",
+                  "properties": {
+                    "Type": "BasicType:Text"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Text",
+                      "key": "uROOBXPvQEyU76NWO+1uxQ",
+                      "reference": "@uROOBXPvQEyU76NWO+1uxQ",
+                      "path": "BasicType:Text"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 1,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "+PiRGvHf5kWBF7a62sgFlA",
+              "reference": "@+PiRGvHf5kWBF7a62sgFlA",
+              "path": "ServerAction:EmitWorkflowProbe/TriggerGlobalNode:TriggerWorkflowProbe/ActionConnector:",
+              "properties": {
+                "Target": "EndNode:End"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "EndNode",
+                  "name": "",
+                  "label": "End",
+                  "key": "dElo31NVPkOLriCLDLSKEA",
+                  "reference": "@dElo31NVPkOLriCLDLSKEA",
+                  "path": "ServerAction:EmitWorkflowProbe/EndNode:End"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 3,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "StartNode",
+          "name": "Start",
+          "modelName": "",
+          "label": "Start",
+          "key": "aONqJJ62AUaJYBWN7suwfg",
+          "reference": "@aONqJJ62AUaJYBWN7suwfg",
+          "path": "ServerAction:EmitWorkflowProbe/StartNode:Start",
+          "properties": {
+            "Connectors": "[ActionConnector:]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Target": "TriggerGlobalNode:TriggerWorkflowProbe",
+            "VerticalPosition": "800",
+            "ReadableIdentifier": "(3200,800)"
+          },
+          "propertyReferences": {
+            "Target": {
+              "kind": "TriggerGlobalNode",
+              "name": "TriggerWorkflowProbe",
+              "label": "TriggerWorkflowProbe",
+              "key": "zoxypXXQEEStzyEYWTRo+Q",
+              "reference": "@zoxypXXQEEStzyEYWTRo+Q",
+              "path": "ServerAction:EmitWorkflowProbe/TriggerGlobalNode:TriggerWorkflowProbe"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "hs4aKJq_YEemVtGm7YOcSw",
+                  "reference": "@hs4aKJq_YEemVtGm7YOcSw",
+                  "path": "ServerAction:EmitWorkflowProbe/StartNode:Start/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "hs4aKJq_YEemVtGm7YOcSw",
+              "reference": "@hs4aKJq_YEemVtGm7YOcSw",
+              "path": "ServerAction:EmitWorkflowProbe/StartNode:Start/ActionConnector:",
+              "properties": {
+                "Target": "TriggerGlobalNode:TriggerWorkflowProbe"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "TriggerGlobalNode",
+                  "name": "TriggerWorkflowProbe",
+                  "label": "TriggerWorkflowProbe",
+                  "key": "zoxypXXQEEStzyEYWTRo+Q",
+                  "reference": "@zoxypXXQEEStzyEYWTRo+Q",
+                  "path": "ServerAction:EmitWorkflowProbe/TriggerGlobalNode:TriggerWorkflowProbe"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 1,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "EndNode",
+          "name": "End",
+          "modelName": "",
+          "label": "End",
+          "key": "dElo31NVPkOLriCLDLSKEA",
+          "reference": "@dElo31NVPkOLriCLDLSKEA",
+          "path": "ServerAction:EmitWorkflowProbe/EndNode:End",
+          "properties": {
+            "Connectors": "[]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "VerticalPosition": "4000",
+            "ReadableIdentifier": "(3200,4000)"
+          },
+          "propertyReferences": {},
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        }
+      ],
+      "childrenTotal": 5,
+      "childrenOmitted": 0
+    },
+    {
+      "kind": "ClientAction",
+      "name": "LaunchWorkflowProbe",
+      "modelName": "LaunchWorkflowProbe",
+      "label": "LaunchWorkflowProbe",
+      "key": "7M0Ewh4W_Uu_wlSxXsCdQQ",
+      "reference": "@7M0Ewh4W_Uu_wlSxXsCdQQ",
+      "path": "ClientAction:LaunchWorkflowProbe",
+      "properties": {
+        "Description": "Original client caller for the event producer; no anonymous flow or automatic lifecycle execution.",
+        "Function": "False",
+        "Name": "LaunchWorkflowProbe",
+        "Public": "True",
+        "Shareable": "True",
+        "ReadableIdentifier": "LaunchWorkflowProbe"
+      },
+      "propertyReferences": {},
+      "propertyReferenceCollections": {},
+      "propertiesOmitted": {},
+      "propertyErrors": {},
+      "propertiesMissing": [],
+      "children": [
+        {
+          "kind": "InputParameter",
+          "name": "Correlation",
+          "modelName": "Correlation",
+          "label": "Correlation",
+          "key": "8oNFgp6WhkCV9s9rfV9_VA",
+          "reference": "@8oNFgp6WhkCV9s9rfV9_VA",
+          "path": "ClientAction:LaunchWorkflowProbe/InputParameter:Correlation",
+          "properties": {
+            "DataType": "BasicType:Text",
+            "Name": "Correlation",
+            "IsMandatory": "True",
+            "ReadableIdentifier": "Correlation"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Text",
+              "key": "uROOBXPvQEyU76NWO+1uxQ",
+              "reference": "@uROOBXPvQEyU76NWO+1uxQ",
+              "path": "BasicType:Text"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "InputParameter",
+          "name": "Seed",
+          "modelName": "Seed",
+          "label": "Seed",
+          "key": "Depfoc6bWE6UXPwALaLMJQ",
+          "reference": "@Depfoc6bWE6UXPwALaLMJQ",
+          "path": "ClientAction:LaunchWorkflowProbe/InputParameter:Seed",
+          "properties": {
+            "DataType": "BasicType:Integer",
+            "Name": "Seed",
+            "IsMandatory": "True",
+            "ReadableIdentifier": "Seed"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Integer",
+              "key": "j2Lc0phK0kuggij4gQYfAw",
+              "reference": "@j2Lc0phK0kuggij4gQYfAw",
+              "path": "BasicType:Integer"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "ExecuteServerActionNode",
+          "name": "EmitWorkflowProbe",
+          "modelName": "EmitWorkflowProbe",
+          "label": "EmitWorkflowProbe",
+          "key": "o1cP9XcMcEe6xQOa29i2KQ",
+          "reference": "@o1cP9XcMcEe6xQOa29i2KQ",
+          "path": "ClientAction:LaunchWorkflowProbe/ExecuteServerActionNode:EmitWorkflowProbe",
+          "properties": {
+            "Action": "ServerAction:EmitWorkflowProbe",
+            "AnimationEffect": "None",
+            "Connectors": "[ActionConnector:]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Name": "EmitWorkflowProbe",
+            "Target": "EndNode:End",
+            "VerticalPosition": "2400",
+            "ReadableIdentifier": "EmitWorkflowProbe"
+          },
+          "propertyReferences": {
+            "Action": {
+              "kind": "ServerAction",
+              "name": "EmitWorkflowProbe",
+              "label": "EmitWorkflowProbe",
+              "key": "5QuK3N0Ox0qmhouoNbTXIQ",
+              "reference": "@5QuK3N0Ox0qmhouoNbTXIQ",
+              "path": "ServerAction:EmitWorkflowProbe"
+            },
+            "Target": {
+              "kind": "EndNode",
+              "name": "",
+              "label": "End",
+              "key": "HrsiofFn00eyYk5D59Gitg",
+              "reference": "@HrsiofFn00eyYk5D59Gitg",
+              "path": "ClientAction:LaunchWorkflowProbe/EndNode:End"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "XR4FMVlen0aR5lsm1dP0pg",
+                  "reference": "@XR4FMVlen0aR5lsm1dP0pg",
+                  "path": "ClientAction:LaunchWorkflowProbe/ExecuteServerActionNode:EmitWorkflowProbe/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "Argument",
+              "name": "Correlation",
+              "modelName": "",
+              "label": "Correlation",
+              "key": "oKBahVbdK0SUla6d6UhLzA",
+              "reference": "@oKBahVbdK0SUla6d6UhLzA",
+              "path": "ClientAction:LaunchWorkflowProbe/ExecuteServerActionNode:EmitWorkflowProbe/Argument:Correlation",
+              "properties": {
+                "Value": "Correlation",
+                "Parameter": "InputParameter:Correlation"
+              },
+              "propertyReferences": {
+                "Parameter": {
+                  "kind": "InputParameter",
+                  "name": "Correlation",
+                  "label": "Correlation",
+                  "key": "Vh_G+CO2FEClRVN3WxiW8g",
+                  "reference": "@Vh_G+CO2FEClRVN3WxiW8g",
+                  "path": "ServerAction:EmitWorkflowProbe/InputParameter:Correlation"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "Correlation",
+                  "modelName": "",
+                  "label": "Correlation",
+                  "key": "oKBahVbdK0SUla6d6UhLzA.#Value",
+                  "reference": "@oKBahVbdK0SUla6d6UhLzA.#Value",
+                  "path": "ClientAction:LaunchWorkflowProbe/ExecuteServerActionNode:EmitWorkflowProbe/Argument:Correlation/TextBasedExpression:Correlation",
+                  "properties": {
+                    "Type": "BasicType:Text"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Text",
+                      "key": "uROOBXPvQEyU76NWO+1uxQ",
+                      "reference": "@uROOBXPvQEyU76NWO+1uxQ",
+                      "path": "BasicType:Text"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 1,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "Argument",
+              "name": "Seed",
+              "modelName": "",
+              "label": "Seed",
+              "key": "EYqBtLFPY0GRuhdcjyKIuA",
+              "reference": "@EYqBtLFPY0GRuhdcjyKIuA",
+              "path": "ClientAction:LaunchWorkflowProbe/ExecuteServerActionNode:EmitWorkflowProbe/Argument:Seed",
+              "properties": {
+                "Value": "Seed",
+                "Parameter": "InputParameter:Seed"
+              },
+              "propertyReferences": {
+                "Parameter": {
+                  "kind": "InputParameter",
+                  "name": "Seed",
+                  "label": "Seed",
+                  "key": "YNB7UnvYsUyYdSEf2aN60g",
+                  "reference": "@YNB7UnvYsUyYdSEf2aN60g",
+                  "path": "ServerAction:EmitWorkflowProbe/InputParameter:Seed"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "Seed",
+                  "modelName": "",
+                  "label": "Seed",
+                  "key": "EYqBtLFPY0GRuhdcjyKIuA.#Value",
+                  "reference": "@EYqBtLFPY0GRuhdcjyKIuA.#Value",
+                  "path": "ClientAction:LaunchWorkflowProbe/ExecuteServerActionNode:EmitWorkflowProbe/Argument:Seed/TextBasedExpression:Seed",
+                  "properties": {
+                    "Type": "BasicType:Integer"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Integer",
+                      "key": "j2Lc0phK0kuggij4gQYfAw",
+                      "reference": "@j2Lc0phK0kuggij4gQYfAw",
+                      "path": "BasicType:Integer"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 1,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "XR4FMVlen0aR5lsm1dP0pg",
+              "reference": "@XR4FMVlen0aR5lsm1dP0pg",
+              "path": "ClientAction:LaunchWorkflowProbe/ExecuteServerActionNode:EmitWorkflowProbe/ActionConnector:",
+              "properties": {
+                "Target": "EndNode:End"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "EndNode",
+                  "name": "",
+                  "label": "End",
+                  "key": "HrsiofFn00eyYk5D59Gitg",
+                  "reference": "@HrsiofFn00eyYk5D59Gitg",
+                  "path": "ClientAction:LaunchWorkflowProbe/EndNode:End"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 3,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "StartNode",
+          "name": "Start",
+          "modelName": "",
+          "label": "Start",
+          "key": "KmoBEjZSUkS1895fNa5Mhg",
+          "reference": "@KmoBEjZSUkS1895fNa5Mhg",
+          "path": "ClientAction:LaunchWorkflowProbe/StartNode:Start",
+          "properties": {
+            "Connectors": "[ActionConnector:]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Target": "ExecuteServerActionNode:EmitWorkflowProbe",
+            "VerticalPosition": "800",
+            "ReadableIdentifier": "(3200,800)"
+          },
+          "propertyReferences": {
+            "Target": {
+              "kind": "ExecuteServerActionNode",
+              "name": "EmitWorkflowProbe",
+              "label": "EmitWorkflowProbe",
+              "key": "o1cP9XcMcEe6xQOa29i2KQ",
+              "reference": "@o1cP9XcMcEe6xQOa29i2KQ",
+              "path": "ClientAction:LaunchWorkflowProbe/ExecuteServerActionNode:EmitWorkflowProbe"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "99mKH9ZcyU+_ALnyHWLNbA",
+                  "reference": "@99mKH9ZcyU+_ALnyHWLNbA",
+                  "path": "ClientAction:LaunchWorkflowProbe/StartNode:Start/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "99mKH9ZcyU+_ALnyHWLNbA",
+              "reference": "@99mKH9ZcyU+_ALnyHWLNbA",
+              "path": "ClientAction:LaunchWorkflowProbe/StartNode:Start/ActionConnector:",
+              "properties": {
+                "Target": "ExecuteServerActionNode:EmitWorkflowProbe"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "ExecuteServerActionNode",
+                  "name": "EmitWorkflowProbe",
+                  "label": "EmitWorkflowProbe",
+                  "key": "o1cP9XcMcEe6xQOa29i2KQ",
+                  "reference": "@o1cP9XcMcEe6xQOa29i2KQ",
+                  "path": "ClientAction:LaunchWorkflowProbe/ExecuteServerActionNode:EmitWorkflowProbe"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 1,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "EndNode",
+          "name": "End",
+          "modelName": "",
+          "label": "End",
+          "key": "HrsiofFn00eyYk5D59Gitg",
+          "reference": "@HrsiofFn00eyYk5D59Gitg",
+          "path": "ClientAction:LaunchWorkflowProbe/EndNode:End",
+          "properties": {
+            "Connectors": "[]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "VerticalPosition": "4000",
+            "ReadableIdentifier": "(3200,4000)"
+          },
+          "propertyReferences": {},
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        }
+      ],
+      "childrenTotal": 5,
+      "childrenOmitted": 0
+    },
+    {
+      "kind": "ServiceAction",
+      "name": "ObserveWorkflowValue",
+      "modelName": "ObserveWorkflowValue",
+      "label": "ObserveWorkflowValue",
+      "key": "YtJpu_pKR0a2xAv3zsPA_A",
+      "reference": "@YtJpu_pKR0a2xAv3zsPA_A",
+      "path": "ServiceAction:ObserveWorkflowValue",
+      "properties": {
+        "Description": "Deterministic Workflow automatic activity. In-memory computation only; no business persistence or external services.",
+        "Name": "ObserveWorkflowValue",
+        "Public": "True",
+        "Shareable": "True",
+        "ReadableIdentifier": "ObserveWorkflowValue"
+      },
+      "propertyReferences": {},
+      "propertyReferenceCollections": {},
+      "propertiesOmitted": {},
+      "propertyErrors": {},
+      "propertiesMissing": [],
+      "children": [
+        {
+          "kind": "InputParameter",
+          "name": "Correlation",
+          "modelName": "Correlation",
+          "label": "Correlation",
+          "key": "zXgxrLMoh0K4aoVdH7ZIRw",
+          "reference": "@zXgxrLMoh0K4aoVdH7ZIRw",
+          "path": "ServiceAction:ObserveWorkflowValue/InputParameter:Correlation",
+          "properties": {
+            "DataType": "BasicType:Text",
+            "Name": "Correlation",
+            "IsMandatory": "True",
+            "ReadableIdentifier": "Correlation"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Text",
+              "key": "uROOBXPvQEyU76NWO+1uxQ",
+              "reference": "@uROOBXPvQEyU76NWO+1uxQ",
+              "path": "BasicType:Text"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "InputParameter",
+          "name": "Seed",
+          "modelName": "Seed",
+          "label": "Seed",
+          "key": "VUUZsHBqckKouWERB+xWOA",
+          "reference": "@VUUZsHBqckKouWERB+xWOA",
+          "path": "ServiceAction:ObserveWorkflowValue/InputParameter:Seed",
+          "properties": {
+            "DataType": "BasicType:Integer",
+            "Name": "Seed",
+            "IsMandatory": "True",
+            "ReadableIdentifier": "Seed"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Integer",
+              "key": "j2Lc0phK0kuggij4gQYfAw",
+              "reference": "@j2Lc0phK0kuggij4gQYfAw",
+              "path": "BasicType:Integer"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "OutputParameter",
+          "name": "Result",
+          "modelName": "Result",
+          "label": "Result",
+          "key": "aWmltBnxnUGvXHE+SgyBXg",
+          "reference": "@aWmltBnxnUGvXHE+SgyBXg",
+          "path": "ServiceAction:ObserveWorkflowValue/OutputParameter:Result",
+          "properties": {
+            "DataType": "BasicType:Integer",
+            "Name": "Result",
+            "ReadableIdentifier": "Result"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Integer",
+              "key": "j2Lc0phK0kuggij4gQYfAw",
+              "reference": "@j2Lc0phK0kuggij4gQYfAw",
+              "path": "BasicType:Integer"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "OutputParameter",
+          "name": "CorrelationEcho",
+          "modelName": "CorrelationEcho",
+          "label": "CorrelationEcho",
+          "key": "7wwoVCKH2UCSlOynAKJQvA",
+          "reference": "@7wwoVCKH2UCSlOynAKJQvA",
+          "path": "ServiceAction:ObserveWorkflowValue/OutputParameter:CorrelationEcho",
+          "properties": {
+            "DataType": "BasicType:Text",
+            "Name": "CorrelationEcho",
+            "ReadableIdentifier": "CorrelationEcho"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Text",
+              "key": "uROOBXPvQEyU76NWO+1uxQ",
+              "reference": "@uROOBXPvQEyU76NWO+1uxQ",
+              "path": "BasicType:Text"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "LocalVariable",
+          "name": "Observed",
+          "modelName": "Observed",
+          "label": "Observed",
+          "key": "IkC6JjhEMUOXuN799sSywg",
+          "reference": "@IkC6JjhEMUOXuN799sSywg",
+          "path": "ServiceAction:ObserveWorkflowValue/LocalVariable:Observed",
+          "properties": {
+            "DataType": "BasicType:Integer",
+            "Name": "Observed",
+            "ReadableIdentifier": "Observed"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Integer",
+              "key": "j2Lc0phK0kuggij4gQYfAw",
+              "reference": "@j2Lc0phK0kuggij4gQYfAw",
+              "path": "BasicType:Integer"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "EndNode",
+          "name": "End",
+          "modelName": "",
+          "label": "End",
+          "key": "PfcCWr3VFkSXMD0swF0Shw",
+          "reference": "@PfcCWr3VFkSXMD0swF0Shw",
+          "path": "ServiceAction:ObserveWorkflowValue/EndNode:End",
+          "properties": {
+            "Connectors": "[]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "VerticalPosition": "5600",
+            "ReadableIdentifier": "(3200,5600)"
+          },
+          "propertyReferences": {},
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "AssignNode",
+          "name": "Return synthetic values",
+          "modelName": "",
+          "label": "Return synthetic values",
+          "key": "XdLxmwsC3E2PlEyo15XSrw",
+          "reference": "@XdLxmwsC3E2PlEyo15XSrw",
+          "path": "ServiceAction:ObserveWorkflowValue/AssignNode:Return synthetic values",
+          "properties": {
+            "Connectors": "[ActionConnector:]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Label": "Return synthetic values",
+            "Target": "EndNode:End",
+            "VerticalPosition": "4000",
+            "ReadableIdentifier": "(3200,4000)"
+          },
+          "propertyReferences": {
+            "Target": {
+              "kind": "EndNode",
+              "name": "",
+              "label": "End",
+              "key": "PfcCWr3VFkSXMD0swF0Shw",
+              "reference": "@PfcCWr3VFkSXMD0swF0Shw",
+              "path": "ServiceAction:ObserveWorkflowValue/EndNode:End"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "ynjBlbwlqk+RyUXA0T5cBg",
+                  "reference": "@ynjBlbwlqk+RyUXA0T5cBg",
+                  "path": "ServiceAction:ObserveWorkflowValue/AssignNode:Return synthetic values/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "Assignment",
+              "name": "Result = Observed",
+              "modelName": "",
+              "label": "Result = Observed",
+              "key": "CHpGDj51LU+6uO3zloc4qw",
+              "reference": "@CHpGDj51LU+6uO3zloc4qw",
+              "path": "ServiceAction:ObserveWorkflowValue/AssignNode:Return synthetic values/Assignment:Result = Observed",
+              "properties": {
+                "Value": "Observed",
+                "Variable": "Result"
+              },
+              "propertyReferences": {},
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "Result",
+                  "modelName": "",
+                  "label": "Result",
+                  "key": "CHpGDj51LU+6uO3zloc4qw.#Variable",
+                  "reference": "@CHpGDj51LU+6uO3zloc4qw.#Variable",
+                  "path": "ServiceAction:ObserveWorkflowValue/AssignNode:Return synthetic values/Assignment:Result = Observed/TextBasedExpression:Result",
+                  "properties": {
+                    "Type": "BasicType:Integer"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Integer",
+                      "key": "j2Lc0phK0kuggij4gQYfAw",
+                      "reference": "@j2Lc0phK0kuggij4gQYfAw",
+                      "path": "BasicType:Integer"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                },
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "Observed",
+                  "modelName": "",
+                  "label": "Observed",
+                  "key": "CHpGDj51LU+6uO3zloc4qw.#Value",
+                  "reference": "@CHpGDj51LU+6uO3zloc4qw.#Value",
+                  "path": "ServiceAction:ObserveWorkflowValue/AssignNode:Return synthetic values/Assignment:Result = Observed/TextBasedExpression:Observed",
+                  "properties": {
+                    "Type": "BasicType:Integer"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Integer",
+                      "key": "j2Lc0phK0kuggij4gQYfAw",
+                      "reference": "@j2Lc0phK0kuggij4gQYfAw",
+                      "path": "BasicType:Integer"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 2,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "Assignment",
+              "name": "CorrelationEcho = Correlation",
+              "modelName": "",
+              "label": "CorrelationEcho = Correlation",
+              "key": "K4xvAHZ9SkuynfbEorqUBg",
+              "reference": "@K4xvAHZ9SkuynfbEorqUBg",
+              "path": "ServiceAction:ObserveWorkflowValue/AssignNode:Return synthetic values/Assignment:CorrelationEcho = Correlation",
+              "properties": {
+                "Value": "Correlation",
+                "Variable": "CorrelationEcho"
+              },
+              "propertyReferences": {},
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "CorrelationEcho",
+                  "modelName": "",
+                  "label": "CorrelationEcho",
+                  "key": "K4xvAHZ9SkuynfbEorqUBg.#Variable",
+                  "reference": "@K4xvAHZ9SkuynfbEorqUBg.#Variable",
+                  "path": "ServiceAction:ObserveWorkflowValue/AssignNode:Return synthetic values/Assignment:CorrelationEcho = Correlation/TextBasedExpression:CorrelationEcho",
+                  "properties": {
+                    "Type": "BasicType:Text"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Text",
+                      "key": "uROOBXPvQEyU76NWO+1uxQ",
+                      "reference": "@uROOBXPvQEyU76NWO+1uxQ",
+                      "path": "BasicType:Text"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                },
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "Correlation",
+                  "modelName": "",
+                  "label": "Correlation",
+                  "key": "K4xvAHZ9SkuynfbEorqUBg.#Value",
+                  "reference": "@K4xvAHZ9SkuynfbEorqUBg.#Value",
+                  "path": "ServiceAction:ObserveWorkflowValue/AssignNode:Return synthetic values/Assignment:CorrelationEcho = Correlation/TextBasedExpression:Correlation",
+                  "properties": {
+                    "Type": "BasicType:Text"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Text",
+                      "key": "uROOBXPvQEyU76NWO+1uxQ",
+                      "reference": "@uROOBXPvQEyU76NWO+1uxQ",
+                      "path": "BasicType:Text"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 2,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "ynjBlbwlqk+RyUXA0T5cBg",
+              "reference": "@ynjBlbwlqk+RyUXA0T5cBg",
+              "path": "ServiceAction:ObserveWorkflowValue/AssignNode:Return synthetic values/ActionConnector:",
+              "properties": {
+                "Target": "EndNode:End"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "EndNode",
+                  "name": "",
+                  "label": "End",
+                  "key": "PfcCWr3VFkSXMD0swF0Shw",
+                  "reference": "@PfcCWr3VFkSXMD0swF0Shw",
+                  "path": "ServiceAction:ObserveWorkflowValue/EndNode:End"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 3,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "AssignNode",
+          "name": "Observe synthetic value",
+          "modelName": "",
+          "label": "Observe synthetic value",
+          "key": "rWRgv_DJHUmyHgtC0t5Dfg",
+          "reference": "@rWRgv_DJHUmyHgtC0t5Dfg",
+          "path": "ServiceAction:ObserveWorkflowValue/AssignNode:Observe synthetic value",
+          "properties": {
+            "Connectors": "[ActionConnector:]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Label": "Observe synthetic value",
+            "Target": "AssignNode:Return synthetic values",
+            "VerticalPosition": "2400",
+            "ReadableIdentifier": "(3200,2400)"
+          },
+          "propertyReferences": {
+            "Target": {
+              "kind": "AssignNode",
+              "name": "",
+              "label": "Return synthetic values",
+              "key": "XdLxmwsC3E2PlEyo15XSrw",
+              "reference": "@XdLxmwsC3E2PlEyo15XSrw",
+              "path": "ServiceAction:ObserveWorkflowValue/AssignNode:Return synthetic values"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "MP+9nu56MEmOpIz9ELKQvA",
+                  "reference": "@MP+9nu56MEmOpIz9ELKQvA",
+                  "path": "ServiceAction:ObserveWorkflowValue/AssignNode:Observe synthetic value/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "Assignment",
+              "name": "Observed = Seed + 1",
+              "modelName": "",
+              "label": "Observed = Seed + 1",
+              "key": "llT2PBs4OEi1ITJd_OYpVQ",
+              "reference": "@llT2PBs4OEi1ITJd_OYpVQ",
+              "path": "ServiceAction:ObserveWorkflowValue/AssignNode:Observe synthetic value/Assignment:Observed = Seed + 1",
+              "properties": {
+                "Value": "Seed + 1",
+                "Variable": "Observed"
+              },
+              "propertyReferences": {},
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "Observed",
+                  "modelName": "",
+                  "label": "Observed",
+                  "key": "llT2PBs4OEi1ITJd_OYpVQ.#Variable",
+                  "reference": "@llT2PBs4OEi1ITJd_OYpVQ.#Variable",
+                  "path": "ServiceAction:ObserveWorkflowValue/AssignNode:Observe synthetic value/Assignment:Observed = Seed + 1/TextBasedExpression:Observed",
+                  "properties": {
+                    "Type": "BasicType:Integer"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Integer",
+                      "key": "j2Lc0phK0kuggij4gQYfAw",
+                      "reference": "@j2Lc0phK0kuggij4gQYfAw",
+                      "path": "BasicType:Integer"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                },
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "Seed + 1",
+                  "modelName": "",
+                  "label": "Seed + 1",
+                  "key": "llT2PBs4OEi1ITJd_OYpVQ.#Value",
+                  "reference": "@llT2PBs4OEi1ITJd_OYpVQ.#Value",
+                  "path": "ServiceAction:ObserveWorkflowValue/AssignNode:Observe synthetic value/Assignment:Observed = Seed + 1/TextBasedExpression:Seed + 1",
+                  "properties": {
+                    "Type": "BasicType:Integer"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Integer",
+                      "key": "j2Lc0phK0kuggij4gQYfAw",
+                      "reference": "@j2Lc0phK0kuggij4gQYfAw",
+                      "path": "BasicType:Integer"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 2,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "MP+9nu56MEmOpIz9ELKQvA",
+              "reference": "@MP+9nu56MEmOpIz9ELKQvA",
+              "path": "ServiceAction:ObserveWorkflowValue/AssignNode:Observe synthetic value/ActionConnector:",
+              "properties": {
+                "Target": "AssignNode:Return synthetic values"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "AssignNode",
+                  "name": "",
+                  "label": "Return synthetic values",
+                  "key": "XdLxmwsC3E2PlEyo15XSrw",
+                  "reference": "@XdLxmwsC3E2PlEyo15XSrw",
+                  "path": "ServiceAction:ObserveWorkflowValue/AssignNode:Return synthetic values"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 2,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "CommentNode",
+          "name": "Service Actions run logic in a loosely coupled manner:    - In a separate transaction.    - Remotely in the producer context.    - Changes are immediately available to all consumers upon publishing. <a href=\"30180\">Check the documentation for more information.</a>",
+          "modelName": "",
+          "label": "Service Actions run logic in a loosely coupled manner:    - In a separate transaction.    - Remotely in the producer context.    - Changes are immediately available to all consumers upon publishing. <a href=\"30180\">Check the documentation for more information.</a>",
+          "key": "D6txaH5lOk+nX13c2zE6oA",
+          "reference": "@D6txaH5lOk+nX13c2zE6oA",
+          "path": "ServiceAction:ObserveWorkflowValue/CommentNode:Service Actions run logic in a loosely coupled manner:    - In a separate transa…",
+          "properties": {
+            "Connectors": "[]",
+            "HorizontalPosition": "5000",
+            "IsDisabled": "False",
+            "IsReminder": "False",
+            "Text": "Service Actions run logic in a loosely coupled manner:\n   - In a separate transaction.\n   - Remotely in the producer context.\n   - Changes are immediately available to all consumers upon publishing.\n\n<a href=\"30180\">Check the documentation for more information.</a>",
+            "VerticalPosition": "1000",
+            "ReadableIdentifier": "(5000,1000)"
+          },
+          "propertyReferences": {},
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "StartNode",
+          "name": "Start",
+          "modelName": "",
+          "label": "Start",
+          "key": "X4cdhxU4CkqXGm2RZk8Jbw",
+          "reference": "@X4cdhxU4CkqXGm2RZk8Jbw",
+          "path": "ServiceAction:ObserveWorkflowValue/StartNode:Start",
+          "properties": {
+            "Connectors": "[ActionConnector:]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Target": "AssignNode:Observe synthetic value",
+            "VerticalPosition": "800",
+            "ReadableIdentifier": "(3200,800)"
+          },
+          "propertyReferences": {
+            "Target": {
+              "kind": "AssignNode",
+              "name": "",
+              "label": "Observe synthetic value",
+              "key": "rWRgv_DJHUmyHgtC0t5Dfg",
+              "reference": "@rWRgv_DJHUmyHgtC0t5Dfg",
+              "path": "ServiceAction:ObserveWorkflowValue/AssignNode:Observe synthetic value"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "ActionConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "JglAWPFua0yJPboi5htCNQ",
+                  "reference": "@JglAWPFua0yJPboi5htCNQ",
+                  "path": "ServiceAction:ObserveWorkflowValue/StartNode:Start/ActionConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "ActionConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "JglAWPFua0yJPboi5htCNQ",
+              "reference": "@JglAWPFua0yJPboi5htCNQ",
+              "path": "ServiceAction:ObserveWorkflowValue/StartNode:Start/ActionConnector:",
+              "properties": {
+                "Target": "AssignNode:Observe synthetic value"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "AssignNode",
+                  "name": "",
+                  "label": "Observe synthetic value",
+                  "key": "rWRgv_DJHUmyHgtC0t5Dfg",
+                  "reference": "@rWRgv_DJHUmyHgtC0t5Dfg",
+                  "path": "ServiceAction:ObserveWorkflowValue/AssignNode:Observe synthetic value"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 1,
+          "childrenOmitted": 0
+        }
+      ],
+      "childrenTotal": 10,
+      "childrenOmitted": 0
+    },
+    {
+      "kind": "GlobalEvent",
+      "name": "WorkflowProbeRequested",
+      "modelName": "WorkflowProbeRequested",
+      "label": "WorkflowProbeRequested",
+      "key": "oH6LwRgokka+eFKXJ+jdTQ",
+      "reference": "@oH6LwRgokka+eFKXJ+jdTQ",
+      "path": "GlobalEvent:WorkflowProbeRequested",
+      "properties": {
+        "Description": "Carries synthetic correlation and value to one diagnostic Workflow instance.",
+        "Name": "WorkflowProbeRequested",
+        "Public": "True",
+        "Shareable": "True",
+        "ReadableIdentifier": "WorkflowProbeRequested"
+      },
+      "propertyReferences": {},
+      "propertyReferenceCollections": {},
+      "propertiesOmitted": {},
+      "propertyErrors": {},
+      "propertiesMissing": [],
+      "children": [
+        {
+          "kind": "InputParameter",
+          "name": "Correlation",
+          "modelName": "Correlation",
+          "label": "Correlation",
+          "key": "JSFbOvdYuUSrLpvUMHdXhg",
+          "reference": "@JSFbOvdYuUSrLpvUMHdXhg",
+          "path": "GlobalEvent:WorkflowProbeRequested/InputParameter:Correlation",
+          "properties": {
+            "DataType": "BasicType:Text",
+            "Name": "Correlation",
+            "IsMandatory": "True",
+            "ReadableIdentifier": "Correlation"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Text",
+              "key": "uROOBXPvQEyU76NWO+1uxQ",
+              "reference": "@uROOBXPvQEyU76NWO+1uxQ",
+              "path": "BasicType:Text"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "InputParameter",
+          "name": "Seed",
+          "modelName": "Seed",
+          "label": "Seed",
+          "key": "ovTmxiXfdkSUW+CWWGu2AQ",
+          "reference": "@ovTmxiXfdkSUW+CWWGu2AQ",
+          "path": "GlobalEvent:WorkflowProbeRequested/InputParameter:Seed",
+          "properties": {
+            "DataType": "BasicType:Integer",
+            "Name": "Seed",
+            "IsMandatory": "True",
+            "ReadableIdentifier": "Seed"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Integer",
+              "key": "j2Lc0phK0kuggij4gQYfAw",
+              "reference": "@j2Lc0phK0kuggij4gQYfAw",
+              "path": "BasicType:Integer"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        }
+      ],
+      "childrenTotal": 2,
+      "childrenOmitted": 0
+    },
+    {
+      "kind": "BusinessProcess",
+      "name": "SSAMDbgWorkflow",
+      "modelName": "SSAMDbgWorkflow",
+      "label": "SSAMDbgWorkflow",
+      "key": "AQi7rNY+cUG8IbcjOun+sA",
+      "reference": "@AQi7rNY+cUG8IbcjOun+sA",
+      "path": "BusinessProcess:SSAMDbgWorkflow",
+      "properties": {
+        "Description": "Unpublished diagnostic Workflow: original Event Start -> automatic deterministic Service Action -> End.",
+        "Name": "SSAMDbgWorkflow",
+        "Public": "False",
+        "Shareable": "False",
+        "ReadableIdentifier": "SSAMDbgWorkflow"
+      },
+      "propertyReferences": {},
+      "propertyReferenceCollections": {},
+      "propertiesOmitted": {},
+      "propertyErrors": {},
+      "propertiesMissing": [],
+      "children": [
+        {
+          "kind": "InputParameter",
+          "name": "Correlation",
+          "modelName": "Correlation",
+          "label": "Correlation",
+          "key": "dZeCjNh03hIvzMwgj2Lypw",
+          "reference": "@dZeCjNh03hIvzMwgj2Lypw",
+          "path": "BusinessProcess:SSAMDbgWorkflow/InputParameter:Correlation",
+          "properties": {
+            "DataType": "BasicType:Text",
+            "Name": "Correlation",
+            "IsMandatory": "True",
+            "ReadableIdentifier": "Correlation"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Text",
+              "key": "uROOBXPvQEyU76NWO+1uxQ",
+              "reference": "@uROOBXPvQEyU76NWO+1uxQ",
+              "path": "BasicType:Text"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "InputParameter",
+          "name": "Seed",
+          "modelName": "Seed",
+          "label": "Seed",
+          "key": "kWlxyeuir2fhbWjZ4jH2WQ",
+          "reference": "@kWlxyeuir2fhbWjZ4jH2WQ",
+          "path": "BusinessProcess:SSAMDbgWorkflow/InputParameter:Seed",
+          "properties": {
+            "DataType": "BasicType:Integer",
+            "Name": "Seed",
+            "IsMandatory": "True",
+            "ReadableIdentifier": "Seed"
+          },
+          "propertyReferences": {
+            "DataType": {
+              "kind": "BasicType",
+              "name": "",
+              "label": "Integer",
+              "key": "j2Lc0phK0kuggij4gQYfAw",
+              "reference": "@j2Lc0phK0kuggij4gQYfAw",
+              "path": "BasicType:Integer"
+            }
+          },
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "StartNode",
+          "name": "Start",
+          "modelName": "Start",
+          "label": "Start",
+          "key": "RxTL2JzYYE2V0g2EIcE3Pg",
+          "reference": "@RxTL2JzYYE2V0g2EIcE3Pg",
+          "path": "BusinessProcess:SSAMDbgWorkflow/StartNode:Start",
+          "properties": {
+            "Connectors": "[BusinessProcessConnector:]",
+            "Frequency": "None",
+            "HorizontalPosition": "3200",
+            "InstanceLabel": "WorkflowProbeRequested.Correlation",
+            "IsDisabled": "False",
+            "Label": "Start",
+            "Name": "Start",
+            "StartProcessOn": "GlobalEventSignature:WorkflowProbeRequested",
+            "Target": "AutomaticActivityNode:ObserveWorkflowValue",
+            "TriggerMode": "Event",
+            "VerticalPosition": "800",
+            "ReadableIdentifier": "Start"
+          },
+          "propertyReferences": {
+            "StartProcessOn": {
+              "kind": "GlobalEventSignature",
+              "name": "WorkflowProbeRequested",
+              "label": "WorkflowProbeRequested",
+              "key": "Pe0zhXnJaEW04um0iB_qmQ",
+              "reference": "@Pe0zhXnJaEW04um0iB_qmQ",
+              "path": "Reference:SSAMDbgWorkflowProducer/GlobalEventSignature:WorkflowProbeRequested"
+            },
+            "Target": {
+              "kind": "AutomaticActivityNode",
+              "name": "ObserveWorkflowValue",
+              "label": "Observe synthetic values",
+              "key": "wqqARKZdikaaTuad5s+WIA",
+              "reference": "@wqqARKZdikaaTuad5s+WIA",
+              "path": "BusinessProcess:SSAMDbgWorkflow/AutomaticActivityNode:ObserveWorkflowValue"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "BusinessProcessConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "eCTQY6Rfi0y7mnQMXY3soQ",
+                  "reference": "@eCTQY6Rfi0y7mnQMXY3soQ",
+                  "path": "BusinessProcess:SSAMDbgWorkflow/StartNode:Start/BusinessProcessConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "Schedule",
+              "name": "Schedule",
+              "modelName": "",
+              "label": "Schedule",
+              "key": "RxTL2JzYYE2V0g2EIcE3Pg.#ScheduleConfiguration",
+              "reference": "@RxTL2JzYYE2V0g2EIcE3Pg.#ScheduleConfiguration",
+              "path": "BusinessProcess:SSAMDbgWorkflow/StartNode:Start/Schedule:Schedule",
+              "properties": {
+                "WhenPublished": "False"
+              },
+              "propertyReferences": {},
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "BusinessProcessConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "eCTQY6Rfi0y7mnQMXY3soQ",
+              "reference": "@eCTQY6Rfi0y7mnQMXY3soQ",
+              "path": "BusinessProcess:SSAMDbgWorkflow/StartNode:Start/BusinessProcessConnector:",
+              "properties": {
+                "Target": "AutomaticActivityNode:ObserveWorkflowValue"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "AutomaticActivityNode",
+                  "name": "ObserveWorkflowValue",
+                  "label": "Observe synthetic values",
+                  "key": "wqqARKZdikaaTuad5s+WIA",
+                  "reference": "@wqqARKZdikaaTuad5s+WIA",
+                  "path": "BusinessProcess:SSAMDbgWorkflow/AutomaticActivityNode:ObserveWorkflowValue"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "TextBasedExpression",
+              "name": "WorkflowProbeRequested.Correlation",
+              "modelName": "",
+              "label": "WorkflowProbeRequested.Correlation",
+              "key": "RxTL2JzYYE2V0g2EIcE3Pg.#InstanceLabel",
+              "reference": "@RxTL2JzYYE2V0g2EIcE3Pg.#InstanceLabel",
+              "path": "BusinessProcess:SSAMDbgWorkflow/StartNode:Start/TextBasedExpression:WorkflowProbeRequested.Correlation",
+              "properties": {
+                "Type": "BasicType:Text"
+              },
+              "propertyReferences": {
+                "Type": {
+                  "kind": "BasicType",
+                  "name": "",
+                  "label": "Text",
+                  "key": "uROOBXPvQEyU76NWO+1uxQ",
+                  "reference": "@uROOBXPvQEyU76NWO+1uxQ",
+                  "path": "BasicType:Text"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 3,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "AutomaticActivityNode",
+          "name": "ObserveWorkflowValue",
+          "modelName": "ObserveWorkflowValue",
+          "label": "Observe synthetic values",
+          "key": "wqqARKZdikaaTuad5s+WIA",
+          "reference": "@wqqARKZdikaaTuad5s+WIA",
+          "path": "BusinessProcess:SSAMDbgWorkflow/AutomaticActivityNode:ObserveWorkflowValue",
+          "properties": {
+            "ActionToTrigger": "ServiceActionSignature:ObserveWorkflowValue",
+            "Connectors": "[BusinessProcessConnector:]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Label": "Observe synthetic values",
+            "Name": "ObserveWorkflowValue",
+            "Target": "EndNode:End",
+            "VerticalPosition": "2400",
+            "ReadableIdentifier": "ObserveWorkflowValue"
+          },
+          "propertyReferences": {
+            "ActionToTrigger": {
+              "kind": "ServiceActionSignature",
+              "name": "ObserveWorkflowValue",
+              "label": "ObserveWorkflowValue",
+              "key": "IqInAITfSEiYgwmJfDAE2A",
+              "reference": "@IqInAITfSEiYgwmJfDAE2A",
+              "path": "Reference:SSAMDbgWorkflowProducer/ServiceActionSignature:ObserveWorkflowValue"
+            },
+            "Target": {
+              "kind": "EndNode",
+              "name": "",
+              "label": "End",
+              "key": "pcQBZm98F0OYVTfnsHsySA",
+              "reference": "@pcQBZm98F0OYVTfnsHsySA",
+              "path": "BusinessProcess:SSAMDbgWorkflow/EndNode:End"
+            }
+          },
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [
+                {
+                  "kind": "BusinessProcessConnector",
+                  "name": "",
+                  "label": "",
+                  "key": "IDLUukkzIkKYvJjTBn2s5g",
+                  "reference": "@IDLUukkzIkKYvJjTBn2s5g",
+                  "path": "BusinessProcess:SSAMDbgWorkflow/AutomaticActivityNode:ObserveWorkflowValue/BusinessProcessConnector:"
+                }
+              ],
+              "total": 1,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "Argument",
+              "name": "Seed",
+              "modelName": "",
+              "label": "Seed",
+              "key": "AjroAMGR_0+E_x+mr7S8lw",
+              "reference": "@AjroAMGR_0+E_x+mr7S8lw",
+              "path": "BusinessProcess:SSAMDbgWorkflow/AutomaticActivityNode:ObserveWorkflowValue/Argument:Seed",
+              "properties": {
+                "Value": "Start.WorkflowProbeRequested.Seed",
+                "Parameter": "InputParameterSignature:Seed"
+              },
+              "propertyReferences": {
+                "Parameter": {
+                  "kind": "InputParameterSignature",
+                  "name": "Seed",
+                  "label": "Seed",
+                  "key": "lbV4E2Qtr0+0O1ya4YmWfg",
+                  "reference": "@lbV4E2Qtr0+0O1ya4YmWfg",
+                  "path": "Reference:SSAMDbgWorkflowProducer/ServiceActionSignature:ObserveWorkflowValue/InputParameterSignature:Seed"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "Start.WorkflowProbeRequested.Seed",
+                  "modelName": "",
+                  "label": "Start.WorkflowProbeRequested.Seed",
+                  "key": "AjroAMGR_0+E_x+mr7S8lw.#Value",
+                  "reference": "@AjroAMGR_0+E_x+mr7S8lw.#Value",
+                  "path": "BusinessProcess:SSAMDbgWorkflow/AutomaticActivityNode:ObserveWorkflowValue/Argument:Seed/TextBasedExpression:Start.WorkflowProbeRequested.Seed",
+                  "properties": {
+                    "Type": "BasicType:Integer"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Integer",
+                      "key": "j2Lc0phK0kuggij4gQYfAw",
+                      "reference": "@j2Lc0phK0kuggij4gQYfAw",
+                      "path": "BasicType:Integer"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 1,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "Argument",
+              "name": "Correlation",
+              "modelName": "",
+              "label": "Correlation",
+              "key": "jEY7FXOIU0ilcc_pX0NvXw",
+              "reference": "@jEY7FXOIU0ilcc_pX0NvXw",
+              "path": "BusinessProcess:SSAMDbgWorkflow/AutomaticActivityNode:ObserveWorkflowValue/Argument:Correlation",
+              "properties": {
+                "Value": "Start.WorkflowProbeRequested.Correlation",
+                "Parameter": "InputParameterSignature:Correlation"
+              },
+              "propertyReferences": {
+                "Parameter": {
+                  "kind": "InputParameterSignature",
+                  "name": "Correlation",
+                  "label": "Correlation",
+                  "key": "VL7cAz5mi0CBsd6XxoAd2Q",
+                  "reference": "@VL7cAz5mi0CBsd6XxoAd2Q",
+                  "path": "Reference:SSAMDbgWorkflowProducer/ServiceActionSignature:ObserveWorkflowValue/InputParameterSignature:Correlation"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [
+                {
+                  "kind": "TextBasedExpression",
+                  "name": "Start.WorkflowProbeRequested.Correlation",
+                  "modelName": "",
+                  "label": "Start.WorkflowProbeRequested.Correlation",
+                  "key": "jEY7FXOIU0ilcc_pX0NvXw.#Value",
+                  "reference": "@jEY7FXOIU0ilcc_pX0NvXw.#Value",
+                  "path": "BusinessProcess:SSAMDbgWorkflow/AutomaticActivityNode:ObserveWorkflowValue/Argument:Correlation/TextBasedExpression:Start.WorkflowProbeRequested.Correlation",
+                  "properties": {
+                    "Type": "BasicType:Text"
+                  },
+                  "propertyReferences": {
+                    "Type": {
+                      "kind": "BasicType",
+                      "name": "",
+                      "label": "Text",
+                      "key": "uROOBXPvQEyU76NWO+1uxQ",
+                      "reference": "@uROOBXPvQEyU76NWO+1uxQ",
+                      "path": "BasicType:Text"
+                    }
+                  },
+                  "propertyReferenceCollections": {},
+                  "propertiesOmitted": {},
+                  "propertyErrors": {},
+                  "propertiesMissing": [],
+                  "children": [],
+                  "childrenTotal": 0,
+                  "childrenOmitted": 0
+                }
+              ],
+              "childrenTotal": 1,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "BusinessProcessConnector",
+              "name": "",
+              "modelName": "",
+              "label": "",
+              "key": "IDLUukkzIkKYvJjTBn2s5g",
+              "reference": "@IDLUukkzIkKYvJjTBn2s5g",
+              "path": "BusinessProcess:SSAMDbgWorkflow/AutomaticActivityNode:ObserveWorkflowValue/BusinessProcessConnector:",
+              "properties": {
+                "Target": "EndNode:End"
+              },
+              "propertyReferences": {
+                "Target": {
+                  "kind": "EndNode",
+                  "name": "",
+                  "label": "End",
+                  "key": "pcQBZm98F0OYVTfnsHsySA",
+                  "reference": "@pcQBZm98F0OYVTfnsHsySA",
+                  "path": "BusinessProcess:SSAMDbgWorkflow/EndNode:End"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 3,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "EndNode",
+          "name": "End",
+          "modelName": "",
+          "label": "End",
+          "key": "pcQBZm98F0OYVTfnsHsySA",
+          "reference": "@pcQBZm98F0OYVTfnsHsySA",
+          "path": "BusinessProcess:SSAMDbgWorkflow/EndNode:End",
+          "properties": {
+            "Connectors": "[]",
+            "HorizontalPosition": "3200",
+            "IsDisabled": "False",
+            "Label": "End",
+            "VerticalPosition": "4000",
+            "ReadableIdentifier": "(3200,4000)"
+          },
+          "propertyReferences": {},
+          "propertyReferenceCollections": {
+            "Connectors": {
+              "items": [],
+              "total": 0,
+              "omitted": 0
+            }
+          },
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [],
+          "childrenTotal": 0,
+          "childrenOmitted": 0
+        }
+      ],
+      "childrenTotal": 5,
+      "childrenOmitted": 0
+    },
+    {
+      "kind": "Reference",
+      "name": "SSAMDbgWorkflowProducer",
+      "modelName": "SSAMDbgWorkflowProducer",
+      "label": "SSAMDbgWorkflowProducer",
+      "key": "TeAMAr75UEqE7wD7d1f0QQ",
+      "reference": "@TeAMAr75UEqE7wD7d1f0QQ",
+      "path": "Reference:SSAMDbgWorkflowProducer",
+      "properties": {
+        "Description": "Unpublished diagnostic candidate. No entities, SQL, external HTTP or business data. Event creates one Workflow instance after publication only.",
+        "ESpaceType": "Mobile",
+        "Hash": "00000000-0000-0000-0000-000000000000",
+        "IsMobilePlugin": "False",
+        "JQueryVersion": "JQuery183",
+        "Kind": "eSpace",
+        "ModuleKey": "yxrq9gPJC0qKPoiEdBf4UA",
+        "ModuleType": "CrossDevice",
+        "Name": "SSAMDbgWorkflowProducer",
+        "ReadableIdentifier": "SSAMDbgWorkflowProducer"
+      },
+      "propertyReferences": {},
+      "propertyReferenceCollections": {},
+      "propertiesOmitted": {},
+      "propertyErrors": {},
+      "propertiesMissing": [],
+      "children": [
+        {
+          "kind": "ServiceActionSignature",
+          "name": "ObserveWorkflowValue",
+          "modelName": "ObserveWorkflowValue",
+          "label": "ObserveWorkflowValue",
+          "key": "IqInAITfSEiYgwmJfDAE2A",
+          "reference": "@IqInAITfSEiYgwmJfDAE2A",
+          "path": "Reference:SSAMDbgWorkflowProducer/ServiceActionSignature:ObserveWorkflowValue",
+          "properties": {
+            "Description": "Deterministic Workflow automatic activity. In-memory computation only; no business persistence or external services.",
+            "Name": "ObserveWorkflowValue",
+            "ReadableIdentifier": "ObserveWorkflowValue",
+            "OriginalKey": "YtJpu_pKR0a2xAv3zsPA_A"
+          },
+          "propertyReferences": {},
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "InputParameterSignature",
+              "name": "Correlation",
+              "modelName": "Correlation",
+              "label": "Correlation",
+              "key": "VL7cAz5mi0CBsd6XxoAd2Q",
+              "reference": "@VL7cAz5mi0CBsd6XxoAd2Q",
+              "path": "Reference:SSAMDbgWorkflowProducer/ServiceActionSignature:ObserveWorkflowValue/InputParameterSignature:Correlation",
+              "properties": {
+                "DataType": "BasicType:Text",
+                "Name": "Correlation",
+                "IsMandatory": "True",
+                "ReadableIdentifier": "Correlation",
+                "OriginalKey": "zXgxrLMoh0K4aoVdH7ZIRw"
+              },
+              "propertyReferences": {
+                "DataType": {
+                  "kind": "BasicType",
+                  "name": "",
+                  "label": "Text",
+                  "key": "uROOBXPvQEyU76NWO+1uxQ",
+                  "reference": "@uROOBXPvQEyU76NWO+1uxQ",
+                  "path": "BasicType:Text"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "InputParameterSignature",
+              "name": "Seed",
+              "modelName": "Seed",
+              "label": "Seed",
+              "key": "lbV4E2Qtr0+0O1ya4YmWfg",
+              "reference": "@lbV4E2Qtr0+0O1ya4YmWfg",
+              "path": "Reference:SSAMDbgWorkflowProducer/ServiceActionSignature:ObserveWorkflowValue/InputParameterSignature:Seed",
+              "properties": {
+                "DataType": "BasicType:Integer",
+                "Name": "Seed",
+                "IsMandatory": "True",
+                "ReadableIdentifier": "Seed",
+                "OriginalKey": "VUUZsHBqckKouWERB+xWOA"
+              },
+              "propertyReferences": {
+                "DataType": {
+                  "kind": "BasicType",
+                  "name": "",
+                  "label": "Integer",
+                  "key": "j2Lc0phK0kuggij4gQYfAw",
+                  "reference": "@j2Lc0phK0kuggij4gQYfAw",
+                  "path": "BasicType:Integer"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "OutputParameterSignature",
+              "name": "Result",
+              "modelName": "Result",
+              "label": "Result",
+              "key": "iOLzDvqU6UuZwFiHC0+MLQ",
+              "reference": "@iOLzDvqU6UuZwFiHC0+MLQ",
+              "path": "Reference:SSAMDbgWorkflowProducer/ServiceActionSignature:ObserveWorkflowValue/OutputParameterSignature:Result",
+              "properties": {
+                "DataType": "BasicType:Integer",
+                "Name": "Result",
+                "ReadableIdentifier": "Result",
+                "OriginalKey": "aWmltBnxnUGvXHE+SgyBXg"
+              },
+              "propertyReferences": {
+                "DataType": {
+                  "kind": "BasicType",
+                  "name": "",
+                  "label": "Integer",
+                  "key": "j2Lc0phK0kuggij4gQYfAw",
+                  "reference": "@j2Lc0phK0kuggij4gQYfAw",
+                  "path": "BasicType:Integer"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "OutputParameterSignature",
+              "name": "CorrelationEcho",
+              "modelName": "CorrelationEcho",
+              "label": "CorrelationEcho",
+              "key": "pmrANAk5zkuJRmX9NCLBBg",
+              "reference": "@pmrANAk5zkuJRmX9NCLBBg",
+              "path": "Reference:SSAMDbgWorkflowProducer/ServiceActionSignature:ObserveWorkflowValue/OutputParameterSignature:CorrelationEcho",
+              "properties": {
+                "DataType": "BasicType:Text",
+                "Name": "CorrelationEcho",
+                "ReadableIdentifier": "CorrelationEcho",
+                "OriginalKey": "7wwoVCKH2UCSlOynAKJQvA"
+              },
+              "propertyReferences": {
+                "DataType": {
+                  "kind": "BasicType",
+                  "name": "",
+                  "label": "Text",
+                  "key": "uROOBXPvQEyU76NWO+1uxQ",
+                  "reference": "@uROOBXPvQEyU76NWO+1uxQ",
+                  "path": "BasicType:Text"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 4,
+          "childrenOmitted": 0
+        },
+        {
+          "kind": "GlobalEventSignature",
+          "name": "WorkflowProbeRequested",
+          "modelName": "WorkflowProbeRequested",
+          "label": "WorkflowProbeRequested",
+          "key": "Pe0zhXnJaEW04um0iB_qmQ",
+          "reference": "@Pe0zhXnJaEW04um0iB_qmQ",
+          "path": "Reference:SSAMDbgWorkflowProducer/GlobalEventSignature:WorkflowProbeRequested",
+          "properties": {
+            "Description": "Carries synthetic correlation and value to one diagnostic Workflow instance.",
+            "Name": "WorkflowProbeRequested",
+            "ReadableIdentifier": "WorkflowProbeRequested",
+            "OriginalKey": "oH6LwRgokka+eFKXJ+jdTQ"
+          },
+          "propertyReferences": {},
+          "propertyReferenceCollections": {},
+          "propertiesOmitted": {},
+          "propertyErrors": {},
+          "propertiesMissing": [],
+          "children": [
+            {
+              "kind": "InputParameterSignature",
+              "name": "Correlation",
+              "modelName": "Correlation",
+              "label": "Correlation",
+              "key": "M_CQMAa6aUqwzuz+SkfptQ",
+              "reference": "@M_CQMAa6aUqwzuz+SkfptQ",
+              "path": "Reference:SSAMDbgWorkflowProducer/GlobalEventSignature:WorkflowProbeRequested/InputParameterSignature:Correlation",
+              "properties": {
+                "DataType": "BasicType:Text",
+                "Name": "Correlation",
+                "IsMandatory": "True",
+                "ReadableIdentifier": "Correlation",
+                "OriginalKey": "JSFbOvdYuUSrLpvUMHdXhg"
+              },
+              "propertyReferences": {
+                "DataType": {
+                  "kind": "BasicType",
+                  "name": "",
+                  "label": "Text",
+                  "key": "uROOBXPvQEyU76NWO+1uxQ",
+                  "reference": "@uROOBXPvQEyU76NWO+1uxQ",
+                  "path": "BasicType:Text"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            },
+            {
+              "kind": "InputParameterSignature",
+              "name": "Seed",
+              "modelName": "Seed",
+              "label": "Seed",
+              "key": "ML5TnQikQkayDeFtAXrJEQ",
+              "reference": "@ML5TnQikQkayDeFtAXrJEQ",
+              "path": "Reference:SSAMDbgWorkflowProducer/GlobalEventSignature:WorkflowProbeRequested/InputParameterSignature:Seed",
+              "properties": {
+                "DataType": "BasicType:Integer",
+                "Name": "Seed",
+                "IsMandatory": "True",
+                "ReadableIdentifier": "Seed",
+                "OriginalKey": "ovTmxiXfdkSUW+CWWGu2AQ"
+              },
+              "propertyReferences": {
+                "DataType": {
+                  "kind": "BasicType",
+                  "name": "",
+                  "label": "Integer",
+                  "key": "j2Lc0phK0kuggij4gQYfAw",
+                  "reference": "@j2Lc0phK0kuggij4gQYfAw",
+                  "path": "BasicType:Integer"
+                }
+              },
+              "propertyReferenceCollections": {},
+              "propertiesOmitted": {},
+              "propertyErrors": {},
+              "propertiesMissing": [],
+              "children": [],
+              "childrenTotal": 0,
+              "childrenOmitted": 0
+            }
+          ],
+          "childrenTotal": 2,
+          "childrenOmitted": 0
+        }
+      ],
+      "childrenTotal": 2,
+      "childrenOmitted": 0
+    }
+  ]
+}

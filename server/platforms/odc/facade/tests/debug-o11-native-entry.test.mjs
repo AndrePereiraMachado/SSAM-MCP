@@ -7,6 +7,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { createO11NativeEntryBroker, readO11NativeEntryContract, o11NativePublicCode } from '../debug-o11-native-entry.mjs';
+import { originalO11WorkerSuccess, o11InspectionEnableOptions } from '../debug-o11-native-entry-worker.mjs';
 
 // Synthetic local protocol fixtures. They qualify gates and RPC, not an original OutSystems runtime.
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -50,6 +51,62 @@ function childFixture(onMessage) {
       queueMicrotask(() => onMessage(JSON.parse(line), reply)); } });
   return child;
 }
+
+test('answered login refusal stays failed while successful disposal is acknowledged separately', async t => {
+  for (const cleared of [true, false]) {
+    const f = fixture(t); let initial;
+    const failure = { ok: false, error: 'debug_o11_native_login_failed', authenticated: false,
+      loginSubmittedCount: 1, loginAnsweredCount: 1, diagnostics: { errorType: 'InvalidLoginException' } };
+    const child = childFixture((message, reply) => {
+      if (message.op === 'prepare') { initial = message.input; reply(originalO11WorkerSuccess(message.id, {}, receipt(initial))); }
+      if (message.op === 'authenticate') reply({ id: message.id, ok: false, error: failure.error, receipt: receipt(initial, failure) });
+      if (message.op === 'dispose') {
+        const final = receipt(initial, { ...failure, phase: 'disposed', memoryCleared: cleared, nativeContextReferencesReleased: cleared });
+        reply(originalO11WorkerSuccess(message.id, final, final));
+      }
+    });
+    const handle = await createO11NativeEntryBroker({ root: f.root, spawnImpl: () => child }).prepare(f);
+    await assert.rejects(handle.authenticate({}), /debug_o11_native_login_failed/);
+    const disposed = await handle.dispose();
+    assert.equal(disposed.ok, cleared);
+    assert.equal(disposed.workerExited, true);
+    const processReceipt = JSON.parse(fs.readFileSync(path.join(f.directory, 'native-entry-process-receipt.json')));
+    assert.equal(processReceipt.workerExited, true);
+    assert.equal(processReceipt.nativeMemoryCleared, cleared);
+    assert.equal(processReceipt.nativeContextReferencesReleased, cleared);
+    assert.equal(processReceipt.sessionId, f.sessionId);
+    assert.deepEqual(processReceipt.sourceContract, f.sourceContract);
+    assert.equal(handle.receipt().ok, false);
+    assert.equal(handle.receipt().authenticated, false);
+    assert.equal(handle.receipt().diagnostics.errorType, 'InvalidLoginException');
+    assert.equal(handle.receipt().requestSubmittedCount, 0);
+    assert.equal((await handle.dispose()).ok, cleared);
+  }
+});
+
+test('O11 broker keeps interactive invocation until the fixed server lease, then refuses renewal by another scenario', async t => {
+  const f = fixture(t), now = Date.now();
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now });
+  let invocation, send;
+  const child = childFixture((message, reply) => {
+    send = reply;
+    if (message.op === 'invoke') { invocation = message; return; }
+    reply({ id: message.id, ok: true, receipt: receipt(f),
+      ...(message.op === 'configure-server-inspection' ? { configured: true, expiresAt: message.input.expiresAt } : {}) });
+  });
+  const handle = await createO11NativeEntryBroker({ root: f.root, spawnImpl: () => child }).prepare(f);
+  const expiresAt = new Date(now + 30000).toISOString();
+  await handle.configureServerInspection({ expiresAt });
+  const first = handle.invoke({ beforeRequest: async () => {}, scenario: { name: 'one' } });
+  await new Promise(resolve => queueMicrotask(resolve));
+  t.mock.timers.tick(22000); assert.equal(child.killed, undefined);
+  send({ id: invocation.id, ok: true, receipt: receipt(f), scenario: { ok: true } });
+  assert.equal((await first).scenario.ok, true);
+  const second = handle.invoke({ beforeRequest: async () => {}, scenario: { name: 'two' } });
+  const rejected = assert.rejects(second, /worker_unavailable/);
+  t.mock.timers.tick(23001); await new Promise(resolve => queueMicrotask(resolve));
+  await rejected; assert.equal(child.killed, true);
+});
 
 // v2: graph-chosen entry contract (no publication receipt; published identity = inventory row + capture + moduleinfo).
 function graphFixture(t) {
@@ -168,4 +225,26 @@ test('a process that never confirms exit cannot claim cleanup or provide a clean
   child.stdin.removeAllListeners('finish'); child.kill = () => false;
   let failure; try { await createO11NativeEntryBroker({ root: f.root, spawnImpl: () => child }).prepare(f); } catch (error) { failure = error; }
   assert.equal(failure.nativeEntryCleanupHandle, undefined);
+  const processReceipt = JSON.parse(fs.readFileSync(path.join(f.directory, 'native-entry-process-receipt.json')));
+  assert.equal(processReceipt.workerExited, false);
+  assert.equal(processReceipt.nativeMemoryCleared, false);
+  assert.equal(processReceipt.nativeContextReferencesReleased, false);
+});
+test('O11 broker and worker forward a boolean pauseOnExceptions to the client inspection and refuse other values', async t => {
+  const f = fixture(t), seen = [];
+  const child = childFixture((message, reply) => {
+    if (message.op === 'configure-inspection') { seen.push(message.input); reply({ id: message.id, ok: false, error: 'debug_o11_native_session_busy', receipt: receipt(f) }); return; }
+    reply({ id: message.id, ok: true, receipt: receipt(f) });
+  });
+  const handle = await createO11NativeEntryBroker({ root: f.root, spawnImpl: () => child }).prepare(f);
+  const options = { modules: [{ moduleKey: 'A'.repeat(22), sourceSha256: 'a'.repeat(64) }], variables: [], breakpoints: ['A'.repeat(22) + ':' + 'C'.repeat(22)], leaseMs: 5000, onEvent() {} };
+  await assert.rejects(handle.configureInspection({ ...options, pauseOnExceptions: 'yes' }), /debug_o11_native_inspection_options_invalid/);
+  assert.equal(seen.length, 0);
+  await assert.rejects(handle.configureInspection({ ...options, pauseOnExceptions: true }), /debug_o11_native_session_busy/);
+  assert.equal(seen[0].pauseOnExceptions, true); assert.equal('onEvent' in seen[0], false);
+  // The worker stores only the native enable options for the original debugger switch.
+  assert.deepEqual(o11InspectionEnableOptions(seen[0]), { breakpoints: options.breakpoints, pauseOnExceptions: true });
+  assert.deepEqual(o11InspectionEnableOptions({}), { breakpoints: [], pauseOnExceptions: false });
+  assert.throws(() => o11InspectionEnableOptions({ pauseOnExceptions: 1 }), /debug_o11_native_preparation_invalid/);
+  await handle.dispose();
 });

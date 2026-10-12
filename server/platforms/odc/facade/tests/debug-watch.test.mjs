@@ -204,3 +204,174 @@ test('ordinary start stays unchanged and the registered MCP tool describes watch
     assert.equal((await tool.fn(base)).op, 'watch');
   } finally { f.close(); }
 });
+
+test('internal O11 background watch uses native SSO without an app login and never proves ownership or identity', async () => {
+  const f = fixture('o11');
+  try {
+    f.input.trace = { focusFunctionKey: moduleKey, requireFunctionKey: moduleKey };
+    const result = await headlessDebug(f.input, { services: f.services, backgroundWatch: true, contextMode: 'native-background' });
+    assert.equal(result.ok, true); assert.equal(result.contextMode, 'native-background'); assert.equal(result.appUser, undefined);
+    for (const flag of ['requestOwnershipProved', 'appUserIdentityProved', 'rolesProved', 'executionCompleted']) assert.equal(result[flag], false);
+    assert.deepEqual(f.events, ['developer-sso-token', 'debugger-worker', 'private-bootstrap']);
+    assert.deepEqual(f.bootstrap.privateValues, []); assert.equal(f.bootstrap.trace.fullValues, false);
+    assert.equal(f.bootstrap.token, 'synthetic-developer-token'); assert.equal(f.bootstrap.soapSecret, 'synthetic-studio-id');
+    const manifest = JSON.parse(fs.readFileSync(path.join(f.services.sessionRoot, result.sessionId, 'manifest.json')));
+    assert.equal(manifest.appUser, undefined); assert.equal(manifest.backgroundWatch, true);
+    assert.doesNotMatch(JSON.stringify(manifest), /synthetic-/);
+    const stopped = await headlessDebug({ op: 'stop', sessionId: result.sessionId }, { services: f.services });
+    assert.equal(stopped.state, 'stopped'); assert.equal(stopped.appUser, undefined); assert.equal(stopped.requestOwnershipProved, false);
+    assert.equal(f.released.length, 0); assert.deepEqual(f.commands.map(c => c.op), ['stop']); assert.equal(fs.existsSync(manifest.lock), false);
+  } finally { f.close(); }
+});
+
+test('background full trace preserves the private native auth/redaction bootstrap and permits only status or stop afterwards', async () => {
+  const f = fixture('o11');
+  try {
+    f.input.trace = { fullValues: true, depth: 4, focusFunctionKey: moduleKey, requireFunctionKey: moduleKey,
+      scopes: { [moduleKey]: ['Count', 'Password', 'Lookup'] } };
+    const result = await headlessDebug(f.input, { services: f.services, backgroundWatch: true, contextMode: 'native-background' });
+    assert.equal(result.ok, true); assert.equal(result.valuesComplete, false); assert.equal(result.propagationProved, false);
+    assert.deepEqual(f.events, ['developer-sso-token', 'debugger-worker', 'private-bootstrap']);
+    assert.equal(f.bootstrap.trace.fullValues, true); assert.equal(f.bootstrap.trace.depth, 4);
+    assert.deepEqual(f.bootstrap.trace.scopes, f.input.trace.scopes); assert.deepEqual(f.bootstrap.privateValues, []);
+    // DebugSession adds exactly these private bootstrap values to its existing per-session DebugPolicy.
+    assert.equal(f.bootstrap.token, 'synthetic-developer-token'); assert.equal(f.bootstrap.soapUser, 'synthetic-studio-user');
+    assert.equal(f.bootstrap.soapSecret, 'synthetic-studio-id');
+    for (const op of ['variables', 'step-into', 'step-over', 'step-out', 'continue'])
+      await assert.rejects(headlessDebug({ op, sessionId: result.sessionId, threadId: 'T', eventId: '1', paths: ['Foreign.Value'] },
+        { services: f.services }), /background_watch_command_invalid/);
+    assert.equal(f.commands.length, 0);
+    const status = await headlessDebug({ op: 'status', sessionId: result.sessionId }, { services: f.services });
+    assert.equal(status.requestOwnershipProved, false); assert.equal(status.valuesComplete, false);
+    assert.equal((await headlessDebug({ op: 'stop', sessionId: result.sessionId }, { services: f.services })).state, 'stopped');
+    const manifest = JSON.parse(fs.readFileSync(path.join(f.services.sessionRoot, result.sessionId, 'manifest.json')));
+    assert.doesNotMatch(JSON.stringify(manifest), /synthetic-/); assert.equal(f.released.length, 0);
+    assert.equal(fs.existsSync(manifest.lock), false);
+  } finally { f.close(); }
+});
+
+test('background watch refuses unbound scopes, app identity, another lane or operation before native authentication', async () => {
+  const f = fixture('o11');
+  try {
+    const context = { services: f.services, backgroundWatch: true, contextMode: 'native-background' };
+    const full = { fullValues: true, focusFunctionKey: moduleKey, requireFunctionKey: moduleKey, scopes: { [moduleKey]: ['Count'] } };
+    f.input.trace = { focusFunctionKey: moduleKey, requireFunctionKey: moduleKey };
+    for (const [input, extra] of [[{ ...f.input, op: 'start' }, {}], [{ ...f.input, lane: 'odc', tenant: 'fixture' }, {}],
+      [{ ...f.input, trace: { fullValues: true } }, {}], [{ ...f.input, trace: { scopes: { [moduleKey]: ['Private'] } } }, {}],
+      [{ ...f.input, trace: { ...full, scopes: {} } }, {}],
+      [{ ...f.input, trace: { ...full, scopes: { [nodeKey]: ['Count'] } } }, {}],
+      [{ ...f.input, trace: { ...full, scopes: { [moduleKey]: ['Count', 'Count'] } } }, {}],
+      [{ ...f.input, trace: { ...full, scopes: { [moduleKey]: ['Foreign.Value'] } } }, {}],
+      [{ ...f.input, trace: { ...full, requireFunctionKey: nodeKey } }, {}],
+      [{ ...f.input, trace: { ...full, mode: 'breakpoints' } }, {}],
+      [{ ...f.input, paths: ['Count'], trace: full }, {}],
+      [{ ...f.input, trace: undefined }, {}],
+      [f.input, { appUser: {} }], [f.input, { redactionOnly: true }], [f.input, { contextMode: undefined }]])
+      await assert.rejects(headlessDebug(input, { ...context, ...extra }));
+    assert.deepEqual(f.events, []); assert.equal(fs.existsSync(f.services.sessionRoot), false);
+  } finally { f.close(); }
+});
+
+test('anonymous original-entry watch keeps its explicit context, uses only debugger SSO and restricts later commands', async () => {
+  for (const fullValues of [false, true]) {
+    const f = fixture('o11');
+    try {
+      f.input.trace = { fullValues, depth: 4, focusFunctionKey: moduleKey, requireFunctionKey: moduleKey,
+        scopes: fullValues ? { [moduleKey]: ['Count', 'Result', 'Password'] } : {} };
+      const result = await headlessDebug(f.input, { services: f.services, anonymousWatch: true, contextMode: 'anonymous' });
+      assert.equal(result.ok, true); assert.equal(result.contextMode, 'anonymous'); assert.equal(result.appUser, undefined);
+      for (const flag of ['requestOwnershipProved', 'appUserIdentityProved', 'rolesProved', 'propagationProved', 'executionCompleted'])
+        assert.equal(result[flag], false);
+      assert.deepEqual(f.events, ['developer-sso-token', 'debugger-worker', 'private-bootstrap']);
+      assert.deepEqual(f.bootstrap.privateValues, []); assert.deepEqual(f.bootstrap.trace.scopes, f.input.trace.scopes);
+      assert.equal(f.bootstrap.token, 'synthetic-developer-token'); assert.equal(f.bootstrap.soapSecret, 'synthetic-studio-id');
+      const manifest = JSON.parse(fs.readFileSync(path.join(f.services.sessionRoot, result.sessionId, 'manifest.json')));
+      assert.equal(manifest.contextMode, 'anonymous'); assert.equal(manifest.anonymousWatch, true);
+      assert.equal(manifest.appUser, undefined); assert.equal(manifest.backgroundWatch, undefined);
+      assert.doesNotMatch(JSON.stringify(manifest), /synthetic-/);
+      for (const op of ['variables', 'continue', 'step-into', 'step-over', 'step-out'])
+        await assert.rejects(headlessDebug({ op, sessionId: result.sessionId, threadId: 'T', eventId: '1', paths: ['Foreign.Value'] },
+          { services: f.services }), /anonymous_watch_command_invalid/);
+      assert.equal(f.commands.length, 0);
+      const status = await headlessDebug({ op: 'status', sessionId: result.sessionId }, { services: f.services });
+      assert.equal(status.contextMode, 'anonymous'); assert.equal(status.appUserIdentityProved, false);
+      const stopped = await headlessDebug({ op: 'stop', sessionId: result.sessionId }, { services: f.services });
+      assert.equal(stopped.state, 'stopped'); assert.equal(stopped.contextMode, 'anonymous');
+      assert.equal(f.released.length, 0); assert.equal(fs.existsSync(manifest.lock), false);
+    } finally { f.close(); }
+  }
+});
+
+test('anonymous watch refuses mixed contexts, injected identity and unbound roots before authentication', async () => {
+  const f = fixture('o11');
+  try {
+    const full = { fullValues: true, focusFunctionKey: moduleKey, requireFunctionKey: moduleKey, scopes: { [moduleKey]: ['Count'] } };
+    f.input.trace = full;
+    const context = { services: f.services, anonymousWatch: true, contextMode: 'anonymous' };
+    for (const [input, extra] of [[f.input, { backgroundWatch: true }], [f.input, { contextMode: 'native-background' }],
+      [f.input, { contextMode: undefined }], [f.input, { appUser: {} }], [f.input, { redactionOnly: true }],
+      [{ ...f.input, op: 'start' }, {}], [{ ...f.input, lane: 'odc', tenant: 'fixture' }, {}],
+      [{ ...f.input, trace: { ...full, requireFunctionKey: nodeKey } }, {}],
+      [{ ...f.input, trace: { ...full, scopes: { [nodeKey]: ['Count'] } } }, {}],
+      [{ ...f.input, trace: { ...full, scopes: { [moduleKey]: ['Foreign.Value'] } } }, {}],
+      [{ ...f.input, trace: { ...full, scopes: { [moduleKey]: ['Count', 'Count'] } } }, {}],
+      [{ ...f.input, trace: { ...full, scopes: {} } }, {}], [{ ...f.input, paths: ['Count'] }, {}],
+      [{ ...f.input, trace: { ...full, mode: 'breakpoints' } }, {}]])
+      await assert.rejects(headlessDebug(input, { ...context, ...extra }));
+    assert.deepEqual(f.events, []); assert.equal(fs.existsSync(f.services.sessionRoot), false);
+  } finally { f.close(); }
+});
+
+test('ODC background watch uses its native developer token, with exact action roots and no app-user session', async () => {
+  const f = fixture('odc');
+  try {
+    const context = { services: f.services, backgroundWatch: true, contextMode: 'native-background' };
+    f.input.trace = { fullValues: true, focusFunctionKey: moduleKey, requireFunctionKey: moduleKey, scopes: { [moduleKey]: ['Count', 'Result'] } };
+    for (const [input, extra] of [[f.input, { appUser: {} }], [f.input, { redactionOnly: true }],
+      [f.input, { contextMode: 'anonymous' }], [{ ...f.input, trace: { ...f.input.trace, requireFunctionKey: nodeKey } }, {}],
+      [{ ...f.input, trace: { ...f.input.trace, scopes: { [moduleKey]: ['Foreign.Value'] } } }, {}],
+      [{ ...f.input, paths: ['Result'] }, {}]])
+      await assert.rejects(headlessDebug(input, { ...context, ...extra }), /debug_odc_background_watch_context_invalid/);
+    assert.deepEqual(f.events, []);
+    const result = await headlessDebug(f.input, context);
+    assert.equal(result.contextMode, 'native-background'); assert.equal(result.appUser, undefined);
+    for (const flag of ['requestOwnershipProved', 'appUserIdentityProved', 'rolesProved', 'propagationProved', 'executionCompleted'])
+      assert.equal(result[flag], false);
+    assert.deepEqual(f.events, ['developer-debug-token', 'debugger-worker', 'private-bootstrap']);
+    assert.deepEqual(f.bootstrap.privateValues, []); assert.equal(f.bootstrap.token, 'synthetic-developer-token');
+    assert.equal(f.bootstrap.soapUser, undefined); assert.equal(f.bootstrap.soapSecret, undefined);
+    const manifest = JSON.parse(fs.readFileSync(path.join(f.services.sessionRoot, result.sessionId, 'manifest.json')));
+    assert.equal(manifest.backgroundWatch, true); assert.equal(manifest.appUser, undefined); assert.equal(manifest.o11Auth, undefined);
+    assert.doesNotMatch(JSON.stringify(manifest), /synthetic-/);
+    await assert.rejects(headlessDebug({ op: 'variables', sessionId: result.sessionId, threadId: 'T', eventId: '1', paths: ['Result'] },
+      { services: f.services }), /debug_odc_background_watch_command_invalid/);
+    const stopped = await headlessDebug({ op: 'stop', sessionId: result.sessionId }, { services: f.services });
+    assert.equal(stopped.contextMode, 'native-background'); assert.equal(stopped.executionCompleted, false);
+    assert.equal(f.released.length, 0); assert.equal(fs.existsSync(manifest.lock), false);
+  } finally { f.close(); }
+});
+
+for(const [lane,background] of [['o11',false],['o11',true],['odc',true],['odc',false]]) test(`original ${lane} ${background?'timer':'anonymous endpoint'} inspection uses bound metadata and no invented app identity`, async () => {
+ const f=fixture(lane);try{
+  const sourceSha256='e'.repeat(64),binding={moduleKey,functionKey:moduleKey,sourceSha256};
+  const scope={...binding,nodeKey},inspection={sources:[{moduleKey,sourceSha256}],scopes:[scope],variables:[{...scope,variableKey:'F'.repeat(22),name:'Count',category:'local',path:'Count'}]};
+  const input={...f.input,op:'start',autoContinue:false,inspection};
+  const field=background?'backgroundInspection':'anonymousInspection',context={services:f.services,[background?'backgroundWatch':'anonymousWatch']:true,contextMode:background?'native-background':'anonymous',[field]:binding};
+  for(const [request,extra] of [[input,{[background?'anonymousWatch':'backgroundWatch']:true}],[input,{appUser:{}}],[input,{contextMode:'app-user'}],
+   [input,{[field]:{...binding,sourceSha256:'f'.repeat(64)}}],
+   [{...input,inspection:{...inspection,sources:[]}},{}],
+   [{...input,inspection:{...inspection,scopes:[{...scope,functionKey:nodeKey}]}},{}]])
+    await assert.rejects(headlessDebug(request,{...context,...extra}),/anonymous_inspection_context_invalid/);
+  assert.equal(f.events.length,0);
+  const secondScope={...scope,functionKey:nodeKey};
+  const multiple={...input,inspection:{...inspection,scopes:[scope,secondScope]}};
+  for(const keys of [[],[nodeKey],[moduleKey,'invalid']])
+    await assert.rejects(headlessDebug(multiple,{...context,[field]:{...binding,functionKeys:keys}}),/anonymous_inspection_context_invalid/);
+  const started=await headlessDebug(multiple,{...context,[field]:{...binding,functionKeys:[moduleKey,nodeKey]}});assert.equal(started.ok,true);assert.equal(started.contextMode,background?'native-background':'anonymous');assert.equal(started.appUserIdentityProved,false);
+  assert.ok(!f.events.includes('private-app-login'));assert.ok(!f.events.includes('private-vault-read'));
+  assert.equal(f.bootstrap.autoContinue,false);assert.equal(f.bootstrap.trace,undefined);assert.deepEqual(f.bootstrap.inspection,multiple.inspection);
+  for(const op of ['scope','step-into','step-over','step-out','continue'])await headlessDebug({op,sessionId:started.sessionId,threadId:'T',eventId:'1'},{services:f.services});
+  await assert.rejects(headlessDebug({op:'variables',sessionId:started.sessionId,threadId:'T',eventId:'1',paths:['Foreign.Value']},{services:f.services}),/anonymous_watch_command_invalid/);
+  const stopped=await headlessDebug({op:'stop',sessionId:started.sessionId},{services:f.services});assert.equal(stopped.state,'stopped');assert.equal(stopped.rolesProved,false);
+ }finally{f.close();}
+});

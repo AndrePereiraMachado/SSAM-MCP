@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
-import { createKinds, O11_METHODS } from '../lib/kinds.mjs';
+import { createKinds, O11_METHODS, ODC_COMMANDS } from '../lib/kinds.mjs';
 import { createWorkspace } from '../lib/workspace.mjs';
 import { createAgent, readPack } from '../lib/agent.mjs';
 import { pipeName } from '../lib/odc-pipe.mjs';
@@ -90,12 +90,36 @@ test('attach and unknown commands never go through odc.pipe; login, export_*, fi
   } finally { removeRoot(root); }
 });
 
-test('o11.bridge passes exactly the 22 verbs of the thin bridge, in the order of its manifest (docs/O11-BRIDGE-FINA.md 3.2, 14)', async () => {
+test('24th release: reference-producers passes odc.pipe; the private Portal commands, portal-upload and the private SC transport never pass', async () => {
+  const root = makeRoot();
+  const pipe = await fakePipe('v35', PID);
+  try {
+    const { kinds } = kindsFor(root);
+    assert.ok(ODC_COMMANDS.includes('reference-producers'));
+    const answer = await kinds.execute('odc.pipe', { pid: PID, version: 'v35', args: ['reference-producers', 'Quotes'] });
+    assert.equal(JSON.parse(answer.line).ok, true);
+    assert.equal(pipe.lines[0], 'reference-producers Quotes');
+    // A path hidden in the module word is still a path of the final line.
+    await refused(kinds.execute('odc.pipe', { pid: PID, version: 'v35', args: ['reference-producers', 'Quotes C:\\x.oml'] }), 'PATH_FORBIDDEN');
+    for (const command of ['portal-private-call', 'portal-private-download', 'portal-api-client-fixture-cleanup', 'portal-upload']) {
+      assert.equal(ODC_COMMANDS.includes(command), false, command);
+      await refused(kinds.execute('odc.pipe', { pid: PID, version: 'v35', args: [command, 'agent:odc/journal/portal/requests/x.json'] }), 'COMMAND_NOT_ALLOWED');
+    }
+    for (const method of ['sc_private_http', 'sc_private_http_cookie']) {
+      assert.equal(O11_METHODS.includes(method), false, method);
+      await refused(kinds.execute('o11.bridge', { method, params: { host: 'lab.example.com' } }), 'METHOD_NOT_ALLOWED');
+    }
+    assert.equal(pipe.lines.length, 1, 'only reference-producers reached the bridge');
+  } finally { await pipe.close(); removeRoot(root); }
+});
+
+test('o11.bridge passes exactly the 23 verbs of the thin bridge, in the order of its manifest (docs/O11-BRIDGE-FINA.md 3.2, 14, 16)', async () => {
   // refresh_references (ninth release): the Studio's own Refresh References; answer_dependencies_dialog (servidor/fase4): the
-  // Manage Dependencies dialog answered as Cancel. No path in either, so nothing to confine.
+  // Manage Dependencies dialog answered as Cancel; sc_http (24th release): the Service Center over the Studio's own HTTP
+  // session. No path in any of them, so nothing to confine (sc_http args.outFile is refused like sc_web's).
   assert.deepEqual(O11_METHODS, ['ping', 'bridge_manifest', 'get_active_module', 'list_open_modules', 'get_errors', 'open_module', 'close_module',
     'publish', 'windows', 'ui_alive', 'close_dialog', 'snapshot_module', 'merge_from_oml', 'merge_status', 'environment_session', 'sc_api',
-    'sc_web', 'studio_login', 'sc_session', 'publish_log', 'refresh_references', 'answer_dependencies_dialog']);
+    'sc_web', 'sc_http', 'studio_login', 'sc_session', 'publish_log', 'refresh_references', 'answer_dependencies_dialog']);
   const root = makeRoot();
   const bridge = await fakeBridge(request => ({ success: true, data: { method: request.method } }));
   try {

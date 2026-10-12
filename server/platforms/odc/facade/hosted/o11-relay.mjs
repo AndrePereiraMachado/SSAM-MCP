@@ -14,6 +14,12 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 const MAX_LINE_BYTES = 16 * 1024 * 1024;
 const digest = text => createHash('sha256').update(String(text), 'utf8').digest();
 export const REFUSED_KEY = "Relay refused: not this customer's relay key";
+// prazos B (2026-10-12): the time a relayed call may take on the agent, where the kernel's own budget is longer than the
+// wire's default (timeoutFor: 120 s). The kernel's environment verbs and the delivery's producer authority wait 330 s for
+// an environment_session reply (Anvil.Cli Program.cs, BridgeClient(port, 330)), and the full bridge has no cut of its own,
+// so the local path gives each environment read 330 s; hosted, the agent cut the same read at 120 s. Sent as timeoutMs:
+// the agent honors it (kinds.mjs o11Bridge, at most 1 h) and the hub adds its margin (agent-executor DEADLINES).
+export const RELAY_BUDGET_MS = Object.freeze({ environment_session: 330000 });
 
 export async function startRelay({ key, call, log = () => {}, host = '127.0.0.1', port = 0 }) {
   if (typeof key !== 'string' || !key) throw new Error("The relay needs this customer's relay key");
@@ -45,7 +51,8 @@ export async function startRelay({ key, call, log = () => {}, host = '127.0.0.1'
       }
       const method = typeof request.method === 'string' ? request.method : '';
       try {
-        const value = await call('o11.bridge', { method, params: request.params ?? {} });
+        const budget = Object.hasOwn(RELAY_BUDGET_MS, method) ? RELAY_BUDGET_MS[method] : null;
+        const value = await call('o11.bridge', { method, params: request.params ?? {}, ...(budget ? { timeoutMs: budget } : {}) });
         const reply = value?.reply;
         // A delivered call without a bridge reply is an unknown outcome, never a made-up answer.
         if (!reply || typeof reply !== 'object') { log({ event: 'relay-unknown', method, code: 'NO_REPLY' }); socket.destroy(); return; }

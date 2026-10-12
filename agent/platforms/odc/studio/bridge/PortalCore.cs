@@ -8,10 +8,27 @@ using System.Text.RegularExpressions;
 
 // Portal lane of the bridge (v32), the part that never touches a Studio type: which requests may leave, the single
 // send through the Studio's authenticated HttpClient, the write reservation, the vault values a write names
-// (secretRefs) and the redaction of every answer. PortalCommands.cs binds it to the Studio session, to the Portal
-// window and to the Windows vault (PortalVault.cs); studio\bridge\tests compiles this file alone, with a fake vault.
+// (secretRefs) and the redaction of every answer. PortalCommands.cs binds it to the Studio session
+// and to the Windows vault (PortalVault.cs); studio\bridge\tests compiles this file alone, with a fake vault.
 // Answers follow _notes\scp\CONTRATO.md: { ok:true, source, host, user, elapsedMs, ... } or { ok:false, code, message }.
 internal static class PortalCore {
+    // This bridge does not own an internal Portal session. These compatibility
+    // commands must never inspect or create a browser, nor clear Studio cookies.
+    public static JsonObject HeadlessSession(string action, int argumentCount, string? host) {
+        if (!((action is "status" or "open" or "close" or "recheck") && argumentCount == 1)
+            && !(action == "fetch" && argumentCount == 2))
+            throw new Refusal("BAD_REQUEST", "portal-session status|open|close|recheck [--tenant <host>] | fetch <request.json> [--tenant <host>].");
+        if (action is "open" or "recheck" or "fetch")
+            throw new Refusal("HEADLESS_AUTH_UNAVAILABLE", "This bridge has no authenticated headless internal Portal transport. Use a compatible private profile through the facade; no window is opened or used.");
+        var result = new JsonObject {
+            ["ok"] = true, ["source"] = "studio-http", ["host"] = host,
+            ["signedIn"] = false, ["headlessAvailable"] = false, ["windowOpen"] = false,
+            ["instruction"] = "Internal Portal authentication requires a compatible private profile through the facade. This bridge does not provide that transport."
+        };
+        if (action == "close") { result["closed"] = false; result["cookiesDeleted"] = 0; }
+        return result;
+    }
+
     // servers[].url of the 14 public API families in portal\catalog\catalog.json. The Studio's handler puts the user's
     // Bearer on ANY URI it is given, so nothing outside these prefixes on the session's own host is ever sent.
     public static readonly string[] BasePaths = {
@@ -32,16 +49,86 @@ internal static class PortalCore {
     // Internal Portal routes known to only read (tool-surface\odc-portal-internal-routes.csv, class read). Any other
     // screenservice may change the tenant and goes only as an authorized write.
     public static readonly HashSet<string> KnownWebReads = new(StringComparer.Ordinal) {
+        "UnifiedExperienceCommonLib/UnifiedExpTools/UnifiedExperienceAside/DataActionGetUEAside",
+        "usersaccess/APIClients/apiclients/DataActionApiClients_GetAll",
+        "usersaccess/APIClients/apiclients/DataActionApiClientsStatus_GetAll",
+        "usersaccess/APIClients/apiclient/DataActionGetApiClientByKey",
+        "connections/ProviderBlocks/Connection_Edit_AzureAISearch/ActionConnection_CheckNameAvailability_Wrapper",
+        "connections/ProviderBlocks/Connection_Edit_CustomAISearch/ActionConnection_CheckNameAvailability_Wrapper",
+        "connections/ProviderBlocks/Connection_Edit_AzureAISearch/DataActionGetQueryTypes",
+        "connections/ProviderBlocks/Connection_View_AzureAISearch/DataActionGetQueryTypeLabels",
+        "apps/ApplicationMobile/extensibillitysetting/DataActionGetApplicationStages",
+        "apps/ApplicationMobile/extensibillitysetting/DataActionGetLatestDeployedAppVersion",
+        "apps/ApplicationMobile/extensibillitysetting/DataActionGetExtensibilitySettingInfo",
+        "agentguardrails/MainFlow/agentguardrails/DataActionGetStages",
+        "agentguardrails/MainFlow/agentguardrails/DataActionGetGuardrail",
+        "agentguardrails/MainFlow/agentguardrails/DataActionGetFeatureToggles",
+        "aimodels/MainFlow/aimodels/DataActionGetAIModels",
+        "aimodels/MainFlow/aimodels/DataActionGetStages",
+        "aimodels/MainFlow/AIModelProvider_List/DataActionGetProviders",
+        "aimodels/MainFlow/TrialAIModel_List/DataActionGetTrials",
+        "aimodels/MainFlow/aimodel/DataActionGetAIModel",
+        // Exact current read routes exercised by the facade; never classify by an action-name prefix.
+        "connections/Connections/connection_v2/DataActionGetLatestRevisionAndStages",
+        "connections/Connections/connection_v2/DataActionGetAssetDataForStage",
+        "knowledgebases/KnowledgeBases/createknowledgebase/DataActionGetStages",
+        "knowledgebases/DataSources/datasource/DataActionGetUploadLimits",
+        "knowledgebases/DataSources/datasource/DataActionGetEnums",
+        "knowledgebases/DataSourceFile/datasourcefile/DataActionGetDataSourceFile",
+        "knowledgebases/KnowledgeBases/knowledgebase/DataActionGetKnowledgeBase",
+        "knowledgebases/KnowledgeBases/knowledgebase/DataActionGetDataSources",
+        "knowledgebases/DataSources/datasource/DataActionGetDataSource",
+        "knowledgebases/DataSources/datasource/DataActionGetFiles",
+        "knowledgebases/DataSources/datasource/DataActionGetKnowledgeBaseAndStages",
+        "knowledgebases/KnowledgeBases/createknowledgebase/DataActionGetChunkingMethods",
+        "knowledgebases/KnowledgeBases/knowledgebases/DataActionGetKnowledgeBases",
+        "knowledgebases/Common_WebBlocks/KnowledgeBase_DeletePopup/DataActionGetConsumersList",
+        "connections/ProviderBlocks/Connection_Edit_A2A/DataActionGetAuthenticationTypesAndKeyLocations",
+        "connections/ProviderBlocks/Connection_Edit_A2A/ActionConnection_CheckNameAvailability_Wrapper",
+        "apps/ApplicationMobile/createandroidpackage/DataActionGetAndroidBuildType_NAOS",
+        "apps/ApplicationMobile/createiospackage/DataActionGetiOSBuildType_NAOS",
+        "apps/library/libraryrelease/DataActionGetSettings",
+        "apps/library/libraryrelease/DataActionGetRevision",
+        "agents/Evaluations_Datasets/dataset/DataActionGetDataset",
+        "agents/Evaluations_Datasets/Dataset_DetailsMoreOptions/DataActionGetEvaluationsByDatasetId",
+        "agents/Evaluations_Datasets/Dataset_TestCase_Create/DataActionGetJsonSchema",
+        "agents/Evaluations_Datasets/Dataset_Form/DataActionGetAgenticApps",
+        "agents/Evaluations_Components/Dropdown_ServiceActions/DataActionGetServiceActionsByApp",
+        "agents/Evaluations_Datasets/Dataset_Form/ActionDataset_GetTemplate_Wrapper",
+        // Current Agents routes observed in the 2026-10-09 module bundles. Keep
+        // exact action names: a DataAction prefix alone is not proof of a read.
+        "agents/Evaluations/evaluations/ActionCheckEvaluationsConsoleAvailability",
+        "agents/Evaluations/evaluations/DataActionGetFeatureToggles",
+        "agents/Evaluations/EvalsHome_DatasetList/DataActionGetDatasets",
+        "agents/Evaluations/EvalsHome_EvaluationList/DataActionGetEvaluations",
+        "agents/Evaluations/EvalsHome_RunsList/DataActionGetEvaluationRuns",
+        "agents/Evaluations_Details/EvaluationDetails_RunList/DataActionGetEvaluationRuns",
+        "agents/AgentsV2/agent/ActionCheckAgentsConsoleAvailability",
+        "agents/AgenticApps/AgentsV1/DataActionGetAgents",
+        "agents/AgentsV2/AgentsV2_AgentList/DataActionGetAgents",
+        "agents/AgenticApps/agenticapp/DataActionGetSettingsAndFeatureToggles",
+        "agents/AgenticApps/agenticapp/DataActionGetLatestAgentRevisionAndAgentStages",
+        "agents/AgenticApps_AgentElements/Agent_Elements/DataActionGetAgents",
+        "agents/AgenticApps_AgentElements/Agent_Guardrails/DataActionGetAgentGuardrail",
+        "agents/AgentsV2/AgentV2_Guardrails/DataActionGetAgentGuardrail",
+        "agents/AgenticApps_AgentElements/Agent_Guardrails_v5/DataActionGetAgentGuardrail",
+        "apps/Timers/timer/DataActionGetTimerInfo", "apps/Timers/timer/DataActionGetCurrentTimerRunInformation",
+        "apps/Timers/timer/DataActionGetPendingConfiguration", "apps/Timers/timer/DataActionGetLatestDeployedAppVersion",
+        "apps/Timers/timer/DataActionGetApplicationStages", "apps/Timers/timer/DataActionCheckLatestDeployment",
         "agents/Datasets/Dataset_CreateForm/ActionDataset_GetTemplate_Wrapper", "agents/Datasets/Dataset_CreateForm/DataActionGetAgenticApps",
-        "agents/Datasets/Dataset_CreateForm/DataActionGetServiceActionsByApp", "agents/EvaluationRuns/EvaluationRun_DetailedResults/DataActionGetEvaluationRun",
-        "agents/Evaluations/evaluation/ActionEvaluationRun_GetStatus_Wrapper", "agents/Evaluations/Evaluation_CreateForm/DataActionGetJudges",
+        "agents/Datasets/Dataset_CreateForm/DataActionGetServiceActionsByApp", "agents/Evaluations_EvaluationRuns/EvaluationRun_DetailedResults/DataActionGetEvaluationRun",
+        "agents/Evaluations_Details/evaluation/ActionEvaluationRun_GetStatus_Wrapper", "agents/Evaluations_Details/Evaluation_CreateForm/DataActionGetJudges",
+        "agents/Evaluations_Details/Evaluation_CreateForm/DataActionGetDatasets", "agents/Evaluations_Details/evaluation/DataActionGetEvaluation",
+        "agents/Evaluations_Details/evaluation/DataActionGetDevStage", "agents/Evaluations_Details/evaluation/DataActionGetOngoingEvaluationRun",
         "agents/MainFlow_Agents/agent/DataActionGetApplicationStages", "agents/MainFlow_Agents/agent/DataActionGetLatestAgentRevision",
         "agents/Mainflow_Evaluations/EvalsHome_DatasetList/DataActionGetDatasets", "agents/Mainflow_Evaluations/EvalsHome_EvaluationList/DataActionGetEvaluations",
         "agents/Mainflow_Evaluations/EvalsHome_RunsList/DataActionGetEvaluationRuns", "agents/Mainflow_Evaluations/evaluations/ActionCheckEvaluationsConsoleAvailability",
         "agents/Tab_AgentElements/Agent_Elements/DataActionGetAgents", "agents/Tab_AgentElements/Agent_Guardrails/DataActionGetAgentGuardrail",
         "connections/Connections/connection/DataActionGetSettings", "connections/Connections/connections/DataActionGetConnections",
+        "connections/Connections/connections_RDDFT1370/DataActionGetConnections",
         "connections/Connections/connections/DataActionGetProviders", "connections/Connections/elements/ActionConnection_GetEntityAttributes_Wrapper",
         "connections/Connections/elements/DataActionGetActions", "connections/Connections/elements/DataActionGetConnection",
+        "connections/Connections/connection/DataActionGetConnection",
         "connections/Connections/elements/DataActionGetEntities", "connections/Connections/elements/DataActionGetSelectedActions",
         "connections/Connections/elements/DataActionGetSelectedEntities", "connections/ConnectionsCommon/Connection_GetTestStatus/DataActionGetStatus",
         "connections/ProviderBlocks/Connection_Edit_MCPServer/ActionConnection_CheckNameAvailability_Wrapper",
@@ -54,6 +141,7 @@ internal static class PortalCore {
         "monitoring/logs/logs/DataActionGetFilter_Stages", "monitoring/logs/logs/DataActionLogSearch", "monitoring/traces/trace/DataActionGetTraceById",
         "monitoring/traces/traces/ActionTraceSearch_Wrapper", "monitoring/traces/TreeView_multipleRoots/DataActionGetLogsByTraceId",
         "monitoring/traces/TreeView_multipleRoots/DataActionGetSpans",
+        "monitoring/traces/trace/DataActionGetStage", "monitoring/traces/trace/DataActionGetSettings",
     };
     // The login flow belongs to the user in the window and the public API to portal-call; no page route reaches either.
     private static readonly string[] DeniedWebModules = { "authentication", "identity", "api" };
@@ -69,7 +157,7 @@ internal static class PortalCore {
     public sealed record ApiRequest(string? OperationId, string? ApiId, string Method, string BasePath, string Path, string? Query, string? ContentType,
         JsonNode? Body, string? BodyBase64, bool Write, string? OperationUuid, string? AuthorizeSha256, string? ConfirmTenant, IReadOnlyList<SecretRef>? SecretRefs = null);
     public sealed record WebRequest(string? OperationId, string Method, string Path, JsonNode? Body, bool Write, string? OperationUuid, string? AuthorizeSha256, string? ConfirmTenant,
-        IReadOnlyList<SecretRef>? SecretRefs = null);
+        IReadOnlyList<SecretRef>? SecretRefs = null, string? MobileUploadOperationUuid = null, string? MobileObjectUri = null, JsonNode? MobileExpectedContent = null);
     public sealed record TenantPolicy(string? Default, HashSet<string> ReadOnly);
     // Where a write leaves its reservation and outcome, and where an answer too large to inline is stored (redacted).
     public sealed record Places(string WritesDir, string DownloadsDir);
@@ -108,7 +196,7 @@ internal static class PortalCore {
         if (method is not ("GET" or "POST")) throw new Refusal("BAD_REQUEST", "Portal page routes take GET or POST.");
         if (method == "GET" && o["body"] != null) throw new Refusal("BAD_REQUEST", "A GET carries no body.");
         return new WebRequest(Text(o, "operationId"), method, Text(o, "path") ?? "", o["body"]?.DeepClone(), Flag(o, "write"), Text(o, "operationUuid"), Text(o, "authorizeSha256"), Text(o, "confirmTenant"),
-            ParseSecretRefs(o));
+            ParseSecretRefs(o), Text(o, "mobileUploadOperationUuid"), Text(o, "mobileObjectUri"), o["mobileExpectedContent"]?.DeepClone());
     }
 
     // ---- what may leave
@@ -410,7 +498,7 @@ internal static class PortalCore {
         response.GetType() != typeof(HttpResponseMessage) || ((int)response.StatusCode == 401 && !response.Headers.Any());
 
     private static readonly string[] AnswerHeaders = { "location", "x-request-id" };
-    private static async Task<(JsonObject Result, string State)> Shape(HttpResponseMessage response, string host, string? user, bool write, Places places, string? reservation, IReadOnlyList<string> placed, CancellationToken token) {
+    internal static async Task<(JsonObject Result, string State)> Shape(HttpResponseMessage response, string host, string? user, bool write, Places places, string? reservation, IReadOnlyList<string> placed, CancellationToken token) {
         var final = response.RequestMessage?.RequestUri;
         if (!SameHost(final, host)) {
             var where = final?.IsAbsoluteUri == true ? final.IdnHost : "(unknown)";
@@ -418,7 +506,7 @@ internal static class PortalCore {
                 : (Fail("HOST_MISMATCH", "The answer came from " + where + " after a redirect, not from " + host + "; it was discarded."), "failed");
         }
         if (IsSessionFailure(response))
-            return (Fail("STUDIO_NOT_SIGNED_IN", "The Studio could not renew its session on " + host + " (" + (response.ReasonPhrase ?? "token renewal failed") + "); sign in again in the Studio. The server processed nothing."), "rejected");
+            return (Fail("STUDIO_NOT_SIGNED_IN", "The Studio could not renew its session on " + host + " (" + (response.ReasonPhrase ?? "token renewal failed") + "); authenticated headless access is unavailable. The server processed nothing."), "rejected");
         var status = (int)response.StatusCode;
         var contentType = response.Content.Headers.ContentType?.ToString();
         var headers = new JsonObject();
@@ -503,10 +591,16 @@ internal static class PortalCore {
     public static JsonNode? Redact(JsonNode? node) {
         switch (node) {
             case JsonObject o: {
-                var secret = o["isSecret"] is JsonValue s && s.TryGetValue<bool>(out var b) && b;
+                var secret = (o["isSecret"] is JsonValue s && s.TryGetValue<bool>(out var b) && b)
+                    || (o["IsSecret"] is JsonValue upper && upper.TryGetValue<bool>(out var upperFlag) && upperFlag);
                 var copy = new JsonObject();
-                foreach (var (key, value) in o)
-                    copy[key] = (key != "isSecret" && !PublicKeys.Contains(key) && SensitiveKey.IsMatch(key)) || (secret && SecretValueKey.IsMatch(key)) ? Redacted : Redact(value);
+                foreach (var (key, value) in o) {
+                    var publicFlag=key.Equals("isSecret",StringComparison.OrdinalIgnoreCase)&&value is JsonValue flag&&flag.TryGetValue<bool>(out _);
+                    var publicLimit=key=="BinarySetting_Secret_MaxFileSize"&&value is JsonValue limit&&
+                        ((limit.TryGetValue<double>(out var size)&&double.IsFinite(size)&&size>=0&&size<=1048576)
+                        ||(limit.TryGetValue<string>(out var sizeText)&&Regex.IsMatch(sizeText,@"^(?:0|[1-9]\d{0,6})(?:\.\d{1,8})?$")&&double.TryParse(sizeText,System.Globalization.NumberStyles.AllowDecimalPoint,System.Globalization.CultureInfo.InvariantCulture,out var parsedSize)&&parsedSize<=1048576));
+                    copy[key] = (!publicFlag&&!publicLimit&&!PublicKeys.Contains(key)&&SensitiveKey.IsMatch(key)) || (secret && SecretValueKey.IsMatch(key)) ? Redacted : Redact(value);
+                }
                 return copy;
             }
             case JsonArray a: return new JsonArray(a.Select(Redact).ToArray());
@@ -546,7 +640,8 @@ internal static class PortalCore {
         if (rest.StartsWith("screenservices/", StringComparison.Ordinal)) {
             var route = rest["screenservices/".Length..];
             if (r.Method != "POST") throw new Refusal("BAD_REQUEST", "A screenservice takes POST.");
-            if (!WebRoute.IsMatch(route) || !route.StartsWith(module + "/", StringComparison.Ordinal)) throw new Refusal("BAD_REQUEST", "screenservice route must be <module>/<flow>/<screen>/<action> of the same module: " + route);
+            var sharedAside = module == "apps" && route == "UnifiedExperienceCommonLib/UnifiedExpTools/UnifiedExperienceAside/DataActionGetUEAside";
+            if (!WebRoute.IsMatch(route) || (!route.StartsWith(module + "/", StringComparison.Ordinal) && !sharedAside)) throw new Refusal("BAD_REQUEST", "screenservice route must belong to the same module or the exact Apps aside read: " + route);
             if (route.Split('/')[^1].Contains("decrypt", StringComparison.OrdinalIgnoreCase)) throw new Refusal("NOT_ALLOWED", "Routes that decrypt secrets are never called: " + route);
             var write = Classify(KnownWebReads.Contains(route), r.Write, "Portal route " + route);
             if (write) CheckWriteFields(r.OperationUuid, r.AuthorizeSha256);

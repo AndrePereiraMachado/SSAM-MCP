@@ -1,15 +1,15 @@
-// The internal Portal through the ODC Studio's own Portal window (bridge v32 `portal-session`, CONTRATO.md): the user
-// signs in once in that window (SSO/MFA included) and every call runs as a same-origin fetch inside the page. No
-// cookie, token or CSRF value ever reaches this process, nor the vault secret a write names by secretRefs (the bridge
-// reads it inside the Studio); the version metadata is resolved here, with the same PortalMetadata the vault broker
-// uses, over GETs through the same window.
+// Internal Portal transport through an authenticated headless bridge session.
+// The resolver requires portal-session:headless and a signed-in status before
+// using this adapter. Bridge v44 cannot establish that session; auto may select
+// a compatible private profile instead. No cookie/token is extracted from Studio.
 import fs from 'node:fs';
 import path from 'node:path';
 import { PortalMetadata } from './portal-metadata.mjs';
 import { PORTAL_READS, checkSecretRefs, pointerValue, routeOf, screenservice, wirePointer } from './portal-routes.mjs';
 import { fail, redact } from './errors.mjs';
+import { readCheckpoint } from '../../facade/read-budget.mjs';
 
-const WINDOW_CODES = new Set(['WEB_SIGN_IN_REQUIRED', 'STUDIO_NOT_SIGNED_IN', 'NOT_ALLOWED', 'HOST_MISMATCH', 'UNCERTAIN', 'BAD_REQUEST', 'REMOTE_ERROR']);
+const SESSION_CODES = new Set(['HEADLESS_AUTH_UNAVAILABLE', 'WEB_SIGN_IN_REQUIRED', 'STUDIO_NOT_SIGNED_IN', 'NOT_ALLOWED', 'HOST_MISMATCH', 'UNCERTAIN', 'BAD_REQUEST', 'REMOTE_ERROR']);
 
 export class StudioPortalBroker {
   // bridge(args) runs one bridge command; requestFile(json) writes it under journal\portal\requests and returns the path.
@@ -21,34 +21,36 @@ export class StudioPortalBroker {
   }
 
   async session(action) {
+    readCheckpoint('authentication');
     const answer = await this.bridge(['portal-session', action, '--tenant', this.host]);
     if (answer?.host && String(answer.host).toLowerCase() !== this.host) fail('HOST_MISMATCH', 'The Studio answered for another host.');
     return answer;
   }
 
   async request(value, { method = 'GET', body, write = false, operationUuid, authorizeSha256, confirmTenant, secretRefs } = {}) {
+    readCheckpoint('transport');
     const url = new URL(value);
-    if (url.origin !== this.origin || url.username || url.password || url.hash) fail('PORTAL_ORIGIN_DENIED', 'Only the tenant origin is reachable through the Studio Portal window.');
+    if (url.origin !== this.origin || url.username || url.password || url.hash) fail('PORTAL_ORIGIN_DENIED', 'Only the selected tenant origin is reachable through the Studio headless transport.');
     // secretRefs leave this process as vault entry names only; the bridge reads the entry inside the ODC Studio and
     // fills the placeholder right before the page's fetch (CONTRATO.md). Writes only; the pointers given here name the
     // screenservice input and go to the bridge as pointers into the wire body.
     if (secretRefs?.length && !write) fail('INPUT_INVALID', 'secretRefs travel only with a write.');
     const refs = checkSecretRefs(this.host, secretRefs ?? []).map(({ pointer, target, field }) => ({ pointer: wirePointer(pointer), target, field }));
     for (const ref of refs) if (pointerValue(body, ref.pointer) !== '') fail('INPUT_INVALID', 'Each secretRefs pointer must name an existing field of the body holding an empty placeholder: ' + ref.pointer);
-    const file = this.requestFile({ method, path: url.pathname + url.search, ...(body === undefined ? {} : { body }), write,
+    const file = await this.requestFile({ method, path: url.pathname + url.search, ...(body === undefined ? {} : { body }), write,
       ...(write ? { operationUuid, authorizeSha256, confirmTenant } : {}), ...(refs.length ? { secretRefs: refs } : {}) });
     const answer = await this.bridge(['portal-session', 'fetch', file, '--tenant', this.host]);
     if (answer?.outcome === 'gate_refused') fail('STUDIO_BUSY', 'The Studio was busy; nothing was sent.', { gate: answer.gate ?? null });
     if (!answer || answer.ok !== true) {
-      const code = WINDOW_CODES.has(answer?.code) ? answer.code : 'PORTAL_WINDOW_FAILED';
+      const code = SESSION_CODES.has(answer?.code) ? answer.code : 'PORTAL_WINDOW_FAILED';
       // A status means the request reached the Portal: `sent` lets a write tell "refused" from "maybe applied".
-      fail(code, code === 'WEB_SIGN_IN_REQUIRED' ? 'The Studio Portal window is not signed in: call odc_portal_login {tenant} and sign in there once.'
-        : code === 'UNCERTAIN' ? 'The request may have reached the Portal; reconcile by a read, never resend.' : 'The Studio Portal window refused or failed the request.',
+      fail(code, code === 'WEB_SIGN_IN_REQUIRED' || code === 'HEADLESS_AUTH_UNAVAILABLE' ? 'The Studio has no authenticated headless Portal session. Use an existing compatible private profile through auth:"auto"; interactive sign-in is not launched.'
+        : code === 'UNCERTAIN' ? 'The request may have reached the Portal; reconcile by a read, never resend.' : 'The Studio headless Portal transport refused or failed the request.',
         { ...(typeof answer?.status === 'number' ? { status: answer.status, sent: true } : {}), ...(answer?.gate ? { gate: answer.gate } : {}), ...(answer?.reason ? { reason: answer.reason } : {}) });
     }
     // The bridge answers with the Studio session's host name, compared without case like the bridge does.
     if (answer.host && String(answer.host).toLowerCase() !== this.host) fail('HOST_MISMATCH', 'The Studio answered for another host.');
-    if (answer.finalUrl && new URL(answer.finalUrl).origin !== this.origin) fail('HOST_MISMATCH', 'The Portal window left the tenant origin.');
+    if (answer.finalUrl && new URL(answer.finalUrl).origin !== this.origin) fail('HOST_MISMATCH', 'The Portal response left the tenant origin.');
     this.user = answer.user ?? this.user;
     // Bodies above 4 MB (large script bundles) come as a redacted file the bridge wrote under journal\portal\downloads.
     const text = typeof answer.bodyFile === 'string' ? readDownload(answer.bodyFile)

@@ -1,5 +1,5 @@
 {
- "description": "NEGATIVO (primeira-certa, A4/A6): uma op logic com uma action que falha no apply (call a action inexistente) aplica sem ela e sem a que a chama, e as outras chegam ao Verify (Text atribuido a Integer); a mesma recusa traz os patches exatos: output e argumento de uma action do proprio job escritos errado, NullDateTime( que e NullDate( e a sintaxe de uma expressao (==). Nada e salvo.",
+ "description": "NEGATIVO (primeira-certa, A4/A6): uma op logic com uma action que falha no apply (call a action inexistente) aplica sem ela e sem a que a chama, e as outras chegam ao Verify (Text atribuido a Integer); a mesma recusa traz os patches exatos: output e argumento de uma action do proprio job escritos errado, NullDateTime( que e NullDate( (dentro de um If o tipo alvo nao e conhecido: fora dele o motor ja escreve o nulo do tipo, JobNormalizer) e a sintaxe de uma expressao (==). Nada e salvo.",
  "base": "tests/fixtures/blank-service.oml",
  "expectError": [
   "[ARGUMENT_UNKNOWN]: 'Quantty' is not an input of PcCalc",
@@ -22,7 +22,7 @@
     "steps": [{"assign": {"Total": "Quantity", "Code": "\"x\""}}]},
    {"name": "PcUse", "kind": "server", "description": "Synthetic caller with the output and the input written wrong.",
     "outputs": [{"name": "R", "type": "Integer"}, {"name": "At", "type": "Date Time"}, {"name": "Same", "type": "Boolean"}],
-    "steps": [{"call": "PcCalc", "as": "Calc", "args": {"Quantty": "2"}}, {"assign": {"R": "Calc.Totl", "At": "NullDateTime()", "Same": "R == 1"}}]}
+    "steps": [{"call": "PcCalc", "as": "Calc", "args": {"Quantty": "2"}}, {"assign": {"R": "Calc.Totl", "At": "If(True, NullDateTime(), CurrDateTime())", "Same": "R == 1"}}]}
   ]}}
  ]
 }

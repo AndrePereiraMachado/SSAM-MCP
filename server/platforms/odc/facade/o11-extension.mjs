@@ -31,6 +31,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import * as z from 'zod/v4';
 import { anvilRoot } from './workspace.mjs';
 import * as standingGrants from './standing-grants.mjs';
+import { authorizationContext } from './authorization-context.mjs';
 import { consumerNames } from './o11-publish.mjs';
 import { CAPABILITY, studioReads } from './service-center/integration-studio.mjs';
 import { hostClass as registeredHostClass } from './service-center/auth.mjs';
@@ -62,6 +63,7 @@ export const extensionSchema = z.object({
   consumers: z.boolean().optional().describe('publish: true also refreshes and publishes every consumer module, with the same words or a grant that covers each'),
   expectedVersionId: z.union([z.string().trim().min(1).max(20), z.number().int().nonnegative()]).optional().describe('publish: the active version the edit is based on ("none" for a new extension); another one is EXTENSION_VERSION_CHANGED'),
   words: z.string().max(4000).optional().describe('The user\'s own words, verbatim, naming the extension (and every consumer a breaking change or a delete affects); only their sha256 is kept'),
+  authorizationContext: z.string().max(1024).optional().describe('Absolute proposal-bound human approval record: new fixture publication only, or exact-target deletion; never a standing grant or consumer cascade'),
   operationId: z.string().regex(UUID).optional().describe('publish/delete: a UUID; the same call repeated with it reconciles by reading and never sends again'),
   confirmHost: z.string().trim().toLowerCase().max(253).optional().describe('A corporate or unregistered environment: the same host again, and words that name it'),
 }).strict();
@@ -271,6 +273,13 @@ async function publish(input, ctx) {
 
   // 9. Authorization.
   const { words, authorization } = wordsFor(ctx, input, name);
+  let contextual;
+  if (input.authorizationContext) {
+    if (current || input.application || input.applicationKey || input.consumers)
+      return refusal('AUTHORIZATION_CONTEXT_INVALID', 'Context publication covers a new standalone fixture only; nothing was sent.');
+    try { contextual = authorizationContext(input.authorizationContext, words, {lane:'o11',host,operation:'extension-publish',targets:[name],constraints:{createOnly:true}}); }
+    catch (error) { return refusal(error.code, error.message); }
+  }
   const repeat = { action: 'publish', host, spec: input.spec ? '<the same spec>' : undefined, specFile: input.specFile, words: '<the user\'s words naming ' + name + (affected.length ? ' and ' + affected.join(', ') : '') + '>' };
   const because = { ...summary, consumers };
   if (!words.trim() || (authorization && breaking))
@@ -278,7 +287,7 @@ async function publish(input, ctx) {
       : `Publishing ${name} needs the user's own words naming it (or a standing publish grant that covers it). Nothing was sent.`,
     [problem('WORDS_REQUIRED', 'No words authorize this publication.', `Ask the user and pass their words verbatim in words; they name ${name}${affected.length ? ' and every consumer: ' + affected.join(', ') : ''}.`, breaking ? { ssamRule: true } : {})],
     { ...because, repeat: JSON.parse(JSON.stringify(repeat)) });
-  if (!authorization && !standingGrants.namesApp(words, name))
+  if (!authorization && !contextual && !standingGrants.namesApp(words, name))
     return refusal('WORDS_MUST_NAME_TARGET', `The words do not name ${name}. Nothing was sent.`,
       [problem('WORDS_MUST_NAME_TARGET', `The user's words must name the extension ${name} as a whole word.`, `Words that name ${name}.`)], { ...because, repeat: JSON.parse(JSON.stringify(repeat)) });
   const unnamed = affected.filter(consumer => !standingGrants.namesApp(words, consumer));
@@ -303,14 +312,15 @@ async function publish(input, ctx) {
   const argv = ['extension-publish', '--host=' + host, '--xif-file=' + final.xif, '--extension=' + name, '--expected-version-id=' + (observedVersion ?? 'none'),
     ...(input.applicationKey ? ['--application-key=' + input.applicationKey] : input.application ? ['--application=' + input.application] : []),
     ...(input.commitMessage ? ['--commit-message=' + input.commitMessage] : []),
-    '--words=' + words, '--operation-id=' + operationId, '--execute', ...(input.confirmHost ? ['--confirm-host=' + input.confirmHost] : [])];
+    '--words=' + words, '--operation-id=' + operationId, '--execute', ...(input.confirmHost ? ['--confirm-host=' + input.confirmHost] : []),
+    ...(contextual ? ['--authorization-context=' + input.authorizationContext] : [])];
   let sent;
   try { sent = await ctx.serviceCenter(argv); } catch (error) { sent = { ok: false, state: 'uncertain', error: String(error?.message ?? error) }; }
   const outcome = interpret(sent, { name, created, operationId, summary, current, host });
   writeReceipt(ctx, { operationId, state: outcome.state ?? (outcome.ok === false ? 'refused' : 'unknown'), host, extension: name, key: final.key, hash: final.hash,
     xifSha256: final.xifSha256, created, versionId: outcome.versionId ?? null, extensionId: outcome.extensionId ?? null, wordsSha256: sha256(words) });
   if (!STATES.includes(outcome.state) || outcome.state === 'uncertain') return { ...outcome, consumers };
-  const answer = { ...outcome, consumers, ...(authorization ? { authorization } : {}), ...referenceContinuation(ctx, work, name, (spec.actions ?? []).map(a => a?.name).filter(Boolean)) };
+  const answer = { ...outcome, consumers, ...(contextual ? {authorization:{source:'human-context',context:contextual}} : authorization ? { authorization } : {}), ...referenceContinuation(ctx, work, name, (spec.actions ?? []).map(a => a?.name).filter(Boolean)) };
   if (!input.consumers) return answer;
   const cascade = await ctx.publishConsumersOf({ producer: { name, key: final.key, environment: host }, words, authorization, message: input.commitMessage }, ctx.publishDeps);
   return { ...answer, consumerPublications: cascade?.consumers ?? [], ...(cascade?.ok === false ? { ok: false, code: cascade.code, error: cascade.error, continuation: cascade.continuation ?? answer.continuation } : {}) };
@@ -392,8 +402,13 @@ async function remove(input, ctx) {
   if (!words.trim())
     return refusal('WORDS_REQUIRED', `Deleting ${name} needs the user's own words naming it (and every consumer). Nothing was sent.`,
       [problem('WORDS_REQUIRED', 'No words authorize this delete.', `Ask the user; their words name ${name} and every module that consumes it.`)]);
+  if (input.authorizationContext) {
+    try { authorizationContext(input.authorizationContext,words,{lane:'o11',host:input.host,operation:'delete',targets:[name]}); }
+    catch (error) { return refusal(error.code,error.message); }
+  }
   const argv = ['delete', '--host=' + input.host, '--target=extension:' + name, '--words=' + words,
-    ...(input.confirmHost ? ['--confirm-host=' + input.confirmHost] : []), ...(input.operationId ? ['--operation-id=' + input.operationId] : [])];
+    ...(input.confirmHost ? ['--confirm-host=' + input.confirmHost] : []), ...(input.operationId ? ['--operation-id=' + input.operationId] : []),
+    ...(input.authorizationContext ? ['--authorization-context=' + input.authorizationContext] : [])];
   let result;
   try { result = await ctx.serviceCenter(argv); } catch (error) { return refusal('DELETE_FAILED', String(error?.message ?? error).slice(0, 300)); }
   return result && typeof result === 'object' ? result : refusal('DELETE_FAILED', 'The Service Center answered nothing.');
@@ -434,6 +449,7 @@ export function registerO11Extension(server, deps = {}) {
       + 'anything is sent (XIF_SPEC_INVALID, XIF_COMPILE_FAILED, XIF_STUBS_REFUSED...). The answer is created, updated, already-running '
       + 'or uncertain (never sent again: the same call with the same operationId reconciles by reading). An edit that breaks consumers '
       + 'needs words naming each of them (EXTENSION_BREAKS_CONSUMERS); a standing grant covers additive publishes only. consumers:true '
+      + 'authorizationContext binds verbatim human approval to an exact proposal: a new standalone fixture publication, or an exact-target deletion. '
       + 'then refreshes and publishes each consumer. delete {host, extension, words}: the words name the extension and every consumer. '
       + 'Then reference it from a module with ssam_job (continuation) and o11_deliver/o11_publish.',
     inputSchema: extensionSchema, annotations,

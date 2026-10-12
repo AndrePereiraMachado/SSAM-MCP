@@ -229,7 +229,7 @@
         "o11": {
           "proofs": [
             "consume-reference-static", "smoke-data-logic", "producer-public", "delete-data-consumers", "rename-logic-propagation", "refactor-usages",
-            "delete-logic-consumers", "refactor-replace-action", "logic-spec-replace", "cat-a-reset-typed-values"
+            "delete-logic-consumers", "refactor-replace-action", "logic-spec-replace", "cat-a-reset-typed-values", "single-job-actions"
           ],
           "negative": ["delete-action-in-use", "logic-duplicate-action"],
           "context": { "kinds": ["ServerAction"], "signatures": ["ServerAction"] },
@@ -1217,7 +1217,7 @@
         "o11": {
           "proofs": [
             "smoke-data-logic", "producer-public", "consume-reference-static", "refactor-move", "rename-logic-propagation", "rename-data-propagation",
-            "delete-data-consumers", "rename-interface-propagation", "data-action-reactive", "tickets-02-helpers", "cat-a-reset-typed-values"
+            "delete-data-consumers", "rename-interface-propagation", "data-action-reactive", "single-job-actions", "cat-a-reset-typed-values"
           ],
           "context": { "kinds": ["ServerAction", "ClientAction", "MobileScreen"], "signatures": ["ServerAction", "ClientAction"] },
           "limits": [

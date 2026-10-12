@@ -8,6 +8,33 @@ import { sampleRequest, mockFetch, testConfig } from './helpers.mjs';
 
 const catalog = new Catalog();
 
+test('closed generated portfolio wrapper accepts declared fields without weakening referenced constraints', () => {
+  const id='portfolio-api-v2:patch:/portfolios/{portfolioKey}';
+  const {api,operation}=catalog.get(id);
+  const schema=operation.requestBody.content['application/json'].schema;
+  const original=JSON.stringify(schema);
+  for(const body of [{name:'Portfolio'},{name:'x'.repeat(50)}]) {
+    assert.doesNotThrow(()=>catalog.validate(api,schema,body,'body'));
+  }
+  for(const body of [{name:''},{name:'x'.repeat(51)},{name:123},{name:'Valid',extra:true},[]]) {
+    assert.throws(()=>catalog.validate(api,schema,body,'body'),{code:'INPUT_INVALID'});
+  }
+  assert.equal(JSON.stringify(schema),original,'Pinned contract is never mutated');
+  assert.throws(()=>catalog.validate(api,{type:'object',additionalProperties:false},{name:'x'},'body'),{code:'INPUT_INVALID'});
+});
+
+test('revision metadata transport preserves explicit null and empty text without claiming restoration', async () => {
+  const operationId='asset-repository-api-v1:patch:/assets/{assetKey}/revisions/{revisionNumber}';
+  const sent=[];
+  const mock=mockFetch({apiHandler: request=>{sent.push(JSON.parse(request.body));return new Response(null,{status:204});}});
+  const bridge=new OdcBridge({catalog,fetchImpl:mock.fetchImpl,config:testConfig({allowedWriteOperations:new Set([operationId])})});
+  for(const body of [{tag:null,commitMessage:null},{tag:'',commitMessage:''}]) {
+    const result=await bridge.execute(operationId,{path:{assetKey:'11111111-1111-4111-8111-111111111111',revisionNumber:1},body},'write');
+    assert.equal(result.status,204);assert.deepEqual(sent.at(-1),body);
+    assert.equal(result.restored,undefined);
+  }
+});
+
 test('all 163 pinned operations resolve definitions and execute through mock HTTP', async () => {
   assert.equal(catalog.apis.size, 14);
   assert.equal(catalog.operations.size, 163);
@@ -53,6 +80,21 @@ test('parameters preserve JSON types, enforce required/bounds/enum and serialize
   assert.throws(() => prepareRequest(catalog, id, { query: { limit: 1001 } }, testConfig()), { code: 'INPUT_INVALID' });
   const withPath = 'asset-repository-api-v1:get:/assets/{assetKey}';
   assert.throws(() => prepareRequest(catalog, withPath, {}, testConfig()), { code: 'INPUT_INVALID' });
+});
+
+test('portfolio library multi-type filter reaches a server that accepts one CSV parameter', async () => {
+  const id='portfolio-api-v2:get:/libraries';
+  const rows=[{key:'extension',type:'ExtensionLibrary'},{key:'widget',type:'WidgetLibrary'}];
+  const mock=mockFetch({apiHandler:request=>{
+    const types=new URL(request.url).searchParams.get('type').split(',');
+    return Response.json({results:rows.filter(row=>types.includes(row.type))});
+  }});
+  const bridge=new OdcBridge({catalog,fetchImpl:mock.fetchImpl,config:testConfig()});
+  const result=await bridge.execute(id,{query:{type:['ExtensionLibrary','WidgetLibrary']}},'read');
+  assert.equal(result.ok,true);
+  assert.deepEqual(result.data.results,rows);
+  const original=catalog.get(id).operation.parameters.find(p=>p.name==='type');
+  assert.equal(original.explode,undefined,'Pinned catalog must remain unchanged');
 });
 
 test('JSON, wildcard JSON, octet-stream and multipart request bodies are supported', async () => {

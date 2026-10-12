@@ -55,7 +55,32 @@ internal static class EnvironmentSessionHandler
             }
             finally { Gate.Release(); }
         }
-        catch (Exception error) { return Server.Fail(Server.Unwrap(error)); }
+        catch (Exception error) { return Server.Fail(Describe(error)); }
+    }
+
+    /// <summary>The failure text of an environment operation, as the full bridge writes it (Anvil.Bridge
+    /// EnvironmentSessionHandler.Describe, servidor/fase4-24): the type and message of the error (TargetInvocationException and
+    /// AggregateException unwrapped), then each inner exception after " &lt;- " (at most six, 900 characters), with the socket
+    /// error code and the HttpRequestError kind when there is one. The kernel's ConnectedEnvironment reads it to tell a
+    /// connection to the OutSystems environment that never opened (a read, even publish-check, may be asked again) from a reply
+    /// lost after the request was sent (Anvil.Core.EnvironmentNetwork).
+    /// Pure BCL; DescribeTests keeps it equal to the full bridge's method.</summary>
+    internal static string Describe(Exception error)
+    {
+        var parts = new List<string>();
+        Exception? current = error;
+        while (current != null && parts.Count < 6)
+        {
+            while (current is System.Reflection.TargetInvocationException { InnerException: not null } tie) current = tie.InnerException;
+            while (current is AggregateException { InnerException: not null } ae) current = ae.InnerException;
+            var line = current!.GetType().Name + ": " + current.Message;
+            if (current is System.Net.Sockets.SocketException socket) line += " (socket " + socket.SocketErrorCode + ")";
+            if (current is System.Net.Http.HttpRequestException http) line += " (http " + http.HttpRequestError + ")";
+            parts.Add(line);
+            current = current.InnerException;
+        }
+        var text = string.Join(" <- ", parts);
+        return text.Length > 900 ? text[..900] : text;
     }
 
     /// <summary>Pattern 2 (2026-10-08, UiGate.cs HeadlessPublications), as the full bridge: a publish-start that started and

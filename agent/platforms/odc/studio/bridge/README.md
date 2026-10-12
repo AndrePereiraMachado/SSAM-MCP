@@ -5,7 +5,40 @@ It replaces the per-delivery Bridge/Client project pairs. It never initializes t
 Studio, never edits the open model directly, never synthesizes operating-system input, and appends one line per
 command to `..\..\journal\operations.jsonl`.
 
-Current version: the `AssemblyName` of Bridge.csproj (**v35** on 2026-10-04). v23 was proven live on 2026-09-16 in the
+Current version: the `AssemblyName` of Bridge.csproj (**v74** on 2026-10-10).
+v70 adds a typed private persisted mobile BinaryUrl read, bound to confirmed
+creation/upload/save receipts. A fresh native setting supplies the URL inside
+Studio; its origin and complete configuration-object path are checked before
+the fixed native proxy reads the bytes. Exact length/SHA256, private atomic
+artifact save and bounded diagnostics are required. Caller URLs and raw bytes
+never enter the generic MCP surface. v71 adds bounded OS-* diagnostics for native
+JSON failures without returning raw messages. v72 uses the screen model context
+and the native minimal server-action envelope; v73 accepts inline BinaryData
+interfaces without following their URL. v74 treats absent MIME as octet-stream,
+with exact content length/SHA256 still mandatory and separate diagnostics.
+An own-fixture live read verified persisted 53-byte content and its private local
+artifact hash; restoration and deletion/list absence/GET404 were confirmed. See
+`../../../../docs/PORTAL-MOBILE-PERSISTED-CONTENT-LIVE-20261010.md`. Binary secrets,
+libraries, Base64 and physical blob deletion remain incomplete.
+v66 adds a typed private
+Knowledge Base file download. The source-list action keeps source and file identities distinct; signed URLs
+and credentials remain in native transport. A dedicated storage client verifies size and SHA256 and returns
+only a private file proof. The facade requires own upload/base receipts with the same grant and fresh scope
+reads. v69 fixes the observed Knowledge Base global S3 endpoint; private downloaded bytes and separate
+file-detail ingestion counts are now proved live. HTTPS global S3 buckets and plat-* regional S3 are
+supported with strict signature, size/hash and isolated-client checks. Safe fixed diagnostics distinguish
+Portal, storage URL and blob stages. Proof and remaining limits:
+`../../../../docs/PORTAL-KNOWLEDGE-PRIVATE-LIVE-20261010.md`.
+Version-specific CleanFile manifests preserve prior resident DLLs during incremental builds.
+
+v65 adds private mobile
+upload handoff: signed URLs stay in Studio memory, independent downloads verify uploaded bytes, and a scoped
+opaque reference is consumed once by native save. Upload, conversion and save are never classified as reads.
+Release build and headless proof: `../../../../docs/PORTAL-MOBILE-PRIVATE-FILE-LIVE-20261010.md`.
+Loaded v64 and earlier DLLs remain preserved. Public/native reads confirmed file configuration and metadata;
+reset restored the complete baseline and the fixture was deleted. Persisted bytes and physical blob cleanup
+remain unproved; the hash proof covers the temporary upload only.
+v23 was proven live on 2026-09-16 in the
 personal test environment: open from organization,
 snapshot, candidate preview, native merge with strict equivalence, publication followed to its end in one command,
 dialog inspection and dismissal with a watchdog for informational dialogs, duplicate-copy close, discard close,

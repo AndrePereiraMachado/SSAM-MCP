@@ -14,7 +14,7 @@ import fs from 'node:fs';
 
 export const DIGEST_SCHEMA = 'ssam-digest/1';
 // ModuleDigest.Extractor and SectionIds (C#): a stored digest of another version is a miss.
-export const DIGEST_EXTRACTOR = 2;
+export const DIGEST_EXTRACTOR = 3;
 export const DIGEST_SECTIONS = ['module', 'entities', 'structures', 'variables', 'roles', 'exceptions', 'actions', 'timers', 'integrations', 'ui', 'coverage'];
 // Both lanes write the digest with the kernel's own reader (anvil read-serve, anvil-odc read-serve).
 export const DIGEST_ADAPTER = 'kernel';

@@ -217,7 +217,7 @@ Próprios da fina (em `kernel/src/Anvil.Bridge.Thin/`, namespace `Anvil.Bridge`)
 | Arquivo | Conteúdo |
 |---|---|
 | `Server.cs` | igual ao completo, com `Authority` no lugar de `Anvil.Core.Delivery.BridgeAccess`; mais `Start(int, string, string)`, a entrada do gancho de release (pasta do log e autoridade por parâmetro; `Start(int)` = `Start(porta, null, null)`) |
-| `Dispatch.cs` | tabela dos verbos (§3.2: 20, e 21 desde a nona entrega, §14); `BridgeInfo()` com `flavor:"thin"`; verbo desconhecido → `Server.NotExecuted("Unknown method: <m>")` |
+| `Dispatch.cs` | tabela dos verbos (§3.2: 20, 21 desde a nona entrega, §14, e 23 desde o 24º, §16); `BridgeInfo()` com `flavor:"thin"`; verbo desconhecido → `Server.NotExecuted("Unknown method: <m>")` |
 | `Authority.cs` | cópia de `BridgeAccess` (`DirectoryPath`, `ResolveDirectory`, `KeyPath`, `Initialize`, `ReadCredential`, `Matches`, `Require`, com as sobrecargas que recebem a pasta da autoridade, como no overlay de release) e de `DurableJson` (`Lease`, `Hash`, `Read`, `Write`, `WriteBytes`) |
 | `BridgeKit.cs` | as cópias de plumbing da §2.4 |
 | `ReadsThin.cs` | `partial class Reads`: `Errors` da fina (§3.4) |
@@ -290,7 +290,7 @@ Igual à da completa (`Server.cs`): TCP em `127.0.0.1:<porta>`, uma conexão por
 | Verbo | Na fina | Diferença da completa |
 |---|---|---|
 | `ping` | `{pid, bridge:"anvil", flavor:"thin", version, uiThread}` | + `flavor` |
-| `bridge_manifest` | `{bridge:"anvil", flavor:"thin", protocolVersion:2, authentication:true, verbs:[os 21], capabilities, serviceCenter}` | + `flavor`; `capabilities` = as da completa, na mesma ordem (com `"merge_from_oml:first_pass"`, §12, e as da nona entrega, §14) + `"thin"` + `"merge:reference-plan"` |
+| `bridge_manifest` | `{bridge:"anvil", flavor:"thin", protocolVersion:2, authentication:true, verbs:[os 23], capabilities, serviceCenter}` | + `flavor`; `capabilities` = as da completa, na mesma ordem (com `"merge_from_oml:first_pass"`, §12, as da nona entrega, §14, e `sc_http:studioSession`, §16), menos as que a fina não serve, + `"thin"` + `"merge:reference-plan"` |
 | `get_active_module` | igual (arquivo compartilhado) | — |
 | `list_open_modules` | igual | — |
 | `get_errors` | §3.4 | sem as dicas do kernel; + `kernelHints:false` |
@@ -302,14 +302,19 @@ Igual à da completa (`Server.cs`): TCP em `127.0.0.1:<porta>`, uma conexão por
 | `merge_from_oml` | §3.3 | + `reference_plan`, obrigatório com `base_path` |
 | `merge_status {operation_id, module_key?}` | igual | — |
 | `environment_session` | §3.6 | mesmo fio |
-| `sc_api`, `sc_web`, `sc_session`, `studio_login` | iguais (arquivos compartilhados) | — |
+| `sc_api`, `sc_session` | iguais (arquivos compartilhados) | — |
+| `sc_web`, `sc_http` | iguais: os dois vão para `ScHttpHandler` (arquivo compartilhado, desde o 24º, §16) | — |
+| `studio_login` | igual: recusa tipada `STUDIO_NOT_SIGNED_IN`, sem abrir o diálogo de login (desde o 24º, §16) | — |
 | `refresh_references {module_key, environment?, producers?, producer_keys?, timeout?}` | igual (arquivo compartilhado, desde a nona entrega, §14) | — |
-| `login`, `export_modules`, `export_status`, `find_element`, `get_flow_nodes` | `{success:false, executed:false, error:"Unknown method: <m>"}` | removidos |
+| `answer_dependencies_dialog` | igual (arquivo compartilhado, desde a `servidor/fase4`) | — |
+| `login`, `export_modules`, `export_status`, `find_element`, `get_flow_nodes`, `integration_import`, `query_test` | `{success:false, executed:false, error:"Unknown method: <m>"}` | removidos (lógica do kernel) |
+| `sc_private_http`, `sc_private_http_cookie` | `{success:false, executed:false, error:"Unknown method: <m>"}` | removidos (transporte privado, §16) |
 
-A lista dos 21, na ordem de `verbs`: `ping`, `bridge_manifest`, `get_active_module`, `list_open_modules`,
+A lista dos 23, na ordem de `verbs`: `ping`, `bridge_manifest`, `get_active_module`, `list_open_modules`,
 `get_errors`, `open_module`, `close_module`, `publish`, `windows`, `ui_alive`, `close_dialog`, `snapshot_module`,
-`merge_from_oml`, `merge_status`, `environment_session`, `sc_api`, `sc_web`, `studio_login`, `sc_session`,
-`publish_log`, `refresh_references` (este desde a nona entrega, §14). A lista só cresce com um teste
+`merge_from_oml`, `merge_status`, `environment_session`, `sc_api`, `sc_web`, `sc_http`, `studio_login`, `sc_session`,
+`publish_log`, `refresh_references`, `answer_dependencies_dialog`. `refresh_references` entrou na nona entrega (§14),
+`answer_dependencies_dialog` na `servidor/fase4` e `sc_http` no 24º (§16). A lista só cresce com um teste
 (`DispatchTests`, `agent/tests/kinds.test.mjs`) e uma linha neste documento.
 
 ### 3.3 `merge_from_oml` e `reference_plan`
@@ -574,6 +579,8 @@ cada produtor que passa nele; a fina confere a cobertura sobre os bytes e o esta
   copiado para `ThinBridge.cs` como função pura sobre o `ESpace` carregado.
 - A captura carregada vale enquanto as chamadas seguidas forem `find_element` com o mesmo `module_key` e
   `environment`; qualquer outro verbo a descarta. As verificações de `Delivery.cs:208-217` tiram uma captura só.
+- O fim de cada entrega também a descarta (`Delivery.Run` chama `IBridgeClient.ReleaseCapture` no `finally`): num worker
+  residente o módulo sai dos estáticos do Studio (`ModelHost.Release`) como sairia no fim de um processo frio.
 - `get_flow_nodes` não é emulado: nenhum chamador no kernel nem na fachada (`Delivery.cs:212` só usa `find_element`;
   `get_flow_nodes` aparece só na bridge e em scripts Python do dono, que usam a completa). Recusa `executed:false`.
 - No hospedado `TEMP` é `<ws>/o11/tmp` (FASE2 §4.7), dentro do prefixo gravável do espelho; a cópia do agente fica em
@@ -1250,3 +1257,47 @@ Produto `b01cef95` (`consolidacao/main`). A bridge completa ganhou o verbo `inte
 - Os testes .NET da fina pedem `ANVIL_STUDIO_DIR` apontando para o Service Studio usado na compilação (`SSDir`). Sem
   isso, o `StudioAssemblies.Bind` carrega o Studio da faixa (outra versão) e o `ESpace.Load` cai com
   `OutOfMemoryException`.
+
+## 16. O 24º envio na linha do servidor (`servidor/fase4-24`)
+
+Produto `integracao/juncao-24` (`02b71765`). A bridge completa trocou a janela do Service Center por HTTP sem janela,
+pela sessão do próprio Studio (`ScHttpHandler`). A fina segue a completa (passo B7 do plano do 24º, riscos R5 e R7).
+
+- **Verbos.** A fina passa a ter 23. Entra `sc_http`, logo depois de `sc_web`. `sc_web` e `sc_http` vão para o mesmo
+  `ScHttpHandler`, ligado da completa sem cópia (não tem overlay de release). `studio_login` continua na lista, mas
+  responde a recusa tipada da completa (`STUDIO_NOT_SIGNED_IN`, `executed:false`) e nunca abre o diálogo de login.
+- **Capacidades.** Entra `sc_http:studioSession`. Saem `sc_web:hidden`, `sc_web:login`, `studio_login` e
+  `sc_web:studioSession`, que a completa também não anuncia mais. O SC do 24º exige `sc_http:studioSession`: sem ela, o
+  cliente recebe `STUDIO_BRIDGE_OUTDATED`.
+- **Fora da fina.** `sc_private_http` e `sc_private_http_cookie` (`Removed`), e `sc_private_http:secretRefs` e
+  `sc_private_http:cookieUpdates` (`NotServed`). O transporte privado usa um pipe local e o cofre do dono. Ele não
+  atravessa máquinas. `ScPrivateHttp*.cs` e `PrivateHttpContext.cs` não são ligados na fina.
+- **`ScWebHandler.cs` desligado.** Nenhum verbo das duas bridges chega mais a ele (a janela, o login pelo cofre e o
+  keep-alive). A fina deixa de ligar o arquivo. A DLL do cliente fica sem esse código.
+- **Cópias.** `ScProtocol.cs` foi copiado de novo da completa (`LoginHtml`, `ProtectedHtml`, `ProfileTarget` e as
+  mensagens sem janela). `ScSecrets.cs` já era igual. `CopiedFilesTests` passa.
+- **Mensagens.** O `MessageInfo` do kernel guarda agora o dono do Verify (referência fraca) e os nomes de propriedade,
+  nunca escritos (`JsonIgnore`). O fio não mudou. `MessageParityTests` compara o registro sem esses dois campos.
+- **Agente.** `O11_METHODS` ganha `sc_http`. `args.outFile` de `sc_http` é `PATH_FORBIDDEN`, como em `sc_api` e
+  `sc_web`. `ODC_COMMANDS` ganha `reference-producers` (só leitura, sem caminho). Continuam recusados
+  `portal-private-call`, `portal-private-download`, `portal-api-client-fixture-cleanup`, `portal-upload`,
+  `sc_private_http` e `sc_private_http_cookie`. O agente passa a `0.3.0`. O hub grava essa versão a cada conexão
+  (`agent-connected`), então o log mostra quem ainda roda um pacote velho (R7).
+- **Transporte do agente.** O bloco de `agent/lib/o11-wire.mjs` voltou a ser igual ao de `o11-bridge.mjs`
+  (`drift.test.mjs`, vermelho desde o 20º). Vieram os prazos do congelamento de UI (`publish` + 45 s, `close_module`
+  com `idle_timeout_ms`) e a conexão que espera a resposta atrasada até `FLIGHT_CAP_MS`. O agente não registra voo.
+- **Prova ao vivo.** `scripts/prova-verbos.mjs` roda `sc_http {action:"status"}` com `--host`.
+- **Bridge ODC v96.** Ficam as cópias da linha (`MergeOrderCopy.cs`, `SecurityWarningsCopy.cs`,
+  `PublicSignatureReader.cs`) e entram os `Portal*.cs` do 24º. O link
+  `kernel/src/Anvil.Bridge/PrivateHttpContext.cs` vira arquivo compartilhado das duas caixas do SSAM-MCP, com entrada
+  no `SHARED.md` na cópia.
+- **Pacotes antigos.** Um agente com a fina antiga continua aceito (`odcBridgeAccepted`), mas o SC responde
+  `STUDIO_BRIDGE_OUTDATED` e `studio_reference_producers` recebe `COMMAND_NOT_ALLOWED` do agente antigo.
+- **Pacote de velocidade (`integracao/velocidade`, `ff27a1cd`).** A fina serve as duas capacidades novas da completa,
+  na mesma ordem: `list_open_modules:model_sha256` (`list_open_modules {model_sha256_of}` devolve a impressão do modelo
+  da aba, e a fase de build reaproveita uma captura que o servidor já tem em vez de subir o mesmo modelo de novo) e
+  `open_module:references_check_optional` (`references_check:false` numa aba já aberta pula a checagem de
+  referências). `Reads.cs`, `OpenHandler.cs` e `MergeRollbackProof.cs` já eram ligados; o `Dispatch.cs` passa os
+  parâmetros. O `EnvironmentSessionHandler` da fina descreve a falha como a completa (`Describe`: as exceções
+  internas com o código do socket e o tipo do erro HTTP), para o kernel decidir a nova tentativa de leitura igual nas
+  duas bridges (`DescribeParityTests`). O agente passa a `0.3.1` (0.3.0 com o transporte do 0.2.1 e o `net.probe`).

@@ -12,8 +12,12 @@ bruta Warning: o comando nao inventa uma classificacao diferente da API.
 
 O repositorio guarda apenas o manifesto de IDs para validar expectedMessages sem carregar o Studio,
 e os hints nossos em catalog/verify-hints-*.json: 112 curados e 57 orientados por quick-fix.
-Os 299 textos que apenas repetiam a mensagem deixaram de ser hints. O runner mostra somente os hints
-curados dos IDs presentes (uma vez por ID, ate 20); detalhes e erros continuam com seu proprio limite.
+Os 299 textos que apenas repetiam a mensagem deixaram de ser hints. Um hint e o `fix` de um problema do Verify e de um
+warning tal como esta, por isso nunca leva placeholder do template ({0}, {1}): cita "o que a mensagem cita"
+(VerifyAnchorTests.NoCuratedHintCarriesAPlaceholder). Sem hint curado, o fix diz o que fazer. Comando da CLI num fix, so
+os que a fachada troca pela chamada MCP (`anvil functions|api|signature`, em responses.mjs): o FUNCTION_UNKNOWN sem nome
+parecido cita `anvil functions --find X`, que chega a sessao como ssam_reference {kind:"functions"} com continuation.
+O runner mostra somente os hints curados dos IDs presentes (uma vez por ID, ate 20); detalhes e erros continuam com seu proprio limite.
 A bridge instalada fora do repositorio pode nao ter esse arquivo: o Verify continua funcionando.
 
 Corrija erros. Para um aviso novo intencional, declare expectedMessages com id, element e why;

@@ -2,6 +2,8 @@ import { fail } from './errors.mjs';
 import { requestBytes, readJson } from './http.mjs';
 
 export class OAuthClient {
+  get method() { return 'OAuth 2.0 client_credentials'; }
+
   constructor(config, fetchImpl = globalThis.fetch, now = Date.now) {
     this.config = config;
     this.fetch = fetchImpl;

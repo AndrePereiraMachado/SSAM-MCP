@@ -22,13 +22,13 @@ internal static class Program {
     }
     [MethodImpl(MethodImplOptions.NoInlining)] static async Task<int> Run() {
         var line = await Console.In.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(15));
-        if (line == null || line.Length > 65536) throw new DebugFailure("debug_bootstrap_required");
+        if (line == null || line.Length > 1024 * 1024) throw new DebugFailure("debug_bootstrap_required");
         var config = JsonSerializer.Deserialize<Configuration>(line, Wire.Options)!;
         line = null; // Release the private bootstrap string; immutable strings are not forensic-zeroable.
         config.Validate();
         await using var session = new DebugSession(config);
         // Bind the user-only pipe before starting any remote operation.
-        using var lease = new CancellationTokenSource(TimeSpan.FromSeconds(config.Seconds));
+        using var lease = new CancellationTokenSource(session.RemainingLease);
         using var pipe = NewPipe(config.SessionId);
         try {
             await session.Start();
@@ -39,16 +39,7 @@ internal static class Program {
             try {
                 while (!lease.IsCancellationRequested && !session.Finished) {
                     await pipe.WaitForConnectionAsync(lease.Token);
-                    using var reader = new StreamReader(pipe, leaveOpen: true);
-                    using var writer = new StreamWriter(pipe, leaveOpen: true) { AutoFlush = true };
-                    try {
-                        var command = await reader.ReadLineAsync(lease.Token).AsTask().WaitAsync(TimeSpan.FromSeconds(5));
-                        if (command == null || command.Length > 32768) throw new DebugFailure("debug_invalid_request");
-                        var request = JsonSerializer.Deserialize<Request>(command, Wire.Options)!;
-                        var result = await session.Execute(request);
-                        await writer.WriteLineAsync(Wire.Json(result));
-                    } catch (Exception e) { try { await writer.WriteLineAsync(Wire.Json(Wire.Error(e))); } catch { } }
-                    finally { pipe.Disconnect(); }
+                    await DebugPipe.ServeConnected(pipe, session.Execute, lease.Token);
                 }
             } catch (OperationCanceledException) { }
             finally { lease.Cancel(); try { await watchdog; } catch (OperationCanceledException) { } }

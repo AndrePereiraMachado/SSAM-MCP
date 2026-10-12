@@ -157,11 +157,14 @@ public sealed class ModuleDigestTests
             "  foreach Lines.List:\n    if Lines.List.Current.Order.Code = \"\":\n      next\n    Bump = sql() -> Order\n    | UPDATE {Order}\n    | SET [Code] = @Code\n  [1] OrderId",
             "  [1] OrderId = Lines.List.Current.Order.Id\n  on exception All Exceptions abort:\n    -> [1]\n  unreached: AssignNode  @k",
             "timer Nightly", "action=PlaceOrder schedule=\"Daily\"",
-            "screen MainFlow/Home", " roles=Guest,Manager", "  local Filter: Text", "  action Search", "    refresh GetLines\n", "  widgets:\n    if Filter <> \"\":\n      input FilterInput var=Filter\n      button \"Search\" on OnClick->Search\n    list Results source=GetLines.List:",
+            "screen MainFlow/Home", " roles=Guest,Manager", "  local Filter: Text", "  action Search", "    refresh GetLines\n",
             "  data action FetchLines @", "\n    on AfterFetch -> Search\n    PlaceOrder(Code=[\"A\"])",
-            "    list Grid source=GetLines.List on OnSort->Search:", "    label \"Quotes\"\n    text \"Carriers\"\n",
+            "    label \"Quotes\"\n    text \"Carriers\"\n",
             "folders (each block names its folder) 1", "not rendered 1: Mystery:1" })
             Assert.Contains(expected, text);
+        // A named widget carries its @key (G13).
+        Assert.Matches(@"  widgets:\n    if Filter <> """":\n      input FilterInput @k\d+ var=Filter\n      button ""Search"" on OnClick->Search\n    list Results @k\d+ source=GetLines\.List:", text);
+        Assert.Matches(@"\n    list Grid @k\d+ source=GetLines\.List on OnSort->Search:", text);
         Assert.Equal(1, digest.NotRendered);
         Assert.True(digest.Clipped >= 1);
         // An expression clipped past 2000 characters names the @key that holds it whole.
@@ -185,6 +188,65 @@ public sealed class ModuleDigestTests
         var coverage = digest.Section("coverage").Blocks.Single();
         Assert.Contains("folded ", coverage); Assert.Contains("reference signatures 2", coverage);
         Assert.Contains("widget style and attributes 1", coverage); Assert.Contains("built-in and derived types", coverage);
+    }
+
+    // G13 (FarmaVirtual, 10/10/2026): after the merge the digest (calls 114-119) named the screen's widgets without their
+    // @key, and the named containers the job had mounted (MountFvEditNome, Fv416, UiState4) not at all; ten ssam_map {name}
+    // calls (120-128, 132) followed. Every named widget's @key is in the digest: on its line, or, for a named widget the tree
+    // collapses, in the "named containers" lines of its screen; the tree itself stays as it was.
+    [Fact]
+    public void DigestGivesEveryNamedWidgetItsKeyAndKeepsTheTree()
+    {
+        keys = 0;
+        var root = N("ESpace", "Shop");
+        var flow = root.Add(N("MobileFlow", "MainFlow", "UIFlow"));
+        var screen = flow.Add(N("MobileScreen", "Catalog", "MobileScreen"));
+        screen.Add(N("LocalVariable", "Query")).Set("DataType", N("BasicType", "Text"));
+        var go = screen.Add(N("ScreenAction", "Go", "Action"));
+        var goStart = go.Add(N("StartNode")); var goEnd = go.Add(N("EndNode")); goStart.Set("Target", goEnd);
+        var page = screen.Add(N("Container", "", "Widget"));
+        var mount = page.Add(N("Container", "MountEditName", "Widget"));
+        var input = mount.Add(N("Input", "EditNameInput", "Widget")).Set("Variable", new Code("Query"));
+        var empty = page.Add(N("Container", "MountEmpty", "Widget"));
+        var link = page.Add(N("Link", "Fv464", "Widget", "Link"));
+        link.Add(N("TextWidget", "", "Widget")).Set("Text", "Orders");
+        link.Add(N("UILifeCycleEvent", "OnClick")).Set("Destination", go);
+        var state = page.Add(N("IfWidget", "IfUiState4", "Widget")).Set("Condition", new Code("Query = \"\""));
+        var yes = state.Add(N("IfBranchWidget", "", "Widget")); state.Set("TrueBranch", yes);
+        yes.Add(N("Container", "", "Widget")).Add(N("TextWidget", "", "Widget")).Set("Text", "Empty");
+        // A line folds what is inside it (CoverTree): the named widgets there carry their keys on that line (review of G13:
+        // IfFv41 in the button Fv14, Container Fv36 in its branch, Icon4 in an unnamed link had none).
+        var save = page.Add(N("Button", "Fv14", "Widget", "Button")); save.Add(N("TextWidget", "", "Widget")).Set("Text", "Save");
+        var guard = save.Add(N("IfWidget", "IfFv41", "Widget")).Set("Condition", new Code("Query <> \"\""));
+        var guarded = guard.Add(N("IfBranchWidget", "", "Widget")); guard.Set("TrueBranch", guarded);
+        var spinner = guarded.Add(N("Container", "Fv36", "Widget"));
+        var back = page.Add(N("Link", "", "Widget", "Link")); var arrow = back.Add(N("Icon", "Icon4", "Widget"));
+        // Two instances of one block, each with an empty placeholder: each key on the line of its own instance.
+        var card = flow.Add(N("MobileBlock", "Card", "MobileBlock"));
+        var first = page.Add(N("MobileBlockInstanceWidget", "", "Widget")).Set("SourceBlock", card);
+        var firstHeader = first.Add(N("PlaceholderContentWidget", "Header", "Widget"));
+        first.Add(N("PlaceholderContentWidget", "Content", "Widget")).Add(N("TextWidget", "", "Widget")).Set("Text", "Hi");
+        var second = page.Add(N("MobileBlockInstanceWidget", "", "Widget")).Set("SourceBlock", card);
+        var secondHeader = second.Add(N("PlaceholderContentWidget", "Header", "Widget"));
+        var html = page.Add(N("AdvancedHtml", "Fv416", "Widget")); html.Add(N("TextWidget", "", "Widget")).Set("Text", "Price");
+        var text = ModuleDigest.Build(root, new Reader(), "o11", "EF", 1).Text;
+        foreach (var expected in new[] {
+            "  widgets:\n    input EditNameInput @" + input.Key + " var=Query\n",
+            "    link \"Orders\" on OnClick->Go  # Fv464 @" + link.Key + "\n",
+            "    if Query = \"\":  # IfUiState4 @" + state.Key + "\n      text \"Empty\"\n",
+            "    button \"Save\"  # Fv14 @" + save.Key + "; inside IfFv41 @" + guard.Key + ", Fv36 @" + spinner.Key + "\n",
+            "    link \"\"  # inside Icon4 @" + arrow.Key + "\n",
+            "    block Card()  # inside [Header] @" + firstHeader.Key + "\n      [Content] @", ":\n        text \"Hi\"\n",
+            "    block Card()  # inside [Header] @" + secondHeader.Key + "\n",
+            "    text \"Price\"\n  named containers:\n    MountEditName @" + mount.Key + ", MountEmpty @" + empty.Key + ", Fv416 @" + html.Key })
+            Assert.Contains(expected, text);
+        // The list holds the collapsed containers only: what a line folds in is on that line.
+        Assert.Matches(@"\n  named containers:\n    MountEditName @k\d+, MountEmpty @k\d+, Fv416 @k\d+(\n|$)", text);
+        // The collapsed containers stay collapsed, named or not: no line of their own, no indentation for their children.
+        Assert.DoesNotMatch(@"\n +(container|advancedhtml)\b", text);
+        // Every named widget's key is in the text (the placeholders' too).
+        foreach (var named in new[] { mount, input, empty, link, state, save, guard, spinner, arrow, firstHeader, secondHeader, html })
+            Assert.Contains("@" + named.Key, text);
     }
 
     [Fact]

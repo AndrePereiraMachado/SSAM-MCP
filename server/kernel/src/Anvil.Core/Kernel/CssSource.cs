@@ -94,7 +94,7 @@ public sealed class CssStylesheet
             for (var i = open.Count; i > common; i--) sb.Append("}\n");
             for (var i = common; i < rule.EnclosingRules.Count; i++) sb.Append(rule.EnclosingRules[i]).Append(" {\n");
             open = rule.EnclosingRules;
-            var selectors = SplitSelectors(rule.Selector).Select(s => ScopeSelector(s, scopeClass));
+            var selectors = SplitSelectors(rule.Selector).SelectMany(s => ScopeSelectors(s, scopeClass));
             sb.Append(open.Count > 0 ? "  " : "").Append(string.Join(", ", selectors)).Append(" { ");
             foreach (var d in rule.Declarations) sb.Append(d.Property).Append(": ").Append(d.Value).Append(d.Important ? " !important; " : "; ");
             sb.Append("}\n");
@@ -117,8 +117,8 @@ public sealed class CssStylesheet
             for (var i = open.Count; i > common; i--) scoped.Append("}\n");
             for (var i = common; i < rule.EnclosingRules.Count; i++) scoped.Append(rule.EnclosingRules[i]).Append(" {\n");
             open = rule.EnclosingRules;
-            scoped.Append(string.Join(", ", SplitSelectors(rule.Selector).Select(selector => {
-                var value = ScopeSelector(selector, scope); var pseudo = PseudoElementOffset(value);
+            scoped.Append(string.Join(", ", SplitSelectors(rule.Selector).SelectMany(selector => ScopeSelectors(selector, scope)).Select(value => {
+                var pseudo = PseudoElementOffset(value);
                 return pseudo < 0 ? value + ":where(" + owner + ")" : value[..pseudo] + ":where(" + owner + ")" + value[pseudo..];
             }))).Append(" { ");
             foreach (var d in rule.Declarations) scoped.Append(d.Property).Append(": ").Append(d.Value).Append(d.Important ? " !important; " : "; ");
@@ -147,14 +147,51 @@ public sealed class CssStylesheet
     /// <summary>One selector under the scope. A selector that already starts with the scope token (followed by its end, a
     /// combinator, a class, an id, an attribute or a pseudo-class) already selects inside the scope and stays as written:
     /// prefixing it again selected `.scope .scope`, which matched nothing (C20, the tic-tac-toe board of 2026-10-06).</summary>
-    private static string ScopeSelector(string selector, string scope)
+    private static string ScopeSelector(string selector, string scope) => string.Join(", ", ScopeSelectors(selector, scope));
+
+    /// <summary>One selector under the scope, as the selectors that replace it (docs/PROTOTIPO-NATIVO.md, 4.3 item 1):
+    /// <list type="bullet">
+    /// <item>:root, html, body (and the Reactive root) become the scope itself;</item>
+    /// <item>a first compound that already is the root (it carries the scope token anywhere: <c>.app</c>, <c>main.app</c>,
+    /// <c>[data-x].app</c>, <c>.a.app</c>) is the anchor and stays as written: prefixing it selected <c>.app main.app</c>, an
+    /// element inside the root, never the root itself;</item>
+    /// <item>a first compound that starts with <c>*</c> covers the root and what is inside it: <c>*</c> becomes
+    /// <c>.app, .app *</c> (<c>*:before</c> becomes <c>.app:before, .app *:before</c>), as <c>*</c> covers every element in the
+    /// browser;</item>
+    /// <item>anything else is prefixed: <c>.app X</c>.</item>
+    /// </list></summary>
+    internal static IReadOnlyList<string> ScopeSelectors(string selector, string scope)
     {
         var s = selector.Trim();
         static bool Bounded(string s, string head) => s.StartsWith(head, StringComparison.Ordinal) && (s.Length == head.Length || " >+~.#[:".Contains(s[head.Length]));
         foreach (var root in Roots)
-            if (Bounded(s, root)) return scope + s[root.Length..];
-        if (Bounded(s, scope)) return s;
-        return scope + " " + s;
+            if (Bounded(s, root)) return [scope + s[root.Length..]];
+        if (Bounded(s, scope) || FirstCompoundHasToken(s, scope)) return [s];
+        if (s.StartsWith('*') && (s.Length == 1 || " >+~.#[:".Contains(s[1])))
+            return [scope + s[1..], scope + " " + s];
+        return [scope + " " + s];
+    }
+
+    /// <summary>True when the first compound of the selector (up to its first combinator, outside brackets, parentheses and
+    /// strings) carries the scope's class or id token, whole (".app" in "main.app:hover", not in ".apple").</summary>
+    private static bool FirstCompoundHasToken(string selector, string scope)
+    {
+        if (scope.Length < 2 || scope[0] is not ('.' or '#')) return false;
+        var depth = 0; char? quote = null; var end = selector.Length;
+        for (var i = 0; i < selector.Length; i++)
+        {
+            var c = selector[i];
+            if (quote != null) { if (c == '\\') i++; else if (c == quote) quote = null; continue; }
+            if (c is '"' or '\'') quote = c;
+            else if (c == '\\') i++;
+            else if (c is '(' or '[') depth++;
+            else if (c is ')' or ']') depth--;
+            else if (depth == 0 && (char.IsWhiteSpace(c) || c is '>' or '+' or '~')) { end = i; break; }
+        }
+        var first = selector[..end];
+        foreach (var (start, stop) in TokenPositions(first, scope[0]))
+            if (string.Equals(first[start..stop], scope[1..], StringComparison.Ordinal)) return true;
+        return false;
     }
 
     /// <summary>Native widgets keep their framework DOM IDs. Resolve authored ID selectors through
@@ -204,11 +241,77 @@ public sealed class CssStylesheet
         yield return selector[start..].Trim();
     }
 
-    public static CssStylesheet Parse(string css)
+    public static CssStylesheet Parse(string css) => Parse(css, lenient: false);
+
+    /// <summary>The stylesheet parsed. <paramref name="lenient"/>: an at-rule block this parser does not model (@page,
+    /// @property, @counter-style, @font-feature-values, @view-transition…) is kept whole as an opaque block instead of being
+    /// refused, the way a browser keeps it; the prototype importer counts a sheet this way. The text itself is <see cref="Text"/>,
+    /// verbatim.</summary>
+    public static CssStylesheet Parse(string css, bool lenient)
     {
         var rules = new List<CssRule>(); var statements = new List<string>(); var blocks = new List<CssBlock>();
-        new Parser(css, rules, statements, blocks).Sheet([], 0);
-        return new CssStylesheet(rules, statements, blocks);
+        new Parser(css, rules, statements, blocks) { Lenient = lenient }.Sheet([], 0);
+        return new CssStylesheet(rules, statements, blocks) { Text = css };
+    }
+
+    /// <summary>The text the stylesheet was parsed from, verbatim (null for a stylesheet built by a rewrite).</summary>
+    public string? Text { get; private init; }
+
+    /// <summary>The number of rules by this parser: style rules (inside at-rules too), opaque blocks (@keyframes, @font-face and,
+    /// leniently, any other at-rule block) and statements (@import, @charset, @layer a, b;). Comparing it for two texts is how a
+    /// rewrite proves it lost no rule.</summary>
+    public int RuleCount => Rules.Count + Blocks.Count + Statements.Count;
+
+    /// <summary><see cref="RuleCount"/> of a text, never truncated and never throwing: the lenient parse, and when the text is
+    /// beyond it (CSS nesting, a malformed tail), the same count by a tolerant walk that balances strings, comments and braces.</summary>
+    public static int CountRules(string css)
+    {
+        try { return Parse(css, lenient: true).RuleCount; }
+        catch (InvalidOperationException) { return TolerantCount(css, 0, css.Length); }
+    }
+
+    private static int TolerantCount(string css, int i, int end)
+    {
+        var count = 0;
+        while (i < end)
+        {
+            while (i < end && (char.IsWhiteSpace(css[i]) || css[i] == '﻿')) i++;
+            if (i + 1 < end && css[i] == '/' && css[i + 1] == '*') { var close = css.IndexOf("*/", i + 2, StringComparison.Ordinal); i = close < 0 ? end : close + 2; continue; }
+            if (i >= end) break;
+            if (css[i] == '}') { i++; continue; }
+            var start = i; var depth = 0;
+            while (i < end)
+            {
+                var c = css[i];
+                if (c == '/' && i + 1 < end && css[i + 1] == '*') { var close = css.IndexOf("*/", i + 2, StringComparison.Ordinal); i = close < 0 ? end : close + 2; continue; }
+                if (c is '"' or '\'') { var q = c; i++; while (i < end && css[i] != q) i += css[i] == '\\' ? 2 : 1; i++; continue; }
+                if (c is '(' or '[') depth++;
+                else if (c is ')' or ']') depth--;
+                else if (depth == 0 && c is '{' or ';' or '}') break;
+                i++;
+            }
+            if (i >= end) { if (css[start..end].Trim().Length > 0) count++; break; }
+            if (css[i] == ';') { count++; i++; continue; }
+            if (css[i] == '}') continue;
+            var prelude = css[start..i].TrimStart();
+            var blockStart = i + 1; depth = 0; i = blockStart;
+            while (i < end)
+            {
+                var c = css[i];
+                if (c == '/' && i + 1 < end && css[i + 1] == '*') { var close = css.IndexOf("*/", i + 2, StringComparison.Ordinal); i = close < 0 ? end : close + 2; continue; }
+                if (c is '"' or '\'') { var q = c; i++; while (i < end && css[i] != q) i += css[i] == '\\' ? 2 : 1; i++; continue; }
+                if (c == '{') depth++;
+                else if (c == '}') { if (depth == 0) break; depth--; }
+                i++;
+            }
+            var blockEnd = Math.Min(i, end);
+            if (prelude.StartsWith('@') && (prelude.StartsWith("@media", StringComparison.OrdinalIgnoreCase) || prelude.StartsWith("@supports", StringComparison.OrdinalIgnoreCase)
+                || prelude.StartsWith("@container", StringComparison.OrdinalIgnoreCase) || prelude.StartsWith("@layer", StringComparison.OrdinalIgnoreCase)))
+                count += TolerantCount(css, blockStart, blockEnd);
+            else count++;
+            i = blockEnd + 1;
+        }
+        return count;
     }
 
     /// <summary>At-rules whose block holds no style rules: the browser takes them as a whole (a keyframe list, a font face).</summary>
@@ -221,6 +324,7 @@ public sealed class CssStylesheet
 
     private sealed class Parser(string text, List<CssRule> rules, List<string> statements, List<CssBlock> blocks)
     {
+        public bool Lenient { get; init; }
         private int _i; private int _line = 1, _col = 1;
         private bool End => _i >= text.Length;
         private char Peek(int ahead = 0) => _i + ahead < text.Length ? text[_i + ahead] : '\0';
@@ -242,16 +346,23 @@ public sealed class CssStylesheet
                 Take(); // '{'
                 if (IsNestingAtRule(prelude)) { Sheet([.. enclosing, prelude.Trim()], depth + 1); continue; }
                 if (IsOpaqueAtRule(prelude)) { blocks.Add(new CssBlock(HtmlNode.CollapseSpaces(prelude), Opaque(l, c), enclosing, l, c)); continue; }
-                if (prelude.TrimStart().StartsWith('@')) throw Error($"unsupported at-rule '{prelude.Trim()}'", l, c);
+                if (prelude.TrimStart().StartsWith('@'))
+                {
+                    if (!Lenient) throw Error($"unsupported at-rule '{prelude.Trim()}'", l, c);
+                    blocks.Add(new CssBlock(HtmlNode.CollapseSpaces(prelude), Opaque(l, c), enclosing, l, c));
+                    continue;
+                }
                 rules.Add(new CssRule(HtmlNode.CollapseSpaces(prelude), enclosing.LastOrDefault(), Declarations(l, c), l, c) { EnclosingRules = enclosing });
             }
         }
 
-        private static bool IsNestingAtRule(string prelude)
+        private bool IsNestingAtRule(string prelude)
         {
             var p = prelude.TrimStart();
             return p.StartsWith("@media", StringComparison.OrdinalIgnoreCase) || p.StartsWith("@supports", StringComparison.OrdinalIgnoreCase)
-                || p.StartsWith("@container", StringComparison.OrdinalIgnoreCase) || p.StartsWith("@layer", StringComparison.OrdinalIgnoreCase);
+                || p.StartsWith("@container", StringComparison.OrdinalIgnoreCase) || p.StartsWith("@layer", StringComparison.OrdinalIgnoreCase)
+                || Lenient && (p.StartsWith("@scope", StringComparison.OrdinalIgnoreCase) || p.StartsWith("@starting-style", StringComparison.OrdinalIgnoreCase)
+                    || p.StartsWith("@document", StringComparison.OrdinalIgnoreCase));
         }
 
         private string Prelude()
@@ -324,7 +435,7 @@ public sealed class CssStylesheet
         {
             while (!End)
             {
-                if (char.IsWhiteSpace(Peek())) { Take(); continue; }
+                if (char.IsWhiteSpace(Peek()) || Peek() == '﻿') { Take(); continue; }
                 if (Peek() == '/' && Peek(1) == '*')
                 {
                     var (l, c) = (_line, _col); var end = text.IndexOf("*/", _i + 2, StringComparison.Ordinal);

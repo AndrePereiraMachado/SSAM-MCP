@@ -1,0 +1,6 @@
+.app { font-family: system-ui, sans-serif; margin: 0; }
+.top { display: flex; gap: 8px; align-items: center; }
+.lista .item { display: flex; gap: 12px; }
+.item.done .titulo { text-decoration: line-through; }
+.btn { padding: 6px 12px; }
+.ssam-tag-search { display: block; }

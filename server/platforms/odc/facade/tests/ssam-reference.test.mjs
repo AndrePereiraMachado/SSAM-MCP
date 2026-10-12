@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { registerSsamReference, resolveUiCatalog } from '../ssam-reference.mjs';
+import { registerSsamReference, resolveUiCatalog, functionList, FUNCTIONS_MAX } from '../ssam-reference.mjs';
 import { fakeAnvil } from './fixtures/fake-anvil.mjs';
 import { tempKernel, linked } from './fixtures/o11env-kernel.mjs';
 
@@ -189,4 +189,50 @@ test('UI catalogs resolve by library name to the newest version', t => {
   assert.match(resolveUiCatalog(kernel.root, 'outsystemsui'), /OutSystemsUI-2\.28\.1\.json$/);
   assert.match(resolveUiCatalog(kernel.root, 'RichWidgets'), /RichWidgets-unversioned\.json$/);
   assert.equal(resolveUiCatalog(kernel.root, 'Nope'), null);
+});
+
+// 2026-10-12 (production test): eight names in one query answered notFound for the whole text, the session asked again one
+// name per call (6 more calls), and NullDateTime and NullTime, never asked, became a refused delivery. Several names now go
+// in ONE call: each signature, and for a name the Studio lacks its closest names (and the literal of a typed null).
+const CATALOG = {
+  GetUserId: { Name: 'GetUserId', Group: 'Roles', Signature: 'GetUserId(): UserId', ReturnType: 'UserId', Parameters: [], Description: 'Returns the identifier of the user that is logged in.', Examples: '' },
+  NullDate: { Name: 'NullDate', Group: 'Data Conversion', Signature: 'NullDate(): Date', Parameters: [], Description: 'Returns a null Date value.', Examples: 'NullDate() = #1900-01-01#' },
+  AddMinutes: { Name: 'AddMinutes', Group: 'Date and Time', Signature: 'AddMinutes(dt: Date Time, n: Integer): Date Time', Parameters: [{ Name: 'dt' }, { Name: 'n' }], Description: 'Adds n minutes to dt.' + ' x'.repeat(200), Examples: '' },
+};
+const functionsCli = args => {
+  const name = args[args.indexOf('--name') + 1];
+  const found = Object.values(CATALOG).find(f => f.Name.toLowerCase() === name.toLowerCase());
+  return { ok: true, command: 'functions', data: found ?? { notFound: name, closest: name === 'NullDateTime' ? ['NullDate', 'NewDateTime'] : name === 'NullTime' ? ['CurrTime', 'NewTime', 'NullDate'] : [], hint: 'veja docs/functions.md' } };
+};
+
+test('functions takes several names in one call: each signature, closest names for the missing ones, one CLI lookup per name', async t => {
+  const h = await harness(t, { handlers: { functions: functionsCli } });
+  const value = await h.ask('o11', 'functions', 'GetUserId AddMinutes, NullDateTime; NullDate() NullTime');
+  assert.equal(value.ok, true, JSON.stringify(value)); assert.equal(value.asked, 5);
+  assert.deepEqual(h.run.calls.map(c => c.args), ['GetUserId', 'AddMinutes', 'NullDateTime', 'NullDate', 'NullTime'].map(n => ['functions', '--name', n]));
+  assert.deepEqual(value.data.functions.map(f => f.Signature), ['GetUserId(): UserId', 'AddMinutes(dt: Date Time, n: Integer): Date Time', 'NullDate(): Date']);
+  assert.ok(value.data.functions.every(f => !('Parameters' in f) && (f.Description ?? '').length <= 200), 'compact entries');
+  assert.deepEqual(value.data.notFound.map(n => [n.name, n.closest[0]]), [['NullDateTime', 'NullDate'], ['NullTime', 'CurrTime']]);
+  assert.match(value.data.notFound[0].use, /^NullDate\(\)/); assert.match(value.data.notFound[1].use, /NewTime\(0, 0, 0\)/);
+  assert.deepEqual(value.normalized, ['NullDate() -> NullDate']);
+  assert.match(value.note, /never write it in an expression/);
+  // {names:[...]} is the same lookup, and every name already looked up comes from the session cache.
+  const again = await h.ask('o11', 'functions', { names: ['getuserid', 'NullDate'] });
+  assert.deepEqual(again.data.functions.map(f => f.Name), ['GetUserId', 'NullDate']);
+  assert.equal(h.run.calls.length, 5, 'no new CLI run');
+  // One name keeps the one-name answer (the CLI's own data), a call written with parentheses says what was normalized.
+  const one = await h.ask('o11', 'functions', 'AddMinutes()');
+  assert.equal(one.data.Signature, CATALOG.AddMinutes.Signature); assert.deepEqual(one.normalized, ['AddMinutes() -> AddMinutes']);
+  assert.deepEqual(h.run.calls.at(-1).args, ['functions', '--name', 'AddMinutes']);
+  // A find, or a text that is no list of names, keeps the one-name path.
+  await h.ask('o11', 'functions', { find: 'date' });
+  assert.deepEqual(h.run.calls.at(-1).args, ['functions', '--find', 'date']);
+});
+
+test('functionList: the forms of a list of names, and what is not one', () => {
+  assert.deepEqual(functionList('A B,C;D()'), { names: ['A', 'B', 'C', 'D'], normalized: ['D() -> D'] });
+  assert.deepEqual(functionList({ name: ['A', 'a', 'B'] }), { names: ['A', 'B'], normalized: [] });
+  assert.equal(functionList({ find: 'x' }), null); assert.equal(functionList({ name: 'A', find: 'B' }), null);
+  assert.equal(functionList('Date + 1'), null, 'an expression is no list');
+  assert.equal(functionList(Array.from({ length: FUNCTIONS_MAX + 1 }, (_, i) => 'F' + i).join(' ')), null, 'above the cap: the one-name path refuses it');
 });

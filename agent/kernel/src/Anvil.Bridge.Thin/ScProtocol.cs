@@ -241,7 +241,7 @@ internal static class ScRedaction
 {
     public const string Mask = "[REDACTED]";
     private static readonly Regex SensitiveKey = new(
-        "(?:authorization|cookie|password|passwd|^pwd$|secret|(?:^|_)token(?:$|_)|accesstoken|refreshtoken|idtoken|private.?key|credential|api.?key|subscription.?key|connection.?string|activation.?code|^serial$)",
+        "(?:authorization|cookie|password|passwd|^pwd$|secret|(?:^|_)token(?:$|_)|accesstoken|refreshtoken|idtoken|private.?key|credential|api.?key|subscription.?key|connection.?string|activation.?code|^serial$|^ForceSecureAlgorithmsInAuthentication$)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex Scheme = new("\\b(Bearer|Basic)\\s+[A-Za-z0-9._~+/=-]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex Jwt = new("eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}", RegexOptions.CultureInvariant);
@@ -395,6 +395,13 @@ internal static class ScWebLogin
     public static readonly TimeSpan RejectAfter = TimeSpan.FromSeconds(15);
 
     public static string Target(string host) => $"SSAM/O11/{host}/ServiceCenter";
+    public static string ProfileTarget(string host, string? target)
+    {
+        var legacy = Target(host);
+        if (string.IsNullOrEmpty(target) || target == legacy) return legacy;
+        if (System.Text.RegularExpressions.Regex.IsMatch(target, "^" + System.Text.RegularExpressions.Regex.Escape(legacy) + "/Profiles/[a-f0-9]{64}/[a-f0-9-]{36}$")) return target;
+        throw new ScFailure(ScCodes.BadRequest, "credential profile must belong to this exact Service Center host");
+    }
 
     public static bool MayFill(string host, string? origin) =>
         origin != null && (IdentityOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase) ||
@@ -601,6 +608,23 @@ internal sealed record ScWebRequest(string Method, string Url, string Accept, Js
 /// <summary>Reads what the page answered. Bodies outside the allowlist are dropped before anything is returned.</summary>
 internal static class ScWebResult
 {
+    // SSO login pages can return HTTP 200 at the protected URL and include the
+    // word "logout" in shared scripts. Neither proves an authenticated session.
+    public static bool LoginHtml(string html) => Regex.IsMatch(html,
+        "<form\\b[^>]*\\baction\\s*=\\s*[\"'][^\"']*\\b_?login(?:sso)?\\.aspx(?:[?][^\"']*)?[\"']|class\\s*=\\s*[\"'][^\"']*\\bsc-layout-login\\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+
+    public static bool ProtectedHtml(string host, string url, int status, string html)
+    {
+        if (status != 200 || !ScWebPaths.Allowed(host, url) || ScWebPaths.IsLoginPage(url) || LoginHtml(html)) return false;
+        // Web Forms names the real control wtLogoutLink inside a postback URL.
+        // Markup embedded in shared scripts or comments is not a live control.
+        var markup = Regex.Replace(html, "<(script|style)\\b[^>]*>[\\s\\S]*?</\\1\\s*>|<!--[\\s\\S]*?-->", "",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+        return Regex.IsMatch(markup, "<(?:a|input|button)\\b[^>]*\\b(?:href|onclick)\\s*=\\s*[\"'][^\"']*logout",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+    }
+
     public static JsonObject Status(string host, string? raw)
     {
         var page = Parse(raw);
@@ -622,7 +646,7 @@ internal static class ScWebResult
         switch (page["error"]?.ToString())
         {
             case "origin":
-                throw new ScFailure(ScCodes.WebSignInRequired, $"the Service Center window is not on https://{host} (sign-in pending): run sc_web action=open and sign in there");
+                throw new ScFailure(ScCodes.WebSignInRequired, $"the native HTTP session is not authenticated on https://{host}; no interactive sign-in was attempted");
             case "network" when write:
                 throw new ScFailure(ScCodes.Uncertain, "sc_web: the postback failed in the browser; it may have reached the server; it is never resent: reconcile by a read", true, new JsonObject { ["outcome"] = "uncertain" });
             case "network" when method == "GET":
@@ -637,10 +661,10 @@ internal static class ScWebResult
         var finalUrl = page["finalUrl"]?.ToString();
         if (!ScWebPaths.Allowed(host, finalUrl))
             throw new ScFailure(ScCodes.HostMismatch, $"sc_web: the answer came from {ScWebPaths.Describe(host, finalUrl) ?? "an unknown location"}, outside https://{host}/ServiceCenter/; its body was dropped", true);
-        if (ScWebPaths.IsLoginPage(finalUrl!))
+        if (ScWebPaths.IsLoginPage(finalUrl!) || status is 401 or 403 || LoginHtml(page["html"]?.ToString() ?? ""))
             throw write ? new ScFailure(ScCodes.Uncertain, "sc_web: the postback was answered by the sign-in page; it is never resent: sign in (sc_web action=open), then reconcile by a read", true,
                     new JsonObject { ["outcome"] = "uncertain", ["signInRequired"] = true })
-                : new ScFailure(ScCodes.WebSignInRequired, "sc_web: the Service Center asked for sign-in: run sc_web action=open and sign in in that window", true);
+                : new ScFailure(ScCodes.WebSignInRequired, "Service Center requires authentication; headless HTTP did not open a login window", true);
         if (page["tooLarge"] is { } size)
             throw new ScFailure(ScCodes.RemoteError, $"sc_web: response of {size} exceeds the limit", true);
         var body = new JsonObject { ["status"] = status, ["finalUrl"] = finalUrl, ["redirected"] = page["redirected"]?.GetValue<bool>() ?? false,

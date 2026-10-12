@@ -33,10 +33,10 @@
         "wake up",
         "nightly"
       ],
-      "summary": "ITimer under the module with Action = IServerAction:<Name> and Description; TimeoutInMinutes and Priority exist on both lanes. ODC also has CronSchedule (five fields) and a derived child ScheduleConfiguration (ISchedule with typed ScheduleItems) rebuilt when the timer's CronSchedule or Schedule changes; O11 has the Schedule text instead, as the Service Studio writes it: \"Every 60 minutes\", \"Every day at 00:00\", \"Every Monday at 00:05\" (pacote-laneE-timer-schedule). No O11 job writes TimeoutInMinutes or Priority.",
+      "summary": "ITimer under the module with Action = IServerAction:<Name> and Description; TimeoutInMinutes and Priority exist on both lanes. ODC also has CronSchedule (five fields) and a derived child ScheduleConfiguration (ISchedule with typed ScheduleItems) rebuilt when the timer's CronSchedule or Schedule changes; O11 has the Schedule text instead, as the Service Studio writes it: \"00:00 01:00 02:00 03:00 04:00 05:00 06:00 07:00 08:00 09:00 10:00 11:00 12:00 13:00 14:00 15:00 16:00 17:00 18:00 19:00 20:00 21:00 22:00 23:00\", \"00:00\", \"00:05 Mon\" (pacote-laneE-timer-schedule). No O11 job writes TimeoutInMinutes or Priority.",
       "route": {
         "kind": "job",
-        "operation": "create ITimer @espace; set Action IServerAction:<Name>; set Description; O11: set Schedule \"Every 60 minutes\" | \"Every day at 00:00\" | \"Every Monday at 00:05\"; ODC: set CronSchedule \"m h dom mon dow\" (or Schedule), TimeoutInMinutes, Priority; deliver with o11_deliver / studio_deliver"
+        "operation": "create ITimer @espace; set Action IServerAction:<Name>; set Description; O11: set Schedule \"00:00 01:00 02:00 03:00 04:00 05:00 06:00 07:00 08:00 09:00 10:00 11:00 12:00 13:00 14:00 15:00 16:00 17:00 18:00 19:00 20:00 21:00 22:00 23:00\" | \"00:00\" | \"00:05 Mon\"; ODC: set CronSchedule \"m h dom mon dow\" (or Schedule), TimeoutInMinutes, Priority; deliver with o11_deliver / studio_deliver"
       },
       "contract": [
         "verbs.verbs.create",
@@ -46,7 +46,7 @@
         "verbs.verbs.usages",
         "verbs.references"
       ],
-      "guidance": "The scheduled logic is a server action (front A): create it first or point at an existing one (set Action IServerAction:<Name>). ODC: a timer counts as a consumer of its action, so deleting the timer leaves the action without consumers (UnusedUserAction, declared in timer-lifecycle); on O11 usages is not proven. ODC: change the schedule through the PARENT (CronSchedule or Schedule on the timer); the schedule values in ScheduleConfiguration and its items are derived and read-only, while ScheduleConfiguration.WhenPublished and the items' Interval are writable but untested. Read the tree by path ITimer:<T>/ScheduleConfiguration/#IMinute, #IHour, #IDayOfWeek; the item count depends on the route (CronSchedule builds five items including Any placeholders, Schedule \"07:45\" builds two), so never infer the schedule from the count. A six-field cron is not accepted on ODC. O11: the schedule is the Schedule text (\"Every 60 minutes\", \"Every day at 00:00\", \"Every Monday at 00:05\"), read back by get.",
+      "guidance": "The scheduled logic is a server action (front A): create it first or point at an existing one (set Action IServerAction:<Name>). ODC: a timer counts as a consumer of its action, so deleting the timer leaves the action without consumers (UnusedUserAction, declared in timer-lifecycle); on O11 usages is not proven. ODC: change the schedule through the PARENT (CronSchedule or Schedule on the timer); the schedule values in ScheduleConfiguration and its items are derived and read-only, while ScheduleConfiguration.WhenPublished and the items' Interval are writable but untested. Read the tree by path ITimer:<T>/ScheduleConfiguration/#IMinute, #IHour, #IDayOfWeek; the item count depends on the route (CronSchedule builds five items including Any placeholders, Schedule \"07:45\" builds two), so never infer the schedule from the count. A six-field cron is not accepted on ODC. O11: the schedule is the Schedule text (\"00:00 01:00 02:00 03:00 04:00 05:00 06:00 07:00 08:00 09:00 10:00 11:00 12:00 13:00 14:00 15:00 16:00 17:00 18:00 19:00 20:00 21:00 22:00 23:00\", \"00:00\", \"00:05 Mon\"), read back by get.",
       "example": {
         "ops": [
           "create",
@@ -167,7 +167,7 @@
                   "process-human-traditional",
                   "tickets-06-sla"
                 ],
-                "scope": "Action, Description and Schedule (\"Every 60 minutes\", \"Every day at 00:00\", read back by get in pacote-laneE-timer-schedule)"
+                "scope": "Action, Description and Schedule (\"00:00 01:00 02:00 03:00 04:00 05:00 06:00 07:00 08:00 09:00 10:00 11:00 12:00 13:00 14:00 15:00 16:00 17:00 18:00 19:00 20:00 21:00 22:00 23:00\", \"00:00\", read back by get in pacote-laneE-timer-schedule)"
               }
             }
           }
@@ -265,7 +265,7 @@
           ],
           "differences": [
             {
-              "text": "The O11 schedule is the Schedule text (\"Every 60 minutes\", \"Every day at 00:00\"); CronSchedule and the ScheduleConfiguration tree do not exist on O11.",
+              "text": "The O11 schedule is the Schedule text (\"00:00 01:00 02:00 03:00 04:00 05:00 06:00 07:00 08:00 09:00 10:00 11:00 12:00 13:00 14:00 15:00 16:00 17:00 18:00 19:00 20:00 21:00 22:00 23:00\", \"00:00\"); CronSchedule and the ScheduleConfiguration tree do not exist on O11.",
               "origin": "kernel/catalog/model-api-11.55.69.json ITimer"
             }
           ]

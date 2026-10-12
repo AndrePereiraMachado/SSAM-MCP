@@ -16,6 +16,17 @@ const registered = (deps = {}) => {
   return entries;
 };
 
+test('typed provider read reaches IntegrationStudio with only its exact target arguments', async () => {
+  const bridge = new FakeBridge({api: {TranslateLogicalDatabaseToDbConnection: {providerObserved:true,mappingAbsentProven:false,dbConnection:{name:'Proof',providerName:'SqlServer'}}}});
+  const entries = registered({serviceCenter:{locate:()=>bridge,present:async()=>false,running:async()=>false}});
+  const result = await entries.get('o11_service_center_read').handler({action:'extension-database-provider',host:'test.example.com',extensionKey:'proof-key',logicalDatabase:'Cargo'});
+  assert.equal(result.structuredContent.ok,true,JSON.stringify(result.structuredContent));
+  assert.equal(result.structuredContent.result.result.mappingAbsentProven,false,JSON.stringify(result.structuredContent));
+  assert.deepEqual(bridge.calls.find(c=>c[0]==='api').slice(1,5), ['integration-studio','TranslateLogicalDatabaseToDbConnection',{extensionKey:'proof-key',logicalDatabase:'Cargo'},false]);
+  assert.ok(entries.get('o11_service_center_read').inputSchema.properties.extensionKey);
+  assert.ok(entries.get('o11_service_center_read').inputSchema.properties.logicalDatabase);
+});
+
 test('Service Center tools answer in this process (no Python, no command line) and never echo the words', async () => {
   const source = fs.readFileSync(path.join(import.meta.dirname, '..', 'o11-operations.mjs'), 'utf8');
   assert.ok(!source.includes("run('o11', 'service-center'"));
@@ -56,6 +67,18 @@ test('read tool rejects mutations and argv injection never becomes execute', () 
   assert.throws(() => serviceCenterArguments({ action: 'module-delete' }, 'session'));
 });
 
+test('monitoring events are a typed MCP read and require explicit vault transport before resolving identity',async()=>{
+ const entries=registered({serviceCenter:{locate:()=>assert.fail('No Studio lookup before transport validation')}});
+ const read=entries.get('o11_service_center_read');
+ assert.ok(read.inputSchema.properties.action.enum.includes('timer-events'));
+ assert.deepEqual(read.inputSchema.properties.eventAuth.enum,['basic','service-token']);
+ assert.ok(serviceCenterArguments({action:'timer-events',eventAuth:'service-token'}).includes('--event-auth=service-token'));
+ assert.deepEqual(serviceCenterArguments({action:'timer-events',host:'test.example.com',session:'vault',since:'2026-10-09T16:00:00Z',until:'2026-10-09T16:10:00Z',limit:10}),
+  ['timer-events','--host=test.example.com','--session=vault','--limit=10','--since=2026-10-09T16:00:00Z','--until=2026-10-09T16:10:00Z']);
+ const r=await read.handler({action:'timer-events',host:'test.example.com'});
+ assert.equal(r.isError,true);assert.match(JSON.stringify(r.structuredContent),/requires session=vault/);
+});
+
 test('new reads and writes map to typed flags; parameters are label=value text only', () => {
   assert.deepEqual(serviceCenterArguments({ action: 'logs', host: 'h.test', kind: 'error', stackContains: 'Pay', export: true, maxPages: 50 }),
     ['logs', '--host=h.test', '--kind=error', '--max-pages=50', '--stack-contains=Pay', '--export']);
@@ -84,6 +107,8 @@ test('wave 2: schedule controls, log filters, page-layout and the Studio API wri
   assert.deepEqual(serviceCenterArguments({ action: 'solution-add-component', host: 'h.test', solution: 'S', component: 'C', includeReferences: true }, 'write'),
     ['solution-add-component', '--host=h.test', '--solution=S', '--component=C', '--include-references']);
   // Writes and their arguments never reach the read tool.
+  assert.deepEqual(serviceCenterArguments({action:'integration-detail',host:'h.test',moduleId:'7',integration:'Api',integrationKind:'exposed-rest'}),
+    ['integration-detail','--host=h.test','--module-id=7','--integration=Api','--integration-kind=exposed-rest']);
   for (const extra of [{ xifFile: 'C:\\x.xif' }, { schedule: { at: '01:00' } }, { includeReferences: true }]) assert.throws(() => serviceCenterArguments({ action: 'logs', ...extra }));
   assert.throws(() => serviceCenterArguments({ action: 'page-layout' }, 'write'));
 });

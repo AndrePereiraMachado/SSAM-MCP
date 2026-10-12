@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Task Board</title>
+  <script src="https://unpkg.com/tiny-board@1.0.0/dist/tiny-board.js"></script>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    TinyBoard.mount(document.getElementById('app'), [
+      { id: 1, title: 'Write report', done: false },
+      { id: 2, title: 'Call supplier', done: true }
+    ]);
+  </script>
+</body>
+</html>

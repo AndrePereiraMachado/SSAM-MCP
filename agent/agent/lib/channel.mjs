@@ -6,6 +6,9 @@
 // C03 (fase4): a POST of messages gives up after 10 s (plus 1 s per 64 KiB of its batch), so a stuck POST never holds the
 // channel; a pong goes in a POST of its own, never behind a result; the stream GET gives up after 15 s without response
 // headers; a stream that fails right after a successful hello says hello again at once, one time, before any backoff.
+// fase4-24 (2.9): the hello gives up after 15 s, like the stream headers (it waited 120 s); a blob part request gets the
+// deadline and the `fresh` flag uploadBlob/downloadBlob give it (blobs.mjs). The connections themselves (idle reuse of 2 s,
+// TCP keep-alive probes, a dead path dropped after a failure) are net.mjs, the fetch createAgent hands the channel.
 export const PROTOCOL = 'ssam-agent/1';
 export const EXIT = Object.freeze({ stopped: 0, credential: 2, replaced: 3, protocol: 4 });
 const CLOSE_EXIT = { revoked: 2, expired: 2, rotated: 2, replaced: 3 };
@@ -16,11 +19,12 @@ const REQUEST_MS = 120000;
 // hub's 45 s dead timer); the stream's response headers: 15 s.
 export const MESSAGES_MS = 10000;
 export const STREAM_HEADERS_MS = 15000;
+export const HELLO_MS = 15000;
 export const messagesTimeoutMs = (bytes, base = MESSAGES_MS) => base + Math.ceil(Math.max(0, Number(bytes) || 0) / 65536) * 1000;
 
 export function createChannel({ server, credential, hello, onCall, outbox, pongVersions = () => undefined, fetch = globalThis.fetch,
   now = Date.now, setTimeout: setTimer = globalThis.setTimeout, clearTimeout: clearTimer = globalThis.clearTimeout, random = Math.random,
-  log = () => {}, onState = () => {}, deadMs = DEAD_MS, messagesMs = MESSAGES_MS, streamHeadersMs = STREAM_HEADERS_MS }) {
+  log = () => {}, onState = () => {}, deadMs = DEAD_MS, messagesMs = MESSAGES_MS, streamHeadersMs = STREAM_HEADERS_MS, helloMs = HELLO_MS }) {
   const base = String(server ?? '').replace(/\/+$/, '');
   let welcome = null; let channel = null; let stream = null; let resolveRun = null;
   // connecting: a hello or a stream request is in flight; connected: the stream is open.
@@ -32,8 +36,10 @@ export function createChannel({ server, credential, hello, onCall, outbox, pongV
   let reconnectTimer = null; let deadTimer = null; let flushTimer = null;
 
   const auth = () => ({ authorization: 'Bearer ' + credential });
-  const request = (method, route, { json, body, headers = {}, signal, timeoutMs = REQUEST_MS } = {}) => {
+  // fresh: on a connection of its own (net.mjs); a fetch that does not know the flag ignores it.
+  const request = (method, route, { json, body, headers = {}, signal, timeoutMs = REQUEST_MS, fresh = false } = {}) => {
     const init = { method, headers: { ...auth(), ...headers }, signal: signal ?? AbortSignal.timeout(timeoutMs) };
+    if (fresh) init.fresh = true;
     if (json !== undefined) { init.body = typeof json === 'string' ? json : JSON.stringify(json); init.headers['content-type'] = 'application/json'; }
     else if (body !== undefined) init.body = body;
     return fetch(base + route, init);
@@ -80,7 +86,7 @@ export function createChannel({ server, credential, hello, onCall, outbox, pongV
     connecting = true;
     onState('connecting');
     let reply;
-    try { reply = await request('POST', '/agent/v1/hello', { json: await hello() }); }
+    try { reply = await request('POST', '/agent/v1/hello', { json: await hello(), timeoutMs: helloMs }); }
     catch (error) { log('hello-failed', { error: error.message }); return retry(); }
     if (stopped) return;
     if (reply.status === 401 || reply.status === 403) { await discard(reply); return finish(EXIT.credential, 'hello-' + reply.status); }
@@ -217,16 +223,27 @@ export function createChannel({ server, credential, hello, onCall, outbox, pongV
     flush,
     welcome: () => welcome,
     connected: () => connected,
-    async blobPut(transfer, index, body, headers) {
+    // One part, within its own deadline (timeoutMs covers the answer and its body); fresh after a part that got no answer.
+    async blobPut(transfer, index, body, headers, { timeoutMs, fresh = false } = {}) {
       if (!channel) throw new Error('not connected');
-      const reply = await request('PUT', `/agent/v1/blobs/${transfer}/${index}?channel=${channel}`, { body, headers });
+      const reply = await request('PUT', `/agent/v1/blobs/${transfer}/${index}?channel=${channel}`, { body, headers, timeoutMs, fresh });
       await discard(reply);
       return reply.status;
     },
-    async blobGet(transfer, index) {
+    async blobGet(transfer, index, { timeoutMs, fresh = false } = {}) {
       if (!channel) throw new Error('not connected');
-      const reply = await request('GET', `/agent/v1/blobs/${transfer}/${index}?channel=${channel}`);
+      const reply = await request('GET', `/agent/v1/blobs/${transfer}/${index}?channel=${channel}`, { timeoutMs, fresh });
       return { status: reply.status, body: Buffer.from(await reply.arrayBuffer()), partSha: reply.headers.get('x-ssam-part-sha256') };
+    },
+    // One upload of the network check (net-probe.mjs, docs/FASE2-AGENTE.md 2.10): throwaway bytes the server discards, on a
+    // connection of its own by default; signal is the check's budget. -> {status, value: {bytes, ms, via} | null}.
+    async probePut(id, body, { signal, timeoutMs = 15000, fresh = true } = {}) {
+      if (!channel) throw new Error('not connected');
+      const reply = await request('PUT', `/agent/v1/probe/${id}?channel=${channel}`, { body, headers: { 'content-type': 'application/octet-stream' },
+        signal: signal ?? AbortSignal.timeout(timeoutMs), fresh });
+      let value = null;
+      try { value = await reply.json(); } catch { value = null; }
+      return { status: reply.status, value };
     },
   };
 }

@@ -255,10 +255,15 @@ test('real MCP stdio exposes both runner schemas and rejects incomplete O11 prep
   await client.connect(new StdioClientTransport({ command: process.execPath,
     args: [fileURLToPath(new URL('../ssam.mjs', import.meta.url)), 'mcp'], stderr: 'ignore' }));
   try {
-    const tool = (await client.listTools()).tools.find(value => value.name === 'ssam_debug_run');
+    const listed = (await client.listTools()).tools;
+    const tool = listed.find(value => value.name === 'ssam_debug_run');
     assert.ok(tool); const schema = JSON.stringify(tool.inputSchema);
     assert.ok(schema.includes('operationId')); assert.ok(schema.includes('applicationKey')); assert.ok(schema.includes('o11'));
     const result = await client.callTool({ name: 'ssam_debug_run', arguments: { op: 'prepare', lane: 'o11' } });
     assert.equal(result.isError, true);
+    const interactive = listed.find(value => value.name === 'ssam_debug_client');
+    assert.ok(interactive); assert.match(JSON.stringify(interactive.inputSchema), /independentClientLocal/);
+    const invalid = await client.callTool({ name: 'ssam_debug_client', arguments: { op: 'continue', sessionId: '12345678-1234-4234-8234-123456789abc' } });
+    assert.equal(invalid.isError, true);
   } finally { await client.close(); }
 });

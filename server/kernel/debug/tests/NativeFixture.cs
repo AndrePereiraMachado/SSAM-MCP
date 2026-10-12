@@ -5,6 +5,27 @@ using System.Text;
 using System.Text.Json;
 using System.Collections.Concurrent;
 internal static class NativeFixture {
+#if ODC
+    // Typed hub payloads ($type + JsonProperty names of the installed OutSystems.DebuggerClient.Payloads), decoded as
+    // NativeTransport does: PayloadBinder, then DebuggerPayloadExtensions.ConvertToPluginApiEvent. Synthetic values.
+    internal static string OdcEventJson(string type, string threadId, long eventId, string? requestId, string? node = null, string? lastBreakpoint = null, bool longLived = true) =>
+        JsonSerializer.Serialize(new Dictionary<string, object?> {
+            ["$type"] = "OutSystems.DebuggerClient.Payloads." + type + ", OutSystems.DebuggerClient",
+            ["threadId"] = threadId, ["eventId"] = eventId, ["requestId"] = requestId, ["threadName"] = "Timer",
+            ["isLongLivedRequest"] = longLived, ["inPTA"] = false, ["clientThreadId"] = 7,
+            ["breakpointType"] = node == null ? null : "Normal", ["username"] = type == "ThreadEndEvent" ? "PRIVATE-USER" : null,
+            ["lastBreakpoint"] = lastBreakpoint, ["lastCommand"] = type == "ThreadEndEvent" ? "ContinueThread" : null,
+            ["stack"] = node == null ? null : new { stackElem = new { eSpaceName = "Fixture", functionName = "Timer", functionType = "ServerAction",
+                functionId = Tests.ModuleKey + ":" + Tests.NodeKey + "::", breakpoint = Tests.ModuleKey + ":" + node + "::", breakpointType = "Normal" } }
+        }.Where(kv => kv.Value != null).ToDictionary());
+    internal static DebugTransportEvent OdcEnvelope(string json) {
+        var payload = Newtonsoft.Json.JsonConvert.DeserializeObject<OutSystems.DebuggerClient.Payloads.DebuggerEvent>(json, new Newtonsoft.Json.JsonSerializerSettings {
+            TypeNameHandling = Newtonsoft.Json.TypeNameHandling.Auto, SerializationBinder = new PayloadBinder() })!;
+        var evt = ServiceStudio.ServerCommunications.API.DebuggerPayloadExtensions.ConvertToPluginApiEvent(payload,
+            OutSystems.ObjectKeys.ObjectKey.Parse(Tests.ModuleKey), false, "PRIVATE-SESSION", out _);
+        return DebugTransportEvent.FromTyped(evt, payload);
+    }
+#endif
     internal static async Task Run(bool slowEvaluation = false, bool rejectStart = false) {
         var reservation = new TcpListener(IPAddress.Loopback, 0); reservation.Start();
         var port = ((IPEndPoint)reservation.LocalEndpoint).Port; reservation.Stop();
@@ -61,7 +82,7 @@ internal static class NativeFixture {
         await using var transport = new NativeTransport(config, _ => ("TEST_USER", "TEST_PASSWORD"));
         transport.Received += e => { if (e.NativeEvent.ThreadData?.ThreadId == "T1" && e.NativeEvent.EventId == 42) {
 #if ODC
-            Tests.Check(!e.RawRequestIdPresent && e.RequestIdIsFallback, "ODC payload provenance remains unavailable");
+            Tests.Check(e.RawRequestIdPresent && !e.RequestIdIsFallback && e.RawRequestId == "R1", "native ODC typed payload preserves original requestId");
 #else
             Tests.Check(e.RawRequestIdPresent && !e.RequestIdIsFallback && e.RawRequestId == "R1", "native REST XML preserves original requestId");
 #endif

@@ -1,0 +1,2 @@
+# Prototype fixtures are byte-exact copies (hashes, line:column of handlers); no line-ending conversion.
+* -text

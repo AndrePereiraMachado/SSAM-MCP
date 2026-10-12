@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { connectNativeClientInspector } from './debug-native-client-inspection.mjs';
 
 const SHA = /^[a-f0-9]{64}$/;
 const KEY = /^[A-Za-z0-9_+]{22}$/;
@@ -35,7 +36,9 @@ const PUBLIC_CODES = new Set(`source_required source_invalid source_unavailable 
   cookie_contract_invalid output_contract_invalid anonymous_context_invalid credentials_unavailable login_rejected
   roles_unavailable login_identity_unavailable invocation_refused timeout result_unproved submission_refused
   operation_invalid parent_closed preparation_already_reserved worker_failed inventory_unproved scenario_invalid
-  input_conversion_failed record_class_unresolved entry_kind_unsupported`.split(/\s+/).map(code => 'debug_o11_native_' + code));
+  input_conversion_failed record_class_unresolved entry_kind_unsupported screen_permissions_unavailable
+  context_invalid context_owner_unavailable context_private_value context_attribute_unavailable context_conflict
+  lifecycle_handler_unavailable inspection_deadline_invalid record_class_mismatch`.split(/\s+/).map(code => 'debug_o11_native_' + code));
 export const o11NativePublicCode = (value, fallback = 'debug_o11_native_worker_failed') => PUBLIC_CODES.has(value) ? value : fallback;
 const safeCode = o11NativePublicCode;
 
@@ -106,6 +109,26 @@ const DATA_TYPE_NAMES = new Set(['Integer', 'LongInteger', 'Decimal', 'Currency'
   'Time', 'Record', 'RecordList', 'BinaryData', 'Object']);
 const ENTRY_KINDS = new Set(['server-stub', 'data-action', 'client-action']);
 const UNSAFE = ['__proto__', 'constructor', 'prototype'];
+const LIST_ELEMENTS = new Set(['Text', 'Integer', 'LongInteger', 'Decimal', 'Currency', 'Boolean', 'Date', 'Time', 'DateTime', 'Email', 'PhoneNumber', 'BinaryData']);
+// One typed entry input. A basic-type list names its element and the runtime's OS.DataTypes.<Element>List (never a module
+// class: the original converter cannot instantiate a module GenericRecordList of a basic type); the worker checks the item type.
+export function o11EntryInputValid(i) {
+  if (!NAME.test(i?.name ?? '') || !/^[A-Za-z_$][\w$]*$/.test(i.param ?? '') || !DATA_TYPE_NAMES.has(i.dataType)) return false;
+  if (i.recordClass !== undefined && i.recordClass !== null && !SELECTOR.test(i.recordClass)) return false;
+  if ((i.element !== undefined || i.runtimeList !== undefined) && (i.dataType !== 'RecordList' || !LIST_ELEMENTS.has(i.element) ||
+      i.runtimeList !== i.element + 'List' || i.recordClass !== undefined && i.recordClass !== null)) return false;
+  return true;
+}
+// Published login controller (graph contract and the owned-browser mount): factories, method, API version, screenservices endpoint.
+export function o11NativeLoginSpecValid(login, target) {
+  const endpoint = login?.endpoint;
+  let endpointOk = false;
+  try { endpointOk = typeof endpoint === 'string' && NAME.test(target?.module ?? '') && endpoint.startsWith('/' + target.module + '/screenservices/') &&
+    !/[?#\\\x00-\x20]/.test(endpoint) && new URL(endpoint, target.runtimeUrl).pathname === endpoint; } catch { endpointOk = false; }
+  return endpointOk && [login.modelFactory, login.controllerFactory].every(s => SELECTOR.test(s ?? '') && !UNSAFE.includes(s)) &&
+    /^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/.test(login.viewName ?? '') &&
+    SELECTOR.test(login.method ?? '') && !UNSAFE.includes(login.method) && KEY.test(login.apiVersion ?? '');
+}
 function readGraphEntryContract(value, reference, target, action, read) {
   if (!value.target || ['lane', 'runtimeUrl', 'module', 'moduleKey', 'applicationKey'].some(k => value.target[k] !== target[k]) ||
       ['publishedVersionId', 'sourceSha256'].some(k => target[k] !== undefined && value.target[k] !== target[k]) ||
@@ -122,19 +145,37 @@ function readGraphEntryContract(value, reference, target, action, read) {
     !/[?#\\\x00-\x20]/.test(endpoint) && new URL(endpoint, target.runtimeUrl).pathname === endpoint;
   const factoriesOk = spec => [spec.modelFactory, spec.controllerFactory].every(s => SELECTOR.test(s ?? '') && !UNSAFE.includes(s)) &&
     /^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/.test(spec.viewName ?? '');
-  if (!factoriesOk(login) || !SELECTOR.test(login.method ?? '') || UNSAFE.includes(login.method) || !KEY.test(login.apiVersion ?? '') || !endpointOk(login.endpoint))
-    deny('debug_o11_native_abi_invalid');
+  if (!o11NativeLoginSpecValid(login, target)) deny('debug_o11_native_abi_invalid');
   if (!SELECTOR.test(entry.controller ?? '') || typeof entry.moduleLevel !== 'boolean' || !SELECTOR.test(entry.method ?? '') || UNSAFE.includes(entry.method) ||
       (!entry.moduleLevel && !factoriesOk(entry)) || (entry.actionKey !== null && entry.actionKey !== undefined && !KEY.test(entry.actionKey)) ||
+      (entry.hostScreen !== undefined && (!factoriesOk(entry.hostScreen) || entry.hostScreen.viewName !== entry.viewName)) ||
       !Array.isArray(entry.endpoints) || entry.endpoints.length > 64 || !entry.endpoints.every(endpointOk) || entry.endpoints.includes(login.endpoint) ||
       (entry.kind !== 'client-action' && (!entry.endpoints.includes(entry.endpoint) || !KEY.test(entry.apiVersion ?? ''))) ||
       (entry.kind === 'data-action' && !SELECTOR.test(entry.dataProperty ?? '')) ||
       !Array.isArray(entry.inputs) || entry.inputs.length > 60 || !Array.isArray(entry.outputs) || entry.outputs.length > 120 ||
-      entry.inputs.some(i => !NAME.test(i.name ?? '') || !/^[A-Za-z_$][\w$]*$/.test(i.param ?? '') || !DATA_TYPE_NAMES.has(i.dataType) ||
-        i.recordClass !== undefined && i.recordClass !== null && !SELECTOR.test(i.recordClass)) ||
+      entry.inputs.some(i => !o11EntryInputValid(i)) ||
       new Set(entry.inputs.map(i => i.name)).size !== entry.inputs.length ||
       entry.outputs.some(o => !NAME.test(o.name ?? '') || !SELECTOR.test(o.attribute ?? '') || !DATA_TYPE_NAMES.has(o.dataType)) ||
       (entry.screenVariables ?? []).some(v => !NAME.test(v.name ?? '') || !SELECTOR.test(v.attribute ?? '') || !DATA_TYPE_NAMES.has(v.dataType)))
+    deny('debug_o11_native_abi_invalid');
+  if (entry.context !== undefined) {
+    if (!entry.context || typeof entry.context !== 'object' || Array.isArray(entry.context) || entry.moduleLevel ||
+        Object.keys(entry.context).some(owner => !['screen', 'block'].includes(owner))) deny('debug_o11_native_abi_invalid');
+    for (const groups of Object.values(entry.context)) {
+      if (!groups || Object.keys(groups).some(group => !['inputs', 'variables'].includes(group))) deny('debug_o11_native_abi_invalid');
+      for (const group of ['inputs', 'variables']) {
+        if (!Array.isArray(groups[group]) || groups[group].length > 120 || new Set(groups[group].map(v => v.name)).size !== groups[group].length ||
+            groups[group].some(v => !NAME.test(v.name ?? '') || v.name.startsWith('_') || !SELECTOR.test(v.attribute ?? '') ||
+              UNSAFE.includes(v.name) || UNSAFE.includes(v.attribute) || !DATA_TYPE_NAMES.has(v.dataType) ||
+              v.recordClass !== undefined && !SELECTOR.test(v.recordClass) || group === 'inputs' && typeof v.wireInput !== 'boolean'))
+          deny('debug_o11_native_abi_invalid');
+      }
+      if (groups.inputs.some(v => groups.variables.some(other => other.attribute === v.attribute))) deny('debug_o11_native_abi_invalid');
+    }
+  }
+  if (entry.lifecycle !== undefined && (entry.kind !== 'client-action' || entry.moduleLevel || entry.inputs.length || entry.outputs.length ||
+      !/^On(?:Initialize|Ready|Render|Destroy|ParametersChanged)$/.test(entry.lifecycle?.event ?? '') ||
+      entry.lifecycle.handler !== entry.lifecycle.event.replace(/^On/, 'on') + 'EventHandler' || entry.lifecycle.method !== entry.method))
     deny('debug_o11_native_abi_invalid');
   read(value.snapshot, 200 * 1024 * 1024);
   if (value.snapshot.sha256 !== target.sourceSha256) deny('debug_o11_native_source_changed');
@@ -171,7 +212,7 @@ export function createO11NativeEntryBroker({ root, spawnImpl = spawn } = {}) {
         !path.isAbsolute(directory ?? '') || !fs.existsSync(workerPath)) deny('debug_o11_native_preparation_invalid');
     o11NativeDirectory(root, directory);
     let report = { ok: false, phase: 'preparing', browser: false, serverTraceProved: false, userRequestIsolationProved: false };
-    let busy = false, closed = false, sequence = 0, pending, buffer = '', submissionHandler, workerReceiptPath, submissions = 0, maxSubmissions = 1, exitObserved = false;
+    let busy = false, closed = false, sequence = 0, pending, buffer = '', submissionHandler, workerReceiptPath, submissions = 0, maxSubmissions = 1, exitObserved = false, inspection, serverInspectionDeadline;
     const sameReceiptScope = value => value?.schema === 'ssam-o11-native-entry-receipt/1' && value.sessionId === sessionId &&
       TARGET_FIELDS.every(key => value.target?.[key] === target[key]) && value.target.host === target.host &&
       value.sourceContract?.path === sourceContract.path && value.sourceContract.sha256 === sourceContract.sha256;
@@ -186,6 +227,15 @@ export function createO11NativeEntryBroker({ root, spawnImpl = spawn } = {}) {
       if (!exitObserved && child.kill() !== false) await wait(4000);
       report.workerExited = exitObserved;
       if (!exitObserved) { report.memoryCleared = false; report.nativeContextReferencesReleased = false; }
+      // Parent observation is independent of native disposal. Preserve it even
+      // when a paused worker was terminated before its disposal RPC could run.
+      const processReceipt = { schema: 'ssam-o11-native-process-receipt/1', sessionId, target, sourceContract,
+        observedAt: new Date().toISOString(), workerExited: exitObserved,
+        nativeMemoryCleared: report.memoryCleared === true,
+        nativeContextReferencesReleased: report.nativeContextReferencesReleased === true };
+      const processReceiptPath = path.join(directory, 'native-entry-process-receipt.json');
+      fs.writeFileSync(processReceiptPath + '.tmp', JSON.stringify(processReceipt, null, 2));
+      fs.renameSync(processReceiptPath + '.tmp', processReceiptPath);
       return exitObserved;
     };
     child.stdin.on('error', () => {}); child.stdout.setEncoding('utf8');
@@ -231,18 +281,48 @@ export function createO11NativeEntryBroker({ root, spawnImpl = spawn } = {}) {
       const prepared = await rpc('prepare', { root, target, sourceContract, action, sessionId, timeoutSeconds, directory });
       const receiptPath = prepared.receiptPath;
       return Object.freeze({ receiptPath, receipt: () => structuredClone(report),
+        configureServerInspection: async options => {
+          const result = await rpc('configure-server-inspection', options);
+          const deadline = Date.parse(result.expiresAt);
+          if (result.configured !== true || !Number.isFinite(deadline) || deadline <= Date.now() || result.expiresAt !== options.expiresAt)
+            deny('debug_o11_native_inspection_deadline_invalid');
+          serverInspectionDeadline = deadline;
+          return { configured: true, expiresAt: result.expiresAt };
+        },
+        configureInspection: async ({ onEvent, ...options }) => {
+          if (inspection) deny('debug_o11_native_session_busy');
+          // pauseOnExceptions reaches the worker's original pauseOnAllExceptions switch unchanged.
+          if (options.pauseOnExceptions !== undefined && typeof options.pauseOnExceptions !== 'boolean') deny('debug_o11_native_inspection_options_invalid');
+          const prepared = await rpc('configure-inspection', options);
+          inspection = await connectNativeClientInspector({ ...prepared.inspectionCapability, onEvent: event => {
+            if (pending?.op === 'invoke') {
+              if (event.kind === 'paused') clearTimeout(pending.timer);
+              if (event.kind === 'resumed') pending.timer = setTimeout(() => { child.kill(); rejectPending(); }, (timeoutSeconds + 15) * 1000);
+            }
+            onEvent?.(event);
+          },
+            leaseMs: options.leaseMs, terminate: () => child.kill() });
+          return { configured: true, runtime: 'client', mode: 'interactive' };
+        },
+        inspection: input => inspection ? inspection.command(input) : Promise.reject(new Error('debug_native_client_not_configured')),
+        consumePrivateInspection: (descriptor,consume) => inspection ? inspection.consumePrivate(descriptor,consume) : Promise.reject(new Error('debug_native_client_not_configured')),
         authenticate: descriptor => rpc('authenticate', { descriptor }),
         invoke: async ({ beforeRequest, scenario } = {}) => {
           // The child's real outgoing request waits for accounting, before its fetch.
           if (typeof beforeRequest !== 'function') deny('debug_o11_native_submission_refused');
           submissionHandler = beforeRequest; submissions = 0; maxSubmissions = scenario ? 20 : 1;
-          try { return await rpc('invoke', scenario ? { scenario } : {}); } finally { submissionHandler = undefined; }
+          try { return await rpc('invoke', scenario ? { scenario } : {}, serverInspectionDeadline === undefined
+            ? (timeoutSeconds + 15) * 1000 : Math.max(1, serverInspectionDeadline - Date.now()) + 15000); }
+          finally { submissionHandler = undefined; }
         },
         dispose: async () => {
-          if (closed) return { ok: true, ...structuredClone(report) };
+          await inspection?.close();
+          const outcome = () => ({ ...structuredClone(report), ok: report.workerExited === true &&
+            report.memoryCleared === true && report.nativeContextReferencesReleased === true });
+          if (closed) return outcome();
           try { await rpc('dispose', {}, 15000); }
           finally { await terminate(); }
-          return { ok: report.workerExited === true, ...structuredClone(report) };
+          return outcome();
         } });
     } catch (error) {
       await terminate();

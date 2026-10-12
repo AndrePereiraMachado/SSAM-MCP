@@ -7,7 +7,8 @@
 //                basedOn correct a refused job with a JSON Patch into a new job file (job-patch.mjs; paths by index or by
 //                name), job + basedOn merges a partial job (only the changed or new elements) into it, and every refusal
 //                and success names the job it used (job, jobSha256, nextBasedOn; a refusal's patches also by name,
-//                patchByName) so the next call patches or completes it;
+//                patchByName) so the next call patches or completes it; a delivered job, or any job it was corrected
+//                from, is never a base again (BASED_ON_DELIVERED, G16);
 //   ssam_task    the long tasks (ssam-task.mjs).
 // Policy stays in the kernel: the CLI validates, merges once and keeps the task (work/deliver/<taskId>/task.json). This
 // file builds the argv, keeps the user's words as a sha256 in the lane journal and reads the outcome: delivered ->
@@ -56,10 +57,19 @@ import { resolveOpenModule } from './studio-module.mjs';
 import * as standingGrants from './standing-grants.mjs';
 import { prepareIntegrationJob } from './integration-documents.mjs';
 import { taskWarnings, warningFields } from './delivery-warnings.mjs';
+import { jobSummary } from './job-summary.mjs';
 // Lane wp (atritos 3): the build phase of a phased delivery, outside the Studio lock (o11-build-phase.mjs).
 import { phaseGuards, buildBeforeApply, afterApply } from './o11-build-phase.mjs';
-import { refusalFields, diagnosisOf } from './refusal-problems.mjs';
+import { refusalFields, diagnosisOf, normalizationsOf } from './refusal-problems.mjs';
 import { PHASES_META } from './studio-write-lock.mjs';
+// The prototype importer (docs/PROTOTIPO-NATIVO.md, lane surface): the capture before anything, the rebuild of 1.4.1, the
+// receipt and the seed after a clean publication.
+import { expandJobFile, capturePrototype, buildWithDegradation, buildProblems, journalTo, kernelPrototypeReport, findNativeDom,
+  measurePrototypeFidelity, prototypeReceipt, receiptWithSeed, PROTOTYPE_DELIVER_TEXT } from './prototype-op.mjs';
+import { seedPrototypeData, o11DataWriter } from './prototype-seed.mjs';
+import { prototypeAppUrl, prototypeScreenLinks } from './next-steps.mjs';
+// prazos B: a referenced producer open and unmodified in the same Studio is bound by a capture of its tab (no environment call).
+import { openProducerBindings } from './o11-open-producer.mjs';
 
 const readOnly = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 const mutating = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false };
@@ -228,13 +238,17 @@ export function deliverArguments(input, { work, port }) {
     '--work', work, '--port', String(port), ...close];
 }
 // `deliver --close <taskId> --reason <text> --work W --port P` (kernel DeliveryTask.CloseKnownFailure).
+// The job a patched delivery corrects, carried on the call's input to the builds (never a field of the tool's schema).
+export const BASED_ON = Symbol('basedOnJob');
 export const closeArguments = (taskId, reason, { work, port }) => ['deliver', '--close', taskId, '--reason', reason, '--work', work, '--port', String(port)];
 
 // The job file this delivery runs, with its sha256 (job-patch.mjs): a path as given (absolute), an inline job written once
-// under <lane.local>/jobs/inline/<uuid>.json, or patch + basedOn applied into a new file there (the base never changes).
+// under <lane.local>/jobs/inline/<uuid>.json, or patch + basedOn applied into a new file there (the base never changes);
+// each patched or partial job leaves its line job <- basedOn in <lane.local>/journal/job-patch.jsonl, as o11_job does, so
+// the versions of a job are known even when one was refused before its delivery started (jobAncestors, G16).
 function resolveJob(input, lane) {
   const resolved = resolvePatchedJob({ job: input.job, patch: input.patch, basedOn: input.basedOn },
-    { inlineDir: path.join(lane.local, 'jobs', 'inline'), work: lane.work });
+    { inlineDir: path.join(lane.local, 'jobs', 'inline'), work: lane.work, journalDir: path.join(lane.local, 'journal'), tool: 'o11_deliver' });
   if (resolved.ok) return resolved;
   // A changed base is not patched blind: the file as it is now, or the whole corrected job, in the same call otherwise
   // (until=apply stays a validation, closePrevious still closes the refused task); the words only as the marker.
@@ -255,14 +269,20 @@ function withJob(value, resolved) {
   return withNamedPatches({ ...value, job: resolved.path, jobSha256: resolved.sha256, ...(shape ? { jobShape: shape } : {}), ...nextBasedOnOf(resolved.path, resolved.sha256),
     ...(resolved.partial ? { partial: resolved.partial } : {}) }, resolved.path);
 }
-// A success names the job it delivered (or validated) the same way: nextBasedOn, and what a partial job merged.
+// A success names the job it delivered (or validated) the same way: nextBasedOn, and what a partial job merged. A delivery
+// ("entregue", "entregue e publicado") also says what the job created or changed (job-summary.mjs: each action with its
+// inputs and outputs, each entity and structure with its attribute count), so no map of the module follows it.
 function withJobDone(value, resolved) {
   if ((value?.ok !== true && value?.result !== 'entregue') || !resolved?.path) return value;
-  return { ...value, ...nextBasedOnOf(resolved.path, resolved.sha256), ...(resolved.partial ? { partial: resolved.partial } : {}) };
+  const delivered = value?.result === 'entregue' || value?.result === 'entregue e publicado';
+  let summary = null;
+  if (delivered && value.summary == null) { try { summary = jobSummary(JSON.parse(fs.readFileSync(resolved.path, 'utf8').replace(/^﻿/, ''))); } catch { summary = null; } }
+  return { ...value, ...nextBasedOnOf(resolved.path, resolved.sha256), ...(resolved.partial ? { partial: resolved.partial } : {}), ...(summary ? { summary } : {}) };
 }
 
 // patch + basedOn instead of job, or job + basedOn (a partial job, a patch applied after it). A base task with an
-// unconfirmed write is resumed, never patched; the module defaults to the base task's. Returns the input to deliver, or a
+// unconfirmed write is resumed, never patched, and a delivered one (or one whose job was corrected into a delivered job) is
+// never a base of the same module (G16); the module defaults to the base task's. Returns the input to deliver, or a
 // refusal ({ok:false}).
 function patchInput(input, lane) {
   if (input.basedOn == null) throw new Refusal('PATCH_INVALID', 'patch needs basedOn: {job, sha256} as a refusal returned them (nextBasedOn), or {taskId} of the refused delivery.');
@@ -273,8 +293,97 @@ function patchInput(input, lane) {
   if (!state) return refusal('BASE_NOT_FOUND', 'No delivery task ' + id + ' in the lane work folder.', { tool: 'ssam_task', arguments: {}, why: 'Lists the recent deliveries and their kernel taskId.' }, { taskId: id });
   if (deliveryOutcome(state) === 'uncertain') return { ok: false, outcome: 'uncertain', code: 'BASE_UNCERTAIN', stage: state.stage ?? null, taskId: id, writeState: state.writeState,
     error: 'Task ' + id + ' has an unconfirmed write; it is never patched. Resume it first.', continuation: resumeWith(id) };
+  // G16: a task delivered to this module (named by letters and digits), or one whose job was corrected into a job delivered
+  // to it, is never a base; another module still takes it, as with basedOn {job, sha256}.
+  const module = input.module ?? state.module ?? null;
+  const own = state.request?.JobPath ?? state.request?.jobPath ?? null;
+  if (deliveryOutcome(state) === 'delivered' && (!state.module || moduleId(state.module) === moduleId(module)))
+    return basedOnDelivered({ ...input, module }, { module: state.module ?? module, at: state.updatedAt ?? null, taskId: id, delivered: { job: own } });
+  for (const hash of new Set([fileSha256(own), input.basedOn.sha256].filter(h => SHA.test(String(h ?? ''))).map(h => h.toLowerCase()))) {
+    const recorded = deliveredBase(lane, { sha256: hash }, module);
+    if (recorded) return basedOnDelivered({ ...input, module }, recorded, hash);
+  }
   return !input.module && state.module ? { ...input, module: state.module } : input;
 }
+const fileSha256 = file => { try { return typeof file === 'string' && file ? sha256(fs.readFileSync(file)) : null; } catch { return null; } };
+
+// G16 (FarmaVirtual session, 2026-10-10): every answer names nextBasedOn, "entregue" too (the contract of patch por nome), but
+// a delivered job is in the module now: a patch or a partial job over it is that whole job again over the merged module.
+// Call 105 delivered 331 ops (the FarmaVirtual screen, its variables, 62 actions); the change of call 145 sent as a partial
+// job over its nextBasedOn would have sent 351 ops, and a one-op patch over it the 331 again. That job was the 13th version
+// of one job: the session corrected the job of call 79 twelve times (79 -> 82 -> 88 -> 89 -> ... -> 96 -> 99 -> 105), each
+// answer naming its own nextBasedOn, and all of them are in the module. So each delivered job and every job it was corrected
+// from, back to the first (jobAncestors: the lane journal), is recorded by sha256 and module under
+// <lane.local>/jobs/delivered, and a basedOn naming one of them for the same module (letters and digits, as the person names
+// it), or the taskId of a delivered task or of one whose job is among them, is refused once, before anything runs, with
+// the call of a new job that keeps the other arguments.
+const NEW_JOB = '<a new job: only the change, over the module as it is now>';
+const deliveredDir = lane => path.join(lane.local, 'jobs', 'delivered');
+const moduleId = module => String(module ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const deliveredFile = (lane, hash, module) => path.join(deliveredDir(lane), String(hash).toLowerCase() + '-' + moduleId(module) + '.json');
+// The jobs a job was corrected from, back to the first: the edges job <- basedOn of the lane journal, the start line of each
+// o11_deliver (jobSha256, basedOn.sha256) and each line of job-patch.jsonl (every patched or partial job written, by
+// o11_deliver or o11_job, also one refused before its delivery started), plus the base the caller already knows. At most
+// ANCESTORS_MAX; a journal that cannot be read adds none.
+const ANCESTORS_MAX = 256;
+const JOURNALS = [['o11_deliver.jsonl', entry => entry.event === 'start'], ['job-patch.jsonl', () => true]];
+function jobAncestors(journalDir, hash, base = null) {
+  const parents = new Map();
+  for (const [name, wanted] of JOURNALS) {
+    let text;
+    try { text = fs.readFileSync(path.join(journalDir, name), 'utf8'); } catch { continue; }
+    for (const line of text.split('\n')) {
+      if (!line.includes('"basedOn"')) continue;
+      let entry; try { entry = JSON.parse(line); } catch { continue; }
+      const child = String(entry?.jobSha256 ?? '').toLowerCase(); const parent = String(entry?.basedOn?.sha256 ?? '').toLowerCase();
+      if (!entry || !wanted(entry) || !SHA.test(child) || !SHA.test(parent)) continue;
+      if (!parents.has(child)) parents.set(child, new Set());
+      parents.get(child).add(parent);
+    }
+  }
+  const start = String(hash ?? '').toLowerCase();
+  const found = new Set();
+  const queue = [...(SHA.test(String(base ?? '')) ? [String(base).toLowerCase()] : []), ...(parents.get(start) ?? [])];
+  while (queue.length && found.size < ANCESTORS_MAX) {
+    const next = queue.shift();
+    if (next === start || found.has(next)) continue;
+    found.add(next);
+    queue.push(...(parents.get(next) ?? []));
+  }
+  return [...found];
+}
+// A record that cannot be written never changes the answer of the delivery.
+function recordDelivered(lane, named, { module, taskId, at }) {
+  if (typeof named?.path !== 'string' || !SHA.test(String(named.sha256 ?? '')) || !moduleId(module)) return;
+  const hash = String(named.sha256).toLowerCase();
+  const record = { module, at, ...(taskId ? { taskId } : {}), delivered: { job: path.resolve(named.path), sha256: hash } };
+  try {
+    const hashes = [hash, ...jobAncestors(path.join(lane.local, 'journal'), hash, named.basedOn?.sha256)];
+    fs.mkdirSync(deliveredDir(lane), { recursive: true });
+    for (const each of new Set(hashes)) fs.writeFileSync(deliveredFile(lane, each, module), JSON.stringify(record));
+  } catch { /* see above */ }
+}
+function deliveredBase(lane, basedOn, module) {
+  if (!SHA.test(String(basedOn?.sha256 ?? '')) || !moduleId(module)) return null;
+  try { return JSON.parse(fs.readFileSync(deliveredFile(lane, basedOn.sha256, module), 'utf8')); } catch { return null; }
+}
+// The refusal names the delivered job; the base it names may be that job or one it was corrected from (hash). The new job
+// keeps the call's other arguments (checks, producers, captureProducers, expectedEnvironment, until, closePrevious,
+// publish), as BASE_CHANGED and closeAndDeliver do.
+const basedOnDelivered = (input, record, hash = input.basedOn?.sha256) => refusal('BASED_ON_DELIVERED',
+  (record.delivered?.sha256 && SHA.test(String(hash ?? '')) && String(hash).toLowerCase() !== record.delivered.sha256
+    ? 'The job of basedOn was corrected into the job delivered to ' : 'The job of basedOn is already in ')
+    + (record.module ?? input.module) + (record.at ? ' (delivered ' + record.at + ')' : '') + ': a patch or a partial job over it '
+    + 'would apply all of that job again over the merged module. Nothing was sent; deliver a new job with only the change.',
+  { tool: 'o11_deliver', arguments: { module: input.module ?? record.module, job: NEW_JOB,
+    ...(input.checks?.length ? { checks: input.checks } : {}), ...(input.producers ? { producers: input.producers } : {}),
+    ...(input.captureProducers?.length ? { captureProducers: input.captureProducers } : {}),
+    ...(input.expectedEnvironment ? { expectedEnvironment: input.expectedEnvironment } : {}),
+    ...(input.until === 'apply' ? { until: 'apply' } : {}), ...(input.closePrevious ? { closePrevious: input.closePrevious } : {}),
+    ...(input.publish === true ? { publish: true } : {}), authorize: WORDS_MARKER },
+    why: 'Um job entregue já está no módulo: a próxima mudança é um job novo só com ela, sem basedOn, sobre o módulo como está agora (ssam_map lê as @key do que foi criado). authorize: as palavras do usuário no lugar do marcador.' },
+  { delivered: { ...(record.delivered?.job ? { job: record.delivered.job } : {}), ...(record.delivered?.sha256 ? { sha256: record.delivered.sha256 } : {}),
+    module: record.module ?? null, at: record.at ?? null, ...(record.taskId ? { taskId: record.taskId } : {}) } });
 
 // The kernel's own checkpoint (DurableJson envelope {format, sha256, payload}); null when absent or unreadable.
 function readKernelTask(work, id) {
@@ -332,6 +441,43 @@ const closeAndDeliver = (input, job, holder) => ({ tool: 'o11_deliver', argument
   ...(input.expectedEnvironment ? { expectedEnvironment: input.expectedEnvironment } : {}), closePrevious: holder, authorize: WORDS_MARKER },
   why: 'A tarefa anterior foi recusada; feche e entregue o job corrigido (ele vale sobre o módulo como está agora no Studio). authorize: as palavras do usuário no lugar do marcador.' });
 
+// prazos B: ENVIRONMENT_CALL_CUT (kernel EnvironmentCut.cs). cut, short: what the Studio was reading, from which host, the
+// environment operation running, the cause (timeout | connection) and how long; cutBy is always the Service Studio.
+// servidor/fase4-24: ENVIRONMENT_UNREACHABLE (vel-entrega, a read that failed on the network after the kernel's single
+// retry) is the same failure: a delivery answers it as this one code before anything was merged (the kernel already does;
+// this covers an older kernel), with repeated (the kernel asked twice). The retry policy is the kernel's alone
+// (EnvironmentNetwork: reads once, never a write, never the Studio's own timeout); this answer never repeats anything.
+export const ENVIRONMENT_CALL_CUT = 'ENVIRONMENT_CALL_CUT';
+export const ENVIRONMENT_UNREACHABLE = 'ENVIRONMENT_UNREACHABLE';
+export function cutOf(cut) {
+  if (!cut || typeof cut !== 'object') return null;
+  const keep = ['what', 'stage', 'producer', 'host', 'operation', 'cause', 'afterSeconds', 'elapsedSeconds', 'repeated', 'cutBy', 'writeState'];
+  return Object.fromEntries(keep.filter(k => cut[k] !== undefined && cut[k] !== null).map(k => [k, typeof cut[k] === 'string' ? clean(cut[k], 120) : cut[k]]));
+}
+export function cutError(cut, fallback) {
+  const c = cutOf(cut);
+  if (!c) return clean(fallback, 300);
+  const seconds = c.afterSeconds ?? c.elapsedSeconds;
+  const how = (c.cause === 'timeout' ? 'timed out' + (seconds != null ? ' after ' + seconds + ' s' : '') : 'could not reach ' + (c.host ?? 'the environment') + (seconds != null ? ' (' + seconds + ' s)' : ''))
+    + (c.repeated === true ? ' (asked twice by SSAM, on two requests)' : '');
+  return clean('The Service Studio\'s own call to ' + (c.host ?? 'the environment') + (c.operation ? ' (' + c.operation + ')' : '') + ' for ' + (c.what ?? 'a read')
+    + (c.producer ? ' of ' + c.producer : '') + ' ' + how + '. It runs from the Studio\'s PC to the OutSystems environment, outside SSAM; nothing was captured, applied or merged.', 400);
+}
+// The next delivery helps only once the PC reaches the environment again, or with the producer open and unmodified in the
+// Studio (then it is bound from its tab and no environment call is made). The refused task is closed in the same call.
+export function cutContinuation(input, job, holder, cut) {
+  const c = cutOf(cut) ?? {};
+  const host = c.host ?? 'o ambiente';
+  const producer = c.producer && !/^the producer with key /.test(c.producer) ? c.producer : null;
+  return { tool: 'o11_deliver', arguments: { module: input.module, job, ...(input.checks?.length ? { checks: input.checks } : {}),
+    ...(input.producers ? { producers: input.producers } : {}), ...(input.expectedEnvironment ? { expectedEnvironment: input.expectedEnvironment } : {}),
+    ...(holder ? { closePrevious: holder } : {}), authorize: WORDS_MARKER },
+    why: 'Nada foi gravado. Quem cortou foi o cliente do próprio Service Studio na chamada a ' + host + ' (rede do PC até a OutSystems, fora do SSAM). '
+      + 'Não repita às cegas: entregue de novo quando o PC voltar a falar com ' + host
+      + (producer ? ', ou com ' + producer + ' aberto e sem alterações neste Studio (a entrega usa a aba e não chama o ambiente)' : '')
+      + '. authorize: as palavras do usuário no lugar do marcador.' };
+}
+
 export function closeOutcome(run, id, work) {
   const state = run?.envelope?.data && typeof run.envelope.data === 'object' ? run.envelope.data : readKernelTask(work, id);
   if (state?.closed === true) return CLOSED;
@@ -367,11 +513,14 @@ export function preflightProblems(problems, limit = 300) {
 const preflightRefusal = (source, base, code = 'PREFLIGHT_REFUSED') => ({ ok: false, outcome: 'refused', code, ...base,
   ...(code === 'PREFLIGHT_REFUSED' ? { stage: 'preflight', failed: 'preflight' } : { stage: base.stage ?? 'apply' }),
   error: clean(source.error ?? 'The job was refused by the preflight; nothing was sent to the Studio.', 400),
-  ...refusalFields(preflightProblems(source.problems), source) });
+  ...refusalFields(preflightProblems(source.problems), source),
+  // prazos B: the environment read the Studio's own client cut, when that is why the rest of the phases did not run.
+  ...(cutOf(source.cut) ? { cut: cutOf(source.cut) } : {}) });
 
 // Section 3.2 fields of a delivered answer from the kernel's apply (contract I3/I4): leftovers (expectations met and
 // allowlisted Unused* warnings, at most 20 plus leftoversTotal) and screenRoles (html page screens, at most 20 plus
-// screenRolesTotal). Absent when there is nothing to say.
+// screenRolesTotal), and normalizations (what the kernel rewrote in the job instead of refusing it: count per rule and the
+// first entries; refusal-problems.mjs normalizationsOf). Absent when there is nothing to say.
 export function deliveryFields(state) {
   const validation = state?.apply?.validation ?? {};
   const leftovers = [
@@ -392,7 +541,9 @@ export function deliveryFields(state) {
     // A03 (I9): the new warnings that blocked nothing, each with its path and the suggested fix.
     ...warningFields(taskWarnings(state)),
     // MB2: the dependencies dialogs the delivery answered (Cancel) and the Refresh References of every producer after each.
-    ...referencesRefreshedOf(state) };
+    ...referencesRefreshedOf(state),
+    // lentidao 2026-10-12: the kernel's JobNormalizer rewrites of this job (apply receipt), never silent.
+    ...normalizationsOf(state?.apply) };
 }
 // MB2 (Delivery.cs, DeliveryDependenciesDialog.cs): the receipt's referencesRefreshed, short; absent when none.
 export function referencesRefreshedOf(state) {
@@ -489,6 +640,16 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
   if (state.code === 'MERGE_ROLLED_BACK') return { ok: false, outcome: 'refused', code: 'MERGE_ROLLED_BACK', ...base, failed: 'merge', error,
     closed: true, ...(input.module && job ? { continuation: { tool: 'o11_deliver', arguments: { module: input.module, job, authorize: WORDS_MARKER },
       why: 'Nada foi aplicado e o módulo está livre: entregue o job corrigido como uma nova entrega. authorize: as palavras do usuário no lugar do marcador.' } } : {}) };
+  // prazos B: a read of the environment that the Service Studio's own client cut (ENVIRONMENT_CALL_CUT: its WCF
+  // SendTimeout, a connection that never answered). Nothing was written; the answer says what was cut and when a new
+  // delivery helps, never "repeat": the same delivery repeats the same environment calls.
+  if ((state.code === ENVIRONMENT_CALL_CUT || state.code === ENVIRONMENT_UNREACHABLE) && !merged) {
+    const cut = state.cut ?? (state.code === ENVIRONMENT_UNREACHABLE ? { what: 'an environment read of the delivery', cause: 'connection',
+      repeated: /asked twice/.test(String(state.error ?? '')), cutBy: 'service-studio', writeState: 'not-sent' } : null);
+    return { ok: false, outcome: 'refused', code: ENVIRONMENT_CALL_CUT, ...base,
+      writeState: state.writeState ?? 'not-sent', error: cutError(cut, error), ...(cut ? { cut: cutOf(cut) } : {}), retry: 'after-network',
+      ...(input.module && job ? { continuation: cutContinuation(input, job, holds ? base.taskId : null, cut) } : {}) };
+  }
   // The kernel's own code (VERIFY_UNAVAILABLE, SIGNATURE_PREVIEW_REFUSED, ...) names the refusal; otherwise the class of it.
   const kernelCode = /^[A-Z][A-Z0-9_]{2,}$/.test(String(state.code ?? '')) ? state.code : null;
   // A12: the differences of a failed data proof come in the answer; when they are the only failure (DATA_PROOF_DIFFERS) the
@@ -524,8 +685,46 @@ function mergeOrderOf(order) {
 const safeName = name => String(name).replace(/[^A-Za-z0-9_.-]/g, '_');
 const stamp = date => date.toISOString().replace(/[-:.]/g, '');
 
+// ---- the prototype import (docs/PROTOTIPO-NATIVO.md, lane surface)
+// The kernel's apply data of a prebuilt candidate (candidate.result.json next to it), for report.prototype.
+function readCandidateResult(manifest) {
+  try { const prebuilt = JSON.parse(fs.readFileSync(manifest, 'utf8')); const saved = JSON.parse(fs.readFileSync(prebuilt.result, 'utf8')); return saved?.data ?? saved; } catch { return null; }
+}
+// The receipt of a valid or delivered prototype import: the kernel's report.prototype, the fidelity measured on the module
+// read back (prototype-dom.json), the degraded items and the timings so far (publish and seed are added after them).
+async function prototypeAnswer(value, proto, { kernelState, module = null }) {
+  const data = proto.kernelData ?? kernelState?.apply ?? null;
+  const report = kernelPrototypeReport(data) ?? kernelPrototypeReport(kernelState);
+  const nativeDom = findNativeDom({ report, captures: proto.captures, dirs: [...(proto.dirs ?? []), typeof kernelState?.work === 'string' ? kernelState.work : null] });
+  const measured = await measurePrototypeFidelity({ captures: proto.captures, nativeDom, measure: proto.measure ?? null });
+  // The link of each screen (O11 Reactive: https://<environment>/<Module>/<Screen>), when the delivery named its environment.
+  const links = prototypeScreenLinks(report, prototypeAppUrl({ lane: 'o11', host: kernelState?.environment ?? null, module }));
+  proto.receipt = prototypeReceipt(report, { fidelity: measured.fidelity, degraded: proto.degraded ?? [], captures: proto.captures, warnings: proto.warnings ?? [],
+    verify: data?.validation?.new ?? null, links,
+    phases: { captureMs: proto.timings?.captureMs, buildMs: proto.buildMs ?? data?.applyMs, fidelityMs: measured.fidelityMs, mergeMs: proto.deliverMs } });
+  if (!proto.receipt.timings.expandMs && proto.timings?.expandMs != null) proto.receipt.timings.expandMs = proto.timings.expandMs;
+  return { ...value, prototype: proto.receipt };
+}
+// The seed after a clean publication: the o11_data path through the connected Studio (host of the delivered module, a
+// capture of it as the OML that names entities and attributes), only with the words of this call.
+async function prototypeSeedAfter(value, proto, { input, module, words, authorization, kernelState, ctx, lane }) {
+  const host = kernelState?.environment ?? input.expectedEnvironment ?? null;
+  let oml = null;
+  try { const shot = await ctx.capture(module); if (shot?.ok === true && typeof shot.path === 'string') oml = shot.path; } catch { oml = null; }
+  const seedOn = proto.captures?.[0];
+  const ops = JSON.parse(fs.readFileSync(proto.original.path, 'utf8').replace(/^﻿/, ''));
+  const seedFlag = (Array.isArray(ops) ? ops : ops?.ops ?? []).find(op => op?.op === 'prototype')?.data?.seed;
+  const write = ctx.prototypeWriter ? ctx.prototypeWriter({ host, oml, module }) : host && oml ? o11DataWriter({ runAnvil: ctx.runAnvil, host, oml, work: path.join(lane.local, 'data') }) : null;
+  const seed = await seedPrototypeData({ lane: 'o11', module, receipt: proto.receipt, bundle: seedOn?.capture, write,
+    authorize: authorization?.source === 'standing-grant' ? '' : words, published: value?.ok === true && value?.publish?.outcome === 'published', seed: seedFlag !== false });
+  if (!write && !seed.ran) seed.reason = 'no host or capture of the published module for the Edit Data';
+  proto.receipt = receiptWithSeed(proto.receipt, seed);
+  return value;
+}
+
 // until=apply: the module's current state captured through the bridge, then `apply` on that capture. Nothing is merged.
-async function applyOnly(input, job, ctx, task) {
+// A prototype job (proto) rebuilds once without the generated items a build problem names (1.4.1).
+async function applyOnly(input, job, ctx, task, proto = null) {
   const lane = ctx.lane();
   const bridge = ctx.bridge();
   try {
@@ -542,8 +741,17 @@ async function applyOnly(input, job, ctx, task) {
     const captured = await bridge.ok('snapshot_module', { path: snapshot, ...(active?.key ? { module_key: active.key } : {}) });
     if (captured?.key && active?.key && captured.key !== active.key) return refusal('ACTIVE_MODULE_CHANGED', 'The active module changed during the snapshot; nothing was applied.', doctor('Shows the module open in the selected Studio.'));
     const folder = path.join(lane.work, 'apply', task.id);
-    const run = await ctx.runAnvil(['apply', '--job', job, '--base', snapshot, '--out', path.join(folder, 'candidate.oml'), '--work', path.join(folder, 'model'),
-      ...producerArgs(input.producers)], { timeoutMs: ctx.applyTimeoutMs });
+    const applyOnce = file => ctx.runAnvil(['apply', '--job', file, '--base', snapshot, '--out', path.join(folder, 'candidate.oml'), '--work', path.join(folder, 'model'),
+      ...producerArgs(input.producers), ...(input[BASED_ON] ? ['--based-on', input[BASED_ON]] : [])], { timeoutMs: ctx.applyTimeoutMs });
+    let run;
+    if (proto) {
+      const begin = Date.now();
+      const b = await buildWithDegradation({ jobFile: job, attempt: applyOnce, inlineDir: path.join(lane.local, 'jobs', 'inline'), journal: journalTo(path.join(lane.local, 'journal'), { lane: 'o11' }),
+        ok: r => r?.envelope?.ok === true && r.envelope.data?.isValid === true && r.envelope.data?.accepted === true });
+      proto.buildMs = Date.now() - begin; proto.degraded = b.degraded; proto.dirs = [folder, path.join(folder, 'model')];
+      if (b.refusal) return b.refusal;
+      run = b.result; proto.kernelData = run?.envelope?.data ?? null;
+    } else run = await applyOnce(job);
     const data = run?.envelope?.data;
     if (run?.envelope?.ok === true && data?.isValid === true && data?.accepted === true) return { ok: true, valid: true };
     if (data && typeof data === 'object' && 'isValid' in data) {
@@ -790,6 +998,9 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
         const checked = patchInput(input, lane);
         if (checked.ok === false) return checked;
         input = checked;
+        // G16: a job already delivered to this module, or one it was corrected from, is never a base (recordDelivered).
+        const delivered = input.basedOn?.job ? deliveredBase(lane, input.basedOn, input.module) : null;
+        if (delivered) return basedOnDelivered(input, delivered, input.basedOn.sha256);
       }
       if (!input.module || (input.job == null && input.patch == null))
         throw new Refusal('MODULE_AND_JOB_REQUIRED', 'o11_deliver needs module and job, or module with patch and basedOn (or resume with the taskId of an earlier delivery).');
@@ -809,6 +1020,18 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
       if (closeState(previous) === 'refused' && previous.moduleKey) closing = input.closePrevious;
     }
     if (!input.resume) resolved = resolveJob(input, lane);
+    // a patched or partial job names the job it corrects: the kernel's preflight refuses CSS the correction dropped
+    // (CSS_RULES_DROPPED, apply --based-on)
+    if (typeof resolved?.basedOn?.job === 'string') input = { ...input, [BASED_ON]: resolved.basedOn.job };
+    // The prototype op (docs/PROTOTIPO-NATIVO.md 1.1): its capture comes first, before any Studio or build work; a refusal
+    // of the prototype comes back ONCE with every problem, the patch over /ops/<i>/data and the corrected call, naming the
+    // model's own job. The delivery then runs the expanded job (data.capture, data.captureSha256).
+    let proto = null;
+    if (!input.resume) {
+      const expanded = await ctx.expandPrototype(resolved.path, lane);
+      if (expanded?.refusal) return withJob(expanded.refusal, resolved);
+      if (expanded?.path) { proto = { ...expanded.expansion, original: resolved, measure: ctx.measureFidelity }; resolved = { ...resolved, path: expanded.path, sha256: expanded.sha256 }; }
+    }
     // K1-d: a "published" producer whose theme the job references is bound by its published OML (a signature never imports
     // a theme, cause theme), downloaded once per version (o11_environment cache, K1-c); the others are captured by the kernel.
     if (!input.resume && input.allPublished) {
@@ -845,9 +1068,16 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
       if (named.ok === false) return withJob(named, resolved);
       input = { ...input, module: named.module };
     }
-    // C27: the producers the job references by name are captured read-only, as the ODC lane does.
-    const autoCaptured = !input.resume && until === 'merge' ? autoCaptures(resolved.path, input) : [];
+    // C27: the producers the job references by name are captured read-only, as the ODC lane does. prazos B: one that is
+    // open, unmodified, in this Studio is bound instead by a capture of its tab (o11-open-producer.mjs), so the delivery
+    // reads nothing from the environment for it; it stays out of `input`, so a continuation never pins that capture.
+    const referenced = !input.resume && until === 'merge' ? autoCaptures(resolved.path, input) : [];
+    const open = referenced.length ? await openProducerBindings(referenced, { bridge: ctx.bridge, local: lane.local, consumer: input.module,
+      environment: input.expectedEnvironment ?? null, now: ctx.now, signal }) : { bound: {}, fromStudio: [], skipped: [] };
+    const autoCaptured = referenced.filter(name => !Object.hasOwn(open.bound, name));
     if (autoCaptured.length) input = { ...input, captureProducers: [...(input.captureProducers ?? []), ...autoCaptured] };
+    const fromStudio = open.fromStudio.map(p => p.producer);
+    const runInput = fromStudio.length ? { ...input, producers: { ...(input.producers ?? {}), ...open.bound } } : input;
     // C32: only StyleSheet sets on blocks: one touch of a block widget, in a new job file next to the inline jobs.
     let touch = null;
     if (!input.resume && until === 'merge') {
@@ -860,10 +1090,13 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
     const summary = { module: input.module ?? null, until, ...(job ? { job, jobSha256 } : {}), ...(input.resume ? { resume: input.resume } : {}),
       ...(input.closePrevious ? { closePrevious: input.closePrevious } : {}),
       ...(resolved?.basedOn ? { basedOn: resolved.basedOn, ...(input.patch ? { patchOps: input.patch.length } : {}), ...(resolved.partial ? { partial: resolved.partial } : {}) } : {}),
-      ...(autoCaptured.length ? { autoCaptured } : {}), ...(touch ? { touch: touch.target } : {}), ...(input.publish === true && until === 'merge' ? { publish: true } : {}) };
+      ...(autoCaptured.length ? { autoCaptured } : {}), ...(fromStudio.length ? { fromStudio } : {}), ...(touch ? { touch: touch.target } : {}),
+      ...(input.publish === true && until === 'merge' ? { publish: true } : {}) };
     let kernelState = null; // the kernel task of this delivery (its open answer decides the tab closed after a publication)
+    // A prototype job names the model's own job (proto.original) in its answers: the patches of a refusal apply to it.
+    const named = proto?.original ?? resolved;
     let value = withJob(await tracked(ctx, lane, summary, words, async task => {
-      if (until === 'apply') return applyOnly(input, job, ctx, task);
+      if (until === 'apply') return applyOnly(input, job, ctx, task, proto);
       const port = ctx.port();
       if (closing) { // the new delivery runs only once the previous task is closed
         const closed = closeOutcome(await ctx.runAnvil(closeArguments(closing, SUPERSEDED, { work: lane.work, port }), { timeoutMs: ctx.closeTimeoutMs }), closing, lane.work);
@@ -872,23 +1105,67 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
       const since = Date.now();
       // Lane wp: the build phase (capture by key, kernel apply in the build pool) before the Studio is taken; a job the
       // kernel refuses on the live module is answered from it, an accepted candidate goes to deliver as --prebuilt.
-      const built = await buildBeforeApply({ input, job, ctx, lane, task, signal });
+      // A prototype job (1.4.1): a build problem on a generated item rebuilds ONCE without it; a second failure is an SSAM
+      // defect (VALIDATION_REFUSED, ssamDefect, the mapping.ignore patch).
+      let built; let deliverJob = job;
+      if (proto) {
+        const begin = Date.now();
+        const b = await buildWithDegradation({ jobFile: job, inlineDir: path.join(lane.local, 'jobs', 'inline'), journal: journalTo(path.join(lane.local, 'journal'), { lane: 'o11' }),
+          attempt: file => buildBeforeApply({ input: runInput, job: file, ctx, lane, task, signal }), ok: r => Array.isArray(r?.args), problemsOf: r => buildProblems(r?.refused) });
+        built = b.result; proto.degraded = b.degraded; proto.buildMs = Date.now() - begin;
+        proto.dirs = [path.join(lane.work, 'build', task.id), path.join(lane.work, 'build', task.id, 'model')];
+        if (b.refusal) return b.refusal;
+        if (b.rebuilt) deliverJob = b.jobFile;
+        if (built?.manifest) proto.kernelData = readCandidateResult(built.manifest);
+      } else built = await buildBeforeApply({ input: runInput, job, ctx, lane, task, signal });
       if (built?.answer) return built.answer;
-      if (built?.refused) return deliverOutcome(built.refused, { trackId: task.id, work: lane.work, job, taskId: null, since, input });
-      const run = await ctx.runAnvil([...deliverArguments({ ...input, job }, { work: lane.work, port }), ...(built?.args ?? [])], { timeoutMs: ctx.deliverTimeoutMs });
-      kernelState = run?.envelope?.data && typeof run.envelope.data === 'object' ? run.envelope.data : null;
-      afterApply(run, built, lane);
-      return deliverOutcome(run, { trackId: task.id, work: lane.work, job, taskId: input.resume, since, input });
-    }), resolved);
+      if (built?.refused) return deliverOutcome(built.refused, { trackId: task.id, work: lane.work, job: deliverJob, taskId: null, since, input });
+      const deliverOnce = async (file, previous) => {
+        // The refused task of the first try still holds the module: closed first (never an uncertain one).
+        const held = previous?.outcome?.taskId;
+        if (held && closeState(findKernelTask(lane.work, { taskId: held })) === 'refused') {
+          const closed = closeOutcome(await ctx.runAnvil(closeArguments(held, 'superseded by the degraded rebuild of a prototype import', { work: lane.work, port }), { timeoutMs: ctx.closeTimeoutMs }), held, lane.work);
+          if (closed !== CLOSED) return { outcome: closed, closeFailed: true };
+        }
+        const begin = Date.now();
+        const run = await ctx.runAnvil([...deliverArguments({ ...runInput, job: file }, { work: lane.work, port }), ...(built?.args ?? [])], { timeoutMs: ctx.deliverTimeoutMs });
+        kernelState = run?.envelope?.data && typeof run.envelope.data === 'object' ? run.envelope.data : null;
+        afterApply(run, built, lane);
+        if (proto) proto.deliverMs = Date.now() - begin;
+        return { run, outcome: deliverOutcome(run, { trackId: task.id, work: lane.work, job: file, taskId: input.resume, since, input }) };
+      };
+      // Without a build phase (the module not open in a tab) the delivery builds itself: its refusal on a generated item
+      // closes the refused task and delivers the degraded job once.
+      if (proto && !built?.args) {
+        const settled = r => r?.closeFailed === true || r?.outcome?.ok === true || r?.outcome?.merged === true || r?.outcome?.outcome === 'uncertain';
+        const b = await buildWithDegradation({ jobFile: deliverJob, inlineDir: path.join(lane.local, 'jobs', 'inline'), journal: journalTo(path.join(lane.local, 'journal'), { lane: 'o11' }),
+          attempt: deliverOnce, ok: settled, problemsOf: r => buildProblems(r?.run) });
+        proto.degraded = b.degraded;
+        if (b.refusal) return { ...b.refusal, ...(b.result?.outcome?.taskId ? { taskId: b.result.outcome.taskId } : {}) };
+        if (kernelState) proto.kernelData = kernelState.apply ?? kernelState;
+        return b.result.outcome;
+      }
+      const { outcome } = await deliverOnce(deliverJob, null);
+      if (proto && kernelState?.apply && !proto.kernelData) proto.kernelData = kernelState.apply;
+      return outcome;
+    }), named);
     if (value === CLOSED) return value;
-    if (until !== 'merge') return withJobDone(value, resolved);
+    // prazos B: the producers bound from their Studio tab, named in the answer (their references came from there).
+    if (fromStudio.length && value && typeof value === 'object') value = { ...value, producersFromStudio: fromStudio };
+    if (proto && value?.ok === true) value = await prototypeAnswer(value, proto, { kernelState, module: input.module ?? null });
+    if (until !== 'merge') return withJobDone(value, named);
     const module = input.module ?? findKernelTask(lane.work, { taskId: input.resume })?.module ?? null;
     if (touch) value = { ...value, touch };
     if (input.publish === true) {
       // C08: only after a clean merge; otherwise the publication is skipped and the answer says so.
       if (value?.ok !== true) value = { ...value, publish: { requested: true, outcome: 'skipped' } };
       else {
+        const begin = Date.now();
         value = await publishAfter(value, { ...input, module }, { words, authorization }, ctx, signal);
+        if (proto?.receipt) proto.receipt.timings.publishMs = Date.now() - begin;
+        // The demo data of a prototype import (3.4): after a clean publication, into the empty entities the import marked,
+        // with the words of this call, while the module is still open.
+        if (proto?.receipt && value?.ok === true) value = await prototypeSeedAfter(value, proto, { input, module, words, authorization, kernelState, ctx, lane });
         // K1-g: the tab this delivery opened is closed once the publication saved the module.
         if (value?.ok === true) { const closedTab = await closeOpenedTab(module, kernelState, ctx); if (closedTab !== undefined) value = { ...value, closedTab }; }
       }
@@ -896,7 +1173,10 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
       const last = await ctx.lastPublication(module);
       if (last) value = { ...value, lastPublication: last };
     }
-    return withJobDone(value, resolved);
+    if (proto?.receipt && value && typeof value === 'object') value = { ...value, prototype: proto.receipt };
+    // G16: the job is in the module now (a failed publication too: the delivery stands); it is never a base again.
+    if (value?.result === 'entregue' || value?.result === 'entregue e publicado') recordDelivered(lane, named, { module, taskId: kernelState?.taskId, at: ctx.now().toISOString() });
+    return withJobDone(value, named);
   } catch (error) {
     if (error instanceof Refusal) return withJob(refusal(error.code, error.message, error.continuation
       ?? { tool: 'o11_deliver', arguments: input.module ? { module: input.module } : {}, why: 'Call again with the arguments fixed as the error says, and the user\'s words in authorize.' }, error.extra), resolved);
@@ -983,6 +1263,12 @@ export function registerO11Cycle(server, deps = {}) {
     lastPublication: deps.lastPublication ?? (async module => {
       try { return lastPublicationOf(await ctx.bridge().ok('publish_log', { module, max: 1 }, { timeoutMs: 5000 })); } catch { return null; }
     }),
+    // The prototype op: its capture (deps.capturePrototype in tests, else the render lane's engine) into a new inline job
+    // file before anything else; the fidelity measure (deps.measureFidelity) and the data writer of the seed
+    // (deps.prototypeWriter({host, oml, module})) are injectable too.
+    expandPrototype: deps.expandPrototype ?? ((file, lane) => expandJobFile(file, { inlineDir: path.join(lane.local, 'jobs', 'inline'),
+      work: path.join(lane.work, 'prototype', randomUUID()), capture: deps.capturePrototype ?? capturePrototype })),
+    prototypeWriter: deps.prototypeWriter ?? null, measureFidelity: deps.measureFidelity ?? null,
   };
   // Lane wp: in a phased delivery every Studio access of this context takes the Studio first (o11-build-phase.mjs).
   phaseGuards(ctx);
@@ -1003,10 +1289,10 @@ export function registerO11Cycle(server, deps = {}) {
 
   server.registerTool('o11_deliver', {
     title: 'Deliver an O11 job to the selected Service Studio',
-    description: 'Delivers a job to the module open in the Service Studio selected on the O11 lane: deliver directly, with no separate proof (o11_job/ssam_job) '
+    description: 'Delivers a job to the module open in the Service Studio selected on the O11 lane: EVERY change of the request for this module in ONE job and one call (separate jobs only for different modules, never one action or step per call); deliver directly, with no separate proof (o11_job/ssam_job) '
       + 'or until=apply step first. It captures the module as it is now in the Studio, validates the candidate headless (TrueChange) '
       + 'before the native merge, merges once, then checks the new messages and the named checks. '
-      + 'Delivered: "entregue" (plus leftovers, warnings, screenRoles and lastPublication when there is something to say; only errors and security warnings refuse). '
+      + 'Delivered: "entregue" with summary (each action with its inputs and outputs, each entity and structure with its attribute count: no map of the module is needed after it), plus leftovers, warnings, screenRoles and lastPublication when there is something to say; only errors and security warnings refuse. '
       + 'A refused job comes back ONCE, before any Studio write, with every problem of every phase over the live module (the job alone, the base, the apply, the Verify of '
       + 'the candidate): problems[] with phase, op, pointer, code, message, fix and the patch of each certain fix (identical ones grouped with their pointers), verifyRan, '
       + 'stage, taskId, job, jobSha256 and nextBasedOn (failedOp when the kernel names the op); nothing is delivered. Correct all of them in ONE call, never by rewriting '
@@ -1019,7 +1305,7 @@ export function registerO11Cycle(server, deps = {}) {
       + 'publish:true publishes the same module right after a clean merge (the o11_publish flow, same words or grant): "entregue e publicado"; '
       + 'a failed publication answers result "entregue" with PUBLISH_FAILED|PUBLISH_UNCERTAIN and the o11_publish continuation, never a new delivery. '
       + 'Without publish nothing is published. Without authorize a standing grant (ssam_grant) of the module for deliver is used. Producers named by '
-      + 'reference ops are captured read-only by name. Blocks until the CLI ends; ssam_task reads the task meanwhile.',
+      + 'reference ops are captured read-only by name. Blocks until the CLI ends; ssam_task reads the task meanwhile. ' + PROTOTYPE_DELIVER_TEXT,
     inputSchema: deliverSchema, annotations: mutating,
     // Lane wp: this handler splits its delivery in build and apply (o11-build-phase.mjs; studio-write-lock.mjs PHASES_META).
     _meta: { [PHASES_META]: true },

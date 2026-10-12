@@ -32,7 +32,7 @@ public static class StartupHook { public static void Initialize() => Bridge.Star
 // model directly: every mutation goes through the native CompareAndMerge with a hash-checked base
 // and an immutable candidate, and every command appends one line to the operations journal.
 internal static partial class Bridge {
-    public const string Version = "v48";
+    public const string Version = "v96";
     // A command that outlives its timeout is reported as uncertain and keeps running; the loop stays
     // available for status, and every other command is refused until the late command completes.
     private static volatile string? busyCommand;
@@ -93,12 +93,12 @@ internal static partial class Bridge {
                     failure = new InvalidOperationException("Command '" + busyCommand + "' is still running since " + busySince.ToString("o") + "; only status is accepted until it completes. Never retry it.");
                     response = new { ok = false, outcome = "gate_refused", gate = "studio_busy", error = failure.Message };
                 } else {
-                    var timeout = command switch { "query-test" => TimeSpan.FromMinutes(3), "merge" => TimeSpan.FromMinutes(15), "publish" => argument.Contains("--wait") ? TimeSpan.FromMinutes(20) : TimeSpan.FromMinutes(10), "wait" => TimeSpan.FromMinutes(20), "open" or "latest" => TimeSpan.FromMinutes(3), "check-base" or "preview" => TimeSpan.FromMinutes(5), "assets" or "consumers" or "reference-snapshot" or "templates" => TimeSpan.FromMinutes(2), "create" or "create-app" or "template-download" => TimeSpan.FromMinutes(3), "refresh-references" => TimeSpan.FromMinutes(5), "data" or "data-insert" or "data-update" or "data-delete" => TimeSpan.FromMinutes(3), "portal-call" or "portal-session" => TimeSpan.FromMinutes(3), "portal-upload" => TimeSpan.FromMinutes(13), _ => TimeSpan.FromMinutes(1) };
+                    var timeout = command switch { "query-test" => TimeSpan.FromMinutes(3), "merge" => TimeSpan.FromMinutes(15), "publish" => argument.Contains("--wait") ? TimeSpan.FromMinutes(20) : TimeSpan.FromMinutes(10), "wait" => TimeSpan.FromMinutes(20), "open" or "latest" => TimeSpan.FromMinutes(3), "check-base" or "preview" => TimeSpan.FromMinutes(5), "assets" or "consumers" or "reference-producers" or "reference-snapshot" or "templates" => TimeSpan.FromMinutes(2), "create" or "create-app" or "template-download" => TimeSpan.FromMinutes(3), "refresh-references" => TimeSpan.FromMinutes(5), "data" or "data-insert" or "data-update" or "data-delete" => TimeSpan.FromMinutes(3), "portal-call" or "portal-private-call" or "portal-private-download" or "portal-session" => TimeSpan.FromMinutes(3), "portal-upload" => TimeSpan.FromMinutes(13), _ => TimeSpan.FromMinutes(1) };
                     var work = Task.Run(() => Dispatch(command, argument, context));
                     // The watchdog closes informational dialogs and notice windows while the command runs, so a
                     // native command that ends with "Close" never holds the bridge. Choices are never made for the user.
                     // The portal lane opens no Studio dialog, so it never closes the user's.
-                    var watchdog = command is "query-test" or "status" or "dismiss-dialog" or "auth-status" or "portal-call" or "portal-session" or "portal-upload" or "publish-log" ? Task.CompletedTask : WatchDialogs(work, context);
+                    var watchdog = command is "query-test" or "status" or "dismiss-dialog" or "auth-status" or "portal-call" or "portal-private-call" or "portal-private-download" or "portal-api-client-fixture-cleanup" or "portal-session" or "portal-upload" or "publish-log" ? Task.CompletedTask : WatchDialogs(work, context);
                     if (await Task.WhenAny(work, Task.Delay(timeout)) == work) {
                         try { response = await work; }
                         catch (Exception error) {
@@ -180,16 +180,20 @@ internal static partial class Bridge {
         "templates" => await Templates(argument, context),
         "template-download" => await TemplateDownload(argument, context),
         "refresh-references" => await RefreshReferences(argument, context),
+        "reference-producers" => await ReferenceProducers(argument, context),
         "reference-snapshot" => await ReferenceSnapshot(argument, context),
         "data" => await Data("read", argument, context),
         "data-insert" => await Data("insert", argument, context),
         "data-update" => await Data("update", argument, context),
         "data-delete" => await Data("delete", argument, context),
         "portal-call" => await PortalCall(argument, context),
+        "portal-private-call" => await PortalPrivateCall(argument, context),
+        "portal-api-client-fixture-cleanup" => await PortalApiClientFixtureCleanup(argument, context),
+        "portal-private-download" => await PortalPrivateDownload(argument, context),
         "portal-session" => await PortalSessionCommand(argument, context),
         "portal-upload" => await PortalUploadCommand(argument, context),
         "auth-status" => await AuthStatus(argument, context),
-        _ => throw new ArgumentException("Commands: status [brief|<field.path>] | wait idle|no-dialogs|published <Module>|open <Module> [timeoutSeconds] | authorize <manifest> publish|create <text> | assets [tenant] [--no-catalog] | consumers <Module|key> | open <Module|key> [local.oml] | close <Module> [--duplicates] [--discard] | snapshot <Module> | latest <Module|key> | module-info <Module> | reference-snapshot <json: module, producer, output> | refresh-references <Module> [--producer <Library|key>] | check-base <manifest> | preview <manifest> | merge <manifest> | create <manifest> | create-app <manifest> | templates [--kind reactive|mobile|all] [--tenant <host>] | template-download <templateKey> [--tenant <host>] | publish <manifest> [--wait [minutes]] | publish-status <manifest> | publish-log [<Module|key>] [--no-resolve] | dismiss-dialog <caption>|<action label> | data <Module> <Entity> [--limit N] [--offset N] [--fields A,B] [--out file] | data-insert|data-update <Module> <Entity> --records-file <json array> --authorize <text> | data-delete <Module> <Entity> --ids <id,id> --authorize <text> | portal-call <request.json> [--tenant <host>] | portal-session status|open|close [--tenant <host>] | portal-session fetch <request.json> [--tenant <host>] | portal-upload <request.json> --tenant <host> | auth-status [--tenant <host>] | stop")
+        _ => throw new ArgumentException("Commands: status [brief|<field.path>] | wait idle|no-dialogs|published <Module>|open <Module> [timeoutSeconds] | authorize <manifest> publish|create <text> | assets [tenant] [--no-catalog] | consumers <Module|key> | open <Module|key> [local.oml] | close <Module> [--duplicates] [--discard] | snapshot <Module> | latest <Module|key> | module-info <Module> | reference-producers <Module> | reference-snapshot <json: module, producer, output> | refresh-references <Module> [--producer <Library|key>] | check-base <manifest> | preview <manifest> | merge <manifest> | create <manifest> | create-app <manifest> | templates [--kind reactive|mobile|all] [--tenant <host>] | template-download <templateKey> [--tenant <host>] | publish <manifest> [--wait [minutes]] | publish-status <manifest> | publish-log [<Module|key>] [--no-resolve] | dismiss-dialog <caption>|<action label> | data <Module> <Entity> [--limit N] [--offset N] [--fields A,B] [--out file] | data-insert|data-update <Module> <Entity> --records-file <json array> --authorize <text> | data-delete <Module> <Entity> --ids <id,id> --authorize <text> | portal-call <request.json> [--tenant <host>] | portal-session status|open|close [--tenant <host>] | portal-session fetch <request.json> [--tenant <host>] | portal-upload <request.json> --tenant <host> | auth-status [--tenant <host>] | stop")
     };
 
     // ---- Watchdog: informational dialogs are closed, choices are reported, everything is journaled.

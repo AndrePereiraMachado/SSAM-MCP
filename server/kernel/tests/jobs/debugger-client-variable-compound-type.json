@@ -1,0 +1,209 @@
+{
+ "description": "P09-w1-fixture-capability-evidence: evidence job for the debugger coverage fixture; never delivered. O11 Reactive negative: Client Variables typed Binary Data, entity Record, structure Record, Text List and structure List. The model accepts the write and Verify reports UnallowedTypeForClientVariable for each one, leaving the module invalid (expectValid false).",
+ "base": "tests/fixtures/reactive-ui.oml",
+ "expectValid": false,
+ "expectedMessages": [
+  {
+   "id": "UnusedElement",
+   "element": "Headless_UI (ESpace) / SSAMDbgCvBinaryData (ClientVariable)",
+   "why": "The variable exists only to establish that the installed model accepts its data type; the coverage fixture adds the readers and writers."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "Headless_UI (ESpace) / SSAMDbgCvEntityRecord (ClientVariable)",
+   "why": "The variable exists only to establish that the installed model accepts its data type; the coverage fixture adds the readers and writers."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "Headless_UI (ESpace) / SSAMDbgCvStructureRecord (ClientVariable)",
+   "why": "The variable exists only to establish that the installed model accepts its data type; the coverage fixture adds the readers and writers."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "Headless_UI (ESpace) / SSAMDbgCvTextList (ClientVariable)",
+   "why": "The variable exists only to establish that the installed model accepts its data type; the coverage fixture adds the readers and writers."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "Headless_UI (ESpace) / SSAMDbgCvStructureList (ClientVariable)",
+   "why": "The variable exists only to establish that the installed model accepts its data type; the coverage fixture adds the readers and writers."
+  },
+  {
+   "id": "UnallowedTypeForClientVariable",
+   "element": "Headless_UI (ESpace) / SSAMDbgCvBinaryData (ClientVariable)",
+   "why": "The result this job proves: the installed O11 Verify refuses 'BinaryData' for a Client Variable, so the coverage fixture cannot hold it."
+  },
+  {
+   "id": "UnallowedTypeForClientVariable",
+   "element": "Headless_UI (ESpace) / SSAMDbgCvEntityRecord (ClientVariable)",
+   "why": "The result this job proves: the installed O11 Verify refuses 'Record' for a Client Variable, so the coverage fixture cannot hold it."
+  },
+  {
+   "id": "UnallowedTypeForClientVariable",
+   "element": "Headless_UI (ESpace) / SSAMDbgCvStructureRecord (ClientVariable)",
+   "why": "The result this job proves: the installed O11 Verify refuses 'Record' for a Client Variable, so the coverage fixture cannot hold it."
+  },
+  {
+   "id": "UnallowedTypeForClientVariable",
+   "element": "Headless_UI (ESpace) / SSAMDbgCvTextList (ClientVariable)",
+   "why": "The result this job proves: the installed O11 Verify refuses 'RecordList' for a Client Variable, so the coverage fixture cannot hold it."
+  },
+  {
+   "id": "UnallowedTypeForClientVariable",
+   "element": "Headless_UI (ESpace) / SSAMDbgCvStructureList (ClientVariable)",
+   "why": "The result this job proves: the installed O11 Verify refuses 'RecordList' for a Client Variable, so the coverage fixture cannot hold it."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerEntity",
+   "name": "SSAMDbgTypeEntity",
+   "as": "$typeEntity"
+  },
+  {
+   "op": "create",
+   "parent": "$typeEntity",
+   "type": "IEntityAttribute",
+   "name": "Id",
+   "as": "$typeEntityId"
+  },
+  {
+   "op": "set",
+   "target": "$typeEntityId",
+   "prop": "DataType",
+   "value": "Long Integer"
+  },
+  {
+   "op": "set",
+   "target": "$typeEntityId",
+   "prop": "IsAutoNumber",
+   "value": "Yes"
+  },
+  {
+   "op": "set",
+   "target": "$typeEntity",
+   "prop": "IdentifierAttribute",
+   "value": "$typeEntityId"
+  },
+  {
+   "op": "create",
+   "parent": "$typeEntity",
+   "type": "IEntityAttribute",
+   "name": "Label",
+   "as": "$typeEntityLabel"
+  },
+  {
+   "op": "set",
+   "target": "$typeEntityLabel",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IStructure",
+   "name": "SSAMDbgTypeStructure",
+   "as": "$typeStructure"
+  },
+  {
+   "op": "create",
+   "parent": "$typeStructure",
+   "type": "IStructureAttribute",
+   "name": "Label",
+   "as": "$typeStructureLabel"
+  },
+  {
+   "op": "set",
+   "target": "$typeStructureLabel",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IClientVariable",
+   "name": "SSAMDbgCvBinaryData",
+   "as": "$vBinaryData"
+  },
+  {
+   "op": "set",
+   "target": "$vBinaryData",
+   "prop": "DataType",
+   "value": "Binary Data"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IClientVariable",
+   "name": "SSAMDbgCvEntityRecord",
+   "as": "$vEntityRecord"
+  },
+  {
+   "op": "set",
+   "target": "$vEntityRecord",
+   "prop": "DataType",
+   "value": "SSAMDbgTypeEntity"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IClientVariable",
+   "name": "SSAMDbgCvStructureRecord",
+   "as": "$vStructureRecord"
+  },
+  {
+   "op": "set",
+   "target": "$vStructureRecord",
+   "prop": "DataType",
+   "value": "SSAMDbgTypeStructure"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IClientVariable",
+   "name": "SSAMDbgCvTextList",
+   "as": "$vTextList"
+  },
+  {
+   "op": "set",
+   "target": "$vTextList",
+   "prop": "DataType",
+   "value": "Text List"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IClientVariable",
+   "name": "SSAMDbgCvStructureList",
+   "as": "$vStructureList"
+  },
+  {
+   "op": "set",
+   "target": "$vStructureList",
+   "prop": "DataType",
+   "value": "SSAMDbgTypeStructure List"
+  },
+  {
+   "op": "get",
+   "target": "$vBinaryData"
+  },
+  {
+   "op": "get",
+   "target": "$vEntityRecord"
+  },
+  {
+   "op": "get",
+   "target": "$vStructureRecord"
+  },
+  {
+   "op": "get",
+   "target": "$vTextList"
+  },
+  {
+   "op": "get",
+   "target": "$vStructureList"
+  }
+ ]
+}

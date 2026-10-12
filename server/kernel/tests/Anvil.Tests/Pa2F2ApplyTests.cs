@@ -118,6 +118,27 @@ public sealed class Pa2F2ApplyTests
         Assert.False(File.Exists(output));
     }
 
+    [Fact]
+    public void ARenameOfANameEndingInDigitsIsANameCollisionToo()
+    {
+        if (!PacoteBPolicyTests.StudioAvailable()) return;
+        var dir = Dir();
+        // The Studio numbers a newcomer from the name without its trailing digits: a second Total2 becomes Total3 (observed
+        // 2026-10-11, Wv2 -> Wv3), which "^Total2\d+$" never matched, so the rename passed in silence.
+        var (_, error, output) = Run(dir, "digits", """
+        {"base":"blank-service.oml","ops":[
+          {"op":"create","parent":"@espace","type":"IServerAction","name":"Pa2Contar","as":"$a"},
+          {"op":"create","parent":"$a","type":"IOutputParameter","name":"Total2","as":"$o1"},
+          {"op":"create","parent":"$a","type":"IOutputParameter","name":"Total2","as":"$o2"}]}
+        """);
+        var refused = Assert.IsType<JobPreflightException>(error);
+        var problem = Assert.Single(refused.Problems, p => p!["phase"]!.GetValue<string>() == "apply")!;
+        Assert.Equal("NAME_COLLISION", problem["code"]!.GetValue<string>());
+        Assert.Equal(2, problem["op"]!.GetValue<int>());
+        Assert.Contains("renamed it to 'Total3'", problem["message"]!.GetValue<string>());
+        Assert.False(File.Exists(output));
+    }
+
     /// <summary>A base built by a job of its own (the module the job edits), so the base check reads its entities and actions.
     /// It is written under a `work` folder of .local, which JobSources accepts as a capture of the SSAM.</summary>
     private static string Base(string dir)

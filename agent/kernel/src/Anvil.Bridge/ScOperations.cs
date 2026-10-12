@@ -368,6 +368,7 @@ internal static class ScApi
     /// HttpClient.RetryOnCommunicationError, which resend on 500 and timeouts.</summary>
     public static readonly IReadOnlyDictionary<string, ScOp<ScRestSend>> RestOperations = new Dictionary<string, ScOp<ScRestSend>>(StringComparer.OrdinalIgnoreCase)
     {
+        ["platform-settings"] = Read<ScRestSend>(_ => ReadPlatformSettings),
         ["environment-features"] = Read<ScRestSend>(_ => c =>
             (c.Api ?? throw Unavailable("ServiceCenterRest")).GetServerModelFeatures(c.Login!, Uri.UriSchemeHttps)),
         ["apply-settings-status"] = Read<ScRestSend>(a =>
@@ -384,6 +385,12 @@ internal static class ScApi
     /// guard; uploads and publications stay on soap UploadAndPublishExtension. The zips go to args.outFile (or base64).</summary>
     public static readonly IReadOnlyDictionary<string, ScOp<ScIntegrationStudioSend>> IntegrationStudioOperations = new Dictionary<string, ScOp<ScIntegrationStudioSend>>(StringComparer.OrdinalIgnoreCase)
     {
+        ["TranslateLogicalDatabaseToDbConnection"] = Read<ScIntegrationStudioSend>(a =>
+        {
+            var key = a.Key("extensionKey"); var database = a.Text("logicalDatabase");
+            return c => ScIntegrationStudioSoap.DatabaseProvider(IntegrationStudioCall(c,
+                "TranslateLogicalDatabaseToDbConnection", ("extensionKey", key), ("logicalDatabase", database)));
+        }),
         ["Handshake"] = Read<ScIntegrationStudioSend>(a =>
         {
             var version = a.Text("version"); var last = a.Raw("lastUpgradeVersion") ?? "";
@@ -597,6 +604,18 @@ internal static class ScApi
             timeout: TimeSpan.FromMinutes(2), retryOnCommunicationError: false, handleCommunicationError: false);
         parameters.AddAuthenticationHeader(context.User, context.Secret);
         using var response = context.Rest!.Put(parameters) ?? throw new InvalidOperationException("no HTTP response");
+        return new ScHttp((int)response.StatusCode, response.Content?.Headers.ContentType?.ToString(),
+            response.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? "");
+    }
+
+    private static ScHttp ReadPlatformSettings(ScRestContext context)
+    {
+        var parameters = new HttpRequestParameters(
+            new Uri($"https://{context.Host}/ServiceCenter/rest/PlatformServices/PlatformSettings"),
+            timeout: TimeSpan.FromSeconds(25), retryOnCommunicationError: false, handleCommunicationError: false);
+        parameters.AddAuthenticationHeader(context.User, context.Secret);
+        using var response = (context.Rest ?? throw Unavailable("RestService")).Get(parameters)
+            ?? throw new InvalidOperationException("no HTTP response");
         return new ScHttp((int)response.StatusCode, response.Content?.Headers.ContentType?.ToString(),
             response.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? "");
     }

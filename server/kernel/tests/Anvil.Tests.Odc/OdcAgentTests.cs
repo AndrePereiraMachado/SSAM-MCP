@@ -9,6 +9,29 @@ using Xunit;
 namespace Anvil.Tests.Odc;
 public class OdcAgentTests {
  [Fact]
+ public void CommonMessageTypesSupportActionParametersAndNativeReload() {
+  StudioAssembliesOdc.Bind(); CommonTypes();
+ }
+ [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+ static void CommonTypes() {
+  using var app=Loader.ModelServicesInstance.CreateESpace(SegmentationKind.AIAgent,"CommonTypesFixture",targetPlatform:PlatformServerVersion.Neo,enableTransactions:true);
+  var common=app.GetAllDescendantsOfType<OutSystems.Model.Data.IStructureSignature>().Single(x=>x.Name=="AIMessage");
+  Assert.Same(common,TypeResolver.Resolve(app,"aimessage"));
+  var list=Assert.IsAssignableFrom<OutSystems.Model.Types.IListType>(TypeResolver.Resolve(app,"AIMessage List"));
+  Assert.Same(common,list.ElementType);
+  Assert.Throws<KeyNotFoundException>(()=>TypeResolver.Resolve(app,"UnknownCommonType"));
+  new ModelSession((ESpace)app).Apply(JsonNode.Parse("""
+  [{"op":"logic","data":{"actions":[{"name":"RoundTrip","inputs":[{"name":"Messages","type":"AIMessage List"}],"outputs":[{"name":"Result","type":"AIMessage List"}],"steps":[{"assign":{"Result":"Messages"}}]}]}}]
+  """)!.AsArray());
+  var host=new ModelHost(Path.Combine(Path.GetTempPath(),"ssam-agent-common-types",Guid.NewGuid().ToString("N")));
+  var loaded=host.Load(app.Save());
+  try {
+   var messages=((IESpace)loaded).GetAllDescendantsOfType<IServerAction>().Single(x=>x.Name=="RoundTrip").InputParameters.Single(x=>x.Name=="Messages");
+   Assert.Equal("AIMessage",TypeResolver.Name(((OutSystems.Model.Types.IListType)messages.DataType).ElementType));
+   Assert.Equal(0,ModelHost.Messages(loaded).Count(x=>x.IsError));
+  } finally {ModelHost.Release(loaded);}
+ }
+ [Fact]
  public void AgentNativeModelSupportsCreationToolsAndIdentityPreservingUpdates() {
   StudioAssembliesOdc.Bind(); Run();
  }

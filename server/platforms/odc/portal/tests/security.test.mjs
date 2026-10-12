@@ -4,11 +4,40 @@ import { readConfig, httpsOrigin } from '../runtime/config.mjs';
 import { OAuthClient } from '../runtime/auth.mjs';
 import { OdcBridge } from '../runtime/bridge.mjs';
 import { Catalog } from '../runtime/catalog.mjs';
-import { redact } from '../runtime/errors.mjs';
+import { redact, publicError } from '../runtime/errors.mjs';
 import { mockFetch, testConfig, sampleRequest } from './helpers.mjs';
 
 const readId = 'asset-repository-api-v1:get:/assets';
 const catalog = new Catalog();
+
+test('authentication cancellation is a safe timeout, not an internal error', () => {
+  for (const name of ['AbortError', 'TimeoutError']) {
+    const result = publicError(Object.assign(new Error('private auth detail'), { name }));
+    assert.equal(result.code, 'PORTAL_TIMEOUT');
+    assert.doesNotMatch(JSON.stringify(result), /private/);
+  }
+});
+
+test('typed telemetry remains usable with short cookie secrets while free text and secret fields stay masked', () => {
+  const metadata = { Time: '2026-10-07T12:30:00.123Z', StartTime: '2026-10-07T12:30:00Z',
+    TraceId: '0123456789abcdef0123456789abcdef', SpanId: '0123456789abcdef', Duration: '123', NumberOfSpans: '12',
+    StartTimeUnixNano: '1791376200123456789', TotalResults: '123', LogId: 'ALuqGKEB64JIwmMXa9i8' };
+  const result = redact({ ...metadata, Message: 'secret 0 or 1', password: '123', value: '123', invalidTime: '2026-10-07T12:30:00Z' }, ['0', '1']);
+  for (const [key, value] of Object.entries(metadata)) assert.equal(result[key], value);
+  assert.equal(result.password, '[REDACTED]');
+  assert.match(result.Message, /\[REDACTED\]/);
+  assert.match(result.value, /\[REDACTED\]/);
+  assert.match(result.invalidTime, /\[REDACTED\]/);
+  assert.equal(redact({ Time: metadata.Time }, [metadata.Time]).Time, '[REDACTED]');
+});
+
+test('timer dates retain fractional seconds and the no-run sentinel without exempting secrets or free text', () => {
+  const dates = { currentStartedOn: '1900-01-01T00:00:00', lastRunStartedOn: '2026-10-07T21:45:05.711597Z', lastRunFinishedOn: '1900-01-01T00:00:00', nextRunStartsOn: '2026-10-08T00:00:00+00:00' };
+  assert.deepEqual(redact(dates, ['0','1']), dates);
+  assert.equal(redact(dates, [dates.lastRunStartedOn]).lastRunStartedOn, '[REDACTED]');
+  const masked = redact({ password: dates.lastRunStartedOn, text: dates.lastRunStartedOn, currentStartedOn: 'private1' }, ['1']);
+  for (const value of Object.values(masked)) assert.match(value, /\[REDACTED\]/);
+});
 
 test('catalog works without credentials and access is reported unverified', async () => {
   const mock = mockFetch();

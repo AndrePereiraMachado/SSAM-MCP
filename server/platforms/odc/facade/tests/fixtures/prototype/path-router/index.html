@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Studio Nine - Home</title>
+  <style>.nav a.on{text-decoration:underline}</style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    (function () {
+      var pages = {
+        '/': '<h1>Studio Nine</h1><p class="lead">Design and print.</p>',
+        '/work': '<h1>Work</h1><ul class="projects"><li class="project">Poster</li><li class="project">Book</li></ul>',
+        '/about': '<h1>About</h1><p>Since 2009.</p>'
+      };
+      function current() { var path = location.pathname.replace(/\/index\.html$/, '/'); return pages[path] ? path : '/'; }
+      function link(path, label) { return '<a href="' + path + '" class="' + (current() === path ? 'on' : '') + '">' + label + '</a>'; }
+      function render() {
+        document.getElementById('app').innerHTML = '<nav class="nav">' + link('/', 'Home') + link('/work', 'Work') + link('/about', 'About') + '</nav><main class="page">' + pages[current()] + '</main>';
+      }
+      document.addEventListener('click', function (event) {
+        var anchor = event.target.closest('a[href^="/"]');
+        if (!anchor) return;
+        event.preventDefault();
+        history.pushState({}, '', anchor.getAttribute('href'));
+        render();
+      });
+      window.addEventListener('popstate', render);
+      render();
+    })();
+  </script>
+</body>
+</html>

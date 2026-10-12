@@ -21,7 +21,7 @@ test('every endpoint matches the contract shapes on a realistic state volume', a
   assert.equal(meta.publicUrl, 'https://ssam.example.com/mcp');
   assert.equal(meta.serverUrl, 'https://ssam.example.com');
   assert.equal(meta.timeZone, 'America/Sao_Paulo');
-  assert.deepEqual(meta.capabilities, { issue: true, revoke: true, agentRotate: true, renew: false, lanes: false, readOnly: null });
+  assert.deepEqual(meta.capabilities, { issue: true, revoke: true, agentRotate: true, renew: true, lanes: true, readOnly: null });
   assert.equal(meta.indexing.state, 'ready');
 
   const ov = (await c.get('/api/overview')).body;
@@ -54,8 +54,9 @@ test('every endpoint matches the contract shapes on a realistic state volume', a
   assert.equal(alfa.accessAlerts, 1);
   assert.equal(alfa.daily14.reduce((s, n) => s + n, 0), 3);
   assert.equal(alfa.workspace.bytes, 4096);
-  assert.equal(alfa.actions.renew.allowed, false);
-  assert.equal(alfa.actions.renew.reason, 'Indisponível nesta imagem (chega com o 24º envio).');
+  // the box's token module is the 24th image's: renew and lanes are offered
+  assert.deepEqual(alfa.actions.renew, { allowed: true, reason: null });
+  assert.deepEqual(alfa.actions.lanes, { allowed: true, reason: null });
   assert.equal(alfa.actions.revoke.allowed, true);
   const gama = lic.licenses.find(l => l.id === sc.gama.id);
   assert.equal(gama.state, 'revoked');
@@ -134,20 +135,27 @@ test('every endpoint matches the contract shapes on a realistic state volume', a
   const rev = await c.post(`/api/licenses/${issued.body.license.id}/revoke`, { confirm: 'Cliente Delta' });
   S.assertShape(assert, rev.body, S.RevokeAnswer, 'revoke');
   assert.equal(rev.body.license.state, 'revoked');
-  const notSupported = await c.post(`/api/licenses/${sc.alfa.id}/renew`, { days: 30, confirm: 'Cliente Alfa', expectExpiresAt: alfa.expiresAt });
-  assert.equal(notSupported.status, 501);
-  S.assertShape(assert, notSupported.body, S.ErrorAnswer, 'error');
+  // the box's token module (24th image) renews and changes lanes; a stale renew is the error answer
+  const renewed = await c.post(`/api/licenses/${sc.alfa.id}/renew`, { days: 30, confirm: 'Cliente Alfa', expectExpiresAt: alfa.expiresAt });
+  assert.equal(renewed.status, 200);
+  S.assertShape(assert, renewed.body, S.RenewAnswer, 'renew');
+  const laned = await c.post(`/api/licenses/${sc.alfa.id}/lanes`, { lanes: ['odc'], confirm: 'Cliente Alfa', expectLanes: ['odc', 'o11'] });
+  assert.equal(laned.status, 200);
+  S.assertShape(assert, laned.body, S.LanesAnswer, 'lanes');
+  const stale = await c.post(`/api/licenses/${sc.alfa.id}/renew`, { days: 30, confirm: 'Cliente Alfa', expectExpiresAt: alfa.expiresAt });
+  assert.equal(stale.status, 409);
+  S.assertShape(assert, stale.body, S.ErrorAnswer, 'error');
   const ack = await c.post('/api/alerts/ack', { id: `licenca-vence:${sc.beta.id}`, hours: 24 });
   S.assertShape(assert, ack.body, S.AckAnswer, 'ack');
   const unack = await c.post('/api/alerts/unack', { id: `licenca-vence:${sc.beta.id}` });
   S.assertShape(assert, unack.body, S.UnackAnswer, 'unack');
   const hist = (await c.get('/api/history')).body;
   S.assertShape(assert, hist, S.HistoryList, 'history');
-  assert.deepEqual(hist.entries.slice(0, 6).map(e => e.action), ['alert-unack', 'alert-ack', 'revoke', 'agent-rotate', 'issue', 'issue']);
+  assert.deepEqual(hist.entries.slice(0, 8).map(e => e.action), ['alert-unack', 'alert-ack', 'lanes', 'renew', 'revoke', 'agent-rotate', 'issue', 'issue']);
   const histAlfa = (await c.get(`/api/history?token=${sc.alfa.id}&limit=1`)).body;
-  assert.deepEqual(histAlfa.entries.map(e => e.action), ['agent-rotate']);
+  assert.deepEqual(histAlfa.entries.map(e => e.action), ['lanes']);
   const lic2 = (await c.get('/api/licenses')).body;
-  assert.equal(lic2.licenses.find(l => l.id === sc.alfa.id).history[0].action, 'agent-rotate');
+  assert.equal(lic2.licenses.find(l => l.id === sc.alfa.id).history[0].action, 'lanes');
   const key = await c.post('/api/key/rotate', {});
   S.assertShape(assert, key.body, S.KeyAnswer, 'key');
 });

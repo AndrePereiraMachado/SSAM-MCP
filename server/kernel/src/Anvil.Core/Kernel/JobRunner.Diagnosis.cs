@@ -26,14 +26,22 @@ public static partial class JobRunner
     private static readonly HashSet<string> FailsTheOp = new(StringComparer.Ordinal)
         { "REFERENCE_UNRESOLVED", "CHILD_NOT_FOUND", "PROPERTY_NOT_WRITABLE", "ENUM_VALUE_INVALID", "TYPE_UNRESOLVED", "SQL_UNRESOLVED", "JSON_SHAPE", "OP_NOT_OBJECT", "LOGIC_DUPLICATE_ACTION" };
 
-    /// <summary>The ops the preflight refused whole: their JSON could not be read as the op (JSON_SHAPE, OP_NOT_OBJECT).</summary>
+    /// <summary>The ops the preflight refused whole: their JSON could not be read as the op (JSON_SHAPE, OP_NOT_OBJECT), or an
+    /// html op the structural pass refused (H3 of docs/PROTOTIPO-NATIVO.md: HTML_* and the CSS the html op carries, found
+    /// without a module). Applying them again only repeated the same failure after the whole build.</summary>
     private static IReadOnlySet<int>? RefusedWhole(JsonObject? preflight)
     {
         var ops = (preflight?["problems"] as JsonArray ?? new JsonArray()).OfType<JsonObject>()
-            .Where(p => p["code"]?.ToString() is JobDocument.ShapeCode or "OP_NOT_OBJECT" && p["op"] is JsonValue v && v.TryGetValue<int>(out _))
+            .Where(p => (p["code"]?.ToString() is JobDocument.ShapeCode or "OP_NOT_OBJECT" || StructuralHtml(p)) && p["op"] is JsonValue v && v.TryGetValue<int>(out _))
             .Select(p => p["op"]!.GetValue<int>()).ToHashSet();
         return ops.Count == 0 ? null : ops;
     }
+
+    /// <summary>A problem of the module-free pass of an html op: its code is an HTML_* code (or the CSS one of the op), its pointer
+    /// inside an op, and it is an error of the preflight (no base was loaded to find it).</summary>
+    private static bool StructuralHtml(JsonObject problem)
+        => problem["severity"]?.ToString() is null or "error" && problem["phase"]?.ToString() is null or "preflight"
+           && problem["code"]?.ToString() is { } code && (code.StartsWith("HTML_", StringComparison.Ordinal) || code == CssCompat.Code && problem["pointer"]?.ToString()?.Contains("/data/css", StringComparison.Ordinal) == true);
 
     /// <summary>The refusal of a job with problems in any phase: the Verify of the candidate as applied (never saved), its
     /// blocking messages mapped to the job, and the union of every phase. One phase alone keeps the refusal tools already
@@ -142,7 +150,8 @@ public static partial class JobRunner
     /// <summary>The problems of every phase, in phase order, each place once: a later problem (apply, verify) at the same
     /// place as an earlier one is the same fault seen again and is dropped, unless it carries a patch the earlier one lacks.
     /// The same place: the same op and pointer; or a pointer inside the other's with the same code or the same quoted name;
-    /// or an op-level apply failure of an op the preflight or the base already refused for a fault that fails the op.</summary>
+    /// or an op-level apply failure of an op the preflight or the base already refused for a fault that fails the op. Two
+    /// messages of the Verify are never one place unless they are the same message on the same element (key).</summary>
     internal static List<JsonObject> Union(IEnumerable<JsonObject> all, string? opsPointer)
     {
         var result = new List<JsonObject>();
@@ -169,6 +178,11 @@ public static partial class JobRunner
 
     private static bool SamePlace(JsonObject q, JsonObject p, string? opsPointer)
     {
+        // The Verify says each fault of each element once: two of its messages are two faults (UI-Mockup, FarmaVirtual call 96:
+        // the 16 IfWidgets of one html op shared /ops/245 and came back as 1; call 99: the ExpressionUnknownObject of a Labels
+        // went under the CustomObjectError of the same Labels), unless the same message on the same element came twice.
+        if (q["phase"]?.ToString() == "verify" && p["phase"]?.ToString() == "verify"
+            && (q["key"]?.ToString() != p["key"]?.ToString() || q["message"]?.ToString() != p["message"]?.ToString())) return false;
         var qo = q["op"] is JsonValue qv && qv.TryGetValue<int>(out var a) ? a : (int?)null;
         var po = p["op"] is JsonValue pv && pv.TryGetValue<int>(out var b) ? b : (int?)null;
         if (qo == null || po == null || qo != po) return false;

@@ -2,6 +2,7 @@
 // Headless_UI/personal-2qqw9srv) and the local registry refuse at Validate, before any transport or credential use.
 static class BlockedBindingTests {
     internal static void Run() {
+        O11NativeNeutralizationTests.Run();
         Tests.Check(BlockedBindings.Hash("https://Shop.Example.Test", "UIUIUIUIUIUIUIUIUIUIUI") ==
 #if ODC
             BlockedBindings.Hash("https://shop.example.test", "UIUIUIUIUIUIUIUIUIUIUI"),
@@ -15,6 +16,10 @@ static class BlockedBindingTests {
         try { Make("https://personal-2qqw9srv.outsystemscloud.com/Headless_UI/", "Mif02PxcH0K7KiABEHTwMg").Validate(); throw new Exception("4c binding accepted"); }
         catch (DebugFailure error) { Tests.Check(error.Message == "debug_binding_blocked", "4c binding refused: " + error.Message); }
         Make("https://personal-2qqw9srv.outsystemscloud.com/Headless_CS/", "Kawk_WFx5USxo7qFAB0lCQ").Validate(); // another binding of the same environment
+        var consumer = Make("https://personal-2qqw9srv.outsystemscloud.com/Headless_UI/", "Kawk_WFx5USxo7qFAB0lCQ");
+        consumer.EntryModule = "Headless_UI"; consumer.EntryModuleKey = "Mif02PxcH0K7KiABEHTwMg";
+        try { consumer.Validate(); throw new Exception("blocked consumer accepted"); }
+        catch (DebugFailure error) { Tests.Check(error.Message == "debug_binding_blocked", "4c remains blocked through a different producer"); }
 #endif
         var root = Path.Combine(Path.GetTempPath(), "ssam-blocked-" + Guid.NewGuid().ToString("N"));
         try {

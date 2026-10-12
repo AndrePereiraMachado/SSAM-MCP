@@ -136,7 +136,15 @@ public abstract class ModelReader<T> where T : class
         // Native keys can contain '/' (base64). A key is opaque, never a segmented path.
         if (path.StartsWith('@')) {
             var keyed = Walk(root).Where(n => Key(n) == path[1..]).ToArray();
-            return keyed.Length == 1 ? keyed[0] : throw new InvalidOperationException("Unresolved or ambiguous key in this snapshot: " + path);
+            // An element Parent() reaches that no Children list holds (O11: a widget's MobileWidget "content" placeholder, an
+            // aggregate's DataTable): the module index keeps it as an ancestor and the map names it, so its key resolves too
+            // (G11, FarmaVirtual 10/10/2026).
+            if (keyed.Length == 0) keyed = Unlisted(root).Where(n => Key(n) == path[1..]).ToArray();
+            // Two elements with one key: the paths that tell them apart (a key never will).
+            return keyed.Length == 1 ? keyed[0] : throw new InvalidOperationException(keyed.Length == 0
+                ? "Unresolved key in this snapshot: " + path + " names no element of it, listed or reached through Parent()"
+                : "Ambiguous key in this snapshot: " + path + " names " + keyed.Length + " elements ("
+                    + string.Join("; ", keyed.Take(8).Select(PathOf)) + "): read one by its path");
         }
         var current = root;
         foreach (var segment in path.Split('/', StringSplitOptions.RemoveEmptyEntries)) {
@@ -157,6 +165,23 @@ public abstract class ModelReader<T> where T : class
             current = hits[0];
         }
         return current;
+    }
+    // The elements above the walked ones that Parent() reaches and no Children list holds, each once (ModuleIndex keeps the
+    // same ones as ancestors). The climb stops at the chain above the root: under a scope (the path of a select) a key
+    // resolves inside that scope, never the placeholder the scope sits in nor an element above it. A Parent() that throws
+    // only loses that chain.
+    private List<T> Unlisted(T root)
+    {
+        var walked = new HashSet<T>(Walk(root), ReferenceEqualityComparer.Instance);
+        var above = new HashSet<T>(ReferenceEqualityComparer.Instance);
+        try { for (var at = Parent(root); at != null && above.Add(at); at = Parent(at)) { } } catch { /* what was read of the chain stays out */ }
+        var found = new HashSet<T>(ReferenceEqualityComparer.Instance); var unlisted = new List<T>();
+        foreach (var node in walked) {
+            try {
+                for (var at = Parent(node); at != null && !walked.Contains(at) && !above.Contains(at) && found.Add(at); at = Parent(at)) unlisted.Add(at);
+            } catch { /* the chain of this node stays unread */ }
+        }
+        return unlisted;
     }
     // True/False of an If (TrueTarget/FalseTarget), the names its connectors show in the Studio.
     private T? Branch(T node, string segment)

@@ -13,11 +13,15 @@ export async function fakeHub({ credential, kernel = { odc: '1.7.27', o11: '11.5
   const hub = {
     hellos: [], messages: [], requests: [], posts: 0, deletes: 0, blobGets: 0, blobPuts: 0, streams: 0,
     helloStatus: [],       // statuses for the next hellos (else 200 + welcome)
+    holdHellos: 0,         // the next N hellos are read and never answered
     dropPosts: 0,          // the next N POST /messages lose their connection without an answer
     holdPosts: 0,          // the next N POST /messages wait for release() and are then answered as the hub is by then
     holdStreams: 0,        // the next N stream GETs never get response headers (C03: a stream that does not open)
     held: [],
     corruptPuts: 0,        // the next N blob PUTs are answered 400 PART_HASH_MISMATCH
+    holdPuts: 0,           // the next N blob PUTs are read and never answered (a stalled connection; the part is not kept)
+    holdGets: 0,           // the next N blob GETs are never answered
+    blobSockets: [],       // the client port of every blob request (a new port = a new connection)
     corruptParts: new Set(), // "transfer/index" served with wrong bytes (right header)
     stream: null, channel: null, instance: null,
     downloads: new Map(),  // transfer -> {buffer, partBytes}
@@ -42,6 +46,7 @@ export async function fakeHub({ credential, kernel = { odc: '1.7.27', o11: '11.5
       hub.holdPosts--;
       await new Promise(resolve => { hub.held.push(resolve); notify(); });
     }
+    if (req.method === 'POST' && url.pathname === '/agent/v1/hello' && hub.holdHellos > 0) { hub.holdHellos--; hub.heldHellos = (hub.heldHellos ?? 0) + 1; notify(); return; }
     if (req.method === 'POST' && url.pathname === '/agent/v1/hello') {
       const hello = JSON.parse(body.toString('utf8'));
       hub.hellos.push(hello); notify();
@@ -74,6 +79,9 @@ export async function fakeHub({ credential, kernel = { odc: '1.7.27', o11: '11.5
       return;
     }
     const blob = /^\/agent\/v1\/blobs\/([0-9a-f]{32})\/(0|[1-9][0-9]{0,5})$/.exec(url.pathname);
+    if (blob) hub.blobSockets.push(req.socket.remotePort);
+    if (blob && req.method === 'PUT' && hub.holdPuts > 0) { hub.blobPuts++; hub.holdPuts--; notify(); return; }
+    if (blob && req.method === 'GET' && hub.holdGets > 0) { hub.blobGets++; hub.holdGets--; notify(); return; }
     if (blob && req.method === 'PUT') {
       hub.blobPuts++;
       if (hub.corruptPuts > 0) { hub.corruptPuts--; return json(400, { code: 'PART_HASH_MISMATCH' }); }

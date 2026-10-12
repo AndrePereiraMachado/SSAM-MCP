@@ -1,0 +1,10 @@
+/* tiny-board 1.0.0 (fixture library served from the vendor cache, never from the network) */
+(function (root) {
+  'use strict';
+  function mount(element, tasks) {
+    element.innerHTML = '<h1 class="board-title">Tasks</h1><ul class="board">' + tasks.map(function (task) {
+      return '<li class="task' + (task.done ? ' done' : '') + '" data-id="' + task.id + '">' + task.title + '</li>';
+    }).join('') + '</ul>';
+  }
+  root.TinyBoard = { mount: mount, version: '1.0.0' };
+})(window);

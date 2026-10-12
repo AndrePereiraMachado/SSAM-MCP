@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomUUID, randomBytes, createCipheriv } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { debugSchema, parseDebugCli } from '../debug.mjs';
-import { headlessDebug, o11DebugRequest, o11TokenFailureIsUncertain, selectedO11Studio, O11_CROSS_MODULE_REDACTION } from '../debug-runtime.mjs';
+import { headlessDebug, consumeServerPrivateInspection, o11DebugRequest, o11TokenFailureIsUncertain, selectedO11Studio, O11_CROSS_MODULE_REDACTION } from '../debug-runtime.mjs';
 import { createO11Runner, o11RunSchema } from '../debug-o11-run.mjs';
 import { appUserBinding } from '../debug-app-user.mjs';
 
@@ -121,7 +121,119 @@ function services(f, extra = {}) {
     journal: () => {}, ...extra };
 }
 
-test('SSO start metadata is strict, same-module only, and CLI reads no public bearer or PID', () => {
+test('private server bootstrap and public read retain plaintext only in the internal consumer and invalidate before uncertain control', async () => {
+  const f=fixture();let bootstrap,sessionId;
+  const variable={moduleKey:f.input.moduleKey,functionKey:'E'.repeat(22),variableKey:'F'.repeat(22),sourceSha256:'a'.repeat(64),name:'Secret',category:'local',path:'Secret'};
+  const context={runtime:'server',threadId:'T',eventId:'1',generation:1,frame:0,moduleKey:variable.moduleKey,functionKey:variable.functionKey,nodeKey:f.input.nodeKeys[0]};
+  const reference='b'.repeat(32),value={type:'Scalar',value:'private-server-value-Ω'};
+  const svc=services(f,{getO11DebugToken:async r=>privateReply(r),spawn:fakeWorker(text=>bootstrap=JSON.parse(text)),
+    pipeRequest:async(id,r)=>{
+      assert.equal(id,sessionId);
+      if(r.op==='scope')return{ok:true,context};
+      if(r.op==='frame')throw new Error('debug_command_uncertain');
+      if(r.op==='stop')return{ok:true,state:'stopped'};
+      assert.equal(r.op,'private-read');
+      const nonce=randomBytes(12),cipher=createCipheriv('aes-256-gcm',Buffer.from(bootstrap.privateInspectionKey,'hex'),nonce);
+      cipher.setAAD(Buffer.from('ssam-server-private-inspection/1|'+sessionId));
+      const ciphertext=Buffer.concat([cipher.update(JSON.stringify({context,variable:{ref:reference,moduleKey:variable.moduleKey,sourceSha256:variable.sourceSha256},value})),cipher.final()]);
+      return{ok:true,context,reference,evaluationRevision:1,changed:null,privatePayload:{format:'ssam-server-private-inspection/1',nonce:nonce.toString('base64'),tag:cipher.getAuthTag().toString('base64'),ciphertext:ciphertext.toString('base64')}};
+    }});
+  try{
+    const started=await headlessDebug({...f.input,autoContinue:false,inspection:{variables:[variable]}},{services:svc});sessionId=started.sessionId;
+    assert.match(bootstrap.privateInspectionKey,/^[a-f0-9]{64}$/);
+    assert.equal(JSON.stringify(started).includes(bootstrap.privateInspectionKey),false);
+    assert.equal(fs.readFileSync(path.join(svc.sessionRoot,sessionId,'manifest.json'),'utf8').includes(bootstrap.privateInspectionKey),false);
+    const result=await headlessDebug({op:'private-read',sessionId,threadId:'T',eventId:'1',reference},{services:svc});
+    assert.equal(result.privateInspection.roundTripVerified,true);assert.doesNotMatch(JSON.stringify(result),/private-server-value|ciphertext|privatePayload/);
+    let observed;await consumeServerPrivateInspection({sessionId,threadId:'T',eventId:'1',descriptor:result.privateInspection},v=>{observed=v;},svc);
+    assert.deepEqual(observed,value);
+    await assert.rejects(headlessDebug({op:'frame',sessionId,threadId:'T',eventId:'1',frame:0},{services:svc}),/debug_command_uncertain/);
+    await assert.rejects(consumeServerPrivateInspection({sessionId,threadId:'T',eventId:'1',descriptor:result.privateInspection},()=>{},svc),/unavailable/);
+    const stopped=await headlessDebug({op:'stop',sessionId},{services:svc});assert.deepEqual(stopped.privateInspectionCleanup,{completed:true,pending:0});
+  }finally{if(sessionId)await headlessDebug({op:'stop',sessionId},{services:svc}).catch(()=>{});f.close();}
+});
+
+test('a stopped native debugger cannot claim private cleanup after losing its owning controller', async () => {
+  const f=fixture(),sessionId='d'.repeat(32),directory=path.join(f.dir,'sessions',sessionId);
+  fs.mkdirSync(directory,{recursive:true});
+  const manifest={sessionId,lane:'o11',module:'Fixture',moduleKey:f.input.moduleKey,runtimeUrl:f.input.runtimeUrl,
+    privateInspectionEnabled:true,receiptPath:path.join(directory,'receipt.json'),lock:path.join(directory,'absent.lock')};
+  fs.writeFileSync(path.join(directory,'manifest.json'),JSON.stringify(manifest));
+  try{
+    const result=await headlessDebug({op:'status',sessionId},{services:services(f,{pipeRequest:async()=>({ok:true,state:'stopped'})})});
+    assert.equal(result.state,'stopped');assert.equal(result.ok,false);assert.equal(result.error,'debug_private_inspection_cleanup_failed');
+    assert.deepEqual(result.privateInspectionCleanup,{completed:false,pending:null,ownerAvailable:false});
+  }finally{f.close();}
+});
+
+test('local pre-start failure preserves safe diagnostic and certainty without token or worker', async () => {
+  for (const message of ['debug_o11_selected_studio_unavailable', 'private username and password']) {
+    const f = fixture(); let touched = false;
+    try {
+      const svc = services(f, { selectedO11Studio: async () => { throw new Error(message); },
+        getO11DebugToken: async () => { touched = true; }, spawn: () => { touched = true; } });
+      const result = await headlessDebug(f.input, { services: svc });
+      assert.equal(result.ok, false); assert.equal(result.state, 'not-started');
+      assert.equal(result.workerStarted, false); assert.equal(result.uncertain, false);
+      assert.equal(result.error, message.startsWith('debug_') ? message : 'debug_local_start_failed');
+      assert.equal(touched, false);
+      assert.deepEqual(fs.readdirSync(svc.sessionRoot).filter(file => file.endsWith('.lock')), []);
+      assert.deepEqual(JSON.parse(fs.readFileSync(result.receiptPath)), result);
+      assert.doesNotMatch(JSON.stringify(result), /private username|password/);
+    } finally { f.close(); }
+  }
+});
+
+test('public server model scope is prepared before authentication and reaches native bootstrap without caller variable paths', async () => {
+  const f = fixture(); let bootstrap, readCalled = false;
+  try {
+    const modelScope = { source: { path: path.join(f.dir, 'published.oml'), sha256: 'a'.repeat(64) },
+      scopes: [{ functionKey: 'E'.repeat(22), nodeKeys: f.input.nodeKeys }] };
+    const variable = { moduleKey, functionKey: modelScope.scopes[0].functionKey, nodeKey: f.input.nodeKeys[0],
+      variableKey: 'F'.repeat(22), sourceSha256: modelScope.source.sha256, name: 'Result', category: 'local', path: 'Result' };
+    const input = { ...f.input, modelScope, autoContinue: false };
+    const file = path.join(f.dir, 'scope.json'); fs.writeFileSync(file, JSON.stringify(modelScope));
+    assert.deepEqual(parseDebugCli(['start', '--lane', 'o11', '--module', 'Fixture', '--module-key', moduleKey,
+      '--runtime-url', input.runtimeUrl, '--node-keys', input.nodeKeys[0], '--manual', '--model-scope', file]).modelScope, modelScope);
+    for (const patch of [{ inspection: { variables: [] } }, { autoContinue: true }, { op: 'watch' },
+      { modelScope: { ...modelScope, scopes: [{ ...modelScope.scopes[0], nodeKeys: ['G'.repeat(22)] }] } }])
+      assert.equal(debugSchema.safeParse({ ...input, ...patch }).success, false);
+    const svc = services(f, {
+      readScopes: async request => { readCalled = true; assert.equal(request.runtime, 'server'); assert.deepEqual(request.source, modelScope.source);
+        assert.equal(fs.existsSync(path.join(f.dir, 'sessions')), false);
+        return { variables: [variable], evidence: [file], coverage: [{ scopeComplete: false }] }; },
+      getO11DebugToken: async request => { assert.equal(readCalled, true); return privateReply(request); },
+      spawn: fakeWorker(text => { bootstrap = JSON.parse(text); }),
+    });
+    const result = await headlessDebug(input, { services: svc });
+    assert.deepEqual(bootstrap.inspection.variables, [variable]);
+    assert.equal(bootstrap.autoContinue, false);
+    assert.equal(result.modelScopeEvidence.publishedBindingVerified, false);
+    assert.equal(result.modelScopeEvidence.runtimeValuesEvaluated, false);
+    const status = await headlessDebug({ op: 'status', sessionId: result.sessionId },
+      { services: { ...svc, pipeRequest: async () => ({ ok: true, state: 'connected' }) } });
+    assert.deepEqual(status.modelScopeEvidence, result.modelScopeEvidence);
+  } finally { f.close(); }
+});
+
+for (const lane of ['o11', 'odc']) test(lane + ': model refusal creates no target lock, login or debugger start', async () => {
+  const f = fixture(); let touched = false;
+  try {
+    const input = { ...f.input, lane, ...(lane === 'odc' ? { tenant: 'fixture', o11Auth: undefined } : {}), autoContinue: false,
+      modelScope: { source: { path: path.join(f.dir, 'source.oml'), sha256: 'a'.repeat(64) },
+        scopes: [{ functionKey: 'E'.repeat(22), nodeKeys: f.input.nodeKeys }] } };
+    const touch = () => { touched = true; throw new Error('unexpected authentication'); };
+    const svc = services(f, { readScopes: async () => { throw new Error('debug_native_scope_source_changed'); },
+      getOdcDebugToken: touch, getO11DebugToken: touch, prepareAppUser: touch, spawn: touch });
+    await assert.rejects(headlessDebug(input, { services: svc }), /source_changed/);
+    assert.equal(touched, false); assert.equal(fs.existsSync(svc.sessionRoot), false);
+    svc.readScopes = async () => ({ variables: Array.from({ length: 501 }, () => ({})) });
+    await assert.rejects(headlessDebug(input, { services: svc }), /server_metadata_invalid/);
+    assert.equal(touched, false); assert.equal(fs.existsSync(svc.sessionRoot), false);
+  } finally { f.close(); }
+});
+
+test('SSO start metadata is strict, requires a declared entry, and CLI reads no public bearer or PID', () => {
   const f = fixture();
   try {
     assert.equal(debugSchema.parse(f.input).o11Auth.publishedVersionId, 7);
@@ -136,6 +248,20 @@ test('SSO start metadata is strict, same-module only, and CLI reads no public be
     assert.deepEqual(parseDebugCli(args).o11Auth, f.input.o11Auth);
     fs.writeFileSync(file, JSON.stringify({ ...f.input.o11Auth, token: 'do-not-echo-me' }));
     assert.throws(() => parseDebugCli(args), /^Error: debug_o11_auth_file_invalid$/);
+  } finally { f.close(); }
+});
+
+test('separate O11 entry requires published evidence for consumer and producer', () => {
+  const f = fixture();
+  try {
+    const entry = { module: 'Consumer', moduleKey: 'C'.repeat(22), applicationKey: 'E'.repeat(22), publishedVersionId: 9 };
+    const input = { ...f.input, runtimeUrl: 'https://' + host + '/Consumer/', o11Auth: { ...f.input.o11Auth, entry } };
+    assert.equal(debugSchema.safeParse(input).success, true);
+    assert.throws(() => o11DebugRequest(input, id, selected), /module_scope_mismatch/);
+    f.proof.modules.push({ Name: entry.module, Key: entry.moduleKey, ApplicationKey: entry.applicationKey, VersionId: 9, IsActive: true });
+    input.o11Auth.publishedProof = f.saveProof(f.proof);
+    assert.deepEqual(o11DebugRequest(input, id, selected).request.entry, entry);
+    assert.equal(debugSchema.safeParse({ ...input, runtimeUrl: 'https://' + host + '/Different/' }).success, false);
   } finally { f.close(); }
 });
 
@@ -210,7 +336,8 @@ test('cancel, changed proof and wrong token scope stop before any worker or acti
         spawn: () => { spawned++; throw new Error('must not spawn'); }, releaseAppUser: async () => { released++; return { ok: true }; },
       });
       if (kind === 'proof') {
-        await assert.rejects(headlessDebug(f.input, { services: svc }), /proof_changed/);
+        const result = await headlessDebug(f.input, { services: svc });
+        assert.equal(result.state, 'not-started'); assert.equal(result.error, 'debug_o11_publication_proof_changed');
         assert.equal(tokenCalls, 0); assert.equal(released, 1);
       } else {
         const result = await headlessDebug(f.input, { services: svc });
@@ -233,8 +360,8 @@ test('cancel, changed proof and wrong token scope stop before any worker or acti
   }
 });
 
-test('explicitly failed token mint cleans up, oversized private bootstrap fails locally, legacy developer mode remains separate', async () => {
-  for (const kind of ['failed', 'oversized', 'legacy']) {
+test('failed token mint cleans up, allowed large token fits the native 1 MiB bootstrap, legacy mode remains separate', async () => {
+  for (const kind of ['failed', 'large', 'legacy']) {
     const f = fixture(); let calls = 0, releases = 0, body;
     try {
       const svc = services(f, { installation: async () => selected.studioDir, selectedO11Studio: async () => { calls++; return selected; },
@@ -246,8 +373,13 @@ test('explicitly failed token mint cleans up, oversized private bootstrap fails 
       if (kind === 'legacy') {
         const result = await headlessDebug(input, { services: svc });
         assert.equal(result.state, 'connected'); assert.equal(calls, 0); assert.equal(body.token, undefined); assert.equal(body.credentials, input.credentials);
+      } else if (kind === 'large') {
+        const result = await headlessDebug(input, { services: svc });
+        assert.equal(result.state, 'connected'); assert.equal(body.token.length, 65536);
+        assert.ok(JSON.stringify(body).length < 1024 * 1024);
       } else {
-        await assert.rejects(headlessDebug(input, { services: svc }), kind === 'failed' ? /token_exchange_unavailable/ : /bootstrap_too_large/);
+        const result = await headlessDebug(input, { services: svc });
+        assert.equal(result.state, 'not-started'); assert.equal(result.error, 'debug_o11_token_exchange_unavailable');
         assert.equal(releases, 1); assert.equal(body, undefined);
         assert.deepEqual(fs.readdirSync(svc.sessionRoot).filter(file => file.endsWith('.lock')), []);
       }
@@ -294,7 +426,8 @@ test('private credential binding fails before SSO or worker and leaves only safe
         getO11DebugToken: async () => { tokens++; throw new Error('must not mint'); },
         spawn: () => { spawned++; throw new Error('must not spawn'); }, releaseAppUser: async () => { released++; return { ok: true }; },
       });
-      await assert.rejects(headlessDebug(f.input, { services: svc }), /^Error: debug_app_user_credentials_unavailable$/);
+      const result = await headlessDebug(f.input, { services: svc });
+      assert.equal(result.state, 'not-started'); assert.equal(result.error, 'debug_app_user_credentials_unavailable');
       assert.equal(tokens, 0); assert.equal(spawned, 0); assert.equal(released, 1);
       for (const entry of fs.readdirSync(svc.sessionRoot)) {
         assert.equal(entry.endsWith('.lock'), false);
@@ -304,27 +437,31 @@ test('private credential binding fails before SSO or worker and leaves only safe
   }
 });
 
+// D1 (consolidation 99d8982e, rewritten for this runtime's signature): a producer-module session filters private values
+// with the consumer's app user. The runner passes that descriptor with redactionOnly (debugRedactionBinding); it is
+// redaction evidence only, never authorization, and the native SSO stays on the producer module.
 test('producer-module trace: the consumer app user is redaction evidence only, with the same private values as the same module', async () => {
   const consumer = { module: 'Consumer', moduleKey: 'E'.repeat(22) };
   const consumerUser = (input, sessionId) => ({ ...appUser(input, sessionId),
     binding: { lane: 'o11', runtimeUrl: 'https://' + host + '/' + consumer.module + '/', app: consumer.module, sessionId, ...consumer } });
   assert.equal(O11_CROSS_MODULE_REDACTION, true);
-  const run = async (f, descriptor, appUserEntry) => {
+  const run = async (f, descriptor, redactionOnly = false) => {
     const events = [], reads = []; let bootstrap;
     const svc = services(f, {
       prepareAppUser: async () => { events.push('prompt'); throw new Error('a producer trace never prompts'); },
       privateAppUserVault: async (mode, request) => { reads.push(request.binding);
         return { ok: true, kind: 'credentials', binding: request.binding, expiresAt: request.expiresAt, username: 'synthetic-app-user', password: 'synthetic-app-password' }; },
+      releaseAppUser: async () => { events.push('release'); return { ok: true }; },
       getO11DebugToken: async request => { events.push('token:' + request.module); return privateReply(request); },
       spawn: fakeWorker(text => { bootstrap = JSON.parse(text); events.push('stdin'); }),
     });
-    const result = await headlessDebug(f.input, { appUser: descriptor, ...(appUserEntry ? { appUserEntry } : {}), services: svc });
+    const result = await headlessDebug(f.input, { appUser: descriptor, ...(redactionOnly ? { redactionOnly: true } : {}), services: svc });
     return { result, events, reads, bootstrap, svc };
   };
   const f = fixture(), same = fixture();
   try {
     const sessionId = 'd'.repeat(32), descriptor = consumerUser(f.input, sessionId);
-    const cross = await run(f, descriptor, consumer);
+    const cross = await run(f, descriptor, true);
     assert.equal(cross.result.state, 'connected'); assert.equal(cross.result.sessionId, sessionId);
     assert.deepEqual(cross.events, ['token:Fixture', 'stdin']);
     assert.deepEqual(cross.reads, [descriptor.binding]); // the vault is opened only for the consumer binding it was sealed for
@@ -333,35 +470,37 @@ test('producer-module trace: the consumer app user is redaction evidence only, w
     assert.deepEqual(cross.bootstrap.privateValues, parity.bootstrap.privateValues);
     assert.deepEqual(cross.bootstrap.privateValues, ['synthetic-app-user', 'synthetic-app-password']);
     const manifest = JSON.parse(fs.readFileSync(path.join(cross.svc.sessionRoot, sessionId, 'manifest.json')));
-    assert.deepEqual(manifest.appUserScope, { purpose: 'redaction', ...consumer }); assert.equal(manifest.module, 'Fixture');
+    // The borrowed descriptor stays the consumer's and proves no app request identity (the old appUserScope).
+    assert.equal(manifest.appUserBorrowed, true); assert.equal(manifest.appRequestIdentityProved, false);
+    assert.deepEqual([manifest.appUser.binding.module, manifest.appUser.binding.moduleKey], [consumer.module, consumer.moduleKey]);
+    assert.equal(manifest.module, 'Fixture');
     assert.equal(manifest.o11Auth.binding.moduleKey, moduleKey); // SSO authority stays on the producer module
     for (const value of [cross.result, manifest, JSON.parse(fs.readFileSync(cross.result.receiptPath))])
       assert.doesNotMatch(JSON.stringify(value), /synthetic-private-bearer|synthetic-private-id-token|synthetic-sso-user|synthetic-app-user|synthetic-app-password|privateValues/);
   } finally { f.close(); same.close(); }
 });
 
-test('producer-module trace refuses a foreign, missing or self-declared consumer before vault, SSO or worker', async () => {
+test('producer-module trace refuses a foreign, expired or non-borrowed consumer descriptor before vault, SSO or worker', async () => {
   const consumer = { module: 'Consumer', moduleKey: 'E'.repeat(22) }, sessionId = 'd'.repeat(32);
   const user = (patch = {}) => ({ ...appUser({ runtimeUrl: 'https://' + host + '/Consumer/', module: 'Consumer', moduleKey: consumer.moduleKey }, sessionId),
+    ...(patch.expiresAt ? { expiresAt: patch.expiresAt } : {}),
     ...(patch.binding ? { binding: { ...appUser({ runtimeUrl: 'https://' + host + '/Consumer/', module: 'Consumer', moduleKey: consumer.moduleKey }, sessionId).binding, ...patch.binding } } : {}) });
   const cases = [
-    ['consumer descriptor without a declared entry', user(), undefined, {}],
-    ['declared entry without a descriptor', undefined, consumer, {}],
-    ['entry is the producer itself', appUser({ runtimeUrl: 'https://' + host + '/Fixture/', module: 'Fixture', moduleKey }, sessionId), { module: 'Fixture', moduleKey }, {}],
-    ['entry differs from the descriptor', user(), { module: 'Other', moduleKey: 'G'.repeat(22) }, {}],
-    ['descriptor of another origin', user({ binding: { runtimeUrl: 'https://other.outsystemscloud.com/Consumer/' } }), consumer, {}],
-    ['descriptor of another lane', user({ binding: { lane: 'odc' } }), consumer, {}],
-    ['legacy developer credentials (no native SSO)', user(), consumer, { o11Auth: undefined, credentials: 'C:\\fixture\\developer.json' }],
-    ['ODC lane', user({ binding: { lane: 'odc' } }), consumer, { lane: 'odc', tenant: 'fixture-tenant', o11Auth: undefined }],
+    ['consumer descriptor without redactionOnly', user(), false, {}],
+    ['expired consumer descriptor', user({ expiresAt: new Date(Date.now() - 1000).toISOString() }), true, {}],
+    ['descriptor of another origin', user({ binding: { runtimeUrl: 'https://other.outsystemscloud.com/Consumer/' } }), true, {}],
+    ['descriptor of another lane', user({ binding: { lane: 'odc' } }), true, {}],
+    ['legacy developer credentials (no native SSO)', user(), true, { o11Auth: undefined, credentials: 'C:\\fixture\\developer.json' }],
+    ['ODC lane without a producer trace', user({ binding: { lane: 'odc' } }), true, { lane: 'odc', tenant: 'fixture-tenant', o11Auth: undefined }],
   ];
-  for (const [name, descriptor, appUserEntry, patch] of cases) {
+  for (const [name, descriptor, redactionOnly, patch] of cases) {
     const f = fixture(); const touched = [];
     try {
       const svc = services(f, { prepareAppUser: async () => { touched.push('prompt'); return { ok: false }; },
         privateAppUserVault: async () => { touched.push('vault'); throw new Error('must not read'); },
         getO11DebugToken: async () => { touched.push('token'); throw new Error('must not mint'); }, getOdcDebugToken: async () => { touched.push('odc-token'); return 'x'; },
         spawn: () => { touched.push('spawn'); throw new Error('must not spawn'); } });
-      await assert.rejects(headlessDebug({ ...f.input, ...patch }, { appUser: descriptor, appUserEntry, services: svc }), /^Error: debug_app_user_(scope_mismatch|invalid_target)$/, name);
+      await assert.rejects(headlessDebug({ ...f.input, ...patch }, { appUser: descriptor, redactionOnly, services: svc }), /^Error: debug_app_user_(scope_mismatch|invalid_target)$/, name);
       assert.deepEqual(touched, [], name);
       assert.equal(fs.existsSync(svc.sessionRoot) ? fs.readdirSync(svc.sessionRoot).length : 0, 0, name); // no lock, no manifest
     } finally { f.close(); }
@@ -558,4 +697,33 @@ test('native-entry runner retains foreign lock ownership and refuses regression 
   // A final worker report must not erase recorded submissions when clearing private memory.
   const returned = await regressed.runner(regressed.input);
   assert.equal(returned.ok, false); assert.equal(returned.workerLedgerUnproved, true); assert.equal(returned.lockRetained, true);
+});
+
+test('auxiliary O11 native session borrows the original entry lease without rebinding or releasing it',async()=>{
+ const f=fixture(),descriptor=appUser(f.input,id),original=structuredClone(descriptor);let bootstrap,reads=0,releases=0;
+ const input={...f.input,autoContinue:false,inspection:{variables:[],scopes:[{moduleKey,functionKey:'E'.repeat(22),nodeKey:'D'.repeat(22),sourceSha256:'a'.repeat(64)}]}};
+ const svc=services(f,{getO11DebugToken:async r=>privateReply(r),spawn:fakeWorker(text=>bootstrap=JSON.parse(text)),
+  prepareAppUser:async()=>{throw Error('must reuse runner credential lease');},
+  privateAppUserVault:async(mode,request)=>{reads++;assert.equal(mode,'read');assert.deepEqual(request.binding,original.binding);return{ok:true,kind:'credentials',binding:original.binding,expiresAt:original.expiresAt,username:'synthetic-user',password:'synthetic-password'};},
+  releaseAppUser:async()=>{releases++;return{ok:true};},pipeRequest:async()=>({ok:true,state:'stopped'})});
+ try{
+  const result=await headlessDebug(input,{services:svc,appUser:descriptor,redactionOnly:true,additionalO11Session:true});
+  assert.equal(result.ok,true,JSON.stringify({state:result.state,error:result.error,reads,boot:!!bootstrap}));assert.notEqual(result.sessionId,id);assert.equal(bootstrap.sessionId,result.sessionId);
+  assert.deepEqual(descriptor,original);assert.equal(reads,1);
+  const manifest=JSON.parse(fs.readFileSync(path.join(svc.sessionRoot,result.sessionId,'manifest.json')));
+  assert.equal(manifest.additionalO11Session,true);assert.equal(manifest.appUserBorrowed,true);assert.equal(manifest.credentialOwnerSessionId,id);assert.deepEqual(manifest.appUser.binding,original.binding);
+  const stopped=await headlessDebug({op:'stop',sessionId:result.sessionId},{services:svc});
+  assert.equal(stopped.state,'stopped');assert.equal(stopped.credentialCleanup.state,'runner-owned');assert.equal(releases,0);assert.equal(fs.existsSync(manifest.lock),false);
+ }finally{f.close();}
+});
+test('auxiliary native sessions reject changed user target, lane, mode and public capability arguments before any side effects',async()=>{
+ const f=fixture(),descriptor=appUser(f.input,id),input={...f.input,autoContinue:false,inspection:{variables:[]}};let effects=0;
+ const svc=services(f,{selectedO11Studio:async()=>{effects++;throw Error('not allowed');},journal:()=>{effects++;}});
+ try{
+  for(const patch of [{redactionOnly:false},{appUser:undefined},{appUser:{...descriptor,binding:{...descriptor.binding,moduleKey:'F'.repeat(22)}}},{additionalO11Session:'yes'},{anonymousWatch:true},{contextMode:'app-user'}])
+   await assert.rejects(headlessDebug(input,{services:svc,appUser:descriptor,redactionOnly:true,additionalO11Session:true,...patch}),/additional_session_binding_invalid/);
+  await assert.rejects(headlessDebug({...input,lane:'odc',tenant:'fixture',o11Auth:undefined},{services:svc,appUser:descriptor,redactionOnly:true,additionalO11Session:true}),/additional_session_binding_invalid/);
+  assert.equal(debugSchema.safeParse({...input,additionalO11Session:true}).success,false);
+  assert.equal(effects,0);assert.equal(fs.existsSync(svc.sessionRoot),false);
+ }finally{f.close();}
 });

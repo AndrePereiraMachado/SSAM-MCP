@@ -383,7 +383,9 @@ async function defaultOdcSide() {
     (await currentExecutor().call('odc.pipe', { pid, version: v, args, ...(connectMs ? { connectMs } : {}) })).line;
   return {
     processes: async () => (await lib.studioPids()).map(pid => ({ pid })),
-    probe: async pid => { const v = version(); return v ? pipeProbe(pid, v, localSeam() ? {} : { call: viaExecutor }) : { attached: false, error: 'the ODC bridge is not built' }; },
+    // servidor/fase4-24: a server without a built ODC bridge (the Linux image) still probes the customer's pipe: the
+    // AgentExecutor asks for the kernel's odcBridge when the version is null (hosted/agent-executor.mjs bridgeVersionFor).
+    probe: async pid => { const v = version(); return v || !localSeam() ? pipeProbe(pid, v, localSeam() ? {} : { call: viaExecutor }) : { attached: false, error: 'the ODC bridge is not built' }; },
     attach: pid => lib.attach(pid),
   };
 }

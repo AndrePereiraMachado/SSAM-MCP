@@ -36,6 +36,8 @@ import { assertSelectedO11 } from './studio-connect.mjs';
 import { resolveOpenModule, systemModuleName } from './studio-module.mjs';
 import { studioWriteHolder, withStudioWriteLock } from './studio-write-lock.mjs';
 import { anvilRoot, o11Lane } from './workspace.mjs';
+import { rememberCapture } from './o11-capture-store.mjs';
+import { lastModuleCreation, refreshInventory } from './o11-environment.mjs';
 
 export const COMMANDS = ['status', 'wait', 'open-module', 'close-module', 'snapshot', 'errors', 'publish-log', 'windows', 'dismiss-dialog', 'login', 'refresh-references'];
 export const ASK_PERSON = 'peça à pessoa para responder o diálogo no Studio';
@@ -609,7 +611,7 @@ export function readInventory({ local, host } = {}) {
 // Without an inventory of the environment nothing is read here: the bridge's open_module answers as before.
 async function resolveModuleName(bridge, args, ctx) {
   if (args.moduleKey) return { ok: true, name: args.name };
-  let inventory = null;
+  let inventory = null;  // reassigned by the one re-read after a creation (below)
   try { inventory = ctx?.inventory ? await ctx.inventory({ host: args.environment ?? null }) : null; } catch { inventory = null; }
   if (!inventory?.modules?.length) return { ok: true, name: args.name };
   const inInventory = matchModuleName(args.name, inventory.modules.map(m => m.name));
@@ -618,8 +620,21 @@ async function resolveModuleName(bridge, args, ctx) {
   let listed = null;
   try { listed = await bridge.ok('list_open_modules', {}, { timeoutMs: 5000 }); } catch (error) { if (abortsWait(error)) throw error; listed = null; }
   const open = (listed?.modules ?? []).filter(m => m?.hasESpace !== false).map(m => m.name);
-  const found = matchModuleName(args.name, [...open, ...inventory.modules.map(m => m.name)]);
+  let found = matchModuleName(args.name, [...open, ...inventory.modules.map(m => m.name)]);
   if (found.name) return { ok: true, name: found.name };
+  // vel-entrega (lentidão 2026-10-12, MODULE_NOT_FOUND right after a create-app): a name missing from an inventory older
+  // than the last creation that answered ok (create-app, add-modules, create-module) reads the inventory ONCE more.
+  const last = !found.ambiguous && ctx?.lastCreation ? ctx.lastCreation() : null;
+  if (last && ctx?.rereadInventory && Date.parse(last) > Date.parse(inventory.at)) {
+    const host = inventory.host ?? args.environment ?? null;
+    let fresh = null;
+    try { if ((await ctx.rereadInventory({ host }))?.ok === true) fresh = await ctx.inventory({ host }); } catch (error) { if (abortsWait(error)) throw error; fresh = null; }
+    if (fresh?.modules?.length) {
+      found = matchModuleName(args.name, [...open, ...fresh.modules.map(m => m.name)]);
+      if (found.name) return { ok: true, name: found.name, inventoryReread: true };
+      inventory = fresh;
+    }
+  }
   const refresh = { tool: 'o11_environment', arguments: { action: 'inventory', ...(inventory.host ? { host: inventory.host } : {}) },
     why: 'se o módulo foi criado depois do inventário de ' + inventory.at + ', leia o inventário de novo' };
   if (found.ambiguous) return { ok: false, code: 'MODULE_AMBIGUOUS', name: args.name, candidates: found.ambiguous,
@@ -682,6 +697,9 @@ async function snapshot(bridge, args, ctx) {
     String(active.name).replace(/[^\w.-]/g, '_') + '-' + stamp(ctx.now()) + '.oml');
   // module_key pins the capture to the module just read: the bridge refuses if another tab became active meanwhile.
   const data = await bridge.ok('snapshot_module', { path: file, module_key: active.key });
+  // vel-entrega: a known capture of the module for the next delivery's build phase (o11-capture-store.mjs).
+  if (typeof data?.path === 'string' && typeof data.key === 'string')
+    rememberCapture(o11LaneOf(ctx.lane, { root: ctx.root, env: ctx.env }).local, { moduleKey: data.key, module: data.name ?? null, file: data.path, source: 'o11_studio' });
   return { ok: true, path: data.path, sha256: data.sha256, module: data.name, key: data.key, environment: data.environment ?? null, snapshotId: data.snapshot_id ?? null };
 }
 
@@ -949,10 +967,13 @@ const HANDLERS = { status, wait, 'open-module': openModule, 'close-module': clos
 // inventory({host}) -> {host, at, modules:[{name}]} | null (default: the newest o11_environment inventory file),
 // writeHolder() -> holder | null (default: the Studio write lock of this lane). run(input, {signal}).
 export function o11Studio({ bridge, assertSelected = assertSelectedO11, lane = o11Lane.lane, root = anvilRoot, env = process.env,
-  now = Date.now, delay = ms => new Promise(resolve => setTimeout(resolve, ms)), inventory, writeHolder, exclusive } = {}) {
+  now = Date.now, delay = ms => new Promise(resolve => setTimeout(resolve, ms)), inventory, writeHolder, exclusive, rereadInventory, lastCreation } = {}) {
   const local = () => o11LaneOf(lane, { root, env }).local;
   const ctx = { lane, root, env, now, delay,
     inventory: inventory ?? (({ host } = {}) => readInventory({ local: local(), host })),
+    // vel-entrega: the one inventory re-read of open-module after a creation, and the time of the last creation
+    rereadInventory: rereadInventory ?? (({ host } = {}) => refreshInventory({ host }, { root, lane, env, assertSelected })),
+    lastCreation: lastCreation ?? (() => lastModuleCreation(local())),
     writeHolder: writeHolder ?? (() => studioWriteHolder({ tool: 'o11_studio', lane, deps: { o11Root: root, o11Lane: lane } })),
     // fn under the Studio write lock only when it is free now (queue 0); else the refusal, fn not called. Inside a write
     // that already holds the Studio (wait idle|no-dialogs), fn runs at once.

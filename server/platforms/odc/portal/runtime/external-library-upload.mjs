@@ -45,8 +45,14 @@ export function bridgeUploader({ studio, requestFile, stage }) {
   return {
     kind: 'studio',
     async upload({ host, file, sha256, fileName, operationUuid, authorizeSha256, confirmTenant }) {
-      const staged = stage(file, fileName);
-      const request = requestFile({ file: staged, sha256, fileName, operationUuid, authorizeSha256, confirmTenant: confirmTenant ?? host });
+      let request;
+      try {
+        const staged = await stage(file, fileName);
+        request = await requestFile({ file: staged, sha256, fileName, operationUuid, authorizeSha256, confirmTenant: confirmTenant ?? host });
+      } catch (error) {
+        const code = ['BRIDGE_ROOT_UNAVAILABLE', 'REQUEST_FILE_UNAVAILABLE'].includes(error?.code) ? error.code : 'UPLOAD_PREPARATION_FAILED';
+        return refusal('not-sent', code, 'The local upload files could not be prepared; no generation request was sent.');
+      }
       let answer;
       try { answer = await studio.call(['portal-upload', request, '--tenant', host]); }
       catch { return refusal('uncertain', 'UNCERTAIN', 'The bridge did not answer portal-upload; the job may exist. It is never resent: the same call reconciles it by reading the jobs by file name.'); }

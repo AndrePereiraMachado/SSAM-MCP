@@ -8,19 +8,26 @@
 //   module        the elements of the capture the intent names, from its module digest (ssam-digest/1, ModuleDigest.cs and
 //                 module-digest.mjs): entities, static entities, structures and the signature of each action; the body of
 //                 an action, and a screen, named exactly; nothing named: the overview, in digest order
-//   capabilities  the matched capabilities of the discover: operation, contract slices, dependencies, what the lane lacks,
-//                 and the grammar of the logic steps the intent names
+//   capabilities  the matched capabilities of the discover: operation, contract slices (a slice an earlier item wrote is
+//                 named in contractAbove, never written twice; with logic steps a raw verb keeps only its arguments),
+//                 dependencies, what the lane lacks, the grammar of the logic steps the intent names, the capability a
+//                 named step needs (raise: logic.exception) and the signatures of the built-ins the intent names
+//                 (functions, builtin-functions.mjs); a ui.* match named only by words logic shares, in an intent with no
+//                 screen noun, goes last in its reduced form
 //   example       one proven example (the discover's provenExample, else the example of the first match)
 //   rules         the team rules (docs/CONHECIMENTO-DO-TIME.md) and the OutSystems padrões rules (ssam_reference
 //                 {kind:"rules"}) that apply to the intent, chosen by its words and the categories of its capabilities
-//   next          deliver (o11_deliver / studio_deliver) and fix (patch + basedOn), and how to work from the packet
+//   next          deliver (o11_deliver / studio_deliver) with the batch rule (every change of the request for a module in
+//                 ONE job: BATCH_RULE) and fix (patch + basedOn), and how to work from the packet
 // Sizing: next and the envelope first; each other section gets its share of the room left (SHARES), and the room a section
-// does not use passes to the next one in that order. Inside its room a section keeps its items by relevance and leaves out
-// the rest; every section that left something out says so once in `cuts`, with the call that returns it.
+// does not use passes to the next one in that order; what the last sections leave unused goes back, once, to the first
+// section with a cut. Inside its room a section keeps its items by relevance and leaves out the rest; every section that
+// left something out says so once in `cuts`, with the call that returns it.
 import { tokens, normalize } from './catalog.mjs';
 import { indexLine, FOLD_RECORDS } from './module-digest.mjs';
 import { guideText, guideSections } from './runtime-guides.mjs';
-import { isScreenIntent } from './osui-catalog.mjs';
+import { isScreenIntent, screenWords } from './osui-catalog.mjs';
+import { functionNames } from './builtin-functions.mjs';
 
 export const PACKET_SCHEMA = 'ssam-packet/1';
 export const PACKET_ORDER = ['module', 'capabilities', 'example', 'rules', 'next'];
@@ -32,6 +39,9 @@ export const SHARES = { module: 0.44, capabilities: 0.26, example: 0.17, rules: 
 const CUTS_ROOM = 1600;
 const ORDER_RULE = 'sections in this order; each takes its share of the room and passes what it leaves to the next; inside a section the most relevant items come first and the rest is named in cuts with the call that returns it';
 const WORK_RULE = 'Work from this packet: it holds what this task needs from the module, the contracts, a proven example and the team rules. Do not read docs, guides or the whole module again; for a part named in cuts, make the call it gives.';
+// 2026-10-12 (production test): the packet described the mechanics of one delivery and its example was one step of a chain
+// of jobs, so the session delivered one action per call (three deliveries and a rewrite of the batch: about 2 minutes).
+export const BATCH_RULE = 'ALL the changes of this request for this module go in ONE job and ONE call (user exceptions, site properties or settings, structures, entities and every action together, in any order: the actions may call each other); separate jobs only for different modules, never one job per action or per step; a refusal brings every problem of the whole job at once';
 
 const bytes = value => Buffer.byteLength(JSON.stringify(value), 'utf8');
 const clip = (text, max) => { const s = String(text ?? ''); return s.length <= max ? s : s.slice(0, max) + '…(+' + (s.length - max) + ')'; };
@@ -166,10 +176,32 @@ export function moduleSection(found, intent, cap, { lane, screens = false } = {}
 }
 
 // ---- (b) capabilities
+// Words a ui.* capability shares with logic ("list", "filter", "input"...): a ui match named only by them, in an intent
+// without a screen noun (screenWords), is not what the intent builds.
+const LOGIC_WORDS = new Set(['list', 'lists', 'lista', 'listas', 'sort', 'filter', 'filtro', 'search', 'busca', 'input', 'inputs', 'output', 'outputs', 'parameter', 'parameters',
+  'action', 'actions', 'acao', 'acoes', 'assign', 'call', 'current', 'value', 'values', 'data', 'date', 'time', 'text', 'field', 'record', 'records', 'if', 'each', 'node',
+  'server', 'client', 'variable', 'aggregate', 'max', 'append', 'user']);
 // forms(match) -> richest first; the first form that fits the room left is kept.
-export function capabilitiesSection(input, cap, { lane }) {
-  const { matches = [], unavailable = [], steps = null, slices } = input;
-  const direct = matches.filter(m => m.via === 'match');
+export function capabilitiesSection(input, cap, { lane, screens = true } = {}) {
+  const { matches = [], unavailable = [], steps = null } = input;
+  // When the intent names logic steps (the compact logic op builds the actions), a raw verb of a contract keeps its
+  // arguments and leaves its prose to one ssam_reference call (2026-10-12: the six raw verbs took 2.6 KB of the 5 KB of
+  // logic.flow, and the batch was written with the logic op).
+  let verbsReduced = false;
+  const slices = (pointers, form) => {
+    const out = input.slices(pointers, form);
+    if (!steps) return out;
+    for (const [p, v] of Object.entries(out)) if (/^verbs\.verbs\./.test(p) && v && typeof v === 'object' && !Array.isArray(v) && (v.required || v.optional)) {
+      out[p] = [v.kind, 'required: ' + (v.required ?? []).join(', '), 'optional: ' + (v.optional ?? []).join(', ')].filter(Boolean).join('; ');
+      verbsReduced = true;
+    }
+    return out;
+  };
+  // An intent that builds no screen keeps its ui.* matches (named by generic words: list, input, filter, search) after the
+  // others and in their reduced form (operation and the expand that returns them): 2026-10-12, an intent of server actions
+  // got ui.dropdown-search, ui.list and ui.form before logic.server-action, which the room then left out.
+  const offTopic = m => !screens && m.from !== 'module' && /^ui\./.test(String(m.id)) && (m.why ?? []).every(w => normalize(String(w)).split(/[^a-z0-9]+/).filter(Boolean).every(t => LOGIC_WORDS.has(t)));
+  const direct = [...matches.filter(m => m.via === 'match' && !offTopic(m)), ...matches.filter(m => m.via === 'match' && offTopic(m))];
   const value = { matched: direct.length, items: [] };
   const requires = matches.filter(m => m.via === 'dependency').map(m => m.id);
   if (requires.length) value.requires = requires;
@@ -177,23 +209,44 @@ export function capabilitiesSection(input, cap, { lane }) {
   if (steps) value.steps = { kinds: steps.kinds, shape: steps.shape, grammar: steps.grammar };
   if (bytes(value) > cap && value.steps) delete value.steps.shape;
   if (bytes(value) > cap && value.steps) value.steps = { kinds: steps.kinds, grammar: Object.fromEntries(Object.entries(steps.grammar ?? {}).map(([k, v]) => [k, Array.isArray(v) ? v : v && typeof v === 'object' ? Object.keys(v) : v])) };
+  // The built-ins the intent names (builtin-functions.mjs): their signatures within a third of the room, else their names,
+  // else left out and named in the cut.
+  let functionsCut = null;
+  if (input.functions) {
+    const kept = [input.functions, functionNames(input.functions)].find(f => bytes(f) + 16 <= cap / 3);
+    if (kept) value.functions = kept;
+    if (kept !== input.functions) functionsCut = kept ? 'names only' : input.functions.signatures.length;
+  }
   const expand = id => ({ tool: 'ssam_discover', arguments: { lane, expand: id + ':contract+example' } });
   const said = m => (m.from === 'module' ? { named: m.why?.[0] ?? null } : { why: m.why ?? [] });
+  // A contract slice an earlier item already wrote (the raw verbs and the reference grammar under every logic capability:
+  // about 3.5 KB repeated per item, 2026-10-12) is not written again: the item names it in contractAbove. The form an
+  // earlier item wrote is kept (a full slice is never cut to compact below it, a compact one is not repeated in full).
+  const written = new Set();
+  const fresh = m => [...new Set(m.contract ?? [])].filter(p => !written.has(p));
+  const above = m => [...new Set(m.contract ?? [])].filter(p => written.has(p));
   const forms = m => [
-    { id: m.id, title: m.title, ...said(m), level: m.level, operation: m.route?.operation ?? null, contract: slices(m.contract, 'full'), ...(m.depends?.length ? { depends: m.depends.map(d => d.id) } : {}),
+    { id: m.id, title: m.title, ...said(m), level: m.level, operation: m.route?.operation ?? null, contract: slices(fresh(m), 'full'), ...(above(m).length ? { contractAbove: above(m) } : {}), ...(m.depends?.length ? { depends: m.depends.map(d => d.id) } : {}),
       ...(m.guidance ? { guidance: clip(m.guidance, 600) } : {}), ...(m.limits?.length ? { limits: m.limits.map(l => clip(typeof l === 'string' ? l : l.title ?? JSON.stringify(l), 200)) } : {}) },
-    { id: m.id, title: m.title, ...said(m), level: m.level, operation: clip(m.route?.operation ?? '', 900) || null, contract: slices(m.contract, 'compact'), ...(m.guidance ? { guidance: clip(m.guidance, 240) } : {}) },
+    { id: m.id, title: m.title, ...said(m), level: m.level, operation: clip(m.route?.operation ?? '', 900) || null, contract: slices(fresh(m), 'compact'), ...(above(m).length ? { contractAbove: above(m) } : {}), ...(m.guidance ? { guidance: clip(m.guidance, 240) } : {}) },
     { id: m.id, title: m.title, operation: clip(m.route?.operation ?? '', 300) || null, expand: expand(m.id).arguments.expand },
   ];
   const left = [];
-  let used = bytes(value);
+  // Room for the verbs note, written after the items when a raw verb was reduced.
+  let used = bytes(value) + (steps ? 240 : 0);
   for (const m of direct) {
-    const form = forms(m).find(f => used + bytes(f) + 1 <= cap);
+    const form = forms(m).slice(offTopic(m) ? 2 : 0).find(f => used + bytes(f) + 1 <= cap);
     if (!form) { left.push(m.id); continue; }
     value.items.push(form); used += bytes(form) + 1;
+    for (const p of Object.keys(form.contract ?? {})) written.add(p);
   }
+  if (verbsReduced && value.items.some(i => Object.keys(i.contract ?? {}).some(p => /^verbs\.verbs\./.test(p))))
+    value.verbs = { note: 'raw verbs reduced to their arguments: the logic op builds the actions; one verb whole (its effect and references)', read: { tool: 'ssam_reference', arguments: { lane, kind: 'api', query: { op: '<verb>' } } } };
   const reduced = value.items.filter(f => f.expand).map(f => f.id);
-  return { value, cut: left.length || reduced.length ? { section: 'capabilities', left: { capabilities: left, reducedToOperation: reduced },
+  const functions = functionsCut === null ? {} : { functions: functionsCut };
+  if (!left.length && !reduced.length && functionsCut !== null)
+    return { value, cut: { section: 'capabilities', left: functions, recover: input.functions.more } };
+  return { value, cut: left.length || reduced.length ? { section: 'capabilities', left: { capabilities: left, reducedToOperation: reduced, ...functions },
     recover: { tool: 'ssam_discover', arguments: { lane, expand: [...reduced, ...left].slice(0, 6).map(id => id + ':contract+example').join(',') } } } : null };
 }
 
@@ -332,16 +385,19 @@ export function rulesSection(input, cap, { lane, read = guideText } = {}) {
 }
 
 // ---- (e) next
-export function nextSection({ lane, module = null, operations = null }) {
+// `expand`: the expand, detail or type of the same call (2026-10-11): the packet carries its own contract slices, so the
+// parts asked by name are its next call, never dropped in silence.
+export function nextSection({ lane, module = null, operations = null, expand = null }) {
   const name = module?.ok !== false && module?.digest?.module?.name ? module.digest.module.name : '<Module>';
   const deliver = lane === 'o11'
     ? { tool: 'o11_deliver', arguments: { module: name, job: { ops: ['<ops written from this packet>'] }, authorize: '<the user\'s own words, or none with a standing grant>' } }
     : { tool: 'studio_deliver', arguments: { feature: '<Feature>', module: name, job: { ops: ['<ops written from this packet>'] }, owners: ['<Owner>'], changes: ['<Change>'] } };
   return { work: WORK_RULE,
-    deliver: { ...deliver, why: 'one call: it captures the live module, validates and merges; without errors it answers "entregue"' },
+    deliver: { ...deliver, batch: BATCH_RULE, why: 'one call: it captures the live module, validates and merges; without errors it answers "entregue" with a summary of what it created (each action with its inputs and outputs): no map of the module after it' },
     fix: { how: 'a refusal comes once with every problem of every phase (problems[]: phase, pointer, fix, patch when certain, also by name in patchByName) and names its job in nextBasedOn {job, sha256}: correct all of them in one call with patch (paths by name: actions/<Action>/steps/<as>/...) + basedOn, or with only the changed actions as a partial job + basedOn; never resend the whole job' + (lane === 'o11' ? '; on O11 also closePrevious with the refused taskId' : ''),
       arguments: { patch: ['<the patches returned (patchByName) plus your fixes>'], basedOn: { job: '<nextBasedOn.job>', sha256: '<nextBasedOn.sha256>' } } },
     ...(operations?.length ? { operations } : {}),
+    ...(expand ? { expand: { tool: 'ssam_discover', arguments: { lane, expand }, why: 'the parts this call asked by expand, detail or type: the packet answers its own sections, they come in this call' } } : {}),
     after: 'after app or screen work, the links of ssam_app_url' };
 }
 
@@ -360,7 +416,7 @@ export function workPacket(input, { budgetBytes = PACKET_BUDGET, read = guideTex
   const shares = withModule ? SHARES : Object.fromEntries(Object.entries(SHARES).filter(([k]) => k !== 'module').map(([k, v]) => [k, v / (1 - SHARES.module)]));
   const build = {
     module: cap => moduleSection(input.module ?? null, intent, cap, { lane, screens }),
-    capabilities: cap => capabilitiesSection(input, cap, { lane }),
+    capabilities: cap => capabilitiesSection(input, cap, { lane, screens: screenWords(intent).length > 0 }),
     example: cap => exampleSection(input, cap, { lane }),
     rules: cap => rulesSection(input, cap, { lane, read }),
   };
@@ -387,6 +443,16 @@ export function workPacket(input, { budgetBytes = PACKET_BUDGET, read = guideTex
     const id = ['rules', 'example', 'capabilities', 'module'][round % 4];
     shrink[id] = (shrink[id] ?? 0) + over;
     packet = assemble(shrink);
+  }
+  // The room a later section left (a whole example smaller than its share, rules held at RULES_MAX) goes back to the first
+  // section with a cut, in the declared order, once per section (2026-10-12: logic.server-action was cut while 3 KB of
+  // the budget stayed unused). A pass that would pass the budget is not kept.
+  for (const id of ['module', 'capabilities', 'example', 'rules']) {
+    const left = budgetBytes - packet.size.bytes - 64;
+    if (left < 256 || !packet.cuts.some(c => c.section === id)) continue;
+    const tried = { ...shrink, [id]: (shrink[id] ?? 0) - left };
+    const again = assemble(tried);
+    if (again.size.bytes <= budgetBytes) { Object.assign(shrink, tried); packet = again; }
   }
   return packet;
 }

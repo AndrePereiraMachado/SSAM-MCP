@@ -1,8 +1,8 @@
-param([ValidateSet('status','read','bootstrap')][string]$Mode='status', [string]$Origin='https://wrightflood.outsystems.dev', [string]$Database='', [string]$Setting='')
+param([ValidateSet('status','read','bootstrap')][string]$Mode='status', [Parameter(Mandatory=$true)][string]$Origin, [string]$Database='', [string]$Setting='', [string]$ProfileTarget='', [string]$Principal='')
 $ErrorActionPreference = 'Stop'
 # One entry per tenant host: SSAM/ODC3/<host>/Portal for the Portal account, SSAM/ODC3/<host>/DB/<name> for the
 # account of an external database connection, SSAM/ODC3/<host>/Setting/<name> for a secret setting value (the
-# password; the user name is ignored). The default keeps the WrightFlood entry created on 2026-09-15. DB and Setting
+# password; the user name is ignored). The caller must supply the target origin. DB and Setting
 # entries are never read here: only the bridge reads them, inside the ODC Studio, right before the send (secretRefs).
 $tenantHost = ([uri]$Origin).Host
 if ([string]::IsNullOrWhiteSpace($tenantHost) -or ([uri]$Origin).Scheme -ne 'https') { throw 'Origin must be an HTTPS origin' }
@@ -11,6 +11,11 @@ if ($Setting -and $Setting -notmatch '^[A-Za-z0-9_.-]{1,64}$') { throw 'Invalid 
 if ($Database -and $Setting) { throw 'Choose -Database or -Setting' }
 if ($Mode -eq 'read' -and ($Database -or $Setting)) { throw 'Database accounts and setting values are read only inside the ODC Studio' }
 $credentialTarget = if ($Setting) { "SSAM/ODC3/$tenantHost/Setting/$Setting" } elseif ($Database) { "SSAM/ODC3/$tenantHost/DB/$Database" } else { "SSAM/ODC3/$tenantHost/Portal" }
+if ($ProfileTarget) {
+ if($Database -or $Setting -or $Mode -eq 'bootstrap'){throw 'Profiles apply only to Portal authentication'}
+ if($ProfileTarget -ne $credentialTarget -and $ProfileTarget -notmatch ('^'+[regex]::Escape($credentialTarget)+'/Profiles/[a-f0-9]{64}/[a-f0-9-]{36}$')){throw 'Profile belongs to another context'}
+ $credentialTarget=$ProfileTarget
+}
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
@@ -57,6 +62,7 @@ try {
   # Private subprocess channel consumed only by the broker. Never invoke read as
   # a model-facing command, log this stdout, or put it into a tool result.
   $record=[Runtime.InteropServices.Marshal]::PtrToStructure($native,[type][OdcPortalVault+Credential])
+  if($Principal -and $record.UserName.Trim().ToLowerInvariant() -ne $Principal.Trim().ToLowerInvariant()){throw 'Profile principal changed'}
   $value=[Runtime.InteropServices.Marshal]::PtrToStringUni($record.CredentialBlob,[int]($record.CredentialBlobSize/2))
   @{available=$true;username=$record.UserName;password=$value} | ConvertTo-Json -Compress
   $value=$null

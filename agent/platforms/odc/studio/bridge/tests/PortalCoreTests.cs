@@ -9,12 +9,55 @@ using Refusal = PortalCore.Refusal;
 // The Studio's plugin client is replaced by a fake HttpClient over a counting handler: every assertion is about what
 // the bridge would send, how often, and what it would answer. Nothing leaves the machine.
 public sealed class PortalCoreTests : IDisposable {
+    [Fact]
+    public void NativeSecretMetadataStaysTypedAndUppercaseSecretValuesAreRedacted() {
+        var node=JsonNode.Parse("""{"BinarySetting_Secret_MaxFileSize":64,"Setting":{"IsSecret":true,"Value":"private-content","DefaultValue":"private-default","DeployedValue":"private-deployed"}}""");
+        var r=PortalCore.Redact(node)!;Assert.Equal(64,(int?)r["BinarySetting_Secret_MaxFileSize"]);Assert.True((bool?)r["Setting"]?["IsSecret"]);
+        foreach(var key in new[]{"Value","DefaultValue","DeployedValue"})Assert.Equal(PortalCore.Redacted,(string?)r["Setting"]?[key]);
+        Assert.Equal("64",(string?)PortalCore.Redact(JsonNode.Parse("""{"BinarySetting_Secret_MaxFileSize":"64"}"""))?["BinarySetting_Secret_MaxFileSize"]);
+        foreach(var text in new[]{"""{"IsSecret":"private"}""","""{"BinarySetting_Secret_MaxFileSize":"private"}""","""{"BinarySetting_Secret_MaxFileSize":{"Value":"private"}}"""})Assert.DoesNotContain("private",PortalCore.Redact(JsonNode.Parse(text))!.ToJsonString());
+    }
     private const string Host = "personal-test.outsystems.dev";
     private readonly string dir = Path.Combine(Path.GetTempPath(), "odc-bridge-portal-" + Guid.NewGuid().ToString("N"));
     private PortalCore.Places Places => new(Path.Combine(dir, "writes"), Path.Combine(dir, "downloads"));
     private static readonly PortalCore.TenantPolicy Tenants = PortalCore.ReadTenants(
         "{\"default\":\"" + Host + "\",\"tenants\":{\"" + Host + "\":{},\"corporate.outsystems.dev\":{},\"client.outsystems.dev\":{\"readOnly\":true}}}");
     public void Dispose() { try { Directory.Delete(dir, true); } catch { } }
+
+    [Theory]
+    [InlineData("status")]
+    [InlineData("close")]
+    public void InternalSessionStatusNeverClaimsBrowserAuthentication(string action) {
+        var result = PortalCore.HeadlessSession(action, 1, Host);
+        Assert.True((bool)result["ok"]!);
+        Assert.Equal(Host, (string?)result["host"]);
+        Assert.False((bool)result["signedIn"]!);
+        Assert.False((bool)result["headlessAvailable"]!);
+        Assert.False((bool)result["windowOpen"]!);
+        if (action == "close") {
+            Assert.False((bool)result["closed"]!);
+            Assert.Equal(0, (int)result["cookiesDeleted"]!);
+        }
+        Assert.DoesNotContain("sign in", (string)result["instruction"]!);
+    }
+
+    [Theory]
+    [InlineData("open", 1)]
+    [InlineData("recheck", 1)]
+    [InlineData("fetch", 2)]
+    public void InternalSessionOperationsRefuseWithoutAnInteractiveRecovery(string action, int count) {
+        var error = Assert.Throws<Refusal>(() => PortalCore.HeadlessSession(action, count, Host));
+        Assert.Equal("HEADLESS_AUTH_UNAVAILABLE", error.Code);
+    }
+
+    [Theory]
+    [InlineData("", 0)]
+    [InlineData("status", 2)]
+    [InlineData("close", 2)]
+    [InlineData("fetch", 1)]
+    public void InternalSessionStillValidatesItsCommand(string action, int count) {
+        Assert.Equal("BAD_REQUEST", Assert.Throws<Refusal>(() => PortalCore.HeadlessSession(action, count, Host)).Code);
+    }
 
     private sealed class FakeHandler : HttpMessageHandler {
         public int Sends;
@@ -569,6 +612,24 @@ public sealed class PortalCoreTests : IDisposable {
         new("op", method, path, null, write, write ? Guid.NewGuid().ToString() : null, write ? new string('b', 64) : null, null);
 
     [Fact]
+    public void SearchConnectionReadsNeverAuthorizeTestingConversionOrSecrets() {
+        const string prefix = "/connections/screenservices/connections/ProviderBlocks/";
+        foreach (var route in new[] {
+            "Connection_Edit_AzureAISearch/ActionConnection_CheckNameAvailability_Wrapper",
+            "Connection_Edit_CustomAISearch/ActionConnection_CheckNameAvailability_Wrapper",
+            "Connection_Edit_AzureAISearch/DataActionGetQueryTypes",
+            "Connection_View_AzureAISearch/DataActionGetQueryTypeLabels" })
+            Assert.False(PortalCore.CheckWebRoute(Web("POST", prefix + route)));
+        foreach (var route in new[] {
+            "Connection_Edit_AzureAISearch/ActionConnection_Convert_AzureAISearch_v2",
+            "Connection_Edit_CustomAISearch/ActionConnection_Convert_CustomAISearch",
+            "Connection_Edit_AzureAISearch/ActionConnections_AzureAISearch_Test_Wrapper",
+            "Connection_Edit_CustomAISearch/ActionConnections_CustomAISearch_Test_Wrapper",
+            "Connection_Edit_AzureAISearch/DataActionGetDecryptedSecrets" })
+            Assert.Equal("NOT_ALLOWED", Refused(() => PortalCore.CheckWebRoute(Web("POST", prefix + route))).Code);
+    }
+
+    [Fact]
     public void KnownReadsGoWithoutWordsAndEverythingElseOnlyAsAWrite() {
         Assert.False(PortalCore.CheckWebRoute(Web("POST", "/monitoring/screenservices/monitoring/logs/logs/DataActionLogSearch")));
         Assert.Equal("NOT_ALLOWED", Refused(() => PortalCore.CheckWebRoute(Web("POST", "/connections/screenservices/connections/ProviderBlocks/Connection_Edit_RelationalDB/ActionConnection_Convert_RelationalDB"))).Code);
@@ -576,6 +637,59 @@ public sealed class PortalCoreTests : IDisposable {
         Assert.False(PortalCore.CheckWebRoute(Web("GET", "/monitoring/moduleservices/moduleversioninfo")));
         Assert.False(PortalCore.CheckWebRoute(Web("GET", "/monitoring/")));
         Assert.False(PortalCore.CheckWebRoute(Web("GET", "/monitoring/scripts/monitoring.logs.logs.mvc.js?abc123")));
+    }
+
+    [Fact]
+    public void AdministrativeGuardrailReadsNeverAuthorizeItsSaveOrUnknownDataActions() {
+        const string prefix = "/agentguardrails/screenservices/agentguardrails/MainFlow/agentguardrails/";
+        foreach (var action in new[] { "DataActionGetStages", "DataActionGetGuardrail", "DataActionGetFeatureToggles" })
+            Assert.False(PortalCore.CheckWebRoute(Web("POST", prefix + action)));
+        foreach (var action in new[] { "ActionUI_Guardrails_CreateOrUpdate_v5", "ActionUI_Guardrails_CreateOrUpdate", "DataActionUnknown" })
+            Assert.Equal("NOT_ALLOWED", Refused(() => PortalCore.CheckWebRoute(Web("POST", prefix + action))).Code);
+    }
+
+    [Fact]
+    public void SharedAsideReadDoesNotExposeHeaderOrLightAccessTokenActions() {
+        const string prefix = "/apps/screenservices/UnifiedExperienceCommonLib/UnifiedExpTools/";
+        Assert.False(PortalCore.CheckWebRoute(Web("POST", prefix + "UnifiedExperienceAside/DataActionGetUEAside")));
+        foreach (var action in new[] { "UnifiedExperienceHeader/DataActionGetUEHeader", "UnifiedExperienceShell/DataActionGetLightAccessToken", "UnifiedExperienceAside/ActionSave" })
+            Assert.Equal("BAD_REQUEST", Refused(() => PortalCore.CheckWebRoute(Web("POST", prefix + action))).Code);
+        Assert.Equal("BAD_REQUEST", Refused(() => PortalCore.CheckWebRoute(Web("POST", "/connections/screenservices/UnifiedExperienceCommonLib/UnifiedExpTools/UnifiedExperienceAside/DataActionGetUEAside"))).Code);
+    }
+
+    [Fact]
+    public void ApiClientInventoryDoesNotAuthorizeCredentialOrPermissionWrites() {
+        const string prefix = "/usersaccess/screenservices/usersaccess/APIClients/";
+        foreach (var action in new[] { "apiclients/DataActionApiClients_GetAll", "apiclients/DataActionApiClientsStatus_GetAll" })
+            Assert.False(PortalCore.CheckWebRoute(Web("POST", prefix + action)));
+        foreach (var action in new[] { "apiclient/ActionAPIClients_Create", "apiclient/ActionAPIClients_UpdatePermissions", "SecretGenerate_Popup/ActionAPIClients_SecretRotation", "DeleteAPIClient/ActionAPIClients_Delete" })
+            Assert.Equal("NOT_ALLOWED", Refused(() => PortalCore.CheckWebRoute(Web("POST", prefix + action))).Code);
+    }
+
+    [Fact]
+    public void MobileExtensibilityReadsNeverAuthorizeFileUploadOrSettingSave() {
+        const string prefix = "/apps/screenservices/apps/ApplicationMobile/extensibillitysetting/";
+        foreach (var action in new[] { "DataActionGetApplicationStages", "DataActionGetLatestDeployedAppVersion", "DataActionGetExtensibilitySettingInfo" })
+            Assert.False(PortalCore.CheckWebRoute(Web("POST", prefix + action)));
+        foreach (var action in new[] { "ActionFileUpload_Wrapper", "ActionExtensbilitySettingSave_Wrapper", "ActionBinaryToBase64", "DataActionUnknown" })
+            Assert.Equal("NOT_ALLOWED", Refused(() => PortalCore.CheckWebRoute(Web("POST", prefix + action))).Code);
+    }
+
+    [Fact]
+    public void AlternateConnectionInventoryDoesNotAuthorizeItsDeleteOrRetry() {
+        const string prefix="/connections/screenservices/connections/Connections/connections_RDDFT1370/";
+        Assert.False(PortalCore.CheckWebRoute(Web("POST",prefix+"DataActionGetConnections")));
+        foreach(var action in new[]{"ActionConnection_Delete_Wrapper","ActionConnection_O11_Retry_Wrapper","DataActionUnknown"})
+            Assert.Equal("NOT_ALLOWED",Refused(()=>PortalCore.CheckWebRoute(Web("POST",prefix+action))).Code);
+    }
+
+    [Fact]
+    public void TimerPrerequisitesAreReadsButWakeAndApplyNeverAre() {
+        const string prefix = "/apps/screenservices/apps/Timers/timer/";
+        foreach (var action in new[] { "DataActionGetTimerInfo", "DataActionGetCurrentTimerRunInformation", "DataActionGetPendingConfiguration", "DataActionGetLatestDeployedAppVersion", "DataActionGetApplicationStages", "DataActionCheckLatestDeployment" })
+            Assert.False(PortalCore.CheckWebRoute(Web("POST", prefix + action)));
+        foreach (var action in new[] { "ActionWakeTimer_Wrapper", "ActionTimers_SaveAndApply" })
+            Assert.Equal("NOT_ALLOWED", Refused(() => PortalCore.CheckWebRoute(Web("POST", prefix + action))).Code);
     }
 
     [Theory]

@@ -6,6 +6,8 @@
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
+import { writePortalRequest } from './portal-request-file.mjs';
+import { CredentialProfiles } from './credential-profiles.mjs';
 import { readSnapshot, presentReading } from './reader-client.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -130,7 +132,7 @@ const warmIndex = file => import('./module-map.mjs').then(m => m.prefetchIndex(f
 // person sees ("QuizLive Web", the app) is resolved to the open module before anything is sent (studio-module.mjs); a
 // name that is no open module, or several, is refused with the open modules and nothing reaches the bridge. One status
 // read per command: the open modules are the Studio's own answer, never a cache.
-const OPEN_MODULE_COMMANDS = new Set(['snapshot', 'close', 'refresh-references', 'data', 'data-insert', 'data-update', 'data-delete', 'module-info']);
+const OPEN_MODULE_COMMANDS = new Set(['snapshot', 'reference-producers', 'close', 'refresh-references', 'data', 'data-insert', 'data-update', 'data-delete', 'module-info']);
 const readCatalogFile = () => { try { return readJson(paths.catalog); } catch { return null; } };
 export async function resolveModuleArgs(pid, args, { call = client, catalog = readCatalogFile } = {}) {
   const json = args[0] === 'reference-snapshot';
@@ -709,11 +711,20 @@ export async function portalBridge(host, tenant, { requireCredential = true, wri
 // ---- tenant-aware access (odc_read/odc_write/odc_portal_*/typed helpers): the live collaborators of OdcAccess.
 // Studio = the attached bridge (v32 commands auth-status, portal-call, portal-session); vault = Credential Manager
 // status and the existing OdcBridge/Odc3PortalBroker; prompt = the private helpers in a window of their own.
-export function requestFile(json) {
-  const dir = dataPath('journal', 'portal', 'requests'); fs.mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, new Date().toISOString().replace(/[:.]/g, '-') + '-' + process.pid + '-' + randomUUID().slice(0, 8) + '.json');
-  fs.writeFileSync(file, JSON.stringify(json)); return file;
+// Locally the request goes under the loaded bridge's own root (portal-request-file.mjs). Hosted it is a file of the
+// customer's <ws>/odc and the mirror takes it to the agent: the bridge root of this server is never the customer's.
+export async function requestFile(json) {
+  if (usesWorkspace(root, root)) {
+    const dir = dataPath('journal', 'portal', 'requests'); fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, new Date().toISOString().replace(/[:.]/g, '-') + '-' + process.pid + '-' + randomUUID().slice(0, 8) + '.json');
+    fs.writeFileSync(file, JSON.stringify(json)); return file;
+  }
+  const pid = await studioPid();
+  return writePortalRequest(json, args => client(pid, args));
 }
+// The private prompt in a window of its own (windows-api-client-credential.ps1 or windows-portal-credential.ps1
+// -Mode bootstrap): the user types there and the value goes straight to the Windows Credential Manager; nothing
+// typed there passes through this process, its arguments or the chat.
 function openPrompt(script, args, powerShell) {
   ownerSecrets(hostedPromptRefusal);
   if (offline()) return { opened: false, reason: 'offline (SSAM_ODC_OFFLINE=1)' };
@@ -752,7 +763,7 @@ export async function createAccess({ env = process.env } = {}) {
     // No owner default tenant, and every vault, API Client, Portal account and prompt path refuses.
     const { OdcError } = await load('errors.mjs');
     const refuse = make => async () => { const error = make(); throw new OdcError(error.code, error.message); };
-    const value = new OdcAccess({ ...shared, hosted: true,
+    const value = new OdcAccess({ ...shared, hosted: true, profiles: null,
       vault: { apiClient: refuse(hostedVaultRefusal), portal: refuse(hostedVaultRefusal), bridge: refuse(hostedVaultRefusal) },
       prompt: { apiClient: refuse(hostedPromptRefusal), portal: refuse(hostedPromptRefusal) },
       portalBroker: () => { const error = hostedVaultRefusal(); throw new OdcError(error.code, error.message); } });
@@ -762,6 +773,7 @@ export async function createAccess({ env = process.env } = {}) {
   const odc3 = await load('odc3-context.mjs');
   const bridges = new Map(), brokers = new Map();
   return access = new OdcAccess({ ...shared, defaultTenant: env.SSAM_HYBRID_ODC_TENANT,
+    profiles: offline() ? null : new CredentialProfiles(),
     vault: {
       apiClient: async host => ({ available: await credentialStatus(tenantEntry(host)) }),
       portal: async (host, database, setting) => offline() ? { available: false } : odc3.portalVault('status', 'https://' + host, database, setting),
@@ -775,9 +787,12 @@ export async function createAccess({ env = process.env } = {}) {
       portal: async (host, database, setting) => openPrompt(odc3.portalCredentialHelper, ['-Mode', 'bootstrap', '-Origin', 'https://' + host,
         ...(database ? ['-Database', database] : []), ...(setting ? ['-Setting', setting] : [])], odc3.portalPowerShell),
     },
-    portalBroker: host => {
-      if (!brokers.has(host)) brokers.set(host, new odc3.Odc3PortalBroker({ origin: 'https://' + host, ...(offline() ? { credentialProvider: async () => ({ available: false }) } : {}) }));
-      return brokers.get(host);
+    portalBroker: (host, profile = null) => {
+      const key = host + ':' + (profile?.target ?? 'legacy') + ':' + (profile?.principal ?? '');
+      if (!brokers.has(key)) brokers.set(key, new odc3.Odc3PortalBroker({ origin: 'https://' + host,
+        ...(offline() ? { credentialProvider: async () => ({ available: false }) }
+          : profile ? { credentialProvider: mode => odc3.portalVault(mode, 'https://' + host, null, null, profile.target, profile.principal) } : {}) }));
+      return brokers.get(key);
     },
   });
 }
@@ -834,7 +849,7 @@ export async function doctor({ live = false, deps = {} } = {}) {
       // The API Client credential is optional: Portal and public API calls use the ODC Studio session first.
       check('portal ' + host, true, entry);
       if (!credentialAvailable) warn('portal ' + host, 'No API Client credential stored for ' + host + ': its Portal and public API calls use the ODC Studio session, and only without one ask for it.',
-        { tool: 'odc_read', arguments: { tenant: host, auth: 'api-client' }, why: 'opens the private Windows prompt to store it (the user types there, never in chat), only when the person wants this tenant without a Studio session' });
+        { tool: 'odc_read', arguments: { tenant: host, auth: 'api-client' }, why: 'uses an existing privately provisioned API Client for this tenant; missing credentials are refused without opening a prompt' });
     } catch (error) { check('portal ' + host, false, { ...entry, error: error.message }); }
   }
   journalCheck(check, d.readJournal);

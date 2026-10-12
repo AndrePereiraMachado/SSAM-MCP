@@ -68,7 +68,10 @@ public sealed partial class ModelSession
             existing["scripts"] = scripts;
             previousVariables = Sequence(screen, "LocalVariables").OfType<IObjectSignature>().ToDictionary(v => TypeResolver.Name(v)!, v => v, StringComparer.OrdinalIgnoreCase);
         }
-        var compiled = HtmlExpander.Expand(data, TryRef, Contract, _espace.ESpaceType.ToString(), existing);
+        // H10: the job around this op (its logic ops), so call reaches the screen actions of this screen the job declares.
+        var inJob = _applyOps != null && _applyIndex < _applyOps.Count && ReferenceEquals(_applyOps[_applyIndex], op);
+        var job = inJob ? HtmlJob.From(_applyOps, _applyIndex) : null;
+        var compiled = HtmlExpander.Expand(data, TryRef, Contract, _espace.ESpaceType.ToString(), existing, job);
         if (screen != null) delta = ClearScreen(screen, screenName, data["layout"]?.ToString() == "blank");
         for (var i = 0; i < compiled.Ops.Count; i++)
         {
@@ -76,6 +79,7 @@ public sealed partial class ModelSession
             catch (Exception ex) { throw new InvalidOperationException($"html op #{i} ({compiled.Ops[i]["op"]} {compiled.Ops[i]["prop"] ?? compiled.Ops[i]["type"]}): {Unwrap(ex)}", ex); }
         }
         var report = compiled.Report.DeepClone().AsObject(); report["expanded"] = compiled.Ops.Count;
+        if (inJob && compiled.Report["sameJobScreenActions"] is JsonArray shells) report["sameJobScreenActions"] = FillLater(screenName, shells);
         var migrated = new JsonArray();
         foreach (var legacy in legacyScripts)
         {
@@ -99,6 +103,30 @@ public sealed partial class ModelSession
         }
         if (compiled.ScopedCss != null) report["stylesheet"]!["theme"] = InstallStylesheet(screenName, compiled.ScopedCss, report["stylesheet"]!.AsObject());
         return report;
+    }
+
+    /// <summary>H10: the screen actions the page created first (name, inputs, outputs) are filled by the logic ops after this
+    /// op that declare them: each declaration is marked replace, so the logic op rewrites the body in place keeping the key the
+    /// widgets already point at (the stable-signature replace of Logic). Reported per action with the op that fills it.</summary>
+    private JsonArray FillLater(string screenName, JsonArray shells)
+    {
+        var names = new HashSet<string>(shells.Select(s => s!.ToString()), StringComparer.OrdinalIgnoreCase);
+        var filled = new JsonArray();
+        for (var k = _applyIndex + 1; k < _applyOps!.Count; k++)
+        {
+            if (_applyOps[k] is not JsonObject later || later["op"]?.ToString() != "logic" || later["data"]?["actions"] is not JsonArray declared) continue;
+            foreach (var action in declared.OfType<JsonObject>())
+            {
+                if (action["name"]?.ToString() is not { } actionName || !names.Contains(actionName) || action["kind"]?.ToString() != "screen") continue;
+                var owner = action["owner"]?.ToString() ?? "";
+                if (!owner.Equals("IMobileScreen:" + screenName, StringComparison.OrdinalIgnoreCase) && !owner.Equals("$html." + screenName, StringComparison.OrdinalIgnoreCase)) continue;
+                action["replace"] = true;
+                names.Remove(actionName);
+                filled.Add(new JsonObject { ["name"] = actionName, ["filledBy"] = k });
+            }
+        }
+        foreach (var unfilled in names.Order(StringComparer.OrdinalIgnoreCase)) filled.Add(new JsonObject { ["name"] = unfilled, ["filledBy"] = null });
+        return filled;
     }
 
     private static JsonObject DescribeScreen(IObjectSignature screen)
@@ -169,28 +197,45 @@ public sealed partial class ModelSession
         return new JsonObject { ["screen"] = screen.ObjectKey?.ToString(), ["removed"] = removed };
     }
 
-    /// <summary>Writes the scoped CSS into the module's own default theme between markers named after the screen, so a second
-    /// compilation replaces the block instead of appending another copy.</summary>
-    private string InstallStylesheet(string screenName, string scopedCss, JsonObject report)
+    /// <summary>Writes the scoped CSS into the module's own default theme between markers named by <paramref name="blockKey"/>,
+    /// the key the caller composes (docs/PROTOTIPO-NATIVO.md 4.3 item 2): the page form passes the screen (<c>Dashboard</c>), the
+    /// fragment form <c>&lt;owner&gt;:&lt;class&gt;</c> (the screen or block that receives the fragment and the class its
+    /// stylesheet is scoped under), so the same class in two screens is two blocks and a second compilation replaces its own
+    /// block instead of appending another copy. A legacy block of a fragment (<c>/* anvil:html &lt;class&gt; */</c>, the key
+    /// before the owner) is adopted once by the first owner that installs that class: the marker is renamed and the content
+    /// replaced (<c>adoptedLegacy</c>); the next owners get blocks of their own. Never two copies. The @import statements the
+    /// block carries go to the top of the stylesheet, once (H14, <c>cssImportsHoisted</c>).</summary>
+    private string InstallStylesheet(string blockKey, string scopedCss, JsonObject report)
     {
         var defaultTheme = _es.DefaultMobileTheme ?? throw new InvalidOperationException("html: the module has no default theme to carry the stylesheet");
         var theme = _es.MobileThemes.FirstOrDefault(t => t.ObjectKey?.ToString() == defaultTheme.ObjectKey?.ToString())
             ?? throw new InvalidOperationException($"html: the default theme {TypeResolver.Name(defaultTheme)} belongs to another module; the page stylesheet needs a theme owned by this module");
-        scopedCss = FormatCode(CodeLanguage.Css, scopedCss, TypeResolver.Name(theme) + ".StyleSheet (html " + screenName + ")");
-        var begin = $"/* anvil:html {screenName} */"; var end = $"/* /anvil:html {screenName} */";
+        scopedCss = FormatCode(CodeLanguage.Css, scopedCss, TypeResolver.Name(theme) + ".StyleSheet (html " + blockKey + ")");
+        var begin = Marker(blockKey); var end = EndMarker(blockKey);
         var block = begin + "\n" + scopedCss.TrimEnd() + "\n" + end;
         // O bloco vai para a metade do AUTOR do tema, nunca pela efetiva: num tema com CSS do Theme Editor a efetiva
         // e gerada + autor, e um ciclo ler-efetiva/escrever-efetiva ou perde o marcador ou duplica o bloco gerado.
         var sheet = ThemeCss.Of(theme);
         var css = sheet != null ? ThemeCss.Author(sheet) : theme.StyleSheet ?? "";
-        var i = css.IndexOf(begin, StringComparison.Ordinal);
+        var (i, endMarker) = (css.IndexOf(begin, StringComparison.Ordinal), end);
+        var colon = blockKey.IndexOf(':');
+        if (i < 0 && colon > 0)
+        {
+            var legacy = Marker(blockKey[(colon + 1)..]);
+            if ((i = css.IndexOf(legacy, StringComparison.Ordinal)) >= 0)
+            {
+                endMarker = EndMarker(blockKey[(colon + 1)..]);
+                report["adoptedLegacy"] = new JsonObject { ["from"] = legacy, ["to"] = begin };
+            }
+        }
         if (i >= 0)
         {
-            var j = css.IndexOf(end, i, StringComparison.Ordinal);
-            if (j < 0) throw new InvalidOperationException($"html: the theme stylesheet has an unterminated block for {screenName}");
-            css = css[..i] + block + css[(j + end.Length)..];
+            var j = css.IndexOf(endMarker, i, StringComparison.Ordinal);
+            if (j < 0) throw new InvalidOperationException($"html: the theme stylesheet has an unterminated block for {blockKey}");
+            css = css[..i] + block + css[(j + endMarker.Length)..];
         }
         else css = css.TrimEnd().Length == 0 ? block + "\n" : css.TrimEnd() + "\n\n" + block + "\n";
+        css = TopImports(css, report);
         if (sheet != null) ThemeCss.WriteAuthor(sheet, css); else theme.StyleSheet = css;
         report["installed"] = true; report["scopedChars"] = scopedCss.Length;
         if (sheet != null && ThemeCss.IsSplit(sheet)) report["half"] = "UserStyleSheet";
@@ -198,6 +243,25 @@ public sealed partial class ModelSession
         if (sheet != null && ThemeCss.Changed(sheet) is { } changed)
             foreach (var (key, value) in changed) report[key] = value?.DeepClone();
         return TypeResolver.Name(theme) ?? "";
+    }
+
+    private static string Marker(string key) => $"/* anvil:html {key} */";
+    private static string EndMarker(string key) => $"/* /anvil:html {key} */";
+
+    /// <summary>The @import statements of the author CSS at its top, each once (a block installed again brings its @import again):
+    /// the browser ignores an @import after a rule. The text itself when they already are there, once.</summary>
+    private static string TopImports(string css, JsonObject report)
+    {
+        var (imports, rest) = CssCompat.Imports(css);
+        if (imports.Count == 0) return css;
+        var distinct = imports.Select(x => x.Statement).Distinct(StringComparer.Ordinal).ToList();
+        if (!imports.Any(x => x.AfterRule) && distinct.Count == imports.Count) return css;
+        var body = rest.TrimStart();
+        var charset = "";
+        if (body.StartsWith("@charset", StringComparison.OrdinalIgnoreCase) && body.IndexOf(';') is var semi and > 0)
+        { charset = body[..(semi + 1)] + "\n"; body = body[(semi + 1)..].TrimStart(); }
+        report["cssImportsHoisted"] = new JsonArray(imports.Where(x => x.AfterRule).Select(x => x.Statement).Distinct(StringComparer.Ordinal).Select(s => (JsonNode)s).ToArray());
+        return charset + string.Join("\n", distinct) + "\n" + body;
     }
 
     private static IEnumerable<object> Sequence(object? value, string property) => value != null && ModelHost.Prop(value, property) is IEnumerable sequence ? sequence.Cast<object>() : [];

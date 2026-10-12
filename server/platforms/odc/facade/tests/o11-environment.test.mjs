@@ -57,7 +57,7 @@ test('reads run with the exact argv, a read-only lease, the Studio check first a
   assert.deepEqual(app.files, [path.join(out, 'Demo', 'Demo_CS.oml')]); assert.deepEqual(app.skipped, ['Demo_Ext']); assert.equal(app.ok, true);
 
   const templates = await h.call('o11_environment', { action: 'templates' });
-  assert.deepEqual(h.run.calls[3].args, ['templates', '--read-only']);
+  assert.deepEqual(h.run.calls[3].args, ['templates', '--with-host', '--read-only']); // vel-entrega: {host, templates} for the cache per environment
   assert.deepEqual(templates.templates, [{ key: 'tpl-1', label: 'Reactive Web App', kind: 'CrossDevice' }]);
 
   const producers = await h.call('o11_environment', { action: 'referenceable', filter: 'users' });

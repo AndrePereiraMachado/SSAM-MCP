@@ -1,0 +1,318 @@
+{
+ "description": "P09-w1-fixture-capability-evidence: evidence job for the debugger coverage fixture; never delivered. O11 Traditional Web: one Session Variable per scalar data type (same twelve as the Client Variable job). The Reactive factory refuses Session Variables (\"Session Variable objects can't be children of Module objects\"), so the base is the Traditional fixture.",
+ "base": "tests/fixtures/traditional-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [
+  {
+   "id": "UnusedElement",
+   "element": "HeadlessTrad_UI (ESpace) / SSAMDbgSvText (SessionVariable)",
+   "why": "The variable exists only to establish that the installed model accepts its data type; the coverage fixture adds the readers and writers."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "HeadlessTrad_UI (ESpace) / SSAMDbgSvInteger (SessionVariable)",
+   "why": "The variable exists only to establish that the installed model accepts its data type; the coverage fixture adds the readers and writers."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "HeadlessTrad_UI (ESpace) / SSAMDbgSvLongInteger (SessionVariable)",
+   "why": "The variable exists only to establish that the installed model accepts its data type; the coverage fixture adds the readers and writers."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "HeadlessTrad_UI (ESpace) / SSAMDbgSvDecimal (SessionVariable)",
+   "why": "The variable exists only to establish that the installed model accepts its data type; the coverage fixture adds the readers and writers."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "HeadlessTrad_UI (ESpace) / SSAMDbgSvBoolean (SessionVariable)",
+   "why": "The variable exists only to establish that the installed model accepts its data type; the coverage fixture adds the readers and writers."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "HeadlessTrad_UI (ESpace) / SSAMDbgSvDate (SessionVariable)",
+   "why": "The variable exists only to establish that the installed model accepts its data type; the coverage fixture adds the readers and writers."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "HeadlessTrad_UI (ESpace) / SSAMDbgSvTime (SessionVariable)",
+   "why": "The variable exists only to establish that the installed model accepts its data type; the coverage fixture adds the readers and writers."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "HeadlessTrad_UI (ESpace) / SSAMDbgSvDateTime (SessionVariable)",
+   "why": "The variable exists only to establish that the installed model accepts its data type; the coverage fixture adds the readers and writers."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "HeadlessTrad_UI (ESpace) / SSAMDbgSvCurrency (SessionVariable)",
+   "why": "The variable exists only to establish that the installed model accepts its data type; the coverage fixture adds the readers and writers."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "HeadlessTrad_UI (ESpace) / SSAMDbgSvEmail (SessionVariable)",
+   "why": "The variable exists only to establish that the installed model accepts its data type; the coverage fixture adds the readers and writers."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "HeadlessTrad_UI (ESpace) / SSAMDbgSvPhoneNumber (SessionVariable)",
+   "why": "The variable exists only to establish that the installed model accepts its data type; the coverage fixture adds the readers and writers."
+  },
+  {
+   "id": "UnusedElement",
+   "element": "HeadlessTrad_UI (ESpace) / SSAMDbgSvEntityIdentifier (SessionVariable)",
+   "why": "The variable exists only to establish that the installed model accepts its data type; the coverage fixture adds the readers and writers."
+  }
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IServerEntity",
+   "name": "SSAMDbgTypeEntity",
+   "as": "$typeEntity"
+  },
+  {
+   "op": "create",
+   "parent": "$typeEntity",
+   "type": "IEntityAttribute",
+   "name": "Id",
+   "as": "$typeEntityId"
+  },
+  {
+   "op": "set",
+   "target": "$typeEntityId",
+   "prop": "DataType",
+   "value": "Long Integer"
+  },
+  {
+   "op": "set",
+   "target": "$typeEntityId",
+   "prop": "IsAutoNumber",
+   "value": "Yes"
+  },
+  {
+   "op": "set",
+   "target": "$typeEntity",
+   "prop": "IdentifierAttribute",
+   "value": "$typeEntityId"
+  },
+  {
+   "op": "create",
+   "parent": "$typeEntity",
+   "type": "IEntityAttribute",
+   "name": "Label",
+   "as": "$typeEntityLabel"
+  },
+  {
+   "op": "set",
+   "target": "$typeEntityLabel",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISessionVariable",
+   "name": "SSAMDbgSvText",
+   "as": "$vText"
+  },
+  {
+   "op": "set",
+   "target": "$vText",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISessionVariable",
+   "name": "SSAMDbgSvInteger",
+   "as": "$vInteger"
+  },
+  {
+   "op": "set",
+   "target": "$vInteger",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISessionVariable",
+   "name": "SSAMDbgSvLongInteger",
+   "as": "$vLongInteger"
+  },
+  {
+   "op": "set",
+   "target": "$vLongInteger",
+   "prop": "DataType",
+   "value": "Long Integer"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISessionVariable",
+   "name": "SSAMDbgSvDecimal",
+   "as": "$vDecimal"
+  },
+  {
+   "op": "set",
+   "target": "$vDecimal",
+   "prop": "DataType",
+   "value": "Decimal"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISessionVariable",
+   "name": "SSAMDbgSvBoolean",
+   "as": "$vBoolean"
+  },
+  {
+   "op": "set",
+   "target": "$vBoolean",
+   "prop": "DataType",
+   "value": "Boolean"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISessionVariable",
+   "name": "SSAMDbgSvDate",
+   "as": "$vDate"
+  },
+  {
+   "op": "set",
+   "target": "$vDate",
+   "prop": "DataType",
+   "value": "Date"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISessionVariable",
+   "name": "SSAMDbgSvTime",
+   "as": "$vTime"
+  },
+  {
+   "op": "set",
+   "target": "$vTime",
+   "prop": "DataType",
+   "value": "Time"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISessionVariable",
+   "name": "SSAMDbgSvDateTime",
+   "as": "$vDateTime"
+  },
+  {
+   "op": "set",
+   "target": "$vDateTime",
+   "prop": "DataType",
+   "value": "Date Time"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISessionVariable",
+   "name": "SSAMDbgSvCurrency",
+   "as": "$vCurrency"
+  },
+  {
+   "op": "set",
+   "target": "$vCurrency",
+   "prop": "DataType",
+   "value": "Currency"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISessionVariable",
+   "name": "SSAMDbgSvEmail",
+   "as": "$vEmail"
+  },
+  {
+   "op": "set",
+   "target": "$vEmail",
+   "prop": "DataType",
+   "value": "Email"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISessionVariable",
+   "name": "SSAMDbgSvPhoneNumber",
+   "as": "$vPhoneNumber"
+  },
+  {
+   "op": "set",
+   "target": "$vPhoneNumber",
+   "prop": "DataType",
+   "value": "Phone Number"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ISessionVariable",
+   "name": "SSAMDbgSvEntityIdentifier",
+   "as": "$vEntityIdentifier"
+  },
+  {
+   "op": "set",
+   "target": "$vEntityIdentifier",
+   "prop": "DataType",
+   "value": "SSAMDbgTypeEntity Identifier"
+  },
+  {
+   "op": "get",
+   "target": "$vText"
+  },
+  {
+   "op": "get",
+   "target": "$vInteger"
+  },
+  {
+   "op": "get",
+   "target": "$vLongInteger"
+  },
+  {
+   "op": "get",
+   "target": "$vDecimal"
+  },
+  {
+   "op": "get",
+   "target": "$vBoolean"
+  },
+  {
+   "op": "get",
+   "target": "$vDate"
+  },
+  {
+   "op": "get",
+   "target": "$vTime"
+  },
+  {
+   "op": "get",
+   "target": "$vDateTime"
+  },
+  {
+   "op": "get",
+   "target": "$vCurrency"
+  },
+  {
+   "op": "get",
+   "target": "$vEmail"
+  },
+  {
+   "op": "get",
+   "target": "$vPhoneNumber"
+  },
+  {
+   "op": "get",
+   "target": "$vEntityIdentifier"
+  }
+ ]
+}

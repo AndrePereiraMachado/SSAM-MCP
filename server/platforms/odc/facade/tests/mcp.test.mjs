@@ -38,7 +38,7 @@ test('facade serves studio_* and odc_* tools on one stdio server', async () => {
     assert.ok(library, 'odc_external_library is listed');
     assert.deepEqual(library.inputSchema.required, ['action']);
     assert.deepEqual(library.inputSchema.properties.action.enum, ['build', 'deploy', 'status', 'discard']);
-    assert.deepEqual(Object.keys(library.inputSchema.properties).sort(), ['action', 'auth', 'authorize', 'confirmTenant', 'jobKey', 'library', 'operationUuid', 'pid',
+    assert.deepEqual(Object.keys(library.inputSchema.properties).sort(), ['action', 'auth', 'authorizationContext', 'authorize', 'confirmTenant', 'expectedRevision', 'jobKey', 'library', 'operationUuid', 'originOperationUuid', 'pid',
       'releaseNotes', 'releaseTag', 'spec', 'specFile', 'tenant'].sort());
     assert.deepEqual(library.inputSchema.properties.auth.enum, ['auto', 'studio', 'api-client']);
     assert.deepEqual(library.annotations, { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });
@@ -46,7 +46,7 @@ test('facade serves studio_* and odc_* tools on one stdio server', async () => {
     // Offline, an invalid spec is refused before anything runs.
     const invalid = await client.callTool({ name: 'odc_external_library', arguments: { action: 'build', spec: { name: '9Lib', actions: [] } } });
     assert.equal(invalid.isError, true); assert.equal(invalid.structuredContent.code, 'EXTERNAL_LIBRARY_SPEC_INVALID');
-    assert.match(client.getInstructions(), /ODC Studio session first.*vault.*private Windows prompt only when no Studio is open/);
+    assert.match(client.getInstructions(), /ODC Studio session first.*headless HTTP.*Windows vault.*private Windows prompt only when the tenant has nothing stored/);
     // The map is the first read of an application, both lanes, read-only; the instructions say so.
     const map = tools.find(t => t.name === 'ssam_map');
     assert.equal(map.annotations.readOnlyHint, true);
@@ -90,7 +90,7 @@ test('facade serves studio_* and odc_* tools on one stdio server', async () => {
     assert.equal(write.isError, true);
     const authStatus = await client.callTool({ name: 'odc_auth_status', arguments: { tenant: 'personal-nv0s5uly.outsystems.dev' } });
     assert.equal(authStatus.structuredContent.ok, true); assert.equal(authStatus.structuredContent.studio.running, false);
-    assert.equal(authStatus.structuredContent.tenants[0].resolves.public, 'prompt');
+    assert.equal(authStatus.structuredContent.tenants[0].resolves.public, 'AUTH_NOT_CONFIGURED');
     assert.equal(connection.stderr, '');
   } finally { await client.close(); }
 });
