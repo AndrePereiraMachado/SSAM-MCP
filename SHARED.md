@@ -2,7 +2,7 @@
 
 Estes 76 arquivos existem em `server/` e em `agent/`, no mesmo caminho relativo dentro de cada caixa.
 Hoje as duas cópias são iguais byte a byte. Vieram de `servidor/fase4` (`e7b2119b`) e estão na revisão de
-`servidor/fase4-24` (`a945838b`), o 24º envio. O 24º acrescentou 8: `PrivateHttpContext.cs` e `ScHttpHandler.cs` do
+`servidor/fase4-24` (`a415531d`), o 24º envio. O 24º acrescentou 8: `PrivateHttpContext.cs` e `ScHttpHandler.cs` do
 kernel e 6 fontes novas da bridge ODC (`Portal*.cs`).
 
 ## A regra
@@ -58,7 +58,7 @@ Sem saída, está tudo igual.
 | Arquivo (relativo à caixa) | sha256 (conteúdo com fim de linha LF) |
 | --- | --- |
 | `docs/DISTRIBUICAO.md` | `bc87ebe53ef2230f89d4ceb1162e5e84b9eecc0e2563e93905eccb78fbc9d5b1` |
-| `docs/FASE2-AGENTE.md` | `9cbf130187c74d5172dc900cd421472a6bb6462731b97a3bcb060573be28cd5f` |
+| `docs/FASE2-AGENTE.md` | `dcd26fc0efaa3ac3840ed86782550a1810b3311f0846f82fd77ece1bfa4c05a9` |
 | `docs/O11-BRIDGE-FINA.md` | `c7f24e4ad0e2b537394a537d103ad5b0654745c4c692965cdec5cc8fcc80a25d` |
 | `docs/PROVAS-AO-VIVO.md` | `8e758af73ac2c94b7ec6592d9fb191b39a432da2a7ececcc61731ceddd2552a6` |
 | `docs/exemplos/mcp-cliente-hospedado.json` | `cabbe38805716878f03def98527dd5234b2dcfd9187df8c773305f80d8d6fa28` |

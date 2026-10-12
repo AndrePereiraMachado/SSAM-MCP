@@ -17,6 +17,11 @@ import { ODC_BRIDGE } from './fixtures/odc-bridge-version.mjs';
 
 const facade = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const repo = path.resolve(facade, '..', '..', '..');
+// The real agent runs here: the agent box must be beside this server box. In SSAM-MCP the agent lives in a box of its own
+// (agent/, next to server/), so there this test skips with the reason, as hosted-e2e does; the server line runs it.
+const AGENT_ENTRY = path.join(repo, 'agent', 'ssam-agent.mjs');
+const agentSkip = fs.existsSync(AGENT_ENTRY) ? false : 'the agent box is not beside this server box (missing ' + path.relative(repo, AGENT_ENTRY)
+  + '): this test runs the real agent; run it on the server line, where agent/ sits next to platforms/';
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const waitFor = async (check, ms) => { const end = Date.now() + ms; while (Date.now() < end) { const value = await check(); if (value) return value; await delay(50); } return null; };
@@ -52,7 +57,7 @@ function bigJob(bytes) {
   return { actions };
 }
 
-test('hosted: a job of ~2 MB inline (object and JSON text) reaches o11_deliver and studio_deliver whole, in the workspace, with no agent upload; agent:inbox costs one', { timeout: 240000 }, async t => {
+test('hosted: a job of ~2 MB inline (object and JSON text) reaches o11_deliver and studio_deliver whole, in the workspace, with no agent upload; agent:inbox costs one', { skip: agentSkip, timeout: 240000 }, async t => {
   const { Client, StreamableHTTPClientTransport } = await import('@modelcontextprotocol/client');
   const { fakeBridge } = await import('./fixtures/fake-o11-bridge.mjs');
   const ssam = await import('../ssam.mjs');

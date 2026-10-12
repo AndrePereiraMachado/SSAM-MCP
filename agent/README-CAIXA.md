@@ -3,7 +3,7 @@
 Agente do SSAM que roda na máquina do cliente: `agent/ssam-agent.mjs` e `.ps1`, bridge ODC e cliente de attach, bridge
 O11 fina, gancho de runtime, conector O11 e a montagem do pacote `ssam-agent.zip` com a varredura de PI.
 Cópia de `servidor/fase4` (`e7b2119b`) de `C:\Users\andre\SSAM-Hybrid-servidor`, sem edição, atualizada para
-`servidor/fase4-24` (`a945838b`, 24º envio, branch `server/r24`): bridge ODC `v96`, bridge O11 fina com `sc_http`
+`servidor/fase4-24` (`a415531d`, 24º envio, branch `server/r24`): bridge ODC `v96`, bridge O11 fina com `sc_http`
 (`ScHttpHandler.cs`) e agente `0.3.1` (`reference-producers`, `sc_http`, transporte novo e `net.probe`).
 Esta pasta guarda os caminhos relativos do repositório antigo: os `.csproj` e os scripts resolvem daqui.
 

@@ -1,6 +1,7 @@
 // The resident worker client without Python (anvil-worker.mjs, the port of anvil_cli.py, odc_worker.py and
-// worker_process.py), against fake TCP workers on ephemeral loopback ports. No process is ever started: the spawn is
-// injected, every root, authority folder and user folder is temporary, and every target names its fake's port.
+// worker_process.py), against fake TCP workers on ephemeral loopback ports. No worker process is ever started: the spawn is
+// injected (the startup lock's live owner is an idle node child), every root, authority folder and user folder is
+// temporary, and every target names its fake's port.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -8,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import { EventEmitter } from 'node:events';
+import { spawn } from 'node:child_process';
 import { workerTarget, workerDisabled, workerRequest, ping, ensureWorker, runOnWorker, withStartupLock, staleKernel, studioMatches } from '../anvil-worker.mjs';
 import { fakeWorker, freePort } from './fixtures/jobs-fake-worker.mjs';
 
@@ -166,13 +168,87 @@ test('the startup lock: a dead owner is removed; a live owner is waited for unti
   fs.writeFileSync(lock, JSON.stringify({ pid: 987654321, birth: 'dead', created: Date.now() / 1000 }));
   const taken = await withStartupLock(local, 1234, 1000, async () => fs.existsSync(lock));
   assert.deepEqual(taken, { locked: true, value: true }); assert.equal(fs.existsSync(lock), false);
-  const live = { pid: process.pid, birth: '1', created: Date.now() / 1000 };
+  // A live owner is another process that is still starting the worker (a child that only waits here). This process's own
+  // pid is no live owner any more: a lock with it and without this instance is an earlier process's (item 2, below).
+  const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], { stdio: 'ignore', windowsHide: true });
+  t.after(() => { try { child.kill(); } catch { /* gone */ } });
+  const live = { pid: child.pid, birth: null, created: Date.now() / 1000 };
   fs.writeFileSync(lock, JSON.stringify(live));
   const started = Date.now();
   const busy = await withStartupLock(local, 1234, 700, async () => 'never');
   assert.equal(busy.locked, false); assert.match(busy.note, /startup lock did not clear/);
   assert.ok(Date.now() - started >= 650);
   assert.deepEqual(JSON.parse(fs.readFileSync(lock, 'utf8')), live, 'the live owner keeps its lock');
+});
+
+// Item 2 of the 24th rehearsal: under docker-init the server is always pid 7, and a lock {pid:7, owner:'node', birth:null}
+// left by a server stopped during its warm-up looked alive to the next one (the warm-up waited 90 s, the first ODC call
+// until the lock was 300 s old). The lock now names the process instance: a lock of an earlier process with this very pid,
+// of another boot of the host, or of a pid another process took is left over; a lock of this instance is live.
+test('the startup lock names the process instance: a lock left by an earlier process with this pid (fake pid reuse) is taken at once', async t => {
+  const s = sandbox(t);
+  const local = path.join(s.root, '.local', 'lane-odc');
+  fs.mkdirSync(local, { recursive: true });
+  const lock = path.join(local, 'worker-24647.lock');
+  // exactly what the stopped server wrote (the 23rd and 24th until this fix), with this process's pid in it
+  for (const left of [{ pid: process.pid, birth: null, created: Date.now() / 1000, owner: 'node' },
+    { pid: process.pid, birth: null, created: Date.now() / 1000, owner: 'node', instance: 'an-earlier-server', boot: null }]) {
+    fs.writeFileSync(lock, JSON.stringify(left));
+    const started = Date.now();
+    let seen = null;
+    const taken = await withStartupLock(local, 24647, 5000, async () => { seen = JSON.parse(fs.readFileSync(lock, 'utf8')); return 'started'; });
+    assert.deepEqual(taken, { locked: true, value: 'started' }, JSON.stringify(left));
+    assert.ok(Date.now() - started < 1500, 'taken at once, not after the deadline: ' + (Date.now() - started) + ' ms');
+    assert.equal(seen.pid, process.pid); assert.equal(seen.owner, 'node');
+    assert.equal(typeof seen.instance, 'string'); assert.notEqual(seen.instance, 'an-earlier-server', 'the token names this instance');
+    if (process.platform !== 'win32') { assert.match(String(seen.birth), /^\d+$/, 'Linux: the start time of /proc/self/stat'); assert.ok(seen.boot, 'Linux: the boot id'); }
+    assert.equal(fs.existsSync(lock), false, 'released');
+  }
+});
+
+test('the startup lock of this same instance (a second start in this process) is live: waited for until the deadline', async t => {
+  const s = sandbox(t);
+  const local = path.join(s.root, '.local', 'lane-odc');
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  const first = withStartupLock(local, 24648, 2000, () => held);
+  await new Promise(resolve => setTimeout(resolve, 100));
+  const started = Date.now();
+  const second = await withStartupLock(local, 24648, 700, async () => 'never');
+  assert.equal(second.locked, false); assert.match(second.note, /startup lock did not clear/);
+  assert.ok(Date.now() - started >= 650);
+  release('first');
+  assert.deepEqual(await first, { locked: true, value: 'first' });
+});
+
+test('lockLeftOver: another boot, a reused pid (other start time), an earlier instance of this pid, a dead owner or an old lock; never a live owner', async () => {
+  const { lockLeftOver } = await import('../anvil-worker.mjs');
+  const now = () => 1_000_000_000;
+  const self = { pid: 7, instance: 'new-server', boot: 'boot-B', birth: '5000' };
+  const created = now() / 1000 - 5;
+  const alive = pid => pid === 7 || pid === 9;
+  const decide = (owner, birthOf = () => '100', platform = 'linux') => lockLeftOver(owner, { self, now, alive, birthOf, platform });
+  assert.equal(decide({ pid: 7, instance: 'old-server', boot: 'boot-B', birth: '100', created }), true, 'pid 7 again: the lock of the earlier server');
+  assert.equal(decide({ pid: 7, owner: 'node', birth: null, created }), true, 'the format before the fix, with this pid');
+  assert.equal(decide({ pid: 7, instance: 'new-server', boot: 'boot-B', birth: '5000', created }), false, 'this instance: live');
+  assert.equal(decide({ pid: 9, instance: 'x', boot: 'boot-A', birth: '100', created }), true, 'written before the host booted again');
+  assert.equal(decide({ pid: 9, instance: 'x', boot: 'boot-B', birth: '100', created }, () => '300'), true, 'pid 9 now names another process');
+  assert.equal(decide({ pid: 9, instance: 'x', boot: 'boot-B', birth: '100', created }, () => '100'), false, 'pid 9 is still its owner: live');
+  assert.equal(decide({ pid: 9, birth: '100', created }, () => null), false, 'a start time that cannot be read is no proof: live');
+  assert.equal(decide({ pid: 9, birth: '13377002120000000', created }, () => '1', 'win32'), false, 'Windows: a FILETIME of worker_process.py is not compared here');
+  assert.equal(decide({ pid: 11, instance: 'x', boot: 'boot-B', birth: '100', created }), true, 'its owner is gone');
+  assert.equal(decide({ pid: 9, instance: 'x', boot: 'boot-B', birth: '100', created: now() / 1000 - 301 }, () => '100'), true, 'older than any startup');
+  assert.equal(decide(null), false, 'its owner is still writing it');
+  // and through withStartupLock, with the same injected identity: the earlier pid-7 lock is taken, a live one waited for
+  const local = fs.mkdtempSync(path.join(os.tmpdir(), 'jobs-worker-lock-'));
+  try {
+    const lock = path.join(local, 'worker-1.lock');
+    fs.writeFileSync(lock, JSON.stringify({ pid: 7, instance: 'old-server', boot: 'boot-B', birth: '100', created: Date.now() / 1000 }));
+    const options = { self, alive, birthOf: () => '100', platform: 'linux' };
+    assert.deepEqual(await withStartupLock(local, 1, 3000, async () => JSON.parse(fs.readFileSync(lock, 'utf8')).instance, options), { locked: true, value: 'new-server' });
+    fs.writeFileSync(lock, JSON.stringify({ pid: 9, instance: 'x', boot: 'boot-B', birth: '100', created: Date.now() / 1000 }));
+    assert.equal((await withStartupLock(local, 1, 600, async () => 'never', options)).locked, false, 'a live owner keeps its lock');
+  } finally { fs.rmSync(local, { recursive: true, force: true }); }
 });
 
 test('a worker that loaded an older kernel: busy serves with a warning, idle is shut down and restarted', async t => {

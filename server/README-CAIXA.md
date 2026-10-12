@@ -2,7 +2,7 @@
 
 Servidor MCP hospedado do SSAM: `ssam serve`, hub do agente, tokens, kernels O11 e ODC, builder ODC, imagem Docker e
 painel do dono. Cópia de `servidor/fase4` (`e7b2119b`) de `C:\Users\andre\SSAM-Hybrid-servidor`, sem edição,
-atualizada para `servidor/fase4-24` (`a945838b`, 24º envio, branch `server/r24`; antes, `fase4-22` `1fbfa377` e
+atualizada para `servidor/fase4-24` (`a415531d`, 24º envio, branch `server/r24`; antes, `fase4-22` `1fbfa377` e
 `fase4-23` `e589be22`). Cada arquivo que vem da linha tem o blob da revisão (`README.md` da raiz, "De onde veio").
 Esta pasta é a raiz do repositório antigo: caminhos relativos, Dockerfile e compose funcionam daqui.
 

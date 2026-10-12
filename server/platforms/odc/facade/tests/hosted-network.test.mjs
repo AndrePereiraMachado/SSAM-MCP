@@ -22,6 +22,13 @@ import { createSsamServer, hostedDoctor } from '../ssam.mjs';
 
 const repo = path.resolve(fileURLToPath(new URL('../../../..', import.meta.url)));
 const agentLib = name => import(pathToFileURL(path.join(repo, 'agent', 'lib', name)).href);
+// The two tests that run the agent's own code (the end to end over the real hub, and createAgent) need the agent box beside
+// this server box. In SSAM-MCP the agent lives in a box of its own (agent/, next to server/), so there they skip with the
+// reason, as hosted-e2e does; the server line has both and runs them.
+const AGENT_FILES = ['channel.mjs', 'outbox.mjs', 'net.mjs', 'net-probe.mjs', 'kinds.mjs', 'agent.mjs'].map(name => path.join(repo, 'agent', 'lib', name));
+const agentMissing = AGENT_FILES.filter(file => !fs.existsSync(file));
+const agentSkip = agentMissing.length ? 'the agent box is not beside this server box (missing ' + agentMissing.map(file => path.relative(repo, file)).join(', ')
+  + "): this test runs the agent's own code; run it on the server line, where agent/ sits next to platforms/" : false;
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-net-'));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -261,7 +268,7 @@ test('ssam_doctor {network:true} (hosted): the check in network; without it, slo
   assert.equal(localDoctor.network.code, 'NOT_HOSTED');
 });
 
-test('end to end over the real hub: the agent\'s channel and net.mjs, every other new connection by a second exit that stalls large bodies: the doctor names the bad exit within about 5 s', async t => {
+test('end to end over the real hub: the agent\'s channel and net.mjs, every other new connection by a second exit that stalls large bodies: the doctor names the bad exit within about 5 s', { skip: agentSkip }, async t => {
   const h = await hub();
   t.after(() => h.handle.close());
   const relay = await twoExitRelay(Number(new URL(h.base).port));
@@ -290,7 +297,7 @@ test('end to end over the real hub: the agent\'s channel and net.mjs, every othe
 
 // With the kinds.mjs patch of this lane (C:\t\vel\patch-kinds.diff) the real agent runs the kind: the same check with
 // createAgent. Skipped until kinds.mjs lists net.probe.
-test('the real agent (createAgent) runs net.probe through the hub once kinds.mjs lists it', async t => {
+test('the real agent (createAgent) runs net.probe through the hub once kinds.mjs lists it', { skip: agentSkip }, async t => {
   const { KINDS } = await agentLib('kinds.mjs');
   if (!KINDS.includes('net.probe')) { t.skip('kinds.mjs does not list net.probe yet (patch-kinds.diff of fase4-24/vel-hosted)'); return; }
   const { createAgent } = await agentLib('agent.mjs');

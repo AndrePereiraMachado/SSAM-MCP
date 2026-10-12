@@ -1,7 +1,7 @@
 // D2 of PLANO-24-PRODUCAO (G4, risk R2): in hosted mode the prototype op (the importer) is refused at the gate, before any
-// capture, in the four tools that take a job (o11_deliver, studio_deliver, ssam_job, o11_job): its data.source is a folder
-// of the job that the gate does not confine and its capture runs the prototype's JavaScript on the server machine. One
-// switch, HOSTED_PROTOTYPE_OP in hosted/policy.mjs ('refuse' in 24.0), lets it through when set to 'allow'. A fake link,
+// capture, in the four tools that take a job (o11_deliver, studio_deliver, ssam_job, o11_job): its capture runs the
+// prototype's JavaScript on the server machine. One switch, HOSTED_PROTOTYPE_OP in hosted/policy.mjs ('refuse' in 24.0),
+// lets it through when set to 'allow' (its data.source then confined like every path of a job, item 1). A fake link,
 // context and executor; no hub, agent or Studio.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -125,10 +125,19 @@ test('a COMPOSITE job whose part carries the prototype op is refused; the part i
 
 test('the switch set to allow lets the same calls through (the 24.x road: the folder by agent:inbox, a capture pool per customer)', async () => {
   const h = harness();
-  write(path.join(h.workspace, 'inbox', 'proto.json'), { ops: [PROTOTYPE] });
+  // fase4-24 item 1: even allowed, data.source is a path of the job, confined like every other one: a folder of the
+  // customer's workspace passes (inline, rewritten to its absolute path), the user's own C:\... folder does not.
+  const source = path.join(h.workspace, 'inbox', 'prototype');
+  fs.mkdirSync(source, { recursive: true });
+  const inside = { op: 'prototype', data: { source: 'ws:inbox/prototype' } };
+  write(path.join(h.workspace, 'inbox', 'proto.json'), { ops: [{ op: 'prototype', data: { source } }] });
   for (const name of TOOLS) {
-    assert.notEqual((await h.gate(name, { prototypeOp: 'allow' })({ ...h.lane(name), job: { ops: [PROTOTYPE] } })).isError, true, name);
+    assert.notEqual((await h.gate(name, { prototypeOp: 'allow' })({ ...h.lane(name), job: { ops: [inside] } })).isError, true, name);
+    assert.equal(h.calls.at(-1).args.job.ops[0].data.source, source, name + ': the handler gets the absolute workspace folder');
     assert.notEqual((await h.gate(name, { prototypeOp: 'allow' })({ ...h.lane(name), job: 'ws:inbox/proto.json' })).isError, true, name);
+    const outside = await h.gate(name, { prototypeOp: 'allow' })({ ...h.lane(name), job: { ops: [PROTOTYPE] } });
+    assert.equal(outside.structuredContent.code, 'PATH_OUTSIDE_WORKSPACE', name);
+    assert.equal(outside.structuredContent.pointer, '/job/ops/0/data/source', name);
   }
   assert.equal(h.calls.length, 2 * TOOLS.length);
   // Only the four job tools are concerned: a read tool with a "prototype" text is never refused for it.

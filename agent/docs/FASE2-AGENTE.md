@@ -237,8 +237,12 @@ Jobs inline:
   qualquer que seja o tamanho. O pedido MCP vai direto ao servidor (até 16 MiB, `http-server.mjs`; o Caddy corta em
   20 MB). Nada passa pelo agente. `agent:inbox/<arquivo>` fica para arquivos do usuário (OML, imagens, assets); um job
   que já está no inbox ainda funciona.
-- O texto JSON de um job (`"{...}"` ou `"[...]"`) é o próprio job em qualquer ponteiro de caminho (`hosted/policy.mjs`
-  `pathOnlyWhen`): antes virava `ws:<faixa>/{"ops":...}` e a ferramenta não achava o arquivo. O proxy do
+- O texto JSON de um job (`"{...}"` ou `"[...]"`) é o próprio job, mas só nos ponteiros de job (`/job` das quatro
+  ferramentas de job e a `query` do `check-job`; `hosted/job-paths.mjs` `jobTextPointers`): o portão o converte no objeto
+  antes de tudo (`parseJobTexts`) e confere os caminhos de dentro dele como os de um objeto (regra 5 de 6.3). Um texto
+  ali que parece JSON e não é recebe `JOB_INVALID`. Em qualquer outro ponteiro, um valor que começa com `{` ou `[` é um
+  caminho como outro qualquer (antes ficava isento em todos, e `ssam_evidence {file:"[x]/../../<arquivo do servidor>"}`
+  chegava ao handler sem resolver). Antes desta regra o texto virava `ws:<faixa>/{"ops":...}` e a ferramenta não achava o arquivo. O proxy do
   `studio_deliver` lê esse texto como o job (antes ia ao servidor ODC como caminho). O `o11_deliver` já lia
   (`job-patch.mjs plainJob`).
 - `PATH_OUTSIDE_WORKSPACE` de um job (`agent-paths.mjs`): a correção é o job inline na mesma chamada (o marcador
@@ -1055,6 +1059,37 @@ Regras da faixa `hosted` (em `hosted/policy.mjs`):
    caminho absoluto dentro do workspace vira `ws:<rel>`; qualquer outro caminho sob a raiz do repositório do servidor ou
    sob o perfil do usuário do servidor vira `<servidor>`. Quando o texto é o JSON do `structuredContent`, ele é
    reserializado a partir do objeto apresentado; senão trocam-se as duas formas (crua e com barras escapadas do JSON).
+5. Os caminhos DENTRO de um job também ficam no workspace (`hosted/job-paths.mjs`, `servidor/fase4-24`): `base`, as
+   partes de um job composto (`jobs[i]`, caminho ou `job:<nome>`), o `producer` de um `reference`, o `file` de um
+   `html`, o `data.source` e o `data.capture` de um `prototype`, o `data.wsdl` de um `soap` (e os `imports`) e o
+   `data.openapi.path` de um `rest` (e os `external`). Valem no job inline (objeto ou texto), num arquivo de job do
+   workspace, em cada parte e alvo `job:<nome>` que ele alcança e no job que um `patch` ou um job parcial produz sobre
+   `basedOn`. Inline, cada caminho é reescrito para o caminho absoluto do workspace (`ws:`, `agent:` com a regra do
+   espelho, absoluto dentro da área visível, ou relativo sob `ws:<faixa>/`). Num arquivo, nada é reescrito: um nome
+   relativo só vale onde o kernel procura primeiro na pasta do próprio arquivo (parte, `job:<nome>`, documento
+   WSDL/OpenAPI) e o arquivo está lá. Não são caminhos: nome de binding, URL `http(s)` de documento e as fixtures de
+   produto pelo nome da suíte (`tests/fixtures/[odc/]blank-*.oml`, `odc/insurance-reactive-r8.oml`,
+   `reactive-ui.oml`, `traditional-ui.oml`, `mobile-ui.oml`). Fora disso: `PATH_OUTSIDE_WORKSPACE` com o `pointer` do
+   job (ex.: `/job/ops/2/file`, ou `/job/jobs/0 > /ops/1/file` dentro de uma parte), antes de qualquer leitura. A recusa
+   do op `prototype` (D2) continua vindo primeiro.
+6. Um arquivo de job que a chamada alcança (o job, o job de `basedOn`, uma parte, um alvo `job:<nome>` de `base` ou
+   `producer`) e que existe, mas que o portão não lê inteiro como o kernel lê, é recusado com `JOB_PATHS_UNCHECKED`
+   (com o `pointer` e um `fix`), seja qual for o campo: o `File.ReadAllText` do kernel aceita a marca de ordem de bytes
+   UTF-8, UTF-16 LE/BE e UTF-32, então o portão decodifica UTF-8 e UTF-16 do mesmo jeito (estrito) e recusa UTF-32, uma
+   sequência de bytes inválida, um texto que não é JSON e uma chave repetida no mesmo objeto (o `JSON.parse` fica com o
+   último valor; outro leitor pode não ficar). Um arquivo que não existe continua sendo a resposta da própria ferramenta.
+7. Os documentos de integração (`soap`, `rest`) lidos para um cliente hospedado (`integration-documents.mjs`, depois do
+   portão, em `ssam_job`/`o11_job`, `studio_deliver` e `o11_deliver`): todo arquivo LOCAL que a fixação vai ler, o
+   documento e cada import/`$ref` escrito DENTRO dele (absoluto, `file:` ou relativo ao documento), fica na área visível
+   do workspace pelo caminho léxico e pelo real (os bytes vêm do caminho real); um documento lido por URL só nomeia URLs
+   (nome relativo resolve contra a URL; `file:` ou letra de unidade é recusado); um documento relativo que a pasta do job
+   não tem é recusado (o kernel o procuraria no repositório). Fora disso: `PATH_OUTSIDE_WORKSPACE` com o ponteiro do job
+   (`/ops/0/data/wsdl`) e a referência, sem ler nada. Toda URL (o documento, cada salto de redirecionamento, cada import)
+   tem de chegar a um endereço público (`hosted/public-fetch.mjs`): loopback, rede privada, link-local, faixas reservadas
+   e os endereços de metadados de nuvem dão `DOCUMENT_HOST_NOT_PUBLIC`, verificado antes do pedido e de novo na conexão
+   (DNS rebinding); o cliente nunca segue um redirecionamento sozinho. A cópia do job que a fixação grava em outra pasta
+   continua nomeando, a partir da pasta do job, a `base` e os `producer` `job:<nome>` e os documentos dos outros ops; e um
+   import fixado nunca é gravado fora de `<localRoot>/documents/<sha256>/`.
 
 ### 6.4 Argumentos de caminho por ferramenta
 

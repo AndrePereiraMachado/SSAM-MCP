@@ -804,7 +804,8 @@ A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensai
     `867cf3c9` e `b37715e1`, sobre o 23º envio `e589be22`). Os quatro arquivos e o teste `hosted-policy.test.mjs` têm
     lá os mesmos bytes do `main`. As próximas cópias para esta caixa saem dessa branch (ou de uma linha que a contenha),
     não de `servidor/fase4-23`.
-  - **24º envio** (`server/r24`): a cópia saiu de `servidor/fase4-24` (`a945838b`), que nasceu de
+  - **24º envio** (`server/r24`): a cópia saiu de `servidor/fase4-24` (`a945838b`, depois `a415531d` com as correções dos caminhos de job hospedado, do
+    lock de partida do worker e dos documentos de integração), que nasceu de
     `servidor/fase4-23-linux` (`b37715e1`). Conferido blob a blob: os quatro arquivos, os do worker O11 e todos os outros
     arquivos das duas caixas (fora os do SSAM-MCP) são iguais aos da linha.
 - O índice do `ssam_discover` e os outros caches de `/app` se perdem a cada container novo: 1 a 2 min de aquecimento

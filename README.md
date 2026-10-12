@@ -24,7 +24,7 @@ Os arquivos que existem nas duas caixas estão em [`SHARED.md`](SHARED.md), com 
 - Cada caixa guarda o caminho relativo original. A raiz da caixa é a raiz do repositório antigo. Por isso os links dos
   `.csproj` (`../../../../kernel/...`), os imports `../platforms/odc/facade` e os scripts funcionam sem mudança.
 - Contagem: `server/` 5155 arquivos, `agent/` 125, 68 nas duas. É a contagem da cópia, sem os arquivos do SSAM-MCP.
-  No 24º (`server/r24`): `server/` 6049, `agent/` 145, 76 nas duas.
+  No 24º (`server/r24`): `server/` 6054, `agent/` 145, 76 nas duas.
 - Atualizado em 2026-10-10 para o 22º envio: `servidor/fase4-22` (`1fbfa377e243cbd3262000089a70456eed623882`), a
   revisão que está no ar. Entraram em `server/` os 68 arquivos de `e7b2119b..1fbfa377` (53 alterados, 15 novos),
   com os bytes da revisão. Ficaram fora, pela mesma regra da cópia: os overlays de `scripts/release` e
@@ -46,6 +46,13 @@ Os arquivos que existem nas duas caixas estão em [`SHARED.md`](SHARED.md), com 
     `docs/FLUXO-O11.md`.
   - Conferido: os 6193 arquivos das duas caixas que vêm da linha (fora os do SSAM-MCP e o `.dockerignore`) têm o mesmo
     blob de `a945838b`, inclusive os quatro arquivos de Linux e os do worker O11.
+  - Depois, `a945838b..a415531d` (`a415531d2591bdc0c80400fc7d20b179f9653ed3`): os caminhos dentro de um job hospedado
+    ficam no workspace do cliente, o lock de partida do worker nomeia a instância do processo (pid reaproveitado sob o
+    `docker-init`), os testes que rodam o código do agente pulam quando a caixa agent não está ao lado, o arquivo de job
+    que o portão não lê inteiro vira `JOB_PATHS_UNCHECKED` e os documentos de integração só vêm do workspace do cliente e
+    de URLs públicas. São 14 caminhos (5 novos, 9 alterados), 15 entradas: todos em `server/`, e `docs/FASE2-AGENTE.md`
+    também em `agent/` (hash novo no `SHARED.md`). Conferido de novo: os 6198 arquivos das duas caixas que vêm da linha
+    têm o mesmo blob de `a415531d`.
 
 ## Aviso: o servidor no ar não mudou
 

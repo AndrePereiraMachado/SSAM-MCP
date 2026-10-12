@@ -201,7 +201,8 @@ test('23rd release: a list of ssam_map targets and the check-job {basedOn, patch
   assert.deepEqual(h.calls.at(-1).args.query, { basedOn: { job: ws('o11', 'jobs', 'a.json'), sha256: SHA }, job: ws('o11', 'jobs', 'partial.json') });
   const text = '{"ops":[{"op":"logic","data":{"actions":[{"name":"A"}]}}]}';
   await h.gate('ssam_reference')({ lane: 'odc', kind: 'check-job', query: { basedOn: { job: 'ws:odc/a.json', sha256: SHA }, job: text } });
-  assert.equal(h.calls.at(-1).args.query.job, text, 'a partial job as JSON text is not a path');
+  // fase4-24 item 1: on a job pointer the JSON text is the job itself, parsed by the gate (its paths are then confined).
+  assert.deepEqual(h.calls.at(-1).args.query.job, JSON.parse(text), 'a partial job as JSON text is not a path: the gate parsed it');
   const inline = { ops: [], job: 'not a path of this tool' };
   await h.gate('ssam_reference')({ lane: 'odc', kind: 'check-job', query: inline });
   assert.deepEqual(h.calls.at(-1).args.query, inline, 'an inline job is the job itself');

@@ -21,7 +21,8 @@
 //   - stopping a worker (stale kernel, other installation) asks it to shut down; a process that accepted and is still
 //     alive 10 s later, with the creation time it had when its ping named it on this port, is terminated and waited
 //     for (kernel/scripts/anvil_worker.py stop does the same); a pid whose creation time changed is never touched;
-//   - starting one takes the startup lock file of worker_process.py (<local>/worker-<port>.lock), launches it detached
+//   - starting one takes the startup lock file of worker_process.py (<local>/worker-<port>.lock, which names the process
+//     instance: a lock of an earlier process with the same pid, of another boot or of a reused pid is left over), launches it detached
 //     and waits for its ping. There is no event that says "listening" outside the worker's own log, so the ping is
 //     consulted with backoff (250 ms doubling to 1 s) until a deadline (25 s O11, 90 s ODC) or until the child exits;
 //   - a worker that loaded a kernel older than the CLI on disk is shut down and restarted when idle, served (with a
@@ -36,7 +37,7 @@
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { spawn, execFile } from 'node:child_process';
 import { anvilRoot, workspaceRoot, o11Lane } from './workspace.mjs';
 import { o11LaneOf, readAuthorityKey } from './o11-lane.mjs';
@@ -202,18 +203,59 @@ export async function stopWorker(target, status, deps = {}) {
   return { stopped: false, note: `the worker on port ${port} accepted the shutdown but is still there after ${Math.round(waitMs / 1000)} s; ${why}, so nothing was terminated` };
 }
 
-// worker_process.startup_lock: one starter per port, across Python and Node. A lock whose owner is gone (or older
-// than any startup) is removed; a live owner is waited for with the same backoff until the deadline.
-export async function withStartupLock(local, port, waitMs, fn, { now = Date.now } = {}) {
+// The identity of this process instance, named in every startup lock it writes (item 2 of the 24th rehearsal,
+// C:\t\r24f\ENSAIO-24.md): under docker-init the server is always pid 7, so a lock {pid:7, owner:'node', birth:null} left by
+// a server stopped during its warm-up looked alive to the next server (pid 7 again): the warm-up ended after 90 s with
+// "worker startup lock did not clear" and the first ODC call waited until the lock was STALE_LOCK_SECONDS old. Now the
+// lock carries a random instance id, the start time of the process as the kernel counts it (Linux: the start field of
+// /proc/self/stat, the value worker_process.birth writes, so worker_process.py tells a reused pid apart too) and the boot
+// id of the host (/proc/sys/kernel/random/boot_id, the same in every container of one boot).
+const INSTANCE = randomUUID();
+// The start time of a process (field 22 of /proc/<pid>/stat, clock ticks after boot), or null (Windows, gone, no /proc).
+export function procBirth(pid, { read = fs.readFileSync } = {}) {
+  try { const stat = String(read(`/proc/${pid}/stat`, 'utf8')); return stat.slice(stat.lastIndexOf(')') + 1).trim().split(/\s+/)[19] ?? null; }
+  catch { return null; }
+}
+// The boot id of the running kernel, or null (Windows, no /proc).
+export function bootId({ read = fs.readFileSync } = {}) {
+  try { return String(read('/proc/sys/kernel/random/boot_id', 'utf8')).trim() || null; } catch { return null; }
+}
+let own = null;
+export const selfInstance = () => (own ??= { pid: process.pid, instance: INSTANCE,
+  birth: process.platform === 'win32' ? null : procBirth('self'), boot: process.platform === 'win32' ? null : bootId() });
+// Whether the startup lock of another starter is left over: older than any startup; written in another boot of the host;
+// written by an earlier process that had this very pid (pid 7 under docker-init: that process is gone, this one has its
+// pid); its owner is gone; or its pid now names another process (Linux: another start time). A lock of this same instance
+// (a second start inside this process) and a live owner are not. null (its owner is still writing it) is not.
+// deps: self, now, alive, birthOf, platform (tests).
+export function lockLeftOver(owner, { self = selfInstance(), now = Date.now, alive: isAlive = alive, birthOf = procBirth, platform = process.platform } = {}) {
+  if (!owner || typeof owner !== 'object') return false;
+  if (now() / 1000 - Number(owner.created) > STALE_LOCK_SECONDS) return true;
+  if (owner.boot && self.boot && owner.boot !== self.boot) return true;
+  const pid = Number(owner.pid);
+  if (pid === self.pid) return owner.instance !== self.instance;
+  if (!isAlive(pid)) return true;
+  if (platform !== 'win32' && typeof owner.birth === 'string' && owner.birth) {
+    const birth = birthOf(pid);
+    if (birth !== null && birth !== owner.birth) return true;
+  }
+  return false;
+}
+
+// worker_process.startup_lock: one starter per port, across Python and Node. A lock that is left over (lockLeftOver: its
+// owner gone, another instance with this pid, another boot, a reused pid, or older than any startup) is removed; a live
+// owner is waited for with the same backoff until the deadline. identity: lockLeftOver's deps (tests).
+export async function withStartupLock(local, port, waitMs, fn, { now = Date.now, ...identity } = {}) {
   fs.mkdirSync(local, { recursive: true });
   const file = path.join(local, `worker-${port}.lock`);
-  const token = { pid: process.pid, birth: null, created: now() / 1000, owner: 'node' };
+  const self = identity.self ?? selfInstance();
+  const token = { pid: self.pid, birth: self.birth, created: now() / 1000, owner: 'node', instance: self.instance, boot: self.boot };
   let free = false;
   const take = () => {
     try { fs.writeFileSync(file, JSON.stringify(token), { flag: 'wx', mode: 0o600 }); return (free = true); }
     catch (error) { if (error.code !== 'EEXIST') throw error; }
     const owner = readJson(file); // null while its owner is still writing it
-    if (owner && (!alive(Number(owner.pid)) || now() / 1000 - Number(owner.created) > STALE_LOCK_SECONDS)) { try { fs.unlinkSync(file); } catch { /* raced */ } return take(); }
+    if (lockLeftOver(owner, { now, ...identity, self })) { try { fs.unlinkSync(file); } catch { /* raced */ } return take(); }
     return false;
   };
   if (!(await until(take, waitMs, { now })) || !free) return { locked: false, note: `worker startup lock did not clear: ${file}` };
