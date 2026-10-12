@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import { CHUNK_BYTES, createAccessAlertsReader, createAuditReader, createServerLogReader } from '../readers.mjs';
+import { CHUNK_BYTES, createAccessAlertsReader, createAuditReader, createDailyReader, createServerLogReader } from '../readers.mjs';
 import { appendLines, clock, line, makeEnv, startConsole, tempDir, writeLines } from './helpers.mjs';
 import { writeAudit } from './scenario.mjs';
 
@@ -213,6 +213,37 @@ test('audit: a past day read to its end 60 s after the UTC midnight is marked co
   now.set('2026-10-12T00:01:00Z');
   await r.tick();
   assert.equal(r.checkpoint().files['20261011'].complete, true);
+});
+
+// DESIGN-QUALIDADE 4.1: the audit reader generalized into createDailyReader({prefix, maxLineBytes}); the quality reader caps
+// a line at 4096 bytes with its newline (skipped and counted before any parse), reads the .gz of a past day, and the audit
+// keeps its 1 MiB cap and its own files.
+test('daily reader: quality-* with the 4096-byte cap (newline included), gz of a past day, audit files untouched', async () => {
+  const dir = tempDir('rd');
+  const now = clock('2026-10-12T15:00:00Z');
+  const seen = [];
+  const r = createDailyReader({ dir, prefix: 'quality', maxLineBytes: 4096, now, onRecord: l => seen.push(l.n) });
+  const sized = (n, bytes) => { const base = JSON.stringify({ time: '2026-10-12T13:00:00.000Z', n, pad: '' }); return base.slice(0, -2) + 'x'.repeat(bytes - 1 - base.length) + '"}'; };
+  const fit = sized(1, 4096), over = sized(2, 4097);
+  assert.equal(Buffer.byteLength(fit + '\n'), 4096);
+  assert.equal(Buffer.byteLength(over + '\n'), 4097);
+  fs.writeFileSync(path.join(dir, 'quality-20261012.jsonl'), fit + '\n' + over + '\n' + line({ time: '2026-10-12T13:00:01.000Z', n: 3 }));
+  fs.writeFileSync(path.join(dir, 'quality-20261011.jsonl.gz'), zlib.gzipSync(Buffer.from(line({ time: '2026-10-11T13:00:00.000Z', n: 0 }))));
+  writeAudit(dir, [{ time: '2026-10-12T13:00:00.000Z', n: 99, pad: 'y'.repeat(5000) }]);
+  assert.equal(await r.tick(), true);
+  assert.deepEqual(seen, [0, 1, 3], 'gz day first, then the plain day; the 4097-byte line skipped');
+  assert.equal(r.stats.skipped, 1);
+  assert.deepEqual(Object.keys(r.checkpoint().files).sort(), ['20261011', '20261012']);
+  assert.equal(r.checkpoint().files['20261011'].complete, true);
+  assert.equal(r.checkpoint().files['20261012'].offset, fs.statSync(path.join(dir, 'quality-20261012.jsonl')).size);
+  // the audit reader sees only audit-*, with its 1 MiB cap (a 5 KB line passes)
+  const audit = [];
+  const a = createAuditReader({ dir, now, onRecord: l => audit.push(l.n) });
+  assert.equal(await a.tick(), true);
+  assert.deepEqual(audit, [99]);
+  assert.deepEqual(Object.keys(a.checkpoint().files), ['20261012']);
+  assert.throws(() => createDailyReader({ dir, prefix: '../x', onRecord: () => {} }), /prefix/);
+  assert.throws(() => createDailyReader({ dir, prefix: 'quality', maxLineBytes: 1, onRecord: () => {} }), /maxLineBytes/);
 });
 
 test('access-alerts: incremental, a replaced file is read again from the start', async () => {
