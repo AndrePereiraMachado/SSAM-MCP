@@ -129,3 +129,41 @@ test('mutations: JSON only, exact confirmation, 501 without renew, 409 on a revo
     assert.deepEqual(ack, { ok: true, id: 'disco:/', until: '2026-10-14T02:51:08Z' });
   });
 });
+
+// DESIGN-QUALIDADE 4.6: /api/quality from quality-*.json, vazio 30 dias unavailable, the exports with the headers of 4.4.
+test('quality: ranges, one day, one license, the unavailable answer and the exports', async () => {
+  await withServer(async (base) => {
+    const get = async (p, h = {}) => (await fetch(base + p, { headers: { ...KEY, ...h } })).json();
+    assert.equal((await get('/api/quality?range=today')).range.kind, 'today');
+    assert.equal((await get('/api/quality')).range.days, 7);
+    assert.equal((await get('/api/quality?range=30d')).range.days, 30);
+    const day = await get('/api/quality?range=day&day=2026-10-08');
+    assert.deepEqual([day.range.kind, day.range.from, day.range.to], ['day', '2026-10-08', '2026-10-08']);
+    const one = await get('/api/quality?range=7d&token=tok_0000000a1fa0');
+    assert.equal(one.token, 'tok_0000000a1fa0');
+    assert.deepEqual(one.byCustomer.map((c) => c.token), ['tok_0000000a1fa0']);
+    assert.equal((await get('/api/quality?range=30d', { 'X-Mock-Scenario': 'vazio' })).available, false);
+    assert.equal((await get('/api/quality?range=7d', { 'X-Mock-Scenario': 'vazio' })).available, true);
+    const csv = await fetch(`${base}/api/quality/export?range=today&table=erros&format=csv`, { headers: KEY });
+    assert.equal(csv.status, 200);
+    assert.equal(csv.headers.get('content-type'), 'text/csv; charset=utf-8');
+    assert.equal(csv.headers.get('content-disposition'), 'attachment; filename="ssam-qualidade-erros-2026-10-12-2026-10-12.csv"');
+    assert.equal(csv.headers.get('cache-control'), 'no-store');
+    const bytes = Buffer.from(await csv.arrayBuffer());
+    assert.deepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf], 'UTF-8 BOM');
+    const text = bytes.toString('utf8');
+    assert.ok(text.startsWith('﻿Código;Ocorrências;% das falhas;Ferramentas;Clientes;Última vez\r\n'), JSON.stringify(text.slice(0, 80)));
+    const all = await fetch(`${base}/api/quality/export?range=7d&table=tudo`, { headers: KEY });
+    assert.equal(all.headers.get('content-type'), 'application/json; charset=utf-8');
+    assert.equal((await all.json()).range.days, 7);
+    const lines = await fetch(`${base}/api/quality/export?range=30d&table=linhas`, { headers: KEY });
+    assert.equal(lines.status, 400);
+    assert.equal((await lines.json()).error.field, 'range');
+    const bad = await fetch(`${base}/api/quality/export?range=7d&table=nada`, { headers: KEY });
+    assert.equal(bad.status, 400);
+    await bad.text();
+    const noKey = await fetch(`${base}/api/quality`);
+    assert.equal(noKey.status, 401);
+    await noKey.text();
+  });
+});

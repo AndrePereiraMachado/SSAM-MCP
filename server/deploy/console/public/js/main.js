@@ -1,4 +1,4 @@
-// Boot of the owner console (DESIGN.md 6.2, 6.3, 6.8, 6.9): key from #k=, hash routes, status line, tabs,
+// Boot of the owner console (DESIGN.md 6.2, 6.3, 6.8, 6.9; the Qualidade tab of DESIGN-QUALIDADE 4.5, shortcut 4): key from #k=, hash routes, status line, tabs,
 // polling per view (paused while the document is hidden, backoff on errors), theme, keyboard shortcuts, notices.
 
 import { api, initKey, getKey, on, clock, store } from './api.js';
@@ -9,6 +9,7 @@ import { createDialogs } from './dialogs.js';
 import createVisao from './views/visao.js';
 import createLicencas from './views/licencas.js';
 import createUso from './views/uso.js';
+import createQualidade from './views/qualidade.js';
 import createAgentes from './views/agentes.js';
 import createVps from './views/vps.js';
 import createEventos from './views/eventos.js';
@@ -447,7 +448,7 @@ function inField(el) {
 function onKey(e) {
   if (state.dead || e.ctrlKey || e.metaKey || e.altKey) return;
   if ($('dlg').open || inField(e.target)) return;
-  if (e.key >= '1' && e.key <= '7') {
+  if (e.key >= '1' && e.key <= '8') {
     const v = VIEWS[Number(e.key) - 1];
     if (v) {
       e.preventDefault();
@@ -541,7 +542,7 @@ function boot() {
 
   dialogs = createDialogs(ctx);
   const makers = {
-    visao: createVisao, licencas: createLicencas, uso: createUso, agentes: createAgentes, vps: createVps,
+    visao: createVisao, licencas: createLicencas, uso: createUso, qualidade: createQualidade, agentes: createAgentes, vps: createVps,
     eventos: createEventos, historico: createHistorico,
   };
   for (const v of VIEWS) {

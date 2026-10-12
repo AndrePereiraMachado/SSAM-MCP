@@ -730,3 +730,27 @@ pre.snippet {
   .dlg-form { padding: 16px; }
   .snippet-head { flex-wrap: wrap; }
 }
+
+/* ---------------------------------------------------------------- Qualidade (DESIGN-QUALIDADE 4.5) */
+
+/* A text button that cannot act now (Exportar linhas on 30 dias): muted, no underline. */
+.tbtn:disabled { color: var(--muted); cursor: not-allowed; text-decoration: none; }
+
+/* The Voltas até entregar table ends with a Todos row from the totals: a table row, not a muted footer line. */
+.grid tfoot tr.total > th, .grid tfoot tr.total > td {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  border-top: 1px solid var(--line-strong);
+}
+
+/* The Resumo key-value table keeps its two columns at phone width (the other key-value tables stack). */
+@media (max-width: 720px) {
+  .kv.kv-keep { display: table; width: 100%; }
+  .kv.kv-keep thead { display: table-header-group; }
+  .kv.kv-keep tbody { display: table-row-group; }
+  .kv.kv-keep tr { display: table-row; border-bottom: 0; }
+  .kv.kv-keep th, .kv.kv-keep td { display: table-cell; width: auto; padding: 6px 8px 6px 0; border-bottom: 1px solid var(--line); }
+  .kv.kv-keep tbody th { width: 38%; white-space: normal; padding-top: 6px; }
+}

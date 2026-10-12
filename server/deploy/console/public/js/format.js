@@ -382,3 +382,13 @@ export function fmtMachine(m) {
   if (!m || !m.name) return DASH;
   return m.user ? `${m.name} (${m.user})` : String(m.name);
 }
+
+/**
+ * Two values of one cell (p50 / p90 of the Qualidade tables): `1,2 s / 4,0 s` with the given formatter; a dash when both
+ * are null or both are 0 (DESIGN-QUALIDADE 4.5).
+ */
+export function fmtPair(a, b, fmt = fmtInt) {
+  const none = (v) => v == null || !Number.isFinite(Number(v));
+  if ((none(a) && none(b)) || (Number(a) === 0 && Number(b) === 0)) return DASH;
+  return `${fmt(a)} / ${fmt(b)}`;
+}

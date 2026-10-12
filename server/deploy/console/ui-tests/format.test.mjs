@@ -188,3 +188,17 @@ test('toMs accepts numbers, ISO strings and Dates; NaN otherwise', () => {
   assert.ok(Number.isNaN(F.toMs(null)));
   assert.ok(Number.isNaN(F.toMs('ontem')));
 });
+
+// DESIGN-QUALIDADE 4.5: a p50 / p90 pair in one cell.
+test('fmtPair: `1,2 s / 4,0 s`, a dash when both are null or both are 0', () => {
+  assert.equal(F.fmtPair(1200, 4000, F.fmtDuration), '1,2 s / 4,0 s');
+  assert.equal(F.fmtPair(0, 5600, F.fmtDuration), '0 ms / 5,6 s');
+  assert.equal(F.fmtPair(4, 8), '4 / 8');
+  assert.equal(F.fmtPair(0, 1), '0 / 1');
+  assert.equal(F.fmtPair(1234, 56789), '1.234 / 56.789');
+  assert.equal(F.fmtPair(0, 0, F.fmtDuration), '—');
+  assert.equal(F.fmtPair(null, null, F.fmtDuration), '—');
+  assert.equal(F.fmtPair(undefined, null), '—');
+  assert.equal(F.fmtPair(null, 3), '— / 3');
+  assert.equal(F.fmtPair(46105, 364800, F.fmtDuration), '46,1 s / 6 min 04 s');
+});

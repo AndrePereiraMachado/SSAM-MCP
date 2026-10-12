@@ -169,6 +169,10 @@ export default function createLicencas(ctx, section) {
         label: 'Uso',
         value: (cell) => cell.append(textButton('Ver uso desta licença', () => ctx.navigate('uso', { token: lic.id }), { dataset: { fk: 'uso' } })),
       },
+      {
+        label: 'Qualidade',
+        value: (cell) => cell.append(textButton('Ver qualidade desta licença', () => ctx.navigate('qualidade', { token: lic.id }), { dataset: { fk: 'qualidade' } })),
+      },
     ];
     td.append(h('div', { class: 'detail-grid' },
       kvTable(left, { label: `Detalhes de ${lic.customer}` }),

@@ -1,0 +1,1292 @@
+{
+  "ok": true,
+  "now": "2026-10-13T02:51:08Z",
+  "range": {
+    "kind": "7d",
+    "from": "2026-10-06",
+    "to": "2026-10-12",
+    "days": 7,
+    "timeZone": "America/Sao_Paulo"
+  },
+  "indexing": {
+    "state": "running",
+    "progress": 0.42,
+    "detail": "registros de qualidade"
+  },
+  "available": true,
+  "firstDay": "2026-10-06",
+  "totals": {
+    "calls": 419,
+    "failures": 136,
+    "refusals": 97,
+    "delivered": 61,
+    "uncertain": 0,
+    "problems": 423,
+    "withPatch": 229,
+    "problemPhases": {
+      "preflight": 331,
+      "verify": 92
+    },
+    "normalizations": 120,
+    "normalizedCalls": 63,
+    "sharedCalls": 10,
+    "chains": 61,
+    "chainsOpen": 10,
+    "turnsPerChainP50": 5,
+    "turnsPerChainP90": 8,
+    "callsPerChainP50": 6,
+    "callsPerChainP90": 8,
+    "refusalsBeforeP50": 1,
+    "refusalsBeforeMax": 5,
+    "wallP50Ms": 298354,
+    "wallP90Ms": 1577075,
+    "idlePct": 10.9,
+    "gapP50Ms": 14096,
+    "gapP90Ms": 31490,
+    "gaps": 242,
+    "longGaps": 35
+  },
+  "errors": [
+    {
+      "code": "PREFLIGHT_REFUSED",
+      "count": 92,
+      "pctOfFailures": 67.6,
+      "tools": [
+        {
+          "tool": "o11_deliver",
+          "count": 60
+        },
+        {
+          "tool": "studio_deliver",
+          "count": 32
+        }
+      ],
+      "customers": 5,
+      "lastAt": "2026-10-12T19:24:32.400Z"
+    },
+    {
+      "code": "AGENT_NOT_CONNECTED",
+      "count": 14,
+      "pctOfFailures": 10.3,
+      "tools": [
+        {
+          "tool": "o11_studio",
+          "count": 9
+        },
+        {
+          "tool": "o11_deliver",
+          "count": 5
+        }
+      ],
+      "customers": 4,
+      "lastAt": "2026-10-12T20:30:40.300Z"
+    },
+    {
+      "code": "CREATE_APP_FAILED",
+      "count": 5,
+      "pctOfFailures": 3.7,
+      "tools": [
+        {
+          "tool": "o11_environment",
+          "count": 5
+        }
+      ],
+      "customers": 1,
+      "lastAt": "2026-10-12T18:03:09.400Z"
+    },
+    {
+      "code": "DOCTOR_LANE_UNUSABLE",
+      "count": 5,
+      "pctOfFailures": 3.7,
+      "tools": [
+        {
+          "tool": "ssam_doctor",
+          "count": 5
+        }
+      ],
+      "customers": 1,
+      "lastAt": "2026-10-12T18:00:02.615Z"
+    },
+    {
+      "code": "INTENT_REQUIRED",
+      "count": 5,
+      "pctOfFailures": 3.7,
+      "tools": [
+        {
+          "tool": "ssam_discover",
+          "count": 5
+        }
+      ],
+      "customers": 1,
+      "lastAt": "2026-10-12T18:17:06.038Z"
+    },
+    {
+      "code": "MODULE_NOT_FOUND",
+      "count": 5,
+      "pctOfFailures": 3.7,
+      "tools": [
+        {
+          "tool": "o11_studio",
+          "count": 5
+        }
+      ],
+      "customers": 1,
+      "lastAt": "2026-10-12T18:06:13.300Z"
+    },
+    {
+      "code": "RPC_32602",
+      "count": 5,
+      "pctOfFailures": 3.7,
+      "tools": [
+        {
+          "tool": "?",
+          "count": 5
+        }
+      ],
+      "customers": 1,
+      "lastAt": "2026-10-12T20:30:41.002Z"
+    },
+    {
+      "code": "VALIDATION_REFUSED",
+      "count": 5,
+      "pctOfFailures": 3.7,
+      "tools": [
+        {
+          "tool": "studio_deliver",
+          "count": 5
+        }
+      ],
+      "customers": 1,
+      "lastAt": "2026-10-12T19:25:13.000Z"
+    }
+  ],
+  "problems": [
+    {
+      "code": "EXPR_UNKNOWN_IDENTIFIER",
+      "count": 100,
+      "refusals": 27,
+      "withPatch": 82,
+      "tools": [
+        {
+          "tool": "o11_deliver",
+          "count": 82
+        },
+        {
+          "tool": "studio_deliver",
+          "count": 18
+        }
+      ],
+      "customers": 5
+    },
+    {
+      "code": "EXPRESSION_SYNTAX",
+      "count": 53,
+      "refusals": 23,
+      "withPatch": 20,
+      "tools": [
+        {
+          "tool": "o11_deliver",
+          "count": 40
+        },
+        {
+          "tool": "studio_deliver",
+          "count": 13
+        }
+      ],
+      "customers": 4
+    },
+    {
+      "code": "FUNCTION_UNKNOWN",
+      "count": 52,
+      "refusals": 23,
+      "withPatch": 27,
+      "tools": [
+        {
+          "tool": "o11_deliver",
+          "count": 34
+        },
+        {
+          "tool": "studio_deliver",
+          "count": 18
+        }
+      ],
+      "customers": 4
+    },
+    {
+      "code": "OTHER_CODES",
+      "count": 42,
+      "refusals": 22,
+      "withPatch": 20,
+      "tools": [
+        {
+          "tool": "o11_deliver",
+          "count": 27
+        },
+        {
+          "tool": "studio_deliver",
+          "count": 15
+        }
+      ],
+      "customers": 3
+    },
+    {
+      "code": "ENTITY_UNKNOWN",
+      "count": 39,
+      "refusals": 15,
+      "withPatch": 22,
+      "tools": [
+        {
+          "tool": "o11_deliver",
+          "count": 22
+        },
+        {
+          "tool": "studio_deliver",
+          "count": 17
+        }
+      ],
+      "customers": 3
+    },
+    {
+      "code": "NATIVE_UNLISTED",
+      "count": 35,
+      "refusals": 15,
+      "withPatch": 20,
+      "tools": [
+        {
+          "tool": "o11_deliver",
+          "count": 18
+        },
+        {
+          "tool": "studio_deliver",
+          "count": 17
+        }
+      ],
+      "customers": 3
+    },
+    {
+      "code": "TYPE_MISMATCH",
+      "count": 35,
+      "refusals": 17,
+      "withPatch": 18,
+      "tools": [
+        {
+          "tool": "o11_deliver",
+          "count": 24
+        },
+        {
+          "tool": "studio_deliver",
+          "count": 11
+        }
+      ],
+      "customers": 3
+    },
+    {
+      "code": "ATTRIBUTE_UNKNOWN",
+      "count": 33,
+      "refusals": 17,
+      "withPatch": 14,
+      "tools": [
+        {
+          "tool": "o11_deliver",
+          "count": 27
+        },
+        {
+          "tool": "studio_deliver",
+          "count": 6
+        }
+      ],
+      "customers": 3
+    },
+    {
+      "code": "ExpressionUnknownObject",
+      "count": 29,
+      "refusals": 18,
+      "withPatch": 6,
+      "tools": [
+        {
+          "tool": "o11_deliver",
+          "count": 21
+        },
+        {
+          "tool": "studio_deliver",
+          "count": 8
+        }
+      ],
+      "customers": 5
+    },
+    {
+      "code": "PROPERTY_NOT_WRITABLE",
+      "count": 5,
+      "refusals": 5,
+      "withPatch": 0,
+      "tools": [
+        {
+          "tool": "o11_deliver",
+          "count": 5
+        }
+      ],
+      "customers": 1
+    }
+  ],
+  "rules": [
+    {
+      "rule": "SORT_KEYS_SPLIT",
+      "count": 62,
+      "calls": 42,
+      "tools": [
+        {
+          "tool": "studio_deliver",
+          "count": 41
+        },
+        {
+          "tool": "o11_deliver",
+          "count": 21
+        }
+      ],
+      "customers": 4
+    },
+    {
+      "rule": "LIST_ENTITY_SEGMENT_DROPPED",
+      "count": 32,
+      "calls": 32,
+      "tools": [
+        {
+          "tool": "o11_deliver",
+          "count": 21
+        },
+        {
+          "tool": "studio_deliver",
+          "count": 11
+        }
+      ],
+      "customers": 3
+    },
+    {
+      "rule": "NULL_FUNCTION_REWRITTEN",
+      "count": 26,
+      "calls": 26,
+      "tools": [
+        {
+          "tool": "o11_deliver",
+          "count": 14
+        },
+        {
+          "tool": "studio_deliver",
+          "count": 12
+        }
+      ],
+      "customers": 4
+    }
+  ],
+  "phases": [
+    {
+      "tool": "o11_deliver",
+      "calls": 99,
+      "shared": 0,
+      "total": {
+        "p50": 26576,
+        "p90": 60635
+      },
+      "queue": {
+        "p50": 0,
+        "p90": 0
+      },
+      "capture": {
+        "p50": 1471,
+        "p90": 1951
+      },
+      "compile": {
+        "p50": 6977,
+        "p90": 9350
+      },
+      "studio": {
+        "p50": 2445,
+        "p90": 12347
+      },
+      "verify": {
+        "p50": 0,
+        "p90": 2361
+      },
+      "publish": {
+        "p50": 0,
+        "p90": 0
+      },
+      "environment": {
+        "p50": 0,
+        "p90": 0
+      },
+      "transfer": {
+        "p50": 8783,
+        "p90": 9478
+      },
+      "rest": {
+        "p50": 387,
+        "p90": 565
+      },
+      "transferBytesAvg": 110357,
+      "kernelRuns": 114,
+      "kernelCold": 67
+    },
+    {
+      "tool": "ssam_reference",
+      "calls": 75,
+      "shared": 0,
+      "total": {
+        "p50": 432,
+        "p90": 747
+      },
+      "queue": {
+        "p50": 0,
+        "p90": 0
+      },
+      "capture": {
+        "p50": 0,
+        "p90": 0
+      },
+      "compile": {
+        "p50": 0,
+        "p90": 0
+      },
+      "studio": {
+        "p50": 0,
+        "p90": 0
+      },
+      "verify": {
+        "p50": 0,
+        "p90": 0
+      },
+      "publish": {
+        "p50": 0,
+        "p90": 0
+      },
+      "environment": {
+        "p50": 0,
+        "p90": 0
+      },
+      "transfer": {
+        "p50": 0,
+        "p90": 0
+      },
+      "rest": {
+        "p50": 432,
+        "p90": 747
+      },
+      "transferBytesAvg": 0,
+      "kernelRuns": 0,
+      "kernelCold": 0
+    },
+    {
+      "tool": "studio_deliver",
+      "calls": 59,
+      "shared": 10,
+      "total": {
+        "p50": 22020,
+        "p90": 52647
+      },
+      "queue": {
+        "p50": 0,
+        "p90": 0
+      },
+      "capture": {
+        "p50": 1549,
+        "p90": 2100
+      },
+      "compile": {
+        "p50": 6823,
+        "p90": 8997
+      },
+      "studio": {
+        "p50": 2410,
+        "p90": 11976
+      },
+      "verify": {
+        "p50": 0,
+        "p90": 2369
+      },
+      "publish": {
+        "p50": 0,
+        "p90": 5448
+      },
+      "environment": {
+        "p50": 0,
+        "p90": 0
+      },
+      "transfer": {
+        "p50": 8768,
+        "p90": 9000
+      },
+      "rest": {
+        "p50": 394,
+        "p90": 567
+      },
+      "transferBytesAvg": 996531,
+      "kernelRuns": 54,
+      "kernelCold": 16
+    },
+    {
+      "tool": "ssam_discover",
+      "calls": 46,
+      "shared": 0,
+      "total": {
+        "p50": 385,
+        "p90": 3383
+      },
+      "queue": {
+        "p50": 0,
+        "p90": 0
+      },
+      "capture": {
+        "p50": 0,
+        "p90": 0
+      },
+      "compile": {
+        "p50": 0,
+        "p90": 0
+      },
+      "studio": {
+        "p50": 0,
+        "p90": 0
+      },
+      "verify": {
+        "p50": 0,
+        "p90": 0
+      },
+      "publish": {
+        "p50": 0,
+        "p90": 0
+      },
+      "environment": {
+        "p50": 0,
+        "p90": 0
+      },
+      "transfer": {
+        "p50": 0,
+        "p90": 0
+      },
+      "rest": {
+        "p50": 385,
+        "p90": 3383
+      },
+      "transferBytesAvg": 54783,
+      "kernelRuns": 0,
+      "kernelCold": 0
+    },
+    {
+      "tool": "ssam_map",
+      "calls": 41,
+      "shared": 0,
+      "total": {
+        "p50": 952,
+        "p90": 3383
+      },
+      "queue": {
+        "p50": 0,
+        "p90": 0
+      },
+      "capture": {
+        "p50": 588,
+        "p90": 2100
+      },
+      "compile": {
+        "p50": 0,
+        "p90": 0
+      },
+      "studio": {
+        "p50": 0,
+        "p90": 0
+      },
+      "verify": {
+        "p50": 0,
+        "p90": 0
+      },
+      "publish": {
+        "p50": 0,
+        "p90": 0
+      },
+      "environment": {
+        "p50": 0,
+        "p90": 0
+      },
+      "transfer": {
+        "p50": 203,
+        "p90": 669
+      },
+      "rest": {
+        "p50": 108,
+        "p90": 891
+      },
+      "transferBytesAvg": 424295,
+      "kernelRuns": 0,
+      "kernelCold": 0
+    },
+    {
+      "tool": "o11_environment",
+      "calls": 30,
+      "shared": 0,
+      "total": {
+        "p50": 11510,
+        "p90": 117306
+      },
+      "queue": {
+        "p50": 0,
+        "p90": 0
+      },
+      "capture": {
+        "p50": 0,
+        "p90": 0
+      },
+      "compile": {
+        "p50": 0,
+        "p90": 8000
+      },
+      "studio": {
+        "p50": 0,
+        "p90": 999
+      },
+      "verify": {
+        "p50": 0,
+        "p90": 0
+      },
+      "publish": {
+        "p50": 0,
+        "p90": 0
+      },
+      "environment": {
+        "p50": 10464,
+        "p90": 105000
+      },
+      "transfer": {
+        "p50": 0,
+        "p90": 0
+      },
+      "rest": {
+        "p50": 798,
+        "p90": 5400
+      },
+      "transferBytesAvg": 0,
+      "kernelRuns": 10,
+      "kernelCold": 10
+    },
+    {
+      "tool": "o11_studio",
+      "calls": 24,
+      "shared": 0,
+      "total": {
+        "p50": 1922,
+        "p90": 13355
+      },
+      "queue": {
+        "p50": 0,
+        "p90": 0
+      },
+      "capture": {
+        "p50": 0,
+        "p90": 0
+      },
+      "compile": {
+        "p50": 0,
+        "p90": 0
+      },
+      "studio": {
+        "p50": 151,
+        "p90": 13000
+      },
+      "verify": {
+        "p50": 0,
+        "p90": 0
+      },
+      "publish": {
+        "p50": 0,
+        "p90": 0
+      },
+      "environment": {
+        "p50": 0,
+        "p90": 0
+      },
+      "transfer": {
+        "p50": 0,
+        "p90": 0
+      },
+      "rest": {
+        "p50": 908,
+        "p90": 2000
+      },
+      "transferBytesAvg": 45000,
+      "kernelRuns": 0,
+      "kernelCold": 0
+    },
+    {
+      "tool": "ssam_doctor",
+      "calls": 20,
+      "shared": 0,
+      "total": {
+        "p50": 795,
+        "p90": 2615
+      },
+      "queue": {
+        "p50": 0,
+        "p90": 0
+      },
+      "capture": {
+        "p50": 0,
+        "p90": 0
+      },
+      "compile": {
+        "p50": 0,
+        "p90": 0
+      },
+      "studio": {
+        "p50": 543,
+        "p90": 2100
+      },
+      "verify": {
+        "p50": 0,
+        "p90": 0
+      },
+      "publish": {
+        "p50": 0,
+        "p90": 0
+      },
+      "environment": {
+        "p50": 0,
+        "p90": 0
+      },
+      "transfer": {
+        "p50": 0,
+        "p90": 0
+      },
+      "rest": {
+        "p50": 308,
+        "p90": 696
+      },
+      "transferBytesAvg": 0,
+      "kernelRuns": 0,
+      "kernelCold": 0
+    },
+    {
+      "tool": "o11_inspect",
+      "calls": 15,
+      "shared": 0,
+      "total": {
+        "p50": 202,
+        "p90": 1748
+      },
+      "queue": {
+        "p50": 0,
+        "p90": 0
+      },
+      "capture": {
+        "p50": 0,
+        "p90": 1200
+      },
+      "compile": {
+        "p50": 0,
+        "p90": 0
+      },
+      "studio": {
+        "p50": 0,
+        "p90": 0
+      },
+      "verify": {
+        "p50": 0,
+        "p90": 0
+      },
+      "publish": {
+        "p50": 0,
+        "p90": 0
+      },
+      "environment": {
+        "p50": 0,
+        "p90": 0
+      },
+      "transfer": {
+        "p50": 0,
+        "p90": 300
+      },
+      "rest": {
+        "p50": 202,
+        "p90": 248
+      },
+      "transferBytesAvg": 25333,
+      "kernelRuns": 0,
+      "kernelCold": 0
+    },
+    {
+      "tool": "ssam_connect",
+      "calls": 5,
+      "shared": 0,
+      "total": {
+        "p50": 3767,
+        "p90": 3767
+      },
+      "queue": {
+        "p50": 0,
+        "p90": 0
+      },
+      "capture": {
+        "p50": 0,
+        "p90": 0
+      },
+      "compile": {
+        "p50": 0,
+        "p90": 0
+      },
+      "studio": {
+        "p50": 3500,
+        "p90": 3500
+      },
+      "verify": {
+        "p50": 0,
+        "p90": 0
+      },
+      "publish": {
+        "p50": 0,
+        "p90": 0
+      },
+      "environment": {
+        "p50": 0,
+        "p90": 0
+      },
+      "transfer": {
+        "p50": 0,
+        "p90": 0
+      },
+      "rest": {
+        "p50": 267,
+        "p90": 267
+      },
+      "transferBytesAvg": 0,
+      "kernelRuns": 0,
+      "kernelCold": 0
+    }
+  ],
+  "timeShare": [
+    {
+      "tool": "o11_deliver",
+      "sumMs": 3187499,
+      "queuePct": 0,
+      "capturePct": 4,
+      "compilePct": 22.1,
+      "studioPct": 14.9,
+      "verifyPct": 1.1,
+      "publishPct": 0,
+      "environmentPct": 0,
+      "transferPct": 30.1,
+      "restPct": 1.1
+    },
+    {
+      "tool": "studio_deliver",
+      "sumMs": 1374541,
+      "queuePct": 0,
+      "capturePct": 6.1,
+      "compilePct": 24.5,
+      "studioPct": 13,
+      "verifyPct": 1.2,
+      "publishPct": 2,
+      "environmentPct": 0,
+      "transferPct": 21.6,
+      "restPct": 1.5
+    },
+    {
+      "tool": "o11_environment",
+      "sumMs": 1161820,
+      "queuePct": 0,
+      "capturePct": 0,
+      "compilePct": 6.5,
+      "studioPct": 0.4,
+      "verifyPct": 0,
+      "publishPct": 0,
+      "environmentPct": 87.9,
+      "transferPct": 0,
+      "restPct": 5.2
+    },
+    {
+      "tool": "o11_studio",
+      "sumMs": 93500,
+      "queuePct": 0,
+      "capturePct": 0,
+      "compilePct": 0,
+      "studioPct": 72.5,
+      "verifyPct": 0,
+      "publishPct": 0,
+      "environmentPct": 0,
+      "transferPct": 0,
+      "restPct": 27.5
+    },
+    {
+      "tool": "ssam_map",
+      "sumMs": 54730,
+      "queuePct": 0,
+      "capturePct": 57.7,
+      "compilePct": 0,
+      "studioPct": 0,
+      "verifyPct": 0,
+      "publishPct": 0,
+      "environmentPct": 0,
+      "transferPct": 18.6,
+      "restPct": 23.6
+    },
+    {
+      "tool": "ssam_discover",
+      "sumMs": 47965,
+      "queuePct": 0,
+      "capturePct": 0,
+      "compilePct": 0,
+      "studioPct": 0,
+      "verifyPct": 0,
+      "publishPct": 0,
+      "environmentPct": 0,
+      "transferPct": 0,
+      "restPct": 100
+    },
+    {
+      "tool": "ssam_reference",
+      "sumMs": 34465,
+      "queuePct": 0,
+      "capturePct": 0,
+      "compilePct": 0,
+      "studioPct": 0,
+      "verifyPct": 0,
+      "publishPct": 0,
+      "environmentPct": 0,
+      "transferPct": 0,
+      "restPct": 100
+    },
+    {
+      "tool": "ssam_doctor",
+      "sumMs": 25075,
+      "queuePct": 0,
+      "capturePct": 0,
+      "compilePct": 0,
+      "studioPct": 63.8,
+      "verifyPct": 0,
+      "publishPct": 0,
+      "environmentPct": 0,
+      "transferPct": 0,
+      "restPct": 36.2
+    },
+    {
+      "tool": "ssam_connect",
+      "sumMs": 18835,
+      "queuePct": 0,
+      "capturePct": 0,
+      "compilePct": 0,
+      "studioPct": 92.9,
+      "verifyPct": 0,
+      "publishPct": 0,
+      "environmentPct": 0,
+      "transferPct": 0,
+      "restPct": 7.1
+    },
+    {
+      "tool": "o11_inspect",
+      "sumMs": 10470,
+      "queuePct": 0,
+      "capturePct": 57.3,
+      "compilePct": 0,
+      "studioPct": 0,
+      "verifyPct": 0,
+      "publishPct": 0,
+      "environmentPct": 0,
+      "transferPct": 14.3,
+      "restPct": 28.4
+    }
+  ],
+  "rounds": [
+    {
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "chains": 20,
+      "open": 0,
+      "turnsP50": 4,
+      "turnsP90": 8,
+      "callsP50": 8,
+      "callsP90": 18,
+      "refusalsBeforeP50": 1,
+      "refusalsBeforeMax": 1,
+      "wallP50Ms": 112854,
+      "wallP90Ms": 364800,
+      "gapP50Ms": 13355,
+      "gapP90Ms": 29173,
+      "idlePct": 53.5
+    },
+    {
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "chains": 15,
+      "open": 5,
+      "turnsP50": 1,
+      "turnsP90": 5,
+      "callsP50": 1,
+      "callsP90": 5,
+      "refusalsBeforeP50": 0,
+      "refusalsBeforeMax": 1,
+      "wallP50Ms": 21508,
+      "wallP90Ms": 100712,
+      "gapP50Ms": 12083,
+      "gapP90Ms": 41115,
+      "idlePct": 51.9
+    },
+    {
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "chains": 7,
+      "open": 0,
+      "turnsP50": 5,
+      "turnsP90": 7,
+      "callsP50": 6,
+      "callsP90": 8,
+      "refusalsBeforeP50": 3,
+      "refusalsBeforeMax": 5,
+      "wallP50Ms": 1391287,
+      "wallP90Ms": 1605070,
+      "gapP50Ms": 24222,
+      "gapP90Ms": 32090,
+      "idlePct": 5.4
+    },
+    {
+      "token": "tok_000000002e7a",
+      "customer": "Cliente Zeta",
+      "chains": 7,
+      "open": 0,
+      "turnsP50": 6,
+      "turnsP90": 7,
+      "callsP50": 7,
+      "callsP90": 8,
+      "refusalsBeforeP50": 4,
+      "refusalsBeforeMax": 5,
+      "wallP50Ms": 1549080,
+      "wallP90Ms": 1701668,
+      "gapP50Ms": 17211,
+      "gapP90Ms": 24222,
+      "idlePct": 4
+    },
+    {
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "chains": 7,
+      "open": 0,
+      "turnsP50": 6,
+      "turnsP90": 7,
+      "callsP50": 7,
+      "callsP90": 8,
+      "refusalsBeforeP50": 4,
+      "refusalsBeforeMax": 5,
+      "wallP50Ms": 1530416,
+      "wallP90Ms": 1745414,
+      "gapP50Ms": 14341,
+      "gapP90Ms": 27946,
+      "idlePct": 3.8
+    },
+    {
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "chains": 5,
+      "open": 5,
+      "turnsP50": 2,
+      "turnsP90": 2,
+      "callsP50": 2,
+      "callsP90": 2,
+      "refusalsBeforeP50": 0,
+      "refusalsBeforeMax": 0,
+      "wallP50Ms": 44000,
+      "wallP90Ms": 44000,
+      "gapP50Ms": 9469,
+      "gapP90Ms": 28627,
+      "idlePct": 41.4
+    }
+  ],
+  "causes": [
+    {
+      "code": "EXPR_UNKNOWN_IDENTIFIER",
+      "refusals": 27,
+      "chains": 22,
+      "extraCallsSum": 54,
+      "extraCallsP50": 1,
+      "extraMsP50": 76020
+    },
+    {
+      "code": "OTHER_CODES",
+      "refusals": 22,
+      "chains": 12,
+      "extraCallsSum": 54,
+      "extraCallsP50": 2,
+      "extraMsP50": 98830
+    },
+    {
+      "code": "TYPE_MISMATCH",
+      "refusals": 17,
+      "chains": 11,
+      "extraCallsSum": 50,
+      "extraCallsP50": 3,
+      "extraMsP50": 159166
+    },
+    {
+      "code": "ATTRIBUTE_UNKNOWN",
+      "refusals": 17,
+      "chains": 13,
+      "extraCallsSum": 46,
+      "extraCallsP50": 2,
+      "extraMsP50": 135718
+    },
+    {
+      "code": "EXPRESSION_SYNTAX",
+      "refusals": 23,
+      "chains": 18,
+      "extraCallsSum": 44,
+      "extraCallsP50": 2,
+      "extraMsP50": 98830
+    },
+    {
+      "code": "FUNCTION_UNKNOWN",
+      "refusals": 23,
+      "chains": 19,
+      "extraCallsSum": 44,
+      "extraCallsP50": 2,
+      "extraMsP50": 98830
+    },
+    {
+      "code": "NATIVE_UNLISTED",
+      "refusals": 15,
+      "chains": 14,
+      "extraCallsSum": 40,
+      "extraCallsP50": 3,
+      "extraMsP50": 192591
+    },
+    {
+      "code": "ENTITY_UNKNOWN",
+      "refusals": 15,
+      "chains": 12,
+      "extraCallsSum": 31,
+      "extraCallsP50": 2,
+      "extraMsP50": 87706
+    },
+    {
+      "code": "ExpressionUnknownObject",
+      "refusals": 13,
+      "chains": 12,
+      "extraCallsSum": 26,
+      "extraCallsP50": 1,
+      "extraMsP50": 81677
+    },
+    {
+      "code": "CREATE_APP_FAILED",
+      "refusals": 5,
+      "chains": 5,
+      "extraCallsSum": 10,
+      "extraCallsP50": 2,
+      "extraMsP50": 175083
+    },
+    {
+      "code": "PROPERTY_NOT_WRITABLE",
+      "refusals": 5,
+      "chains": 5,
+      "extraCallsSum": 5,
+      "extraCallsP50": 1,
+      "extraMsP50": 26025
+    }
+  ],
+  "byCustomer": [
+    {
+      "token": "tok_0000000a1fa0",
+      "customer": "Cliente Alfa",
+      "calls": 200,
+      "failures": 30,
+      "refusals": 10,
+      "delivered": 20,
+      "topError": "PREFLIGHT_REFUSED",
+      "topProblem": "EXPR_UNKNOWN_IDENTIFIER",
+      "topRule": null,
+      "slowestPhase": "environment"
+    },
+    {
+      "token": "tok_000000002e7a",
+      "customer": "Cliente Zeta",
+      "calls": 51,
+      "failures": 30,
+      "refusals": 27,
+      "delivered": 7,
+      "topError": "PREFLIGHT_REFUSED",
+      "topProblem": "FUNCTION_UNKNOWN",
+      "topRule": "LIST_ENTITY_SEGMENT_DROPPED",
+      "slowestPhase": "transfer"
+    },
+    {
+      "token": "tok_00000000de17",
+      "customer": "Cliente Delta",
+      "calls": 50,
+      "failures": 29,
+      "refusals": 26,
+      "delivered": 7,
+      "topError": "PREFLIGHT_REFUSED",
+      "topProblem": "OTHER_CODES",
+      "topRule": "LIST_ENTITY_SEGMENT_DROPPED",
+      "slowestPhase": "transfer"
+    },
+    {
+      "token": "tok_0000000000e7",
+      "customer": "Cliente Eta com nome comprido para testar reticências na tabela",
+      "calls": 48,
+      "failures": 27,
+      "refusals": 24,
+      "delivered": 7,
+      "topError": "PREFLIGHT_REFUSED",
+      "topProblem": "ATTRIBUTE_UNKNOWN",
+      "topRule": "LIST_ENTITY_SEGMENT_DROPPED",
+      "slowestPhase": "transfer"
+    },
+    {
+      "token": "tok_00000000be7a",
+      "customer": "Cliente Beta Engenharia de Software e Integrações Corporativas",
+      "calls": 40,
+      "failures": 10,
+      "refusals": 10,
+      "delivered": 15,
+      "topError": "PREFLIGHT_REFUSED",
+      "topProblem": "EXPR_UNKNOWN_IDENTIFIER",
+      "topRule": "SORT_KEYS_SPLIT",
+      "slowestPhase": "compile"
+    },
+    {
+      "token": "tok_000000006a3a",
+      "customer": "Cliente Gama",
+      "calls": 30,
+      "failures": 10,
+      "refusals": 0,
+      "delivered": 5,
+      "topError": "AGENT_NOT_CONNECTED",
+      "topProblem": null,
+      "topRule": null,
+      "slowestPhase": "studio"
+    }
+  ],
+  "byClient": [
+    {
+      "client": "claude-code",
+      "sessions": 17,
+      "chains": 22,
+      "turnsP50": 4,
+      "callsP50": 5,
+      "refusalsBeforeAvg": 1.5,
+      "gapP50Ms": 12561
+    },
+    {
+      "client": "codex",
+      "sessions": 17,
+      "chains": 27,
+      "turnsP50": 6,
+      "callsP50": 8,
+      "refusalsBeforeAvg": 1.5,
+      "gapP50Ms": 13609
+    },
+    {
+      "client": "cursor",
+      "sessions": 12,
+      "chains": 12,
+      "turnsP50": 4,
+      "callsP50": 5,
+      "refusalsBeforeAvg": 2,
+      "gapP50Ms": 18114
+    }
+  ]
+}

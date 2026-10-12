@@ -24,7 +24,7 @@ test('the files of DESIGN.md 6.1 exist', () => {
   const need = [
     'index.html', 'app.css', 'favicon.svg', 'js/main.js', 'js/api.js', 'js/format.js', 'js/table.js', 'js/sparkline.js',
     'js/dialogs.js', 'js/secret.js', 'js/views/visao.js', 'js/views/licencas.js', 'js/views/uso.js', 'js/views/agentes.js',
-    'js/views/vps.js', 'js/views/eventos.js', 'js/views/historico.js', 'mock/dev-server.mjs',
+    'js/views/vps.js', 'js/views/eventos.js', 'js/views/historico.js', 'js/views/qualidade.js', 'mock/dev-server.mjs',
   ];
   for (const f of need) assert.ok(files.includes(f), f);
   for (const s of ['normal', 'vazio', 'problemas', 'sem-coletor', 'sem-renovar']) {
@@ -58,11 +58,41 @@ test('index.html: no inline script or style, no event attributes, the tabs of 6.
     assert.equal(m[2].trim(), '', 'no inline script body');
   }
   const labels = [...html.matchAll(/<span class="tlabel">([^<]+)<\/span>/g)].map((m) => m[1]);
-  assert.deepEqual(labels, ['Visão geral', 'Licenças', 'Uso', 'Agentes e sessões', 'VPS', 'Eventos', 'Histórico']);
+  // Qualidade after Uso (DESIGN-QUALIDADE 4.5): shortcut 4, the later tabs 5-8
+  assert.deepEqual(labels, ['Visão geral', 'Licenças', 'Uso', 'Qualidade', 'Agentes e sessões', 'VPS', 'Eventos', 'Histórico']);
   assert.match(html, /role="tablist"/);
-  assert.equal((html.match(/role="tab"/g) || []).length, 7);
+  assert.equal((html.match(/role="tab"/g) || []).length, 8);
+  assert.equal((html.match(/role="tabpanel"/g) || []).length, 8);
   assert.match(html, /<dialog id="dlg"/);
   assert.match(html, /<html lang="pt-BR">/);
+  assert.match(read('js/main.js'), /e\.key >= '1' && e\.key <= '8'/);
+});
+
+// The owner's taste (DESIGN.md 6.0, DESIGN-QUALIDADE 4.5): tables only. No card, tile, gauge, donut, hero number, badge or
+// pill shows up as a class, a CSS selector or an element; no chart canvas, no <progress>/<meter>.
+test('no cards, tiles, gauges, donuts, hero numbers, badges or pills (classes, selectors, elements)', () => {
+  const words = /(^|[^a-z])(card|cards|tile|tiles|gauge|donut|doughnut|pie|hero|kpi|badge|pill|chip|meter|ring|stat-tile)([^a-z]|$)/i;
+  const hits = [];
+  for (const f of scripts.filter((x) => x.startsWith('js/'))) {
+    const src = stripJs(read(f));
+    for (const m of src.matchAll(/class:\s*(\[[^\]]*\]|'[^']*'|"[^"]*")/g)) if (words.test(m[1])) hits.push(`${f}: class ${m[1]}`);
+    for (const m of src.matchAll(/classList\.(?:add|toggle)\(\s*'([^']+)'/g)) if (words.test(m[1])) hits.push(`${f}: classList ${m[1]}`);
+    for (const m of src.matchAll(/\bh\(\s*'([a-z0-9]+)'/g)) if (['canvas', 'progress', 'meter'].includes(m[1])) hits.push(`${f}: <${m[1]}>`);
+    if (/createElement\(\s*'(canvas|progress|meter)'/.test(src)) hits.push(`${f}: createElement chart element`);
+    if (/getContext\(/.test(src)) hits.push(`${f}: canvas drawing`);
+  }
+  const css = stripCss(read('app.css'));
+  for (const m of css.matchAll(/([^{}]+)\{/g)) {
+    for (const sel of m[1].split(',')) for (const c of sel.matchAll(/\.([A-Za-z0-9_-]+)/g)) if (words.test(c[1])) hits.push(`app.css: .${c[1]}`);
+  }
+  const html = read('index.html');
+  if (/<(canvas|progress|meter)\b/i.test(html)) hits.push('index.html: chart element');
+  assert.deepEqual(hits, []);
+  // the Qualidade view builds tables and key-value tables only, and every value goes in as text
+  const q = stripJs(read('js/views/qualidade.js'));
+  assert.match(q, /createTable\(/);
+  assert.match(q, /class: 'kv kv-keep'/);
+  assert.doesNotMatch(q, /sparkline|svg|innerHTML|insertAdjacent/);
 });
 
 test('CSS: no shadows, gradients, text above 16 px, round shapes outside .dot, web fonts or imports', () => {
