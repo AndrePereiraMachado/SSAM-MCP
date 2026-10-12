@@ -71,7 +71,8 @@ internal sealed class ThinBridge(Func<string, JsonObject?, JsonObject> send)
     }
 
     /// <summary>find_element over one capture of the open module (section 4.3). The loaded capture serves consecutive
-    /// find_element calls with the same module_key and environment; any other verb drops it.</summary>
+    /// find_element calls with the same module_key and environment; any other verb drops it, and so does the end of the
+    /// delivery that asked for it (ReleaseCapture).</summary>
     private JsonObject Find(JsonObject? parameters)
     {
         const string verb = "find_element";
@@ -126,6 +127,11 @@ internal sealed class ThinBridge(Func<string, JsonObject?, JsonObject> send)
         }
         return new JsonObject { ["query"] = name, ["count"] = results.Count, ["results"] = results };
     }
+
+    /// <summary>Releases the capture of find_element now (ModelHost.Release: the module leaves the Studio's statics, as
+    /// the exit of a cold process frees it). Delivery.Run calls it when it ends, so a resident worker keeps no module
+    /// between deliveries. The bridge stays usable: the next find_element takes a capture again.</summary>
+    public void ReleaseCapture() => DropCapture();
 
     private void DropCapture()
     {

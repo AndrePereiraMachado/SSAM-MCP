@@ -172,6 +172,15 @@ No `.env`:
   | 8 vCPU, 16 GB | 7 | 13g | 4 |
 
   Os valores de memória são estimativa e ainda não foram medidos. O `SSAM_CPUS` não pode passar do número de vCPUs.
+- `SSAM_O11_WORKERS_MAX` (padrão 2) e `SSAM_O11_WORKER_IDLE_MS` (padrão 600000): os workers O11 residentes dos clientes,
+  um por token, com o ambiente daquele cliente. A primeira chamada de cada cliente roda fria e sobe o worker em segundo
+  plano para a próxima. Sem vaga, ou com o worker ocupado, a chamada O11 roda no processo frio de antes.
+  `SSAM_O11_WORKERS_MAX=0` desliga. `SSAM_O11_WORKER_MIN_IDLE_MS` (padrão 120000): só depois desse tempo ocioso um
+  worker cede a vaga a outro cliente.
+- Perfil de memória de cada worker, sempre definido pelo servidor: `SSAM_O11_WORKER_BASE_CACHE` (padrão `off`),
+  `SSAM_O11_WORKER_HEAP_MB` (padrão 1536, limite do heap do .NET), `SSAM_O11_WORKER_MAX_COMMANDS` (padrão 1000) e
+  `SSAM_O11_WORKER_RSS_MB` (padrão 1200: acima disso o worker sai depois da chamada). Com `SSAM_MEMORY=6g` e 2 workers,
+  cada um fica abaixo de 1,2 GB; ainda não foi medido na VPS.
 - Só para o build na VPS: `ODC_STUDIO_BUNDLE_SHA256` e `SERVICE_STUDIO_BUNDLE_SHA256`.
 - `BACKUP_DIR`: fora do repositório, de preferência num volume de bloco só para ele (seção 9).
 - Para testar DNS e firewall sem gastar o limite do Let's Encrypt, use `SSAM_ACME_CA` com a URL de staging. Tire depois.

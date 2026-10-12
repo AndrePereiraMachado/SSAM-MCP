@@ -14,6 +14,10 @@ public sealed class BridgeClient(int port, int timeoutSeconds = 120) : IBridgeCl
     public JsonObject Call(string method, JsonObject? parameters = null)
         => ThinBridge.Enabled ? (thin ??= new ThinBridge(Send)).Call(method, parameters) : Send(method, parameters);
 
+    /// <summary>The thin bridge's find_element capture, if any, is released (ThinBridge.ReleaseCapture); the client stays
+    /// usable.</summary>
+    public void ReleaseCapture() => thin?.ReleaseCapture();
+
     private JsonObject Send(string method, JsonObject? parameters)
     {
         var socketTimeout = ThinBridge.EffectiveTimeout(timeoutSeconds);

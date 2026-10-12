@@ -23,9 +23,9 @@ import { anvilRoot, o11Lane } from './workspace.mjs';
 import { o11LaneOf } from './o11-lane.mjs';
 import { readConnection } from './studio-session.mjs';
 import { createAnvilRunner } from './anvil-cli.mjs';
-import { createWorkerClient, workerDisabled } from './anvil-worker.mjs';
+import { createWorkerClient, hostedWorkerClient, workerDisabled } from './anvil-worker.mjs';
 import { resolvePatchedJob, jobIdentity, failedOpOf, withNamedPatches } from './job-patch.mjs';
-import { seamFields, usesWorkspace, workspacePath } from './executor.mjs';
+import { hostedContext, seamFields, usesWorkspace, workspacePath } from './executor.mjs';
 import { highWarningsOf } from './delivery-warnings.mjs';
 import { refusalFields, diagnosisOf } from './refusal-problems.mjs';
 
@@ -205,7 +205,10 @@ export async function runJob(request = {}, deps = {}) {
   const producers = producerList(request.producers).map(p => producerArg(p, abs));
   const base = request.base != null && String(request.base) !== '' ? abs(request.base) : null;
   const runAnvil = deps.runAnvil ?? createAnvilRunner({ lane: o11.name, root, env });
-  const worker = workerDisabled(lane, env) ? null : deps.worker ?? createWorkerClient(lane, { root, env, o11: o11.name, ...(deps.workspace ? { workspace: deps.workspace } : {}) }, deps);
+  // Hosted, an O11 job goes to the customer's own worker (anvil-worker.mjs hostedWorkerClient; deps.hostedWorkers in tests),
+  // never to the lane's worker (off: workerDisabled).
+  const worker = lane === 'o11' && hostedContext() ? hostedWorkerClient({ root, env, o11: o11.name, pool: deps.hostedWorkers })
+    : workerDisabled(lane, env) ? null : deps.worker ?? createWorkerClient(lane, { root, env, o11: o11.name, ...(deps.workspace ? { workspace: deps.workspace } : {}) }, deps);
 
   // Read-only captures through the lane's logged-in Studio, before the job (run_job.py capture_producers), on the bridge
   // port of the connection record (the selected Studio), else the lane table's.

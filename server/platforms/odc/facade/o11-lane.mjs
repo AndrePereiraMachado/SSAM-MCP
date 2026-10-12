@@ -10,8 +10,9 @@
 // keeps 4517/4537. ANVIL_STUDIO_DIR, USERPROFILE and LOCALAPPDATA are read at call time, never cached.
 //
 // Hosted (executor.mjs, docs/FASE2-AGENTE.md 4.7), with the default root: `local` is the customer's <ws>/o11, the CLI and
-// the Studio stay the server's, there is no worker, and `bridge` is the relay port of the customer's connection record,
-// or O11_NOT_CONNECTED without one: every caller that reads it fails closed, never on the lane table port.
+// the Studio stay the server's, there is no lane worker (the customer's own one is anvil-worker.mjs hostedWorkerClient),
+// and `bridge` is the relay port of the customer's connection record, or O11_NOT_CONNECTED without one: every caller that
+// reads it fails closed, never on the lane table port.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

@@ -570,8 +570,30 @@ hospedado a partir de uma lista fechada, nunca de `process.env` inteiro:
 Usam `hostedSpawnEnv`: `anvil-cli.mjs createAnvilRunner` (faixa ODC quando o assembly é `anvil-odc.dll`),
 `lanes.mjs run` (inclusive `data`), `job-runner.mjs`, `kernel-delivery.mjs applyKernel`, `studio-create-app.mjs`,
 `ssam-reference.mjs` e `lib.mjs builder`. Os processos compartilhados do servidor (leitores residentes, worker ODC,
-índice de módulos) continuam com o ambiente do servidor e nunca falam com um Studio. O worker O11 fica desligado no
-hospedado.
+índice de módulos) continuam com o ambiente do servidor e nunca falam com um Studio. O worker O11 da faixa fica
+desligado no hospedado (`workerDisabled('o11')`). No lugar dele, cada cliente pode ter um worker O11 só seu
+(`anvil-worker.mjs HostedO11Workers`, `hostedWorkerClient`): `dotnet <cli> serve` com o `hostedSpawnEnv('o11')` e o
+`cwd` do processo frio daquele cliente, numa porta de loopback própria, com a chave do relay do cliente como chave de
+controlador (`<ws>/state/relay-authority/bridge.key`, lida pelo worker na partida).
+
+- Ambiente: o frio mais só as variáveis do pool (`HOSTED_O11_WORKER_VARIABLES`): `ANVIL_BASE_CACHE` (e
+  `ANVIL_BASE_CACHE_ENTRIES`/`ANVIL_BASE_CACHE_MB` quando ligado), `DOTNET_GCHeapHardLimit`, `ANVIL_WORKER_MAX_COMMANDS`
+  e `ANVIL_WORKER_IDLE_MINUTES`. Vêm do servidor (`SSAM_O11_WORKER_BASE_CACHE` padrão `off`, `SSAM_O11_WORKER_HEAP_MB`
+  padrão 1536, `SSAM_O11_WORKER_MAX_COMMANDS` padrão 1000). Um valor do cliente nunca as substitui.
+- A primeira chamada de cada cliente roda fria na hora; o worker sobe em segundo plano e serve a próxima. Os builds do
+  `o11_deliver` (`o11-build-phase.mjs slotRunner`) também usam esse worker: uma chamada por vez, as outras frias.
+- Chave por `tokenId`, nunca compartilhado; impressão digital (ambiente, pasta, CLI, chave) conferida a cada chamada: um
+  contexto novo (porta e chave de relay novas) aposenta o worker ocioso e a chamada roda fria.
+- Teto `SSAM_O11_WORKERS_MAX` (padrão 2; 0 desliga), contando os que ainda saem. Sem vaga, sai o ocioso usado há mais
+  tempo, só depois de `SSAM_O11_WORKER_MIN_IDLE_MS` (padrão 2 min) sem uso; senão a chamada só roda fria. Parada após
+  `SSAM_O11_WORKER_IDLE_MS` (padrão 10 min), quando o contexto fecha, ou depois da chamada em que o `VmRSS` passou de
+  `SSAM_O11_WORKER_RSS_MB` (padrão 1200).
+- `shutdown` com a chave só vai ao processo que o servidor subiu (pid e instância do ping). Outro pid, sem ping, falha na
+  partida ou pid desconhecido: o servidor termina o próprio processo e não manda nada.
+- Ocupado, partindo, sem vaga ou qualquer dúvida: o processo frio de hoje. Pedido escrito sem resposta é resultado
+  desconhecido, nunca repetido; o worker espera o ping dizer livre (até o tempo da chamada) antes do `shutdown`.
+- Entrega com `--checks`: o kernel solta a captura do `find_element` no fim de cada entrega (`Delivery.Run`,
+  `ThinBridge.ReleaseCapture`), então o worker não guarda módulo entre entregas. Logs em `<ws>/o11/tmp/o11-worker`.
 
 ### 4.8 Listas e conferências do agente
 

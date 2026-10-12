@@ -90,6 +90,36 @@ Servidor:
 - Nunca compila nada. `SSAM_NO_WARM=1` desliga. O log mostra a linha `warm`.
 - Para o worker ODC servir as entregas, o servidor sobe SEM `ANVIL_WORKER=0` e SEM `ANVIL_ODC_NO_WORKER`.
 
+### Worker O11 por cliente
+
+- Cada cliente pode ter um worker O11 residente só dele. Ele serve as chamadas O11 que vão ao kernel (`o11_job`/`ssam_job`
+  lane o11, `o11_deliver` e os outros verbos do `createWorkerFirstRunner`). Os builds do `o11_deliver` também usam esse
+  worker: uma chamada por vez, as outras rodam frias.
+- Ele sobe com o mesmo ambiente do processo frio daquele cliente (porta e chave do relay, `TEMP` e pasta no workspace),
+  mais o perfil de memória do servidor, e atende só o `tokenId` dele.
+- A primeira chamada de cada cliente (e a primeira depois que o worker parou) roda fria na hora. O worker sobe em segundo
+  plano e atende a próxima chamada. Nenhuma chamada espera a partida de um worker nem a saída de outro.
+- `SSAM_O11_WORKERS_MAX` (padrão 2, para a KVM 2; 0 desliga) conta também os workers que ainda estão saindo. Sem vaga, o
+  ocioso usado há mais tempo cede a vaga, mas só depois de `SSAM_O11_WORKER_MIN_IDLE_MS` (padrão 120000) sem uso. Se
+  nenhum pode sair, a chamada só roda fria. `SSAM_O11_WORKER_IDLE_MS` (padrão 600000): ocioso esse tempo, para.
+- Perfil de memória, definido pelo servidor e nunca pelo cliente. O worker recebe o ambiente frio mais só estas variáveis:
+
+  | Variável do servidor | Padrão | Variável no worker |
+  | --- | --- | --- |
+  | `SSAM_O11_WORKER_BASE_CACHE` | `off` | `ANVIL_BASE_CACHE=off` (ou `on` com `ANVIL_BASE_CACHE_ENTRIES=1` e `ANVIL_BASE_CACHE_MB=<MB>`) |
+  | `SSAM_O11_WORKER_HEAP_MB` | 1536 | `DOTNET_GCHeapHardLimit` (bytes em hexadecimal; 0 não define) |
+  | `SSAM_O11_WORKER_MAX_COMMANDS` | 1000 | `ANVIL_WORKER_MAX_COMMANDS` |
+  | `SSAM_O11_WORKER_IDLE_MS` | 600000 | `ANVIL_WORKER_IDLE_MINUTES` (o tempo ocioso mais 5 min) |
+
+- `SSAM_O11_WORKER_RSS_MB` (padrão 1200; 0 desliga): depois de cada chamada o servidor lê o `VmRSS` do worker em
+  `/proc/<pid>/status`. Acima do limite, o worker sai depois da chamada, nunca no meio. No Windows não há leitura.
+- Saída de um worker: se o ping ainda mostra o processo que o servidor subiu, ele recebe `shutdown`. Se não mostra (outro
+  pid, sem ping, falha na partida), o servidor termina o próprio processo e não manda nada com a chave do cliente.
+- Resultado desconhecido (pedido escrito sem resposta): nunca é repetido. O worker não recebe mais nada, o servidor espera o
+  ping dizer que ficou livre (até o tempo da própria chamada) e só então manda `shutdown`.
+- A resposta mostra `via: "worker"`; quando rodou frio, o campo `worker` (ou `workerNote`) diz por quê.
+  `ANVIL_WORKER=0` deixa tudo frio, como antes.
+
 ### Pool de build no servidor (faixa wp)
 
 - Um pool só para o servidor inteiro (`SSAM_BUILD_WORKERS`, padrão `min(4, núcleos - 1)`).

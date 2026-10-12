@@ -46,6 +46,19 @@ services:
       # The build pool (one resident O11 and ODC worker per slot). Set it explicitly: inside a container the default
       # min(4, cores - 1) counts the host's cores, not the CPU limit below.
       SSAM_BUILD_WORKERS: ${SSAM_BUILD_WORKERS:-2}
+      # The resident O11 worker of each customer (one per token, started in the background with that customer's
+      # environment): at most SSAM_O11_WORKERS_MAX at once (0 runs every O11 call cold), each stopped after
+      # SSAM_O11_WORKER_IDLE_MS without a call; an idle one gives its place only after SSAM_O11_WORKER_MIN_IDLE_MS.
+      SSAM_O11_WORKERS_MAX: ${SSAM_O11_WORKERS_MAX:-2}
+      SSAM_O11_WORKER_IDLE_MS: ${SSAM_O11_WORKER_IDLE_MS:-600000}
+      SSAM_O11_WORKER_MIN_IDLE_MS: ${SSAM_O11_WORKER_MIN_IDLE_MS:-120000}
+      # Memory profile of each worker, set by the server (never by the customer): base cache off (or a budget in MB), GC
+      # heap hard limit in MB, commands before it recycles itself, and the resident set (MB) above which it is retired
+      # after its call.
+      SSAM_O11_WORKER_BASE_CACHE: ${SSAM_O11_WORKER_BASE_CACHE:-off}
+      SSAM_O11_WORKER_HEAP_MB: ${SSAM_O11_WORKER_HEAP_MB:-1536}
+      SSAM_O11_WORKER_MAX_COMMANDS: ${SSAM_O11_WORKER_MAX_COMMANDS:-1000}
+      SSAM_O11_WORKER_RSS_MB: ${SSAM_O11_WORKER_RSS_MB:-1200}
     volumes:
       - server-state:/data/server
       - friction:/data/friction
