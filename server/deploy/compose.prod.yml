@@ -63,6 +63,8 @@ services:
       SSAM_O11_WORKER_HEAP_MB: ${SSAM_O11_WORKER_HEAP_MB:-1536}
       SSAM_O11_WORKER_MAX_COMMANDS: ${SSAM_O11_WORKER_MAX_COMMANDS:-1000}
       SSAM_O11_WORKER_RSS_MB: ${SSAM_O11_WORKER_RSS_MB:-1200}
+      # Quality records (DEPLOY.md section 10): codes, counts and times per tool call; 0 turns them off.
+      SSAM_QUALITY: ${SSAM_QUALITY:-1}
     volumes:
       - server-state:/data/server
       - friction:/data/friction
