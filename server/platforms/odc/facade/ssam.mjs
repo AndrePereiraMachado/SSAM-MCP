@@ -452,13 +452,17 @@ export function hostedInstructions(hosted) {
 // servidor/fase4-24 (R1): options.argsOf is the input layer's (relaxTool): the gate confines and hands the handler the
 // arguments the tool runs, never only the ones sent ({targt} runs as target, so it is confined as target).
 const servedGates = new WeakMap();
-async function hostedGate({ context, session, run }) {
+// kernelRefused (startupKernel): the lanes this server image refused at start; the gate refuses every tool of such a
+// lane, the server-only ones included (KERNEL_UNAVAILABLE, cause KERNEL_VERSION_MISSING).
+async function hostedGate({ context, session, run, kernelRefused = null }) {
   const { wrapHostedTool } = await import('./hosted/policy.mjs');
   const runner = run ?? (await import('./executor.mjs')).runWithExecutor;
   const link = session?.agent ?? context.agent;
   const lanes = session?.lanes ?? context.lanes ?? [];
-  return (name, config, handler, { argsOf = null } = {}) => wrapHostedTool(name, config, handler, { context, link, lanes, run: runner, argsOf });
+  return (name, config, handler, { argsOf = null } = {}) => wrapHostedTool(name, config, handler, { context, link, lanes, run: runner, argsOf, kernelRefused });
 }
+// The lanes the hosted server warms at start: the served lanes, without a lane its image refused (its kernel never runs).
+export const hostedWarmLanes = (lanes = {}, refused = null) => ['odc', 'o11'].filter(l => lanes[l] !== false && !refused?.[l]);
 // A tool the served mode adds outside the SSAM shaper (ssam_friction): through the hosted gate when the server has one.
 export function registerServedTool(server, name, config, handler) {
   const gate = servedGates.get(server);
@@ -1205,7 +1209,8 @@ export async function detectKernel({ dir, fileVersion, env = process.env }) {
 // (detectKernel), then the pair with the image: a lane whose kernel.json names another Studio version than the image
 // declares (ENV SSAM_IMAGE_O11 / SSAM_IMAGE_ODC) is off, so the hub answers KERNEL_UNAVAILABLE for it and the image's
 // kernel never runs against another Studio. Then, in an image that declares its versions, the caches that carry no Studio
-// version are emptied for a lane whose version changed. Logs the notes of kernel.json (kernel-v2-ignored,
+// version are emptied for a lane whose version changed, and for a lane that is off (an invalid stamp: its stamp is
+// dropped too). Logs the notes of kernel.json (kernel-v2-ignored,
 // kernel-json-unsupported), the `kernel` event with the same shape as before ({kernel: {o11, odc, odcBridge, o11Hook,
 // odcBridgeAccepted?}}, a refused lane null), one kernel-version-missing per refused lane and kernel-cache-reset.
 export async function startupKernel({ dir, fileVersion, env = process.env, log = () => {}, image, caches } = {}) {
@@ -1223,7 +1228,7 @@ export async function startupKernel({ dir, fileVersion, env = process.env, log =
     try {
       const map = await import('./module-map.mjs');
       const indexRoot = map.indexRoot(env);
-      ki.resetStaleCaches({ kernel, indexRoot, log, roots: ki.legacyCacheRoots({ indexRoot, readerRoot: map.readerConfig('o11', { env }).cacheRoot,
+      ki.resetStaleCaches({ kernel, indexRoot, log, off: Object.keys(refused), roots: ki.legacyCacheRoots({ indexRoot, readerRoot: map.readerConfig('o11', { env }).cacheRoot,
         prefetchRoot: map.prefetchCacheRoot('o11', env), o11Platform: LANES.o11.lane }) });
     } catch (error) { log({ event: 'kernel-cache-reset-failed', error: error?.code ?? error?.name ?? 'Error' }); }
   }
@@ -1318,7 +1323,7 @@ export async function runServed(args) {
   const storeOf = workspace => { let store = stores.get(workspace); if (!store) stores.set(workspace, store = frictionStore.createStore({ root: workspace, directory: customerFrictionDirectory(workspace) })); return store; };
   const createServer = async session => {
     const context = await contextOf(session);
-    const server = await executor.runWithExecutor(context, () => createSsamServer({ ...lanes, hosted: { context, session } }));
+    const server = await executor.runWithExecutor(context, () => createSsamServer({ ...lanes, hosted: { context, session, kernelRefused } }));
     registerServedTool(server, frictionTool.name, frictionConfig, frictionHandler(storeOf(session.workspace)));
     return server;
   };
@@ -1329,7 +1334,7 @@ export async function runServed(args) {
   const handle = served(await startHttpServer({ ...options, agents: { kernel, kernelRefused }, dir, createServer, observeCall, log, quality,
     tools: Object.keys(hostedTools()) }));
   // The server's own warm-up (outside any customer context): discover indexes and the ODC delivery processes.
-  scheduleWarm({ lanes: ['odc', 'o11'].filter(l => lanes[l] !== false), warm: ({ lanes: warmLanes }) => warmServer({ lanes: warmLanes, log }) });
+  scheduleWarm({ lanes: hostedWarmLanes(lanes, kernelRefused), warm: ({ lanes: warmLanes }) => warmServer({ lanes: warmLanes, log }) });
   return handle;
 }
 

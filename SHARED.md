@@ -2,13 +2,14 @@
 
 Estes 76 arquivos existem em `server/` e em `agent/`, no mesmo caminho relativo dentro de cada caixa.
 Hoje as duas cópias são iguais byte a byte. Vieram de `servidor/fase4` (`e7b2119b`) e estão na revisão de
-`fase4-24/combinada` (`3d6f232c`): o 24º envio (`a415531d`) com `fase4-24/odc1728` (`f912cb7e`, ODC Studio 1.7.28 e bridge
+`fase4-24/combinada` (`41e538f0`): o 24º envio (`a415531d`) com `fase4-24/odc1728` (`f912cb7e`, ODC Studio 1.7.28 e bridge
 ODC v97), `fase4-24/o11-115592` (Service Studio 11.55.92) e `fase4-24/qualidade` (que não muda nenhum deles), mais a imagem
 interina. O 24º acrescentou 8:
 `PrivateHttpContext.cs` e `ScHttpHandler.cs` do kernel e 6 fontes novas da bridge ODC (`Portal*.cs`). O `f912cb7e`
 mudou 5: `docs/FASE2-AGENTE.md`, `docs/PROVAS-AO-VIVO.md`, `Bridge.csproj`, `StartupHook.cs` e `client/Program.cs`. A linha
 combinada mudou de novo 2: `docs/FASE2-AGENTE.md` (Service Studio 11.55.92, a seção 7 da imagem interina) e
-`docs/PROVAS-AO-VIVO.md` (Service Studio 11.55.92).
+`docs/PROVAS-AO-VIVO.md` (Service Studio 11.55.92). O `41e538f0` mudou `docs/FASE2-AGENTE.md` de novo (a faixa desligada
+recusa também as ferramentas só do servidor e esvazia os caches dela).
 
 ## A regra
 
@@ -64,7 +65,7 @@ Sem saída, está tudo igual.
 | Arquivo (relativo à caixa) | sha256 (conteúdo com fim de linha LF) |
 | --- | --- |
 | `docs/DISTRIBUICAO.md` | `bc87ebe53ef2230f89d4ceb1162e5e84b9eecc0e2563e93905eccb78fbc9d5b1` |
-| `docs/FASE2-AGENTE.md` | `7dbe5f711e84cee271d7cbb1c6d8989103dcd46a0137b55505419348388f7a3a` |
+| `docs/FASE2-AGENTE.md` | `73985a4c5923a24f61b050ee137d73986cb89814c666bb51c91ce330d4a962f7` |
 | `docs/O11-BRIDGE-FINA.md` | `c7f24e4ad0e2b537394a537d103ad5b0654745c4c692965cdec5cc8fcc80a25d` |
 | `docs/PROVAS-AO-VIVO.md` | `b66c259ac7cb293fbc7c7165794885ac6462598a2e65e2753c85f3646d99979a` |
 | `docs/exemplos/mcp-cliente-hospedado.json` | `cabbe38805716878f03def98527dd5234b2dcfd9187df8c773305f80d8d6fa28` |

@@ -1163,14 +1163,17 @@ Regras da faixa `hosted` (em `hosted/policy.mjs`):
   contra o `ServiceStudio.Framework.dll` de cada pasta do Studio.
   - Faixa cujo `kernel.json` nomeia outra versão fica desligada ao iniciar: `KERNEL_UNAVAILABLE` com
     `cause: "KERNEL_VERSION_MISSING"`, e o servidor registra `kernel-version-missing`. O kernel da imagem nunca roda contra
-    outro Studio. O evento `kernel` mantém o formato (a faixa desligada vem `null`).
+    outro Studio. O evento `kernel` mantém o formato (a faixa desligada vem `null`). A recusa vale também para as
+    ferramentas só do servidor dessa faixa (`ssam_job`, `ssam_map`, `ssam_discover`, `ssam_reference`, `o11_job`,
+    `odc_search_operations`), no portão hospedado; só `ssam_doctor` e `studio_doctor` respondem. O aquecimento pula a faixa.
   - Studio do cliente MAIS VELHO que a versão do servidor (Service Studio 11.55.91 no servidor 11.55.92):
     `STUDIO_VERSION_MISMATCH` com `cause: "STUDIO_VERSION_NOT_SERVED"`, `served` e `installed`, antes de conferir o pacote.
     Nenhum pacote resolve: a faixa volta com o servidor de várias versões. Studio mais novo segue o formato acima.
   - Só `kernel.json` v1. Um `kernel.v2.json` ao lado é ignorado (`kernel-v2-ignored`); um `kernel.json` no formato v2 não
     serve faixa nenhuma (`kernel-json-unsupported`).
   - Os caches sem versão do Studio (índice de módulos `v1/<faixa>`, cópias dos leitores O11 e do prefetch) são esvaziados
-    quando a versão da faixa muda (`kernel-cache-reset`; carimbo `kernel-studio.json` na raiz do índice).
+    quando a versão da faixa muda (`kernel-cache-reset`; carimbo `kernel-studio.json` na raiz do índice). Faixa desligada
+    conta como carimbo inválido: as raízes dela são esvaziadas e o carimbo dela sai.
 
 ## 8. Sem agente, sem conexão O11, contexto perdido
 

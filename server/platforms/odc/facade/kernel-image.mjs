@@ -9,12 +9,15 @@
 //     owner's PC, the tests) nothing is judged and kernel.json is read as before.
 //   - kernelPair: a lane whose kernel.json version is not the image's is OFF (null, the hub answers KERNEL_UNAVAILABLE
 //     with cause KERNEL_VERSION_MISSING); the image's kernel never serves another Studio. The server logs one
-//     `kernel-version-missing` per refused lane. The shape of the `kernel` event does not change.
+//     `kernel-version-missing` per refused lane. The shape of the `kernel` event does not change. The hosted gate
+//     (hosted/policy.mjs) refuses every tool of an off lane, the server-only ones included (ssam_job, ssam_map,
+//     ssam_discover, ssam_reference...), and the server's warm-up skips it.
 //   - kernelFileNotes: the interim reads kernel.json v1 only; a kernel.v2.json beside it (the multi-version image's file)
 //     is ignored and named once (`kernel-v2-ignored`), and a kernel.json in the v2 shape serves no lane.
 //   - resetStaleCaches: the caches of the cache volume that carry no Studio version (module index v1/<lane>, the lane
 //     readers' copies, the prefetch readers') are emptied when the lane's Studio version is not the one they were built
-//     with (stamp <module-index root>/kernel-studio.json), so nothing built for 11.55.91 is served to 11.55.92. The base
+//     with (stamp <module-index root>/kernel-studio.json), so nothing built for 11.55.91 is served to 11.55.92. A lane
+//     that is off (refused at start) counts as an invalid stamp: its roots are emptied and its stamp dropped. The base
 //     model cache of the O11 workers is in memory and keyed by IdeVersion (BaseModelCache.cs): nothing to do.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -124,24 +127,36 @@ export function legacyCacheRoots({ indexRoot, readerRoot, prefetchRoot, o11Platf
     odc: [path.join(indexRoot, 'v1', 'odc')],
   };
 }
-export function resetStaleCaches({ kernel, indexRoot, roots, log = () => {}, fsx = fs }) {
+// off: the lanes the image refused at start (kernelPair refused). An off lane is an invalid stamp: its roots are emptied
+// (an index built by another Studio version is never left for ssam_map or ssam_discover) and its stamp is dropped, so the
+// next start with a valid pair empties them again. A lane that is null without being off (an image that declares nothing
+// for it) is left alone.
+export function resetStaleCaches({ kernel, indexRoot, roots, off = [], log = () => {}, fsx = fs }) {
   const stampFile = path.join(indexRoot, STAMP_FILE);
   let stamp = {};
   try { stamp = JSON.parse(fsx.readFileSync(stampFile, 'utf8')) ?? {}; } catch { stamp = {}; }
+  if (!stamp || typeof stamp !== 'object' || Array.isArray(stamp)) stamp = {};
   const next = { ...stamp }, reset = [], failed = [];
+  const empty = lane => {
+    for (const root of roots[lane] ?? []) {
+      try { fsx.rmSync(root, { recursive: true, force: true }); } catch (error) { failed.push({ lane, root: path.basename(root), error: error.code ?? 'EIO' }); }
+    }
+    reset.push(lane);
+  };
+  const exists = root => { try { return fsx.existsSync(root); } catch { return true; } };
   for (const lane of LANES) {
     const current = threePart(kernel?.[lane]);
-    if (!current) continue;
-    if (stamp[lane] !== current) {
-      for (const root of roots[lane] ?? []) {
-        try { fsx.rmSync(root, { recursive: true, force: true }); } catch (error) { failed.push({ lane, root: path.basename(root), error: error.code ?? 'EIO' }); }
-      }
-      reset.push(lane);
+    if (off.includes(lane)) {
+      if (Object.hasOwn(stamp, lane) || (roots[lane] ?? []).some(exists)) empty(lane);
+      delete next[lane];
+      continue;
     }
+    if (!current) continue;
+    if (stamp[lane] !== current) empty(lane);
     next[lane] = current;
   }
   if (reset.length) log({ event: 'kernel-cache-reset', lanes: reset, from: Object.fromEntries(reset.map(l => [l, stamp[l] ?? null])),
-    to: Object.fromEntries(reset.map(l => [l, next[l]])), ...(failed.length ? { failed } : {}) });
+    to: Object.fromEntries(reset.map(l => [l, next[l] ?? null])), ...(failed.length ? { failed } : {}) });
   if (reset.length || JSON.stringify(next) !== JSON.stringify(stamp)) {
     try { fsx.mkdirSync(indexRoot, { recursive: true }); fsx.writeFileSync(stampFile, JSON.stringify(next) + '\n'); }
     catch (error) { log({ event: 'kernel-cache-stamp-failed', error: error.code ?? 'EIO' }); }

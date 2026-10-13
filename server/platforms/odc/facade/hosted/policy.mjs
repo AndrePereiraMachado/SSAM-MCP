@@ -127,6 +127,18 @@ const unavailable = (name, entry, config) => ({ ok: false, code: 'HOSTED_UNAVAIL
     ?? { tool: 'ssam_discover', arguments: { intent: config?.title ?? name }, why: 'Lists the tools this server offers for the same request.' } });
 const laneDisabled = lane => ({ ok: false, code: 'HOSTED_LANE_DISABLED', lane,
   error: `This account has no ${lane} lane on this SSAM server; nothing ran.`, continuation: doctor('Shows the lanes of this account. Ask the server owner when the lane is needed.') });
+// Multi-version design O.6.1 (kernel-image.mjs kernelPair): a lane this server image refused at start, because its
+// kernel.json names another Studio version than the image carries, is off for every tool, the server-only ones included
+// (ssam_job, ssam_map, ssam_discover, ssam_reference, o11_job, odc_search_operations...): the image's kernel never runs
+// for it and no index of that lane is read or built. Only the state reports (agent "report": ssam_doctor, studio_doctor)
+// still answer.
+export function kernelLaneOff(lane, refused) {
+  const studio = STUDIO[lane];
+  const pinned = refused?.kernel ?? null;
+  return { ok: false, code: 'KERNEL_UNAVAILABLE', cause: 'KERNEL_VERSION_MISSING', lane, serverKernel: null, image: refused?.image ?? null, pinned,
+    error: `This SSAM server image carries the kernel for ${studio} ${refused?.image ?? '?'}, but its kernel.json names ${pinned ? studio + ' ' + pinned : 'no ' + studio + ' version'}: the ${lane} lane is off on this server, server-only tools included, and nothing ran.`,
+    continuation: doctor('Shows the state of each lane. Ask the server owner to write the kernel.json of this server image.') };
+}
 const workspaceFull = () => ({ ok: false, code: 'WORKSPACE_FULL',
   error: 'The workspace of this account on the SSAM server is over its quota; nothing ran.', continuation: doctor('Shows the workspace usage. Ask the server owner to free space.') });
 const pathRefused = (code, error) => ({ ok: false, code, error,
@@ -328,9 +340,10 @@ export function presenter({ workspace, serverRoots = [workspaceRoot, os.homedir(
 // wrapHostedTool(name, config, handler, {context, link, lanes, run, argsOf}) -> the handler to register. run(context, fn)
 // puts the hosted context around the handler (runWithExecutor in ssam.mjs; tests pass (ctx, fn) => fn()). argsOf: the
 // input layer's arguments for the ones sent (R1); every rule below and the handler read them. prototypeOp: the D2 switch
-// (HOSTED_PROTOTYPE_OP by default; tests pass the other value).
+// (HOSTED_PROTOTYPE_OP by default; tests pass the other value). kernelRefused: the lanes the server image refused at start
+// (ssam.mjs startupKernel), each off for every tool but the state reports (kernelLaneOff).
 export function wrapHostedTool(name, config, handler, { context, link = context?.agent, lanes = context?.lanes ?? [], run = (ctx, fn) => fn(),
-  tools = hostedTools(), serverRoots, waitMs = RECONNECT_WAIT_MS, argsOf = null, prototypeOp = HOSTED_PROTOTYPE_OP } = {}) {
+  tools = hostedTools(), serverRoots, waitMs = RECONNECT_WAIT_MS, argsOf = null, prototypeOp = HOSTED_PROTOTYPE_OP, kernelRefused = null } = {}) {
   const entry = tools[name];
   const present = presenter({ workspace: context.workspace, ...(serverRoots ? { serverRoots } : {}) });
   const refusesPrototype = prototypeOp !== 'allow' && PROTOTYPE_TOOLS.includes(name);
@@ -350,6 +363,8 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
     if (refusesPrototype && hasArgs && namesPrototype(args)) return refusal(prototypeUnavailable(name, lane));
     if (LANED.has(lane) && !lanes.includes(lane)) return refusal(laneDisabled(lane));
     const need = agentNeed(entry.agent, args);
+    // O.6.1: a lane the image refused at start is off for every tool but the state reports, before the agent and any path.
+    if (LANED.has(lane) && need !== 'report' && kernelRefused?.[lane]) return refusal(kernelLaneOff(lane, kernelRefused[lane]));
     let info = null;
     try { info = link?.info?.() ?? null; } catch { info = null; }
     if (need === 'always') {

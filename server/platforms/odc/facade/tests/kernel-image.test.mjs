@@ -116,11 +116,31 @@ test('resetStaleCaches: the roots of a lane whose Studio version changed are emp
   r = resetStaleCaches({ kernel: { o11: '11.55.92', odc: '1.7.28' }, indexRoot, roots, log: e => events.push(e) });
   assert.deepEqual(r.reset, []); assert.equal(events.length, 1);
   for (const root of roots.o11) assert.equal(fs.existsSync(path.join(root, 'built-before.json')), true);
-  // only O11 changes: only the O11 roots; a refused lane (null) is left alone
+  // only O11 changes: only the O11 roots; a lane that is null without being off (nothing declared) is left alone
   r = resetStaleCaches({ kernel: { o11: '11.55.93', odc: null }, indexRoot, roots, log: e => events.push(e) });
   assert.deepEqual(r.reset, ['o11']);
   assert.equal(fs.existsSync(path.join(roots.odc[0], 'built-before.json')), true);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(indexRoot, STAMP_FILE), 'utf8')), { o11: '11.55.93', odc: '1.7.28' });
+  // an off lane (refused at start) is an invalid stamp: its roots are emptied and its stamp dropped
+  seed(); events.length = 0;
+  r = resetStaleCaches({ kernel: { o11: null, odc: '1.7.28' }, off: ['o11'], indexRoot, roots, log: e => events.push(e) });
+  assert.deepEqual(r.reset, ['o11']);
+  for (const root of roots.o11) assert.equal(fs.existsSync(root), false, root);
+  assert.equal(fs.existsSync(path.join(roots.odc[0], 'built-before.json')), true, 'the lane that is on keeps its index');
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(indexRoot, STAMP_FILE), 'utf8')), { odc: '1.7.28' });
+  assert.deepEqual(events, [{ event: 'kernel-cache-reset', lanes: ['o11'], from: { o11: '11.55.93' }, to: { o11: null } }]);
+  // still off on the next start, nothing there: nothing to log
+  r = resetStaleCaches({ kernel: { o11: null, odc: '1.7.28' }, off: ['o11'], indexRoot, roots, log: e => events.push(e) });
+  assert.deepEqual(r.reset, []); assert.equal(events.length, 1);
+  // something left in an off lane's root (by any path) is emptied on the next start
+  fs.mkdirSync(roots.o11[0], { recursive: true }); fs.writeFileSync(path.join(roots.o11[0], 'late.json'), '{}');
+  r = resetStaleCaches({ kernel: { o11: null, odc: '1.7.28' }, off: ['o11'], indexRoot, roots, log: e => events.push(e) });
+  assert.deepEqual(r.reset, ['o11']); assert.equal(fs.existsSync(roots.o11[0]), false);
+  // the lane comes back on with the valid pair: no stamp, so its roots are emptied once more
+  seed();
+  r = resetStaleCaches({ kernel: { o11: '11.55.92', odc: '1.7.28' }, indexRoot, roots, log: e => events.push(e) });
+  assert.deepEqual(r.reset, ['o11']);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(indexRoot, STAMP_FILE), 'utf8')), { odc: '1.7.28', o11: '11.55.92' });
 });
 
 test('startupKernel: the interim with a857a1e\'s kernel.json starts with both lanes off, logs kernel-version-missing and keeps the kernel event shape', async () => {
@@ -141,9 +161,11 @@ test('startupKernel: the interim with a857a1e\'s kernel.json starts with both la
   assert.deepEqual(events.filter(e => e.event === 'kernel-version-missing'), [
     { event: 'kernel-version-missing', lane: 'o11', kernel: '11.55.91', image: '11.55.92', studio: '11.55.92.65269', reason: 'other-version' },
     { event: 'kernel-version-missing', lane: 'odc', kernel: '1.7.27', image: '1.7.28', studio: '1.7.28.10850', reason: 'other-version' }]);
-  assert.equal(events.some(e => e.event === 'kernel-cache-reset'), false, 'a lane that is off empties nothing');
-  assert.equal(fs.existsSync(path.join(cache, 'module-index', 'v1', 'o11')), true);
-  // the interim's own pair (deploy step 3): both lanes, the legacy O11 index emptied once
+  // a lane that is off is an invalid stamp: the index another Studio version built is not left for ssam_map/ssam_discover
+  assert.deepEqual(events.filter(e => e.event === 'kernel-cache-reset').map(e => e.lanes), [['o11']]);
+  assert.equal(fs.existsSync(path.join(cache, 'module-index', 'v1', 'o11')), false);
+  // the interim's own pair (deploy step 5): both lanes, the legacy indexes emptied once (no stamp for them)
+  fs.mkdirSync(path.join(cache, 'module-index', 'v1', 'o11'), { recursive: true });
   write({ o11: '11.55.92', odc: '1.7.28', odcBridge: 'v97', odcBridgeAccepted: ['v96', 'v48', 'v45'] });
   events = [];
   started = await startupKernel({ dir, env, fileVersion: async () => null, log: e => events.push(e) });
@@ -187,6 +209,77 @@ test('hub and gate: a lane refused at start answers KERNEL_UNAVAILABLE with caus
   const g2 = incompatible('o11', notServed, { kernel: INTERIM, studios: hello('11.55.91.65258').studios });
   assert.deepEqual({ code: g2.code, cause: g2.cause, served: g2.served }, { code: 'STUDIO_VERSION_MISMATCH', cause: 'STUDIO_VERSION_NOT_SERVED', served: ['11.55.92'] });
   assert.match(g2.error, /no agent package changes that/); assert.match(g2.continuation.why, /update Service Studio to 11\.55\.92/);
+});
+
+test('gate: a lane refused at start is off for the server-only tools too (ssam_job, ssam_map, ssam_discover, o11_job...); the state reports still answer', async () => {
+  const { wrapHostedTool, kernelLaneOff } = await import('../hosted/policy.mjs');
+  const { fakeAgentLink, hostedDirs } = await import('./fixtures/fake-agent-link.mjs');
+  const dirs = hostedDirs(tmp);
+  const refusedO11 = { o11: { kernel: '11.55.91', image: '11.55.92', studio: '11.55.92.65269', reason: 'other-version' } };
+  for (const connected of [true, false]) {
+    const link = fakeAgentLink({ agentRoot: dirs.agentRoot, connected });
+    const executor = { id: 'fake', hosted: true, quota: { full: () => false }, o11Connection: () => ({ pid: 1 }), async call() { return {}; }, async pullFile() { throw new Error('no pull'); } };
+    const context = { id: 'ctx', hosted: true, tokenId: 'tok_test', lanes: ['odc', 'o11'], workspace: dirs.workspace, agent: link, executor };
+    const ran = [];
+    const gate = (name, args) => wrapHostedTool(name, { inputSchema: {} }, async a => { ran.push(name); return { content: [{ type: 'text', text: '{"ok":true}' }], structuredContent: { ok: true } }; },
+      { context, link, lanes: ['odc', 'o11'], kernelRefused: refusedO11 })(args, { requestId: 1 });
+    for (const [name, args] of [['ssam_job', { lane: 'o11', job: { ops: [] } }], ['ssam_job', {}], ['ssam_map', { lane: 'o11', target: 'ws:o11/x.oml' }],
+      ['ssam_discover', { intent: 'x', lane: 'o11' }], ['ssam_reference', { lane: 'o11', kind: 'ops' }], ['o11_job', { job: { ops: [] } }]]) {
+      const r = await gate(name, args);
+      assert.equal(r.isError, true, name);
+      assert.deepEqual({ code: r.structuredContent.code, cause: r.structuredContent.cause, lane: r.structuredContent.lane }, { code: 'KERNEL_UNAVAILABLE', cause: 'KERNEL_VERSION_MISSING', lane: 'o11' }, name + ' ' + JSON.stringify(args));
+      assert.equal(r.structuredContent.continuation.tool, 'ssam_doctor');
+    }
+    assert.deepEqual(ran, [], 'nothing of the off lane ran (connected=' + connected + ')');
+    for (const [name, args] of [['ssam_discover', { intent: 'x', lane: 'odc' }], ['ssam_discover', { intent: 'x' }], ['ssam_doctor', {}], ['odc_search_operations', { query: 'x' }]]) {
+      const r = await gate(name, args);
+      assert.equal(r.structuredContent?.code, undefined, name + ' ' + JSON.stringify(r.structuredContent));
+    }
+    assert.deepEqual(ran, ['ssam_discover', 'ssam_discover', 'ssam_doctor', 'odc_search_operations'], 'the lane that is on and the state report still run');
+    // the ODC lane off: studio_doctor (a state report) answers, odc_search_operations does not
+    ran.length = 0;
+    const offOdc = { odc: { kernel: '1.7.27', image: '1.7.28', reason: 'other-version' } };
+    const g2 = (name, args) => wrapHostedTool(name, { inputSchema: {} }, async () => { ran.push(name); return { content: [], structuredContent: { ok: true } }; },
+      { context, link, lanes: ['odc', 'o11'], kernelRefused: offOdc })(args, { requestId: 1 });
+    assert.equal((await g2('odc_search_operations', { query: 'x' })).structuredContent.code, 'KERNEL_UNAVAILABLE');
+    assert.equal((await g2('ssam_job', { lane: 'odc', job: { ops: [] } })).structuredContent.code, 'KERNEL_UNAVAILABLE');
+    await g2('studio_doctor', {});
+    assert.deepEqual(ran, ['studio_doctor']);
+  }
+  const text = kernelLaneOff('o11', refusedO11.o11);
+  assert.match(text.error, /carries the kernel for Service Studio 11\.55\.92, but its kernel\.json names Service Studio 11\.55\.91: the o11 lane is off on this server, server-only tools included, and nothing ran\./);
+  assert.match(kernelLaneOff('odc', { image: '1.7.28', kernel: null }).error, /names no ODC Studio version/);
+});
+
+test('createSsamServer({hosted: {kernelRefused}}): ssam_job {lane:"o11"} answers KERNEL_UNAVAILABLE and never runs the kernel; the warm-up skips the off lane', async t => {
+  const { createSsamServer, hostedWarmLanes } = await import('../ssam.mjs');
+  const { InMemoryTransport } = await import('@modelcontextprotocol/server');
+  const { Client } = await import('@modelcontextprotocol/client');
+  const { fakeAgentLink, hostedDirs } = await import('./fixtures/fake-agent-link.mjs');
+  const dirs = hostedDirs(tmp);
+  const link = fakeAgentLink({ agentRoot: dirs.agentRoot });
+  const executor = { id: 'fake', hosted: true, quota: { full: () => false }, o11Connection: () => ({ pid: 1 }), async call() { return {}; }, async pullFile() { throw new Error('no pull'); } };
+  const context = { id: 'ctx-k', hosted: true, tokenId: 'tok_test', lanes: ['odc', 'o11'], workspace: dirs.workspace, agent: link, executor, close: async () => {} };
+  const runs = [];
+  const session = { tokenId: 'tok_test', lanes: ['odc', 'o11'], workspace: dirs.workspace, agent: link };
+  const kernelRefused = { o11: { kernel: '11.55.91', image: '11.55.92', reason: 'other-version' } };
+  const server = await createSsamServer({ o11: false, odc: false, hosted: { context, session, run: (ctx, fn) => { runs.push(ctx.id); return fn(); }, kernelRefused } });
+  const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: 'kernel-off-test', version: '1.0.0' });
+  await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
+  t.after(async () => { await client.close(); await server.close(); });
+  const listed = new Set((await client.listTools()).tools.map(tool => tool.name));
+  const offCalls = [['ssam_job', { lane: 'o11', job: { ops: [] } }], ['ssam_map', { lane: 'o11', target: 'ws:o11/x.oml' }], ['ssam_discover', { intent: 'x', lane: 'o11' }], ['ssam_reference', { lane: 'o11', kind: 'ops' }]].filter(([name]) => listed.has(name));
+  assert.ok(offCalls.some(([name]) => name === 'ssam_job'), 'ssam_job is listed: ' + [...listed].join(','));
+  for (const [name, args] of offCalls) {
+    const r = await client.callTool({ name, arguments: args });
+    assert.equal(r.structuredContent?.code, 'KERNEL_UNAVAILABLE', name + ' ' + JSON.stringify(r).slice(0, 400));
+    assert.equal(r.structuredContent.cause, 'KERNEL_VERSION_MISSING');
+  }
+  assert.deepEqual(runs, [], 'no handler of the off lane ran');
+  assert.deepEqual(hostedWarmLanes({ odc: true, o11: true }, kernelRefused), ['odc']);
+  assert.deepEqual(hostedWarmLanes({ odc: true, o11: true }, {}), ['odc', 'o11']);
+  assert.deepEqual(hostedWarmLanes({ odc: false, o11: true }, { o11: {} }), []);
 });
 
 test('telemetry adds event names only: warm keeps {event, indexes, delivery, ms}', async () => {

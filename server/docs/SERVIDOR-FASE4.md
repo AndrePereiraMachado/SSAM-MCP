@@ -663,6 +663,10 @@ por faixa, antes do servidor de várias versões (`C:\t\multiver\DESIGN.md`, rev
 2. **Recusa ao iniciar, por faixa.** Se o `kernel.json` nomeia outra versão, a faixa fica desligada:
    `KERNEL_UNAVAILABLE` com `cause: "KERNEL_VERSION_MISSING"`, e o log tem `kernel-version-missing` (`lane`, `kernel`,
    `image`, `studio`, `reason`). A outra faixa continua. Sem as variáveis (o PC do dono) nada muda.
+   A faixa desligada vale para todas as ferramentas dela, também as só do servidor (`ssam_job`, `ssam_map`,
+   `ssam_discover`, `ssam_reference`, `o11_job`, `odc_search_operations`): o portão hospedado responde a mesma recusa
+   antes do agente e de qualquer caminho (`kernelLaneOff` em `hosted/policy.mjs`). Só os relatórios de estado
+   (`ssam_doctor`, `studio_doctor`) respondem. O aquecimento do servidor pula a faixa desligada.
 3. **`kernel.json` v1.** O da interina é
    `{"o11":"11.55.92","odc":"1.7.28","odcBridge":"v97","odcBridgeAccepted":["v96","v48","v45"]}`. Um `kernel.v2.json` é
    ignorado (`kernel-v2-ignored`).
@@ -678,7 +682,9 @@ por faixa, antes do servidor de várias versões (`C:\t\multiver\DESIGN.md`, rev
      o 11.55.91.
 5. **Caches.** Índice de módulos `v1/o11` e `v1/odc`, cópias dos leitores O11 (`readers/ss4`) e do prefetch
    (`readers-prefetch/ss4`; o desenho diz `readers/ss4-prefetch`, que também é apagado): esvaziados no primeiro início
-   com outra versão da faixa (`kernel-cache-reset`, carimbo `kernel-studio.json` na raiz do índice). O deploy e o rollback
+   com outra versão da faixa (`kernel-cache-reset`, carimbo `kernel-studio.json` na raiz do índice). Uma faixa desligada
+   conta como carimbo inválido: as raízes dela são esvaziadas e o carimbo dela sai, e a próxima subida com o par certo
+   esvazia de novo. Assim nenhum índice feito por outra versão fica no volume. O deploy e o rollback
    também os esvaziam à mão (DEPLOY §7.1 e §8 do SSAM-MCP). Os leitores ODC já são separados por geração (builder e
    Studio). O cache de bases dos workers O11 fica em memória e já tem a versão na chave (`BaseModelCache`).
 6. **Catálogos.** `kernel/catalog/functions-11.55.92.json` e `verify-messages-11.55.92.json` (iguais aos do 11.55.91,
