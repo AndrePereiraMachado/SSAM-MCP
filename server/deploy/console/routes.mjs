@@ -1,4 +1,5 @@
-// Routes of the API (DESIGN 4.3). Read routes hand over to the views; mutations check their body here (2.2 step 6: types,
+// Routes of the API (DESIGN 4.3, DESIGN-QUALIDADE 4.4). Read routes hand over to the views (a download answers
+// {file: {type, name, text}}); mutations check their body here (2.2 step 6: types,
 // ranges, no unknown field), then go to licenses.mjs (confirmation, STALE, gate, token module) or to the alert engine and
 // the access key, each recorded in console-audit.jsonl. New secrets exist only in the response of issue and agent-rotate.
 import { onlyFields } from './http.mjs';
@@ -25,7 +26,7 @@ function confirmField(body) {
 }
 const required = (body, names) => { for (const n of names) if (!Object.hasOwn(body, n)) throw invalidField(n, 'obrigatório'); };
 
-export function createRoutes({ views, data, licenses, live, alerts, auth, history, gate, log, now = Date.now }) {
+export function createRoutes({ views, data, quality, licenses, live, alerts, auth, history, gate, log, now = Date.now }) {
   const audit = entry => history.append({ time: new Date(now()).toISOString(), actor: 'painel', result: 'ok', ...entry });
   const urls = () => { const u = views.urls(); return { publicUrl: u.publicUrl, serverUrl: u.serverUrl }; };
 
@@ -101,6 +102,9 @@ export function createRoutes({ views, data, licenses, live, alerts, auth, histor
     'GET /api/overview': () => ({ body: views.overview() }),
     'GET /api/licenses': () => ({ body: views.licensesPayload() }),
     'GET /api/usage': ({ query }) => ({ body: data.usagePayload(query) }),
+    // DESIGN-QUALIDADE 4.4: the quality tables, and their downloads as a file answer (http.mjs sendFile)
+    'GET /api/quality': ({ query }) => ({ body: quality.payload(query) }),
+    'GET /api/quality/export': ({ query }) => quality.exportFile(query),
     'GET /api/live': () => ({ body: views.livePayload() }),
     'GET /api/vps': () => ({ body: data.vpsPayload() }),
     'GET /api/events': ({ query }) => ({ body: views.eventsPayload(query) }),

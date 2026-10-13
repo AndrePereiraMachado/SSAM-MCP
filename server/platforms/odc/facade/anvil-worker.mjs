@@ -43,6 +43,7 @@ import { anvilRoot, workspaceRoot, o11Lane } from './workspace.mjs';
 import { o11LaneOf, readAuthorityKey } from './o11-lane.mjs';
 import { laneEnvironment, createAnvilRunner } from './anvil-cli.mjs';
 import { hostedContext, hostedSpawnEnv, onHostedContextClose, usesWorkspace } from './executor.mjs';
+import { kernelStart } from './quality-meter.mjs';
 
 export const WORKER_PROTOCOL = 'anvil-worker-1';
 const MAX_REPLY_BYTES = 256 * 1024 * 1024;
@@ -371,7 +372,11 @@ export async function runOdcOnWorker(argv, { worker = defaultOdcWorker(), needs 
   const capabilities = Array.isArray(state.status.capabilities) ? state.status.capabilities : [];
   const missing = needs.filter(c => !capabilities.includes(c));
   if (missing.length) return { used: false, note: `the ODC worker does not advertise ${missing.join(', ')} (an older CLI); ran cold` };
-  const w = await worker.run(argv.map(String));
+  // Quality (docs/QUALIDADE.md): the worker request is a kernel leaf; nothing run there (its cold fallback is the span).
+  const end = kernelStart({ lane: 'odc', via: 'worker' });
+  let w;
+  try { w = await worker.run(argv.map(String)); }
+  finally { end({ ran: w?.used === true && !(!w.unknown && w.envelope?.ok === false && w.envelope?.executed === false), ok: w?.envelope?.ok === true }); }
   if (!w.used) return { used: false, note: w.note };
   if (w.unknown) return { used: true, unknown: true, code: w.code ?? 'WORKER_OUTCOME_UNKNOWN', error: w.error };
   if (w.envelope?.ok === false && w.envelope?.executed === false)
@@ -400,7 +405,11 @@ export function createWorkerFirstRunner({ root = anvilRoot, env = process.env, o
     if (!usable || verb === 'app-session' || options.input !== undefined || options.cli) return fallback(args, options);
     const started = Date.now();
     const line = 'worker ' + verb;
-    const w = await usable.run(args.map(String), { timeoutMs: options.timeoutMs });
+    // Quality (docs/QUALIDADE.md): the worker request is a kernel leaf; a miss ran nothing and its cold run is the span.
+    const end = kernelStart({ lane: 'o11', via: 'worker' });
+    let w;
+    try { w = await usable.run(args.map(String), { timeoutMs: options.timeoutMs }); }
+    finally { end({ ran: w?.used === true && !(!w.unknown && w.envelope?.ok === false && w.envelope?.executed === false), ok: w?.envelope?.ok === true }); }
     // A refusal the worker answers with executed:false (another controller's key) ran nothing: the same command runs cold.
     const refusedUnrun = w.used && !w.unknown && w.envelope?.ok === false && w.envelope?.executed === false;
     if (!w.used || refusedUnrun) {

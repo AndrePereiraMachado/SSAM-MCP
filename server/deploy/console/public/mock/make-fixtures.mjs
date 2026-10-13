@@ -14,6 +14,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+// The Qualidade payloads (DESIGN-QUALIDADE 4.6) are computed by the console's own aggregation over the design's fixture
+// day (tests/fixtures/quality), so the mock answers have the exact shapes and numbers of the real API.
+import { sanitizeQualityLine } from '../../quality-line.mjs';
+import { createQualityEngine, emptyQualityDay, summarizeQuality } from '../../quality.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -1057,10 +1061,10 @@ function buildVps(name) {
         ms: 148000, workerRunning: true,
       },
     logs: problems
-      ? { serverLogB: 650117120, rotatedCount: 0, rotatedB: 0, auditFiles: 31, auditB: 48234496, consoleAuditB: 18432 }
+      ? { serverLogB: 650117120, rotatedCount: 0, rotatedB: 0, auditFiles: 31, auditB: 48234496, qualityFiles: 31, qualityB: 9437184, consoleAuditB: 18432 }
       : fresh
-        ? { serverLogB: 1843, rotatedCount: 0, rotatedB: 0, auditFiles: 0, auditB: 0, consoleAuditB: 0 }
-        : { serverLogB: 7372, rotatedCount: 0, rotatedB: 0, auditFiles: 1, auditB: 2150, consoleAuditB: 1240 },
+        ? { serverLogB: 1843, rotatedCount: 0, rotatedB: 0, auditFiles: 0, auditB: 0, qualityFiles: 0, qualityB: 0, consoleAuditB: 0 }
+        : { serverLogB: 7372, rotatedCount: 0, rotatedB: 0, auditFiles: 1, auditB: 2150, qualityFiles: 7, qualityB: 41216, consoleAuditB: 1240 },
   };
   const coolifyNames = ['coolify', 'coolify-db', 'coolify-proxy', 'coolify-realtime', 'coolify-redis'];
   const coolify = coolifyNames.map((n) => ({ name: n, state: problems && n === 'coolify-proxy' ? 'running' : 'exited', restartPolicy: 'no' }));
@@ -1107,7 +1111,7 @@ function buildVpsMissing() {
       image: null,
       kernel: { running: null, file: KERNEL, drift: false, driftFields: [] },
       warm: null,
-      logs: { serverLogB: 7372, rotatedCount: 0, rotatedB: 0, auditFiles: 1, auditB: 2150, consoleAuditB: 1240 },
+      logs: { serverLogB: 7372, rotatedCount: 0, rotatedB: 0, auditFiles: 1, auditB: 2150, qualityFiles: 7, qualityB: 41216, consoleAuditB: 1240 },
     },
     coolify: null,
     series: null,
@@ -1346,6 +1350,148 @@ const ERRORS = {
   'error-store-unreadable': err('STORE_UNREADABLE', 'O arquivo de licenças não pode ser lido agora (EACCES).'),
 };
 
+// ---------------------------------------------------------------------------------------------------------------- quality
+
+// The fixture day of DESIGN-QUALIDADE (2026-10-12 local, 63 lines) with the mock's tokens.
+const QUALITY_DAY = path.join(here, '..', '..', 'tests', 'fixtures', 'quality', 'server-dir', 'quality-20261012.jsonl');
+const QUALITY_TOKENS = { tok_0000000a1fa0: TOK.alfa, tok_0000000b2fb1: TOK.beta, tok_0000000c3fc2: TOK.gama };
+const localDayOf = (iso) => new Date(Date.parse(iso) + LOCAL_OFFSET).toISOString().slice(0, 10);
+const hex2 = (n) => (n & 0xff).toString(16).padStart(2, '0');
+
+function qualityDay() {
+  return fs.readFileSync(QUALITY_DAY, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+}
+
+// normal: the fixture day today and, on each of the 6 days before, the same day with some of its sessions.
+function normalQualityLines() {
+  const day = qualityDay();
+  const sessions = [...new Set(day.map((l) => l.session))];
+  const out = [];
+  for (let k = 6; k >= 0; k -= 1) {
+    for (const l of day) {
+      const si = sessions.indexOf(l.session);
+      if (k > 0 && (si + k) % 3 === 0) continue;
+      out.push({ ...l, time: new Date(Date.parse(l.time) - k * D).toISOString(), token: QUALITY_TOKENS[l.token] ?? l.token,
+        session: hex2(k) + l.session.slice(2) });
+    }
+  }
+  return out;
+}
+
+// problemas: on top of normal, three customers with many refusals before each delivery, pauses above 10 min, a code that
+// is not in the catalog (NATIVE_UNLISTED), a code outside the registry (CODE_UNLISTED), codes folded by the writer
+// (OTHER_CODES), parallel calls, failures. Every other code is in the contract's registry (CODES).
+function problemQualityLines() {
+  const r = rng(4242);
+  const out = normalQualityLines();
+  const codes = ['EXPR_UNKNOWN_IDENTIFIER', 'EXPRESSION_SYNTAX', 'FUNCTION_UNKNOWN', 'FIELD_UNKNOWN', 'INPUT_TYPE_MISMATCH', 'NATIVE_UNLISTED',
+    'OTHER_CODES', 'CODE_UNLISTED', 'ExpressionUnknownObject'];
+  const people = [[TOK.delta, 'codex'], [TOK.zeta, 'claude-code'], [TOK.eta, 'cursor']];
+  let n = 0;
+  for (let k = 6; k >= 0; k -= 1) {
+    for (const [token, client] of people) {
+      n += 1;
+      const session = `${hex2(0x80 + n)}000000${hex2(k)}${hex2(n)}`;
+      const t = Date.parse(`${localDays(7)[6 - k]}T12:00:00.000Z`) + Math.floor(r() * 6 * H);
+      out.push({ schema: 'ssam-quality/1', kind: 'session', time: new Date(t).toISOString(), token, session, event: 'opened', client });
+      let call = 0;
+      let last = null;
+      const add = (ms, fields, gap = 4000 + Math.floor(r() * 30000), inFlight = 0) => {
+        call += 1;
+        const arrival = last === null ? t : inFlight ? last - 500 : last + gap;
+        const end = arrival + ms;
+        out.push({
+          schema: 'ssam-quality/1', kind: 'call', time: new Date(end).toISOString(), token, session, call, tool: fields.tool, op: fields.op ?? null,
+          lane: fields.lane ?? 'o11', ms, gapMs: last === null || inFlight ? null : arrival - last, inFlight, ok: fields.ok, code: fields.ok ? null : fields.code,
+          class: fields.class, step: fields.step ?? null, deliv: fields.deliv ?? null,
+          ...(fields.problems ? { problems: fields.problems } : {}), ...(fields.norm ? { norm: fields.norm } : {}),
+          t: fields.t, agent: { n: 4, failed: 0, bytes: 120000, shared: false },
+          ...(fields.t.kernelOwn ? { kernel: { runs: 1, cold: k % 2, worker: 1 - (k % 2), ms: fields.t.kernelOwn } } : {}),
+        });
+        last = Math.max(last ?? 0, end);
+      };
+      const tool = client === 'claude-code' ? 'studio_deliver' : 'o11_deliver';
+      const lane = tool === 'studio_deliver' ? 'odc' : 'o11';
+      add(900, { tool: 'ssam_map', op: 'digest', lane, ok: true, class: 'ok', t: { capture: 600, transfer: 200, rest: 100 } });
+      const refusals = 2 + Math.floor(r() * 4);
+      for (let i = 0; i < refusals; i += 1) {
+        const a = codes[Math.floor(r() * codes.length)];
+        const b = codes[Math.floor(r() * codes.length)];
+        const byCode = a === b ? { [a]: 4 } : { [a]: 3, [b]: 1 };
+        add(6000 + Math.floor(r() * 50000), {
+          tool, lane, ok: false, code: 'PREFLIGHT_REFUSED', class: 'refused', step: 'preflight',
+          problems: { n: 4, err: 4, warn: 0, byCode, withPatch: { [a]: 2 }, byPhase: { preflight: 3, verify: 1 }, cut: false },
+          norm: i % 2 ? { n: 2, byRule: { SORT_KEYS_SPLIT: 1, LIST_ENTITY_SEGMENT_DROPPED: 1 } } : null,
+          t: { capture: 1500, transfer: 9000, kernelOwn: 7000, studio: 2500, rest: 400 },
+        }, i === 1 ? 900000 + Math.floor(r() * 600000) : undefined);
+        if (i === 0) add(300, { tool: 'ssam_discover', lane, ok: true, class: 'ok', t: { rest: 300 } }, 0, 1);
+      }
+      add(30000 + Math.floor(r() * 40000), {
+        tool, lane, ok: true, class: 'delivered', deliv: 'entregue', norm: { n: 1, byRule: { NULL_FUNCTION_REWRITTEN: 1 } },
+        t: { capture: 2000, transfer: 6000, kernelOwn: 9000, studio: 12000, verify: 2400, rest: 600 },
+      });
+      if (k % 3 === 0) add(2000, { tool: 'o11_studio', op: 'open-module', lane: 'o11', ok: false, code: 'AGENT_NOT_CONNECTED', class: 'failed', t: { rest: 2000 } }, 2400000);
+      if (k % 2 === 0) {
+        out.push({ schema: 'ssam-quality/1', kind: 'session', time: new Date(last + 30000).toISOString(), token, session, event: 'closed', client,
+          reason: 'client-delete', calls: call, openMs: last + 30000 - t });
+      }
+    }
+  }
+  return out;
+}
+
+function qualityLines(name) {
+  if (name === 'vazio') return [];
+  return name === 'problemas' ? problemQualityLines() : normalQualityLines();
+}
+
+const QUALITY_NATIVE = new Set(['ExpressionUnknownObject']);
+// The day aggregates of a scenario: every line through the contract and the console's engine, the idle close at NOW.
+function qualityDays(name) {
+  const days = new Map();
+  const engine = createQualityEngine({
+    dayOf: localDayOf,
+    dayAgg: (d) => {
+      if (!days.has(d)) days.set(d, emptyQualityDay(d));
+      return days.get(d);
+    },
+  });
+  const lines = qualityLines(name).map((l) => sanitizeQualityLine(l, { nativeIds: QUALITY_NATIVE })).filter(Boolean)
+    .sort((a, b) => a.time.localeCompare(b.time) || (a.kind === 'session' && a.event === 'opened' ? -1 : 0));
+  for (const l of lines) engine.apply(l);
+  engine.sweep(NOW_MS);
+  return days;
+}
+
+function buildQuality(name, kind) {
+  const days = kind === 'today' ? localDays(1) : kind === '7d' ? localDays(7) : localDays(30);
+  const all = qualityDays(name);
+  const names = new Map(licenseList(name).map((l) => [l.id, l.customer]));
+  const summary = summarizeQuality(days.map((d) => all.get(d) ?? emptyQualityDay(d)), { nameOf: (t) => names.get(t) ?? t });
+  const known = [...all.keys()].sort();
+  return ok({
+    now: NOW,
+    range: { kind, from: days[0], to: days[days.length - 1], days: days.length, timeZone: TZ },
+    indexing: name === 'problemas' ? { state: 'running', progress: 0.42, detail: 'registros de qualidade' } : { state: 'ready', progress: 1, detail: null },
+    available: true,
+    firstDay: known[0] ?? null,
+    ...summary,
+  });
+}
+
+// vazio, 30 dias: an image that does not record yet (the notice of the view).
+function buildQualityUnavailable() {
+  const days = localDays(30);
+  return ok({
+    now: NOW,
+    range: { kind: '30d', from: days[0], to: days[days.length - 1], days: days.length, timeZone: TZ },
+    indexing: { state: 'ready', progress: 1, detail: null },
+    available: false,
+    firstDay: null,
+    ...summarizeQuality([]),
+  });
+}
+
 // ---------------------------------------------------------------------------------------------------------------- write
 
 export function buildScenario(name) {
@@ -1356,12 +1502,16 @@ export function buildScenario(name) {
     'usage-today': buildUsage(name, 'today'),
     'usage-7d': buildUsage(name, '7d'),
     'usage-30d': buildUsage(name, '30d'),
+    'quality-today': buildQuality(name, 'today'),
+    'quality-7d': buildQuality(name, '7d'),
+    'quality-30d': buildQuality(name, '30d'),
     live: buildLive(name),
     events: buildEvents(name),
     history: buildHistory(name),
     ...buildMutations(name),
     ...ERRORS,
   };
+  if (name === 'vazio') files['quality-unavailable'] = buildQualityUnavailable();
   const vps = buildVps(name);
   if (vps) files.vps = vps;
   else files['vps-missing'] = buildVpsMissing();

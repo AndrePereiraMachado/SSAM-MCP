@@ -67,6 +67,12 @@ test('every endpoint matches the contract shapes on a realistic state volume', a
     const u = (await c.get('/api/usage' + q)).body;
     S.assertShape(assert, u, S.Usage, 'usage ' + q);
   }
+  for (const q of ['?range=today', '?range=7d', '?range=30d', '?range=day&day=2026-10-12', '']) {
+    const r = (await c.get('/api/quality' + q)).body;
+    S.assertShape(assert, r, S.Quality, 'quality ' + q);
+    assert.equal(r.available, false, 'no quality file in this volume');
+  }
+  S.assertShape(assert, (await c.get('/api/quality?range=7d&token=' + sc.alfa.id)).body, { ...S.Quality, token: 'string' }, 'quality token');
   const u7 = (await c.get('/api/usage?range=7d')).body;
   assert.equal(u7.range.days, 7);
   assert.equal(u7.totals.calls, 4);
@@ -192,7 +198,7 @@ test('empty state volume and missing host.json still answer every endpoint (200)
   const c = await startConsole(env);
   t.after(() => c.close());
   await c.app.tickAll();
-  for (const [p, shape] of [['/api/meta', S.Meta], ['/api/overview', S.Overview], ['/api/licenses', S.Licenses], ['/api/usage?range=today', S.Usage],
+  for (const [p, shape] of [['/api/meta', S.Meta], ['/api/overview', S.Overview], ['/api/licenses', S.Licenses], ['/api/usage?range=today', S.Usage], ['/api/quality?range=today', S.Quality],
     ['/api/live', S.Live], ['/api/vps', S.Vps], ['/api/events', S.Events], ['/api/history', S.HistoryList]]) {
     const r = await c.get(p);
     assert.equal(r.status, 200, p);

@@ -6,6 +6,9 @@ Cópia de `servidor/fase4` (`e7b2119b`) de `C:\Users\andre\SSAM-Hybrid-servidor`
 `fase4-24/odc1728` (`c48074be`, o 24º envio no ODC Studio 1.7.28, branch `server/r24-odc1728`): bridge ODC `v97`
 (compilada contra o 1.7.28), bridge O11 fina com `sc_http` (`ScHttpHandler.cs`) e agente `0.3.1` (`reference-producers`,
 `sc_http`, transporte novo e `net.probe`).
+Na branch `server/r24-qualidade` (`fase4-24/qualidade`, `3262c49f`) só o guia do cliente muda: `docs/AGENTE-CLIENTE.md`
+ganha o parágrafo do registro de qualidade (o agente e o pacote não mudam); `01795e52` não muda nada desta caixa; em
+`c24d468d` só a seção "Privacidade" do guia muda; `1b2ce8fe` não muda nada desta caixa.
 Esta pasta guarda os caminhos relativos do repositório antigo: os `.csproj` e os scripts resolvem daqui.
 
 ## Compilar e montar o pacote
@@ -42,6 +45,7 @@ Em 2026-10-12 (ODC Studio 1.7.28): node 86/86, Bridge.Tests 311/311 contra o 1.7
 `ODC3.Bridge.v97` a partir desta pasta. O pacote v97 (`pack-20261013-003406`, 40 entradas, v97, 11.55.91, varredura sem
 achados) saiu da worktree da linha (`README.md` da raiz, "Conferência de 2026-10-12 (ODC Studio 1.7.28)"). Os clientes
 no ODC Studio 1.7.28 precisam dele para `refresh-references --producer`; o pacote v96 continua aceito no resto.
+Em 2026-10-12 (`server/r24-qualidade`): node 86/86 de novo (só um doc mudou nesta caixa).
 
 ## Deploy
 

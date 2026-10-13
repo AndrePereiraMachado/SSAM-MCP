@@ -134,8 +134,57 @@ export const VIEWS = [
   { id: 'visao', label: 'Visão geral' },
   { id: 'licencas', label: 'Licenças' },
   { id: 'uso', label: 'Uso' },
+  { id: 'qualidade', label: 'Qualidade' },
   { id: 'agentes', label: 'Agentes e sessões' },
   { id: 'vps', label: 'VPS' },
   { id: 'eventos', label: 'Eventos' },
   { id: 'historico', label: 'Histórico' },
 ];
+
+// ---- Qualidade (DESIGN-QUALIDADE 4.5)
+
+/** Phase columns of the quality tables, in the order of the API (Fases da entrega, Para onde vai o tempo). */
+export const PHASE_KEYS = ['queue', 'capture', 'compile', 'studio', 'verify', 'publish', 'environment', 'transfer', 'rest'];
+
+export const PHASE_WORD = {
+  queue: 'Fila',
+  capture: 'Captura',
+  compile: 'Compilação',
+  studio: 'Studio',
+  verify: 'Verificação',
+  publish: 'Publicação',
+  environment: 'Ambiente',
+  transfer: 'Transferência',
+  rest: 'Servidor',
+};
+
+/** Where the problems of a refusal were found (problems.byPhase). */
+export const PROBLEM_PHASE_KEYS = ['preflight', 'base', 'apply', 'verify', 'other'];
+export const PROBLEM_PHASE_WORD = {
+  preflight: 'preflight',
+  base: 'base',
+  apply: 'apply',
+  verify: 'verificação',
+  other: 'outra',
+};
+
+/** MCP client families of the session lines. */
+export const CLIENT_WORD = {
+  'claude-code': 'Claude Code',
+  'claude-ai': 'claude.ai',
+  'claude-desktop': 'Claude Desktop',
+  codex: 'Codex',
+  cursor: 'Cursor',
+  vscode: 'VS Code',
+  windsurf: 'Windsurf',
+  other: 'outro',
+  unknown: 'sem nome',
+};
+
+/** What each normalization rule of the engine did (unknown rule: a dash). */
+export const RULE_TEXT = {
+  SORT_KEYS_SPLIT: 'ordenação escrita com vírgulas virou lista de chaves',
+  LIST_ENTITY_SEGMENT_DROPPED: 'caminho com a entidade numa lista de registros foi encurtado',
+  NULL_FUNCTION_REWRITTEN: 'NullDateTime() ou NullTime() trocado pelo nulo do tipo',
+  PROPERTY_SET_DROPPED: 'propriedade de documentação sem escrita foi descartada, com aviso',
+};

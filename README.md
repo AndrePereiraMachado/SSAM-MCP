@@ -64,6 +64,58 @@ Os arquivos que existem nas duas caixas estão em [`SHARED.md`](SHARED.md), com 
   - Ficou fora 1, pela regra da cópia: `scripts/release/license/weave-spec.json`.
   - Conferido: os 6199 arquivos das duas caixas que vêm da linha têm o mesmo blob de `c48074be`. Contagem: `server/`
     6055, `agent/` 145, 76 nas duas.
+- Atualizado em 2026-10-12 na branch `server/r24-qualidade` (de `server/r24` em `a857a1e`): o registro de qualidade
+  (`ssam-quality/1`). Para cada cliente hospedado, só códigos, contagens e tempos: o motivo de cada recusa por código de
+  problema, as correções automáticas do motor por regra, o tempo de cada fase da entrega e a sequência de chamadas de cada
+  sessão (com o intervalo parado entre elas), mais a aba Qualidade do painel, que soma tudo de todos os clientes.
+  - Antes da cópia entrou por merge `server/console-qualidade` (`2682709a`): a aba Qualidade em `server/deploy/console`,
+    a rotação e a retenção dos `quality-*.jsonl` e as notas do `DEPLOY.md`.
+  - Depois, `a415531d..3262c49f` de `fase4-24/qualidade` (`3262c49fafabd95b44442f78061392f3ea2ed200`, 6 commits): 32
+    caminhos (21 novos, 11 alterados, nenhum apagado), 32 entradas: 31 em `server/` e `docs/AGENTE-CLIENTE.md` (o
+    parágrafo de privacidade do registro) só em `agent/`, onde o guia do cliente está. Nada ficou fora pela regra da
+    cópia; o `SHARED.md` não muda (nenhum arquivo compartilhado mudou).
+  - Conferido: os 6219 arquivos das duas caixas que vêm da linha têm o blob de `3262c49f`. As quatro cópias do contrato
+    `quality-line.mjs` (fachada, painel e as duas pastas de fixtures) têm o sha256 LF `95d2962a…557d` do desenho.
+  - Contagem: `server/` 6075, `agent/` 145, 76 nas duas.
+  - Depois, `3262c49f..01795e52` de `fase4-24/qualidade` (`01795e523aa9ba1d4f9c5aa34059cb6aa9819385`, 1 commit, achado de
+    privacidade de 2026-10-12): o `command` de `studio_command`, texto do modelo com forma de verbo, chegava ao registro
+    (`agent.top`), ao `server.log` e à exportação `linhas` do painel. Os verbos das chamadas ao agente agora saem só das
+    listas fechadas que o agente aplica (`AGENT_VERBS` do contrato). 14 caminhos alterados, todos em `server/` (nenhum
+    novo, nenhum apagado, nenhum compartilhado; o `SHARED.md` não muda), copiados com os blobs da revisão
+    (`C:\t\qual\priv\copy-priv.cjs`). O painel ganhou a mesma cópia do contrato, das fixtures e da paridade. As quatro
+    cópias de `quality-line.mjs` têm agora o sha256 LF `200f74ce…ec6c8`.
+  - Depois, `01795e52..c24d468d` de `fase4-24/qualidade` (`c24d468d97b9e5216725f75581482547e9485039`, 1 commit, os três
+    achados baixos da mesma revisão de privacidade): (1) os códigos, os códigos de problema e as regras das normalizações só
+    ficam quando estão nos registros `CODES` e `RULES` do contrato, gerados das fontes do produto
+    (`platforms/odc/scripts/quality-registry.mjs`, com teste de deriva); fora deles viram `CODE_UNLISTED` ou
+    `RULE_UNLISTED`, contados, nunca o texto; o `debug_<x>` do texto de uma resposta só vira código no depurador, que o
+    servidor hospedado não serve; a auditoria usa o mesmo registro; (2) a seção "Privacidade" de
+    `docs/AGENTE-CLIENTE.md` diz exatamente o que é gravado, por categoria, com a retenção configurável, quem vê (só o
+    dono) e os fatos do `server.log` sobre a máquina do agente; (3) uma expressão mudada por duas regras conta nas duas
+    em `norm.byRule`. 22 caminhos (3 novos, 19 alterados, nenhum apagado), 22 entradas: 21 em `server/` e
+    `docs/AGENTE-CLIENTE.md` só em `agent/`; nenhum compartilhado (o `SHARED.md` só cita a revisão). Copiados com os blobs
+    da revisão (`C:\t\qual\baixos\copy-baixos.cjs`, que também põe os caminhos novos em `server/`). O painel ganhou a
+    mesma cópia do contrato e das fixtures, a paridade nova, os testes do dia hostil com as palavras do cliente em campos
+    de código e os mocks do cenário `problemas` sem códigos fora do registro. As quatro cópias de `quality-line.mjs` têm
+    agora o sha256 LF `cc4440f9…ad239`.
+  - Conferido: os 6222 arquivos das duas caixas que vêm da linha têm o blob de `c24d468d`. Contagem: `server/` 6078,
+    `agent/` 145, 76 nas duas.
+  - Depois, `c24d468d..1b2ce8fe` de `fase4-24/qualidade` (`1b2ce8feadc3a964ddd8611ad2f5dff71d8ef7c1`, 1 commit, os dois
+    achados médios da reconferência da mesma revisão de privacidade): (1) os códigos que o produto compõe em tempo de
+    execução viravam `CODE_UNLISTED` (uma recusa de preflight com `SET_INVALID` e `SPEC_INVALID` ficava
+    `{CODE_UNLISTED: 2}`); o gerador `platforms/odc/scripts/quality-registry.mjs` agora compõe cada família da própria
+    fonte, pela regra de quem a compõe: `<VERBO>_INVALID` de cada verbo e operação do kernel e `OP_INVALID`,
+    `<OP>_REFUSED` de `rest`, `rest-expose` e `soap`, o código que o formatador dá a cada palavra de `failed`, `stage` e
+    `gate` das fontes e `PUBLISH_<GATE>`; (2) `kernel/query-test`, compilado nas duas bridges, não era lido, e os 18
+    `QUERY_TEST_*` do `ssam_query_test` hospedado viravam `CODE_UNLISTED`; a pasta entrou nas raízes, e o teste de deriva
+    agora também falha quando um fonte compilado nas bridges, no kernel ou no builder ODC, ou o arquivo que registra uma
+    ferramenta hospedada, fica fora delas. O registro passa de 1847 para 2004 códigos. 9 caminhos alterados, todos em
+    `server/` (nenhum novo, nenhum apagado, nenhum compartilhado; o `SHARED.md` só cita a revisão), copiados com os blobs
+    da revisão (`C:\t\qual\baixos\fix\copy-fix.cjs`). O painel ganhou a mesma cópia do contrato e do teste
+    compartilhado, o teste novo na sua cópia e a paridade nova. As quatro cópias de `quality-line.mjs` têm agora o
+    sha256 LF `a21d9c1e…5157f`.
+  - Conferido: os 6222 arquivos das duas caixas que vêm da linha têm o blob de `1b2ce8fe`. Contagem: `server/` 6078,
+    `agent/` 145, 76 nas duas.
 
 ## Aviso: o servidor no ar não mudou
 

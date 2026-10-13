@@ -15,16 +15,33 @@
 
 ## Privacidade: o que o servidor registra sobre o seu acesso
 
-Para saber quem usa cada acesso e de onde, o servidor guarda no log dele, em cada conexão:
+Só o dono do servidor vê o log, a auditoria e o registro de qualidade descritos abaixo. Eles ficam no servidor dele e não são repassados a terceiros.
 
-- **O IP de onde você conecta.** É o IP público que o túnel vê. Muda se você trocar de rede, VPN ou 4G.
-- **O cliente MCP.** Nome e versão (por exemplo, Claude Code) e o user-agent.
-- **A máquina do agente.** O nome do computador, o seu usuário do Windows e um identificador. O identificador é um hash do `MachineGuid` do Windows com esses dois e não permite recuperá-los.
-- **O ambiente O11 conectado.** O endereço do ambiente, quando o Service Studio está ligado ao agente.
+**Log do servidor.** Para saber quem usa cada acesso e de onde, o servidor grava:
 
-**A primeira máquina fica registrada.** Se a sua credencial conectar de outra máquina, o acesso continua funcionando, mas o dono recebe um alerta. Trocou de computador? Avise o dono. Trocar de rede, VPN ou 4G não gera alerta de máquina.
+- **Quando o seu cliente MCP abre uma sessão:** o IP de onde você conecta, o nome e a versão do cliente MCP (por exemplo, Claude Code) e o user-agent. O IP é o público que o túnel vê. Muda se você trocar de rede, VPN ou 4G.
+- **Quando o agente conecta:** o IP, a versão do agente, o nome do computador, o seu usuário do Windows e um identificador da máquina. O identificador é um hash do `MachineGuid` do Windows com esses dois e não permite recuperá-los. Com o Service Studio ligado ao agente, também a versão, a porta local, o número do processo e a hora em que ele abriu.
+- **A cada chamada:** as ferramentas, o tamanho da resposta e o tempo. Numa chamada ao agente, o tipo, o comando (só da lista do agente), o tempo e o código do resultado. Também quando o agente conecta, cai ou volta.
 
-Nada além disso sobre a sua máquina é enviado: nenhum arquivo, nenhum histórico, nenhum outro programa. Esses registros servem só para o dono confirmar que o acesso está sendo usado por você, na sua máquina. Ficam no servidor dele e não são repassados a terceiros. Se você não concordar, não instale o agente e fale com o dono.
+**A primeira máquina fica registrada.** Na primeira conexão do agente, o servidor guarda o nome do computador, o seu usuário do Windows, o identificador e o IP. Se a sua credencial conectar de outra máquina, o acesso continua funcionando, mas o dono recebe um alerta com as duas máquinas e o IP. Trocou de computador? Avise o dono. Trocar de rede, VPN ou 4G não gera alerta de máquina.
+
+Nada além disso sobre a sua máquina é enviado: nenhum arquivo, nenhum histórico, nenhum outro programa. Se você não concordar, não instale o agente e fale com o dono.
+
+**Auditoria e registro de qualidade.** De cada chamada de ferramenta, o servidor guarda só códigos, contagens e tempos. Os códigos vêm de uma lista fechada do SSAM. Um valor fora da lista vira um marcador fixo, como `CODE_UNLISTED`, e só é contado.
+
+- **Em toda linha:** a hora, o identificador do seu acesso, o nome que o dono deu a ele e um resumo da sessão MCP que não permite recuperá-la.
+- **A chamada:** a ferramenta, a ação escolhida nela (da lista da ferramenta), a plataforma (O11 ou ODC), a ordem na sessão, a duração, o intervalo desde a resposta anterior e quantas chamadas corriam juntas.
+- **O resultado:** se deu certo, foi recusado, ficou incerto ou falhou; o código; o passo em que parou; e se foi `entregue`, `entregue e publicado` ou `criado`.
+- **A resposta:** quantos problemas de cada código (por fase, quantos eram avisos, quantos vieram com correção pronta e se a lista foi cortada), quantos avisos (e quantos graves), quantas correções automáticas de cada regra, o tamanho, se veio em páginas e como o servidor a leu.
+- **O tempo:** quanto levou cada fase (fila, captura, compilação, Studio, verificação, publicação, ambiente, transferência, rede e o próprio servidor); quantas chamadas ao agente, de que tipo e comando, com quantos bytes, quanto tempo e quantas falhas; quantas vezes o motor rodou e quanto levou.
+- **O pedido, só a forma:** como o job veio (no pedido, num arquivo ou na pasta do agente), se usou `basedOn`, `partial`, `closePrevious`, `publish` ou `until`, quantos patches e o tamanho em bytes.
+- **A sessão MCP:** quando abriu e fechou, o motivo, quantas chamadas teve e a família do cliente MCP (Claude Code, Codex, Cursor...).
+
+Nada do seu trabalho entra na auditoria nem no registro de qualidade: nenhum nome de módulo, tela, action ou entidade, nenhum job, expressão, mensagem, caminho de arquivo, endereço de ambiente ou texto seu. O dono vê esses números por cliente e somados de todos os clientes, para achar os erros mais comuns e o que deixa o SSAM lento.
+
+**Por quanto tempo.** O dono escolhe por quantos dias guarda cada um desses registros. O padrão guarda o log por 56 dias e a auditoria e o registro de qualidade sem prazo. As cópias de segurança do servidor levam os mesmos arquivos.
+
+**O seu espaço no servidor** (`ws:`) guarda os arquivos do seu trabalho (jobs, capturas, recibos e jornais) e a fila de atritos do seu acesso: de cada chamada, a operação, a plataforma, o resultado, o código, o passo e o tempo, e o texto dos relatos que o seu cliente MCP grava com `ssam_friction`. Você e o dono veem esse espaço.
 
 ## O que você recebe do dono do servidor
 

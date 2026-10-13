@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { CONSOLE_DIR, FAKE_MODULE, makeEnv, startConsole } from './helpers.mjs';
+import { CONSOLE_DIR, FAKE_MODULE, HERE, makeEnv, startConsole } from './helpers.mjs';
 import { buildScenario } from './scenario.mjs';
 
 const WRITE = /\b(writeFile|appendFile|rename|unlink|rm|rmdir|mkdir|mkdtemp|copyFile|cp|createWriteStream|truncate|ftruncate|chmod|chown|lchown|symlink|link|utimes|open)(Sync)?\s*\(/g;
@@ -81,11 +81,19 @@ function snapshot(root) {
 test('runtime: a full session writes only the state dir, console-audit.jsonl and tokens.json', async t => {
   const env = makeEnv({ tokenModule: FAKE_MODULE });
   const sc = await buildScenario(env, { module: FAKE_MODULE });
+  // the quality records of DESIGN-QUALIDADE (fixture days, gz and hostile lines): read, aggregated and exported, written
+  // only under the state dir (agg-quality/, the checkpoint)
+  fs.cpSync(path.join(HERE, 'fixtures', 'quality', 'server-dir'), env.serverDir, { recursive: true });
+  env.config.kernelCatalog = path.join(HERE, 'fixtures', 'quality', 'catalog');
   const before = snapshot(env.root);
   const c = await startConsole(env);
   t.after(() => c.close());
   await c.app.tickAll();
   await c.app.parts.workspaces.run();
+  for (const p of ['/api/quality?range=30d', '/api/quality/export?range=30d&table=fases', '/api/quality/export?range=7d&table=linhas', '/api/quality/export?range=7d&table=tudo']) {
+    assert.equal((await c.get(p)).status, 200, p);
+  }
+  assert.ok(fs.readdirSync(path.join(env.stateDir, 'agg-quality')).length > 0);
   const lic = (await c.get('/api/licenses')).body.licenses;
   const beta = lic.find(l => l.id === sc.beta.id);
   const steps = [

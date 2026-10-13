@@ -73,6 +73,24 @@ test('security pipeline (2.2)', async t => {
     r = await request(c.port, { path: '/api/nada', headers: { 'X-SSAM-Console-Key': key() } });
     assert.equal(r.status, 404);
     assert.equal(r.body.error.code, 'NOT_FOUND');
+    // DESIGN-QUALIDADE 4.4: the quality routes and their downloads follow the same rules and carry the same headers
+    for (const p of ['/api/quality', '/api/quality?range=today', '/api/quality/export?range=7d&table=erros', '/api/quality/export?range=7d&table=linhas']) {
+      r = await request(c.port, { path: p });
+      assert.equal(r.status, 401, p);
+      assert.equal(r.body.error.code, 'KEY_REQUIRED', p);
+      r = await request(c.port, { path: p, headers: { 'X-SSAM-Console-Key': 'x'.repeat(43) } });
+      assert.equal(r.status, 401, p);
+      r = await request(c.port, { path: p, headers: { 'X-SSAM-Console-Key': key() } });
+      assert.equal(r.status, 200, p);
+      assertHeaders(r);
+    }
+    r = await request(c.port, { path: '/api/quality/export?range=7d&table=erros&format=csv', headers: { 'X-SSAM-Console-Key': key() } });
+    assert.equal(r.headers['content-type'], 'text/csv; charset=utf-8');
+    assert.match(r.headers['content-disposition'], /^attachment; filename="ssam-qualidade-erros-\d{4}-\d{2}-\d{2}-\d{4}-\d{2}-\d{2}\.csv"$/);
+    r = await request(c.port, { path: '/api/quality/export?range=7d&table=..%2F..%2Fx', headers: { 'X-SSAM-Console-Key': key() } });
+    assert.equal(r.status, 400);
+    assert.equal(r.body.error.field, 'table');
+    assertHeaders(r);
   });
 
   await t.test('OPTIONS and other methods get 405 with no CORS header', async () => {

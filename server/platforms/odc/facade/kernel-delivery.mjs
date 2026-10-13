@@ -16,8 +16,17 @@ import { hasPrototypeOps, expandJobFile, capturePrototype, buildWithDegradation,
   measurePrototypeFidelity, prototypeReceipt, receiptWithSeed } from './prototype-op.mjs';
 import { seedPrototypeData, odcDataWriter } from './prototype-seed.mjs';
 import { prototypeAppUrl, prototypeScreenLinks } from './next-steps.mjs';
+import { kernelStart } from './quality-meter.mjs';
 
 const exec = promisify(execFile);
+// Quality (docs/QUALIDADE.md): a cold `dotnet anvil-odc.dll` is a kernel leaf (the worker request is one in anvil-worker.mjs).
+// run() resolves {exitCode, ...}; a no-op outside a hosted call.
+async function coldKernel(run) {
+  const end = kernelStart({ lane: 'odc', via: 'cold' });
+  let ok = false;
+  try { const response = await run(); ok = response?.exitCode === 0; return response; }
+  finally { end({ ok }); }
+}
 const steps = ['snapshot', 'build', 'check-base', 'preview', 'merge'];
 export const kernelCli = () => path.join(anvilRoot, '.local', 'lane-odc', 'cli', 'anvil-odc.dll');
 export const requiredFlowLayoutEngine = 'anvil-d4d8ece';
@@ -146,10 +155,10 @@ export async function applyKernel({ job, snapshot, output, producers = {} }, dep
   }
   const response = onWorker.used
     ? { stdout: JSON.stringify(onWorker.envelope), stderr: '', exitCode: onWorker.envelope?.ok === true ? 0 : 1 }
-    : await (deps.exec ?? exec)('dotnet', [cli, ...argv], {
+    : await coldKernel(() => (deps.exec ?? exec)('dotnet', [cli, ...argv], {
       cwd: hosted ? hosted.cwd : path.dirname(cli), windowsHide: true, maxBuffer: 64 * 1024 * 1024,
       env: { ...(hosted ? hosted.env : process.env), ANVIL_DEVELOPER_ID: snapshot.developerId },
-    }).then(r => ({ ...r, exitCode: 0 })).catch(e => ({ stdout: e.stdout ?? '', stderr: e.stderr ?? e.message, exitCode: e.code ?? 1 }));
+    }).then(r => ({ ...r, exitCode: 0 })).catch(e => ({ stdout: e.stdout ?? '', stderr: e.stderr ?? e.message, exitCode: e.code ?? 1 })));
   const kernel = { via: onWorker.used ? 'worker' : 'cold', ...(onWorker.note ? { note: onWorker.note } : {}), ...(onWorker.warning ? { warning: onWorker.warning } : {}) };
   let result;
   try { result = JSON.parse(response.stdout); }
@@ -176,9 +185,9 @@ export async function checkJobKernel({ job }, deps = {}) {
   if (!onWorker.used) {
     // Hosted: cold in the customer's closed environment and folder (C01: the verify ids never depend on this cwd).
     const hosted = hostedContext() ? hostedSpawnEnv('odc') : null;
-    const response = await (deps.exec ?? exec)('dotnet', [cli, ...argv], { cwd: hosted ? hosted.cwd : path.dirname(cli), windowsHide: true, maxBuffer: 16 * 1024 * 1024,
+    const response = await coldKernel(() => (deps.exec ?? exec)('dotnet', [cli, ...argv], { cwd: hosted ? hosted.cwd : path.dirname(cli), windowsHide: true, maxBuffer: 16 * 1024 * 1024,
       ...(hosted ? { env: hosted.env } : {}) })
-      .then(r => ({ ...r, exitCode: 0 })).catch(e => ({ stdout: e.stdout ?? '', stderr: e.stderr ?? e.message, exitCode: e.code ?? 1 }));
+      .then(r => ({ ...r, exitCode: 0 })).catch(e => ({ stdout: e.stdout ?? '', stderr: e.stderr ?? e.message, exitCode: e.code ?? 1 })));
     try { envelope = JSON.parse(response.stdout); } catch { envelope = null; }
   }
   if (!isObject(envelope)) return { ok: true, skipped: 'check-job gave no answer' };
@@ -209,8 +218,8 @@ export async function planMergeOrderKernel({ base, candidate, output }, deps = {
   if (onWorker.used && onWorker.unknown) return { ok: false, error: 'the ODC kernel worker took merge-order and gave no answer (' + (onWorker.error ?? 'no reply') + ')' };
   let envelope = onWorker.used ? onWorker.envelope : null;
   if (!onWorker.used) {
-    const response = await (deps.exec ?? exec)('dotnet', [cli, ...argv], { cwd: path.dirname(cli), windowsHide: true, maxBuffer: 16 * 1024 * 1024 })
-      .then(r => ({ ...r, exitCode: 0 })).catch(e => ({ stdout: e.stdout ?? '', stderr: e.stderr ?? e.message, exitCode: e.code ?? 1 }));
+    const response = await coldKernel(() => (deps.exec ?? exec)('dotnet', [cli, ...argv], { cwd: path.dirname(cli), windowsHide: true, maxBuffer: 16 * 1024 * 1024 })
+      .then(r => ({ ...r, exitCode: 0 })).catch(e => ({ stdout: e.stdout ?? '', stderr: e.stderr ?? e.message, exitCode: e.code ?? 1 })));
     try { envelope = JSON.parse(response.stdout); } catch { envelope = null; }
     if (!isObject(envelope)) return { ok: false, error: 'merge-order gave no JSON: ' + (withoutStack(String(response.stderr || response.stdout || '').trim()).split('\n').find(Boolean) ?? 'no output') };
   }

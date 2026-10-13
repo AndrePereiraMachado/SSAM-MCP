@@ -1,0 +1,2 @@
+# The gzip fixture is binary: never normalize its bytes (server/deploy/.gitattributes sets text eol=lf for the rest).
+*.gz binary

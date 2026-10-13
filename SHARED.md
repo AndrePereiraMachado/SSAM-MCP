@@ -2,7 +2,8 @@
 
 Estes 76 arquivos existem em `server/` e em `agent/`, no mesmo caminho relativo dentro de cada caixa.
 Hoje as duas cópias são iguais byte a byte. Vieram de `servidor/fase4` (`e7b2119b`) e estão na revisão de
-`fase4-24/odc1728` (`f912cb7e`), o 24º envio (`a415531d`) no ODC Studio 1.7.28 com a bridge ODC v97. O 24º acrescentou 8:
+`fase4-24/odc1728` (`f912cb7e`), o 24º envio (`a415531d`) no ODC Studio 1.7.28 com a bridge ODC v97, e na de
+`fase4-24/qualidade` (`3262c49f`, `01795e52`, `c24d468d` e `1b2ce8fe`, que não mudam nenhum deles). O 24º acrescentou 8:
 `PrivateHttpContext.cs` e `ScHttpHandler.cs` do kernel e 6 fontes novas da bridge ODC (`Portal*.cs`). O `f912cb7e`
 mudou 5: `docs/FASE2-AGENTE.md`, `docs/PROVAS-AO-VIVO.md`, `Bridge.csproj`, `StartupHook.cs` e `client/Program.cs`.
 

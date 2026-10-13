@@ -129,6 +129,8 @@ export const eventText = {
   },
   tokensUnreadable: () => 'O servidor não conseguiu ler o arquivo de licenças.',
   serverError: e => `Erro interno do servidor (${e.event}: ${cap(e.error ?? '?', 64)}).`,
+  // DESIGN-QUALIDADE 4.1: {"event":"quality-failed","stage":"summary|write|span","error":"<fs code>"}
+  qualityFailed: e => `O servidor não conseguiu gravar um registro de qualidade (${cap(e.stage ?? '?', 20)}: ${cap(e.error ?? '?', 40)}).`,
   contextClosed: (c, e) => `Contexto hospedado de ${c} fechado (${pick(CONTEXT_CLOSE, e.reason) ?? cap(e.reason ?? '?', 40)}).`,
   restarted: service => `${service} reiniciou.`,
   health: (before, after) => `Saúde do ssam-server: ${before} → ${after}.`,

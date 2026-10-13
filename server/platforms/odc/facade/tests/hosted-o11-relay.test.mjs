@@ -70,6 +70,14 @@ test('a drop after delivery closes the socket with no reply (an unknown outcome 
   assert.ok(c.events.some(e => e.event === 'relay-unknown' && e.method === 'merge_from_oml'));
 });
 
+test('the relay log names a method only from the agent\'s closed list, never a verb-shaped free word', async t => {
+  const c = await customer(t, () => { throw coded('AGENT_DISCONNECTED', 'channel lost after accepted', { executed: null, delivered: true }); });
+  await assert.rejects(request(c.port, c.key, 'sntl_method', {}), e => ['BRIDGE_NO_REPLY', 'BRIDGE_TRANSPORT'].includes(e.code));
+  const unknown = c.events.filter(e => e.event === 'relay-unknown');
+  assert.deepEqual(unknown.map(e => e.method), [null]);
+  assert.ok(!JSON.stringify(c.events).includes('sntl'), JSON.stringify(c.events));
+});
+
 test('a client whose read timeout is shorter than a slow agent gets no reply, and the late reply is logged as relay-late', async t => {
   const c = await customer(t, async () => { await delay(400); return { reply: { success: true, data: { late: true } } }; });
   await assert.rejects(givingUp(c.port, c.key, 'snapshot_module', {}, 100), e => e.code === 'BRIDGE_TIMEOUT');

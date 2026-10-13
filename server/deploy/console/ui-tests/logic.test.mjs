@@ -179,6 +179,7 @@ test('VPS: the key-value texts of 6.5 from the normal host.json facts', () => {
   assert.equal(srv.Aquecimento, 'ok em 148 s · índices ODC e O11 ok · builder ok · worker ODC falhou e subiu depois');
   assert.equal(srv['/health'], 'ok em 3 ms · Docker: saudável');
   assert.equal(srv['server.log'], '7,2 KiB · 0 girados');
+  assert.equal(srv['Registros de qualidade'], '7 arquivos · 40 KiB');
   const bk = vps.backupRows(d.backups, NOW);
   assert.equal(bk[0].value, 'nenhum');
   assert.equal(bk[0].level, 'bad');
@@ -250,4 +251,68 @@ test('Licenças: the capability line (read-only by CONSOLE_LICENSE_WRITES, or re
   const off = caps({ issue: false, revoke: false, agentRotate: false, renew: false, lanes: false, readOnly: 'sem-trava' });
   assert.equal(licencas.capabilityLine(off), 'Ações de licença desligadas: esta imagem não trava o tokens.json entre o painel e o ssam-admin. Até a imagem do 24º envio, emita, renove e revogue pelo ssam-admin (DEPLOY.md 15.4).');
   assert.equal(licencas.capabilityLine({ ...off, readOnly: 'desligado' }), 'Ações de licença desligadas neste painel (CONSOLE_LICENSE_WRITES=off).');
+});
+
+// DESIGN-QUALIDADE 4.5: the texts of the Qualidade view, against the golden payload of the design (normal, today).
+const qualidade = await import(pub('js/views/qualidade.js'));
+const api = await import(pub('js/api.js'));
+
+test('qualidade: the Resumo rows of the fixture day, word for word', () => {
+  const t = fixture('normal', 'quality-today').totals;
+  const rows = qualidade.resumoRows(t);
+  assert.deepEqual(rows.map((r) => [r.label, r.value]), [
+    ['Chamadas', '54 · 10 com falha (19%)'],
+    ['Entregas', '8 entregues ou criadas · 4 recusas · 0 incertas'],
+    ['Cadeias até entregar', '8 entregues · 2 sem entrega'],
+    ['Voltas do modelo por cadeia', 'p50 2 · p90 8'],
+    ['Chamadas por cadeia', 'p50 2 · p90 18'],
+    ['Recusas antes de entregar', 'p50 0 · máximo 1'],
+    // the console's duration format truncates: 364 800 ms is 6 min 04 s (the design's example rounds to 05)
+    ['Tempo até entregar', 'p50 46,1 s · p90 6 min 04 s'],
+    ['Parado entre chamadas', 'p50 12,4 s · p90 38,1 s · 1 pausa acima de 10 min'],
+    ['Parte parada das cadeias', '53%'],
+    ['Problemas nas recusas', '23 · 15 com correção pronta · preflight 20 · verificação 3'],
+    ['Correções automáticas', '7 em 2 chamadas'],
+    ['Chamadas em paralelo', '2 (fora das tabelas de fases)'],
+  ]);
+  // nothing yet: zeros, dashes, singular and plural words
+  const empty = qualidade.resumoRows(fixture('vazio', 'quality-7d').totals);
+  assert.deepEqual(empty.map((r) => r.value), ['0 · 0 com falha', '0 entregues ou criadas · 0 recusas · 0 incertas', '0 entregues · 0 sem entrega',
+    '—', '—', '—', '—', '0 pausas acima de 10 min', '—', '0 · 0 com correção pronta', '0 em 0 chamadas', '0 (fora das tabelas de fases)']);
+  const one = qualidade.resumoRows({ calls: 1, failures: 0, delivered: 1, refusals: 1, uncertain: 1, chains: 1, chainsOpen: 0, longGaps: 1,
+    normalizations: 1, normalizedCalls: 1, problems: 1, withPatch: 0, problemPhases: { base: 1, other: 2 } });
+  assert.equal(one[1].value, '1 entregue ou criada · 1 recusa · 1 incerta');
+  assert.equal(one[7].value, '1 pausa acima de 10 min');
+  assert.equal(one[9].value, '1 · 0 com correção pronta · base 1 · outra 2');
+  assert.equal(one[10].value, '1 em 1 chamada');
+});
+
+test('qualidade: cells and lines (time share, cold kernel, tools, Todos row, indexing, notice, privacy)', () => {
+  assert.equal(qualidade.pctCell(48.9), '48,9%');
+  assert.equal(qualidade.pctCell(100), '100%');
+  assert.equal(qualidade.pctCell(0), '—');
+  assert.equal(qualidade.pctCell(null), '—');
+  assert.equal(qualidade.coldText({ kernelRuns: 10, kernelCold: 8 }), '8 de 10');
+  assert.equal(qualidade.coldText({ kernelRuns: 0, kernelCold: 0 }), '—');
+  assert.equal(qualidade.toolsText([{ tool: 'o11_deliver', count: 2 }, { tool: 'studio_deliver', count: 1 }]), 'o11_deliver (2), studio_deliver (1)');
+  assert.equal(qualidade.toolsText([]), '—');
+  const t = fixture('normal', 'quality-today').totals;
+  const all = qualidade.totalRound(t);
+  assert.deepEqual([all.customer, all.chains, all.open, all.turnsP50, all.turnsP90, all.idlePct], ['Todos', 8, 2, 2, 8, 52.7]);
+  assert.equal(qualidade.indexingText({ state: 'running', progress: 0.42 }), 'Indexando os registros de qualidade: 42%.');
+  assert.equal(qualidade.indexingText({ state: 'ready', progress: 1 }), '');
+  assert.equal(qualidade.UNAVAILABLE, 'O servidor ainda não grava os registros de qualidade (imagem anterior ao registro, ou SSAM_QUALITY=0).');
+  assert.equal(qualidade.PRIVACY, 'Só códigos, contagens e tempos. Nenhum nome, expressão, caminho, job ou texto dos clientes é gravado.');
+  assert.equal(qualidade.LINES_ONLY_7D, 'Só para períodos de até 7 dias.');
+  // the words of the tables
+  assert.deepEqual(labels.VIEWS.map((v) => v.id), ['visao', 'licencas', 'uso', 'qualidade', 'agentes', 'vps', 'eventos', 'historico']);
+  assert.deepEqual(labels.PHASE_KEYS.map((k) => labels.PHASE_WORD[k]),
+    ['Fila', 'Captura', 'Compilação', 'Studio', 'Verificação', 'Publicação', 'Ambiente', 'Transferência', 'Servidor']);
+  assert.deepEqual(Object.values(labels.CLIENT_WORD), ['Claude Code', 'claude.ai', 'Claude Desktop', 'Codex', 'Cursor', 'VS Code', 'Windsurf', 'outro', 'sem nome']);
+  assert.equal(labels.wordOf(labels.RULE_TEXT, 'SORT_KEYS_SPLIT'), 'ordenação escrita com vírgulas virou lista de chaves');
+  assert.equal(labels.wordOf(labels.RULE_TEXT, 'constructor'), undefined);
+  // the file name of a download: the server's name, nothing else
+  assert.equal(api.downloadName('attachment; filename="ssam-qualidade-erros-2026-10-12-2026-10-12.csv"'), 'ssam-qualidade-erros-2026-10-12-2026-10-12.csv');
+  assert.equal(api.downloadName('attachment; filename="../../x y.csv"'), '.._.._x_y.csv');
+  assert.equal(api.downloadName(null), 'ssam-qualidade');
 });

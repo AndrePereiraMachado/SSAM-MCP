@@ -2,12 +2,14 @@
 // and local runs, loopback only), CONSOLE_STATE_DIR, CONSOLE_HOST_JSON, CONSOLE_PUBLIC_DIR, CONSOLE_TOKEN_MODULE,
 // CONSOLE_DOMAIN (public URL before a `listening` event is seen), CONSOLE_TZ (America/Sao_Paulo) and
 // CONSOLE_LICENSE_WRITES (auto | on | off, licenses.mjs: auto writes licenses only with a token module that locks
-// tokens.json between writers, the 24th image's; DEPLOY.md 15.4).
+// tokens.json between writers, the 24th image's; DEPLOY.md 15.4) and CONSOLE_KERNEL_CATALOG (the kernel's verify catalogs
+// that name the native ids a quality line may keep; DESIGN-QUALIDADE 2.5, 4.1: the image's own /app/kernel/catalog).
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const CONSOLE_VERSION = '1.0.0';
+export const DEFAULT_KERNEL_CATALOG = '/app/kernel/catalog';
 const LOOPBACK = new Map([['127.0.0.1', '127.0.0.1'], ['::1', '::1'], ['localhost', '127.0.0.1']]);
 
 // "127.0.0.1:7399", "[::1]:7399" or "localhost:7399"; any other host is refused (the console never listens outside loopback).
@@ -43,5 +45,6 @@ export function loadConfig(argv = process.argv.slice(2), env = process.env) {
     domain: env.CONSOLE_DOMAIN ? String(env.CONSOLE_DOMAIN).trim().slice(0, 253) || null : null,
     timeZone: env.CONSOLE_TZ || 'America/Sao_Paulo',
     licenseWrites: parseLicenseWrites(env.CONSOLE_LICENSE_WRITES),
+    kernelCatalog: dir(env.CONSOLE_KERNEL_CATALOG, DEFAULT_KERNEL_CATALOG),
   };
 }

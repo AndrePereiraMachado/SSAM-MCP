@@ -138,7 +138,9 @@ test('checkpoint: schema, written atomically, no partial file left', async t => 
   c.app.writeCheckpoint(true);
   const cp = JSON.parse(fs.readFileSync(path.join(env.stateDir, 'checkpoint.json'), 'utf8'));
   assert.equal(cp.schema, 'ssam-console-checkpoint/1');
-  assert.deepEqual(Object.keys(cp.readers), ['serverLog', 'audit', 'access']);
+  // readers.quality and quality: the quality records' reader and checkpoint part (DESIGN-QUALIDADE 4.1)
+  assert.deepEqual(Object.keys(cp.readers), ['serverLog', 'audit', 'access', 'quality']);
+  assert.deepEqual(Object.keys(cp.quality), ['sessions', 'pending']);
   assert.deepEqual(Object.keys(cp.readers.serverLog), ['ino', 'offset', 'size', 'mtimeMs', 'carry', 'lastRotatedStamp', 'head']);
   assert.deepEqual(fs.readdirSync(env.stateDir).filter(n => n.endsWith('.tmp')), []);
   assert.equal(c.app.writeCheckpoint(), false, 'not rewritten when nothing changed');

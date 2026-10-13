@@ -5,9 +5,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { shapeToolResult, withRefusalCode, compactDelivery, DELIVERY_FIELDS } from '../responses.mjs';
-import { codeFromText, refusalCode, isCode } from '../refusal-codes.mjs';
+import { codeFromText, refusalCode, isCode, isDebugTool } from '../refusal-codes.mjs';
 import { wrap } from '../mcp.mjs';
-import { outcomeOf } from '../../../../facade/friction-store.mjs';
+import { outcomeOf, operationName } from '../../../../facade/friction-store.mjs';
 
 const CODE = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$|^[A-Z]{3,}$/; // UPPER_SNAKE, or one upper word (TIMEOUT)
 const reply = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, ...(value.ok === false ? { isError: true } : {}) });
@@ -35,7 +35,7 @@ const REAL = [
 
 test('every real code-less refusal of the report gets its specific code, as JSON and as plain text', () => {
   for (const [tool, text, code] of REAL) {
-    assert.equal(codeFromText(text), code, text);
+    assert.equal(codeFromText(text, { tool }), code, text);
     const lane = /^(studio_|odc_)/.test(tool) ? 'odc' : 'o11';
     const structured = shapeToolResult(tool, {}, reply({ ok: false, error: text }), { lane });
     assert.equal(structured.structuredContent.code, code, tool + ': ' + text);
@@ -51,10 +51,11 @@ test('every real code-less refusal of the report gets its specific code, as JSON
 });
 
 test('the store classifies the same texts with the same code, before OPERATION_FAILED', () => {
-  for (const [, text, code] of REAL) {
-    if (code === 'TIMEOUT') { assert.equal(outcomeOf({ ok: false, error: text }).code, 'TIMEOUT'); continue; }
-    assert.equal(outcomeOf({ ok: false, error: text }).code, code, text);
-    assert.equal(outcomeOf(textError(text)).code, code, 'plain SDK text: ' + text);
+  for (const [tool, text, code] of REAL) {
+    const operation = { tool: operationName(tool) };
+    if (code === 'TIMEOUT') { assert.equal(outcomeOf({ ok: false, error: text }, {}, operation).code, 'TIMEOUT'); continue; }
+    assert.equal(outcomeOf({ ok: false, error: text }, {}, operation).code, code, text);
+    assert.equal(outcomeOf(textError(text), {}, operation).code, code, 'plain SDK text: ' + text);
   }
   // nothing known: the store keeps its generic code and an explicit code always wins
   assert.equal(outcomeOf({ ok: false, error: 'something nobody wrote down' }).code, 'OPERATION_FAILED');
@@ -96,6 +97,28 @@ test('a thrown error of the ODC server keeps its own code (PipeError), else the 
   assert.equal(zod.structuredContent.code, 'INPUT_INVALID');
   const unknown = await wrap(async () => { throw new Error('a new failure'); })({}, {});
   assert.equal(unknown.structuredContent.code, undefined, 'the ssam shaper names it by its tool');
+});
+
+// Privacy review of 2026-10-12 (finding 1): the debugger's debug_<x> reasons become a code only in the debugger's own answers
+// (not served by the hosted server). In any other answer a debug_-shaped word is the customer's (an object name quoted by a
+// database error), never a code: the shaper names the failure by its tool, the friction store keeps OPERATION_FAILED.
+test('debug_<x> becomes a code only in the answer of a debugger tool; elsewhere it is a word of the customer', async () => {
+  const text = "Invalid object name 'debug_folha_pagamento_sntl'.";
+  assert.equal(codeFromText(text), null);
+  assert.equal(codeFromText(text, { tool: 'odc_read' }), null);
+  assert.equal(codeFromText('debug_o11_native_execution_failed', { tool: 'ssam_debug_run' }), 'DEBUG_O11_NATIVE_EXECUTION_FAILED');
+  assert.equal(codeFromText('debug_o11_native_execution_failed'), null, 'without the tool the rule does not apply');
+  for (const tool of ['odc_read', 'o11_data', 'studio_command', 'ssam_discover', 'odc_portal_read']) {
+    assert.equal(withRefusalCode(tool, { ok: false, error: text }).code, tool.toUpperCase() + '_FAILED', tool);
+    const shaped = shapeToolResult(tool, {}, textError(text), { lane: 'odc' });
+    assert.equal(JSON.parse(shaped.content[0].text).code, tool.toUpperCase() + '_FAILED', tool + ' (plain text)');
+    assert.doesNotMatch(String(JSON.parse(shaped.content[0].text).code), /DEBUG|FOLHA|SNTL/);
+  }
+  assert.equal(outcomeOf({ ok: false, error: text }).code, 'OPERATION_FAILED');
+  assert.equal(outcomeOf({ ok: false, error: text }, {}, { tool: operationName('odc_read') }).code, 'OPERATION_FAILED');
+  assert.equal((await wrap(async () => { throw new Error(text); })({}, {})).structuredContent.code, undefined);
+  for (const tool of ['ssam_debug', 'ssam_debug_run', 'ssam_debug_matrix', 'debug', 'debug-run', 'debug-invoke']) assert.equal(isDebugTool(tool), true, tool);
+  for (const tool of ['odc_read', 'ssam_debugx', 'debugger', 'studio_debug', '', null]) assert.equal(isDebugTool(tool), false, String(tool));
 });
 
 test('warnings and warningsTotal travel in the delivery answer (I9), on "entregue" and on a refusal', () => {

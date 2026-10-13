@@ -18,11 +18,16 @@
 //     its Hello instead of failing at once (then AGENT_RECONNECTING with retryAfterSeconds); a POST that left on the previous
 //     channel of the same instance is still taken. deadAfterMs (45 s) stays above the agent's longest POST of messages
 //     (agent/lib/channel.mjs: 10 s plus 1 s per 64 KiB, 26 s for a full batch), and a pong travels in a POST of its own.
+//   - Quality (docs/QUALIDADE.md): a pending call keeps the tool call that made it (quality-meter.mjs currentCall(); null
+//     from the relay socket) and every settled call is reported to onCallSettled {tokenId, kind, verb, startMs, ms, ok,
+//     code, bytes?, callKey}: protocol verbs, times and sizes, never arguments or values.
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { AGENT_PREFIX } from './server-tokens.mjs';
 import { spawn } from 'node:child_process';
+import { currentCall } from './quality-meter.mjs';
+import { agentVerbOf } from './quality-line.mjs';
 
 // A Windows balloon on the server machine (owner test, 2026-10-08); off with SSAM_ACCESS_NOTIFY=0, never fails a call.
 function notifyOwner(title, text) {
@@ -54,11 +59,31 @@ const SIZE = /^(0|[1-9][0-9]{0,15})$/;
 const INSTANCE = /^[A-Za-z0-9-]{1,64}$/;
 const CODE = /^[A-Z][A-Z0-9_]{1,63}$/;
 const sha256Of = bytes => createHash('sha256').update(bytes).digest('hex');
-// prazos B: the bridge method of an o11.bridge call and the operation of an environment_session, only when they are verbs.
-const VERB = /^[a-z][a-z0-9_-]{0,47}$/;
-export const callVerbs = (kind, params) => kind !== 'o11.bridge' || !params ? {} : {
-  ...(VERB.test(String(params.method ?? '')) ? { method: params.method } : {}),
-  ...(params.method === 'environment_session' && VERB.test(String(params.operation ?? '')) ? { operation: params.operation } : {}) };
+// prazos B: the bridge method of an o11.bridge call and the operation of an environment_session; quality (2.7): the command
+// of an odc.pipe call (params.args[0]). Each only from its closed list, never by its shape: the command of studio_command is
+// the model's own text, and a lowercase app or module name looks like a verb (privacy finding of 2026-10-12). The pipe
+// commands and bridge methods are the lists the customer's agent enforces, kept in the ssam-quality/1 contract
+// (quality-line.mjs AGENT_VERBS); the environment operations are the kernel's (connect and close of the lease, then
+// Anvil.Core EnvironmentOperations.Names, of which the thin bridge's EnvironmentPrimitives.Names is a part). Drift tests in
+// agent-hub.test.mjs compare both with their sources.
+export const ENVIRONMENT_OPERATIONS = Object.freeze(['connect', 'close', 'applications', 'modules', 'application-icon', 'catalogs', 'referenceable',
+  'extensions', 'extension-download', 'versions', 'templates', 'template-module', 'template-download', 'signature', 'template-user-provider',
+  'download', 'application-save', 'module-associate', 'application-delete', 'module-delete', 'publish-start', 'publish-check', 'data-read',
+  'data-write', 'users-read']);
+// params: the call's own params (odc.pipe {args}; o11.bridge {method, params: {operation}}). Only listed words come back.
+export const callVerbs = (kind, params) => {
+  if (!params || typeof params !== 'object') return {};
+  if (kind === 'odc.pipe') { const command = agentVerbOf(kind, Array.isArray(params.args) ? params.args[0] : null); return command ? { command } : {}; }
+  if (kind !== 'o11.bridge') return {};
+  const method = agentVerbOf(kind, params.method);
+  const operation = method === 'environment_session' && typeof params.params?.operation === 'string' && ENVIRONMENT_OPERATIONS.includes(params.params.operation)
+    ? params.params.operation : null;
+  return { ...(method ? { method } : {}), ...(operation ? { operation } : {}) };
+};
+// The bytes a call moves when they are known before it runs: the file of a file.put, the files of a file.sync, a params blob.
+const sizeOf = ref => (Number.isFinite(ref?.size) && ref.size > 0 ? ref.size : 0);
+const bytesDown = (kind, params, blob) => sizeOf(blob?.ref) + (kind === 'file.put' ? sizeOf(params?.blob)
+  : kind === 'file.sync' && Array.isArray(params?.files) ? params.files.reduce((s, f) => s + sizeOf(f?.blob), 0) : 0);
 // The public address a request came from: the first X-Forwarded-For hop (Caddy sets it), else the socket's.
 const addressOf = req => (String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() || req.socket?.remoteAddress || '').slice(0, 64);
 // The exit of the customer's internet an address stands for, as the doctor shows it (fase4-24, 2.10): an IPv4 address
@@ -178,7 +203,7 @@ async function hashFile(file) {
   return hash.digest('hex');
 }
 
-export function createAgentHub({ dir, store, kernel, log = () => {}, now = () => new Date(), limits: overrides = {} } = {}) {
+export function createAgentHub({ dir, store, kernel, log = () => {}, now = () => new Date(), limits: overrides = {}, onCallSettled = null } = {}) {
   if (!dir) throw new Error('dir is required');
   if (!store?.verifyAgent || !store?.lookup) throw new Error('store with verifyAgent and lookup is required');
   const limits = { ...LIMITS, ...overrides };
@@ -260,7 +285,13 @@ export function createAgentHub({ dir, store, kernel, log = () => {}, now = () =>
     state.pending.delete(pending.id);
     clearTimeout(pending.timer); clearTimeout(pending.acceptTimer);
     if (pending.blob) dropTransfer(state, pending.blob);
-    log({ event: 'agent-call', token: state.tokenId, kind: pending.kind, ...callVerbs(pending.kind, pending.params), ms: nowMs() - pending.startedAt, ...outcome });
+    const verbs = pending.verbs;
+    const ms = nowMs() - pending.startedAt;
+    log({ event: 'agent-call', token: state.tokenId, kind: pending.kind, ...verbs, ms, ...outcome });
+    try {
+      onCallSettled?.({ tokenId: state.tokenId, kind: pending.kind, verb: verbs.method ?? verbs.command ?? null, startMs: pending.startedAt, ms, ok: outcome.ok !== false,
+        code: outcome.code ?? null, ...(pending.bytes ? { bytes: pending.bytes } : {}), callKey: pending.callKey ?? null });
+    } catch { /* the quality record never changes a call */ }
     return true;
   }
   // Never written to a stream: nothing can have run (executed:false). Written: the outcome is unknown (executed:null).
@@ -418,7 +449,8 @@ export function createAgentHub({ dir, store, kernel, log = () => {}, now = () =>
         }
         return new Promise((resolve, reject) => {
           const pending = { id, kind, line, written: false, accepted: false, blob, resolve, reject, timer: null, acceptTimer: null, deadline, graced: false, startedAt: nowMs(),
-            params: kind === 'o11.bridge' ? { method: params?.method, operation: params?.params?.operation } : null };
+            verbs: callVerbs(kind, params),
+            callKey: currentCall(), bytes: bytesDown(kind, params, blob) };
           pending.timer = setTimeout(() => fail(state, pending, 'AGENT_TIMEOUT', 'The agent did not answer ' + kind + ' before the deadline.'),
             Math.min(2147483647, Math.max(0, deadline - nowMs())));
           state.pending.set(id, pending);
@@ -566,6 +598,8 @@ export function createAgentHub({ dir, store, kernel, log = () => {}, now = () =>
     }
     pending.written = true;
     if (m.t === 'accepted') { pending.accepted = true; clearTimeout(pending.acceptTimer); return; }
+    // What came back up, when its size is known: the file of a file.get, a value blob.
+    if (m.ok === true) pending.bytes = (pending.bytes ?? 0) + sizeOf(m.valueBlob) + (pending.kind === 'file.get' ? sizeOf(m.value?.blob) : 0);
     if (!settle(state, pending, m.ok === true ? { ok: true } : { ok: false, code: typeof m.error?.code === 'string' && CODE.test(m.error.code) ? m.error.code : 'AGENT_ERROR' })) return;
     if (m.ok === true) {
       if (m.valueBlob === undefined) { pending.resolve(m.value); return; }

@@ -10,6 +10,7 @@ import { anvilRoot, o11Lane } from './workspace.mjs';
 import { o11LaneOf } from './o11-lane.mjs';
 import { connectionEnvironment, readConnection } from './studio-session.mjs';
 import { hostedSpawnEnv, usesWorkspace } from './executor.mjs';
+import { kernelStart } from './quality-meter.mjs';
 
 const tail = (text, lines = 10) => String(text ?? '').trim().split(/\r?\n/).filter(Boolean).slice(-lines);
 
@@ -28,19 +29,26 @@ export function createAnvilRunner({ lane = o11Lane.lane, root = anvilRoot, env =
     const assembly = cli ?? o11LaneOf(lane, { root, env }).cli;
     const argv = [assembly, ...args.map(String)];
     // Hosted: the closed environment, with the customer's relay as the bridge port (executor.mjs hostedSpawnEnv).
-    const hosted = usesWorkspace(root, anvilRoot) ? hostedSpawnEnv(/anvil-odc\.dll$/i.test(assembly) ? 'odc' : 'o11') : null;
+    const odcCli = /anvil-odc\.dll$/i.test(assembly);
+    const hosted = usesWorkspace(root, anvilRoot) ? hostedSpawnEnv(odcCli ? 'odc' : 'o11') : null;
     const started = Date.now();
+    // Quality (docs/QUALIDADE.md): this cold process is a kernel leaf; a no-op outside a hosted call.
+    const end = kernelStart({ lane: odcCli ? 'odc' : 'o11', via: 'cold' });
     return new Promise(resolve => {
-      const child = execFileFn(dotnet, argv, { cwd: hosted ? hosted.cwd : cwd, env: hosted ? hosted.env : laneEnvironment({ lane, root, env }), windowsHide: true,
-        maxBuffer: 256 * 1024 * 1024, timeout: timeoutMs, encoding: 'utf8' }, (error, stdout, stderr) => {
-        const text = String(stdout ?? '').trim();
-        let envelope = null;
-        try { envelope = text ? JSON.parse(text) : null; } catch { envelope = null; }
-        const exitCode = error ? (typeof error.code === 'number' ? error.code : 1) : 0;
-        resolve({ ok: exitCode === 0 && envelope?.ok === true, exitCode, envelope,
-          ...(envelope ? {} : { stdout: tail(text, 40) }), stderr: tail(stderr), wallMs: Date.now() - started,
-          ...(error?.killed ? { timedOut: true } : {}), line: ['dotnet', path.basename(assembly), ...args.map(a => (/\s/.test(a) ? JSON.stringify(a) : a))].join(' ') });
-      });
+      let child;
+      try {
+        child = execFileFn(dotnet, argv, { cwd: hosted ? hosted.cwd : cwd, env: hosted ? hosted.env : laneEnvironment({ lane, root, env }), windowsHide: true,
+          maxBuffer: 256 * 1024 * 1024, timeout: timeoutMs, encoding: 'utf8' }, (error, stdout, stderr) => {
+          const text = String(stdout ?? '').trim();
+          let envelope = null;
+          try { envelope = text ? JSON.parse(text) : null; } catch { envelope = null; }
+          const exitCode = error ? (typeof error.code === 'number' ? error.code : 1) : 0;
+          end({ ok: exitCode === 0 });
+          resolve({ ok: exitCode === 0 && envelope?.ok === true, exitCode, envelope,
+            ...(envelope ? {} : { stdout: tail(text, 40) }), stderr: tail(stderr), wallMs: Date.now() - started,
+            ...(error?.killed ? { timedOut: true } : {}), line: ['dotnet', path.basename(assembly), ...args.map(a => (/\s/.test(a) ? JSON.stringify(a) : a))].join(' ') });
+        });
+      } catch (error) { end({ ok: false }); throw error; }
       if (input !== undefined) { child.stdin?.end(typeof input === 'string' ? input : JSON.stringify(input)); }
     });
   };

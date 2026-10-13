@@ -15,7 +15,9 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/server';
 import { startHttpServer } from '../http-server.mjs';
 import { createTokenStore, tokenCli } from '../server-tokens.mjs';
-import { compatibility, LIMITS, threePart } from '../agent-hub.mjs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { compatibility, LIMITS, threePart, callVerbs, ENVIRONMENT_OPERATIONS } from '../agent-hub.mjs';
+import { ODC_COMMANDS, O11_METHODS } from '../quality-line.mjs';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-hub-'));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -823,5 +825,143 @@ test('machine alert: the first machine is recorded, another one still connects a
     const alerts = fs.readFileSync(path.join(dir, 'access-alerts.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
     assert.equal(alerts.length, 1); assert.equal(alerts[0].customer, 'Pino');
     assert.equal((await agentOf(base, t.agentCredential).hello(helloOf())).status, 200, 'an agent without machine (older pack) passes');
+  } finally { await handle.close(); }
+});
+
+// The verbs that name an agent call (log and quality) come only from closed lists, never from their shape: the command of
+// studio_command is the model's own text. The pipe commands and bridge methods are the agent's (agent/lib/kinds.mjs), kept in
+// the ssam-quality/1 contract; the environment operations are the kernel's. Drift tests compare each list with its source.
+test('callVerbs: only the closed lists name an agent call', () => {
+  assert.deepEqual(callVerbs('odc.pipe', { args: ['snapshot', 'SntlModuloQx7'] }), { command: 'snapshot' });
+  assert.deepEqual(callVerbs('odc.pipe', { args: ['publish-status'] }), { command: 'publish-status' });
+  for (const args of [['acme-folha-pagamento-sntl'], ['sntl-cmd'], ['attach'], ['Snapshot'], [], 'snapshot', [7], undefined])
+    assert.deepEqual(callVerbs('odc.pipe', { args }), {}, JSON.stringify(args));
+  assert.deepEqual(callVerbs('o11.bridge', { method: 'open_module', params: { module: 'SntlModuloQx7' } }), { method: 'open_module' });
+  assert.deepEqual(callVerbs('o11.bridge', { method: 'sntl_method', params: { operation: 'download' } }), {});
+  assert.deepEqual(callVerbs('o11.bridge', { method: 'export_modules' }), {}, 'a full-bridge method the agent refuses');
+  assert.deepEqual(callVerbs('o11.bridge', { method: 'environment_session', params: { operation: 'download' } }), { method: 'environment_session', operation: 'download' });
+  assert.deepEqual(callVerbs('o11.bridge', { method: 'environment_session', params: { operation: 'sntl-op' } }), { method: 'environment_session' });
+  assert.deepEqual(callVerbs('o11.bridge', { method: 'open_module', params: { operation: 'download' } }), { method: 'open_module' });
+  assert.deepEqual(callVerbs('file.get', { path: 'agent:inbox/sntl.json' }), {});
+  assert.deepEqual(callVerbs('odc.pipe', null), {});
+  assert.ok(Object.isFrozen(ENVIRONMENT_OPERATIONS));
+});
+
+const AGENT_KINDS_FILE = fileURLToPath(new URL('../../../../agent/lib/kinds.mjs', import.meta.url));
+test("drift: the pipe commands and bridge methods of the contract are the agent's own lists", { skip: !fs.existsSync(AGENT_KINDS_FILE) && 'agent/ is not in this checkout' }, async () => {
+  const kinds = await import(pathToFileURL(AGENT_KINDS_FILE).href);
+  assert.deepEqual([...ODC_COMMANDS], [...kinds.ODC_COMMANDS]);
+  assert.deepEqual([...O11_METHODS], [...kinds.O11_METHODS]);
+});
+
+// The string values of a C# array initializer "Names = [ ... ];": literals, and constants of this file (Name) or of a class
+// of the same folder (Class.Name).
+function csharpNames(file) {
+  const text = fs.readFileSync(file, 'utf8');
+  const block = /\bNames\s*=\s*\[([\s\S]*?)\];/.exec(text);
+  assert.ok(block, 'no Names block in ' + file);
+  const constant = (source, name) => {
+    const m = new RegExp('const\\s+string\\s+' + name + '\\s*=\\s*"([^"]+)"').exec(source);
+    assert.ok(m, 'constant ' + name + ' not found');
+    return m[1];
+  };
+  return block[1].replace(/\/\/[^\n]*/g, '').split(',').map(s => s.trim()).filter(Boolean).map(item => {
+    const literal = /^"([^"]+)"$/.exec(item);
+    if (literal) return literal[1];
+    const [owner, name] = item.includes('.') ? item.split('.') : [null, item];
+    return constant(owner ? fs.readFileSync(path.join(path.dirname(file), owner + '.cs'), 'utf8') : text, name);
+  });
+}
+const KERNEL_SRC = fileURLToPath(new URL('../../../../kernel/src/', import.meta.url));
+const ENVIRONMENT_FILE = path.join(KERNEL_SRC, 'Anvil.Core', 'Adapters.SS11', 'EnvironmentOperations.cs');
+test("drift: the environment operations are connect, close and the kernel's EnvironmentOperations.Names (the thin bridge's are a part)",
+  { skip: !fs.existsSync(ENVIRONMENT_FILE) && 'kernel/src is not in this checkout' }, () => {
+  assert.deepEqual([...ENVIRONMENT_OPERATIONS], ['connect', 'close', ...csharpNames(ENVIRONMENT_FILE)]);
+  const handler = path.join(KERNEL_SRC, 'Anvil.Bridge', 'EnvironmentSessionHandler.cs');
+  if (fs.existsSync(handler)) for (const word of ['connect', 'close']) assert.ok(fs.readFileSync(handler, 'utf8').includes('operation == "' + word + '"'), word);
+  const thin = path.join(KERNEL_SRC, 'Anvil.Bridge.Thin', 'EnvironmentPrimitives.cs');
+  if (fs.existsSync(thin)) for (const name of csharpNames(thin)) assert.ok(ENVIRONMENT_OPERATIONS.includes(name), 'thin bridge operation ' + name);
+});
+
+// Quality (docs/QUALIDADE.md, design ssam-quality/1 2.7 and 3.4): every settled call reaches onCallSettled (wired by
+// http-server.mjs to the recorder's agentSpan) with its kind, its protocol verb (the bridge method, the pipe command), when
+// it started, how long it took, its outcome, the bytes it moved when known and the tool call that made it (the
+// quality-meter call context; null for a call made outside one, as the O11 relay's). Never an argument or a value.
+test('quality: a settled call reports kind, verb, times, outcome, size and the tool call that made it; the log names the pipe command', async () => {
+  const { withCall } = await import('../quality-meter.mjs');
+  const spans = [];
+  const quality = { agentSpan: span => spans.push(span), arrived() {}, flushed() {}, sessionOpened() {}, sessionClosed() {}, callStarted() {}, callCancelled() {}, callAnswered() {} };
+  const { handle, store, base, events } = await start({}, { quality });
+  try {
+    const t = store.issue({ customer: 'Qualidade' });
+    const a = agentOf(base, t.agentCredential);
+    await a.hello();
+    const s = await a.stream();
+    const link = handle.hub.link(t.id);
+    const key = 'mcp-session\u0000"7"';
+    const pipe = withCall(key, () => link.call('odc.pipe', { args: ['snapshot', 'SntlModuloQx7'], version: 'v35' }));
+    const bridge = link.call('o11.bridge', { method: 'open_module', params: { module: 'SntlModuloQx7' } }).then(() => null, error => error);
+    const put = withCall(key, () => link.call('file.put', { path: 'agent:odc/sntl.oml', blob: { transfer: 'a'.repeat(32), sha256: 'b'.repeat(64), size: 1234, parts: 1 } }));
+    const get = withCall(key, () => link.call('file.get', { path: 'agent:inbox/sntl.json' }));
+    const calls = [];
+    for (let i = 0; i < 4; i++) calls.push(await s.lines.next(m => m.t === 'call'));
+    const of = kind => calls.find(c => c.kind === kind);
+    await sleep(20);
+    assert.equal(await a.post([
+      { t: 'accepted', id: of('odc.pipe').id }, { t: 'result', id: of('odc.pipe').id, ok: true, value: { ok: true, path: 'C:\\sntl\\x.oml' } },
+      { t: 'result', id: of('o11.bridge').id, ok: false, error: { code: 'BRIDGE_ERROR', message: 'sntl message', executed: true } },
+      { t: 'result', id: of('file.put').id, ok: true, value: { path: 'agent:odc/sntl.oml' } },
+      { t: 'result', id: of('file.get').id, ok: true, value: { path: 'agent:inbox/sntl.json', blob: { transfer: 'c'.repeat(32), sha256: 'd'.repeat(64), size: 4567, parts: 1 } } }]), 204);
+    await pipe; await put; await get;
+    assert.equal((await bridge)?.code, 'BRIDGE_ERROR');
+    const byKind = Object.fromEntries(spans.map(sp => [sp.kind, sp]));
+    assert.deepEqual(Object.keys(byKind).sort(), ['file.get', 'file.put', 'o11.bridge', 'odc.pipe']);
+    for (const sp of spans) {
+      assert.equal(sp.tokenId, t.id);
+      assert.ok(Number.isFinite(sp.startMs) && Math.abs(sp.startMs - Date.now()) < 60000, 'epoch start');
+      assert.ok(Number.isFinite(sp.ms) && sp.ms >= 15, 'the time until it settled');
+    }
+    assert.deepEqual({ ...byKind['odc.pipe'], startMs: 0, ms: 0 }, { tokenId: t.id, kind: 'odc.pipe', verb: 'snapshot', startMs: 0, ms: 0, ok: true, code: null, callKey: key });
+    assert.deepEqual({ ...byKind['o11.bridge'], startMs: 0, ms: 0 }, { tokenId: t.id, kind: 'o11.bridge', verb: 'open_module', startMs: 0, ms: 0, ok: false, code: 'BRIDGE_ERROR', callKey: null });
+    assert.equal(byKind['file.put'].bytes, 1234); assert.equal(byKind['file.put'].callKey, key); assert.equal(byKind['file.put'].verb, null);
+    assert.equal(byKind['file.get'].bytes, 4567);
+    assert.ok(events.some(e => e.event === 'agent-call' && e.kind === 'odc.pipe' && e.command === 'snapshot'), 'the log names the pipe command');
+    assert.ok(!JSON.stringify(spans).includes('sntl') && !JSON.stringify(spans).includes('Sntl'), 'no argument or value in a span');
+    assert.ok(!JSON.stringify(events.filter(e => e.event === 'agent-call')).toLowerCase().includes('sntl'), 'nor in the log line');
+    // Verb-shaped words outside the closed lists (privacy finding of 2026-10-12: the model's own text as the command of
+    // studio_command reached the span and the agent-call line): a pipe command the agent refuses (COMMAND_NOT_ALLOWED), an
+    // unlisted bridge method and an unlisted environment operation name nothing; a listed operation is still named.
+    const seen = spans.length;
+    const freePipe = withCall(key, () => link.call('odc.pipe', { args: ['sntl-cmd'], version: 'v35' })).then(() => null, error => error);
+    const freeMethod = withCall(key, () => link.call('o11.bridge', { method: 'sntl_method', params: {} })).then(() => null, error => error);
+    const freeOperation = link.call('o11.bridge', { method: 'environment_session', params: { operation: 'sntl-op', lease: 'l1' } }).then(() => null, error => error);
+    const listed = link.call('o11.bridge', { method: 'environment_session', params: { operation: 'modules', lease: 'l1' } });
+    const more = [];
+    for (let i = 0; i < 4; i++) more.push(await s.lines.next(m => m.t === 'call'));
+    const which = c => (c.kind === 'odc.pipe' ? 'pipe' : c.params?.method === 'sntl_method' ? 'method' : c.params?.params?.operation === 'modules' ? 'listed' : 'operation');
+    const id = name => more.find(c => which(c) === name).id;
+    assert.equal(await a.post([
+      { t: 'result', id: id('pipe'), ok: false, error: { code: 'COMMAND_NOT_ALLOWED', message: 'The ODC bridge command "sntl-cmd" is not allowed on this agent', executed: false } },
+      { t: 'result', id: id('method'), ok: false, error: { code: 'METHOD_NOT_ALLOWED', message: 'The O11 bridge method "sntl_method" is not allowed on this agent', executed: false } },
+      { t: 'result', id: id('operation'), ok: false, error: { code: 'BRIDGE_ERROR', message: 'Unknown environment operation: sntl-op', executed: true } },
+      { t: 'result', id: id('listed'), ok: true, value: { reply: { success: true, data: { modules: [] } } } }]), 204);
+    assert.equal((await freePipe)?.code, 'COMMAND_NOT_ALLOWED'); assert.equal((await freeMethod)?.code, 'METHOD_NOT_ALLOWED');
+    assert.equal((await freeOperation)?.code, 'BRIDGE_ERROR'); await listed;
+    const added = spans.slice(seen).map(sp => [sp.kind, sp.verb, sp.code, sp.callKey]);
+    assert.deepEqual(added.map(e => JSON.stringify(e)).sort(), [['o11.bridge', 'environment_session', 'BRIDGE_ERROR', null], ['o11.bridge', 'environment_session', null, null],
+      ['o11.bridge', null, 'METHOD_NOT_ALLOWED', key], ['odc.pipe', null, 'COMMAND_NOT_ALLOWED', key]].map(e => JSON.stringify(e)).sort());
+    const callLines = events.filter(e => e.event === 'agent-call');
+    assert.ok(!JSON.stringify(spans).toLowerCase().includes('sntl'), 'no free word in a span');
+    assert.ok(!JSON.stringify(callLines).toLowerCase().includes('sntl'), 'no free word in the log: ' + JSON.stringify(callLines.slice(-4)));
+    assert.ok(callLines.some(e => e.kind === 'odc.pipe' && e.code === 'COMMAND_NOT_ALLOWED' && !Object.hasOwn(e, 'command')), 'the refused pipe call is logged without a command');
+    assert.ok(callLines.some(e => e.kind === 'o11.bridge' && e.code === 'METHOD_NOT_ALLOWED' && !Object.hasOwn(e, 'method')), 'the refused bridge call without a method');
+    assert.ok(callLines.some(e => e.method === 'environment_session' && e.code === 'BRIDGE_ERROR' && !Object.hasOwn(e, 'operation')), 'an unlisted operation is not named');
+    assert.ok(callLines.some(e => e.method === 'environment_session' && e.operation === 'modules' && e.ok === true), 'a listed operation is still named');
+    // A failure before any answer (the deadline) is reported too, with its code.
+    const late = withCall(key, () => link.call('studio.processes', {}, { timeoutMs: 100 }));
+    await assert.rejects(late, e => e.code === 'AGENT_TIMEOUT');
+    const timeout = spans.find(sp => sp.kind === 'studio.processes');
+    assert.deepEqual([timeout.ok, timeout.code, timeout.callKey], [false, 'AGENT_TIMEOUT', key]);
+    s.lines.cancel();
   } finally { await handle.close(); }
 });

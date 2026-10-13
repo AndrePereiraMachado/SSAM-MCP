@@ -4,7 +4,11 @@ Servidor MCP hospedado do SSAM: `ssam serve`, hub do agente, tokens, kernels O11
 painel do dono. Cópia de `servidor/fase4` (`e7b2119b`) de `C:\Users\andre\SSAM-Hybrid-servidor`, sem edição,
 atualizada para `fase4-24/odc1728` (`c48074be`: o 24º envio `a415531d` no ODC Studio 1.7.28 com a bridge ODC v97,
 branch `server/r24-odc1728`; antes, `servidor/fase4-24` `a415531d` na `server/r24`, `fase4-22` `1fbfa377` e `fase4-23`
-`e589be22`). Cada arquivo que vem da linha tem o blob da revisão (`README.md` da raiz, "De onde veio").
+`e589be22`). Na branch `server/r24-qualidade`, `fase4-24/qualidade` (`3262c49f`, depois `01795e52` com os verbos das
+chamadas ao agente só de listas fechadas, `c24d468d` com os códigos e as regras só dos registros gerados das fontes e
+`1b2ce8fe` com os códigos compostos pelo produto e os de `kernel/query-test` nesses registros): o registro de qualidade
+`ssam-quality/1` (`docs/QUALIDADE.md`). Cada arquivo que vem da linha tem o blob da revisão (`README.md` da raiz, "De
+onde veio").
 Esta pasta é a raiz do repositório antigo: caminhos relativos, Dockerfile e compose funcionam daqui.
 
 Arquivos do SSAM-MCP nesta caixa, que **não vêm da linha do servidor**:
@@ -69,6 +73,14 @@ Em 2026-10-12 (24º, `server/r24`), com `Anvil.Cli` e `Anvil.Cli.Odc` compilados
 Com um `tenants.json` sintético e a caixa agent ao lado, 152/152 e 15/15. Painel do dono:
 `node --test deploy/console/tests/` 90 de 91 (1 pula: socket unix), `node --test deploy/console/ui-tests/` 65/65 e
 `python -m unittest discover -s deploy/host/tests` 45 de 46 (1 pula: POSIX). Detalhes no `README.md` da raiz.
+
+Em 2026-10-12 (`server/r24-qualidade`, registro de qualidade), com os mesmos CLIs em `kernel/.local`, um `tenants.json`
+sintético e a caixa agent ao lado (os dois removidos depois): o conjunto afetado do desenho da qualidade mais as suítes
+de antes (`quality-*`, `http-server*`, `agent-hub`, `fase4-*`, `hosted-*`, `kernel-delivery`, `job-runner`, `pa3-wp-*`,
+`o11-cycle`, `anvil-worker*`, `integration-documents`, `server-tokens`, o teste do contrato nas fixtures,
+`public-signature-drift`, `tests/friction*`, `servidor-ps1` e `tunel`), 49 arquivos: 462 de 463. A falha é o `C26` do
+`fase4-server`, que já falha igual em `a415531d` (a linha a registrou entre as falhas da base). Painel do dono:
+`node --test deploy/console/tests` 109 de 110 (1 pula: socket unix) e `node deploy/console/ui-tests/run-all.mjs` 71/71.
 
 ## Deploy de produção (SSAM-MCP)
 
