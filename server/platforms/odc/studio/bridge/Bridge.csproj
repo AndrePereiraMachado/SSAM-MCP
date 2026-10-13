@@ -4,7 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <!-- One assembly name per bridge version. A loaded DLL is never replaced: a new version is a new name and a new pipe. -->
-    <AssemblyName>ODC3.Bridge.v96</AssemblyName>
+    <AssemblyName>ODC3.Bridge.v97</AssemblyName>
     <!-- IncrementalClean must never treat a prior resident version as an orphan. -->
     <CleanFile>$(MSBuildProjectFile).$(AssemblyName).FileListAbsolute.txt</CleanFile>
     <DefineConstants>$(DefineConstants);QUERY_TEST_ODC</DefineConstants>

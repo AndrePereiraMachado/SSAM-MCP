@@ -53,6 +53,17 @@ Os arquivos que existem nas duas caixas estão em [`SHARED.md`](SHARED.md), com 
     de URLs públicas. São 14 caminhos (5 novos, 9 alterados), 15 entradas: todos em `server/`, e `docs/FASE2-AGENTE.md`
     também em `agent/` (hash novo no `SHARED.md`). Conferido de novo: os 6198 arquivos das duas caixas que vêm da linha
     têm o mesmo blob de `a415531d`.
+- Atualizado em 2026-10-12 para o ODC Studio 1.7.28, na branch `server/r24-odc1728` (de `a857a1ef`, a produção):
+  `fase4-24/odc1728`, `a415531d..c48074be` (`f912cb7e`: ODC Studio 1.7.28.10850 e bridge ODC v97; `c48074be`: tira um
+  nome de cliente de `docs/SERVIDOR-FASE4.md`, que a guarda do build recusava).
+  - 48 caminhos (1 novo, 47 alterados, nenhum apagado). Entraram 47, com os bytes da revisão: 52 entradas, 39 em
+    `server/` e 13 em `agent/`, sendo 5 nas duas (`docs/FASE2-AGENTE.md`, `docs/PROVAS-AO-VIVO.md`, `Bridge.csproj`,
+    `StartupHook.cs` e `client/Program.cs`, com hash novo no `SHARED.md`). Os testes do agente e
+    `docs/AGENTE-CLIENTE.md` só em `agent/`; o catálogo novo `kernel/catalog/odc/verify-messages-1.7.28.10850.json` em
+    `server/`.
+  - Ficou fora 1, pela regra da cópia: `scripts/release/license/weave-spec.json`.
+  - Conferido: os 6199 arquivos das duas caixas que vêm da linha têm o mesmo blob de `c48074be`. Contagem: `server/`
+    6055, `agent/` 145, 76 nas duas.
 
 ## Aviso: o servidor no ar não mudou
 
@@ -66,7 +77,8 @@ Este monorepo não o substitui nem o toca. Para testar a cópia, nunca use a por
 - Windows 10/11 e PowerShell 5.1 (scripts `.ps1` e testes do agente).
 - Node 22+ (a imagem usa 24). pnpm 11.19.0 (a conferência usou o 11.25.0 que acompanha o Node do Codex).
 - .NET SDK 10. Os kernels são net8.0 com `RollForward=Major`.
-- Service Studio 11.55.91 e ODC Studio 1.7.27+. O servidor recusa outro Service Studio (`STUDIO_VERSION_MISMATCH`).
+- Service Studio 11.55.91 e ODC Studio 1.7.28 (a versão do `kernel.json`; nunca mais velho que 1.7.27). O servidor recusa
+  outro Studio na faixa dele (`STUDIO_VERSION_MISMATCH`).
 - Python 3.11+ só para `scripts/build.ps1` e os testes Python do kernel.
 - Não há `global.json` nem `nuget.config`. O SDK e o feed não estão fixados.
 
@@ -83,7 +95,7 @@ pnpm -C platforms/odc install --frozen-lockfile
 dotnet build kernel/src/Anvil.Cli -c Release -nologo -v q -nodeReuse:false -p:SSDir="<Service Studio 11.55.91>" -o kernel/.local/cli
 dotnet build kernel/src/Anvil.Cli.Odc -c Release -nologo -v q -nodeReuse:false -p:OdcInstall="<ODC Studio 1.7.27+>" -o kernel/.local/lane-odc/cli
 dotnet build platforms/odc/studio/builder/Builder.csproj -c Release -nologo -v q -nodeReuse:false -p:OdcInstall="<ODC Studio>"
-# Servidor Windows: a versão da bridge ODC (v96) sai da bridge compilada, se o kernel.json não a fixar.
+# Servidor Windows: a versão da bridge ODC (v97) sai da bridge compilada, se o kernel.json não a fixar.
 dotnet build platforms/odc/studio/bridge/Bridge.csproj -c Release -nologo -v q -p:OdcInstall="<ODC Studio>"
 dotnet build platforms/odc/studio/bridge/client/Client.csproj -c Release -nologo -v q
 ```
@@ -143,8 +155,9 @@ plano do 24º. Até lá, `prod-20261011-ed0f94b` é a imagem no ar e a do rollba
    `node --test platforms/odc/facade/tests/hosted-image-denylist.test.mjs`.
 4. `docker compose build` e `docker compose up -d` (ssam-server em 127.0.0.1:7310 e túnel ngrok).
 5. Grave o kernel no volume: `docker compose cp kernel.json ssam-server:/data/server/kernel.json`, com
-   `{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v96","odcBridgeAccepted":["v48","v45"]}` (24º envio: pacote do
-   agente com a bridge v96; aceita agentes ainda com a v48 ou a v45). No Linux a detecção por versão de exe não roda.
+   `{"o11":"11.55.91","odc":"1.7.28","odcBridge":"v97","odcBridgeAccepted":["v96","v48","v45"]}` (24º envio no ODC
+   Studio 1.7.28: pacote do agente com a bridge v97; aceita agentes ainda com a v96, a v48 ou a v45). No Linux a detecção
+   por versão de exe não roda.
 6. Cache de features do ODC: o `Features.xml` do Windows é cifrado com DPAPI e o Linux não o lê. Numa máquina já
    logada no tenant, como o mesmo usuário, gere `Features.plain.xml` com `server\deploy\odc-features-export.ps1` e
    grave em `/data/odc-features/` (detalhes no `server/deploy/DEPLOY.md`, seção 7.2).
@@ -208,13 +221,45 @@ C:\SSAM-Agent\agent\node\node.exe C:\SSAM-Agent\agent\ssam-agent.mjs doctor --ro
 
 ## Compatibilidade entre as caixas
 
-- `pack.json` do agente: `odcBridge` tem de ser o `kernel.odcBridge` do servidor (24º: v96, aceita v48 e v45; no ar,
-  com o 23º: v48, aceita v45).
+- `pack.json` do agente: `odcBridge` tem de ser o `kernel.odcBridge` do servidor ou estar em `odcBridgeAccepted` (24º no
+  ODC Studio 1.7.28: v97, aceita v96, v48 e v45; 24º no 1.7.27: v96, aceita v48 e v45).
+- O ODC Studio do cliente tem de ter a versão `kernel.odc` (hoje 1.7.28); outra recebe `STUDIO_VERSION_MISMATCH` na
+  faixa ODC. Um pacote com bridge abaixo da v97 num ODC Studio 1.7.28 recebe `STUDIO_BRIDGE_OUTDATED` só em
+  `refresh-references --producer` (a única chamada que o 1.7.28 quebrou); o resto funciona.
 - `o11BuiltFor` tem de ser o Service Studio do kernel do servidor (hoje 11.55.91).
 - Senão o hub responde `AGENT_PACK_MISMATCH`. Um bump de bridge mexe nas duas caixas no mesmo commit.
 - Um pacote antigo aceito degrada com códigos tipados no 24º: o Service Center responde `STUDIO_BRIDGE_OUTDATED` e
   `studio_reference_producers` recebe `COMMAND_NOT_ALLOWED`. O 23º não aceita o pacote v96: no rollback do servidor, os
   clientes voltam ao pacote v48.
+
+## Conferência de 2026-10-12 (ODC Studio 1.7.28, `server/r24-odc1728`)
+
+Máquina do dono, `ANVIL_WORKER=0`, `ANVIL_ODC_NO_WORKER=1`, `SSAM_NO_WARM=1`, TEMP e caches em `C:\t\odc28`, ODC Studio
+1.7.28.10850 e Service Studio 11.55.91 instalados (nenhum processo de Studio usado).
+
+- Pacote do agente: `C:\t\pack-v97\ssam-agent.zip`, id `pack-20261013-003406`, sha256
+  `99b65a62466cbbd8be427e665beba2d904c01c32770de51d79c973a32cebbe37`, 40 entradas, montado com `scripts/agent-pack.ps1`
+  na worktree de `fase4-24/odc1728`. `pack.json`: `odcBridge` `v97`, `o11BuiltFor` `11.55.91`, gancho dev.
+  `pack-ip-scan.ps1`: ok, nenhum achado.
+- A v96 no 1.7.28 (decide o `odcBridgeAccepted` do `kernel.json`, `server/deploy/DEPLOY.md` 7.1): a
+  `ODC3.Bridge.v96.dll` do pacote do 24º, carregada num `AssemblyLoadContext` que resolve os assemblies do ODC Studio
+  1.7.28 instalado, com cada método compilado (`RuntimeHelpers.PrepareMethod`): 391 tipos, 2072 de 2073 métodos. O único
+  que falha é o lambda de `RefreshReferences` com `MissingMethodException` em
+  `IReferencesManagerService.RefreshSpecificReferencesByKey` (o 1.7.28 ganhou um sexto parâmetro). A mesma DLL contra o
+  bundle 1.7.27: 2073 de 2073. A v97 contra o 1.7.28: 2073 de 2073. A v48: 1911 de 1912, a mesma quebra. Os metadados
+  (todas as referências de tipo e membro da bridge contra a pasta do Studio) dizem o mesmo: 1 problema na v96 e na v48,
+  0 na v97. Como o servidor recusa esse comando para bridge abaixo da v97 (`STUDIO_BRIDGE_OUTDATED`), a v96 continua
+  aceita.
+- Caixa server (`pnpm install --frozen-lockfile` na raiz e em `platforms/odc`; `Anvil.Cli` e `Anvil.Cli.Odc` compilados
+  em `kernel/.local` contra os Studios instalados), com um `tenants.json` sintético e a junção temporária
+  `server/agent` → `agent/agent` (os dois apagados depois): `agent-hub`, `anvil-worker*`, `fase4-*`, `hosted-*` (23
+  arquivos), `http-server`, `integration-documents`, `job-runner`, `server-tokens`, `servidor-ps1`, `tunel` e
+  `public-signature-drift`: 299 testes, 298 passam. A falha é o C26 de `fase4-server.test.mjs`, que falha igual em
+  `a415531d` (a produção). O `hosted-image-denylist` achou um nome de cliente em `docs/SERVIDOR-FASE4.md` do `f912cb7e`;
+  corrigido na origem (`c48074be`), depois 4/4. `Builder.Tests` (contra o 1.7.28): 7/7.
+- Caixa agent: `node --test agent/tests/*.test.mjs tests/prova-verbos.test.mjs` 86/86; `Bridge.Tests` (contra o 1.7.28)
+  311/311; `Bridge.csproj` compila `ODC3.Bridge.v97` da caixa, e a DLL tem 0 referências quebradas no 1.7.28.
+- `SHARED.md`: 76 arquivos, a conferência dele sai sem nada.
 
 ## Conferência de 2026-10-12 (24º envio, `server/r24`)
 

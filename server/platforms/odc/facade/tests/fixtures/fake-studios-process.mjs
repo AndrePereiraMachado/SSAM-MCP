@@ -39,7 +39,7 @@ const odcBridge = pack23 ? 'v48' : ODC_BRIDGE;
 const o11Port = Number(portText);
 const snapshotBytes = Number(bytesText) || 6 * 1024 * 1024 + 4321;
 const odcPid = 900000 + Math.floor(Math.random() * 90000), o11Pid = odcPid + 1;
-const odcVersion = '1.7.27.4021', o11Version = '11.55.91.65012';
+const odcVersion = '1.7.28.4021', o11Version = '11.55.91.65012';
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const record = entry => fs.appendFileSync(studiosFile + '.log', JSON.stringify({ at: Date.now(), ...entry }) + '\n');
 const inside = file => { const rel = path.relative(agentRoot, path.resolve(file)); return rel && !rel.startsWith('..') && !path.isAbsolute(rel); };

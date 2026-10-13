@@ -169,7 +169,9 @@ script ou caminho de DLL.
   já tiver outra bridge Anvil carregada (aberto por outro atalho), o `o11.connect` recusa com `ATTACH_FAILED` sem
   carregar nada: feche e abra o Service Studio normalmente.
 - Antes de cada passo no Studio, o agente confere a versão do PROCESSO escolhido contra o kernel do servidor
-  (`STUDIO_VERSION_MISMATCH`): instalações lado a lado e a atualização automática do ODC Studio não passam.
+  (`STUDIO_VERSION_MISMATCH`): instalações lado a lado e a atualização automática do ODC Studio não passam. Quando o ODC
+  Studio se atualiza sozinho (o 1.7.28, em 12/10/2026), a faixa ODC fica recusada até o dono pôr no servidor o kernel
+  daquela versão; o pacote que você já tem continua aceito enquanto a bridge dele estiver em `odcBridgeAccepted`.
 - Depois do attach, o agente só usa a bridge O11 que for o arquivo do SEU pacote (sha256 do `pack.json`). Outra bridge
   responde `BRIDGE_VERSION_MISMATCH`: nada mais é enviado a ela; reinicie o Service Studio.
 - Um pacote com o gancho de release (o dono avisa) traz `release.json`, `release.sig.jws` e a pasta `studio\o11\`. O
@@ -245,7 +247,7 @@ computador é lido.
 
 ## Atualizar o agente (pacote novo)
 
-Quando o dono manda um pacote novo (por exemplo, o da bridge ODC `v96`):
+Quando o dono manda um pacote novo (por exemplo, o da bridge ODC `v97`, compilada contra o ODC Studio 1.7.28):
 
 1. `C:\SSAM-Agent\agent\ssam-agent.ps1 stop`.
 2. Feche o ODC Studio (a bridge antiga fica carregada até ele fechar; a nova tem outro nome e outro pipe).

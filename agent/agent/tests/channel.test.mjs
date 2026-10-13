@@ -10,7 +10,7 @@ import { createAgent } from '../lib/agent.mjs';
 import { fakeHub } from './fixtures/fake-hub.mjs';
 import { makeRoot, removeRoot, CREDENTIAL } from './fixtures/agent-root.mjs';
 
-const PROCESSES = { 'ODCStudio.exe': [{ pid: 4120, path: 'C:\\Program Files\\OutSystems\\ODC Studio\\ODC Studio\\ODCStudio.exe', version: '1.7.27.4021' }] };
+const PROCESSES = { 'ODCStudio.exe': [{ pid: 4120, path: 'C:\\Program Files\\OutSystems\\ODC Studio\\ODC Studio\\ODCStudio.exe', version: '1.7.28.4021' }] };
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function waitFor(check, ms = 5000) {
   for (const deadline = Date.now() + ms; !check(); await sleep(5)) if (Date.now() > deadline) throw new Error('condition not met in ' + ms + ' ms');
@@ -66,7 +66,7 @@ test('hello, stream, call -> accepted -> result, pong, clean stop', async () => 
     const accepted = hub.messages.findIndex(m => m.t === 'accepted' && m.id === 'call-1');
     const result = hub.messages.findIndex(m => m.t === 'result' && m.id === 'call-1');
     assert.ok(accepted >= 0 && accepted < result, 'accepted goes before the result');
-    assert.deepEqual(hub.messages[result].value, { processes: [{ pid: 4120, path: PROCESSES['ODCStudio.exe'][0].path, version: '1.7.27.4021' }] });
+    assert.deepEqual(hub.messages[result].value, { processes: [{ pid: 4120, path: PROCESSES['ODCStudio.exe'][0].path, version: '1.7.28.4021' }] });
 
     hub.send({ t: 'call', id: 'call-2', kind: 'agent.info', params: {} });
     await hub.until(() => hub.results('call-2').length === 1);
@@ -281,7 +281,7 @@ test('a value above maxValueBytes is refused as VALUE_TOO_LARGE without uploadin
   const root = makeRoot();
   const hub = await fakeHub({ credential: CREDENTIAL, welcome: { inlineMaxBytes: 2048, maxValueBytes: 4096 } });
   try {
-    const many = Array.from({ length: 60 }, (_, i) => ({ pid: 1000 + i * 4, path: 'C:\\Program Files\\OutSystems\\ODC Studio\\ODC Studio\\ODCStudio.exe', version: '1.7.27.4021' }));
+    const many = Array.from({ length: 60 }, (_, i) => ({ pid: 1000 + i * 4, path: 'C:\\Program Files\\OutSystems\\ODC Studio\\ODC Studio\\ODCStudio.exe', version: '1.7.28.4021' }));
     assert.ok(Buffer.byteLength(JSON.stringify({ processes: many })) > 4096);
     const agent = agentFor(root, hub, { processes: async () => many });
     const running = agent.run();
@@ -344,7 +344,7 @@ test('a value above inlineMaxBytes (measured on the whole message) goes as value
   const root = makeRoot();
   const hub = await fakeHub({ credential: CREDENTIAL, welcome: { inlineMaxBytes: 2048 } });
   try {
-    const many = Array.from({ length: 60 }, (_, i) => ({ pid: 1000 + i * 4, path: 'C:\\Program Files\\OutSystems\\ODC Studio\\ODC Studio\\ODCStudio.exe', version: '1.7.27.4021' }));
+    const many = Array.from({ length: 60 }, (_, i) => ({ pid: 1000 + i * 4, path: 'C:\\Program Files\\OutSystems\\ODC Studio\\ODC Studio\\ODCStudio.exe', version: '1.7.28.4021' }));
     const agent = agentFor(root, hub, { processes: async () => many });
     const running = agent.run();
     await hub.until(() => hub.streams === 1);

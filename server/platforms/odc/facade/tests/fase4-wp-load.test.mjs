@@ -35,7 +35,7 @@ function customer(tokenId, index, log) {
   const dirs = hostedDirs(os.tmpdir());
   let captures = 0;
   const handlers = {
-    'studio.processes': () => ({ processes: [{ pid: 7000 + index, path: 'C:\\ODC\\ODCStudio.exe', version: '1.7.27.1' }] }),
+    'studio.processes': () => ({ processes: [{ pid: 7000 + index, path: 'C:\\ODC\\ODCStudio.exe', version: '1.7.28.1' }] }),
     'odc.pipe': async ({ args }, link) => {
       const [command, ...rest] = args;
       if (command === 'status') return line({ ok: true, busy: null });

@@ -8,7 +8,7 @@ import { listenInRange } from './ports.mjs';
 const sha256 = buffer => createHash('sha256').update(buffer).digest('hex');
 const readBody = req => new Promise(resolve => { const chunks = []; req.on('data', c => chunks.push(c)); req.on('end', () => resolve(Buffer.concat(chunks))); });
 
-export async function fakeHub({ credential, kernel = { odc: '1.7.27', o11: '11.55.91', odcBridge: 'v35' }, welcome = {} } = {}) {
+export async function fakeHub({ credential, kernel = { odc: '1.7.28', o11: '11.55.91', odcBridge: 'v35' }, welcome = {} } = {}) {
   const waiters = [];
   const hub = {
     hellos: [], messages: [], requests: [], posts: 0, deletes: 0, blobGets: 0, blobPuts: 0, streams: 0,

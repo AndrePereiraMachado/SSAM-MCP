@@ -3,9 +3,9 @@
   "module": "SsamNeutralApp",
   "moduleKey": "ojF0o++TwanqKJN76uNzpw",
   "kind": "CrossDevice",
-  "sha256": "82DBCF31C81550FBCBADFE53D4F59F4772B03CBC906A9C45CD853F13FEE4699A",
+  "sha256": "1C4118B30BB6580D09ABD7673BECD4B7F14A880B1F0177A586C20570517BE959",
   "createdBy": "anvil-odc create-blank --kind CrossDevice --name SsamNeutralApp",
-  "capturedAt": "2026-10-05T03:40:21.8616829Z",
+  "capturedAt": "2026-10-12T16:22:26.0769206Z",
   "developerId": "anvil@ssam-hybrid.local",
   "host": null,
   "dependencies": []

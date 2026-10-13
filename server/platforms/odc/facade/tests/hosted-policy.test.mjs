@@ -26,7 +26,7 @@ function harness({ connected = true, info = {}, record = { pid: 6001 }, lanes = 
   const link = fakeAgentLink({ agentRoot: dirs.agentRoot, connected, info });
   const pulls = [];
   const executor = { id: 'fake-executor', hosted: true, quota: { full: () => full }, o11Connection: () => record,
-    async call(kind, params) { return kind === 'studio.processes' ? { processes: [{ pid: 4120, path: 'C:\\Customer\\' + params.image, version: '1.7.27.4021' }] } : {}; },
+    async call(kind, params) { return kind === 'studio.processes' ? { processes: [{ pid: 4120, path: 'C:\\Customer\\' + params.image, version: '1.7.28.4021' }] } : {}; },
     async pullFile(value, options) { pulls.push({ value, options }); return write(path.join(dirs.workspace, ...value.slice(6).split('/')), 'from the agent'); } };
   const context = { id: 'ctx-1', hosted: true, tokenId: 'tok_test', customer: 'Test', lanes, workspace: dirs.workspace, agent: link, executor, close: async () => {} };
   const runs = [], calls = [];
@@ -95,14 +95,14 @@ test('an o11-lane tool without the customer\'s O11 record is O11_NOT_CONNECTED; 
 
 test('a version mismatch names both versions; a pack mismatch asks for the package; a lane outside the token is HOSTED_LANE_DISABLED', async () => {
   const h = harness({ info: { compatible: { odc: { ok: false, code: 'STUDIO_VERSION_MISMATCH', message: 'm' }, o11: { ok: false, code: 'AGENT_PACK_MISMATCH', message: 'old pack' } },
-    studios: { odc: { installed: { dir: 'C:\\x', version: '1.7.28.100' } } } } });
+    studios: { odc: { installed: { dir: 'C:\\x', version: '1.7.27.100' } } } } });
   const refused = (await h.gate('studio_snapshot')({ module: 'M' })).structuredContent;
   assert.equal(refused.code, 'STUDIO_VERSION_MISMATCH');
   assert.equal(refused.lane, 'odc');
-  assert.match(refused.error, /ODC Studio 1\.7\.27/);
-  assert.match(refused.error, /ODC Studio 1\.7\.28\.100/);
-  assert.equal(refused.serverKernel, '1.7.27');
-  assert.equal(refused.agentStudio, '1.7.28.100');
+  assert.match(refused.error, /ODC Studio 1\.7\.28/);
+  assert.match(refused.error, /ODC Studio 1\.7\.27\.100/);
+  assert.equal(refused.serverKernel, '1.7.28');
+  assert.equal(refused.agentStudio, '1.7.27.100');
   const pack = (await h.gate('o11_studio')({ command: 'status' })).structuredContent;
   assert.equal(pack.code, 'AGENT_PACK_MISMATCH');
   assert.match(pack.continuation.why, /agent package/);
@@ -374,7 +374,7 @@ test('createSsamServer({hosted}): every tool and ssam_friction go through the ga
   assert.equal(doctor.hosted, true);
   assert.equal(doctor.agent.connected, true);
   assert.equal(doctor.agent.instance, 'fake-instance');
-  assert.equal(doctor.lanes.odc.serverKernel, '1.7.27');
+  assert.equal(doctor.lanes.odc.serverKernel, '1.7.28');
   assert.equal(doctor.lanes.odc.studio.open, true);
   assert.equal(doctor.lanes.o11.connection.pid, 6001);
   assert.equal(Object.hasOwn(doctor.lanes.o11.connection, 'authorityDir'), false, 'no server folder of the record');

@@ -32,7 +32,7 @@ public static class StartupHook { public static void Initialize() => Bridge.Star
 // model directly: every mutation goes through the native CompareAndMerge with a hash-checked base
 // and an immutable candidate, and every command appends one line to the operations journal.
 internal static partial class Bridge {
-    public const string Version = "v96";
+    public const string Version = "v97";
     // A command that outlives its timeout is reported as uncertain and keeps running; the loop stays
     // available for status, and every other command is refused until the late command completes.
     private static volatile string? busyCommand;

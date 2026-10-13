@@ -75,7 +75,7 @@ const ownerEnv = { ...clean(process.env), SSAM_SERVER_DIR: serverDir, SSAM_NODE:
   ...(process.env.ANVIL_ODC_FEATURES_DIR ? { ANVIL_ODC_FEATURES_DIR: process.env.ANVIL_ODC_FEATURES_DIR } : {}) };
 // The server's kernel is pinned (the fake Studios report these versions); detection would read the installed Studios.
 // The 24th release keeps serving the packs of v48 and v45 (PLANO-24-PRODUCAO 6): customer C of step 9i is on v48.
-write(path.join(serverDir, 'kernel.json'), JSON.stringify({ o11: '11.55.91', odc: '1.7.27', odcBridge: ODC_BRIDGE, odcBridgeAccepted: ['v48', 'v45'] }));
+write(path.join(serverDir, 'kernel.json'), JSON.stringify({ o11: '11.55.91', odc: '1.7.28', odcBridge: ODC_BRIDGE, odcBridgeAccepted: ['v96', 'v48', 'v45'] }));
 
 function customerMachine(name) {
   const base = path.join(T, name);

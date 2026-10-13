@@ -102,11 +102,14 @@ sudo ufw enable
 ## 4. Bundles dos Studios (máquina Windows com os Studios instalados)
 
 A imagem compila os kernels contra a parte dos Studios listada em `docker/ssam-server/studio-<faixa>.txt`. Ela vem de
-um bundle feito a partir do Studio instalado. O instalador oficial do ODC Studio 1.7.27 não se consegue baixar.
+um bundle feito a partir do Studio instalado. O instalador oficial do ODC Studio não se consegue baixar.
 
 - Service Studio: a mesma versão dos Studios dos clientes (hoje 11.55.91). O servidor recusa outra
   (`STUDIO_VERSION_MISMATCH`).
-- ODC Studio: 1.7.27 ou mais novo.
+- ODC Studio: a mesma versão dos clientes (hoje 1.7.28.10850, `odc-studio-1.7.28.10850.tar.gz`, sha256
+  `cbe778bdabf6940fb5ff3a2eb63935f6075a2b7a7768ff85431bc73f63151e8c`). O `odc` do `kernel.json` (7.1) é essa versão, e o
+  servidor recusa a faixa ODC de outra (`STUDIO_VERSION_MISMATCH`). O ODC Studio se atualiza sozinho: quando os clientes
+  mudarem de versão, refaça o bundle, a imagem, o `kernel.json` e o `Features.plain.xml` (7.2).
 
 Na raiz `server\` do SSAM-MCP, no Windows:
 
@@ -297,20 +300,35 @@ No Linux o servidor não lê a versão dos Studios nos `.exe`. Sem `kernel.json`
 recusa o pacote do cliente (`AGENT_PACK_MISMATCH`). Os valores têm de bater com o pacote do agente (`pack.json`:
 `odcBridge` e `o11BuiltFor`), como diz a seção "Compatibilidade entre as caixas" do `README.md` da raiz.
 
-Com a imagem do 24º envio (`servidor/fase4-24`, pacote do agente com a bridge ODC `v96`):
+Com a imagem do 24º envio no ODC Studio 1.7.28 (`fase4-24/odc1728`, `f912cb7e`, bundle `odc-studio-1.7.28.10850`,
+pacote do agente com a bridge ODC `v97`):
 
 ```bash
-printf '%s\n' '{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v96","odcBridgeAccepted":["v48","v45"]}' \
+printf '%s\n' '{"o11":"11.55.91","odc":"1.7.28","odcBridge":"v97","odcBridgeAccepted":["v96","v48","v45"]}' \
   | docker compose -f compose.prod.yml run --rm -T ssam-ops sh -c 'cat > /data/server/kernel.json'
 docker compose -f compose.prod.yml run --rm -T ssam-ops cat /data/server/kernel.json
 ```
 
-Com a imagem do 23º (`prod-20261011-ed0f94b`, a do rollback do 24º), o valor é o anterior:
-`{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v48","odcBridgeAccepted":["v45"]}`. O 23º não aceita o pacote v96.
+- `odc` é a versão do ODC Studio dos clientes, sem o build: o servidor recusa a faixa ODC de um Studio de outra versão
+  com `STUDIO_VERSION_MISMATCH` (um cliente que ainda está no 1.7.27 recebe essa recusa; o O11 não muda).
+- A v96 continua aceita: carregada contra os assemblies do 1.7.28, 2072 dos 2073 métodos dela compilam. O único que não
+  compila é o `refresh-references <Módulo> --producer <Biblioteca>`, porque o 1.7.28 mudou a assinatura de
+  `IReferencesManagerService.RefreshSpecificReferencesByKey` (sexto parâmetro opcional). Para um pacote com bridge
+  abaixo da v97 num ODC Studio 1.7.28, o servidor recusa esse comando antes de enviar, com `STUDIO_BRIDGE_OUTDATED`
+  ("Nothing was sent") e o pedido do pacote novo. A v48 tem a mesma e única quebra. Mande o pacote v97 a todos os clientes
+  ODC; tire a v96 de `odcBridgeAccepted` quando nenhum cliente a usar mais.
+
+Com a imagem do 24º no 1.7.27 (`prod-20261012-a857a1e`, a do rollback deste salto), o valor é o anterior:
+`{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v96","odcBridgeAccepted":["v48","v45"]}`. Na faixa ODC ela recusa o
+pacote v97 (`AGENT_PACK_MISMATCH`) e o ODC Studio 1.7.28 (`STUDIO_VERSION_MISMATCH`): depois desse rollback, a faixa ODC
+de quem está no 1.7.28 para, com qualquer pacote; a faixa O11 continua.
+
+Com a imagem do 23º (`prod-20261011-ed0f94b`), o valor é
+`{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v48","odcBridgeAccepted":["v45"]}`. O 23º não aceita os pacotes v96 e v97.
 
 - `odcBridge` é a bridge ODC do pacote atual do agente. `odcBridgeAccepted` lista as bridges mais antigas que o servidor
-  ainda atende: um agente com o pacote v48 ou v45 continua funcionando depois do salto para v96. Sem esse campo, todo
-  cliente ainda com um pacote antigo recebe `AGENT_PACK_MISMATCH` na faixa ODC.
+  ainda atende: um agente com o pacote v96, v48 ou v45 continua funcionando depois do salto para v97. Sem esse campo,
+  todo cliente ainda com um pacote antigo recebe `AGENT_PACK_MISMATCH` na faixa ODC.
 - Um pacote antigo aceito degrada com códigos tipados nas funções novas do 24º: o Service Center responde
   `STUDIO_BRIDGE_OUTDATED` (a fina antiga não tem `sc_http`), e `studio_reference_producers` recebe
   `COMMAND_NOT_ALLOWED` do agente antigo. O resto funciona como antes.
@@ -771,7 +789,7 @@ A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensai
 | Certificado não sai | DNS não aponta para a VPS, porta 80 ou 443 fechada, ou limite do Let's Encrypt (use staging). |
 | 401 `Unknown token` / 403 `Token revoked` ou `expired` | Token errado, revogado ou vencido: `server-token list`. |
 | `AGENT_PACK_MISMATCH` | `kernel.json` (7.1) não bate com o pacote do agente do cliente: a bridge do pacote não é `odcBridge` nem está em `odcBridgeAccepted`, ou o `o11BuiltFor` não é o `o11`. |
-| `STUDIO_VERSION_MISMATCH` | O Service Studio do cliente não é o da imagem (11.55.91). |
+| `STUDIO_VERSION_MISMATCH` | O Studio do cliente não é o do `kernel.json` (7.1): Service Studio 11.55.91 na faixa O11, ODC Studio 1.7.28 na faixa ODC. Um ODC Studio que se atualizou sozinho pede imagem e `kernel.json` novos (bundle da seção 4, features da 7.2). |
 | 403 `Origin not allowed` | Cliente de navegador com uma origem diferente de `https://<SSAM_DOMAIN>`. |
 | `HOSTED_UNAVAILABLE` em `o11_extension`, `odc_external_library`, depurador ou preview | Esperado: essas ferramentas não rodam no servidor hospedado Linux. |
 | `HOSTED_UNAVAILABLE` em `ssam_debug_server`, `ssam_debug_client` ou `ssam_debug_matrix` | Esperado (24º): o depurador continua fora do hospedado, como o `ssam_debug`. |
@@ -779,6 +797,7 @@ A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensai
 | `HOSTED_UNAVAILABLE` com `cause:"PROTOTYPE_SOURCE_LOCAL"` em `o11_deliver`, `studio_deliver`, `ssam_job` ou `o11_job` | Esperado (24º): o op `prototype` (importador de protótipo) é recusado no hospedado antes de qualquer captura; vale também em job composto. |
 | `HOSTED_STUDIO_SESSION_ONLY` ou `HOSTED_PROMPT_UNAVAILABLE` no Service Center ou no Portal | Esperado (24º): no hospedado vale só a sessão do Studio do cliente (`sc_http` e `portal-session`). Perfil privado, cofre, janela de credencial, prompt, `select-profile`, `portal-credential`, `portal-private-*`, SSO, identidade e LifeTime são recusados antes de tentar. |
 | `STUDIO_BRIDGE_OUTDATED` no Service Center, ou `COMMAND_NOT_ALLOWED` em `studio_reference_producers` | O cliente está com um pacote do agente anterior ao v96 (7.1). Mande o pacote novo. |
+| `STUDIO_BRIDGE_OUTDATED` em `refresh-references --producer` (faixa ODC) | Pacote com bridge abaixo da v97 num ODC Studio 1.7.28: nada foi enviado (7.1). Mande o pacote v97. |
 | 429 | Limite por token: `SSAM_RATE_PER_MINUTE`, ou 8 sessões abertas por token. |
 | Build para em "has no pinned SHA256" | Falta `*_BUNDLE_SHA256` (ou `*_SHA256` do instalador) no `.env` (seção 4). |
 | `ODC Studio feature cache not found` ou `ODC feature provider could not load the local cache` | Falta o `Features.plain.xml` no volume, ou foi copiado o `Features.xml` cifrado do Windows (7.2). |
@@ -808,6 +827,9 @@ A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensai
     lock de partida do worker e dos documentos de integração), que nasceu de
     `servidor/fase4-23-linux` (`b37715e1`). Conferido blob a blob: os quatro arquivos, os do worker O11 e todos os outros
     arquivos das duas caixas (fora os do SSAM-MCP) são iguais aos da linha.
+  - **ODC Studio 1.7.28** (`server/r24-odc1728`): a cópia saiu de `fase4-24/odc1728` (`c48074be`, sobre `a415531d`):
+    bundle ODC 1.7.28.10850, bridge ODC v97, catálogo de verificação do 1.7.28 e a guarda do executor para bridge abaixo
+    da v97. Conferido blob a blob de novo: os 6199 arquivos das duas caixas que vêm da linha são iguais aos de `c48074be`.
 - O índice do `ssam_discover` e os outros caches de `/app` se perdem a cada container novo: 1 a 2 min de aquecimento
   (7.3). O índice de módulos e a cópia dos leitores ficam no volume `cache` e passam pela recriação.
 - O container não roda com o sistema de arquivos raiz só de leitura.

@@ -44,8 +44,8 @@ test('o11.bridge: not delivered is BridgeError executed:false; delivered without
 });
 
 test('the other kinds: Error with code and executed false (not delivered) or null (unknown); file.* never pass', async () => {
-  const h = setup({ 'odc.attach': lost('AGENT_REVOKED'), 'studio.processes': () => ({ processes: [{ pid: 4120, path: 'C:\\x\\ODCStudio.exe', version: '1.7.27.4021' }] }) });
-  assert.deepEqual(await h.executor.call('studio.processes', { image: 'ODCStudio.exe' }), { processes: [{ pid: 4120, path: 'C:\\x\\ODCStudio.exe', version: '1.7.27.4021' }] });
+  const h = setup({ 'odc.attach': lost('AGENT_REVOKED'), 'studio.processes': () => ({ processes: [{ pid: 4120, path: 'C:\\x\\ODCStudio.exe', version: '1.7.28.4021' }] }) });
+  assert.deepEqual(await h.executor.call('studio.processes', { image: 'ODCStudio.exe' }), { processes: [{ pid: 4120, path: 'C:\\x\\ODCStudio.exe', version: '1.7.28.4021' }] });
   await assert.rejects(h.executor.call('odc.attach', { pid: 4120 }), e => e.code === 'AGENT_REVOKED' && e.executed === null);
   for (const kind of ['file.get', 'file.put', 'file.list', 'agent.info', 'studio.locate'])
     await assert.rejects(h.executor.call(kind, {}), e => e.code === 'KIND_NOT_ALLOWED' && e.executed === false);

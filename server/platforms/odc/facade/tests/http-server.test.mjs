@@ -186,7 +186,7 @@ const raw = (port, { method = 'GET', path: target = '/health', headers = {}, bod
   });
   req.on('error', reject); req.end(body);
 });
-const KERNEL = { o11: '11.55.91', odc: '1.7.27', odcBridge: 'v35' };
+const KERNEL = { o11: '11.55.91', odc: '1.7.28', odcBridge: 'v35' };
 
 test('/health answers ok with the pid of the server process', async () => {
   const { handle } = await start();

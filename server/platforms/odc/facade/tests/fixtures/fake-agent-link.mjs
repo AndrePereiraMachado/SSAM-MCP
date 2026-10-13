@@ -101,9 +101,9 @@ export function fakeAgentLink({ tokenId = 'tok_test', customer = 'Test', agentRo
     reconnect() { isConnected = true; },
     info: () => ({ connected: isConnected, credential: true, instance: 'fake-instance', agentVersion: '0.1.0', connectedAt: '2026-10-04T18:00:00.000Z',
       lastSeenAt: null, lanes: ['odc', 'o11'], pack: { id: 'pack-test', lanes: ['odc', 'o11'], odcBridge: 'v35', o11BuiltFor: '11.55.91' },
-      studios: { odc: { installed: { dir: 'C:\\Program Files\\OutSystems\\ODC Studio\\ODC Studio', version: '1.7.27.4021' } },
+      studios: { odc: { installed: { dir: 'C:\\Program Files\\OutSystems\\ODC Studio\\ODC Studio', version: '1.7.28.4021' } },
         o11: { installed: { dir: 'C:\\Program Files\\OutSystems\\Service Studio 11\\Service Studio', version: '11.55.91.65012' } } },
-      o11Connection: null, kernel: { o11: '11.55.91', odc: '1.7.27', odcBridge: 'v35' }, compatible: { odc: { ok: true }, o11: { ok: true } }, ...extra }),
+      o11Connection: null, kernel: { o11: '11.55.91', odc: '1.7.28', odcBridge: 'v35' }, compatible: { odc: { ok: true }, o11: { ok: true } }, ...extra }),
     setInfo(patch) { extra = { ...extra, ...patch }; },
     handlers,
     async call(kind, params = {}, options = {}) {

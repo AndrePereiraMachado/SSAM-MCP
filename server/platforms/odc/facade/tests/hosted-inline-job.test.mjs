@@ -68,7 +68,7 @@ test('hosted: a job of ~2 MB inline (object and JSON text) reaches o11_deliver a
   t.after(() => fs.rmSync(base, { recursive: true, force: true }));
   const dir = path.join(base, 'server');
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'kernel.json'), JSON.stringify({ o11: '11.55.91', odc: '1.7.27', odcBridge: ODC_BRIDGE }));
+  fs.writeFileSync(path.join(dir, 'kernel.json'), JSON.stringify({ o11: '11.55.91', odc: '1.7.28', odcBridge: ODC_BRIDGE }));
   process.env.SSAM_SERVER_DIR = dir;
   process.env.SSAM_MODULE_INDEX_ROOT = path.join(base, 'module-index');
   process.env.SSAM_READER_CACHE_ROOT = path.join(base, 'readers');
@@ -108,7 +108,7 @@ test('hosted: a job of ~2 MB inline (object and JSON text) reaches o11_deliver a
   fs.writeFileSync(path.join(agentRoot, 'private', 'authority', 'bridge.key'), randomBytes(32).toString('base64url'));
   const config = { server: `http://127.0.0.1:${port}`, o11Port: bridge.port };
   fs.writeFileSync(path.join(agentRoot, 'private', 'config.json'), JSON.stringify(config));
-  const versions = { 'ODCStudio.exe': '1.7.27.4021', 'ServiceStudio.exe': '11.55.91.65012' };
+  const versions = { 'ODCStudio.exe': '1.7.28.4021', 'ServiceStudio.exe': '11.55.91.65012' };
   const agent = await createAgent({ root: agentRoot, config, log: (event, fields) => events.push({ event, ...fields }), deps: {
     processes: async image => image === 'ODCStudio.exe' ? [{ pid: odcPid, path: 'C:\\Fake\\ODC Studio\\ODCStudio.exe', version: versions['ODCStudio.exe'] }]
       : [{ pid: o11Pid, path: 'C:\\Fake\\Service Studio\\ServiceStudio.exe', version: versions['ServiceStudio.exe'] }],

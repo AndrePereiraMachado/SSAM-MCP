@@ -18,7 +18,7 @@ import { PART_BYTES } from '../lib/blobs.mjs';
 import { fakeHub } from './fixtures/fake-hub.mjs';
 import { makeRoot, removeRoot, CREDENTIAL } from './fixtures/agent-root.mjs';
 
-const PROCESSES = { 'ODCStudio.exe': [{ pid: 4120, path: 'C:\\Program Files\\OutSystems\\ODC Studio\\ODC Studio\\ODCStudio.exe', version: '1.7.27.4021' }] };
+const PROCESSES = { 'ODCStudio.exe': [{ pid: 4120, path: 'C:\\Program Files\\OutSystems\\ODC Studio\\ODC Studio\\ODCStudio.exe', version: '1.7.28.4021' }] };
 const sha = buffer => createHash('sha256').update(buffer).digest('hex');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const fast = (fn, ms) => setTimeout(fn, ms >= 45000 ? ms : Math.min(ms, 25));
@@ -118,7 +118,7 @@ test('C14: file.sync writes several files in one call, keeps what the agent has 
   const root = makeRoot();
   try {
     const blobs = memoryBlobs();
-    const kinds = createKinds({ root, ws: createWorkspace(root), pack: readPack(root), kernel: () => ({ odc: '1.7.27', odcBridge: 'v35' }), blobs, limits: () => ({}), deps: {} });
+    const kinds = createKinds({ root, ws: createWorkspace(root), pack: readPack(root), kernel: () => ({ odc: '1.7.28', odcBridge: 'v35' }), blobs, limits: () => ({}), deps: {} });
     fs.mkdirSync(path.join(root, 'odc', 'lab', 'j'), { recursive: true });
     fs.writeFileSync(path.join(root, 'odc', 'lab', 'j', 'receipt.json'), 'the bridge wrote this');
     const same = Buffer.from('same');
@@ -150,8 +150,8 @@ test('the query-test command of the ODC bridge v45 passes with its capture as an
   });
   await new Promise(resolve => server.listen(pipeName('v35', pid), resolve));
   try {
-    const kinds = createKinds({ root, ws: createWorkspace(root), pack: readPack(root), kernel: () => ({ odc: '1.7.27', odcBridge: 'v35' }), blobs: memoryBlobs(), limits: () => ({}),
-      deps: { processes: async () => [{ pid, path: 'C:\\ODC\\ODCStudio.exe', version: '1.7.27.1' }], fileVersion: async () => null } });
+    const kinds = createKinds({ root, ws: createWorkspace(root), pack: readPack(root), kernel: () => ({ odc: '1.7.28', odcBridge: 'v35' }), blobs: memoryBlobs(), limits: () => ({}),
+      deps: { processes: async () => [{ pid, path: 'C:\\ODC\\ODCStudio.exe', version: '1.7.28.1' }], fileVersion: async () => null } });
     fs.writeFileSync(path.join(root, 'odc', 'snapshots', 'A.oml'), 'oml');
     const request = { op: 'describe', lane: 'odc', source: 'agent:odc/snapshots/A.oml', query: '@q' };
     await kinds.execute('odc.pipe', { pid, version: 'v35', args: ['query-test', JSON.stringify(request)] });
@@ -167,9 +167,9 @@ test('C14: the process listing takes pids from tasklist and describes (PowerShel
   assert.deepEqual(parseTasklist('INFO: No tasks are running which match the specified criteria.\r\n', 'ODCStudio.exe'), []);
   const described = [];
   let listing = '"ODCStudio.exe","4120","Console","1","500 K"\r\n';
-  const options = { tasklist: async () => ({ stdout: listing }), describe: async (image, pids) => { described.push([...pids]); return pids.map(pid => ({ pid, path: 'C:\\ODC\\ODCStudio.exe', version: '1.7.27.' + pid })); } };
-  assert.deepEqual(await listProcesses('ODCStudio.exe', options), [{ pid: 4120, path: 'C:\\ODC\\ODCStudio.exe', version: '1.7.27.4120' }]);
-  assert.deepEqual(await listProcesses('ODCStudio.exe', options), [{ pid: 4120, path: 'C:\\ODC\\ODCStudio.exe', version: '1.7.27.4120' }]);
+  const options = { tasklist: async () => ({ stdout: listing }), describe: async (image, pids) => { described.push([...pids]); return pids.map(pid => ({ pid, path: 'C:\\ODC\\ODCStudio.exe', version: '1.7.28.' + pid })); } };
+  assert.deepEqual(await listProcesses('ODCStudio.exe', options), [{ pid: 4120, path: 'C:\\ODC\\ODCStudio.exe', version: '1.7.28.4120' }]);
+  assert.deepEqual(await listProcesses('ODCStudio.exe', options), [{ pid: 4120, path: 'C:\\ODC\\ODCStudio.exe', version: '1.7.28.4120' }]);
   assert.deepEqual(described, [[4120]], 'a known pid is not described again');
   listing = '"ODCStudio.exe","4188","Console","1","500 K"\r\n';
   await listProcesses('ODCStudio.exe', options);
