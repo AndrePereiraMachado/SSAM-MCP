@@ -2,15 +2,17 @@
 
 Estes 76 arquivos existem em `server/` e em `agent/`, no mesmo caminho relativo dentro de cada caixa.
 Hoje as duas cópias são iguais byte a byte. Vieram de `servidor/fase4` (`e7b2119b`) e estão na revisão de
-`servidor/fase4-24` (`a415531d`), o 24º envio. O 24º acrescentou 8: `PrivateHttpContext.cs` e `ScHttpHandler.cs` do
-kernel e 6 fontes novas da bridge ODC (`Portal*.cs`).
+`fase4-24/odc1728` (`f912cb7e`), o 24º envio (`a415531d`) no ODC Studio 1.7.28 com a bridge ODC v97. O 24º acrescentou 8:
+`PrivateHttpContext.cs` e `ScHttpHandler.cs` do kernel e 6 fontes novas da bridge ODC (`Portal*.cs`). O `f912cb7e`
+mudou 5: `docs/FASE2-AGENTE.md`, `docs/PROVAS-AO-VIVO.md`, `Bridge.csproj`, `StartupHook.cs` e `client/Program.cs`.
 
 ## A regra
 
 - Os dois lados têm de ficar iguais. Mudou um, copie para o outro no mesmo commit.
 - Nunca edite só um lado. Uma diferença quebra o build ou o contrato entre servidor e agente.
 - O dono de cada grupo está no título da seção. O dono muda primeiro; a outra caixa recebe a cópia.
-- Um bump da bridge ODC (hoje v96) mexe nas duas caixas: `Bridge.csproj`, `client/Program.cs` e o `kernel.json` do servidor.
+- Um bump da bridge ODC (hoje v97) mexe nas duas caixas: `Bridge.csproj`, `StartupHook.cs`, `client/Program.cs` e o
+  `kernel.json` do servidor.
 - O `.gitignore` da raiz de cada caixa é o mesmo arquivo do repositório original.
 
 ## Por que existem nas duas
@@ -21,7 +23,7 @@ kernel e 6 fontes novas da bridge ODC (`Portal*.cs`).
 - A bridge fina linka `kernel/src/Anvil.Bridge/ScHttpHandler.cs` (o `sc_http` pela sessão do Studio, 24º). A bridge ODC
   e o `Bridge.Tests` linkam `kernel/src/Anvil.Bridge/PrivateHttpContext.cs` (namespace `Ssam.PrivateTransport`, sem
   tipo do kernel; `public-signature-drift` aceita só esse arquivo do kernel dentro da bridge ODC).
-- A caixa server compila a bridge e o cliente ODC no `setup-dev.ps1`/`build.ps1` e lê a versão da bridge (v96) de
+- A caixa server compila a bridge e o cliente ODC no `setup-dev.ps1`/`build.ps1` e lê a versão da bridge (v97) de
   `client/Program.cs`. O modo local do servidor compila `Anvil.Connect` e `Anvil.RuntimeHook`.
 - `platforms/odc/facade/odc-pipe.mjs` e `o11-bridge.mjs` são do servidor. O agente guarda uma cópia só para o teste de
   deriva (`agent/tests/drift.test.mjs`). Nunca são importados pelo agente.
@@ -58,9 +60,9 @@ Sem saída, está tudo igual.
 | Arquivo (relativo à caixa) | sha256 (conteúdo com fim de linha LF) |
 | --- | --- |
 | `docs/DISTRIBUICAO.md` | `bc87ebe53ef2230f89d4ceb1162e5e84b9eecc0e2563e93905eccb78fbc9d5b1` |
-| `docs/FASE2-AGENTE.md` | `dcd26fc0efaa3ac3840ed86782550a1810b3311f0846f82fd77ece1bfa4c05a9` |
+| `docs/FASE2-AGENTE.md` | `5a708f1fab975c42659d5fb21eac3f02213d6e16016f719ccd350cdb700eb5c1` |
 | `docs/O11-BRIDGE-FINA.md` | `c7f24e4ad0e2b537394a537d103ad5b0654745c4c692965cdec5cc8fcc80a25d` |
-| `docs/PROVAS-AO-VIVO.md` | `8e758af73ac2c94b7ec6592d9fb191b39a432da2a7ececcc61731ceddd2552a6` |
+| `docs/PROVAS-AO-VIVO.md` | `5240a9abc89d90c6ab45e4a898a98ac484bc64b5143deb8ca5d29698af6cca27` |
 | `docs/exemplos/mcp-cliente-hospedado.json` | `cabbe38805716878f03def98527dd5234b2dcfd9187df8c773305f80d8d6fa28` |
 
 ## kernel/: MSBuild comum (dono: server)
@@ -128,7 +130,7 @@ Sem saída, está tudo igual.
 | Arquivo (relativo à caixa) | sha256 (conteúdo com fim de linha LF) |
 | --- | --- |
 | `platforms/odc/studio/bridge/AppCreationCommands.cs` | `416c95f5bf1a86476109aa07d4950d12c05c72450a6d860a9dec4924b1341ccf` |
-| `platforms/odc/studio/bridge/Bridge.csproj` | `01eea97ecd5e62553806e524423c5341f387aa68d72012e571dea7dd26425820` |
+| `platforms/odc/studio/bridge/Bridge.csproj` | `3b228be57045a7a2777b9a0a2baf371c5e77c01ef119ff5ce8d4f0ed203a80ed` |
 | `platforms/odc/studio/bridge/DataCommands.cs` | `2c8eb954b4b1d1ccace550179399a4418f43fee308f3014fe1490a30f4196aa6` |
 | `platforms/odc/studio/bridge/MergeDiagnostics.cs` | `8a1d4b6206278e146729c6a3515d0962d0db6b64156dc9cee313dd9adf3b8573` |
 | `platforms/odc/studio/bridge/MergeOrderCopy.cs` | `4e7a187554154662f5ffcecf401904eb4b59ef656192f7fa57afc73b13a4d2d9` |
@@ -149,10 +151,10 @@ Sem saída, está tudo igual.
 | `platforms/odc/studio/bridge/README.md` | `722510d95bca5db8cced9ed3560f8dbb31dd2681c17c9514f01bd7a332efef9b` |
 | `platforms/odc/studio/bridge/ReferenceCommands.cs` | `615e55dec013036b12270e55ec8eea2a723cce753eb367cd232884b65adf9db0` |
 | `platforms/odc/studio/bridge/SecurityWarningsCopy.cs` | `9994c72f57a32b74fd8ca92299198e44dea11efed1023d5526f72eeb5307b698` |
-| `platforms/odc/studio/bridge/StartupHook.cs` | `b9116706171bec5726df50685f5700ba942656f5e6acf39fa63050f239d19466` |
+| `platforms/odc/studio/bridge/StartupHook.cs` | `3c90b44f10511f06b9f369ff4b2499fa54b57a030563a4d2e582a3337a748b0b` |
 | `platforms/odc/studio/bridge/TemplateCache.cs` | `a57ef89f222983393d3249c75d543e6a2fc06aef456340a63272d8f127b3f20c` |
 | `platforms/odc/studio/bridge/client/Client.csproj` | `a5b9c2d9640b4df751a052075cd5b2bf9b568b7b2e00f72b160acb9ebdc953f2` |
-| `platforms/odc/studio/bridge/client/Program.cs` | `e5a6806579087b63eea2b0f878a9947f95627fb39de8b443a2c83e8ce83198e6` |
+| `platforms/odc/studio/bridge/client/Program.cs` | `371ac5aff49a07d71b307252b6305165f9bf258c678e9ffdc20e7e5190482f87` |
 | `platforms/odc/studio/bridge/tests/Bridge.Tests.csproj` | `2f27778179dacdba7026cb7fea8fa46cfdf79e53cec590833ddaf303062c9696` |
 
 ## platforms/odc/studio/ e platforms/odc/.gitattributes: fontes que a bridge ODC linka e regras de build e eol (dono: server)

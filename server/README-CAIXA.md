@@ -2,8 +2,9 @@
 
 Servidor MCP hospedado do SSAM: `ssam serve`, hub do agente, tokens, kernels O11 e ODC, builder ODC, imagem Docker e
 painel do dono. Cópia de `servidor/fase4` (`e7b2119b`) de `C:\Users\andre\SSAM-Hybrid-servidor`, sem edição,
-atualizada para `servidor/fase4-24` (`a415531d`, 24º envio, branch `server/r24`; antes, `fase4-22` `1fbfa377` e
-`fase4-23` `e589be22`). Cada arquivo que vem da linha tem o blob da revisão (`README.md` da raiz, "De onde veio").
+atualizada para `fase4-24/odc1728` (`c48074be`: o 24º envio `a415531d` no ODC Studio 1.7.28 com a bridge ODC v97,
+branch `server/r24-odc1728`; antes, `servidor/fase4-24` `a415531d` na `server/r24`, `fase4-22` `1fbfa377` e `fase4-23`
+`e589be22`). Cada arquivo que vem da linha tem o blob da revisão (`README.md` da raiz, "De onde veio").
 Esta pasta é a raiz do repositório antigo: caminhos relativos, Dockerfile e compose funcionam daqui.
 
 Arquivos do SSAM-MCP nesta caixa, que **não vêm da linha do servidor**:
@@ -94,9 +95,10 @@ VPS Linux com Docker Compose, HTTPS automático pelo Caddy e servidor sem porta 
 2. `.env` a partir de `.env.example` (`NGROK_DOMAIN`, `NGROK_AUTHTOKEN`).
 3. `node --test platforms/odc/facade/tests/hosted-image-denylist.test.mjs` antes de cada build.
 4. `docker compose build` e `docker compose up -d`.
-5. `kernel.json` no volume: `{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v96","odcBridgeAccepted":["v48","v45"]}` em
-   `/data/server/kernel.json` (24º: pacote do agente v96; aceita agentes ainda com a v48 ou a v45). Com a imagem do
-   23º, o anterior: `{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v48","odcBridgeAccepted":["v45"]}`.
+5. `kernel.json` no volume: `{"o11":"11.55.91","odc":"1.7.28","odcBridge":"v97","odcBridgeAccepted":["v96","v48","v45"]}`
+   em `/data/server/kernel.json` (24º no ODC Studio 1.7.28: pacote do agente v97; aceita agentes ainda com a v96, a v48
+   ou a v45). Com a imagem do 24º no 1.7.27: `{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v96","odcBridgeAccepted":["v48","v45"]}`.
+   Com a do 23º: `{"o11":"11.55.91","odc":"1.7.27","odcBridge":"v48","odcBridgeAccepted":["v45"]}`.
 6. `Features.plain.xml` (do `deploy/odc-features-export.ps1`; o `Features.xml` do Windows é DPAPI e o Linux não o lê)
    em `/data/odc-features/` (`deploy/DEPLOY.md`, seção 7.2).
 7. Tokens: `docker compose run --rm ssam-admin server-token issue ...`.

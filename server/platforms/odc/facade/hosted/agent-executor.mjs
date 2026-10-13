@@ -28,6 +28,34 @@ export const AGENT_KINDS = Object.freeze(['studio.processes', 'odc.pipe', 'odc.a
 export const HOSTED_REFUSED_COMMANDS = Object.freeze(['portal-private-call', 'portal-private-download', 'portal-api-client-fixture-cleanup', 'portal-upload']);
 export const HOSTED_REFUSED_METHODS = Object.freeze(['sc_private_http', 'sc_private_http_cookie']);
 const HOSTED_ONLY_SESSION = 'HOSTED_STUDIO_SESSION_ONLY';
+// ODC Studio 1.7.28 (2026-10-12) gave IReferencesManagerService.RefreshSpecificReferencesByKey a sixth optional parameter
+// (nonSharedProducerKeys). A bridge compiled against an older ODC Studio references the five-parameter method, which
+// 1.7.28 no longer has: in a 1.7.28 Studio its library update (refresh-references <Module> --producer <Library>) cannot
+// bind the call (MissingMethodException) and never reaches the Studio's service. Every ODC bridge numbered below v97 was
+// compiled against 1.7.27 or older (v97 is the first compiled against 1.7.28); the other commands of those bridges bind
+// unchanged (metadata check of the bridges v96 and v48 against 1.7.28, docs/SERVIDOR-FASE4.md "ODC Studio 1.7.28").
+// An accepted older package (kernel.json odcBridgeAccepted) is refused that one command before anything is sent.
+export const ODC_BRIDGE_API_BREAKS = Object.freeze([Object.freeze({ studio: '1.7.28', firstBridge: 97, command: 'refresh-references',
+  flag: '--producer', member: 'IReferencesManagerService.RefreshSpecificReferencesByKey' })]);
+const versionParts = value => (/^(\d+)\.(\d+)\.(\d+)/.exec(String(value ?? '')) ?? []).slice(1, 4).map(Number);
+const atLeast = (value, minimum) => {
+  const a = versionParts(value), b = versionParts(minimum);
+  if (a.length < 3 || b.length < 3) return false;
+  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i];
+  return true;
+};
+// The API break a pipe command would hit in an ODC Studio of studioVersion with the bridge version it is sent to, or null.
+export function bridgeApiBreak(params, studioVersion) {
+  const number = /^v(\d+)$/.exec(String(params?.version ?? ''))?.[1];
+  if (number === undefined || !studioVersion) return null;
+  const args = (params?.args ?? []).map(String);
+  return ODC_BRIDGE_API_BREAKS.find(b => args[0] === b.command && (!b.flag || args.includes(b.flag)) && Number(number) < b.firstBridge
+    && atLeast(studioVersion, b.studio)) ?? null;
+}
+const outdatedBridge = (version, studioVersion, b) => 'The ODC bridge ' + version + ' of this agent package was compiled against an ODC Studio older '
+  + 'than ' + b.studio + ', and ODC Studio ' + b.studio + ' changed ' + b.member + ': in the user\'s ODC Studio ' + studioVersion + ' that bridge cannot run '
+  + b.command + ' ' + b.flag + '. Nothing was sent. Ask the server owner for the current agent package (its ODC bridge is compiled against ODC Studio '
+  + b.studio + '); ' + b.command + ' without ' + b.flag + ' and the other commands still work with this package.';
 const privateTransport = what => what + ' uses a private transport of the machine that runs SSAM (a local pipe and its vault), which is never used in hosted mode: '
   + 'only the session of the user\'s own Studio is a path. Nothing was sent.';
 const MARGIN_MS = 60000;
@@ -112,6 +140,13 @@ export class AgentExecutor {
     return carried && carried !== params.version && accepted.includes(carried) ? { ...params, version: carried } : params;
   }
 
+  // The ODC Studio of this customer: the version the agent reported (Hello, pong.versions), else the server kernel's,
+  // which the hub requires the customer's Studio to match (agent-hub.mjs compatibility).
+  odcStudioVersion() {
+    let info = null; try { info = this.link?.info?.() ?? null; } catch { info = null; }
+    return info?.studios?.odc?.installed?.version ?? info?.kernel?.odc ?? null;
+  }
+
   async call(kind, params = {}, options = {}) {
     if (kind === 'odc.pipe') return this.pipe(this.bridgeVersionFor(params ?? {}), options);
     if (kind === 'odc.attach') params = this.bridgeVersionFor(params ?? {});
@@ -128,6 +163,10 @@ export class AgentExecutor {
     const command = String(params?.args?.[0] ?? '');
     if (HOSTED_REFUSED_COMMANDS.includes(command))
       throw Object.assign(new PipeError(privateTransport('The bridge command ' + command), { code: HOSTED_ONLY_SESSION, sent: false }), { executed: false });
+    const studioVersion = this.odcStudioVersion();
+    const broken = bridgeApiBreak(params, studioVersion);
+    if (broken)
+      throw Object.assign(new PipeError(outdatedBridge(params.version, studioVersion, broken), { code: 'STUDIO_BRIDGE_OUTDATED', sent: false }), { executed: false });
     let staged;
     try { staged = await stageOdcPipe(params, this.mirror); }
     catch (error) { throw pipeError(error, 'before'); }

@@ -16,11 +16,11 @@ import { makeRoot, removeRoot, CREDENTIAL } from './fixtures/agent-root.mjs';
 
 const PID = 4100000 + Math.floor(Math.random() * 90000) * 4;
 const OLD = PID + 4;
-const KERNEL = { odc: '1.7.27', o11: '11.55.91', odcBridge: 'v35' };
+const KERNEL = { odc: '1.7.28', o11: '11.55.91', odcBridge: 'v35' };
 const sha = buffer => createHash('sha256').update(buffer).digest('hex');
 const PROCESSES = {
-  'ODCStudio.exe': [{ pid: PID, path: 'C:\\Program Files\\OutSystems\\ODC Studio\\ODC Studio\\ODCStudio.exe', version: '1.7.27.4021' },
-    { pid: OLD, path: 'C:\\Other\\ODCStudio.exe', version: '1.7.28.100' }],
+  'ODCStudio.exe': [{ pid: PID, path: 'C:\\Program Files\\OutSystems\\ODC Studio\\ODC Studio\\ODCStudio.exe', version: '1.7.28.4021' },
+    { pid: OLD, path: 'C:\\Other\\ODCStudio.exe', version: '1.7.27.100' }],
   'ServiceStudio.exe': [{ pid: 5000, path: 'C:\\Program Files\\OutSystems\\Service Studio 11\\Service Studio\\ServiceStudio.exe', version: '11.55.90.1' }],
 };
 
@@ -246,7 +246,7 @@ test('odc.pipe against a fake named pipe: the line goes out, the reply comes bac
     assert.equal(pipe.lines.length, 1);
     // No pipe for that pid: the transport code comes back as is, nothing sent.
     const other = PID + 400000;
-    const { kinds: lonely } = kindsFor(root, { processes: { 'ODCStudio.exe': [{ pid: other, path: 'C:\\x\\ODCStudio.exe', version: '1.7.27.1' }] } });
+    const { kinds: lonely } = kindsFor(root, { processes: { 'ODCStudio.exe': [{ pid: other, path: 'C:\\x\\ODCStudio.exe', version: '1.7.28.1' }] } });
     await assert.rejects(lonely.execute('odc.pipe', { pid: other, version: 'v35', args: ['status'], connectMs: 50 }),
       error => error.code === 'BRIDGE_NOT_ATTACHED' && error.sent === false && error.executed === false);
   } finally { await pipe.close(); removeRoot(root); }
@@ -323,7 +323,7 @@ test('studio.processes lists only the two Studio images, with versions', async (
   try {
     const { kinds } = kindsFor(root);
     const { processes } = await kinds.execute('studio.processes', { image: 'ODCStudio.exe' });
-    assert.deepEqual(processes.map(p => [p.pid, p.version]), [[PID, '1.7.27.4021'], [OLD, '1.7.28.100']]);
+    assert.deepEqual(processes.map(p => [p.pid, p.version]), [[PID, '1.7.28.4021'], [OLD, '1.7.27.100']]);
     await refused(kinds.execute('studio.processes', { image: 'notepad.exe' }), 'PARAMS_INVALID');
   } finally { removeRoot(root); }
 });

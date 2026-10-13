@@ -62,7 +62,7 @@ class FakeExecutor {
   relayPort() { return this.relay; }
   async call(kind, params = {}) {
     this.calls.push({ kind, params: structuredClone(params) });
-    if (kind === 'studio.processes') return { processes: params.image === 'ODCStudio.exe' ? this.odcPids.map(pid => ({ pid, path: 'C:\\Customer\\ODCStudio.exe', version: '1.7.27.1' })) : [] };
+    if (kind === 'studio.processes') return { processes: params.image === 'ODCStudio.exe' ? this.odcPids.map(pid => ({ pid, path: 'C:\\Customer\\ODCStudio.exe', version: '1.7.28.1' })) : [] };
     if (kind === 'odc.pipe') return { line: JSON.stringify(params.args[0] === 'auth-status' ? { ok: true, sessions: [{ host: 'customer.example', loggedIn: true, user: 'dev@customer.example' }] } : { ok: true, command: params.args[0] }) };
     if (kind === 'odc.attach') return { ok: true, attached: true, pid: params.pid, version: 'v38' };
     if (kind === 'o11.bridge') return { reply: { success: true, data: {} } };
@@ -73,7 +73,7 @@ class FakeExecutor {
   async close() {}
 }
 const agent = { connected: () => true, protocolError() {},
-  info: () => ({ connected: true, credential: true, agentVersion: '0.1.0', kernel: { odc: '1.7.27', odcBridge: 'v38', o11: '11.55.91' },
+  info: () => ({ connected: true, credential: true, agentVersion: '0.1.0', kernel: { odc: '1.7.28', odcBridge: 'v38', o11: '11.55.91' },
     compatible: { odc: { ok: true }, o11: { ok: true } } }) };
 function hosted({ lanes = ['odc', 'o11'], record = false, ...options } = {}) {
   const tokenId = 'tok_' + randomUUID().slice(0, 12);

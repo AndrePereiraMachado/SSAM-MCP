@@ -24,7 +24,7 @@ Tudo aqui roda na máquina do dono. O "cliente de teste" é uma pasta nesta mesm
   Esperado: tabela final toda "ok". Se falhar: o registro detalhado está em `.local\setup\setup-*.log`.
 - [ ] **P2. cloudflared.** `winget install --id Cloudflare.cloudflared`, depois `cloudflared --version`.
   Esperado: uma versão. Se falhar: baixe o MSI oficial da Cloudflare; o script nunca baixa nada.
-- [ ] **P3. Studios.** Service Studio 11.55.91 e ODC Studio 1.7.27 instalados (as versões do kernel do servidor).
+- [ ] **P3. Studios.** Service Studio 11.55.91 e ODC Studio 1.7.28 instalados (as versões do kernel do servidor).
   Se falhar: o `ssam_doctor` do passo 4 mostra `STUDIO_VERSION_MISMATCH`; instale a versão do kernel.
 - [ ] **P4. Testes offline verdes.** `node --test agent\tests\*.test.mjs` e
   `node platforms\odc\facade\tests\hosted-e2e-processes.mjs`. Esperado: 58/58 e 72/72 (16ª entrega). Se falhar: não siga para a sessão.

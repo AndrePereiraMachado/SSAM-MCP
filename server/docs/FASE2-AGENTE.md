@@ -45,7 +45,7 @@ faixa `exec` foi fundida na `policy`, que passa a se chamar `hosted` (seção 10
 |---|---|---|
 | LLM do cliente (Claude, outro) | conta/máquina do cliente | chama as ferramentas MCP por HTTPS com `Authorization: Bearer ssam_...` |
 | Servidor MCP (`ssam serve`), uma instância `createSsamServer` por sessão | máquina do dono | escuta em `127.0.0.1`; HTTPS por túnel ou proxy (seção 9) |
-| Kernel O11 (`anvil.dll`), kernel ODC (`anvil-odc.dll`), builder ODC, leitores residentes, catálogo, discover, receitas | máquina do dono | usam as DLLs do Studio INSTALADO no servidor (Service Studio 11.55.91, ODC Studio 1.7.27) |
+| Kernel O11 (`anvil.dll`), kernel ODC (`anvil-odc.dll`), builder ODC, leitores residentes, catálogo, discover, receitas | máquina do dono | usam as DLLs do Studio INSTALADO no servidor (Service Studio 11.55.91, ODC Studio 1.7.28) |
 | Hub do agente (`/agent/v1/*`) | máquina do dono, dentro do mesmo processo HTTP | `agent-hub.mjs` (faixa `hub`) |
 | `AgentExecutor`, espelho de arquivos, relay do bridge O11, portão hospedado | máquina do dono | `hosted/*.mjs` (faixa `hosted`) |
 | Agente SSAM (`agent/ssam-agent.mjs`) | máquina do cliente | conexão só de SAÍDA; nenhuma porta aberta no cliente |
@@ -296,7 +296,7 @@ Exemplo:
 {"t":"hello","protocol":"ssam-agent/1","instance":"6f1c0e1e-3a59-4c43-9d8b-2f7b6f0d9a11",
  "agent":{"version":"0.1.0","node":"v24.19.0","platform":"win32","startedAt":"2026-10-04T18:00:00.000Z"},
  "pack":{"id":"pack-20261004-1","lanes":["odc","o11"],"odcBridge":"v35","o11BuiltFor":"11.55.91"},
- "studios":{"odc":{"installed":{"dir":"C:\\Program Files\\OutSystems\\ODC Studio\\ODC Studio","version":"1.7.27.4021"}},
+ "studios":{"odc":{"installed":{"dir":"C:\\Program Files\\OutSystems\\ODC Studio\\ODC Studio","version":"1.7.28.4021"}},
             "o11":{"installed":{"dir":"C:\\Program Files\\OutSystems\\Service Studio 11\\Service Studio","version":"11.55.91.65012"}}},
  "o11Connection":null}
 ```
@@ -306,7 +306,7 @@ Exemplo:
 ```
 { t: "welcome", channel: <32 hex>, customer: <string>, resumed: <bool>,
   heartbeatMs, deadAfterMs, maxMessageBytes, inlineMaxBytes, partBytes, maxFileBytes, maxValueBytes,
-  kernel: { odc: <"1.7.27"|null>, o11: <"11.55.91"|null>, odcBridge: <"v35"|null> },
+  kernel: { odc: <"1.7.28"|null>, o11: <"11.55.91"|null>, odcBridge: <"v35"|null> },
   compatible: { odc: Compat, o11: Compat } }
 Compat = { ok: true } | { ok: false, code: "STUDIO_VERSION_MISMATCH"|"STUDIO_NOT_INSTALLED"|"AGENT_PACK_MISMATCH"|"LANE_DISABLED"|"KERNEL_UNAVAILABLE", message: <string> }
 ```
@@ -1151,9 +1151,9 @@ Regras da faixa `hosted` (em `hosted/policy.mjs`):
   continuam funcionando):
 
 ```json
-{ "ok": false, "code": "STUDIO_VERSION_MISMATCH", "lane": "odc", "serverKernel": "1.7.27", "agentStudio": "1.7.28",
-  "error": "This SSAM server has the kernel for ODC Studio 1.7.27; the agent reports ODC Studio 1.7.28. Tools that touch the ODC Studio are unavailable until the versions match. Server-only tools (ssam_discover, ssam_reference, odc_search_operations, ...) still work.",
-  "continuation": { "tool": "ssam_doctor", "arguments": {}, "why": "Shows both versions. Ask the user to install ODC Studio 1.7.27, or to wait until the server owner updates the kernel." } }
+{ "ok": false, "code": "STUDIO_VERSION_MISMATCH", "lane": "odc", "serverKernel": "1.7.28", "agentStudio": "1.7.27",
+  "error": "This SSAM server has the kernel for ODC Studio 1.7.28; the agent reports ODC Studio 1.7.27. Tools that touch the ODC Studio are unavailable until the versions match. Server-only tools (ssam_discover, ssam_reference, odc_search_operations, ...) still work.",
+  "continuation": { "tool": "ssam_doctor", "arguments": {}, "why": "Shows both versions. Ask the user to install ODC Studio 1.7.28, or to wait until the server owner updates the kernel." } }
 ```
 
 - `AGENT_PACK_MISMATCH` usa o mesmo formato, com `why` "ask the server owner for the current agent package".
@@ -1684,7 +1684,7 @@ programadas, blobs e `protocolError` registrado) e workspace temporário:
 - Instalador, ofuscação e assinatura de código (o Controle Inteligente de Aplicativos do Windows pode bloquear DLLs não
   assinadas no cliente; a seleção assinada existente só cobre o runtime ODC).
 - Vários kernels no servidor: há UM kernel por faixa, preso à versão do Studio instalado no servidor (hoje Service Studio
-  11.55.91 e ODC Studio 1.7.27). Cliente em outra versão é recusado (seção 7) até o dono atualizar o servidor.
+  11.55.91 e ODC Studio 1.7.28, desde a atualização automática de 12/10/2026). Cliente em outra versão é recusado (seção 7) até o dono atualizar o servidor.
 - Propriedade intelectual no O11: resolvido na fase 3 ([O11-BRIDGE-FINA.md](O11-BRIDGE-FINA.md)). O pacote leva só a
   bridge fina (`Anvil.Bridge.dll` sem `Anvil.Core.dll`, sem `Anvil.CSharp.dll`, sem `Esprima.dll`); a lógica do kernel
   que rodava dentro do Studio passou para o servidor, e `scripts\pack-ip-scan.ps1` recusa o pacote se aparecer

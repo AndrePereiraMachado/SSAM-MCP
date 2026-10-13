@@ -27,13 +27,14 @@ ARG SERVICE_STUDIO_SHA256=10047d31a03adbbe6bd3a07c9de0506eeba3420e7031e51846607e
 ARG SERVICE_STUDIO_URL=
 ARG SERVICE_STUDIO_BUNDLE=o11-studio-11.55.91.65258.tar.gz
 ARG SERVICE_STUDIO_BUNDLE_SHA256=
-# ODC Studio: 1.7.27 or newer (the ODC kernel uses MobileSplashScreen, which 1.7.23 lacks). No SHA256 pinned yet. Its
-# installer cannot be downloaded today: the studio bundle (studio-bundle.ps1 on a machine with ODC Studio installed)
-# is the other input, used when the installer is absent.
-ARG ODC_STUDIO_INSTALLER=ODCStudio-1.7.27.10846.exe
+# ODC Studio: the version of the customers' ODC Studio (the agent hub compares its first three numbers with kernel.json odc;
+# 1.7.28 since the auto-update of 2026-10-12), and never older than 1.7.27 (the ODC kernel uses MobileSplashScreen, which
+# 1.7.23 lacks). No SHA256 pinned yet. Its installer cannot be downloaded today: the studio bundle (studio-bundle.ps1 on
+# a machine with ODC Studio installed) is the other input, used when the installer is absent.
+ARG ODC_STUDIO_INSTALLER=ODCStudio-1.7.28.10850.exe
 ARG ODC_STUDIO_SHA256=
 ARG ODC_STUDIO_URL=
-ARG ODC_STUDIO_BUNDLE=odc-studio-1.7.27.10846.tar.gz
+ARG ODC_STUDIO_BUNDLE=odc-studio-1.7.28.10850.tar.gz
 ARG ODC_STUDIO_BUNDLE_SHA256=
 # nsis: docker/ssam-server/nsis_extract.py (Python standard library); 7z: 7-Zip of the distribution.
 ARG STUDIO_EXTRACTOR=nsis

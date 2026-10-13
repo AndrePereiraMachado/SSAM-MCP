@@ -45,9 +45,9 @@ O resultado é o mesmo nas duas formas. O instalador é o preferido quando está
 ## Servidor limpo, passo a passo
 
 1. Studios: para cada um, coloque em `docker/installers/` uma de duas entradas (veja `docker/installers/README.md`).
-   - O instalador oficial: `ServiceStudio-11.55.91.65258.exe` e `ODCStudio-1.7.27.10846.exe` (ou mais novo).
-   - Ou um bundle feito numa máquina com o Studio instalado: `studio-bundle.ps1 [-Lane o11]` no Windows, `studio-bundle.sh --lane odc|o11` no WSL ou Linux. Gera `odc-studio-1.7.27.10846.tar.gz` (ou `o11-studio-...`) e o `.sha256`. Fixe esse hash em `*_BUNDLE_SHA256`.
-   - Hoje o ODC 1.7.27 só entra assim: o instalador dele não se consegue baixar.
+   - O instalador oficial: `ServiceStudio-11.55.91.65258.exe` e `ODCStudio-1.7.28.10850.exe`, as versões dos Studios dos clientes.
+   - Ou um bundle feito numa máquina com o Studio instalado: `studio-bundle.ps1 [-Lane o11]` no Windows, `studio-bundle.sh --lane odc|o11` no WSL ou Linux. Gera `odc-studio-1.7.28.10850.tar.gz` (ou `o11-studio-...`) e o `.sha256`. Fixe esse hash em `*_BUNDLE_SHA256`.
+   - Hoje o ODC 1.7.28 só entra assim: o instalador dele não se consegue baixar.
    - Outra versão: ajuste `SERVICE_STUDIO_INSTALLER`/`ODC_STUDIO_INSTALLER` e os SHA256 no `.env`.
    - Download no build: `*_URL`, com o SHA256 obrigatório.
 2. Configuração: `cp .env.example .env` e preencha `NGROK_DOMAIN` e `NGROK_AUTHTOKEN`.
@@ -108,3 +108,14 @@ docker run --init -d --name ssam-server -p 127.0.0.1:7310:7310 -v ssam-server-st
   - um arquivo alterado no bundle para o build (código de saída 3), e também param um SHA256 errado e um bundle da faixa errada;
   - o `studio-bundle.sh` gerou o bundle O11, que sai idêntico ao instalado.
 - O ODC precisa de 1.7.27 ou mais novo: o kernel ODC não compila contra o 1.7.23 (`MobileSplashScreen`). O instalador 1.7.27 não se consegue baixar, então o ODC entra pelo bundle.
+
+## Situação (2026-10-12): ODC Studio 1.7.28
+
+- O ODC Studio dos clientes e o do dono se atualizaram sozinhos para 1.7.28.10850. O hub recusa um Studio cujos três
+  primeiros números não são os do `kernel.json` (`STUDIO_VERSION_MISMATCH`), então o servidor passa para 1.7.28.
+- Bundle: `studio-bundle.ps1` sobre o 1.7.28.10850 instalado. Os 196 arquivos de `studio-odc.txt` existem nele, e as
+  referências de assembly desses arquivos não pedem nenhum outro arquivo da pasta do Studio (fora o runtime .NET
+  compartilhado). Nenhum plugin novo (`OutSystems.Model.Plugin.*.dll`, `Plugins/**/ServiceStudio.Plugin.*.dll`).
+  A lista não muda.
+- `kernel.json` do servidor: `{"o11":"11.55.91","odc":"1.7.28","odcBridge":"v97","odcBridgeAccepted":["v96","v48","v45"]}`
+  (`docs/SERVIDOR-FASE4.md`, "ODC Studio 1.7.28").

@@ -14,7 +14,7 @@ import { fakeBridge } from './fixtures/fake-bridge.mjs';
 import { freePort } from './fixtures/ports.mjs';
 import { makeRoot, removeRoot } from './fixtures/agent-root.mjs';
 
-const KERNEL = { odc: '1.7.27', o11: '11.55.91', odcBridge: 'v35' };
+const KERNEL = { odc: '1.7.28', o11: '11.55.91', odcBridge: 'v35' };
 const STARTED = '2026-10-04T10:00:00.0000000Z';
 const refused = (promise, code) => assert.rejects(promise, error => { assert.equal(error.code, code, error.message); assert.equal(error.executed, false); return true; });
 

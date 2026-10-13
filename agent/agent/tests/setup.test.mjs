@@ -94,7 +94,7 @@ test('doctor checks the two Node options and reports without printing the creden
     fs.writeFileSync(path.join(root, 'private', 'config.json'), JSON.stringify({ server: 'https://ssam.example.com', o11Port: 4516 }));
     fs.writeFileSync(path.join(root, 'private', 'credential'), CREDENTIAL);
     const deps = { env: {}, runtimes: async () => 'Microsoft.NETCore.App 8.0.11 [x]\r\nMicrosoft.NETCore.App 10.0.1 [x]\r\n',
-      studios: async () => ({ odc: { installed: { dir: 'C:\\ODC', version: '1.7.27.4021' } }, o11: { installed: null } }),
+      studios: async () => ({ odc: { installed: { dir: 'C:\\ODC', version: '1.7.28.4021' } }, o11: { installed: null } }),
       fetch: async () => ({ ok: true, status: 200 }) };
     const good = sink();
     assert.equal(await doctor({ root, stdout: good, deps: { ...deps, flags: new Set(['--use-env-proxy', '--use-system-ca']) } }), 0, good.text());

@@ -71,7 +71,7 @@ function customer({ handlers = {} } = {}) {
   const agentRoot = path.join(root, 'agent');
   for (const dir of ['odc/snapshots', 'odc/journal', 'odc/lab', 'o11', 'inbox', 'private']) fs.mkdirSync(path.join(agentRoot, dir), { recursive: true });
   const link = fakeAgentLink({ agentRoot, handlers: {
-    'studio.processes': ({ image }) => ({ processes: image === 'ODCStudio.exe' ? [{ pid: 4120, path: 'C:\\Customer\\ODCStudio.exe', version: '1.7.27.4021' }] : [] }), ...handlers } });
+    'studio.processes': ({ image }) => ({ processes: image === 'ODCStudio.exe' ? [{ pid: 4120, path: 'C:\\Customer\\ODCStudio.exe', version: '1.7.28.4021' }] : [] }), ...handlers } });
   const executor = new AgentExecutor({ link, workspace, o11: {} });
   const context = { id: randomUUID(), hosted: true, tokenId: link.tokenId, customer: 'Cliente X', lanes: ['odc', 'o11'], workspace, agent: link, executor, close: async () => {} };
   return { root, workspace, agentRoot, link, executor, context };
@@ -151,7 +151,7 @@ test('sc_private_http and sc_private_http_cookie: refused before any call, by th
 test('Portal select-profile and auth portal-credential: HOSTED_STUDIO_SESSION_ONLY before any profile, vault or broker', async () => {
   reset();
   const h = customer({ handlers: { 'odc.pipe': ({ args }) => ({ line: JSON.stringify(args[0] === 'auth-status'
-    ? { ok: true, bridge: 'v96', sessions: [{ host: TENANT, loggedIn: true, user: 'dev@customer' }], portalWindows: [], capabilities: ['portal-session:headless'] }
+    ? { ok: true, bridge: 'v97', sessions: [{ host: TENANT, loggedIn: true, user: 'dev@customer' }], portalWindows: [], capabilities: ['portal-session:headless'] }
     : { ok: true, host: TENANT, signedIn: true }) }) } });
   await within(h.context, async () => {
     const access = await lib.createAccess();
@@ -176,7 +176,7 @@ test('portal-private-*: the private Portal transport is refused before staging o
   fs.mkdirSync(path.dirname(request), { recursive: true }); fs.writeFileSync(request, '{}');
   await within(h.context, async () => {
     for (const command of HOSTED_REFUSED_COMMANDS)
-      await assert.rejects(h.executor.call('odc.pipe', { pid: 4120, version: 'v96', args: [command, request, randomUUID(), '--tenant', TENANT] }),
+      await assert.rejects(h.executor.call('odc.pipe', { pid: 4120, version: 'v97', args: [command, request, randomUUID(), '--tenant', TENANT] }),
         e => e.code === 'HOSTED_STUDIO_SESSION_ONLY' && e.sent === false, command);
     // studio_command passes any command: the private ones come back typed, nothing reached the agent.
     const facade = await createFacadeServer();
@@ -295,7 +295,7 @@ test('R4: odc_read, odc_write, odc_portal_read and odc_portal_write write each r
   reset();
   const fetches = [], calls = [];
   const h = customer({ handlers: { 'odc.pipe': ({ args }, link) => {
-    if (args[0] === 'auth-status') return { line: JSON.stringify({ ok: true, bridge: 'v96', sessions: [{ host: TENANT, loggedIn: true, user: 'dev@customer' }], portalWindows: [],
+    if (args[0] === 'auth-status') return { line: JSON.stringify({ ok: true, bridge: 'v97', sessions: [{ host: TENANT, loggedIn: true, user: 'dev@customer' }], portalWindows: [],
       capabilities: ['portal-session:headless', 'portal-call:secretRefs', 'portal-session:secretRefs'] }) };
     if (args[0] === 'portal-call') { calls.push({ file: args[1], request: JSON.parse(link.readAgent(args[1])) });
       return { line: JSON.stringify({ ok: true, status: 200, contentType: 'application/json', body: { items: [], key: 'k' }, source: 'studio', host: TENANT }) }; }

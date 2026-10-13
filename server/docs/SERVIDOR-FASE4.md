@@ -515,3 +515,77 @@ portas dos workers trocadas só localmente para 24617/24637/24647):
 Fica em aberto: a prova de que um job inline no hospedado não carrega caminho fora do workspace do cliente nos campos
 que o kernel lê de dentro do job (`data.source`, `file`, partes de job composto, documentos) e de que as recusas de
 protótipo e de job composto valem também para o job inline em texto JSON. Não entrou nesta rodada.
+
+## ODC Studio 1.7.28
+
+Em 12/10/2026 o ODC Studio do dono e o do Pedro se atualizaram sozinhos para 1.7.28.10850. A produção
+(`prod-20261012-a857a1e`, `kernel.json` com `"odc":"1.7.27"`) recusa a faixa ODC deles com `STUDIO_VERSION_MISMATCH`.
+O O11 não muda (11.55.91). Ramo `fase4-24/odc1728`, sobre `a415531d` (a produção).
+
+### Bundle
+- `studio-bundle.ps1 -Lane odc` (SSAM-MCP `server/r24-odc1728`, de `a857a1ef`), lendo o 1.7.28.10850 instalado:
+  `odc-studio-1.7.28.10850.tar.gz`, 196 arquivos, sha256
+  `cbe778bdabf6940fb5ff3a2eb63935f6075a2b7a7768ff85431bc73f63151e8c`. Fica em `C:\t\odc28\installers`, ao lado de uma
+  cópia do bundle O11 11.55.91 (`e9f0751a…`). Build da imagem com `STUDIO_INSTALLERS_DIR=/c/t/odc28/installers`.
+- A lista `studio-odc.txt` não muda: os 196 arquivos existem no 1.7.28, as referências de assembly deles não pedem outro
+  arquivo da pasta do Studio e não há plugin novo.
+- Do 1.7.27 para o 1.7.28 mudaram 68 dos 196 arquivos, entre eles `OutSystems.Model*.dll`: o modelo vai de
+  13.1431.3.60000 para 13.1436.1.60000.
+
+### Bridge ODC v97
+- A v96 foi compilada contra o 1.7.27. A v97 é a mesma bridge compilada contra o 1.7.28: outra DLL, outro número. Nenhuma
+  ref da integração, do servidor, do operacional ou do SSAM-MCP cita `ODC3.Bridge.v97` a `v99`.
+- Os 4 lugares: `Bridge.csproj`, `StartupHook.cs`, `bridge/client/Program.cs` e `weave-spec.json`. `stage.mjs check
+  --from-worktree`: 53 de 53.
+- Quebra binária do 1.7.28: `IReferencesManagerService.RefreshSpecificReferencesByKey` ganhou um sexto parâmetro
+  opcional (`nonSharedProducerKeys`). Uma bridge compilada contra o 1.7.27 aponta para o método de cinco parâmetros, que
+  o 1.7.28 não tem mais. No 1.7.28, o `refresh-references <Módulo> --producer <Biblioteca>` dela falha ao ligar a
+  chamada (`MissingMethodException`). Conferido nos metadados: a v96 e a v48 têm só essa referência quebrada; a v97 e o
+  kernel ODC não têm nenhuma.
+- Por isso o executor hospedado recusa esse comando antes de enviar, para pacote com bridge abaixo da v97 num ODC Studio
+  1.7.28 ou mais novo: `STUDIO_BRIDGE_OUTDATED`, "Nothing was sent", com o pedido do pacote novo
+  (`hosted/agent-executor.mjs`, `bridgeApiBreak`). O resto do pacote v96 continua funcionando.
+
+### `kernel.json`
+`{"o11":"11.55.91","odc":"1.7.28","odcBridge":"v97","odcBridgeAccepted":["v96","v48","v45"]}`. O pacote v96 do Pedro
+continua aceito. No rollback, volta o do 24º.
+
+### Kernel, fixtures e testes
+- Catálogo `kernel/catalog/odc/verify-messages-1.7.28.10850.json` (`verify-catalog`): 576 ids, 5 novos e nenhum
+  removido (`AgentManifestOnlyOneProtocolInputMustBeFilled`, `BreakpointMinWidthOutOfOrder`, `DuplicateBreakpoint`,
+  `InvalidCssPropertyValueInCustomStyle`, `InvalidExtraSmallBreakpointMinWidth`). Nenhum é de segurança.
+- `kernel/tests/fixtures/odc/blank-*.oml` refeitas com os comandos do `OdcBlankModuleTests` (mesmas chaves, modelo
+  13.1436.1.60000). O sidecar do `blank-crossdevice.oml`, a base neutra do `ssam_job` ODC hospedado, ganhou sha256 e
+  `capturedAt` novos.
+- Testes que fixam a versão do servidor: kernel falso `1.7.28`; o caso de outra versão passa a ser um cliente ainda no
+  1.7.27. Imagem, `.env.example`, compose e READMEs: `ODCStudio-1.7.28.10850.exe` e `odc-studio-1.7.28.10850.tar.gz`.
+- Jobs de cobertura ODC: nenhum muda. Fase 2 inteira (489 jobs) e, da fase 1, os 11 que não existem na fase 2 mais os 29
+  que tocam tema, estilo, breakpoints e agente, todos pelo CLI compilado contra o 1.7.28. Fora o que já era recusado, só
+  3 jobs saem diferentes do carimbo antigo (`cov-data-staticentityrecord-del`, `cov-processes-timeofday-one-set` e o
+  `recon-*` da captura de cliente da fase 1). Os 3 dão o mesmo resultado no CLI do 24º sobre o bundle 1.7.27: são regras
+  do kernel posteriores ao carimbo, não do 1.7.28.
+
+Testes (`ANVIL_WORKER=0`, `ANVIL_ODC_NO_WORKER=1`, `SSAM_NO_WARM=1`, `ANVIL_ODC_FEATURES_DIR` numa cópia do cache de
+features, workers do `.ssam-workspace.json` trocados só localmente para 28517/28537/28547). A comparação é com
+`a415531d`, extraído por `git archive` e compilado do mesmo jeito contra o 1.7.28:
+- `Anvil.Tests.Odc` filtrado em `Odc|Job|Pa|Prototype|Coverage|ScreenHtml|Flow|Ddl`: 783 ok, 1 pulado, 0 falhas. No
+  `a415531d`: 781 ok e 2 falhas, exatamente as do 1.7.28 (`TheVerifyIdManifestIsTheInstalledOdcCatalog` e
+  `TheBlankFixturesWereSavedByTheInstalledModel`).
+- `Bridge.Tests` 311/311 e `Builder.Tests` 7/7 (iguais no `a415531d`).
+- Node (`platforms/odc/facade/tests`, `platforms/odc/tests`, `platforms/odc/portal/tests`, `agent/tests`, `tests` e
+  `scripts/release/license`, um processo por arquivo): 602 arquivos, 5121 testes, 4991 ok, 64 falhas, 31 pulados. No
+  `a415531d`: 5114 testes, 102 falhas. Nenhum nome de falha novo: os 2 que só falharam na cabeça (o índice do
+  `discovery` reaproveitado por identidade, que mudou porque a bateria do kernel escrevia no `test-work` ao mesmo
+  tempo, e o MCP da raiz em `tests/workspace.test.mjs`, tempo esgotado) passam sozinhos; `pacote-trabalho` também
+  passa sozinho (17/17). As outras falhas são as mesmas do `a415531d` e nenhuma é do 1.7.28: DPAPI, git da cópia,
+  carimbos O11 do `test-work` que esta bateria só ODC não refaz (`catalog-a-*`, `catalog-b-ui`), tempo com a máquina
+  cheia, e o C26 de `fase4-server.test.mjs`, que falha igual sozinho no `a415531d`.
+- `hosted-bridge-version`, `hosted-sc-portal` e `hosted-agent-executor` juntos: 21/21.
+- `hosted-e2e-processes.mjs` (servidor com `kernel.json` 1.7.28/v97, cliente no 1.7.28 e o cliente C no pacote v48):
+  117 de 117.
+
+Fica em aberto no 1.7.28: o pacote v97 do agente, a imagem com este bundle, o cache de features do 1.7.28 na imagem, a
+prova ao vivo do `refresh-references --producer` da v97 num ODC Studio 1.7.28 (o sexto parâmetro vai no padrão) e os
+pinos do depurador em `facade/debug-matrix/native-limits.json` que citam DLLs do 1.7.27 (`OutSystems.Model.dll`
+13.1431.3, `OutSystems.ServiceStudio.PluginAPI.dll` 13.1431.3): no 1.7.28 a matriz os mostra como
+`stale-installed-assembly` até alguém refazer aquelas provas.

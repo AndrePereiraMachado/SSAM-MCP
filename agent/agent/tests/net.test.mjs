@@ -252,7 +252,7 @@ test('agent: a result part the hub never answers goes again on a fresh connectio
   const root = makeRoot();
   const hub = await fakeHub({ credential: CREDENTIAL, welcome: { inlineMaxBytes: 2048 } });
   cleanups.push(async () => { await hub.close(); removeRoot(root); });
-  const many = Array.from({ length: 60 }, (_, i) => ({ pid: 1000 + i * 4, path: 'C:\\Program Files\\OutSystems\\ODC Studio\\ODC Studio\\ODCStudio.exe', version: '1.7.27.4021' }));
+  const many = Array.from({ length: 60 }, (_, i) => ({ pid: 1000 + i * 4, path: 'C:\\Program Files\\OutSystems\\ODC Studio\\ODC Studio\\ODCStudio.exe', version: '1.7.28.4021' }));
   const { agent, events } = agentWith(root, hub, { processes: async () => many, partMs: 200 });
   const running = agent.run();
   await hub.until(() => hub.streams === 1);

@@ -30,7 +30,7 @@ function harness({ connected = true, info = {}, lanes = ['odc'], sync = false } 
   const link = fakeAgentLink({ agentRoot: dirs.agentRoot, connected, info, sync });
   const pulls = [];
   const executor = { id: 'fake', hosted: true, quota: { full: () => false }, o11Connection: () => null,
-    async call(kind, params) { return kind === 'studio.processes' ? { processes: [{ pid: 4120, path: 'C:\\Customer\\' + params.image, version: '1.7.27.4021' }] } : {}; },
+    async call(kind, params) { return kind === 'studio.processes' ? { processes: [{ pid: 4120, path: 'C:\\Customer\\' + params.image, version: '1.7.28.4021' }] } : {}; },
     async pullFile(value) { pulls.push(value); return write(path.join(dirs.workspace, ...value.slice(6).split('/')), 'from the agent'); } };
   const context = { id: 'ctx', hosted: true, tokenId: 'tok_test', customer: 'Test', lanes, workspace: dirs.workspace, agent: link, executor, close: async () => {} };
   const calls = [];

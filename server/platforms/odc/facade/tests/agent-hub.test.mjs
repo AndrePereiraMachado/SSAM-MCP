@@ -23,8 +23,8 @@ let n = 0;
 const freshDir = () => { const d = path.join(tmp, 'dir' + (++n)); fs.mkdirSync(d); return d; };
 const hex = bytes => createHash('sha256').update(bytes).digest('hex');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const KERNEL = { o11: '11.55.91', odc: '1.7.27', odcBridge: 'v35' };
-const studios = (odc = '1.7.27.4021', o11 = '11.55.91.65012') => ({
+const KERNEL = { o11: '11.55.91', odc: '1.7.28', odcBridge: 'v35' };
+const studios = (odc = '1.7.28.4021', o11 = '11.55.91.65012') => ({
   odc: { installed: odc ? { dir: 'C:\\Program Files\\OutSystems\\ODC Studio\\ODC Studio', version: odc } : null },
   o11: { installed: o11 ? { dir: 'C:\\Program Files\\OutSystems\\Service Studio 11\\Service Studio', version: o11 } : null } });
 const helloOf = (over = {}) => ({ t: 'hello', protocol: 'ssam-agent/1', instance: randomUUID(),
@@ -154,12 +154,12 @@ test('hello answers welcome with the kernel and the compatibility per lane (equa
     assert.equal(info.connected, true); assert.equal(info.credential, true); assert.equal(info.agentVersion, '0.1.0');
     assert.deepEqual(info.lanes, ['odc', 'o11']); assert.deepEqual(info.kernel, KERNEL); assert.equal(typeof info.lastSeenAt, 'string');
     // Different version: the first three numbers decide.
-    const different = (await a.hello(helloOf({ studios: studios('1.7.28.100') }))).body.compatible;
+    const different = (await a.hello(helloOf({ studios: studios('1.7.27.100') }))).body.compatible;
     assert.equal(different.odc.code, 'STUDIO_VERSION_MISMATCH');
-    assert.match(different.odc.message, /ODC Studio 1\.7\.27.*ODC Studio 1\.7\.28\.100/);
+    assert.match(different.odc.message, /ODC Studio 1\.7\.28.*ODC Studio 1\.7\.27\.100/);
     assert.deepEqual(different.o11, { ok: true });
     // No Studio installed.
-    assert.equal((await a.hello(helloOf({ studios: studios('1.7.27.1', null) }))).body.compatible.o11.code, 'STUDIO_NOT_INSTALLED');
+    assert.equal((await a.hello(helloOf({ studios: studios('1.7.28.1', null) }))).body.compatible.o11.code, 'STUDIO_NOT_INSTALLED');
     // A stale agent package: other ODC bridge, O11 bridge built for another Service Studio, a lane missing.
     const stale = (await a.hello(helloOf({ pack: { id: 'old', lanes: ['odc', 'o11'], odcBridge: 'v34', o11BuiltFor: '11.54.10' } }))).body.compatible;
     assert.equal(stale.odc.code, 'AGENT_PACK_MISMATCH'); assert.equal(stale.o11.code, 'AGENT_PACK_MISMATCH');
@@ -174,8 +174,8 @@ test('hello answers welcome with the kernel and the compatibility per lane (equa
     assert.equal((await a.hello('{not json')).status, 400);
     assert.equal((await a.hello(helloOf({ instance: '../x' }))).status, 400);
     // The pure rule: no kernel for a lane, versions trimmed to three numbers.
-    assert.equal(compatibility(helloOf(), { o11: null, odc: '1.7.27', odcBridge: 'v35' }, ['odc', 'o11']).o11.code, 'KERNEL_UNAVAILABLE');
-    assert.equal(compatibility(helloOf(), { o11: '11.55.91.65012', odc: '1.7.27.4021', odcBridge: 'v35' }, ['odc', 'o11']).o11.ok, true);
+    assert.equal(compatibility(helloOf(), { o11: null, odc: '1.7.28', odcBridge: 'v35' }, ['odc', 'o11']).o11.code, 'KERNEL_UNAVAILABLE');
+    assert.equal(compatibility(helloOf(), { o11: '11.55.91.65012', odc: '1.7.28.4021', odcBridge: 'v35' }, ['odc', 'o11']).o11.ok, true);
     assert.equal(threePart('11.55.91.65012'), '11.55.91'); assert.equal(threePart('v35'), null);
     // The O11 hook of the package (docs/O11-BRIDGE-FINA.md 13): dev (or none, an older package) and h1 pass; an unknown
     // hook never does; kernel.json {"o11Hook":"h1"} accepts only the signed release hook.
@@ -690,7 +690,7 @@ test('a full hub session leaves tokens.json with the same content and mtime', as
     const s = await a.stream();
     const link = handle.hub.link(t.id);
     const ping = await s.lines.next(m => m.t === 'ping');
-    await a.post([{ t: 'pong', seq: ping.seq, versions: { studios: studios('1.7.27.5000'), o11Connection: null } }]);
+    await a.post([{ t: 'pong', seq: ping.seq, versions: { studios: studios('1.7.28.5000'), o11Connection: null } }]);
     const getting = link.call('file.get', { path: 'agent:o11/x.oml' }, { timeoutMs: 5000 });
     const call = await s.lines.next(m => m.t === 'call');
     const ref = await a.upload(randomBytes(3000), 1024);
@@ -698,7 +698,7 @@ test('a full hub session leaves tokens.json with the same content and mtime', as
     await link.receiveBlob((await getting).blob, path.join(dir, 'customers', t.id, 'o11', 'x.oml'));
     const src = path.join(dir, 'up.bin'); fs.writeFileSync(src, randomBytes(2000));
     await a.download(await link.putFile(src));
-    assert.equal(link.info().studios.odc.installed.version, '1.7.27.5000', 'pong.versions updates the info in memory');
+    assert.equal(link.info().studios.odc.installed.version, '1.7.28.5000', 'pong.versions updates the info in memory');
     assert.equal(typeof link.info().lastSeenAt, 'string');
     await fetch(base + '/agent/v1/channel?channel=' + a.channel, { method: 'DELETE', headers: { authorization: 'Bearer ' + t.agentCredential } });
     s.lines.cancel();

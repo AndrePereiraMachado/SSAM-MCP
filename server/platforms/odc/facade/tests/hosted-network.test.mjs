@@ -32,7 +32,7 @@ const agentSkip = agentMissing.length ? 'the agent box is not beside this server
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-net-'));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-const KERNEL = { o11: '11.55.91', odc: '1.7.27', odcBridge: 'v35' };
+const KERNEL = { o11: '11.55.91', odc: '1.7.28', odcBridge: 'v35' };
 const EXIT_A = '177.26.82.10', EXIT_B = '177.26.87.20';
 
 async function hub(limits = {}) {

@@ -88,7 +88,7 @@ test('hosted end to end: agent, ws: paths, O11 relay, refusals, protocol violati
   t.after(() => fs.rmSync(base, { recursive: true, force: true }));
   const dir = path.join(base, 'server');
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'kernel.json'), JSON.stringify({ o11: '11.55.91', odc: '1.7.27', odcBridge: ODC_BRIDGE }));
+  fs.writeFileSync(path.join(dir, 'kernel.json'), JSON.stringify({ o11: '11.55.91', odc: '1.7.28', odcBridge: ODC_BRIDGE }));
   const odcRoot = path.join(facade, '..');
   const stamp = file => { try { const s = fs.statSync(file); return s.size + ':' + s.mtimeMs; } catch { return null; } };
   // In a parallel `node --test` run other test files write their own scratch into the repository's data folders
@@ -154,7 +154,7 @@ test('hosted end to end: agent, ws: paths, O11 relay, refusals, protocol violati
   t.after(() => bridge.close());
 
   const agentEvents = [];
-  async function startAgent(credential, { odcVersion = '1.7.27.4021', root = agentRoot } = {}) {
+  async function startAgent(credential, { odcVersion = '1.7.28.4021', root = agentRoot } = {}) {
     for (const d of ['odc/snapshots', 'odc/journal', 'odc/lab', 'o11', 'inbox', 'private/authority']) fs.mkdirSync(path.join(root, d), { recursive: true });
     fs.writeFileSync(path.join(root, 'odc', 'README.md'), 'agent');
     fs.writeFileSync(path.join(root, 'pack.json'), JSON.stringify({ id: 'pack-e2e', lanes: ['odc', 'o11'], odcBridge: ODC_BRIDGE, o11BuiltFor: '11.55.91', files: [] }));
@@ -192,7 +192,7 @@ test('hosted end to end: agent, ws: paths, O11 relay, refusals, protocol violati
   assert.deepEqual((await client.listTools()).tools.map(x => x.name).sort(), stdioNames);
   const doctor = await waitFor(async () => { const d = (await call('ssam_doctor')).structuredContent; return d?.agent?.connected ? d : null; }, 15000);
   assert.ok(doctor, 'the agent connected: ' + JSON.stringify(agentEvents.slice(-10)));
-  assert.equal(doctor.lanes.odc.serverKernel, '1.7.27');
+  assert.equal(doctor.lanes.odc.serverKernel, '1.7.28');
 
   // ODC through the agent: status and a snapshot mirrored into the workspace as ws:.
   const status = await call('studio_status', {});
@@ -212,15 +212,16 @@ test('hosted end to end: agent, ws: paths, O11 relay, refusals, protocol violati
   assert.ok(bridge.seen.length > seenBefore, 'the O11 status went through the fake bridge');
   assert.ok(bridge.seen.every(r => !Object.hasOwn(r.params ?? {}, 'port')));
 
-  // Refusals: a path outside the workspace; a Studio version the kernel does not have (a second customer).
+  // Refusals: a path outside the workspace; a Studio version the kernel does not have (a second customer, still on the
+  // ODC Studio 1.7.27 the server had before 2026-10-12).
   assert.equal((await call('studio_open', { module: 'M', localOml: 'C:\\Windows\\win.ini' })).structuredContent?.code, 'PATH_OUTSIDE_WORKSPACE');
   const other = store.issue({ customer: 'E2E-Other' });
-  await startAgent(other.agentCredential, { odcVersion: '1.7.28.100', root: path.join(base, 'SSAM-Agent-2') });
+  await startAgent(other.agentCredential, { odcVersion: '1.7.27.10846', root: path.join(base, 'SSAM-Agent-2') });
   const otherClient = await connect(other.token);
   t.after(() => otherClient.close().catch(() => {}));
   const mismatch = await waitFor(async () => { const r = (await otherClient.callTool({ name: 'studio_status', arguments: {} })).structuredContent; return r?.code === 'STUDIO_VERSION_MISMATCH' ? r : null; }, 15000);
   assert.ok(mismatch, 'version mismatch refused');
-  assert.match(mismatch.error, /1\.7\.27/);
+  assert.match(mismatch.error, /kernel for ODC Studio 1\.7\.28; the agent reports ODC Studio 1\.7\.27\.10846/);
 
   // A reply naming agent:..\..\x is a protocol violation and writes nothing.
   const evil = await call('studio_snapshot', { module: 'Evil' });
