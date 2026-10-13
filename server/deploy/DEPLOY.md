@@ -907,8 +907,23 @@ sh host/install.sh --dry-run --with-crons     # mostra cada verificação e cada
 sh host/install.sh --with-crons
 ```
 
-- O `install.sh` confere root, python3 3.10 ou mais novo, docker, systemd, `systemd-socket-proxyd`, a porta
-  127.0.0.1:7320 livre e os containers do projeto. Se algo falhar, não muda nada.
+- O `install.sh` confere root, python3 3.10 ou mais novo, docker, systemd, `systemd-socket-proxyd`, a conta do proxy,
+  a porta 127.0.0.1:7320 livre e os containers do projeto. Se algo falhar, não muda nada.
+- Garante o uid e o gid 10001 no host. O `ssam-console-proxy.service` roda com `User=10001` e `Group=10001`, e o systemd
+  não sobe a unidade com um id que o host não conhece (`217/USER`, 15.10). Um uid ou gid 10001 que já existe é usado,
+  com qualquer nome. O que faltar vira o grupo e o usuário de sistema `ssam-console`, sem home, sem shell e com a senha
+  travada:
+
+  ```bash
+  groupadd -r -g 10001 ssam-console
+  useradd -r -u 10001 -g 10001 -M -d /nonexistent -s /usr/sbin/nologin -c ssam-console-proxy ssam-console
+  ```
+
+  O `useradd` avisa que 10001 passa de `SYS_UID_MAX` (999): é esperado. As consultas passam pelo `getent`, então
+  contam também contas de LDAP, sssd ou userdb. Se for preciso criar o grupo (ou o usuário) e o nome `ssam-console` já
+  existir com outro gid (ou uid), a verificação falha e nada muda. Nenhum outro usuário ou grupo é tocado. Quando cria
+  a conta, o `install.sh` também roda `systemctl reset-failed` no proxy antes de ligar o socket. Rodar de novo não
+  muda a conta.
 - Cria `/var/lib/ssam-console/{host,collector,state,sock}` com os donos certos (o painel roda como uid 10001), copia o
   `collect.py` para `/usr/local/lib/ssam-console`, grava `/etc/ssam-console/collector.conf` (só se não existir; um
   re-install nunca o sobrescreve), instala e liga `ssam-console-collect.timer` e `ssam-console-proxy.socket`, roda o
@@ -1084,12 +1099,20 @@ tire as linhas também de `host/ssam-console-proxy.service` no repositório).
 nano .env                                              # tire (ou comente) COMPOSE_PROFILES=console
 docker compose -f compose.prod.yml rm -sf ssam-console
 sh host/uninstall.sh                                   # unidades do systemd e /usr/local/lib/ssam-console
-sh host/uninstall.sh --purge                           # também /var/lib/ssam-console e /etc/ssam-console
+sh host/uninstall.sh --purge                           # também /var/lib/ssam-console, /etc/ssam-console e a conta ssam-console
 sh host/uninstall.sh --crons                           # também os crons de backup e rotação (o backup diário para)
 ```
 
 - `--dry-run` mostra o que faria. O `--purge` recusa enquanto o container `ssam-console` roda.
 - O `console-audit.jsonl` fica no volume de estado, e os backups ficam onde estão.
+- Sem `--purge`, o usuário e o grupo `ssam-console` ficam. O `--purge` apaga só os do `install.sh`: o usuário
+  `ssam-console` do `/etc/passwd` com uid 10001 e grupo principal 10001, e o grupo `ssam-console` do `/etc/group` com
+  gid 10001. Um `ssam-console` de LDAP, sssd ou userdb, ou com outro grupo principal, fica. Um uid ou gid 10001 com
+  outro nome nunca é apagado.
+- O usuário fica se algum processo rodar como uid 10001 depois de parar o proxy. O `ssam-server` e o painel rodam como
+  10001 nos containers: com eles no ar, a conta fica e o script diz por quê.
+- O grupo fica se tiver outros membros (por exemplo, um operador posto nele para ler o `host.json`) ou se for o grupo
+  principal de outro usuário. No Ubuntu, o `userdel` já leva o grupo junto quando ninguém mais o usa.
 
 ### 15.10 Problemas
 
@@ -1098,6 +1121,8 @@ sh host/uninstall.sh --crons                           # também os crons de bac
 | `painel-ssam.ps1`: "chave ausente" | O container não está rodando: `docker compose -f compose.prod.yml ps ssam-console` e `docker compose -f compose.prod.yml logs --tail 50 ssam-console`. |
 | "O tunel SSH nao abriu" | A porta local ou a 7320 da VPS está ocupada: `systemctl status ssam-console-proxy.socket` e `ss -ltn 'sport = :7320'` na VPS. |
 | "O painel nao respondeu em 15 s" | Na VPS: `curl -fsS http://127.0.0.1:7320/healthz`, `ls -l /var/lib/ssam-console/sock` (tem de ter `console.sock` do uid 10001) e `journalctl -u ssam-console-proxy -n 30 --no-pager`. |
+| `ssam-console-proxy.service` falha com `status=217/USER` e `Failed to determine credentials for user '10001': Unknown user` (o túnel abre e o painel não responde) | O host não tem o uid 10001: o `install.sh` de antes desta correção não criava a conta. Rode `sh host/install.sh` de novo (15.1), ou à mão: `groupadd -r -g 10001 ssam-console`, `useradd -r -u 10001 -g 10001 -M -d /nonexistent -s /usr/sbin/nologin -c ssam-console-proxy ssam-console`, `systemctl reset-failed ssam-console-proxy.service ssam-console-proxy.socket` e `systemctl restart ssam-console-proxy.socket`. Confira com `getent passwd 10001` e `curl -fsS http://127.0.0.1:7320/healthz`. Em produção a conta foi criada à mão assim em 2026-10-12; um `install.sh` novo a encontra e não muda nada. |
+| `install.sh`: "o usuario ssam-console ja existe com o uid N" (ou "o grupo ... com o gid N") | O nome é de outra conta, e o `install.sh` não mexe nela. Apague ou renomeie essa conta, ou crie à mão o uid e o gid 10001 com outro nome (`groupadd -r -g 10001 <nome>` e `useradd -r -u 10001 -g 10001 -M -d /nonexistent -s /usr/sbin/nologin <nome>`): o `install.sh` usa o uid e o gid 10001 com qualquer nome. |
 | Container não sobe: `bind source path does not exist` | Faltou o `sh host/install.sh` (as pastas não existem). |
 | Container reinicia com `EACCES` | `state` ou `sock` não são do uid 10001: rode `sh host/install.sh` de novo. |
 | Aba VPS: "coletor parado" ou dados velhos | `systemctl status ssam-console-collect.timer`, `journalctl -u ssam-console-collect -n 30 --no-pager` e `ls -l /var/lib/ssam-console/host`. |

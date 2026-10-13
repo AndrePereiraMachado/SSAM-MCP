@@ -7,7 +7,14 @@
 # Stops and disables the collector timer and the proxy socket, removes the four units and /usr/local/lib/ssam-console.
 #   --purge  also removes /var/lib/ssam-console (host.json, the console's access key, checkpoint and aggregates) and
 #            /etc/ssam-console; refused while the ssam-console container runs (remove it first, DEPLOY.md 15). The
-#            license history (console-audit.jsonl) lives in the state volume and stays.
+#            license history (console-audit.jsonl) lives in the state volume and stays. It also removes the system
+#            user and group of the proxy, only when they are the ones install.sh creates: the user ssam-console in
+#            /etc/passwd with uid 10001 and primary group 10001, the group ssam-console in /etc/group with gid 10001
+#            (an entry of another NSS source, LDAP, sssd or userdb, is never install.sh's). The user stays while a
+#            process runs as uid 10001 once the units are stopped (ssam-server and the console run as 10001 in their
+#            containers: with them up the account stays and the script says so); the group stays while it has
+#            other members or is another user's primary group. Without --purge the account stays; another name on
+#            uid/gid 10001 is never touched.
 #   --crons  also removes /etc/cron.d/ssam-backup and /etc/cron.d/ssam-rotate (the daily backup and the weekly rotation
 #            stop: schedule them again some other way).
 # Never touches .env, the backups, the Docker volumes, ssam-server or caddy. --dry-run prints and changes nothing.
@@ -50,6 +57,49 @@ confval() {
 }
 PROJECT=$(confval COMPOSE_PROJECT); PROJECT=${PROJECT:-ssam-prod}
 CONSOLE_SERVICE=$(confval CONSOLE_SERVICE); CONSOLE_SERVICE=${CONSOLE_SERVICE:-ssam-console}
+
+# The account install.sh creates for ssam-console-proxy.service (User=10001 Group=10001).
+ACCOUNT=ssam-console
+ACCOUNT_ID=10001
+# dbent DB KEY FIELD: one field of the entry in any NSS source (a number is an id, a name a name); empty if none.
+dbent() { getent "$1" "$2" 2>/dev/null | head -n 1 | cut -d: -f"$3"; }
+# localent DB NAME: the entry of /etc/passwd or /etc/group only (getent -s files), where install.sh writes; empty if none.
+localent() { getent -s files "$1" "$2" 2>/dev/null | head -n 1; }
+USER_NAME=$(dbent passwd "$ACCOUNT_ID" 1)
+GROUP_NAME=$(dbent group "$ACCOUNT_ID" 1)
+# user_not_ours: why the user ssam-console is not the one install.sh creates; empty when it is.
+user_not_ours() {
+    line=$(localent passwd "$ACCOUNT")
+    if [ -z "$line" ]; then echo "nao esta no /etc/passwd (vem de outra fonte do NSS)"; return; fi
+    l_uid=$(printf '%s\n' "$line" | cut -d: -f3)
+    l_gid=$(printf '%s\n' "$line" | cut -d: -f4)
+    if [ "$l_uid" != "$ACCOUNT_ID" ] || [ "$l_gid" != "$ACCOUNT_ID" ]; then
+        echo "no /etc/passwd tem uid $l_uid e grupo principal $l_gid (o do install.sh tem $ACCOUNT_ID e $ACCOUNT_ID)"
+    fi
+}
+# group_not_ours SKIP: why the group ssam-console cannot go (not install.sh's, other members, another user's primary
+# group); SKIP is the user being removed with it. Empty when it can go.
+group_not_ours() {
+    line=$(localent group "$ACCOUNT")
+    if [ -z "$line" ]; then echo "nao esta no /etc/group (vem de outra fonte do NSS)"; return; fi
+    l_gid=$(printf '%s\n' "$line" | cut -d: -f3)
+    if [ "$l_gid" != "$ACCOUNT_ID" ]; then echo "no /etc/group tem o gid $l_gid"; return; fi
+    others=$(printf '%s\n' "$line" | awk -F: -v skip="$1" \
+        '{ n = split($4, m, ","); for (i = 1; i <= n; i++) if (m[i] != "" && m[i] != skip) printf "%s ", m[i] }')
+    if [ -n "$others" ]; then echo "tem outros membros (${others% })"; return; fi
+    primary=$(getent passwd 2>/dev/null | awk -F: -v gid="$ACCOUNT_ID" -v skip="$1" \
+        '$4 == gid && $1 != skip { printf "%s ", $1 }')
+    if [ -n "$primary" ]; then echo "e o grupo principal de ${primary% }"; fi
+}
+# uid_busy: says why the user cannot go now (processes with uid 10001, or no pgrep to tell); empty when it can.
+uid_busy() {
+    if ! command -v pgrep >/dev/null 2>&1; then
+        echo "pgrep nao encontrado (pacote procps): nao deu para conferir os processos do uid $ACCOUNT_ID"
+        return
+    fi
+    n=$(pgrep -u "$ACCOUNT_ID" | wc -l | tr -d ' ')
+    [ "$n" = 0 ] || echo "$n processo(s) rodam como uid $ACCOUNT_ID (o ssam-server e o painel rodam com esse uid nos containers)"
+}
 
 say() { printf '%s\n' "$*"; }
 run() {
@@ -103,10 +153,69 @@ if [ "$CRONS" = 1 ]; then
 fi
 
 say ""
+say "== Conta do proxy (uid e gid $ACCOUNT_ID)"
+ACCOUNT_FAILED=0
+if ! command -v getent >/dev/null 2>&1; then
+    say "  getent nao encontrado: usuario e grupo nao conferidos (mantidos)"
+elif [ -z "$USER_NAME$GROUP_NAME" ]; then
+    say "  nenhum usuario com o uid $ACCOUNT_ID e nenhum grupo com o gid $ACCOUNT_ID"
+elif [ "$PURGE" != 1 ]; then
+    say "  mantidos usuario ${USER_NAME:-(nenhum)} e grupo ${GROUP_NAME:-(nenhum)} (--purge apaga o $ACCOUNT criado pelo install.sh)"
+else
+    USER_GONE=0
+    if [ "$USER_NAME" = "$ACCOUNT" ]; then
+        # The user is install.sh's only as /etc/passwd has it: uid and primary group 10001. Another primary group
+        # matters: userdel (USERGROUPS_ENAB) would take a group named ssam-console with that other gid along.
+        why=$(user_not_ours)
+        busy=""
+        [ -n "$why" ] || busy=$(uid_busy)
+        if [ -n "$why" ]; then
+            say "  mantido o usuario $ACCOUNT (uid $ACCOUNT_ID): $why"
+        elif [ -n "$busy" ]; then
+            say "  mantido o usuario $ACCOUNT: $busy"
+            if [ "$DRY" = 1 ]; then
+                say "          (dry-run: as unidades nao foram paradas, entao o ssam-console-proxy no ar conta aqui)"
+            fi
+            say "          com eles parados: sh host/uninstall.sh --purge de novo"
+        elif run userdel "$ACCOUNT"; then
+            USER_GONE=1
+        else
+            say "    (userdel falhou; usuario mantido)"
+            ACCOUNT_FAILED=1
+        fi
+    elif [ -n "$USER_NAME" ]; then
+        say "  mantido o usuario $USER_NAME (uid $ACCOUNT_ID): nao e o $ACCOUNT do install.sh"
+    fi
+    if [ "$DRY" != 1 ]; then
+        before=$GROUP_NAME
+        GROUP_NAME=$(dbent group "$ACCOUNT_ID" 1)   # read again: userdel removes the user's own group (USERGROUPS_ENAB)
+        if [ "$before" = "$ACCOUNT" ] && [ -z "$GROUP_NAME" ]; then
+            say "  o grupo $ACCOUNT saiu junto com o usuario (userdel)"
+        fi
+    fi
+    if [ "$GROUP_NAME" = "$ACCOUNT" ]; then
+        skip=""
+        if [ "$USER_GONE" = 1 ]; then skip=$ACCOUNT; fi
+        why=$(group_not_ours "$skip")
+        if [ -n "$why" ]; then
+            # Never groupdel a group someone else is in: that would change the other user too.
+            say "  mantido o grupo $ACCOUNT: $why"
+        elif [ "$DRY" = 1 ] && [ "$USER_GONE" = 1 ]; then
+            say "  (dry-run) groupdel $ACCOUNT   (so se o grupo sobrar: o userdel do Ubuntu ja o apaga junto)"
+        elif ! run groupdel "$ACCOUNT"; then
+            say "    (groupdel falhou; grupo mantido)"
+            ACCOUNT_FAILED=1
+        fi
+    elif [ -n "$GROUP_NAME" ]; then
+        say "  mantido o grupo $GROUP_NAME (gid $ACCOUNT_ID): nao e o $ACCOUNT do install.sh"
+    fi
+fi
+
+say ""
 if [ -n "$running" ]; then
     say "Falta o container: tire COMPOSE_PROFILES=console do .env e rode docker compose -f compose.prod.yml rm -sf $CONSOLE_SERVICE"
 else
     say "Se o .env ainda tiver COMPOSE_PROFILES=console, tire a linha (sem as pastas o container nao sobe)."
 fi
 [ "$DRY" = 1 ] && say "dry-run: nada foi alterado."
-exit 0
+exit "$ACCOUNT_FAILED"
