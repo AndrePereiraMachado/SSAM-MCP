@@ -1201,6 +1201,35 @@ export async function detectKernel({ dir, fileVersion, env = process.env }) {
     ...(Array.isArray(pinned.odcBridgeAccepted) ? { odcBridgeAccepted: pinned.odcBridgeAccepted } : {}) };
 }
 
+// The kernel the hosted server starts with (multi-version design rev. 3, O.6.1; kernel-image.mjs). kernel.json v1
+// (detectKernel), then the pair with the image: a lane whose kernel.json names another Studio version than the image
+// declares (ENV SSAM_IMAGE_O11 / SSAM_IMAGE_ODC) is off, so the hub answers KERNEL_UNAVAILABLE for it and the image's
+// kernel never runs against another Studio. Then, in an image that declares its versions, the caches that carry no Studio
+// version are emptied for a lane whose version changed. Logs the notes of kernel.json (kernel-v2-ignored,
+// kernel-json-unsupported), the `kernel` event with the same shape as before ({kernel: {o11, odc, odcBridge, o11Hook,
+// odcBridgeAccepted?}}, a refused lane null), one kernel-version-missing per refused lane and kernel-cache-reset.
+export async function startupKernel({ dir, fileVersion, env = process.env, log = () => {}, image, caches } = {}) {
+  const ki = await import('./kernel-image.mjs');
+  for (const note of ki.kernelFileNotes(dir)) log(note);
+  const detected = await detectKernel({ dir, fileVersion, env });
+  const lib = await import('./lib.mjs');
+  const folder = of => { try { return of(); } catch { return null; } };
+  const declared = image ?? ki.imageKernel({ env, studioDirs: { o11: folder(() => o11LaneOf(LANES.o11.lane, { env }).studioDir), odc: folder(() => lib.odcStudioDir(env)) } });
+  const { kernel, refused } = ki.kernelPair(detected, declared);
+  log({ event: 'kernel', kernel });
+  for (const [lane, why] of Object.entries(refused)) log({ event: 'kernel-version-missing', lane, ...why });
+  const imageDeclares = Object.values(declared ?? {}).some(Boolean);
+  if (caches ?? imageDeclares) {
+    try {
+      const map = await import('./module-map.mjs');
+      const indexRoot = map.indexRoot(env);
+      ki.resetStaleCaches({ kernel, indexRoot, log, roots: ki.legacyCacheRoots({ indexRoot, readerRoot: map.readerConfig('o11', { env }).cacheRoot,
+        prefetchRoot: map.prefetchCacheRoot('o11', env), o11Platform: LANES.o11.lane }) });
+    } catch (error) { log({ event: 'kernel-cache-reset-failed', error: error?.code ?? error?.name ?? 'Error' }); }
+  }
+  return { kernel, refused };
+}
+
 // The friction queue of one customer (docs/FASE2-AGENTE.md 6.1): <ws>/.local/friction, always passed as the store's
 // directory, so SSAM_FRICTION_DIR (a test or bench queue of the owner, friction-store.mjs) never merges the queues of
 // several customers into one.
@@ -1263,8 +1292,7 @@ export async function runServed(args) {
 
   const executor = await import('./executor.mjs');
   executor.setDefaultExecutor(new executor.DenyExecutor());
-  const kernel = await detectKernel({ dir, fileVersion: executor.fileVersion });
-  log({ event: 'kernel', kernel });
+  const { kernel, refused: kernelRefused } = await startupKernel({ dir, fileVersion: executor.fileVersion, log });
   // One hosted context per token (workspace, AgentExecutor, relay), shared by the sessions of that token and closed when
   // the agent link closes (revoked, expired, server-stop).
   const contexts = new Map();
@@ -1296,7 +1324,10 @@ export async function runServed(args) {
   };
   const observeCall = (params, session) => session?.workspace ? observer(storeOf(session.workspace))(params) : null;
   const quality = await qualityRecorder({ dir, log });
-  const handle = served(await startHttpServer({ ...options, agents: { kernel }, dir, createServer, observeCall, log, quality }));
+  // The audit and server.log keep a tool name only when it is a tool of the hosted catalog; another name is '?'.
+  const { hostedTools } = await import('./hosted/policy.mjs');
+  const handle = served(await startHttpServer({ ...options, agents: { kernel, kernelRefused }, dir, createServer, observeCall, log, quality,
+    tools: Object.keys(hostedTools()) }));
   // The server's own warm-up (outside any customer context): discover indexes and the ODC delivery processes.
   scheduleWarm({ lanes: ['odc', 'o11'].filter(l => lanes[l] !== false), warm: ({ lanes: warmLanes }) => warmServer({ lanes: warmLanes, log }) });
   return handle;

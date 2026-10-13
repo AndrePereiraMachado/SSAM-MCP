@@ -3,7 +3,9 @@
 // CONSOLE_DOMAIN (public URL before a `listening` event is seen), CONSOLE_TZ (America/Sao_Paulo) and
 // CONSOLE_LICENSE_WRITES (auto | on | off, licenses.mjs: auto writes licenses only with a token module that locks
 // tokens.json between writers, the 24th image's; DEPLOY.md 15.4) and CONSOLE_KERNEL_CATALOG (the kernel's verify catalogs
-// that name the native ids a quality line may keep; DESIGN-QUALIDADE 2.5, 4.1: the image's own /app/kernel/catalog).
+// that name the native ids a quality line may keep; DESIGN-QUALIDADE 2.5, 4.1: the image's own /app/kernel/catalog) and
+// CONSOLE_TOOLS_CATALOG (the hosted tool catalog whose names the console may show, tool-names.mjs: the image's own
+// /app/platforms/odc/facade/hosted/tools.json by default).
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -46,5 +48,6 @@ export function loadConfig(argv = process.argv.slice(2), env = process.env) {
     timeZone: env.CONSOLE_TZ || 'America/Sao_Paulo',
     licenseWrites: parseLicenseWrites(env.CONSOLE_LICENSE_WRITES),
     kernelCatalog: dir(env.CONSOLE_KERNEL_CATALOG, DEFAULT_KERNEL_CATALOG),
+    toolsCatalog: env.CONSOLE_TOOLS_CATALOG ? path.resolve(env.CONSOLE_TOOLS_CATALOG) : null,
   };
 }

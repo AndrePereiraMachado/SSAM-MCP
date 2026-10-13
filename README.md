@@ -116,6 +116,24 @@ Os arquivos que existem nas duas caixas estão em [`SHARED.md`](SHARED.md), com 
     sha256 LF `a21d9c1e…5157f`.
   - Conferido: os 6222 arquivos das duas caixas que vêm da linha têm o blob de `1b2ce8fe`. Contagem: `server/` 6078,
     `agent/` 145, 76 nas duas.
+- Combinado em 2026-10-12 na branch `server/r24-combinada` (de `a857a1ef`, a produção), a imagem interina do desenho de
+  várias versões (`C:\t\multiver\DESIGN.md`, revisão 3, O.6.1): Service Studio 11.55.92, ODC Studio 1.7.28 e o
+  registro de qualidade numa imagem só.
+  - Merges: `server/r24-odc1728` (`07e14b81`), `server/r24-qualidade` (`36c2e51b`; 5 conflitos de texto destes
+    documentos, as duas histórias mantidas) e `server/painel-usuario` (`bc9b00a0`, a conta `ssam-console` do host).
+  - Depois, `a415531d..3d6f232c` de `fase4-24/combinada` (`3d6f232c`: os merges de `fase4-24/odc1728`, `fase4-24/o11-115592` e
+    `fase4-24/qualidade` e o commit da imagem interina), copiado com os blobs da revisão (`C:\t\comb\copy-comb.cjs`): 96
+    caminhos, 100 entradas, 81 só em `server/`, 9 só em `agent/` (os testes do agente, `docs/AGENTE-CLIENTE.md` e
+    `scripts/agent-pack.ps1`) e 5 nas duas (`docs/FASE2-AGENTE.md`, `docs/PROVAS-AO-VIVO.md` e as 3 fontes da bridge ODC
+    v97); ficou fora `scripts/release/license/weave-spec.json` pela regra da cópia. Nenhum apagado.
+  - Conferido (`C:\t\comb\verify-comb.cjs`): os 6229 arquivos das duas caixas que vêm da linha têm o blob de `3d6f232c`,
+    inclusive os 4 de Linux e os do worker. As quatro cópias de `quality-line.mjs` (fachada, fixtures, painel e fixtures do
+    painel) têm o blob `f63aaa92`, sha256 LF `8625d52c…a015`. Contagem: `server/` 6085, `agent/` 145, 76 nas duas.
+  - Do SSAM-MCP: `server/Dockerfile` (Service Studio 11.55.92, `SSAM_IMAGE_O11`/`SSAM_IMAGE_ODC` em ENV e nos rótulos
+    `ssam.kernels.*`, a conferência das versões no build), `deploy/build.sh`, `deploy/.env.prod.example`,
+    `deploy/kernel-pair-check.mjs` e `deploy/release-record.json` (o par imagem/`kernel.json` e o registro de cada
+    imagem), `deploy/DEPLOY.md` (4, 7.1, 8, 13 e 14) e o painel (`console/tool-names.mjs`: só nomes de ferramenta do
+    catálogo hospedado; o código de erro da auditoria pelo contrato).
 
 ## Aviso: o servidor no ar não mudou
 
@@ -129,8 +147,8 @@ Este monorepo não o substitui nem o toca. Para testar a cópia, nunca use a por
 - Windows 10/11 e PowerShell 5.1 (scripts `.ps1` e testes do agente).
 - Node 22+ (a imagem usa 24). pnpm 11.19.0 (a conferência usou o 11.25.0 que acompanha o Node do Codex).
 - .NET SDK 10. Os kernels são net8.0 com `RollForward=Major`.
-- Service Studio 11.55.91 e ODC Studio 1.7.28 (a versão do `kernel.json`; nunca mais velho que 1.7.27). O servidor recusa
-  outro Studio na faixa dele (`STUDIO_VERSION_MISMATCH`).
+- Service Studio 11.55.92 e ODC Studio 1.7.28 (a versão do `kernel.json`; o ODC nunca mais velho que 1.7.27). O servidor
+  recusa outro Studio na faixa dele (`STUDIO_VERSION_MISMATCH`; um Studio mais velho com `cause: "STUDIO_VERSION_NOT_SERVED"`).
 - Python 3.11+ só para `scripts/build.ps1` e os testes Python do kernel.
 - Não há `global.json` nem `nuget.config`. O SDK e o feed não estão fixados.
 
@@ -278,7 +296,9 @@ C:\SSAM-Agent\agent\node\node.exe C:\SSAM-Agent\agent\ssam-agent.mjs doctor --ro
 - O ODC Studio do cliente tem de ter a versão `kernel.odc` (hoje 1.7.28); outra recebe `STUDIO_VERSION_MISMATCH` na
   faixa ODC. Um pacote com bridge abaixo da v97 num ODC Studio 1.7.28 recebe `STUDIO_BRIDGE_OUTDATED` só em
   `refresh-references --producer` (a única chamada que o 1.7.28 quebrou); o resto funciona.
-- `o11BuiltFor` tem de ser o Service Studio do kernel do servidor (hoje 11.55.91).
+- `o11BuiltFor` tem de ser o Service Studio do kernel do servidor (hoje 11.55.92: o pacote da imagem interina leva a fina
+  compilada contra o 11.55.92, `agent-pack.ps1 -ExpectO11 11.55.92`). Quem está no Service Studio 11.55.91 recebe
+  `STUDIO_VERSION_MISMATCH` com `cause: "STUDIO_VERSION_NOT_SERVED"` com qualquer pacote, até a imagem de várias versões.
 - Senão o hub responde `AGENT_PACK_MISMATCH`. Um bump de bridge mexe nas duas caixas no mesmo commit.
 - Um pacote antigo aceito degrada com códigos tipados no 24º: o Service Center responde `STUDIO_BRIDGE_OUTDATED` e
   `studio_reference_producers` recebe `COMMAND_NOT_ALLOWED`. O 23º não aceita o pacote v96: no rollback do servidor, os

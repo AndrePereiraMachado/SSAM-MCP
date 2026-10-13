@@ -19,7 +19,7 @@
 param(
     [string]$SevenZip = 'C:\t\tools\7zip\7z.exe',
     [string]$Installers = (Join-Path $env:USERPROFILE 'Downloads'),
-    [string]$O11Installer = 'ServiceStudio-11.55.91.65258.exe',
+    [string]$O11Installer = 'ServiceStudio-11.55.92.65269.exe',
     [string]$OdcInstaller = 'ODCStudio-1.7.28.10850.exe',
     [string]$Out = 'C:\t\dist-b\extract',
     [string]$Python = (Join-Path $env:USERPROFILE '.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe'),

@@ -75,7 +75,7 @@ const ownerEnv = { ...clean(process.env), SSAM_SERVER_DIR: serverDir, SSAM_NODE:
   ...(process.env.ANVIL_ODC_FEATURES_DIR ? { ANVIL_ODC_FEATURES_DIR: process.env.ANVIL_ODC_FEATURES_DIR } : {}) };
 // The server's kernel is pinned (the fake Studios report these versions); detection would read the installed Studios.
 // The 24th release keeps serving the packs of v48 and v45 (PLANO-24-PRODUCAO 6): customer C of step 9i is on v48.
-write(path.join(serverDir, 'kernel.json'), JSON.stringify({ o11: '11.55.91', odc: '1.7.28', odcBridge: ODC_BRIDGE, odcBridgeAccepted: ['v96', 'v48', 'v45'] }));
+write(path.join(serverDir, 'kernel.json'), JSON.stringify({ o11: '11.55.92', odc: '1.7.28', odcBridge: ODC_BRIDGE, odcBridgeAccepted: ['v96', 'v48', 'v45'] }));
 
 function customerMachine(name) {
   const base = path.join(T, name);
@@ -229,7 +229,7 @@ try {
   write(path.join(prebuilt, 'o11', 'hook', 'Anvil.RuntimeHook.Agent.dll'), 'hook');
   // The thin O11 bridge only (docs/O11-BRIDGE-FINA.md 6.1); -NoNode keeps the real node.exe out of the pack.
   for (const name of ['Anvil.Bridge.dll', 'Anvil.Bridge.deps.json']) write(path.join(prebuilt, 'o11', 'bridge', name), name);
-  write(path.join(prebuilt, 'o11', 'built-for.txt'), '11.55.91\r\n');
+  write(path.join(prebuilt, 'o11', 'built-for.txt'), '11.55.92\r\n');
   const zip = path.join(T, 'ssam-agent.zip');
   const pack = await powershell(['-File', path.join(repo, 'scripts', 'agent-pack.ps1'), '-Out', zip, '-Lanes', 'odc,o11', '-NoNode', '-NoBuild', '-Prebuilt', prebuilt], ownerEnv);
   // The prebuilt files are placeholders: the scan ran, but over no real binary (the real pack is the acceptance of

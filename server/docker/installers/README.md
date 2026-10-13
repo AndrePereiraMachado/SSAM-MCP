@@ -7,14 +7,14 @@ Coloque aqui, para cada Studio, uma de duas entradas antes de `docker compose bu
 
 | Studio | Instalador (padrão) | Bundle (padrão) |
 |---|---|---|
-| Service Studio 11 | `ServiceStudio-11.55.91.65258.exe`, SHA256 fixado `10047d31a03adbbe6bd3a07c9de0506eeba3420e7031e51846607ee3fcde136c` | `o11-studio-11.55.91.65258.tar.gz` |
+| Service Studio 11 | `ServiceStudio-11.55.92.65269.exe`, SHA256 fixado `1d82f514e8ab7f78ba5dcef8eb618b6088a1793c1993db424f247c59d6efba49` | `o11-studio-11.55.92.65269.tar.gz` |
 | ODC Studio | `ODCStudio-1.7.28.10850.exe`, sem SHA256 ainda | `odc-studio-1.7.28.10850.tar.gz` |
 
 - Os build args são `SERVICE_STUDIO_INSTALLER`/`_BUNDLE` e `ODC_STUDIO_INSTALLER`/`_BUNDLE`, cada um com o seu `_SHA256`. Use outra pasta com `STUDIO_INSTALLERS_DIR`.
 - Instalador: o build só o lê, nunca o executa.
 - Bundle: o build confere o SHA256 fixado, ou senão o arquivo `.sha256` ao lado. Depois confere cada arquivo contra o `SHA256SUMS` do bundle. Um arquivo alterado para o build.
 - Nas duas entradas a imagem fica com o mesmo resultado: só os arquivos de `docker/ssam-server/studio-<faixa>.txt`.
-- Os dois Studios têm de ter os três primeiros números da versão dos Studios dos clientes: o hub compara com o `kernel.json` e recusa outro (`STUDIO_VERSION_MISMATCH`). O ODC Studio se atualiza sozinho: desde 12/10/2026 é o 1.7.28. Ele nunca pode ser mais velho que o 1.7.27, porque o kernel ODC não compila contra o 1.7.23.
+- Os dois Studios têm de ter os três primeiros números da versão dos Studios dos clientes: o hub compara com o `kernel.json` e recusa outro (`STUDIO_VERSION_MISMATCH`). Nesta linha o Service Studio é o 11.55.92 desde 12/10/2026; o 11.55.91 era `ServiceStudio-11.55.91.65258.exe` (SHA256 `10047d31a03adbbe6bd3a07c9de0506eeba3420e7031e51846607ee3fcde136c`). O ODC Studio se atualiza sozinho: desde 12/10/2026 é o 1.7.28. Ele nunca pode ser mais velho que o 1.7.27, porque o kernel ODC não compila contra o 1.7.23.
 
 ## Fazer um bundle
 

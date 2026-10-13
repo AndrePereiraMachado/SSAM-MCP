@@ -1,5 +1,7 @@
 # Files of the Service Studio 11 folder that the O11 kernel (anvil.dll) compiles against or loads, one per line, relative
 # to the Studio folder. Copied to /studio/o11 from the installer; nothing else of the Studio enters the image.
+# Checked again 2026-10-12 for 11.55.92.65269: all the files below are in it, and their only new reference
+# (System.Collections.Concurrent, from Avalonia.Remote.Protocol) is in the shared runtime. The list did not change.
 # Derived 2026-10-07 from Service Studio 11.55.91.65258 (the installer and the installed folder are identical):
 # - seeds: the compile references of kernel/src/Anvil.Core/Anvil.Core.csproj, the files loaded by path at run time
 #   (Plugins/**/ServiceStudio.Plugin.*.dll, OutSystems.Model.Plugin.*.dll, OutSystems.Model.Implementation.*.dll,

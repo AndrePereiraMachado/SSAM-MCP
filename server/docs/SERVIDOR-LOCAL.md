@@ -88,7 +88,7 @@ Um cliente de fora usa a URL HTTPS do túnel (`https://<host>/mcp`, exemplo `doc
 
 ## Limites conhecidos
 
-- Um kernel por faixa no servidor, preso à versão do Studio instalado aqui (Service Studio 11.55.91, ODC Studio 1.7.28 desde 12/10/2026). O agente informa as versões do cliente; com versão diferente, as ferramentas que tocam aquele Studio recusam com texto claro, e as que rodam só no servidor continuam funcionando.
+- Um kernel por faixa no servidor, preso à versão do Studio instalado aqui (Service Studio 11.55.92 e ODC Studio 1.7.28, desde 12/10/2026). O agente informa as versões do cliente; com versão diferente, as ferramentas que tocam aquele Studio recusam com texto claro, e as que rodam só no servidor continuam funcionando.
 - OML e JSON do cliente são lidos aqui pelas DLLs do Studio e pelo kernel: rode o servidor hospedado numa conta Windows dedicada, sem privilégio ([SERVIDOR-HTTPS.md](SERVIDOR-HTTPS.md)).
 - O tempo de espera do kernel O11 com a bridge (120 s) inclui o envio de arquivos pelo canal do agente.
 - Fora de escopo agora (instalador, assinatura, vários kernels, depurador hospedado): seção 11 de [FASE2-AGENTE.md](FASE2-AGENTE.md).

@@ -123,19 +123,37 @@ export const normalizeKernel = (kernel = {}) => ({ o11: threePart(kernel?.o11), 
 // the release hook h1. A package without the field predates them and counts as "dev".
 export const O11_HOOKS = Object.freeze(['dev', 'h1']);
 
+// Three-part versions compared number by number: a < b.
+const olderThan = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] < y[i]; return false; };
+
 // Compatibility per lane (section 7): the lane is in the token and in the package, the server has a kernel for it, the
 // package was built for that kernel (ODC bridge version, Service Studio of the O11 bridge) and the Studio installed on
 // the customer's machine has the same first three numbers.
-export function compatibility(hello, kernel, lanes) {
+//   - refused (multi-version design O.6.1, kernel-image.mjs kernelPair): a lane the image refused at start because its
+//     kernel.json names another Studio version than the image carries: KERNEL_UNAVAILABLE, cause KERNEL_VERSION_MISSING.
+//   - The server serves ONE Studio version per lane until the multi-version server. A customer whose installed Studio is
+//     OLDER than it (Service Studio 11.55.91 on the 11.55.92 server) gets STUDIO_VERSION_MISMATCH with cause
+//     STUDIO_VERSION_NOT_SERVED and served [version] before any package check: no package of this server serves that
+//     Studio (a bridge built for 11.55.92 does not bind on 11.55.91), so "ask for the current package" would mislead.
+export function compatibility(hello, kernel, lanes, { refused = null } = {}) {
   const k = normalizeKernel(kernel);
-  return Object.fromEntries(LANES.map(lane => [lane, laneCompatibility(lane, hello, k, lanes ?? [])]));
+  return Object.fromEntries(LANES.map(lane => [lane, laneCompatibility(lane, hello, k, lanes ?? [], refused?.[lane] ?? null)]));
 }
-function laneCompatibility(lane, hello, kernel, lanes) {
-  const no = (code, message) => ({ ok: false, code, message });
+function laneCompatibility(lane, hello, kernel, lanes, refused) {
+  const no = (code, message, extra = {}) => ({ ok: false, code, message, ...extra });
   const name = STUDIO[lane];
   if (!lanes.includes(lane)) return no('LANE_DISABLED', 'The ' + lane + ' lane is not enabled for this token.');
   const server = kernel[lane];
+  if (!server && refused) return no('KERNEL_UNAVAILABLE', 'This SSAM server image carries the kernel for ' + name + ' ' + refused.image + ', but its kernel.json names '
+    + (refused.kernel ? name + ' ' + refused.kernel : 'no ' + name + ' version') + ': the ' + lane + ' lane is off and nothing runs on the user\'s ' + name
+    + '. The server owner must write the kernel.json of this image.', { cause: 'KERNEL_VERSION_MISSING', image: refused.image, pinned: refused.kernel ?? null });
   if (!server || (lane === 'odc' && !kernel.odcBridge)) return no('KERNEL_UNAVAILABLE', 'This SSAM server has no kernel for ' + name + '.');
+  const installedVersion = threePart(hello?.studios?.[lane]?.installed?.version);
+  if (installedVersion && olderThan(installedVersion, server))
+    return no('STUDIO_VERSION_MISMATCH', 'This SSAM server has the kernel for ' + name + ' ' + server + '; the agent reports ' + name + ' '
+      + hello.studios[lane].installed.version + '. It serves only ' + name + ' ' + server + ': ' + name + ' ' + installedVersion + ' has no hosted ' + lane
+      + ' lane on this server until the server owner installs the multi-version server; to use it now, update ' + name + ' to ' + server + '. Server-only tools still work.',
+      { cause: 'STUDIO_VERSION_NOT_SERVED', served: [server], installed: installedVersion });
   const pack = hello?.pack;
   if (!pack || !Array.isArray(pack.lanes) || !pack.lanes.includes(lane))
     return no('AGENT_PACK_MISMATCH', 'The agent package has no ' + lane + ' lane. Ask the server owner for the current agent package.');
@@ -203,7 +221,7 @@ async function hashFile(file) {
   return hash.digest('hex');
 }
 
-export function createAgentHub({ dir, store, kernel, log = () => {}, now = () => new Date(), limits: overrides = {}, onCallSettled = null } = {}) {
+export function createAgentHub({ dir, store, kernel, kernelRefused = null, log = () => {}, now = () => new Date(), limits: overrides = {}, onCallSettled = null } = {}) {
   if (!dir) throw new Error('dir is required');
   if (!store?.verifyAgent || !store?.lookup) throw new Error('store with verifyAgent and lookup is required');
   const limits = { ...LIMITS, ...overrides };
@@ -421,7 +439,7 @@ export function createAgentHub({ dir, store, kernel, log = () => {}, now = () =>
           agentRoot: hello?.agent?.root ?? null, agentKinds: hello?.agent?.kinds ?? null,
           connectedAt: state.connectedAt, lastSeenAt: state.lastSeenAt, lanes: [...state.lanes], pack: hello?.pack ?? null,
           studios: hello?.studios ?? null, o11Connection: hello?.o11Connection ?? null, kernel: { ...serverKernel },
-          compatible: compatibility(hello, serverKernel, state.lanes) };
+          compatible: compatibility(hello, serverKernel, state.lanes, { refused: kernelRefused }) };
       },
       // C03: true when the agent is connected now or a Hello opens its channel within ms.
       waitConnected: ms => waitConnected(state, ms),
@@ -545,7 +563,7 @@ export function createAgentHub({ dir, store, kernel, log = () => {}, now = () =>
     const welcome = { t: 'welcome', channel: state.channel.id, customer: auth.customer, resumed,
       heartbeatMs: limits.heartbeatMs, deadAfterMs: limits.deadAfterMs, maxMessageBytes: limits.maxMessageBytes,
       inlineMaxBytes: limits.inlineMaxBytes, partBytes: limits.partBytes, maxFileBytes: limits.maxFileBytes, maxValueBytes: limits.maxValueBytes,
-      kernel: { ...serverKernel }, compatible: compatibility(state.hello, serverKernel, state.lanes) };
+      kernel: { ...serverKernel }, compatible: compatibility(state.hello, serverKernel, state.lanes, { refused: kernelRefused }) };
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
     res.end(JSON.stringify(welcome));
     return true;

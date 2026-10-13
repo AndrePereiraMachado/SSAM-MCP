@@ -1,4 +1,4 @@
-# Funcoes built-in das expressoes OutSystems (Service Studio 11.55.87)
+# Funcoes built-in das expressoes OutSystems (Service Studio 11.55.92)
 
 Gerado do registo do proprio Studio por `dotnet .local/cli/anvil.dll functions --out catalog/functions-<ver>.json --docs docs/functions.md`.
 So o que esta aqui existe: qualquer outro nome seguido de `(` da `ExpressionUnknownFunction` no Verify, e o runner avisa antes

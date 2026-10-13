@@ -7,8 +7,9 @@ branch `server/r24-odc1728`; antes, `servidor/fase4-24` `a415531d` na `server/r2
 `e589be22`). Na branch `server/r24-qualidade`, `fase4-24/qualidade` (`3262c49f`, depois `01795e52` com os verbos das
 chamadas ao agente só de listas fechadas, `c24d468d` com os códigos e as regras só dos registros gerados das fontes e
 `1b2ce8fe` com os códigos compostos pelo produto e os de `kernel/query-test` nesses registros): o registro de qualidade
-`ssam-quality/1` (`docs/QUALIDADE.md`). Cada arquivo que vem da linha tem o blob da revisão (`README.md` da raiz, "De
-onde veio").
+`ssam-quality/1` (`docs/QUALIDADE.md`). Na branch `server/r24-combinada`, `fase4-24/combinada` (`3d6f232c`): as três
+juntas, o Service Studio 11.55.92 e a imagem interina (versões declaradas, recusa por faixa, caches, nomes de ferramenta só do
+catálogo). Cada arquivo que vem da linha tem o blob da revisão (`README.md` da raiz, "De onde veio").
 Esta pasta é a raiz do repositório antigo: caminhos relativos, Dockerfile e compose funcionam daqui.
 
 Arquivos do SSAM-MCP nesta caixa, que **não vêm da linha do servidor**:

@@ -141,5 +141,5 @@ test('fitLine: a line above the cap loses detail in the fixed order and keeps it
 // D9: this lane's copy of the contract is the shared one, byte for byte (CRLF read as LF), so writer and reader never disagree.
 test('parity: platforms/odc/facade/quality-line.mjs is the shared ssam-quality/1 contract', () => {
   const text = fs.readFileSync(fileURLToPath(new URL('../quality-line.mjs', import.meta.url)), 'utf8').replace(/\r\n/g, '\n');
-  assert.equal(createHash('sha256').update(text, 'utf8').digest('hex'), 'a21d9c1efa71ece175fb5248cdb92d5a564bcd19390cded2ed9675337255157f');
+  assert.equal(createHash('sha256').update(text, 'utf8').digest('hex'), '8625d52c4c5ef965980197f5cc267f84b3801ebba7c7d8928c4b53325864a015');
 });

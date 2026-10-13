@@ -17,20 +17,23 @@
 
 Só o dono do servidor vê o log, a auditoria e o registro de qualidade descritos abaixo. Eles ficam no servidor dele e não são repassados a terceiros.
 
-**Log do servidor.** Para saber quem usa cada acesso e de onde, o servidor grava:
+**Log do servidor.** Para saber quem usa cada acesso e de onde, o servidor grava, em cada linha, a hora, o evento e o identificador do seu acesso:
 
-- **Quando o seu cliente MCP abre uma sessão:** o IP de onde você conecta, o nome e a versão do cliente MCP (por exemplo, Claude Code) e o user-agent. O IP é o público que o túnel vê. Muda se você trocar de rede, VPN ou 4G.
+- **Quando o seu cliente MCP abre uma sessão:** o nome que o dono deu ao seu acesso, o número da sessão MCP, o IP de onde você conecta, o nome e a versão do cliente MCP (por exemplo, Claude Code) e o user-agent. O IP é o público que o túnel vê. Muda se você trocar de rede, VPN ou 4G. Quando a sessão fecha, o motivo.
 - **Quando o agente conecta:** o IP, a versão do agente, o nome do computador, o seu usuário do Windows e um identificador da máquina. O identificador é um hash do `MachineGuid` do Windows com esses dois e não permite recuperá-los. Com o Service Studio ligado ao agente, também a versão, a porta local, o número do processo e a hora em que ele abriu.
-- **A cada chamada:** as ferramentas, o tamanho da resposta e o tempo. Numa chamada ao agente, o tipo, o comando (só da lista do agente), o tempo e o código do resultado. Também quando o agente conecta, cai ou volta.
+- **A cada chamada:** as ferramentas (só as da lista do servidor; outro nome vira `?`), o tamanho da resposta e o tempo. Numa chamada ao agente, o tipo, o comando (só da lista do agente), o tempo, se deu certo e o código do resultado.
+- **O canal do agente:** quando ele conecta, cai ou volta, com o motivo; e os problemas do canal (um pedido recusado, uma mensagem desconhecida, um arquivo que chegou diferente ou expirou), com o código, o tipo e quantos. Uma parte de arquivo que demora para subir fica com o tamanho, o tempo e o IP sem o último número.
 
-**A primeira máquina fica registrada.** Na primeira conexão do agente, o servidor guarda o nome do computador, o seu usuário do Windows, o identificador e o IP. Se a sua credencial conectar de outra máquina, o acesso continua funcionando, mas o dono recebe um alerta com as duas máquinas e o IP. Trocou de computador? Avise o dono. Trocar de rede, VPN ou 4G não gera alerta de máquina.
+**A primeira máquina fica registrada.** Na primeira conexão do agente, o servidor guarda o nome do computador, o seu usuário do Windows, o identificador, a hora e o IP. Se a sua credencial conectar de outra máquina, o acesso continua funcionando, mas o dono recebe um alerta com a hora, o nome do seu acesso, as duas máquinas e o IP. Trocou de computador? Avise o dono. Trocar de rede, VPN ou 4G não gera alerta de máquina.
 
-Nada além disso sobre a sua máquina é enviado: nenhum arquivo, nenhum histórico, nenhum outro programa. Se você não concordar, não instale o agente e fale com o dono.
+**O que o agente envia e não fica gravado.** A cada conexão, o agente também envia a pasta onde ele está (ela costuma ter o seu usuário do Windows), a versão do Node, o sistema, a hora em que o agente abriu, o que ele sabe fazer, o pacote instalado e a pasta e a versão de cada Studio instalado. O servidor usa esses dados só na memória, para conferir as versões e para o `ssam_doctor`. Eles não vão para o log, para a auditoria nem para o registro de qualidade.
+
+Nada além disso sobre a sua máquina é enviado: nenhum arquivo de fora da pasta do agente, nenhum histórico, nenhum outro programa. Se você não concordar, não instale o agente e fale com o dono.
 
 **Auditoria e registro de qualidade.** De cada chamada de ferramenta, o servidor guarda só códigos, contagens e tempos. Os códigos vêm de uma lista fechada do SSAM. Um valor fora da lista vira um marcador fixo, como `CODE_UNLISTED`, e só é contado.
 
 - **Em toda linha:** a hora, o identificador do seu acesso, o nome que o dono deu a ele e um resumo da sessão MCP que não permite recuperá-la.
-- **A chamada:** a ferramenta, a ação escolhida nela (da lista da ferramenta), a plataforma (O11 ou ODC), a ordem na sessão, a duração, o intervalo desde a resposta anterior e quantas chamadas corriam juntas.
+- **A chamada:** a ferramenta (só da lista de ferramentas do servidor; outro nome vira `?`), a ação escolhida nela (da lista da ferramenta), a plataforma (O11 ou ODC), a ordem na sessão, a duração, o intervalo desde a resposta anterior e quantas chamadas corriam juntas.
 - **O resultado:** se deu certo, foi recusado, ficou incerto ou falhou; o código; o passo em que parou; e se foi `entregue`, `entregue e publicado` ou `criado`.
 - **A resposta:** quantos problemas de cada código (por fase, quantos eram avisos, quantos vieram com correção pronta e se a lista foi cortada), quantos avisos (e quantos graves), quantas correções automáticas de cada regra, o tamanho, se veio em páginas e como o servidor a leu.
 - **O tempo:** quanto levou cada fase (fila, captura, compilação, Studio, verificação, publicação, ambiente, transferência, rede e o próprio servidor); quantas chamadas ao agente, de que tipo e comando, com quantos bytes, quanto tempo e quantas falhas; quantas vezes o motor rodou e quanto levou.
@@ -39,7 +42,7 @@ Nada além disso sobre a sua máquina é enviado: nenhum arquivo, nenhum histór
 
 Nada do seu trabalho entra na auditoria nem no registro de qualidade: nenhum nome de módulo, tela, action ou entidade, nenhum job, expressão, mensagem, caminho de arquivo, endereço de ambiente ou texto seu. O dono vê esses números por cliente e somados de todos os clientes, para achar os erros mais comuns e o que deixa o SSAM lento.
 
-**Por quanto tempo.** O dono escolhe por quantos dias guarda cada um desses registros. O padrão guarda o log por 56 dias e a auditoria e o registro de qualidade sem prazo. As cópias de segurança do servidor levam os mesmos arquivos.
+**Por quanto tempo.** O dono escolhe por quantos dias guarda cada um desses registros. O padrão guarda o log por 56 dias e a auditoria e o registro de qualidade sem prazo. Os 56 dias valem com a limpeza semanal do servidor ligada; sem ela, o log fica até o dono apagá-lo. O registro da primeira máquina e os alertas de outra máquina não têm prazo: ficam até o dono apagá-los. As cópias de segurança do servidor levam os mesmos arquivos.
 
 **O seu espaço no servidor** (`ws:`) guarda os arquivos do seu trabalho (jobs, capturas, recibos e jornais) e a fila de atritos do seu acesso: de cada chamada, a operação, a plataforma, o resultado, o código, o passo e o tempo, e o texto dos relatos que o seu cliente MCP grava com `ssam_friction`. Você e o dono veem esse espaço.
 

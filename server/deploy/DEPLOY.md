@@ -104,8 +104,10 @@ sudo ufw enable
 A imagem compila os kernels contra a parte dos Studios listada em `docker/ssam-server/studio-<faixa>.txt`. Ela vem de
 um bundle feito a partir do Studio instalado. O instalador oficial do ODC Studio não se consegue baixar.
 
-- Service Studio: a mesma versão dos Studios dos clientes (hoje 11.55.91). O servidor recusa outra
-  (`STUDIO_VERSION_MISMATCH`).
+- Service Studio: a mesma versão dos Studios dos clientes (hoje 11.55.92.65269, `o11-studio-11.55.92.65269.tar.gz`, 145
+  arquivos, sha256 `67b44feddd2784e453b81a32294cea23d48448be57f4301e422b9ae1122e79cf`, feito do instalador assinado
+  `ServiceStudio-11.55.92.65269.exe`, sha256 `1d82f514e8ab7f78ba5dcef8eb618b6088a1793c1993db424f247c59d6efba49`). O
+  servidor recusa outra (`STUDIO_VERSION_MISMATCH`). O 11.55.91 era `o11-studio-11.55.91.65258.tar.gz` (`e9f0751a…`).
 - ODC Studio: a mesma versão dos clientes (hoje 1.7.28.10850, `odc-studio-1.7.28.10850.tar.gz`, sha256
   `cbe778bdabf6940fb5ff3a2eb63935f6075a2b7a7768ff85431bc73f63151e8c`). O `odc` do `kernel.json` (7.1) é essa versão, e o
   servidor recusa a faixa ODC de outra (`STUDIO_VERSION_MISMATCH`). O ODC Studio se atualiza sozinho: quando os clientes
@@ -123,8 +125,11 @@ Get-Content docker\installers\*.sha256
 - **Fixe os dois hashes** no `.env` (`ODC_STUDIO_BUNDLE_SHA256` e `SERVICE_STUDIO_BUNDLE_SHA256`). O build de produção
   recusa um Studio sem hash fixado. Ele também confere cada arquivo do bundle contra o `SHA256SUMS` interno.
 - Se a versão não for a padrão, ponha também o nome do arquivo (`ODC_STUDIO_BUNDLE=odc-studio-<versão>.tar.gz`).
-- O Service Studio pode entrar pelo instalador oficial `ServiceStudio-11.55.91.65258.exe` em vez do bundle. O hash
+- O Service Studio pode entrar pelo instalador oficial `ServiceStudio-11.55.92.65269.exe` em vez do bundle. O hash
   dele já está fixado.
+- A imagem declara as versões que serve (`SSAM_IMAGE_O11=11.55.92`, `SSAM_IMAGE_ODC=1.7.28`, rótulos `ssam.kernels.o11`
+  e `ssam.kernels.odc`). O build para se a pasta de um Studio tiver outra versão. Com outros Studios, mude as duas no
+  `.env` (`SSAM_IMAGE_O11`, `SSAM_IMAGE_ODC`).
 - Os bundles nunca vão para o git (`.gitignore`) nem para o contexto principal da imagem (`.dockerignore`).
 
 ## 5. Arquivos de deploy e configuração na VPS
@@ -300,8 +305,42 @@ No Linux o servidor não lê a versão dos Studios nos `.exe`. Sem `kernel.json`
 recusa o pacote do cliente (`AGENT_PACK_MISMATCH`). Os valores têm de bater com o pacote do agente (`pack.json`:
 `odcBridge` e `o11BuiltFor`), como diz a seção "Compatibilidade entre as caixas" do `README.md` da raiz.
 
-Com a imagem do 24º envio no ODC Studio 1.7.28 (`fase4-24/odc1728`, `f912cb7e`, bundle `odc-studio-1.7.28.10850`,
-pacote do agente com a bridge ODC `v97`):
+**Imagem interina (Service Studio 11.55.92 e ODC Studio 1.7.28, `fase4-24/combinada`).** O `kernel.json` sai do
+registro das imagens (`release-record.json`, nesta pasta), nunca digitado. A conferência do par roda dentro da imagem que
+vai subir, antes da primeira subida (desenho de várias versões, O.6.1 itens 3, 5 e 10). Na pasta `deploy`, com
+`TAG` = a tag da interina:
+
+```bash
+TAG=prod-AAAAMMDD-xxxxxxx
+run_check() { docker run --rm --network none --entrypoint node -v "$PWD/kernel-pair-check.mjs:/c.mjs:ro" "$@"; }
+# 1. o kernel.json desta imagem, do registro
+run_check -v "$PWD/release-record.json:/r.json:ro" "ssam-server:$TAG" /c.mjs print released /r.json > /tmp/kernel.json
+cat /tmp/kernel.json    # {"o11":"11.55.92","odc":"1.7.28","odcBridge":"v97","odcBridgeAccepted":["v96","v48","v45"]}
+# 2. a conferência do par, com o node e os Studios da própria imagem
+run_check -v /tmp/kernel.json:/k.json:ro "ssam-server:$TAG" /c.mjs check /k.json; echo "exit $?"
+#    exit 0 = "pair-ok": siga. exit 2 = "refused-pair": não suba; o JSON mostra a faixa que não bate.
+# 3. grava
+docker compose -f compose.prod.yml run --rm -T ssam-ops sh -c 'cat > /data/server/kernel.json' < /tmp/kernel.json
+# 4. esvazia os caches que não têm a versão do Studio (refeitos sob demanda)
+docker compose -f compose.prod.yml run --rm -T ssam-ops sh -c \
+  'rm -rf /data/cache/module-index/v1/o11 /data/cache/module-index/v1/odc /data/cache/readers/ss4 /data/cache/readers-prefetch/ss4 /data/cache/readers/ss4-prefetch /data/cache/module-index/kernel-studio.json'
+rm /tmp/kernel.json
+```
+
+- A interina lê só o `kernel.json` v1. Nunca grave um `kernel.v2.json` (ela o ignora e o log diz `kernel-v2-ignored`).
+- Faixa com outra versão no `kernel.json` fica desligada (`KERNEL_UNAVAILABLE`); o log diz `kernel-version-missing`
+  com a versão do arquivo e a da imagem. A outra faixa continua.
+- O passo 4 também acontece sozinho no primeiro início com outra versão (`kernel-cache-reset` no log). Ele continua no
+  roteiro porque a imagem do rollback (a857a1e) não faz isso.
+- Quem está no Service Studio 11.55.91 (o PC do dono também) perde a faixa O11 hospedada até a imagem de várias
+  versões: `STUDIO_VERSION_MISMATCH` com `cause: "STUDIO_VERSION_NOT_SERVED"`. Pacote novo não resolve. As ferramentas
+  só do servidor continuam. Quem está no ODC Studio 1.7.27 recebe o mesmo na faixa ODC.
+- Pacote do agente da interina: a fina O11 compilada contra o 11.55.92 (`agent-pack.ps1 -ExpectO11 11.55.92`, com
+  `ANVIL_STUDIO_DIR` na pasta extraída do instalador assinado) e a bridge ODC v97. O pacote v97 do 11.55.91 é recusado
+  na faixa O11 (`AGENT_PACK_MISMATCH`); a faixa ODC dele continua.
+
+Com a imagem só do ODC 1.7.28 (`prod-20261013-07e14b8`: o 24º envio no ODC Studio 1.7.28, `fase4-24/odc1728`,
+`f912cb7e`, bundle `odc-studio-1.7.28.10850`, pacote do agente com a bridge ODC `v97`; a interina acima a substitui):
 
 ```bash
 printf '%s\n' '{"o11":"11.55.91","odc":"1.7.28","odcBridge":"v97","odcBridgeAccepted":["v96","v48","v45"]}' \
@@ -513,7 +552,27 @@ O rollback volta a imagem **e** os arquivos que andam com ela: `compose.prod.yml
 2. Volte a pasta `deploy` para esse commit: no caminho A, `git checkout <commit>` no repositório; nos caminhos B e C, o
    `git archive` desse commit (seção 5). O `.env` fica.
 3. Volte `SSAM_IMAGE_TAG` no `.env` para a tag anterior (no caminho B, com o digest anterior).
-4. Se o upgrade mudou o `kernel.json`, grave de novo o da versão anterior (7.1).
+4. Grave o `kernel.json` da imagem que volta, do registro, e confira o par dentro dela antes de subir (desenho de várias
+   versões, O.6.1 itens 5 e 9). Da interina para a `prod-20261012-a857a1e` (`TAG` = a tag que volta; `previous` no
+   registro; para outra imagem, a tag dela):
+
+   ```bash
+   TAG=prod-20261012-a857a1e
+   run_check() { docker run --rm --network none --entrypoint node -v "$PWD/kernel-pair-check.mjs:/c.mjs:ro" "$@"; }
+   run_check -v "$PWD/release-record.json:/r.json:ro" "ssam-server:$TAG" /c.mjs print previous /r.json > /tmp/kernel.json
+   cat /tmp/kernel.json   # {"o11":"11.55.91","odc":"1.7.27","odcBridge":"v96","odcBridgeAccepted":["v48","v45"]}
+   run_check -v /tmp/kernel.json:/k.json:ro "ssam-server:$TAG" /c.mjs check /k.json; echo "exit $?"
+   # exit 2 ("refused-pair"): pare aqui. Não suba essa imagem com esse arquivo; volte a tag da interina no .env.
+   docker compose -f compose.prod.yml run --rm -T ssam-ops sh -c 'cat > /data/server/kernel.json' < /tmp/kernel.json
+   docker compose -f compose.prod.yml run --rm -T ssam-ops sh -c \
+     'rm -rf /data/cache/module-index/v1/o11 /data/cache/module-index/v1/odc /data/cache/readers/ss4 /data/cache/readers-prefetch/ss4 /data/cache/readers/ss4-prefetch /data/cache/module-index/kernel-studio.json'
+   rm /tmp/kernel.json
+   ```
+
+   - Nunca deixe o `kernel.json` da interina com a a857a1e: ela não tem guarda própria e aceitaria o pacote do 11.55.92,
+     rodando o kernel do 11.55.91 contra o Service Studio 11.55.92 do cliente.
+   - O passo dos caches tira o índice e os leitores feitos pela versão que sai. A a857a1e refaz o que precisar.
+   - Volte também o `Features.plain.xml` do ODC Studio da imagem que volta (7.2), se ele mudou.
 5. `docker compose -f compose.prod.yml up -d`: recria o servidor e, se o compose ou o Caddyfile mudaram, o Caddy.
 6. A imagem anterior tem de existir na VPS ou no registro. Não rode `docker image prune -a` enquanto um rollback puder ser
    preciso.
@@ -797,7 +856,7 @@ A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensai
 | Certificado não sai | DNS não aponta para a VPS, porta 80 ou 443 fechada, ou limite do Let's Encrypt (use staging). |
 | 401 `Unknown token` / 403 `Token revoked` ou `expired` | Token errado, revogado ou vencido: `server-token list`. |
 | `AGENT_PACK_MISMATCH` | `kernel.json` (7.1) não bate com o pacote do agente do cliente: a bridge do pacote não é `odcBridge` nem está em `odcBridgeAccepted`, ou o `o11BuiltFor` não é o `o11`. |
-| `STUDIO_VERSION_MISMATCH` | O Studio do cliente não é o do `kernel.json` (7.1): Service Studio 11.55.91 na faixa O11, ODC Studio 1.7.28 na faixa ODC. Um ODC Studio que se atualizou sozinho pede imagem e `kernel.json` novos (bundle da seção 4, features da 7.2). |
+| `STUDIO_VERSION_MISMATCH` | O Studio do cliente não é o do `kernel.json` (7.1): Service Studio 11.55.92 na faixa O11 (interina; um 11.55.91 vem com `cause: "STUDIO_VERSION_NOT_SERVED"`), ODC Studio 1.7.28 na faixa ODC. Um ODC Studio que se atualizou sozinho pede imagem e `kernel.json` novos (bundle da seção 4, features da 7.2). |
 | 403 `Origin not allowed` | Cliente de navegador com uma origem diferente de `https://<SSAM_DOMAIN>`. |
 | `HOSTED_UNAVAILABLE` em `o11_extension`, `odc_external_library`, depurador ou preview | Esperado: essas ferramentas não rodam no servidor hospedado Linux. |
 | `HOSTED_UNAVAILABLE` em `ssam_debug_server`, `ssam_debug_client` ou `ssam_debug_matrix` | Esperado (24º): o depurador continua fora do hospedado, como o `ssam_debug`. |
@@ -813,6 +872,8 @@ A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensai
 
 ## 14. Limitações conhecidas
 
+- Imagem interina: uma versão de cada Studio (Service Studio 11.55.92, ODC Studio 1.7.28). Cliente num Studio mais
+  velho fica sem aquela faixa hospedada até a imagem de várias versões (`STUDIO_VERSION_NOT_SERVED`, 7.1).
 - A imagem foi construída e provada no Docker Desktop (seção 12), mas ainda não numa VPS: o certificado do
   Let's Encrypt, o DNS, o firewall, o IPv6 da rede `edge` com um cliente IPv6 real e o cron como usuário comum não foram
   provados lá. Os bundles dos Studios não estão neste repositório.
@@ -838,6 +899,9 @@ A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensai
   - **ODC Studio 1.7.28** (`server/r24-odc1728`): a cópia saiu de `fase4-24/odc1728` (`c48074be`, sobre `a415531d`):
     bundle ODC 1.7.28.10850, bridge ODC v97, catálogo de verificação do 1.7.28 e a guarda do executor para bridge abaixo
     da v97. Conferido blob a blob de novo: os 6199 arquivos das duas caixas que vêm da linha são iguais aos de `c48074be`.
+  - **Imagem interina** (`server/r24-combinada`): a cópia saiu de `fase4-24/combinada` (`3d6f232c`, sobre `a415531d`): ODC
+    Studio 1.7.28, Service Studio 11.55.92, registro de qualidade e os itens do O.6.1. Conferido blob a blob: os 6229
+    arquivos das duas caixas que vêm da linha são iguais aos de `3d6f232c`.
   - **Registro de qualidade** (`server/r24-qualidade`): mais `fase4-24/qualidade` (`3262c49f`, sobre `a415531d`; depois
     `01795e52`, os verbos das chamadas ao agente só de listas fechadas; `c24d468d`, os códigos e as regras só dos
     registros gerados das fontes; e `1b2ce8fe`, os códigos compostos pelo produto e os de `kernel/query-test` nesses

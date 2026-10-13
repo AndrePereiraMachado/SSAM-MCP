@@ -53,6 +53,8 @@ ficam quando estão nos registros do contrato, gerados das fontes do produto: `C
 Fora da lista, o valor vira `CODE_UNLISTED` ou `RULE_UNLISTED` e é contado, nunca escrito. `RPC_<número>` fica pela forma
 (só dígitos). O `op` só fica quando está nos valores das próprias ferramentas (`OPS`). O gravador e o leitor do painel aplicam
 as mesmas listas. A auditoria (`audit-*.jsonl`) usa o mesmo registro para o código de erro.
+Na auditoria e no `server.log` (`mcp-response-flushed`), o nome da ferramenta só fica quando é uma ferramenta do catálogo
+hospedado (`hosted/tools.json`); outro nome digitado pelo cliente vira `?`, como no registro de qualidade.
 O texto de uma resposta nunca vira código: a regra que transformava `debug_<x>` em `DEBUG_<X>` vale só nas respostas do
 depurador (`ssam_debug*`, que o servidor hospedado não serve); em `odc_read` ou qualquer outra ferramenta, um nome
 `debug_folha_pagamento` citado por um erro do banco fica no texto, e a recusa recebe o código da ferramenta

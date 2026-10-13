@@ -78,8 +78,8 @@ test('the privacy section says who sees the records, how long they stay and the 
   assert.doesNotMatch(section, /mesma retenção da auditoria/);
   // agent-connected and agent-machine-pinned (agent-hub.mjs hello): the machine name, the Windows user and the IP, plainly
   assert.match(section, /Quando o agente conecta:\*\* o IP, a versão do agente, o nome do computador, o seu usuário do Windows e um identificador da máquina/);
-  assert.match(section, /Na primeira conexão do agente, o servidor guarda o nome do computador, o seu usuário do Windows, o identificador e o IP/);
-  assert.match(section, /Quando o seu cliente MCP abre uma sessão:\*\* o IP de onde você conecta, o nome e a versão do cliente MCP/);
+  assert.match(section, /Na primeira conexão do agente, o servidor guarda o nome do computador, o seu usuário do Windows, o identificador, a hora e o IP/);
+  assert.match(section, /Quando o seu cliente MCP abre uma sessão:\*\* o nome que o dono deu ao seu acesso, o número da sessão MCP, o IP de onde você conecta, o nome e a versão do cliente MCP/);
   // what the customer's workspace keeps, including the free text of ssam_friction reports
   assert.match(section, /o texto dos relatos que o seu cliente MCP grava com `ssam_friction`/);
 });

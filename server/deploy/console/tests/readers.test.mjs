@@ -384,7 +384,9 @@ test('readers: a line whose apply throws is counted as skipped; the rest of the 
   assert.equal(x.checkpoint().offset, fs.statSync(path.join(dir, 'access-alerts.jsonl')).size);
 });
 
-test('console: an audit line for a tool named __proto__ is counted like any other, in a cold start and after a restart', async t => {
+// A tool name outside the image's hosted catalog (tool-names.mjs) is '?': an old audit line naming __proto__ or constructor is
+// counted under '?', as a plain key, in a cold start and after a restart.
+test('console: an audit line for a tool named __proto__ is counted under ?, in a cold start and after a restart', async t => {
   const before = Object.getOwnPropertyNames(Object.prototype).sort();
   t.after(() => { for (const k of Object.getOwnPropertyNames(Object.prototype)) if (!before.includes(k)) delete Object.prototype[k]; });
   const open = new Set();
@@ -407,7 +409,8 @@ test('console: an audit line for a tool named __proto__ is counted like any othe
   let u = (await c.get('/api/usage?range=7d')).body;
   assert.equal(u.totals.calls, 4);
   assert.equal(u.totals.failures, 2);
-  assert.deepEqual(u.byTool.map(r => r.tool).sort(), ['__proto__', 'constructor', 'odc_read', 'ssam_doctor']);
+  assert.deepEqual(u.byTool.map(r => r.tool).sort(), ['?', 'odc_read', 'ssam_doctor']);
+  assert.equal(u.byTool.find(r => r.tool === '?').calls, 2);
   assert.equal(c.app.parts.sources.access().length, 1, 'the access alerts were replayed too');
   assert.deepEqual(Object.getOwnPropertyNames(Object.prototype).sort(), before);
   open.delete(c);
@@ -419,7 +422,7 @@ test('console: an audit line for a tool named __proto__ is counted like any othe
   await c.app.tickAll();
   u = (await c.get('/api/usage?range=7d')).body;
   assert.equal(u.totals.calls, 5, 'resumed after the bad line, nothing skipped, nothing twice');
-  assert.equal(u.byTool.find(r => r.tool === '__proto__').calls, 2);
+  assert.equal(u.byTool.find(r => r.tool === '?').calls, 3);
 });
 
 test('console: a cold-start phase that fails does not skip the next ones (server.log unreadable, audit and access still replayed)', async t => {

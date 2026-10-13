@@ -22,7 +22,7 @@ servidor. Um defeito de parser vira acesso àquela conta. Por isso:
 1. Crie uma conta Windows local sem privilégio de administrador só para o servidor.
 2. Dê a ela leitura na pasta do clone (`C:\Users\andre\SSAM-Hybrid-servidor`) e escrita só nas pastas `.local` do
    clone (estado do servidor, workspaces dos clientes, índices).
-3. Instale ou aponte o Service Studio do kernel: `ANVIL_STUDIO_DIR` com a pasta do Service Studio 11.55.91 (o padrão
+3. Instale ou aponte o Service Studio do kernel: `ANVIL_STUDIO_DIR` com a pasta do Service Studio 11.55.92 (o padrão
    é a cópia da faixa sob o perfil do usuário, que essa conta não tem).
 4. Rode `.\scripts\servidor.ps1 start` com essa conta. Os tokens são emitidos na mesma `.local\server`
    (`.\ssam server-token ...`, ou `SSAM_SERVER_DIR` apontando para ela).

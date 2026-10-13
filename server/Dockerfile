@@ -36,10 +36,13 @@ ARG PNPM_VERSION=11.19.0
 
 # ---- Studios: same build args and defaults as the development Dockerfile ----------------------------------------------------
 # Service Studio 11: the version of the customers' Studios (the O11 lane refuses another one, STUDIO_VERSION_MISMATCH).
-ARG SERVICE_STUDIO_INSTALLER=ServiceStudio-11.55.91.65258.exe
-ARG SERVICE_STUDIO_SHA256=10047d31a03adbbe6bd3a07c9de0506eeba3420e7031e51846607ee3fcde136c
+# 11.55.92.65269 since the owner's decision of 2026-10-12 (the interim image): the signed installer (sha256 below, read and
+# never run) or the bundle o11-studio-11.55.92.65269.tar.gz (145 files, sha256 67b44fed..., pinned in deploy/.env).
+# The 11.55.91 inputs were ServiceStudio-11.55.91.65258.exe (10047d31...) and o11-studio-11.55.91.65258.tar.gz (e9f0751a...).
+ARG SERVICE_STUDIO_INSTALLER=ServiceStudio-11.55.92.65269.exe
+ARG SERVICE_STUDIO_SHA256=1d82f514e8ab7f78ba5dcef8eb618b6088a1793c1993db424f247c59d6efba49
 ARG SERVICE_STUDIO_URL=
-ARG SERVICE_STUDIO_BUNDLE=o11-studio-11.55.91.65258.tar.gz
+ARG SERVICE_STUDIO_BUNDLE=o11-studio-11.55.92.65269.tar.gz
 ARG SERVICE_STUDIO_BUNDLE_SHA256=
 # ODC Studio: the version of the customers' ODC Studio (the agent hub compares its first three numbers with kernel.json
 # odc; 1.7.28 since the auto-update of 2026-10-12), never older than 1.7.27. Its installer cannot be downloaded today:
@@ -52,6 +55,12 @@ ARG ODC_STUDIO_BUNDLE=odc-studio-1.7.28.10850.tar.gz
 ARG ODC_STUDIO_BUNDLE_SHA256=
 ARG STUDIO_EXTRACTOR=nsis
 ARG REQUIRE_PINNED_STUDIOS=1
+# The Studio versions this image serves, three numbers each (multi-version design rev. 3, O.6.1: the interim image).
+# ENV SSAM_IMAGE_O11 / SSAM_IMAGE_ODC for the server (a lane whose kernel.json names another version is off,
+# KERNEL_UNAVAILABLE, logged kernel-version-missing) and the labels ssam.kernels.o11 / ssam.kernels.odc for the deploy
+# checks. The runtime stage refuses to build when a Studio folder holds another version. Change them with the Studios.
+ARG SSAM_IMAGE_O11=11.55.92
+ARG SSAM_IMAGE_ODC=1.7.28
 
 # ---- Labels -------------------------------------------------------------------------------------------------------------------
 ARG SSAM_VERSION=unversioned
@@ -198,6 +207,12 @@ COPY --from=kernel-o11 /out/ /app/
 COPY --from=kernel-odc /out/ /app/
 COPY --from=builder-odc /out/ /app/
 
+# The versions the image declares are the versions of its Studio folders (the FileVersion of ServiceStudio.Framework.dll,
+# read with node only by platforms/odc/facade/kernel-image.mjs): the build stops on a mismatch, so ENV and labels never lie.
+ARG SSAM_IMAGE_O11
+ARG SSAM_IMAGE_ODC
+RUN node /app/platforms/odc/facade/kernel-image.mjs check-image "/studio/o11=${SSAM_IMAGE_O11}" "/studio/odc=${SSAM_IMAGE_ODC}"
+
 # Writable by ssam (everything else under /app and /studio is root's and read-only for it):
 #   /data/server, /data/friction, /data/odc-features   the state volumes (below)
 #   /data/cache                                         the cache volume: module index and readers' copy (below)
@@ -259,6 +274,8 @@ EOF
 #   /data/cache         module-index/ (SSAM_MODULE_INDEX_ROOT: the ssam_map index and the module digests of the customers'
 #                       captures) and readers/ (SSAM_READER_CACHE_ROOT: the resident readers' copy, one folder per build).
 #                       Before, both lived in the container layer under /app/.local and were lost at every new container.
+#                       The server empties the parts that carry no Studio version (module-index/v1/<lane>, readers/ss4,
+#                       readers-prefetch/ss4) when a lane changes Studio version (stamp module-index/kernel-studio.json).
 ENV HOME=/tmp \
     SSAM_SERVER_DIR=/data/server \
     SSAM_FRICTION_DIR=/data/friction \
@@ -272,7 +289,9 @@ ENV HOME=/tmp \
     DOTNET_CLI_TELEMETRY_OPTOUT=1 \
     DOTNET_NOLOGO=1 \
     SSAM_PORT=7310 \
-    SSAM_PUBLIC_HOST=
+    SSAM_PUBLIC_HOST= \
+    SSAM_IMAGE_O11=${SSAM_IMAGE_O11} \
+    SSAM_IMAGE_ODC=${SSAM_IMAGE_ODC}
 VOLUME ["/data/server", "/data/friction", "/data/odc-features", "/data/cache"]
 
 # The label values are declared only here: a build arg declared earlier in the stage is part of the cache key of every
@@ -288,7 +307,9 @@ LABEL org.opencontainers.image.title="ssam-server" \
       org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.licenses="LicenseRef-Proprietary" \
-      org.opencontainers.image.base.name="${DOTNET_RUNTIME_IMAGE}"
+      org.opencontainers.image.base.name="${DOTNET_RUNTIME_IMAGE}" \
+      ssam.kernels.o11="${SSAM_IMAGE_O11}" \
+      ssam.kernels.odc="${SSAM_IMAGE_ODC}"
 
 USER 10001:10001
 EXPOSE 7310

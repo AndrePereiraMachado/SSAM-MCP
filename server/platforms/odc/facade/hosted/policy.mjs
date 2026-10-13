@@ -100,6 +100,15 @@ export function incompatible(lane, compat, info) {
   const serverKernel = info?.kernel?.[lane] ?? null;
   const agentStudio = info?.studios?.[lane]?.installed?.version ?? null;
   const studio = STUDIO[lane];
+  // The interim server serves one Studio version per lane (agent-hub.mjs laneCompatibility): an older installed Studio is
+  // not served until the multi-version server, whatever package the customer installs.
+  if (compat.cause === 'STUDIO_VERSION_NOT_SERVED') return { ok: false, code: compat.code, cause: compat.cause, lane, serverKernel, agentStudio,
+    served: compat.served ?? (serverKernel ? [serverKernel] : []),
+    error: `This SSAM server has the kernel for ${studio} ${serverKernel}; the agent reports ${studio} ${agentStudio}. It serves only ${studio} ${serverKernel}: ${studio} ${compat.installed ?? agentStudio} has no hosted ${lane} lane on this server until the server owner installs the multi-version server, and no agent package changes that. Tools that touch the ${studio} are unavailable until the versions match. Server-only tools (ssam_discover, ssam_reference, odc_search_operations, ...) still work.`,
+    continuation: doctor(`Shows both versions. Tell the user: to use the hosted ${lane} lane now, update ${studio} to ${serverKernel} and reopen it; otherwise keep working with SSAM locally until the server owner announces the multi-version server.`) };
+  if (compat.cause === 'KERNEL_VERSION_MISSING') return { ok: false, code: compat.code, cause: compat.cause, lane, serverKernel, agentStudio,
+    error: compat.message ?? `This SSAM server's kernel.json does not name the ${studio} version of its image; the ${lane} lane is off and nothing ran.`,
+    continuation: doctor('Shows the state of each lane. Ask the server owner to write the kernel.json of this server image.') };
   if (compat.code === 'STUDIO_VERSION_MISMATCH') return { ok: false, code: compat.code, lane, serverKernel, agentStudio,
     error: `This SSAM server has the kernel for ${studio} ${serverKernel}; the agent reports ${studio} ${agentStudio}. Tools that touch the ${studio} are unavailable until the versions match. Server-only tools (ssam_discover, ssam_reference, odc_search_operations, ...) still work.`,
     continuation: doctor(`Shows both versions. Ask the user to install ${studio} ${serverKernel}, or to wait until the server owner updates the kernel.`) };

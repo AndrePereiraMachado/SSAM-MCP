@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { addHist, bucketOf, createUsage, quantile } from '../usage.mjs';
+import { BOX_TOOLS_CATALOG, defaultToolsCatalog, loadToolNames, toolOf } from '../tool-names.mjs';
 import { createMinutes } from '../recent.mjs';
 import { createState } from '../state.mjs';
 import { createTz } from '../tz.mjs';
@@ -148,12 +149,14 @@ function cleanPrototype(before) {
   for (const k of Object.getOwnPropertyNames(Object.prototype)) if (!before.includes(k)) delete Object.prototype[k];
 }
 
+// The names come from a catalog that holds them (a hostile catalog); an error word that is no product code is TOOL_ERROR.
 test('usage: tools and codes named __proto__, constructor, toString... are plain keys (counted, saved, read back)', () => {
   const before = prototypeNames();
   try {
     const state = createState(tempDir('us'));
     const now = clock('2026-10-12T15:00:00Z');
-    const usage = createUsage({ tz, state, now });
+    const tools = new Set(PROTO_KEYS);
+    const usage = createUsage({ tz, state, now, tools });
     PROTO_KEYS.forEach((tool, i) => {
       usage.addCall({ time: `2026-10-12T13:0${i}:00.000Z`, token: A, tool, ms: 100, ok: false, error: PROTO_KEYS[(i + 1) % PROTO_KEYS.length] });
       usage.addCall({ time: `2026-10-12T13:0${i}:30.000Z`, token: A, tool, ms: 50, ok: true });
@@ -163,30 +166,30 @@ test('usage: tools and codes named __proto__, constructor, toString... are plain
     assert.deepEqual(prototypeNames(), before, 'Object.prototype unchanged');
     assert.equal(({}).calls, undefined);
     const expectTools = PROTO_KEYS.map(n => [n, 2, 1]).sort();
-    const expectCodes = PROTO_KEYS.map(n => [n, 1]).sort();
+    const expectCodes = [['TOOL_ERROR', 5]];
     const check = u => {
       const s = u.summarize(['2026-10-12']);
       assert.equal(s.totals.calls, 10);
       assert.equal(s.totals.failures, 5);
       assert.deepEqual(s.byTool.map(t => [t.tool, t.calls, t.failures]).sort(), expectTools);
       assert.deepEqual(s.byCode.map(c => [c.code, c.count]).sort(), expectCodes);
-      assert.equal(s.byCode.find(c => c.code === '__proto__').tools[0].tool, 'hasOwnProperty');
+      assert.deepEqual(s.byCode.find(c => c.code === 'TOOL_ERROR').tools.map(t => t.tool).length, 3, 'the top three tools of the code');
       assert.equal(s.byCustomer[0].agentFailures, 2);
       const one = u.summarize(['2026-10-12'], { token: A });
       assert.deepEqual(one.byTool.map(t => [t.tool, t.calls, t.failures]).sort(), expectTools);
       assert.deepEqual(one.byCode.map(c => [c.code, c.count]).sort(), expectCodes);
-      assert.equal(one.byCode.find(c => c.code === 'constructor').lastAt, '2026-10-12T13:00:00.000Z');
+      assert.equal(one.byCode.find(c => c.code === 'TOOL_ERROR').lastAt, '2026-10-12T13:04:00.000Z');
       assert.ok(PROTO_KEYS.includes(one.byCustomer[0].topTool));
     };
     check(usage);
     usage.flushDays();
-    const again = createUsage({ tz, state, now });
+    const again = createUsage({ tz, state, now, tools });
     check(again);
     // objects parsed back from the day file keep working as maps
     again.addCall({ time: '2026-10-12T14:00:00.000Z', token: A, tool: 'constructor', ms: 10, ok: false, error: '__proto__' });
     const s = again.summarize(['2026-10-12']);
     assert.deepEqual(s.byTool.find(t => t.tool === 'constructor').calls, 3);
-    assert.deepEqual(s.byCode.find(c => c.code === '__proto__').count, 2);
+    assert.deepEqual(s.byCode.find(c => c.code === 'TOOL_ERROR').count, 6);
     assert.deepEqual(prototypeNames(), before, 'Object.prototype unchanged');
   } finally { cleanPrototype(before); }
 });
@@ -207,4 +210,21 @@ test('per-minute windows: codes and tools named __proto__ or constructor are pla
     assert.deepEqual(again.window(Date.parse(at), 15), { calls: 5, failures: 5, topCode: 'constructor', topTool: 'toString' });
     assert.deepEqual(prototypeNames(), before, 'Object.prototype unchanged');
   } finally { cleanPrototype(before); }
+});
+
+test('usage: only tools of the hosted catalog keep their name; an audit error outside the registry is CODE_UNLISTED', () => {
+  const catalog = loadToolNames(BOX_TOOLS_CATALOG);
+  assert.ok(catalog.has('ssam_doctor') && catalog.has('o11_deliver'), 'the box catalog (server/platforms/odc/facade/hosted/tools.json)');
+  assert.equal(defaultToolsCatalog(f => f === BOX_TOOLS_CATALOG), BOX_TOOLS_CATALOG);
+  assert.equal(toolOf('GetFolhaPagamentoQz9', catalog), '?');
+  assert.equal(toolOf('ssam_doctor', catalog), 'ssam_doctor');
+  assert.equal(toolOf('ssam_doctor', new Set()), '?', 'an unreadable catalog keeps no name');
+  assert.equal(loadToolNames(path.join(tempDir('cat'), 'missing.json')).size, 0);
+  const usage = createUsage({ tz, state: createState(tempDir('us')), now: clock('2026-10-12T15:00:00Z'), tools: catalog });
+  usage.addCall({ time: '2026-10-12T13:00:00.000Z', token: A, tool: 'GetFolhaPagamentoQz9', ms: 10, ok: false, error: 'FOLHA_PAGAMENTO_QZ9' });
+  usage.addCall({ time: '2026-10-12T13:00:01.000Z', token: A, tool: 'ssam_doctor', ms: 10, ok: false, error: 'AGENT_NOT_CONNECTED' });
+  const s = usage.summarize(['2026-10-12']);
+  assert.deepEqual(s.byTool.map(t => t.tool).sort(), ['?', 'ssam_doctor']);
+  assert.deepEqual(s.byCode.map(c => c.code).sort(), ['AGENT_NOT_CONNECTED', 'CODE_UNLISTED']);
+  assert.equal(JSON.stringify(s).includes('Qz9') || JSON.stringify(s).includes('QZ9'), false);
 });

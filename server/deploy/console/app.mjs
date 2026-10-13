@@ -31,6 +31,7 @@ import { createViews } from './views.mjs';
 import { createDataViews } from './views-data.mjs';
 import { createQualityViews } from './views-quality.mjs';
 import { createWorkspaces } from './workspaces.mjs';
+import { defaultToolsCatalog, loadToolNames } from './tool-names.mjs';
 import { DEFAULT_KERNEL_CATALOG } from './config.mjs';
 
 export const CHECKPOINT_SCHEMA = 'ssam-console-checkpoint/1';
@@ -49,10 +50,12 @@ export async function createConsole({ config, now = Date.now, log = () => {}, wo
   const emitAudit = e => (replay ? replay.audit.emit(e) : events.emit(e));
   const gate = createGate({ now });
   const history = createHistory({ serverDir: config.serverDir, log });
-  const usage = createUsage({ tz, state, now });
+  // The tool names the console may show: the image's hosted catalog (CONSOLE_TOOLS_CATALOG); another name is '?'.
+  const toolNames = loadToolNames(config.toolsCatalog ?? defaultToolsCatalog());
+  const usage = createUsage({ tz, state, now, tools: toolNames });
   const licenses = await createLicenses({ config, state, history, tz, now, log, emit: emitMain, gate });
   const sources = createSources({ serverDir: config.serverDir, now });
-  const live = createLive({ tz, now, nameOf: licenses.nameOf, emit: emitLog, usage });
+  const live = createLive({ tz, now, nameOf: licenses.nameOf, emit: emitLog, usage, tools: toolNames });
   const host = createHost({ file: config.hostJson, state, tz, now, emit: emitMain, usage });
   const workspaces = createWorkspaces({ serverDir: config.serverDir, state, now, ...(workspaceEntries ? { maxEntries: workspaceEntries } : {}) });
   const alerts = createAlerts({ state, now, emit: emitMain });

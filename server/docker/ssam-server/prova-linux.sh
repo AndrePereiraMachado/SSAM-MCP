@@ -28,7 +28,7 @@ while [ $# -gt 0 ]; do
     *) echo "unknown argument $1" >&2; exit 2 ;;
   esac
 done
-O11_INSTALLER=${SERVICE_STUDIO_INSTALLER:-ServiceStudio-11.55.91.65258.exe}
+O11_INSTALLER=${SERVICE_STUDIO_INSTALLER:-ServiceStudio-11.55.92.65269.exe}
 ODC_INSTALLER=${ODC_STUDIO_INSTALLER:-ODCStudio-1.7.28.10850.exe}
 STAGE=$HOME/ssam-prova
 FAIL=0
@@ -55,7 +55,7 @@ $DOCKER version --format '  engine {{.Server.Version}}' && $DOCKER compose versi
 
 step "2. Studios: installer, else bundle ($INSTALLERS)"
 mkdir -p "$STAGE/installers"
-O11_BUNDLE=${SERVICE_STUDIO_BUNDLE:-o11-studio-11.55.91.65258.tar.gz}
+O11_BUNDLE=${SERVICE_STUDIO_BUNDLE:-o11-studio-11.55.92.65269.tar.gz}
 ODC_BUNDLE=${ODC_STUDIO_BUNDLE:-odc-studio-1.7.28.10850.tar.gz}
 stage_studio() { # lane installer bundle installed-folder
   for dir in "$INSTALLERS" "$ROOT/docker/installers"; do

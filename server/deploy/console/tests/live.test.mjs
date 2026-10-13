@@ -46,6 +46,10 @@ test('sessions: calls, last tool, bytes; listening resets sessions and agents', 
   assert.equal(s.calls, 2);
   assert.equal(s.lastTool, 'studio_inspect, odc_read');
   assert.equal(s.bytes, 110);
+  // a name outside the hosted catalog (typed by the client, written by an image before the combined line) is '?'
+  apply({ event: 'mcp-response-flushed', session: 'abc', token: TOK, tools: ['GetFolhaPagamentoQz9'], bytes: 0, ms: 5 });
+  assert.equal(live.sessions.get('abc').lastTool, '?');
+  assert.equal(live.sessions.get('abc').calls, 3);
   apply({ event: 'agent-connected', token: TOK, agent: '0.2.0', ip: '192.0.2.1', machine: { id: 'm', name: 'PC-TESTE-01', user: 'teste' } });
   apply({ event: 'listening', pid: 8, mode: 'hosted' });
   assert.equal(live.sessions.size, 0);

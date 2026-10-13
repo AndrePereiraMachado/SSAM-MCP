@@ -17,6 +17,9 @@
 #   -NoBuild -Prebuilt <pasta>: binarios ja prontos, nada compilado (modo dos testes), no layout
 #        <pasta>\odc\bridge\ODC3.Bridge.v<N>.dll (+ .deps.json)   <pasta>\odc\client\ODC3.Bridge.Client.dll (+ deps)
 #        <pasta>\o11\connect\   <pasta>\o11\hook\   <pasta>\o11\bridge\ (a fina)   <pasta>\o11\built-for.txt (ex.: 11.55.91)
+#   -ExpectO11 <x.y.z> (imagem interina, desenho multiversao O.6.1): a fina sai compilada contra a pasta do Service Studio
+#        daquela versao (ANVIL_STUDIO_DIR, nunca a copia de faixa 'Service Studio 11 - Anvil ...'), ou o script para. O
+#        servidor so aceita o pacote cujo o11BuiltFor e a versao do kernel dele (AGENT_PACK_MISMATCH).
 #   Gancho O11 (-Hook, docs\O11-BRIDGE-FINA.md 13):
 #     dev (padrao)  o gancho de desenvolvimento compilado do fonte: bin\o11\hook\Anvil.RuntimeHook.Agent.dll e a fina em
 #                   bin\o11\bridge\.
@@ -40,7 +43,8 @@ param(
   [string]$HookH1,
   [string]$ReleaseVersion,
   [string]$Stage,
-  [string]$FromStage
+  [string]$FromStage,
+  [string]$ExpectO11
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
@@ -299,6 +303,8 @@ try {
       foreach ($part in $parts) { Copy-Folder (Join-Path $staging $part) $(if ($part -eq 'bridge') { $bridgeOut } else { Join-Path $o11Out $part }) }
     }
     if ($o11BuiltFor -notmatch '^\d+\.\d+\.\d+$') { throw "Versao do Service Studio invalida: '$o11BuiltFor'" }
+    if ($ExpectO11 -and $o11BuiltFor -ne $ExpectO11) { throw "A fina foi compilada para o Service Studio $o11BuiltFor; -ExpectO11 pede $ExpectO11." }
+    if ($ExpectO11 -and -not $Prebuilt -and $ssDir -match 'Service Studio 11 - Anvil') { throw "-ExpectO11 compila a fina contra a pasta do Service Studio daquela versao, nunca contra a copia de faixa ($ssDir)." }
     if ($Hook -eq 'h1') {
       # The release hook as the release line built it: only the hook and its deps.json, never sources or other DLLs.
       $hookOut = Join-Path $tree 'studio\o11\hook'

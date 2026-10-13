@@ -589,3 +589,114 @@ prova ao vivo do `refresh-references --producer` da v97 num ODC Studio 1.7.28 (o
 pinos do depurador em `facade/debug-matrix/native-limits.json` que citam DLLs do 1.7.27 (`OutSystems.Model.dll`
 13.1431.3, `OutSystems.ServiceStudio.PluginAPI.dll` 13.1431.3): no 1.7.28 a matriz os mostra como
 `stale-installed-assembly` até alguém refazer aquelas provas.
+
+## Service Studio 11.55.92
+
+Em 12/10/2026 o Service Studio do Pedro está no 11.55.92.65269. A produção (`prod-20261012-a857a1e`, `kernel.json` com
+`"o11":"11.55.91"`) recusa a faixa O11 dele com `STUDIO_VERSION_MISMATCH`. Ramo `fase4-24/o11-115592`, sobre `a415531d`
+(a produção). O ODC deste ramo continua no 1.7.27 (o 1.7.28 é o ramo `fase4-24/odc1728`).
+
+### Instalador e bundle
+- Instalador oficial `ServiceStudio-11.55.92.65269.exe`: 325.319.112 bytes, sha256
+  `1d82f514e8ab7f78ba5dcef8eb618b6088a1793c1993db424f247c59d6efba49`, Authenticode válido (OutSystems, Inc.). Só lido,
+  nunca executado: o estágio de extração do Dockerfile (`nsis_extract.py`) tira dele a pasta do Studio.
+- Bundle `o11-studio-11.55.92.65269.tar.gz` (`studio-bundle.ps1 -Lane o11 -Studio <pasta extraída>`): 145 arquivos,
+  sha256 `67b44feddd2784e453b81a32294cea23d48448be57f4301e422b9ae1122e79cf`. O estágio `studio-o11` dá os mesmos 145
+  arquivos pelo instalador e pelo bundle.
+- A lista `studio-o11.txt` não muda: os 145 arquivos existem no 11.55.92, e a única referência de assembly nova
+  (`System.Collections.Concurrent`, do `Avalonia.Remote.Protocol`) é do runtime compartilhado.
+- Do 11.55.91 para o 11.55.92 mudaram 57 dos 145 arquivos. `OutSystems.Model*.dll`: versão de arquivo 12.185 para
+  12.187, AssemblyVersion continua 12.0.0.0. `ServiceStudio.*` e plugins: 11.55.91.65258 para 11.55.92.65269. Avalonia
+  11.3.9 para 11.3.22.
+- Imagem deste repositório, `.env.example`, compose, READMEs e scripts de prova: `ServiceStudio-11.55.92.65269.exe` e
+  `o11-studio-11.55.92.65269.tar.gz`. O `server/Dockerfile` do SSAM-MCP ainda fixa a 11.55.91: o build da imagem da 92
+  passa `SERVICE_STUDIO_INSTALLER`, `SERVICE_STUDIO_SHA256`, `SERVICE_STUDIO_BUNDLE` e `SERVICE_STUDIO_BUNDLE_SHA256`.
+
+### Kernel
+- O código compila contra o 11.55.92 sem mudança: `Anvil.Cli`, `Anvil.Bridge`, `Anvil.Bridge.Thin` e os testes, 0 erros,
+  nenhum CS0618, CS1705 ou MSB3277.
+- Catálogos lidos do Studio: `kernel/catalog/functions-11.55.92.json` (`anvil functions --out ... --docs
+  docs/functions.md`) e `kernel/catalog/verify-messages-11.55.92.json` (`anvil verify-message --out ...`). São iguais
+  aos do 11.55.91: 121 funções e 472 ids, nenhum id novo ou removido. Entrou também `functions-11.55.91.json`, que
+  faltava no `a415531d` (o `FunctionCatalogTests` falhava no 11.55.91). Cada Studio tem o seu arquivo e o kernel lê o
+  do Studio ligado: o 11.55.91 continua funcionando.
+- `kernel/docs/functions.md` regenerado: só o cabeçalho muda (11.55.87 para 11.55.92).
+
+### `kernel.json`
+`{"o11":"11.55.92","odc":"1.7.27","odcBridge":"v96","odcBridgeAccepted":["v48","v45"]}`. Junto com o ramo do ODC
+1.7.28, `odc` e as bridges ODC seguem as dele. No rollback, volta o do 24º.
+
+Um servidor serve uma versão do Service Studio. O hub recusa pacote com outro `o11BuiltFor` (`AGENT_PACK_MISMATCH`), e o
+agente recusa um Studio de versão diferente da fina dele (`STUDIO_VERSION_MISMATCH`). Por isso o Pedro precisa de um
+pacote com a fina compilada contra o 11.55.92 (`o11BuiltFor` `11.55.92`), que ainda não foi gerado. Os clientes que
+ficarem no 11.55.91 continuam num servidor 11.55.91 até o desenho de várias versões.
+
+### Testes
+`ANVIL_WORKER=0`, `ANVIL_ODC_NO_WORKER=1`, `SSAM_NO_WARM=1`, builds com `-p:SSDir` e `ANVIL_STUDIO_DIR` na pasta
+extraída do 11.55.92. A comparação é com `a415531d`, extraído por `git archive` e compilado do mesmo jeito contra o
+11.55.91 instalado (só lido). As duas árvores com as fixtures ignoradas pelo git (`outsystems-ui.oml` e
+`outsystems-ui-web.oml`).
+- `Anvil.Bridge.Thin.Tests`: 116/116 nos dois.
+- `Anvil.Tests` filtrado em
+  `Delivery|Job|Logic|Spec|Preflight|ThinBridge|ModuleIndex|ModelReading|ServiceCenter|Pa2F8|Environment|Normalizer|Producer|Open|HtmlVisual|Screen`,
+  mais `FunctionCatalog`, `SurfaceTests`, `MessageExpectationTests`, `MessageToleranceTests`, `VerifyAnchorTests`,
+  `ElementWidgetMapTests` e `PublishLogTests`: 1540/1540 no 11.55.92. No `a415531d` sobre o 11.55.91: 1539 ok e 1 falha (`CatalogInRepoMatchesTheStudio`, sem
+  `functions-11.55.91.json`).
+- Sem os catálogos novos, o `a415531d` falha no 11.55.92 só em `CatalogInRepoMatchesTheStudio` e
+  `VerifyIdsAndHintsMatchTheInstalledPublicCatalog`. Com eles, os dois passam no 11.55.92 e no 11.55.91.
+- Node, em `platforms/odc`: `o11-*`, `hosted-o11-worker`, `job-runner` e `kernel-delivery` (16 arquivos): 255/255 nos
+  dois.
+- Sem prova ao vivo: nenhum Studio foi aberto.
+
+## Imagem interina: Service Studio 11.55.92 e ODC Studio 1.7.28
+
+Decisão do dono (12/10/2026): a faixa O11 hospedada vai para o 11.55.92 e a ODC para o 1.7.28, numa imagem de uma versão
+por faixa, antes do servidor de várias versões (`C:\t\multiver\DESIGN.md`, revisão 3, O.6.1). Ramo `fase4-24/combinada`:
+`a415531d` + `fase4-24/odc1728` (`c48074be`) + `fase4-24/o11-115592` (`e0c8a2ef`) + `fase4-24/qualidade` (`1b2ce8fe`).
+
+### O que a imagem traz (itens 1 a 10 do O.6.1)
+
+1. **Versões declaradas.** `ENV SSAM_IMAGE_O11=11.55.92 SSAM_IMAGE_ODC=1.7.28` e os rótulos `ssam.kernels.o11` e
+   `ssam.kernels.odc` (`docker/ssam-server/Dockerfile`; no SSAM-MCP, `server/Dockerfile`). O build para se o
+   `ServiceStudio.Framework.dll` de `/studio/o11` ou de `/studio/odc` tiver outra versão
+   (`node platforms/odc/facade/kernel-image.mjs check-image`).
+2. **Recusa ao iniciar, por faixa.** Se o `kernel.json` nomeia outra versão, a faixa fica desligada:
+   `KERNEL_UNAVAILABLE` com `cause: "KERNEL_VERSION_MISSING"`, e o log tem `kernel-version-missing` (`lane`, `kernel`,
+   `image`, `studio`, `reason`). A outra faixa continua. Sem as variáveis (o PC do dono) nada muda.
+3. **`kernel.json` v1.** O da interina é
+   `{"o11":"11.55.92","odc":"1.7.28","odcBridge":"v97","odcBridgeAccepted":["v96","v48","v45"]}`. Um `kernel.v2.json` é
+   ignorado (`kernel-v2-ignored`).
+4. **Pacote do agente.** A fina O11 é compilada contra a pasta do 11.55.92 (`ANVIL_STUDIO_DIR` = a pasta extraída do
+   instalador assinado, com `ServiceStudio.exe`; nunca a cópia de faixa): `scripts\agent-pack.ps1 ... -ExpectO11 11.55.92`
+   para se a pasta for de outra versão ou for a cópia de faixa. ODC: bridge v97. O sha256 da fina fica no `pack.json`
+   (`o11Bridge.sha256`): ela vira uma bridge de campo (O.5).
+   - **Por que a fina do 11.55.92, e não a do 11.55.91.** Prova em `C:\t\multiver\compat-run`: a fina compilada contra o
+     11.55.91 liga no 11.55.92 (0 avisos), e a compilada contra o 11.55.92 não liga no 11.55.91 (11 falhas
+     `assembly-version`). Mesmo assim o pacote leva a do 11.55.92: o hub recusa `o11BuiltFor` diferente do kernel
+     (`AGENT_PACK_MISMATCH`) e o agente 0.3.x recusa um Studio de versão diferente da fina. A aceitação "para cima" de uma
+     fina antiga (D1) só vale com agente 0.4.0 e prova ao vivo. A falha no 11.55.91 não importa aqui: a interina não serve
+     o 11.55.91.
+5. **Caches.** Índice de módulos `v1/o11` e `v1/odc`, cópias dos leitores O11 (`readers/ss4`) e do prefetch
+   (`readers-prefetch/ss4`; o desenho diz `readers/ss4-prefetch`, que também é apagado): esvaziados no primeiro início
+   com outra versão da faixa (`kernel-cache-reset`, carimbo `kernel-studio.json` na raiz do índice). O deploy e o rollback
+   também os esvaziam à mão (DEPLOY §7.1 e §8 do SSAM-MCP). Os leitores ODC já são separados por geração (builder e
+   Studio). O cache de bases dos workers O11 fica em memória e já tem a versão na chave (`BaseModelCache`).
+6. **Catálogos.** `kernel/catalog/functions-11.55.92.json` e `verify-messages-11.55.92.json` (iguais aos do 11.55.91,
+   tirando o campo `Studio`), `verify-messages-1.7.28.10850.json` do ODC.
+7. **Telemetria.** Só nomes de evento novos (`quality`, `kernel-version-missing`, `kernel-cache-reset`,
+   `kernel-v2-ignored`). `kernel`, `warm` e `agent-*` mantêm o formato (testes em `kernel-image.test.mjs` e
+   `privacy-record.test.mjs`). O `agent-call` ganhou, na linha de qualidade, o `command` opcional do `odc.pipe` (só da
+   lista do agente); o painel lê só `kind`, `ok`, `code` e `ms`.
+8. **Cliente no Service Studio 11.55.91.** Perde a faixa O11 hospedada até o servidor de várias versões, com qualquer pacote.
+   O hub responde `STUDIO_VERSION_MISMATCH` com `cause: "STUDIO_VERSION_NOT_SERVED"`, `served: ["11.55.92"]` e
+   `installed: "11.55.91"`, antes de olhar o pacote. A continuação do `ssam_doctor` diz: atualize o Service Studio para
+   11.55.92 ou siga com o SSAM local. As ferramentas só do servidor continuam. O PC do dono (11.55.91) também.
+9. **Rollback.** O `kernel.json` vem do registro da imagem (`server/deploy/release-record.json` do SSAM-MCP), nunca de um
+   arquivo solto, e a conferência do par roda antes do `up -d` (`server/deploy/kernel-pair-check.mjs`). DEPLOY §8.
+10. **Conferência do par no deploy.** A mesma conferência roda antes da primeira subida da interina. DEPLOY §7.1.
+
+### Também nesta linha
+- Auditoria e `server.log`: o nome da ferramenta só da lista do catálogo hospedado; outro vira `?`.
+- Seção Privacidade do `docs/AGENTE-CLIENTE.md` igual ao que o servidor grava: retenção do log (depende da limpeza
+  semanal), primeira máquina e alertas sem prazo, campos do Hello que ficam só na memória. `privacy-record.test.mjs` liga
+  cada campo gravado ao texto.

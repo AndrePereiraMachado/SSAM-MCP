@@ -45,7 +45,7 @@ O resultado é o mesmo nas duas formas. O instalador é o preferido quando está
 ## Servidor limpo, passo a passo
 
 1. Studios: para cada um, coloque em `docker/installers/` uma de duas entradas (veja `docker/installers/README.md`).
-   - O instalador oficial: `ServiceStudio-11.55.91.65258.exe` e `ODCStudio-1.7.28.10850.exe`, as versões dos Studios dos clientes.
+   - O instalador oficial: `ServiceStudio-11.55.92.65269.exe` e `ODCStudio-1.7.28.10850.exe`, as versões dos Studios dos clientes.
    - Ou um bundle feito numa máquina com o Studio instalado: `studio-bundle.ps1 [-Lane o11]` no Windows, `studio-bundle.sh --lane odc|o11` no WSL ou Linux. Gera `odc-studio-1.7.28.10850.tar.gz` (ou `o11-studio-...`) e o `.sha256`. Fixe esse hash em `*_BUNDLE_SHA256`.
    - Hoje o ODC 1.7.28 só entra assim: o instalador dele não se consegue baixar.
    - Outra versão: ajuste `SERVICE_STUDIO_INSTALLER`/`ODC_STUDIO_INSTALLER` e os SHA256 no `.env`.

@@ -16,7 +16,7 @@
 # Values: flags, else the environment, else the .env next to this script (when present): SSAM_IMAGE (default ssam-server),
 # STUDIO_INSTALLERS_DIR (relative to this folder), ODC_STUDIO_BUNDLE_SHA256, SERVICE_STUDIO_BUNDLE_SHA256 and, for other
 # Studio files, ODC_STUDIO_BUNDLE, SERVICE_STUDIO_BUNDLE, ODC_STUDIO_INSTALLER, ODC_STUDIO_SHA256,
-# SERVICE_STUDIO_INSTALLER, SERVICE_STUDIO_SHA256, STUDIO_EXTRACTOR. Default tag: prod-<yyyymmdd>-<short commit>, with
+# SERVICE_STUDIO_INSTALLER, SERVICE_STUDIO_SHA256, STUDIO_EXTRACTOR, SSAM_IMAGE_O11, SSAM_IMAGE_ODC. Default tag: prod-<yyyymmdd>-<short commit>, with
 # "-dirty" when the work tree has uncommitted changes. Needs docker with buildx, and git for the default tag.
 # LICENSE: the image carries OutSystems Studio binaries: load it locally or push it to a PRIVATE registry only.
 set -eu
@@ -77,7 +77,7 @@ MSYS_NO_PATHCONV=1 $DOCKER run --rm --network none --read-only --cap-drop ALL --
 # 2. The build. Only the Studio settings that are set become build args (the Dockerfile keeps its defaults otherwise);
 #    they go after the extra buildx arguments already in "$@".
 for name in ODC_STUDIO_BUNDLE ODC_STUDIO_BUNDLE_SHA256 ODC_STUDIO_INSTALLER ODC_STUDIO_SHA256 SERVICE_STUDIO_BUNDLE \
-            SERVICE_STUDIO_BUNDLE_SHA256 SERVICE_STUDIO_INSTALLER SERVICE_STUDIO_SHA256 STUDIO_EXTRACTOR; do
+            SERVICE_STUDIO_BUNDLE_SHA256 SERVICE_STUDIO_INSTALLER SERVICE_STUDIO_SHA256 STUDIO_EXTRACTOR SSAM_IMAGE_O11 SSAM_IMAGE_ODC; do
   value=$(setting "$name")
   if [ -n "$value" ]; then set -- "$@" --build-arg "$name=$value"; fi
 done

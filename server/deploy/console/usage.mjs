@@ -3,6 +3,8 @@
 // /state/agg/usage-YYYY-MM-DD.json are rewritten every 30 s while dirty; the checkpoint carries the days changed since
 // the last write, so offsets and aggregates always match after a restart.
 import { inc, own, put, slot } from './keys.mjs';
+import { codeOf } from './quality-line.mjs';
+import { defaultToolsCatalog, loadToolNames, toolOf } from './tool-names.mjs';
 
 const LN11 = Math.log(1.1);
 const TOKEN = /^tok_[0-9a-f]{12}$/;
@@ -44,7 +46,9 @@ function seen(t, at) { if (!t.firstAt || at < t.firstAt) t.firstAt = at; if (!t.
 const maxAt = (a, b) => (!a || (b && b > a) ? b : a);
 const top = counts => { let best = null, n = -1; for (const [k, v] of Object.entries(counts ?? {})) if (v > n || (v === n && k < best)) { best = k; n = v; } return best; };
 
-export function createUsage({ tz, state, now = Date.now }) {
+// tools: the tool names of the image's hosted catalog (tool-names.mjs); any other name of an audit line is '?'. The error
+// code of a failed call goes through the ssam-quality/1 contract (a code outside the product's registry is CODE_UNLISTED).
+export function createUsage({ tz, state, now = Date.now, tools = loadToolNames(defaultToolsCatalog()) }) {
   const days = new Map();
   const dirty = new Set();     // changed since the last day-file write
   let rebuilding = null;       // Set of days already emptied during a cold-start rebuild
@@ -77,10 +81,10 @@ export function createUsage({ tz, state, now = Date.now }) {
   function addCall(line) {
     const token = typeof line.token === 'string' && TOKEN.test(line.token) ? line.token : null;
     if (!token) return null;
-    const tool = typeof line.tool === 'string' && line.tool ? line.tool.slice(0, 64) : '?';
+    const tool = toolOf(line.tool, tools);
     const ms = Number.isFinite(line.ms) && line.ms >= 0 ? line.ms : 0;
     const failed = line.ok === false;
-    const code = failed ? (typeof line.error === 'string' && line.error ? line.error.slice(0, 64) : 'TOOL_ERROR') : null;
+    const code = failed ? (codeOf(line.error) ?? 'TOOL_ERROR') : null;
     const day = tz.day(line.time);
     const agg = dayAgg(day);
     bump(agg.total, ms, failed);

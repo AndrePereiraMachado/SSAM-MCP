@@ -14,8 +14,8 @@
 //     expired; a revoke closes the open sessions of that token. A session belongs to the token that opened it. An agent
 //     credential never opens /mcp, an MCP token never opens /agent.
 //   - Audit: one JSON line per tool call (time, token id, customer, tool, duration, ok/error code), never the
-//     arguments nor the results; the error code only from the product's registry (else CODE_UNLISTED). Rate limit per
-//     token with 429.
+//     arguments nor the results; the error code only from the product's registry (else CODE_UNLISTED), the tool only from
+//     the hosted catalog when the caller passes it (else '?', also in server.log). Rate limit per token with 429.
 //   - Quality (docs/QUALIDADE.md): with a recorder (quality-recorder.mjs, hosted mode only) one line of codes, counts and
 //     times per tool call, written at the instant of the audit line, and one per MCP session opened and closed. Every
 //     hook is wrapped: the recorder never changes a request, an answer or the audit.
@@ -39,7 +39,10 @@ export const OWNER_ONLY_REFUSAL = 'o modo --local-studios dirige os Studios do P
 // Headers a proxy or tunnel adds. In the owner-only mode their presence refuses the request (a safety net, not a guarantee).
 export const FORWARDED_HEADERS = Object.freeze(['forwarded', 'x-forwarded-for', 'x-forwarded-host', 'cf-connecting-ip', 'cf-ray']);
 
-const toolName = name => typeof name === 'string' && /^[A-Za-z0-9_.-]{1,64}$/.test(name) ? name : '?';
+// The tool name a client sent, as the audit, server.log and the quality record keep it: with the hosted catalog (tools),
+// only a name of the catalog, else '?' (a client may type any name, e.g. a customer's action; privacy re-check of
+// 2026-10-12, low finding); without a catalog (--local-studios, the owner's own machine) any name of the shape.
+export const toolNameOf = (name, tools = null) => typeof name === 'string' && /^[A-Za-z0-9_.-]{1,64}$/.test(name) && (!tools || tools.has(name)) ? name : '?';
 // An UPPER_SNAKE value of the answer, kept only when the product declares it (the registry of quality-line.mjs); another
 // word of that shape (a customer's table or app name in a code field) is CODE_UNLISTED in the audit and the quality line.
 const errorCode = value => typeof value === 'string' && /^[A-Z][A-Z0-9_]{1,63}$/.test(value) && SNAKE.test(value) ? (isListedCode(value) ? value : CODE_UNLISTED) : null;
@@ -69,8 +72,12 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
   // observeCall(params, session) -> {finish(response)} | null: the friction record of stdio (facade/friction-boundary.mjs), per call.
   observeCall = null,
   // quality: a recorder (quality-recorder.mjs) or null (records nothing; --local-studios never passes one).
-  quality = null } = {}) {
+  quality = null,
+  // tools: the tool names the audit and server.log may name (the hosted catalog); null keeps any name of the shape.
+  tools = null } = {}) {
   if (typeof createServer !== 'function') throw new Error('createServer is required');
+  const toolSet = tools ? new Set(tools) : null;
+  const toolName = name => toolNameOf(name, toolSet);
   if (!dir) throw new Error('dir is required');
   const hosts = [...new Set((publicHosts ?? []).map(h => String(h).toLowerCase()))];
   if (!agents && allowRemote) throw new Error('Recusado: --allow-remote. ' + OWNER_ONLY_REFUSAL);
@@ -86,7 +93,7 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
     try { fs.appendFileSync(logFile, JSON.stringify({ time: now().toISOString(), ...event }) + '\n'); } catch { /* the log never stops the server */ }
   };
   const store = createTokenStore(dir, { now });
-  const hub = agents ? createAgentHub({ dir, store, kernel: agents.kernel, log, now, limits: agents.limits,
+  const hub = agents ? createAgentHub({ dir, store, kernel: agents.kernel, kernelRefused: agents.kernelRefused, log, now, limits: agents.limits,
     onCallSettled: quality ? span => quality.agentSpan(span) : null }) : null;
   const sessions = new Map(); // sid -> {tokenId, customer, served, server, transport, responses:Set, lastSeen, closing}
   const windows = new Map();  // tokenId -> {start, count}

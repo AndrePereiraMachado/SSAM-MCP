@@ -2,10 +2,13 @@
 
 Estes 76 arquivos existem em `server/` e em `agent/`, no mesmo caminho relativo dentro de cada caixa.
 Hoje as duas cópias são iguais byte a byte. Vieram de `servidor/fase4` (`e7b2119b`) e estão na revisão de
-`fase4-24/odc1728` (`f912cb7e`), o 24º envio (`a415531d`) no ODC Studio 1.7.28 com a bridge ODC v97, e na de
-`fase4-24/qualidade` (`3262c49f`, `01795e52`, `c24d468d` e `1b2ce8fe`, que não mudam nenhum deles). O 24º acrescentou 8:
+`fase4-24/combinada` (`3d6f232c`): o 24º envio (`a415531d`) com `fase4-24/odc1728` (`f912cb7e`, ODC Studio 1.7.28 e bridge
+ODC v97), `fase4-24/o11-115592` (Service Studio 11.55.92) e `fase4-24/qualidade` (que não muda nenhum deles), mais a imagem
+interina. O 24º acrescentou 8:
 `PrivateHttpContext.cs` e `ScHttpHandler.cs` do kernel e 6 fontes novas da bridge ODC (`Portal*.cs`). O `f912cb7e`
-mudou 5: `docs/FASE2-AGENTE.md`, `docs/PROVAS-AO-VIVO.md`, `Bridge.csproj`, `StartupHook.cs` e `client/Program.cs`.
+mudou 5: `docs/FASE2-AGENTE.md`, `docs/PROVAS-AO-VIVO.md`, `Bridge.csproj`, `StartupHook.cs` e `client/Program.cs`. A linha
+combinada mudou de novo 2: `docs/FASE2-AGENTE.md` (Service Studio 11.55.92, a seção 7 da imagem interina) e
+`docs/PROVAS-AO-VIVO.md` (Service Studio 11.55.92).
 
 ## A regra
 
@@ -61,9 +64,9 @@ Sem saída, está tudo igual.
 | Arquivo (relativo à caixa) | sha256 (conteúdo com fim de linha LF) |
 | --- | --- |
 | `docs/DISTRIBUICAO.md` | `bc87ebe53ef2230f89d4ceb1162e5e84b9eecc0e2563e93905eccb78fbc9d5b1` |
-| `docs/FASE2-AGENTE.md` | `5a708f1fab975c42659d5fb21eac3f02213d6e16016f719ccd350cdb700eb5c1` |
+| `docs/FASE2-AGENTE.md` | `7dbe5f711e84cee271d7cbb1c6d8989103dcd46a0137b55505419348388f7a3a` |
 | `docs/O11-BRIDGE-FINA.md` | `c7f24e4ad0e2b537394a537d103ad5b0654745c4c692965cdec5cc8fcc80a25d` |
-| `docs/PROVAS-AO-VIVO.md` | `5240a9abc89d90c6ab45e4a898a98ac484bc64b5143deb8ca5d29698af6cca27` |
+| `docs/PROVAS-AO-VIVO.md` | `b66c259ac7cb293fbc7c7165794885ac6462598a2e65e2753c85f3646d99979a` |
 | `docs/exemplos/mcp-cliente-hospedado.json` | `cabbe38805716878f03def98527dd5234b2dcfd9187df8c773305f80d8d6fa28` |
 
 ## kernel/: MSBuild comum (dono: server)

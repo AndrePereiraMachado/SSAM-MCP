@@ -5,6 +5,7 @@
 // `listening` line already sits in a rotated .gz. Agents seen by an earlier process stay known (disconnected) for the
 // license view, so only tokens never seen in the retained logs show "sem registro".
 import { inc } from './keys.mjs';
+import { defaultToolsCatalog, loadToolNames, toolOf } from './tool-names.mjs';
 import { createMinutes } from './recent.mjs';
 import { AGENT_DERIVED, agentReason, cap, eventText } from './texts.mjs';
 
@@ -21,7 +22,7 @@ export function o11Of(value) {
 const packOf = p => p && typeof p === 'object'
   ? { id: cap(p.id ?? null, 64), odcBridge: cap(p.odcBridge ?? null, 32), o11BuiltFor: cap(p.o11BuiltFor ?? null, 32) } : null;
 
-export function createLive({ tz, now = Date.now, nameOf = () => null, emit = () => {}, usage = null }) {
+export function createLive({ tz, now = Date.now, nameOf = () => null, emit = () => {}, usage = null, tools = loadToolNames(defaultToolsCatalog()) }) {
   let server = null;
   let sessions = new Map();
   let agents = new Map();
@@ -88,14 +89,15 @@ export function createLive({ tz, now = Date.now, nameOf = () => null, emit = () 
       }
       case 'mcp-response-flushed': {
         const s = typeof e.session === 'string' ? sessions.get(e.session.slice(0, 64)) : null;
-        const tools = Array.isArray(e.tools) ? e.tools.map(t => cap(t, 64)) : [];
+        // only tools of the hosted catalog (tool-names.mjs); a name the client typed is '?'
+        const called = Array.isArray(e.tools) ? e.tools.map(t => toolOf(t, tools)) : [];
         if (s) {
-          s.calls += tools.length;
-          s.lastTool = tools.length ? cap(tools.join(', '), 120) : s.lastTool;
+          s.calls += called.length;
+          s.lastTool = called.length ? cap(called.join(', '), 120) : s.lastTool;
           s.lastAt = e.time;
           s.bytes += Number.isFinite(e.bytes) ? e.bytes : 0;
         }
-        touch(token, e.time, tools.length ? tools[tools.length - 1] : null, 'call');
+        touch(token, e.time, called.length ? called[called.length - 1] : null, 'call');
         return;
       }
       case 'session-closed': {

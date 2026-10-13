@@ -8,7 +8,10 @@ Cópia de `servidor/fase4` (`e7b2119b`) de `C:\Users\andre\SSAM-Hybrid-servidor`
 `sc_http`, transporte novo e `net.probe`).
 Na branch `server/r24-qualidade` (`fase4-24/qualidade`, `3262c49f`) só o guia do cliente muda: `docs/AGENTE-CLIENTE.md`
 ganha o parágrafo do registro de qualidade (o agente e o pacote não mudam); `01795e52` não muda nada desta caixa; em
-`c24d468d` só a seção "Privacidade" do guia muda; `1b2ce8fe` não muda nada desta caixa.
+`c24d468d` só a seção "Privacidade" do guia muda; `1b2ce8fe` não muda nada desta caixa. Na branch `server/r24-combinada`
+(`fase4-24/combinada`, `3d6f232c`): a seção "Privacidade" diz exatamente o que o servidor grava, `docs/FASE2-AGENTE.md` e
+`docs/PROVAS-AO-VIVO.md` falam do Service Studio 11.55.92, e `scripts/agent-pack.ps1 -ExpectO11 <versão>` compila a fina
+contra a pasta daquele Service Studio (nunca a cópia de faixa) ou para.
 Esta pasta guarda os caminhos relativos do repositório antigo: os `.csproj` e os scripts resolvem daqui.
 
 ## Compilar e montar o pacote

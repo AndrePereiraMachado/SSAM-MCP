@@ -45,7 +45,7 @@ faixa `exec` foi fundida na `policy`, que passa a se chamar `hosted` (seção 10
 |---|---|---|
 | LLM do cliente (Claude, outro) | conta/máquina do cliente | chama as ferramentas MCP por HTTPS com `Authorization: Bearer ssam_...` |
 | Servidor MCP (`ssam serve`), uma instância `createSsamServer` por sessão | máquina do dono | escuta em `127.0.0.1`; HTTPS por túnel ou proxy (seção 9) |
-| Kernel O11 (`anvil.dll`), kernel ODC (`anvil-odc.dll`), builder ODC, leitores residentes, catálogo, discover, receitas | máquina do dono | usam as DLLs do Studio INSTALADO no servidor (Service Studio 11.55.91, ODC Studio 1.7.28) |
+| Kernel O11 (`anvil.dll`), kernel ODC (`anvil-odc.dll`), builder ODC, leitores residentes, catálogo, discover, receitas | máquina do dono | usam as DLLs do Studio INSTALADO no servidor (Service Studio 11.55.92, ODC Studio 1.7.28) |
 | Hub do agente (`/agent/v1/*`) | máquina do dono, dentro do mesmo processo HTTP | `agent-hub.mjs` (faixa `hub`) |
 | `AgentExecutor`, espelho de arquivos, relay do bridge O11, portão hospedado | máquina do dono | `hosted/*.mjs` (faixa `hosted`) |
 | Agente SSAM (`agent/ssam-agent.mjs`) | máquina do cliente | conexão só de SAÍDA; nenhuma porta aberta no cliente |
@@ -306,7 +306,7 @@ Exemplo:
 ```
 { t: "welcome", channel: <32 hex>, customer: <string>, resumed: <bool>,
   heartbeatMs, deadAfterMs, maxMessageBytes, inlineMaxBytes, partBytes, maxFileBytes, maxValueBytes,
-  kernel: { odc: <"1.7.28"|null>, o11: <"11.55.91"|null>, odcBridge: <"v35"|null> },
+  kernel: { odc: <"1.7.28"|null>, o11: <"11.55.92"|null>, odcBridge: <"v35"|null> },
   compatible: { odc: Compat, o11: Compat } }
 Compat = { ok: true } | { ok: false, code: "STUDIO_VERSION_MISMATCH"|"STUDIO_NOT_INSTALLED"|"AGENT_PACK_MISMATCH"|"LANE_DISABLED"|"KERNEL_UNAVAILABLE", message: <string> }
 ```
@@ -1158,6 +1158,19 @@ Regras da faixa `hosted` (em `hosted/policy.mjs`):
 
 - `AGENT_PACK_MISMATCH` usa o mesmo formato, com `why` "ask the server owner for the current agent package".
 - Um único kernel por faixa no servidor: o limite está na seção 11.
+- Imagem interina (desenho de várias versões, O.6.1; `kernel-image.mjs`). A imagem declara as versões que serve:
+  `ENV SSAM_IMAGE_O11` e `SSAM_IMAGE_ODC`, rótulos `ssam.kernels.o11` e `ssam.kernels.odc`. O build confere essas versões
+  contra o `ServiceStudio.Framework.dll` de cada pasta do Studio.
+  - Faixa cujo `kernel.json` nomeia outra versão fica desligada ao iniciar: `KERNEL_UNAVAILABLE` com
+    `cause: "KERNEL_VERSION_MISSING"`, e o servidor registra `kernel-version-missing`. O kernel da imagem nunca roda contra
+    outro Studio. O evento `kernel` mantém o formato (a faixa desligada vem `null`).
+  - Studio do cliente MAIS VELHO que a versão do servidor (Service Studio 11.55.91 no servidor 11.55.92):
+    `STUDIO_VERSION_MISMATCH` com `cause: "STUDIO_VERSION_NOT_SERVED"`, `served` e `installed`, antes de conferir o pacote.
+    Nenhum pacote resolve: a faixa volta com o servidor de várias versões. Studio mais novo segue o formato acima.
+  - Só `kernel.json` v1. Um `kernel.v2.json` ao lado é ignorado (`kernel-v2-ignored`); um `kernel.json` no formato v2 não
+    serve faixa nenhuma (`kernel-json-unsupported`).
+  - Os caches sem versão do Studio (índice de módulos `v1/<faixa>`, cópias dos leitores O11 e do prefetch) são esvaziados
+    quando a versão da faixa muda (`kernel-cache-reset`; carimbo `kernel-studio.json` na raiz do índice).
 
 ## 8. Sem agente, sem conexão O11, contexto perdido
 
@@ -1684,7 +1697,7 @@ programadas, blobs e `protocolError` registrado) e workspace temporário:
 - Instalador, ofuscação e assinatura de código (o Controle Inteligente de Aplicativos do Windows pode bloquear DLLs não
   assinadas no cliente; a seleção assinada existente só cobre o runtime ODC).
 - Vários kernels no servidor: há UM kernel por faixa, preso à versão do Studio instalado no servidor (hoje Service Studio
-  11.55.91 e ODC Studio 1.7.28, desde a atualização automática de 12/10/2026). Cliente em outra versão é recusado (seção 7) até o dono atualizar o servidor.
+  11.55.92 e ODC Studio 1.7.28, desde as atualizações de 12/10/2026). Cliente em outra versão é recusado (seção 7) até o dono atualizar o servidor.
 - Propriedade intelectual no O11: resolvido na fase 3 ([O11-BRIDGE-FINA.md](O11-BRIDGE-FINA.md)). O pacote leva só a
   bridge fina (`Anvil.Bridge.dll` sem `Anvil.Core.dll`, sem `Anvil.CSharp.dll`, sem `Esprima.dll`); a lógica do kernel
   que rodava dentro do Studio passou para o servidor, e `scripts\pack-ip-scan.ps1` recusa o pacote se aparecer

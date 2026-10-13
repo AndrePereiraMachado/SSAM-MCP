@@ -1,0 +1,22 @@
+{
+  "schema": "ssam-release-record/1",
+  "note": "The kernel.json v1 of each image (multi-version design rev. 3, O.6.1 item 9, O.6.2). A deploy writes released.kernelV1 and a rollback writes the kernelV1 of the image it restores, always through kernel-pair-check.mjs print, then checks the pair inside that image (kernel-pair-check.mjs check) before up -d (DEPLOY.md 7.1 and 8). released.tag is written when the interim image is built.",
+  "released": {
+    "tag": null,
+    "what": "interim: Service Studio 11.55.92 + ODC Studio 1.7.28 + quality record (fase4-24/combinada)",
+    "o11": "11.55.92",
+    "odc": "1.7.28",
+    "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] }
+  },
+  "previous": {
+    "tag": "prod-20261012-a857a1e",
+    "what": "the 24th in production: Service Studio 11.55.91 + ODC Studio 1.7.27, no ssam.kernels.* labels",
+    "o11": "11.55.91",
+    "odc": "1.7.27",
+    "kernelV1": { "o11": "11.55.91", "odc": "1.7.27", "odcBridge": "v96", "odcBridgeAccepted": ["v48", "v45"] }
+  },
+  "images": {
+    "prod-20261012-a857a1e": { "o11": "11.55.91", "odc": "1.7.27", "kernelV1": { "o11": "11.55.91", "odc": "1.7.27", "odcBridge": "v96", "odcBridgeAccepted": ["v48", "v45"] } },
+    "prod-20261013-07e14b8": { "o11": "11.55.91", "odc": "1.7.28", "kernelV1": { "o11": "11.55.91", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } }
+  }
+}
