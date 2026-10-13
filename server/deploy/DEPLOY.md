@@ -314,12 +314,13 @@ vai subir, antes da primeira subida (desenho de várias versões, O.6.1 itens 3,
 TAG=prod-AAAAMMDD-xxxxxxx
 run_check() { docker run --rm --network none --entrypoint node -v "$PWD/kernel-pair-check.mjs:/c.mjs:ro" "$@"; }
 # 1. o kernel.json desta imagem, do registro
-run_check -v "$PWD/release-record.json:/r.json:ro" "ssam-server:$TAG" /c.mjs print released /r.json > /tmp/kernel.json
+run_check -v "$PWD/release-record.json:/r.json:ro" "ssam-server:$TAG" /c.mjs print released /r.json > /tmp/kernel.json; echo "exit $?"
 cat /tmp/kernel.json    # {"o11":"11.55.92","odc":"1.7.28","odcBridge":"v97","odcBridgeAccepted":["v96","v48","v45"]}
 # 2. a conferência do par, com o node e os Studios da própria imagem
 run_check -v /tmp/kernel.json:/k.json:ro "ssam-server:$TAG" /c.mjs check /k.json; echo "exit $?"
-#    exit 0 = "pair-ok": siga. exit 2 = "refused-pair": não suba; o JSON mostra a faixa que não bate.
-# 3. grava
+#    só siga com exit 0 ("pair-ok") nos dois. 2 = "refused-pair" (o JSON mostra a faixa que não bate), 1 = erro de
+#    leitura, 125 = imagem ausente: não suba.
+# 3. grava (num upgrade, com o servidor que está no ar parado antes: stop ssam-server; veja a seção 8)
 docker compose -f compose.prod.yml run --rm -T ssam-ops sh -c 'cat > /data/server/kernel.json' < /tmp/kernel.json
 # 4. esvazia os caches que não têm a versão do Studio (refeitos sob demanda)
 docker compose -f compose.prod.yml run --rm -T ssam-ops sh -c \
@@ -539,6 +540,11 @@ espere ou combine.
 5. Confira `ps` (healthy), `/health` e o log (`listening`, `kernel`, `warm`).
 6. Se mudou a versão de um Studio ou da bridge ODC, atualize o `kernel.json` (7.1) e mande o pacote novo do agente aos
    clientes. Num salto de bridge, a anterior entra em `odcBridgeAccepted` até todos os clientes trocarem de pacote.
+   - Quando o `kernel.json`, o `Features.plain.xml` ou os caches mudam com a versão (a interina), a ordem é outra: confira
+     o par (7.1, passos 1 e 2) com a imagem antiga ainda no ar; depois pare o servidor (`stop ssam-server`), grave o
+     `kernel.json`, esvazie os caches e grave o Features; só então os passos 3 e 4. A imagem antiga nunca roda com o par
+     da nova, nem num reboot. Se parar antes do passo 3, grave de volta o `kernel.json` e o Features que estavam no ar e
+     rode `start ssam-server` (o mesmo container, sem recriar).
 
 Para o Caddy, troque a imagem fixada em `compose.prod.yml` (tag e digest, resolvidos com
 `docker buildx imagetools inspect caddy:<versão>-alpine`) e rode `up -d caddy`.
@@ -562,7 +568,10 @@ O rollback volta a imagem **e** os arquivos que andam com ela: `compose.prod.yml
    run_check -v "$PWD/release-record.json:/r.json:ro" "ssam-server:$TAG" /c.mjs print previous /r.json > /tmp/kernel.json
    cat /tmp/kernel.json   # {"o11":"11.55.91","odc":"1.7.27","odcBridge":"v96","odcBridgeAccepted":["v48","v45"]}
    run_check -v /tmp/kernel.json:/k.json:ro "ssam-server:$TAG" /c.mjs check /k.json; echo "exit $?"
-   # exit 2 ("refused-pair"): pare aqui. Não suba essa imagem com esse arquivo; volte a tag da interina no .env.
+   # só siga com exit 0 ("pair-ok"). 2 ("refused-pair"), 1 (erro de leitura) ou 125 (imagem ausente): pare aqui. Não
+   # suba essa imagem com esse arquivo; volte a tag da interina no .env. Nada mudou no ar.
+   # a parada começa aqui: com a interina parada, ela não refaz os caches com a versão dela depois do rm
+   docker compose -f compose.prod.yml stop ssam-server
    docker compose -f compose.prod.yml run --rm -T ssam-ops sh -c 'cat > /data/server/kernel.json' < /tmp/kernel.json
    docker compose -f compose.prod.yml run --rm -T ssam-ops sh -c \
      'rm -rf /data/cache/module-index/v1/o11 /data/cache/module-index/v1/odc /data/cache/readers/ss4 /data/cache/readers-prefetch/ss4 /data/cache/readers/ss4-prefetch /data/cache/module-index/kernel-studio.json'
