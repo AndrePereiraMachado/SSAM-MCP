@@ -304,6 +304,39 @@ C:\SSAM-Agent\agent\node\node.exe C:\SSAM-Agent\agent\ssam-agent.mjs doctor --ro
   `studio_reference_producers` recebe `COMMAND_NOT_ALLOWED`. O 23º não aceita o pacote v96: no rollback do servidor, os
   clientes voltam ao pacote v48.
 
+## Conferência de 2026-10-12 (imagem interina, `server/r24-combinada`)
+
+Máquina do dono, `ANVIL_WORKER=0`, `ANVIL_ODC_NO_WORKER=1`, `SSAM_NO_WARM=1`, TEMP em `C:\t\comb\tmp`. Service Studio
+11.55.92 = a pasta extraída do instalador assinado (`C:\t\o11-92\studio`, `ANVIL_STUDIO_DIR`); ODC Studio 1.7.28.10850
+instalado. Nenhum processo de Studio usado, nada na VPS, nada enviado.
+
+- Linha `fase4-24/combinada` (`3d6f232c`, worktree `fase4-24-comb`; CLIs O11 e ODC e builder compilados ali contra os
+  dois Studios):
+  - `hosted-*`, `agent-hub`, `http-server*`, `quality-*`, `job-runner`, `kernel-delivery`, `fase4-*`, `anvil-worker*`,
+    `server-tokens`, `pa2-f7a-codes*`, `pa3-fa-responses`, o contrato das fixtures, `friction*`, `kernel-image` e
+    `privacy-record`: 48 arquivos, 436 testes. Falha só o C26 de `fase4-server`, igual em `a415531d` (mesma bateria,
+    `git archive`, 39 arquivos, 360 testes, só o C26). O `http-server-quality` passou 4/4 sozinho depois de travar na
+    limpeza do diretório temporário com a máquina cheia (bateria do kernel em paralelo).
+  - `hosted-e2e-processes.mjs` com `kernel.json` `{"o11":"11.55.92","odc":"1.7.28","odcBridge":"v97",...}`, Studios
+    falsos no 11.55.92 e no 1.7.28: 117 de 117.
+  - Kernel O11 contra o 11.55.92: `Anvil.Bridge.Thin.Tests` 116/116; `Anvil.Tests` filtrado como no ramo do 11.55.92
+    (Delivery, Job, Logic, Spec, Preflight, ThinBridge, ModuleIndex, ModelReading, ServiceCenter, Pa2F8, Environment,
+    Normalizer, Producer, Open, HtmlVisual, Screen e os catálogos) 1540/1540.
+  - Kernel ODC contra o 1.7.28: `Anvil.Tests.Odc` filtrado (Odc, Job, Pa, Prototype, Coverage, ScreenHtml, Flow, Ddl)
+    790 ok e 1 pulado; `Bridge.Tests` 311/311; `Builder.Tests` 7/7.
+- Conferência do par dentro das imagens locais (`deploy/kernel-pair-check.mjs`, `C:\t\comb\pair\real-images.txt`):
+  `prod-20261012-a857a1e` aceita o próprio par (exit 0) e recusa o da interina (exit 2, as duas faixas);
+  `prod-20261013-07e14b8` recusa os dois (O11 11.55.91 com ODC 1.7.28).
+- Caixa server (`node_modules` por junção só leitura da `r24`, os CLIs da linha copiados em `kernel/.local`, um
+  `tenants.json` sintético e a junção `server/agent`; tudo removido depois): o conjunto das conferências anteriores mais
+  `kernel-image`, `privacy-record` e `deploy/tests/kernel-pair-check`: 54 arquivos, 507 testes. Falha só o C26. O
+  `hosted-e2e.test` pegou o `tenants.json` antigo na primeira passada e passou depois (1/1). Com a junção
+  `server/agent`, o teste de deriva do `quality-registry` lista 23 códigos que só fontes fora da caixa declaram (os
+  builders de features de cliente e os testes de licença); sem a junção, como nas conferências anteriores, 8/8.
+- Caixa agent: `node --test agent/tests/*.test.mjs tests/prova-verbos.test.mjs` 86/86.
+- Painel: `node --test server/deploy/console/tests` 113 ok e 1 pulado (socket unix); `ui-tests/run-all.mjs` 71/71.
+- `SHARED.md`: 76 arquivos, a conferência dele sai sem nada.
+
 ## Conferência de 2026-10-12 (ODC Studio 1.7.28, `server/r24-odc1728`)
 
 Máquina do dono, `ANVIL_WORKER=0`, `ANVIL_ODC_NO_WORKER=1`, `SSAM_NO_WARM=1`, TEMP e caches em `C:\t\odc28`, ODC Studio
