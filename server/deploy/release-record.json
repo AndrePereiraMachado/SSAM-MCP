@@ -1,8 +1,8 @@
 {
   "schema": "ssam-release-record/1",
-  "note": "The kernel.json v1 of each image (multi-version design rev. 3, O.6.1 item 9, O.6.2). A deploy writes released.kernelV1 and a rollback writes the kernelV1 of the image it restores, always through kernel-pair-check.mjs print, then checks the pair inside that image (kernel-pair-check.mjs check) before up -d (DEPLOY.md 7.1 and 8). released.tag is the interim image built on 2026-10-13 (image id sha256:91d31148df00..., revision 9d7e5b77).",
+  "note": "The kernel.json v1 of each image (multi-version design rev. 3, O.6.1 item 9, O.6.2). A deploy writes released.kernelV1 and a rollback writes the kernelV1 of the image it restores, always through kernel-pair-check.mjs print, then checks the pair inside that image (kernel-pair-check.mjs check) before up -d (DEPLOY.md 7.1 and 8). released.tag is the interim image built on 2026-10-13 (image id sha256:4e0dd2f3ceec..., revision 479e16a7; it replaces prod-20261013-9d7e5b7, which never went to the VPS).",
   "released": {
-    "tag": "prod-20261013-9d7e5b7",
+    "tag": "prod-20261013-479e16a",
     "what": "interim: Service Studio 11.55.92 + ODC Studio 1.7.28 + quality record (fase4-24/combinada)",
     "o11": "11.55.92",
     "odc": "1.7.28",
@@ -18,6 +18,7 @@
   "images": {
     "prod-20261012-a857a1e": { "o11": "11.55.91", "odc": "1.7.27", "kernelV1": { "o11": "11.55.91", "odc": "1.7.27", "odcBridge": "v96", "odcBridgeAccepted": ["v48", "v45"] } },
     "prod-20261013-07e14b8": { "o11": "11.55.91", "odc": "1.7.28", "kernelV1": { "o11": "11.55.91", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } },
-    "prod-20261013-9d7e5b7": { "o11": "11.55.92", "odc": "1.7.28", "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } }
+    "prod-20261013-9d7e5b7": { "o11": "11.55.92", "odc": "1.7.28", "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } },
+    "prod-20261013-479e16a": { "o11": "11.55.92", "odc": "1.7.28", "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } }
   }
 }
