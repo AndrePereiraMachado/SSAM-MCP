@@ -8,7 +8,9 @@
 //                                  delete engine and DESTRUCTIVE (service-center), the effect of every ODC operation
 //                                  (effects.mjs effectOf: a DELETE, an Undeploy), the Portal routes of effect
 //                                  'destructive' (portal-routes.mjs PORTAL_WRITES). A request it cannot read, a batch
-//                                  with any delete or a selector of an unexpected type is destructive (fail closed).
+//                                  with any delete or a selector of an unexpected type is destructive (fail closed); a
+//                                  selector left out is not (F3 of the review: nothing can run, the input layer answers
+//                                  INPUT_INVALID with the correction).
 //   HOSTED_OFF / hostedListing     the part of each tool that is off, said first in the hosted listing (local unchanged).
 // tests/hosted-destructive.test.mjs proves every tool and action of hosted/tools.json that can delete is classified.
 // Outside the family (CX15 §6, the owner decides; they delete nothing of the environment or tenant): o11_access apply,
@@ -21,10 +23,12 @@ import { DESTRUCTIVE as SERVICE_CENTER_DESTRUCTIVE } from '../service-center/ind
 
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const word = value => (typeof value === 'string' ? value.trim().toLowerCase() : null);
-// A selector of a type no tool takes (a number, an array) is no reading of the call: fail closed.
+// F3: a selector left out (undefined, null) is no deletion: the input layer refuses the call (INPUT_INVALID, with the
+// correction) and nothing runs. A selector of a type no tool takes (a number, an array) is no reading of the call: fail closed.
+const absent = value => value === undefined || value === null;
 const selector = (args, key, destructive) => {
   const value = args[key];
-  if (value === undefined || value === null) return null;
+  if (absent(value)) return null;
   return typeof value === 'string' ? destructive(word(value)) : true;
 };
 
@@ -48,13 +52,15 @@ function dataDestructive(request) {
 
 // studio_command: the bridge commands that delete (data-delete, the API Client fixture cleanup) and the raw Portal
 // transports, whose request can be any DELETE (portal-call, portal-private-call, portal-session fetch). The bridge takes
-// the whole line, so every word of the command and its arguments is read, whatever the spelling, case or split.
+// the whole line, so every word of the command and its arguments is read, whatever the spelling, case or split: args given
+// as a text (F3) or with items of another type are read word by word too (the input layer then refuses their type).
 const STUDIO_DELETES = ['data-delete', 'portal-api-client-fixture-cleanup', 'portal-call', 'portal-private-call'];
+const textOf = value => (typeof value === 'string' ? value : JSON.stringify(value) ?? '');
 function studioCommandDestructive(args) {
+  if (absent(args.command)) return false; // F3: no command, nothing runs (INPUT_INVALID "/command is required")
   if (typeof args.command !== 'string') return true;
-  const rest = args.args === undefined || args.args === null ? [] : args.args;
-  if (!Array.isArray(rest) || rest.some(a => typeof a !== 'string')) return true;
-  const words = [args.command, ...rest].join(' ').toLowerCase().split(/[\s"'`]+/).filter(Boolean);
+  const rest = absent(args.args) ? [] : Array.isArray(args.args) ? args.args.map(textOf) : [textOf(args.args)];
+  const words = [args.command, ...rest].join(' ').toLowerCase().split(/[\s"'`,:;[\]{}]+/).filter(Boolean);
   if (words.some(w => STUDIO_DELETES.some(command => w.includes(command)))) return true;
   return words.some(w => w.includes('portal-session')) && words.includes('fetch');
 }
@@ -62,6 +68,7 @@ function studioCommandDestructive(args) {
 // ODC public API: the effect of the operation (effects.mjs), its id being <api>:<method>:<path>; a body given as text is
 // read as the access layer reads it, and Undeploy in any case.
 function odcEffectDestructive(operationId, body) {
+  if (absent(operationId)) return false; // F3: no operationId, nothing runs (INPUT_INVALID "/operationId is required")
   if (typeof operationId !== 'string') return true;
   const method = operationId.split(':')[1];
   if (!method) return true;
@@ -78,6 +85,7 @@ function odcEffectDestructive(operationId, body) {
 const RAW_SELECTION_SAVES = new Set(['connections.importEntities', 'connections.importActions']);
 const DELETE_NAME = /delet|remov|purg|drop|destroy|discard|wipe|truncat|eras|clean/i;
 function portalDestructive(operationId) {
+  if (absent(operationId)) return false; // F3: no operationId, nothing runs (INPUT_INVALID)
   if (typeof operationId !== 'string') return true;
   if (RAW_SELECTION_SAVES.has(operationId)) return true;
   if (Object.hasOwn(PORTAL_WRITES, operationId)) return PORTAL_WRITES[operationId].effect === 'destructive';

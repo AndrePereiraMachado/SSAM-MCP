@@ -157,6 +157,22 @@ const CASES = [
   ['o11_extension', { action: 'publish' }, false],
   ['odc_external_library', { action: 'discard' }, true],
   ['odc_external_library', { action: 'build' }, false],
+  // F3 of the review: a selector left out is no reading of a deletion (the input layer answers INPUT_INVALID with the
+  // correction and runs nothing); a selector present with a value that cannot be read stays refused (fail closed).
+  ['odc_write', { operation_id: 'asset-repository-api-v1:post:/assets', body: {} }, false],
+  ['odc_write', { operation_id: 'asset-repository-api-v1:delete:/assets/{assetKey}' }, false],
+  ['odc_write', { body: {} }, false],
+  ['odc_write', { operationId: null }, false],
+  ['odc_write', { operationId: '' }, true],
+  ['odc_portal_write', { operationID: 'timers.run', input: {} }, false],
+  ['odc_portal_write', { input: {} }, false],
+  ['studio_command', { cmd: 'module-info' }, false],
+  ['studio_command', { cmd: 'data-delete', args: ['M', 'E'] }, false],
+  ['studio_command', { command: 'module-info', args: 'Orders' }, false],
+  ['studio_command', { command: 'module-info', args: 'data-delete M E --ids 1' }, true],
+  ['studio_command', { command: ' ', args: 'data-delete M E' }, true],
+  ['studio_command', { command: 'module-info', args: [7, { x: 'data-delete' }] }, true],
+  ['studio_command', { command: 'module-info', args: [7] }, false],
   // Outside the family (CX15 §6, the owner decides): no deletion of the environment or tenant.
   ['o11_deliver', { job: { ops: [] }, patch: [{ op: 'remove', path: '/ops/0' }] }, false],
   ['studio_close', { module: 'Orders', discard: true }, false],
@@ -480,6 +496,38 @@ test('end to end through the hosted server: the incident call is refused and not
     assert.equal(value.cause, 'DESTRUCTIVE_HOSTED_OFF', name + ' ' + JSON.stringify(value).slice(0, 300));
     assert.equal(value.continuation, undefined, name);
   }
+  assert.equal(context.executor.calls.length, before, 'no executor kind ran');
+  assert.deepEqual(spawned, []); assert.deepEqual(connections, []);
+});
+
+// ---- correction 1 of the review (C:\t\revisoes\hosted-destructive-off\REVISAO.md)
+const valueOfCall = result => result.structuredContent ?? JSON.parse(result.content?.[0]?.text ?? 'null');
+
+test('F3: a call without its selector deletes nothing: INPUT_INVALID with the correction, nothing runs; a well-formed DELETE stays refused', async () => {
+  const { client, context } = await hostedListing();
+  const before = context.executor.calls.length;
+  const call = async (name, args) => valueOfCall(await client.callTool({ name, arguments: args }));
+  for (const [name, args, fix] of [
+    ['odc_write', { tenant: TENANT, operation_id: 'asset-repository-api-v1:post:/assets', body: {} }, /closest: operationId/],
+    ['odc_write', { tenant: TENANT, body: {} }, /\/operationId is required/],
+    ['odc_portal_write', { operationID: 'timers.run', input: {} }, /closest: operationId/],
+    ['studio_command', { cmd: 'module-info' }, /\/command is required/],
+    ['studio_command', { command: 'module-info', args: 'Orders' }, /\/args[^;"]*expected array/],
+    // a DELETE under a misspelled field: no selector, nothing runs (the input layer refuses it)
+    ['odc_write', { tenant: TENANT, operation_id: 'asset-repository-api-v1:delete:/assets/{assetKey}', path: { assetKey: ASSET } }, /closest: operationId/],
+  ]) {
+    const value = await call(name, args);
+    const label = name + ' ' + JSON.stringify(args) + ' -> ' + JSON.stringify(value).slice(0, 400);
+    assert.equal(value.code, 'INPUT_INVALID', label);
+    assert.notEqual(value.cause, 'DESTRUCTIVE_HOSTED_OFF', label);
+    assert.doesNotMatch(JSON.stringify(value), /Deleting \(applications/, label);
+    assert.match(JSON.stringify(value), fix, label);
+  }
+  // Well formed, it is refused as before; the words of args given as text are read.
+  for (const [name, args] of [
+    ['odc_write', { tenant: TENANT, operationId: 'asset-repository-api-v1:delete:/assets/{assetKey}', path: { assetKey: ASSET } }],
+    ['studio_command', { command: ' ', args: 'data-delete M E --ids 1' }],
+  ]) assert.equal((await call(name, args)).cause, 'DESTRUCTIVE_HOSTED_OFF', name + ' ' + JSON.stringify(args));
   assert.equal(context.executor.calls.length, before, 'no executor kind ran');
   assert.deepEqual(spawned, []); assert.deepEqual(connections, []);
 });
