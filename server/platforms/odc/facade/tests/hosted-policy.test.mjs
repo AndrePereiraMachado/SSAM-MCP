@@ -15,6 +15,7 @@ import { createSsamServer, registerServedTool, HOSTED_INSTRUCTIONS, HOSTED_RULES
 import { anvilRoot, workspaceRoot } from '../workspace.mjs';
 import { frictionTool } from '../../../../facade/friction-boundary.mjs';
 import { fakeAgentLink, hostedDirs, cleanupHostedDirs } from './fixtures/fake-agent-link.mjs';
+import { compatibility } from '../agent-hub.mjs';
 
 test.after(cleanupHostedDirs);
 const SHA = 'a'.repeat(64);
@@ -71,7 +72,9 @@ test('mixed rules: ssam_map .oml vs module name, o11_access plan vs apply, ssam_
   assert.notEqual((await h.gate('ssam_map')({ lane: 'odc', target: 'ws:odc/snapshots/Orders-1.oml' })).isError, true);
   assert.equal(codeOf(await h.gate('ssam_map')({ lane: 'odc', target: 'Orders' })), 'AGENT_NOT_CONNECTED');
   assert.notEqual((await h.gate('o11_access')({ action: 'plan', manifestPath: 'access/m.json' })).isError, true);
-  assert.equal(codeOf(await h.gate('o11_access')({ action: 'apply', manifestPath: 'access/m.json', words: 'pode' })), 'AGENT_NOT_CONNECTED');
+  // NEW-1 of review 2: every hosted apply is refused at the gate, before the agent (HOSTED_DESTRUCTIVE, fail closed for now).
+  const apply = (await h.gate('o11_access')({ action: 'apply', manifestPath: 'access/m.json', words: 'pode' })).structuredContent;
+  assert.deepEqual([apply?.code, apply?.cause], ['HOSTED_UNAVAILABLE', 'DESTRUCTIVE_HOSTED_OFF']);
   assert.notEqual((await h.gate('ssam_job')({ lane: 'o11', job: { ops: [] }, captureProducers: [] })).isError, true);
   assert.equal(codeOf(await h.gate('ssam_job')({ lane: 'o11', job: { ops: [] }, captureProducers: ['System=(System)'] })), 'AGENT_NOT_CONNECTED');
   assert.equal(codeOf(await h.gate('ssam_app_url')({ app: 'Orders' })), 'AGENT_NOT_CONNECTED');
@@ -111,6 +114,91 @@ test('a version mismatch names both versions; a pack mismatch asks for the packa
   assert.equal(codeOf(await odcOnly.gate('o11_studio')({ command: 'status' })), 'HOSTED_LANE_DISABLED');
   assert.equal(codeOf(await odcOnly.gate('ssam_job')({ job: { ops: [] } })), 'HOSTED_LANE_DISABLED', 'ssam_job defaults to o11');
   assert.notEqual((await odcOnly.gate('studio_status')({})).isError, true);
+});
+
+// A-M1 + E2 (C:\t\multiver\minimo\PROPOSTA.md; docs/FASE2-AGENTE.md 7): the gate reads the hub's identity of the user's
+// Studio (agent-hub.mjs compatibility -> studio-identity.mjs). Synthetic builds: the server serves 1.7.28.5000 / 11.55.92.6000.
+const BUILT = { o11: '11.55.92', odc: '1.7.28', odcBridge: 'v97', builds: { odc: '1.7.28.5000', o11: '11.55.92.6000' } };
+const studioInfo = (odc, o11 = '11.55.92.6000', kernel = BUILT) => {
+  const studios = { odc: { installed: odc ? { dir: 'C:\\Users\\someone\\ODC Studio', version: odc } : null }, o11: { installed: { dir: 'C:\\Users\\someone\\SS', version: o11 } } };
+  const hello = { pack: { lanes: ['odc', 'o11'], odcBridge: 'v97', o11BuiltFor: '11.55.92.6000' }, studios };
+  return { kernel, studios, compatible: compatibility(hello, kernel, ['odc', 'o11']) };
+};
+const textOf = result => JSON.parse(result.content.find(item => item.type === 'text').text);
+
+test('A-M1 gate: one refusal per direction with both builds, pt-BR for the user and English for the model, what still works and nothing ran', async () => {
+  const newer = harness({ info: studioInfo('1.7.29.10900') });
+  const r = await newer.gate('studio_snapshot')({ module: 'M' });
+  assert.equal(r.isError, true);
+  const v = r.structuredContent;
+  assert.deepEqual({ code: v.code, cause: v.cause, lane: v.lane, installed: v.installed, served: v.served, outcome: v.outcome, serverKernel: v.serverKernel, agentStudio: v.agentStudio },
+    { code: 'STUDIO_VERSION_MISMATCH', cause: 'STUDIO_VERSION_NOT_SERVED_YET', lane: 'odc', installed: '1.7.29.10900', served: ['1.7.28.5000'], outcome: 'not-sent', serverKernel: '1.7.28', agentStudio: '1.7.29.10900' });
+  assert.match(v.userMessage, /é mais novo que o ODC Studio que o servidor SSAM atende hoje \(1\.7\.28\.5000\)\. O servidor ainda não tem esta versão; o dono do SSAM já foi avisado/);
+  assert.match(v.userMessage, /Não volte o ODC Studio/); assert.match(v.userMessage, /Nada rodou no seu Studio\./);
+  assert.match(v.error, /does not serve this version yet; the owner was notified/); assert.match(v.error, /Nothing ran on the user's Studio\./);
+  // what still works: the server-only tools of this lane in the hosted catalog, never a tool that touches the Studio
+  for (const name of ['ssam_discover', 'ssam_reference', 'ssam_job', 'studio_build', 'odc_search_operations']) assert.ok(v.stillWorks.includes(name), name);
+  for (const name of ['studio_snapshot', 'studio_deliver', 'o11_inspect', 'o11_job', 'ssam_debug']) assert.ok(!v.stillWorks.includes(name), name);
+  assert.equal(v.continuation.tool, 'ssam_doctor');
+  assert.doesNotMatch(JSON.stringify(r), /install ODC Studio|instal(e|ar) o ODC Studio|someone/i, 'never "install the server version"; no folder of the user');
+  assert.deepEqual(textOf(r), v, 'the text is the same answer');
+  assert.deepEqual(newer.calls, [], 'nothing ran');
+  const older = (await harness({ info: studioInfo('1.7.27.10846') }).gate('studio_deliver')({ module: 'M', job: { ops: [] } })).structuredContent;
+  assert.equal(older.cause, 'STUDIO_UPDATE_REQUIRED');
+  assert.match(older.userMessage, /Atualize o ODC Studio para 1\.7\.28\.5000/);
+  assert.match(older.continuation.why, /update/);
+  // the O11 lane: its own builds and its own server-only tools
+  const o11 = (await harness({ info: studioInfo('1.7.28.5000', '11.55.93.7000') }).gate('o11_studio')({ command: 'status' })).structuredContent;
+  assert.deepEqual({ cause: o11.cause, lane: o11.lane, installed: o11.installed, served: o11.served }, { cause: 'STUDIO_VERSION_NOT_SERVED_YET', lane: 'o11', installed: '11.55.93.7000', served: ['11.55.92.6000'] });
+  assert.ok(o11.stillWorks.includes('o11_job') && o11.stillWorks.includes('o11_inspect') && !o11.stillWorks.includes('studio_build'));
+  // a hub answer without the identity (STUDIO_VERSION_MISMATCH alone): the gate judges the same way from the versions it has
+  const bare = harness({ info: { kernel: BUILT, compatible: { odc: { ok: false, code: 'STUDIO_VERSION_MISMATCH', message: 'm' }, o11: { ok: true } },
+    studios: { odc: { installed: { version: '1.7.29.10900' } } } } });
+  assert.equal((await bare.gate('studio_status')({})).structuredContent.cause, 'STUDIO_VERSION_NOT_SERVED_YET');
+  // kernel.json studioBuildPolicy "refuse": another build is refused, by direction
+  const strict = harness({ info: studioInfo('1.7.28.5023', '11.55.92.6000', { ...BUILT, studioBuildPolicy: 'refuse' }) });
+  const refusedBuild = (await strict.gate('studio_status')({})).structuredContent;
+  assert.deepEqual({ code: refusedBuild.code, cause: refusedBuild.cause, relation: refusedBuild.relation, policy: refusedBuild.policy },
+    { code: 'STUDIO_VERSION_MISMATCH', cause: 'STUDIO_VERSION_NOT_SERVED_YET', relation: 'build-differs', policy: 'refuse' });
+  assert.match(refusedBuild.userMessage, /build 1\.7\.28\.5023; o servidor SSAM atende o build 1\.7\.28\.5000/);
+  assert.deepEqual(strict.calls, []);
+});
+
+test('E2: a server-only tool answers with studioNotServed while the Studio is not served; a build served with a warning puts studioBuildDiffers in every answer; the same build adds nothing', async () => {
+  const notServed = harness({ info: studioInfo('1.7.29.10900') });
+  for (const [name, args] of [['ssam_discover', { intent: 'x', lane: 'odc' }], ['odc_search_operations', { query: 'x' }], ['ssam_map', { lane: 'odc', target: 'ws:odc/snapshots/M.oml' }],
+    ['studio_build', { feature: 'f', base: 'ws:odc/snapshots/M.oml', output: 'x' }], ['studio_doctor', {}]]) {
+    const r = await notServed.gate(name)(args);
+    assert.notEqual(r.isError, true, name);
+    const w = r.structuredContent.studioWarning;
+    assert.deepEqual({ code: w?.code, lane: w?.lane, cause: w?.cause, installed: w?.installed, served: w?.served },
+      { code: 'studioNotServed', lane: 'odc', cause: 'STUDIO_VERSION_NOT_SERVED_YET', installed: '1.7.29.10900', served: '1.7.28.5000' }, name);
+    assert.match(w.userMessage, /^Aviso: esta ferramenta rodou só no servidor, com o kernel do ODC Studio 1\.7\.28\.5000/);
+    assert.deepEqual(textOf(r).studioWarning, w, name + ': the text carries it too');
+  }
+  assert.deepEqual(notServed.calls.map(c => c.name), ['ssam_discover', 'odc_search_operations', 'ssam_map', 'studio_build', 'studio_doctor']);
+  // the other lane and a tool without a lane say nothing about the ODC Studio
+  for (const [name, args] of [['ssam_discover', { intent: 'x', lane: 'o11' }], ['o11_inspect', { oml: 'ws:o11/M.oml' }], ['ssam_doctor', {}], ['ssam_evidence', { file: 'ws:odc/x.json' }]])
+    assert.equal((await notServed.gate(name)(args)).structuredContent.studioWarning, undefined, name);
+  // another build served with the warning (default policy): every answer of the lane, the Studio tools included
+  const differs = harness({ info: studioInfo('1.7.28.5023') });
+  for (const [name, args] of [['studio_status', {}], ['studio_deliver', { module: 'M', job: { ops: [] } }], ['ssam_discover', { intent: 'x', lane: 'odc' }], ['odc_search_operations', { query: 'x' }]]) {
+    const w = (await differs.gate(name)(args)).structuredContent.studioWarning;
+    assert.deepEqual({ code: w?.code, installed: w?.installed, served: w?.served, policy: w?.policy }, { code: 'studioBuildDiffers', installed: '1.7.28.5023', served: '1.7.28.5000', policy: 'warn' }, name);
+  }
+  assert.deepEqual(differs.calls.map(c => c.name), ['studio_status', 'studio_deliver', 'ssam_discover', 'odc_search_operations'], 'served: everything ran');
+  // an answer without structured content gets one more text item with the warning; an answer of another shape keeps its own fields
+  const textOnly = await differs.gate('studio_status', async () => ({ content: [{ type: 'text', text: 'plain' }] }))({});
+  assert.equal(textOnly.content[0].text, 'plain');
+  assert.equal(JSON.parse(textOnly.content[1].text).studioWarning.code, 'studioBuildDiffers');
+  const own = await differs.gate('studio_status', async () => reply({ ok: true, warnings: [{ code: 'X' }] }))({});
+  assert.deepEqual(own.structuredContent.warnings, [{ code: 'X' }]);
+  assert.equal(own.structuredContent.studioWarning.code, 'studioBuildDiffers');
+  // the same build, and an agent that never said hello: nothing
+  const same = harness({ info: studioInfo('1.7.28.5000') });
+  for (const name of ['studio_status', 'ssam_discover']) assert.equal((await same.gate(name)({ lane: 'odc', intent: 'x' })).structuredContent.studioWarning, undefined, name);
+  const never = harness({ connected: false, info: { studios: null, compatible: compatibility(null, BUILT, ['odc', 'o11']), kernel: BUILT } });
+  assert.equal((await never.gate('ssam_discover')({ intent: 'x', lane: 'odc' })).structuredContent.studioWarning, undefined);
 });
 
 test('ssam_job {lane:"odc"} without base runs on the neutral fixture; with base and on o11 nothing changes; over the quota a tool with an output is WORKSPACE_FULL', async () => {

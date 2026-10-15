@@ -47,7 +47,12 @@ const SESSION = { ...LOG_LINE, session: /o número da sessão MCP/, customer: /o
 const AGENT_CONNECTED = { ...LOG_LINE, agent: /Quando o agente conecta:\*\* o IP, a versão do agente/, ip: /Quando o agente conecta:\*\* o IP/,
   'machine.name': /o nome do computador/, 'machine.user': /o seu usuário do Windows/, 'machine.id': /um identificador da máquina/,
   'o11.pid': /o número do processo/, 'o11.port': /a porta local/, 'o11.studioVersion': /Com o Service Studio ligado ao agente, também a versão/,
-  'o11.startedUtc': /a hora em que ele abriu/ };
+  'o11.startedUtc': /a hora em que ele abriu/,
+  // A-M1/E1 (C:\t\multiver\minimo\PROPOSTA.md): the version of each installed Studio, only the number
+  'studios.odc': /não permite recuperá-los\. Também a versão de cada Studio instalado \(só o número, sem a pasta\)/, 'studios.o11': /Também a versão de cada Studio instalado \(só o número, sem a pasta\)/ };
+// E1: a Studio the server does not serve, once per version, so the owner knows who needs an update
+const UNSERVED = { ...LOG_LINE, lane: /Quando o seu Studio não é atendido pelo servidor:\*\* a plataforma/, installed: /a versão do seu Studio/,
+  served: /a versão do seu Studio, a do servidor/, relation: /como as duas se comparam/, cause: /o motivo/, policy: /e a regra do dono para builds diferentes/ };
 const MACHINE = { id: /Na primeira conexão do agente, o servidor guarda o nome do computador, o seu usuário do Windows, o identificador/,
   name: /o servidor guarda o nome do computador/, user: /o servidor guarda o nome do computador, o seu usuário do Windows/,
   at: /o identificador, a hora e o IP/ };
@@ -63,7 +68,7 @@ const LOG = {
   'session-opened': SESSION, 'session-closed': SESSION,
   'mcp-response-flushed': { ...LOG_LINE, session: /o número da sessão MCP/, tools: /as ferramentas \(só as da lista do servidor; outro nome vira `\?`\)/,
     bytes: /o tamanho da resposta/, ms: /o tamanho da resposta e o tempo/ },
-  'agent-connected': AGENT_CONNECTED, 'agent-resumed': AGENT_CONNECTED,
+  'agent-connected': AGENT_CONNECTED, 'agent-resumed': AGENT_CONNECTED, 'studio-version-unserved': UNSERVED,
   'agent-machine-pinned': { ...LOG_LINE, ip: /o identificador, a hora e o IP/, ...Object.fromEntries(Object.entries(MACHINE).map(([k, v]) => ['machine.' + k, v])) },
   'agent-machine-changed': ALERT,
   'agent-call': { ...LOG_LINE, kind: /Numa chamada ao agente, o tipo/, command: /o comando \(só da lista do agente\)/, method: /o comando \(só da lista do agente\)/,
@@ -78,7 +83,7 @@ const AUDIT = { time: /Em toda linha:\*\* a hora/, token: /Em toda linha:\*\* a 
 // The Hello fields kept only in memory (agent-hub.mjs state.hello), with their words.
 const HELLO_MEMORY = { 'agent.root': /a pasta onde ele está \(ela costuma ter o seu usuário do Windows\)/, 'agent.node': /a versão do Node/,
   'agent.platform': /o sistema/, 'agent.startedAt': /a hora em que o agente abriu/, 'agent.kinds': /o que ele sabe fazer/, pack: /o pacote instalado/,
-  studios: /a pasta e a versão de cada Studio instalado/ };
+  studios: /e a pasta de cada Studio instalado/ };
 
 const flat = (value, prefix = '') => Object.entries(value ?? {}).flatMap(([k, v]) =>
   v && typeof v === 'object' && !Array.isArray(v) ? flat(v, prefix + k + '.') : [prefix + k]);
@@ -119,7 +124,10 @@ async function runSession() {
     const post = (route, body) => fetch(base + '/agent/v1/' + route, { method: 'POST', headers: { authorization: 'Bearer ' + t.agentCredential, 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.9' }, body: JSON.stringify(body) });
     const first = await (await post('hello', hello({ id: 'aaaa0000', name: 'PC-PRIVACIDADE', user: 'usuario.windows' }))).json();
     assert.equal(first.t, 'welcome');
-    const welcome = await (await post('hello', hello({ id: 'bbbb1111', name: 'PC-OUTRO', user: 'outro.usuario' }))).json();
+    // the second machine has a newer ODC Studio: the server does not serve it (studio-version-unserved)
+    const newer = hello({ id: 'bbbb1111', name: 'PC-OUTRO', user: 'outro.usuario' });
+    newer.studios.odc.installed.version = '1.7.29.10900';
+    const welcome = await (await post('hello', newer)).json();
     const stream = await fetch(base + '/agent/v1/stream?channel=' + welcome.channel, { headers: { authorization: 'Bearer ' + t.agentCredential } });
     const link = handle.hub.link(t.id);
     await link.call('odc.pipe', { pid: 1, version: 'v97', args: ['status'] }, { timeoutMs: 400 }).catch(() => null);
@@ -174,7 +182,7 @@ test('every field the hosted server records about the customer has its words in 
     const fields = flat({ ...event, o11: typeof event.o11 === 'string' ? JSON.parse(event.o11) : event.o11 ?? undefined });
     tie('server.log ' + event.event, LOG[event.event], fields.filter(f => !(f === 'o11' && event.o11 == null)));
   }
-  for (const name of ['session-opened', 'session-closed', 'mcp-response-flushed', 'agent-connected', 'agent-machine-pinned', 'agent-machine-changed', 'agent-call', 'agent-route-refused'])
+  for (const name of ['session-opened', 'session-closed', 'mcp-response-flushed', 'agent-connected', 'agent-machine-pinned', 'agent-machine-changed', 'agent-call', 'agent-route-refused', 'studio-version-unserved'])
     assert.ok(seen.has(name), 'the run produced ' + name);
   for (const pin of Object.values(r.pins)) tie('machine-pins.json', MACHINE, flat(pin));
   assert.ok(r.alerts.length === 1);
@@ -202,7 +210,8 @@ test('the retention words: the 56 days of the log need the weekly rotation; the 
 test('the agent and session events keep the shape the owner console parses (telemetry adds event names only)', async () => {
   const r = await runSession();
   const keys = name => r.log.filter(e => e.event === name).map(e => Object.keys(e).filter(k => k !== 'time').sort().join(','));
-  for (const k of keys('agent-connected')) assert.equal(k, 'agent,event,ip,machine,o11,token');
+  // A-M1/E1: agent-connected gained studios (the version numbers; the console reads only its own fields)
+  for (const k of keys('agent-connected')) assert.equal(k, 'agent,event,ip,machine,o11,studios,token');
   for (const k of keys('session-opened')) assert.equal(k, 'client,customer,event,ip,session,token,ua');
   for (const k of keys('mcp-response-flushed')) assert.equal(k, 'bytes,event,ms,session,token,tools');
   // agent-call: kind, ms, ok and code as at a415531d; the verb only from closed lists (method/operation, and command since the quality line)

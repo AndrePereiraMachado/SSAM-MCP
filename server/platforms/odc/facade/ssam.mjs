@@ -712,6 +712,8 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
   const { InMemoryTransport, fromJsonSchema } = await import('@modelcontextprotocol/server');
   const { Client } = await import('@modelcontextprotocol/client');
   const gate = hosted ? await hostedGate(hosted) : null;
+  // T2 (CX15 review): the hosted listing says first which part of a tool is off (deleting); a local server lists as before.
+  const listing = hosted ? (await import('./hosted/destructive.mjs')).hostedListing : null;
   const workspaceOf = (...segments) => path.join(hosted.context.workspace, ...segments);
 
   // The instructions are paid on every turn of every session (docs/CONTEXTO-FIXO.md): only what routes the session.
@@ -811,6 +813,7 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
     // Owner rule (2026-10-08): every client shows the tool's own name, never a descriptive title (claude.ai shows the
     // title when there is one), so the title and annotations.title are the name.
     config = { ...config, title: name, ...(config?.annotations ? { annotations: { ...config.annotations, title: name } } : {}) };
+    if (listing) config = listing(name, config);
     served.add(name);
     // Quality (docs/QUALIDADE.md), hosted only: the body runs in the call context of quality-meter.mjs under the key the
     // HTTP server opened for this request (MCP session id + JSON-RPC id), so every agent call and kernel run it makes is
@@ -1249,18 +1252,28 @@ export async function runStdio({ env = process.env, warm = warmIndexes, setTimer
 // Studio of the O11 lane and of the ODC Studio, and the ODC bridge version. <dir>/kernel.json ({o11, odc, odcBridge,
 // o11Hook}) wins field by field, when detection fails or the owner pins a version. o11Hook is only pinned: "h1" makes
 // the hub accept only agent packages with the signed release hook (docs/O11-BRIDGE-FINA.md 13).
-export async function detectKernel({ dir, fileVersion, env = process.env }) {
+// A-M1: kernel.json studioBuildPolicy ("warn" | "refuse", or per lane) passes through as written; the hub normalizes it
+// (studio-identity.mjs buildPolicyOf). exe: the ProductVersions of this machine's Studio executables (studioExeVersions).
+export async function detectKernel({ dir, fileVersion, env = process.env, exe = null }) {
   const three = value => String(value ?? '').match(/^\d+\.\d+\.\d+/)?.[0] ?? null;
   const lib = await import('./lib.mjs');
   const { signedRuntime } = await import('./signed-runtime.mjs');
-  const detected = { o11: null, odc: null, odcBridge: null, o11Hook: null };
-  try { detected.o11 = three(await fileVersion(path.join(o11LaneOf(LANES.o11.lane, { env }).studioDir, 'ServiceStudio.exe'))); } catch { /* not installed */ }
-  try { detected.odc = three(await fileVersion(path.join(lib.odcStudioDir(env), 'ODCStudio.exe'))); } catch { /* not installed */ }
+  const versions = exe ?? await studioExeVersions({ fileVersion, env });
+  const detected = { o11: three(versions.o11), odc: three(versions.odc), odcBridge: null, o11Hook: null };
   try { detected.odcBridge = signedRuntime(lib.root)?.version ?? lib.newestBridgeDll()?.version ?? null; } catch { /* not built */ }
   let pinned = {};
   try { pinned = JSON.parse(fs.readFileSync(path.join(dir, 'kernel.json'), 'utf8').replace(/^﻿/, '')) ?? {}; } catch { pinned = {}; }
   return { ...Object.fromEntries(Object.keys(detected).map(k => [k, typeof pinned[k] === 'string' && pinned[k] ? pinned[k] : detected[k]])),
-    ...(Array.isArray(pinned.odcBridgeAccepted) ? { odcBridgeAccepted: pinned.odcBridgeAccepted } : {}) };
+    ...(Array.isArray(pinned.odcBridgeAccepted) ? { odcBridgeAccepted: pinned.odcBridgeAccepted } : {}),
+    ...(pinned.studioBuildPolicy !== undefined && pinned.studioBuildPolicy !== null ? { studioBuildPolicy: pinned.studioBuildPolicy } : {}) };
+}
+// The ProductVersion (four numbers) of the Service Studio of the O11 lane and of the ODC Studio of this machine, or null.
+export async function studioExeVersions({ fileVersion, env = process.env }) {
+  const lib = await import('./lib.mjs');
+  const out = { o11: null, odc: null };
+  try { out.o11 = (await fileVersion(path.join(o11LaneOf(LANES.o11.lane, { env }).studioDir, 'ServiceStudio.exe'))) ?? null; } catch { /* not installed */ }
+  try { out.odc = (await fileVersion(path.join(lib.odcStudioDir(env), 'ODCStudio.exe'))) ?? null; } catch { /* not installed */ }
+  return out;
 }
 
 // The kernel the hosted server starts with (multi-version design rev. 3, O.6.1; kernel-image.mjs). kernel.json v1
@@ -1271,16 +1284,28 @@ export async function detectKernel({ dir, fileVersion, env = process.env }) {
 // dropped too). Logs the notes of kernel.json (kernel-v2-ignored,
 // kernel-json-unsupported), the `kernel` event with the same shape as before ({kernel: {o11, odc, odcBridge, o11Hook,
 // odcBridgeAccepted?}}, a refused lane null), one kernel-version-missing per refused lane and kernel-cache-reset.
+// A-M1 (C:\t\multiver\minimo\PROPOSTA.md): the kernel also carries builds {o11, odc}, the four-part build each lane serves
+// (kernel-image.mjs servedBuilds: the image's Studio folder, else this machine's Studio executable), and kernel.json
+// studioBuildPolicy as written; the hub compares the user's Studio with that build (studio-identity.mjs). The `kernel`
+// event keeps its shape (neither field); `studio-builds` names the builds and the policy per lane (policyInvalid when
+// kernel.json names a value the server does not know: both lanes then refuse another build).
 export async function startupKernel({ dir, fileVersion, env = process.env, log = () => {}, image, caches } = {}) {
   const ki = await import('./kernel-image.mjs');
+  const { buildPolicyOf } = await import('./studio-identity.mjs');
   for (const note of ki.kernelFileNotes(dir)) log(note);
-  const detected = await detectKernel({ dir, fileVersion, env });
+  const exe = await studioExeVersions({ fileVersion, env });
+  const detected = await detectKernel({ dir, fileVersion, env, exe });
   const lib = await import('./lib.mjs');
   const folder = of => { try { return of(); } catch { return null; } };
   const declared = image ?? ki.imageKernel({ env, studioDirs: { o11: folder(() => o11LaneOf(LANES.o11.lane, { env }).studioDir), odc: folder(() => lib.odcStudioDir(env)) } });
-  const { kernel, refused } = ki.kernelPair(detected, declared);
-  log({ event: 'kernel', kernel });
+  const { kernel: paired, refused } = ki.kernelPair(detected, declared);
+  const { studioBuildPolicy, ...shape } = paired;
+  log({ event: 'kernel', kernel: shape });
   for (const [lane, why] of Object.entries(refused)) log({ event: 'kernel-version-missing', lane, ...why });
+  const builds = ki.servedBuilds({ kernel: shape, image: declared, exe });
+  const policy = buildPolicyOf(studioBuildPolicy);
+  log({ event: 'studio-builds', builds, studioBuildPolicy: { o11: policy.o11, odc: policy.odc }, ...(policy.invalid ? { policyInvalid: true } : {}) });
+  const kernel = { ...shape, builds, ...(studioBuildPolicy !== undefined ? { studioBuildPolicy } : {}) };
   const imageDeclares = Object.values(declared ?? {}).some(Boolean);
   if (caches ?? imageDeclares) {
     try {

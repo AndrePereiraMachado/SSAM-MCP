@@ -40,7 +40,8 @@ export const READS = ['capabilities', 'receipt', ...WEB_READS, ...API_READS];
 // delete (service-center/delete.mjs): applications, modules and extensions in one call; module-delete, extension-delete and
 // application-delete are its aliases (D4).
 export const WRITES = [...Object.keys(ACTIONS), ...Object.keys(WEB_WRITES), ...Object.keys(API_WRITE_TABLE), 'delete'];
-const DESTRUCTIVE = new Set(['solution-delete', 'db-connection-delete', ...API_DESTRUCTIVE]);
+// Exported for the hosted gate (hosted/destructive.mjs), which refuses these on a hosted server.
+export const DESTRUCTIVE = new Set(['solution-delete', 'db-connection-delete', ...API_DESTRUCTIVE]);
 const FLAGS = ['event-auth', 'application', 'module', 'message', 'source', 'server', 'since', 'until', 'error-id', 'request-key', 'operation-id', 'words',
   'application-offset', 'application-batch-size', 'expected-selection-sha256', 'owner-parallelism', 'module-offset', 'module-batch-size', 'expected-module-selection-sha256', 'module-selection-id',
   'expected-value', 'value', 'value-file', 'value-vault', 'application-key', 'extension-key', 'logical-database', 'module-key', 'element-key', 'solution', 'component', 'description', 'osp-file', 'publish-id',

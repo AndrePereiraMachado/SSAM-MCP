@@ -2,7 +2,8 @@
 // version reader that works on Linux, the image's declared versions against its Studio folders, the per-lane start refusal
 // when kernel.json names another version (KERNEL_UNAVAILABLE, kernel-version-missing), kernel.json v1 only, the caches
 // without a Studio version emptied when a lane's version changes, the `kernel` event with its old shape, the hub's answers
-// (KERNEL_VERSION_MISSING; an older installed Studio is STUDIO_VERSION_NOT_SERVED before any package check) and the gate's.
+// (KERNEL_VERSION_MISSING; an older installed Studio is STUDIO_UPDATE_REQUIRED before any package check) and the gate's;
+// the served builds of A-M1 (kernel.builds, studio-builds) and kernel.json studioBuildPolicy.
 import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -170,31 +171,78 @@ test('startupKernel: the interim with a857a1e\'s kernel.json starts with both la
   events = [];
   started = await startupKernel({ dir, env, fileVersion: async () => null, log: e => events.push(e) });
   assert.deepEqual({ o11: started.kernel.o11, odc: started.kernel.odc, refused: started.refused }, { o11: '11.55.92', odc: '1.7.28', refused: {} });
-  assert.deepEqual(events.map(e => e.event), ['kernel', 'kernel-cache-reset']);
+  assert.deepEqual(events.map(e => e.event), ['kernel', 'studio-builds', 'kernel-cache-reset']);
   assert.equal(fs.existsSync(path.join(cache, 'module-index', 'v1', 'o11')), false);
   // without the image variables (the owner's PC) nothing is judged and no cache is touched
   events = [];
   started = await startupKernel({ dir, env: { ...env, SSAM_IMAGE_O11: '', SSAM_IMAGE_ODC: '' }, fileVersion: async () => null, log: e => events.push(e) });
-  assert.deepEqual(events.map(e => e.event), ['kernel']);
+  assert.deepEqual(events.map(e => e.event), ['kernel', 'studio-builds']);
+});
+
+// A-M1 (C:\t\multiver\minimo\PROPOSTA.md): the build each lane serves is the image's Studio folder (four numbers), passed to
+// the hub as kernel.builds; kernel.json studioBuildPolicy ("warn" by default, "refuse") goes with it. The `kernel` event keeps
+// its shape; the new `studio-builds` event names the builds and the policy.
+test('startupKernel: the served builds come from the image\'s Studio folders (else this machine\'s Studio); kernel.json studioBuildPolicy goes to the hub', async () => {
+  const { startupKernel } = await import('../ssam.mjs');
+  const dir = fresh(), cache = fresh();
+  const o11 = studioFolder('11.55.92.6000'), odc = studioFolder('1.7.28.5000', ['OutSystems.ModelAPILoader.dll', 'OutSystems.Model.dll']);
+  const env = { ...process.env, SSAM_IMAGE_O11: '11.55.92', SSAM_IMAGE_ODC: '1.7.28', ANVIL_STUDIO_DIR: o11, ANVIL_ODC_STUDIO_DIR: odc,
+    SSAM_MODULE_INDEX_ROOT: path.join(cache, 'module-index'), SSAM_READER_CACHE_ROOT: path.join(cache, 'readers') };
+  const write = value => fs.writeFileSync(path.join(dir, 'kernel.json'), JSON.stringify(value));
+  const INTERIM_FILE = { o11: '11.55.92', odc: '1.7.28', odcBridge: 'v97', odcBridgeAccepted: ['v96', 'v48', 'v45'] };
+  // the interim's kernel.json as it is (no policy): the image's builds, policy "warn"
+  write(INTERIM_FILE);
+  let events = [];
+  let started = await startupKernel({ dir, env, fileVersion: async () => '9.9.9.9', log: e => events.push(e) });
+  assert.deepEqual(started.kernel.builds, { o11: '11.55.92.6000', odc: '1.7.28.5000' }, 'the image wins over this machine\'s executables');
+  assert.equal(started.kernel.studioBuildPolicy, undefined);
+  assert.deepEqual(Object.keys(events.find(e => e.event === 'kernel').kernel).sort(), ['o11', 'o11Hook', 'odc', 'odcBridge', 'odcBridgeAccepted'], 'the kernel event keeps its shape');
+  assert.deepEqual(events.find(e => e.event === 'studio-builds'), { event: 'studio-builds', builds: { o11: '11.55.92.6000', odc: '1.7.28.5000' },
+    studioBuildPolicy: { o11: 'warn', odc: 'warn' } });
+  // the owner's choice D-M2b: refuse another build of the ODC Studio
+  write({ ...INTERIM_FILE, studioBuildPolicy: { odc: 'refuse' } });
+  events = [];
+  started = await startupKernel({ dir, env, fileVersion: async () => null, log: e => events.push(e) });
+  assert.deepEqual(started.kernel.studioBuildPolicy, { odc: 'refuse' }, 'as written; the hub normalizes it');
+  assert.deepEqual(Object.keys(events.find(e => e.event === 'kernel').kernel).sort(), ['o11', 'o11Hook', 'odc', 'odcBridge', 'odcBridgeAccepted']);
+  assert.deepEqual(events.find(e => e.event === 'studio-builds').studioBuildPolicy, { o11: 'warn', odc: 'refuse' });
+  assert.equal(events.some(e => e.event === 'kernel-json-unsupported'), false, 'the field keeps kernel.json v1');
+  // a value the server does not know: both lanes refuse another build, and the start says so
+  write({ ...INTERIM_FILE, studioBuildPolicy: 'block' });
+  events = [];
+  await startupKernel({ dir, env, fileVersion: async () => null, log: e => events.push(e) });
+  assert.deepEqual(events.find(e => e.event === 'studio-builds'), { event: 'studio-builds', builds: { o11: '11.55.92.6000', odc: '1.7.28.5000' },
+    studioBuildPolicy: { o11: 'refuse', odc: 'refuse' }, policyInvalid: true });
+  // a lane the image refused at start serves no build
+  write({ ...INTERIM_FILE, odc: '1.7.27' });
+  started = await startupKernel({ dir, env, fileVersion: async () => null, log: () => {} });
+  assert.deepEqual(started.kernel.builds, { o11: '11.55.92.6000', odc: null });
+  // without the image (the owner's PC): this machine's Studio executables, when they have the lane's three numbers
+  write(INTERIM_FILE);
+  const exe = { 'ServiceStudio.exe': '11.55.92.6001', 'ODCStudio.exe': '1.7.29.1' };
+  started = await startupKernel({ dir, env: { ...env, SSAM_IMAGE_O11: '', SSAM_IMAGE_ODC: '' }, fileVersion: async file => exe[path.basename(file)] ?? null, log: () => {} });
+  assert.deepEqual(started.kernel.builds, { o11: '11.55.92.6001', odc: null }, 'an ODC Studio of another version is not the build kernel.json serves');
 });
 
 const hello = (o11Installed, o11BuiltFor = '11.55.92.65269') => ({ pack: { lanes: ['odc', 'o11'], odcBridge: 'v97', o11BuiltFor },
   studios: { odc: { installed: { version: '1.7.28.10850' } }, o11: { installed: o11Installed ? { version: o11Installed } : null } } });
 const INTERIM = { o11: '11.55.92', odc: '1.7.28', odcBridge: 'v97', odcBridgeAccepted: ['v96', 'v48', 'v45'] };
 
-test('hub: a Service Studio 11.55.91 customer gets STUDIO_VERSION_NOT_SERVED on the 11.55.92 server, with either package', () => {
+// A-M1: the older Studio's cause is STUDIO_UPDATE_REQUIRED (it was STUDIO_VERSION_NOT_SERVED) and a newer one has its own,
+// STUDIO_VERSION_NOT_SERVED_YET (it had none); installed is the version the agent reports, four numbers.
+test('hub: a Service Studio 11.55.91 customer gets STUDIO_UPDATE_REQUIRED on the 11.55.92 server, with either package; a newer one STUDIO_VERSION_NOT_SERVED_YET', () => {
   for (const pack of ['11.55.91.65258', '11.55.92.65269']) {
     const c = compatibility(hello('11.55.91.65258', pack), INTERIM, ['odc', 'o11']);
     assert.equal(c.o11.code, 'STUDIO_VERSION_MISMATCH', pack);
-    assert.equal(c.o11.cause, 'STUDIO_VERSION_NOT_SERVED');
-    assert.deepEqual(c.o11.served, ['11.55.92']); assert.equal(c.o11.installed, '11.55.91');
-    assert.match(c.o11.message, /has the kernel for Service Studio 11\.55\.92; the agent reports Service Studio 11\.55\.91\.65258\. It serves only Service Studio 11\.55\.92: .*until the server owner installs the multi-version server; to use it now, update Service Studio to 11\.55\.92/);
+    assert.equal(c.o11.cause, 'STUDIO_UPDATE_REQUIRED');
+    assert.deepEqual(c.o11.served, ['11.55.92']); assert.equal(c.o11.installed, '11.55.91.65258');
+    assert.match(c.o11.message, /^This SSAM server serves Service Studio 11\.55\.92; the user's machine has Service Studio 11\.55\.91\.65258, which is older: update Service Studio to 11\.55\.92 and reopen it; no agent package changes that\./);
     assert.deepEqual(c.odc, { ok: true }, 'the ODC lane is judged on its own');
   }
   assert.deepEqual(compatibility(hello('11.55.92.65269'), INTERIM, ['odc', 'o11']).o11, { ok: true });
   assert.equal(compatibility(hello('11.55.92.65269', '11.55.91.65258'), INTERIM, ['odc', 'o11']).o11.code, 'AGENT_PACK_MISMATCH', 'an 11.55.92 Studio with the old package: the new package helps');
   const newer = compatibility(hello('11.55.93.65300'), INTERIM, ['odc', 'o11']).o11;
-  assert.equal(newer.code, 'STUDIO_VERSION_MISMATCH'); assert.equal(newer.cause, undefined, 'a newer Studio waits for the owner');
+  assert.equal(newer.code, 'STUDIO_VERSION_MISMATCH'); assert.equal(newer.cause, 'STUDIO_VERSION_NOT_SERVED_YET', 'a newer Studio waits for the owner');
 });
 
 test('hub and gate: a lane refused at start answers KERNEL_UNAVAILABLE with cause KERNEL_VERSION_MISSING', () => {
@@ -207,7 +255,7 @@ test('hub and gate: a lane refused at start answers KERNEL_UNAVAILABLE with caus
   assert.equal(gate.cause, 'KERNEL_VERSION_MISSING'); assert.equal(gate.continuation.tool, 'ssam_doctor');
   const notServed = compatibility(hello('11.55.91.65258'), INTERIM, ['odc', 'o11']).o11;
   const g2 = incompatible('o11', notServed, { kernel: INTERIM, studios: hello('11.55.91.65258').studios });
-  assert.deepEqual({ code: g2.code, cause: g2.cause, served: g2.served }, { code: 'STUDIO_VERSION_MISMATCH', cause: 'STUDIO_VERSION_NOT_SERVED', served: ['11.55.92'] });
+  assert.deepEqual({ code: g2.code, cause: g2.cause, served: g2.served }, { code: 'STUDIO_VERSION_MISMATCH', cause: 'STUDIO_UPDATE_REQUIRED', served: ['11.55.92'] });
   assert.match(g2.error, /no agent package changes that/); assert.match(g2.continuation.why, /update Service Studio to 11\.55\.92/);
 });
 

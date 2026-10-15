@@ -9,7 +9,9 @@ interina. O 24º acrescentou 8:
 mudou 5: `docs/FASE2-AGENTE.md`, `docs/PROVAS-AO-VIVO.md`, `Bridge.csproj`, `StartupHook.cs` e `client/Program.cs`. A linha
 combinada mudou de novo 2: `docs/FASE2-AGENTE.md` (Service Studio 11.55.92, a seção 7 da imagem interina) e
 `docs/PROVAS-AO-VIVO.md` (Service Studio 11.55.92). O `41e538f0` mudou `docs/FASE2-AGENTE.md` de novo (a faixa desligada
-recusa também as ferramentas só do servidor e esvazia os caches dela).
+recusa também as ferramentas só do servidor e esvazia os caches dela). A branch `feat/studio-build-identity` (A-M1) mudou
+`docs/FASE2-AGENTE.md` de novo (seção 7: identidade do Studio pelo build de 4 números, uma recusa por direção, avisos
+`studioBuildDiffers` e `studioNotServed`).
 
 ## A regra
 
@@ -65,7 +67,7 @@ Sem saída, está tudo igual.
 | Arquivo (relativo à caixa) | sha256 (conteúdo com fim de linha LF) |
 | --- | --- |
 | `docs/DISTRIBUICAO.md` | `bc87ebe53ef2230f89d4ceb1162e5e84b9eecc0e2563e93905eccb78fbc9d5b1` |
-| `docs/FASE2-AGENTE.md` | `73985a4c5923a24f61b050ee137d73986cb89814c666bb51c91ce330d4a962f7` |
+| `docs/FASE2-AGENTE.md` | `1de4db6644da594364bb03113ca0f131bb6835cbf93c7a2662bca8400b6bd82b` |
 | `docs/O11-BRIDGE-FINA.md` | `c7f24e4ad0e2b537394a537d103ad5b0654745c4c692965cdec5cc8fcc80a25d` |
 | `docs/PROVAS-AO-VIVO.md` | `b66c259ac7cb293fbc7c7165794885ac6462598a2e65e2753c85f3646d99979a` |
 | `docs/exemplos/mcp-cliente-hospedado.json` | `cabbe38805716878f03def98527dd5234b2dcfd9187df8c773305f80d8d6fa28` |

@@ -309,6 +309,9 @@ Exemplo:
   kernel: { odc: <"1.7.28"|null>, o11: <"11.55.92"|null>, odcBridge: <"v35"|null> },
   compatible: { odc: Compat, o11: Compat } }
 Compat = { ok: true } | { ok: false, code: "STUDIO_VERSION_MISMATCH"|"STUDIO_NOT_INSTALLED"|"AGENT_PACK_MISMATCH"|"LANE_DISABLED"|"KERNEL_UNAVAILABLE", message: <string> }
+# A-M1 (seção 7): STUDIO_VERSION_MISMATCH também traz cause, studio (a identidade), served e installed; outro build
+# atendido com aviso é { ok: true, studio, warning: { code: "studioBuildDiffers", ... } }. welcome.kernel pode trazer
+# builds { odc, o11 } (4 números) e studioBuildPolicy; o agente 0.3.1 lê só kernel[faixa].
 ```
 
 ### 3.3 Mensagens do stream (servidor → agente)
@@ -1134,7 +1137,8 @@ Regras da faixa `hosted` (em `hosted/policy.mjs`):
 
 ## 7. Versões do Studio
 
-- O servidor conhece o kernel que tem: `kernel = { o11, odc, odcBridge }`.
+- O servidor conhece o kernel que tem: `kernel = { o11, odc, odcBridge }` (desde A-M1, também `builds` e
+  `studioBuildPolicy`, abaixo).
   - `o11` = `ProductVersion` de `ServiceStudio.exe` na pasta do Studio do kernel (`o11LaneOf().studioDir`).
   - `odc` = `ProductVersion` de `ODCStudio.exe` em `odcStudioDir()`.
   - `odcBridge` = a versão da bridge ODC do servidor (`signedRuntime(root)?.version ?? newestBridgeDll()?.version`).
@@ -1143,20 +1147,50 @@ Regras da faixa `hosted` (em `hosted/policy.mjs`):
 - O agente informa no `Hello` (e em `pong.versions` quando muda) a versão instalada de cada Studio, e `studio.processes`
   traz a versão de cada processo.
 - Regra de compatibilidade (no hub, faixa `hub`): por faixa, `ok` quando a faixa está no token e no pacote, o kernel tem
-  versão, e os três primeiros números da versão do Studio do cliente são iguais aos do kernel. ODC também exige
+  versão, e o servidor atende o Studio do cliente (identidade pelo build, abaixo). ODC também exige
   `pack.odcBridge === kernel.odcBridge`; O11 também exige `pack.o11BuiltFor` igual ao kernel (a bridge O11 do pacote foi
   compilada contra aquele Service Studio).
-- O agente confere também o PROCESSO escolhido (4.8): instalação lado a lado ou atualização automática não passam.
-- Recusa (faixa `hosted`, antes do handler, só para ferramentas que precisam do agente naquela faixa; as de servidor
-  continuam funcionando):
+- O agente confere também o PROCESSO escolhido (4.8): instalação lado a lado ou atualização automática não passam. O
+  agente 0.3.1 compara 3 números (segunda trava); o build é julgado pelo servidor.
+- **Identidade pelo build (A-M1, `C:\t\multiver\minimo\PROPOSTA.md`; `studio-identity.mjs`).** Uma regra só, lida pelo
+  hub, pelo portão hospedado e pelos eventos:
+  - O Studio do cliente é o `ProductVersion` do `.exe` que o agente manda no `Hello` (e no `pong.versions`), com 4 números
+    (`1.7.28.10873`). O do servidor é `kernel.builds[faixa]`: a `FileVersion` do `ServiceStudio.Framework.dll` da pasta do
+    Studio da imagem (`kernel-image.mjs servedBuilds`); fora da imagem, o `.exe` desta máquina. Servidor que não sabe o
+    próprio build compara 3 números, como antes. O início registra `studio-builds` (os builds e a política por faixa); o
+    evento `kernel` mantém o formato.
+  - Outra versão de 3 números nunca é atendida, antes de conferir o pacote: Studio mais velho → `cause:
+    "STUDIO_UPDATE_REQUIRED"` (atualize o Studio); mais novo → `cause: "STUDIO_VERSION_NOT_SERVED_YET"` (o servidor ainda
+    não tem; o dono foi avisado; não volte o Studio). O código continua `STUDIO_VERSION_MISMATCH`.
+  - Mesmos 3 números e outro build (ou versão sem o 4º número): decide `kernel.json` `studioBuildPolicy`, uma palavra para
+    as duas faixas ou `{"odc": ..., "o11": ...}`. `"warn"` (padrão, opção D-M2a do dono): atende, e toda resposta da faixa
+    traz `studioWarning` `studioBuildDiffers`. `"refuse"` (D-M2b): recusa como outra versão, pela direção (versão sem o
+    build: `STUDIO_BUILD_UNKNOWN`). Valor desconhecido recusa (falha fechada) e o início marca `policyInvalid`.
+  - Versão que o agente não leu: `STUDIO_VERSION_UNKNOWN`, depois das conferências do pacote, como antes.
+- Recusa (faixa `hosted`, antes do handler, só para ferramentas que precisam do agente naquela faixa): UMA resposta com
+  tudo. A direção (`cause`), os dois builds (`installed`, `served`), o que continua funcionando (`stillWorks`: as
+  ferramentas só de servidor da faixa, de `hosted/tools.json`), `outcome: "not-sent"` e "nada rodou". `userMessage` em
+  pt-BR para o usuário (os licenciados são brasileiros), `error` em inglês para o modelo. A continuação antiga ("instale o
+  Studio na versão do servidor", impossível no ODC) saiu:
 
 ```json
-{ "ok": false, "code": "STUDIO_VERSION_MISMATCH", "lane": "odc", "serverKernel": "1.7.28", "agentStudio": "1.7.27",
-  "error": "This SSAM server has the kernel for ODC Studio 1.7.28; the agent reports ODC Studio 1.7.27. Tools that touch the ODC Studio are unavailable until the versions match. Server-only tools (ssam_discover, ssam_reference, odc_search_operations, ...) still work.",
-  "continuation": { "tool": "ssam_doctor", "arguments": {}, "why": "Shows both versions. Ask the user to install ODC Studio 1.7.28, or to wait until the server owner updates the kernel." } }
+{ "ok": false, "code": "STUDIO_VERSION_MISMATCH", "cause": "STUDIO_VERSION_NOT_SERVED_YET", "lane": "odc",
+  "installed": "1.7.29.10900", "served": ["1.7.28.10850"], "relation": "newer", "policy": "warn", "outcome": "not-sent",
+  "stillWorks": ["ssam_discover", "ssam_map", "ssam_reference", "ssam_job", "studio_build", "odc_search_operations", "..."],
+  "error": "This SSAM server serves ODC Studio 1.7.28.10850; the user's machine has ODC Studio 1.7.29.10900, which is newer: the server does not serve this version yet; the owner was notified (server event studio-version-unserved). Do not roll the Studio back and do not reinstall the agent; repeat the call once the server is updated. Nothing ran on the user's Studio. Server-only tools (...) still work, with the studioNotServed warning.",
+  "userMessage": "O ODC Studio deste computador (1.7.29.10900) é mais novo que o ODC Studio que o servidor SSAM atende hoje (1.7.28.10850). O servidor ainda não tem esta versão; o dono do SSAM já foi avisado (o servidor registrou este pedido). Não volte o ODC Studio para a versão anterior e não reinstale o agente: quando o servidor for atualizado, repita o pedido. Nada rodou no seu Studio. Enquanto isso, as ferramentas só de servidor (...) continuam funcionando, com um aviso.",
+  "serverKernel": "1.7.28", "agentStudio": "1.7.29.10900",
+  "continuation": { "tool": "ssam_doctor", "arguments": {}, "why": "Show the user the userMessage (pt-BR) as it is: nothing to do on their machine until the server owner updates the server; never ask the user to roll the Studio back or to reinstall the agent. ..." } }
 ```
 
-- `AGENT_PACK_MISMATCH` usa o mesmo formato, com `why` "ask the server owner for the current agent package".
+- Avisos nas respostas que rodaram (campo `studioWarning`, ao lado dos campos da ferramenta): `studioBuildDiffers` em toda
+  resposta da faixa quando o servidor atende outro build com `"warn"`; `studioNotServed` quando uma ferramenta só de
+  servidor (ou um relatório de estado) roda enquanto o Studio da faixa não é atendido (E2: antes respondia calada com o
+  kernel do servidor).
+- Log (E1): `agent-connected` grava `studios` (só os números de versão de cada Studio instalado, nunca a pasta). Novo
+  evento `studio-version-unserved` {`token` (o id `tok_…`), `lane`, `installed`, `served`, `relation`, `cause`,
+  `policy`}: uma vez por acesso, faixa e versões, quando o hub julga o `Hello` ou um `pong.versions`.
+- `AGENT_PACK_MISMATCH` usa o formato antigo, com `why` "ask the server owner for the current agent package".
 - Um único kernel por faixa no servidor: o limite está na seção 11.
 - Imagem interina (desenho de várias versões, O.6.1; `kernel-image.mjs`). A imagem declara as versões que serve:
   `ENV SSAM_IMAGE_O11` e `SSAM_IMAGE_ODC`, rótulos `ssam.kernels.o11` e `ssam.kernels.odc`. O build confere essas versões
@@ -1167,8 +1201,9 @@ Regras da faixa `hosted` (em `hosted/policy.mjs`):
     ferramentas só do servidor dessa faixa (`ssam_job`, `ssam_map`, `ssam_discover`, `ssam_reference`, `o11_job`,
     `odc_search_operations`), no portão hospedado; só `ssam_doctor` e `studio_doctor` respondem. O aquecimento pula a faixa.
   - Studio do cliente MAIS VELHO que a versão do servidor (Service Studio 11.55.91 no servidor 11.55.92):
-    `STUDIO_VERSION_MISMATCH` com `cause: "STUDIO_VERSION_NOT_SERVED"`, `served` e `installed`, antes de conferir o pacote.
-    Nenhum pacote resolve: a faixa volta com o servidor de várias versões. Studio mais novo segue o formato acima.
+    `STUDIO_VERSION_MISMATCH` com `cause: "STUDIO_UPDATE_REQUIRED"` (até A-M1, `"STUDIO_VERSION_NOT_SERVED"`), `served` e
+    `installed` (agora a versão inteira que o agente manda), antes de conferir o pacote. Nenhum pacote resolve. Studio mais
+    novo: `cause: "STUDIO_VERSION_NOT_SERVED_YET"` (até A-M1, sem `cause`).
   - Só `kernel.json` v1. Um `kernel.v2.json` ao lado é ignorado (`kernel-v2-ignored`); um `kernel.json` no formato v2 não
     serve faixa nenhuma (`kernel-json-unsupported`).
   - Os caches sem versão do Studio (índice de módulos `v1/<faixa>`, cópias dos leitores O11 e do prefetch) são esvaziados

@@ -695,7 +695,8 @@ por faixa, antes do servidor de várias versões (`C:\t\multiver\DESIGN.md`, rev
    lista do agente); o painel lê só `kind`, `ok`, `code` e `ms`.
 8. **Cliente no Service Studio 11.55.91.** Perde a faixa O11 hospedada até o servidor de várias versões, com qualquer pacote.
    O hub responde `STUDIO_VERSION_MISMATCH` com `cause: "STUDIO_VERSION_NOT_SERVED"`, `served: ["11.55.92"]` e
-   `installed: "11.55.91"`, antes de olhar o pacote. A continuação do `ssam_doctor` diz: atualize o Service Studio para
+   `installed: "11.55.91"`, antes de olhar o pacote (desde A-M1: `cause: "STUDIO_UPDATE_REQUIRED"`, o build de cada lado
+   e o texto em pt-BR; `docs/FASE2-AGENTE.md` 7). A continuação do `ssam_doctor` diz: atualize o Service Studio para
    11.55.92 ou siga com o SSAM local. As ferramentas só do servidor continuam. O PC do dono (11.55.91) também.
 9. **Rollback.** O `kernel.json` vem do registro da imagem (`server/deploy/release-record.json` do SSAM-MCP), nunca de um
    arquivo solto, e a conferência do par roda antes do `up -d` (`server/deploy/kernel-pair-check.mjs`). DEPLOY §8.
