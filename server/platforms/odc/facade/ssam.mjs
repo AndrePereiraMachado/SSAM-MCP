@@ -705,6 +705,8 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
   const { InMemoryTransport, fromJsonSchema } = await import('@modelcontextprotocol/server');
   const { Client } = await import('@modelcontextprotocol/client');
   const gate = hosted ? await hostedGate(hosted) : null;
+  // T2 (CX15 review): the hosted listing says first which part of a tool is off (deleting); a local server lists as before.
+  const listing = hosted ? (await import('./hosted/destructive.mjs')).hostedListing : null;
   const workspaceOf = (...segments) => path.join(hosted.context.workspace, ...segments);
 
   // The instructions are paid on every turn of every session (docs/CONTEXTO-FIXO.md): only what routes the session.
@@ -795,6 +797,7 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
     // Owner rule (2026-10-08): every client shows the tool's own name, never a descriptive title (claude.ai shows the
     // title when there is one), so the title and annotations.title are the name.
     config = { ...config, title: name, ...(config?.annotations ? { annotations: { ...config.annotations, title: name } } : {}) };
+    if (listing) config = listing(name, config);
     served.add(name);
     // Quality (docs/QUALIDADE.md), hosted only: the body runs in the call context of quality-meter.mjs under the key the
     // HTTP server opened for this request (MCP session id + JSON-RPC id), so every agent call and kernel run it makes is

@@ -22,6 +22,10 @@
 // prototype's source and capture, the WSDL/OpenAPI documents) are confined too, in the inline job, its JSON text, a job
 // file, every part and job:<name> it reaches and the job a patch produces over basedOn (job-paths.mjs confineJobs); the
 // JSON text of a job is the job itself only on a job pointer, where it is parsed first (parseJobTexts).
+// T2 of the CX15 review (C:\t\revisoes\cx15\REVISAO.md): deleting is off on a hosted server until the two-step
+// destructive protocol is ported. A call that deletes or may delete (destructive.mjs hostedDestructive, on the arguments the
+// tool runs and on the ones sent) is refused right after the unavailable tools, before the lane, the agent, any path, read
+// or send, by one switch (HOSTED_DESTRUCTIVE): HOSTED_UNAVAILABLE, cause DESTRUCTIVE_HOSTED_OFF, no continuation.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -32,6 +36,7 @@ import { agentReadable, agentSegments, insideVisible } from './mirror.mjs';
 import { agentPath, outsideWorkspaceRefusal } from '../agent-paths.mjs';
 import { JOB_TOOLS, JobTextError, PathRefusal, confineJobs, jobTextPointers, namesPrototype, outside, parseJobTexts } from './job-paths.mjs';
 import { studioIdentity, studioRefusal, studioWarningOf } from '../studio-identity.mjs';
+import { destructiveUnavailable, hostedDestructive } from './destructive.mjs';
 
 export const TOOLS_FILE = fileURLToPath(new URL('./tools.json', import.meta.url));
 let loaded = null;
@@ -198,6 +203,14 @@ export function prototypeUnavailable(name, lane) {
     continuation: { tool: 'ssam_discover', arguments: { intent: 'port an approved prototype screen 1:1 with the html op and its style in the theme', lane: lane === 'odc' ? 'odc' : 'o11' },
       why: 'Builds the same screens with the ops this server runs (html op plus its <style>), without the prototype op; or import the prototype with an SSAM installed on the user\'s own machine.' } };
 }
+
+// ---- T2 (CX15 review): deleting
+// THE switch. 'refuse' (until the CX15 port): every hosted call that deletes, or may delete, something of the licensee's
+// environment or tenant is refused at the gate. 'allow' only with the two-step protocol of CX15 ported to this line.
+export const HOSTED_DESTRUCTIVE = 'refuse';
+export { hostedDestructive };
+// A classification that throws reads nothing of the call: destructive (fail closed).
+const deletes = (name, args) => { try { return hostedDestructive(name, args); } catch { return true; } };
 
 // ---- paths (6.3, 6.4)
 // The concrete locations of a pointer in an argument object: '*' is every key of an object or item of an array.
@@ -382,17 +395,22 @@ export function withStudioWarning(answer, warning) {
 // puts the hosted context around the handler (runWithExecutor in ssam.mjs; tests pass (ctx, fn) => fn()). argsOf: the
 // input layer's arguments for the ones sent (R1); every rule below and the handler read them. prototypeOp: the D2 switch
 // (HOSTED_PROTOTYPE_OP by default; tests pass the other value). kernelRefused: the lanes the server image refused at start
-// (ssam.mjs startupKernel), each off for every tool but the state reports (kernelLaneOff).
+// (ssam.mjs startupKernel), each off for every tool but the state reports (kernelLaneOff). destructive: the T2 switch
+// (HOSTED_DESTRUCTIVE by default; tests pass the other value).
 export function wrapHostedTool(name, config, handler, { context, link = context?.agent, lanes = context?.lanes ?? [], run = (ctx, fn) => fn(),
-  tools = hostedTools(), serverRoots, waitMs = RECONNECT_WAIT_MS, argsOf = null, prototypeOp = HOSTED_PROTOTYPE_OP, kernelRefused = null } = {}) {
+  tools = hostedTools(), serverRoots, waitMs = RECONNECT_WAIT_MS, argsOf = null, prototypeOp = HOSTED_PROTOTYPE_OP, kernelRefused = null,
+  destructive = HOSTED_DESTRUCTIVE } = {}) {
   const entry = tools[name];
   const present = presenter({ workspace: context.workspace, ...(serverRoots ? { serverRoots } : {}) });
   const refusesPrototype = prototypeOp !== 'allow' && PROTOTYPE_TOOLS.includes(name);
+  const refusesDestructive = destructive !== 'allow';
   return async (...params) => {
     const hasArgs = config?.inputSchema != null && params.length > 1;
     // R1: the arguments the tool runs (a field the input layer renames is confined under its own name).
     let args = hasArgs ? effectiveArgs(argsOf, params[0] ?? {}) : {};
     if (!entry || entry.class === 'unavailable') return refusal(unavailable(name, entry, config));
+    // T2: a call that deletes, read on the arguments it runs and on the ones sent, before anything else of the call.
+    if (refusesDestructive && (deletes(name, args) || (hasArgs && deletes(name, params[0])))) return refusal(destructiveUnavailable(name));
     // Item 1: the JSON text of a job is the job itself only on a job pointer; parsed here, every rule below (and the
     // handler) reads the object. A text there that looks like JSON and does not parse is refused: it is no path either.
     if (hasArgs) {
