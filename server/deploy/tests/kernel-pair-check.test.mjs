@@ -56,10 +56,12 @@ const run = (argv, studio) => { let out = '', err = ''; const code = main(argv, 
 const kernelFile = value => { const f = path.join(tmp, 'kernel' + (++n) + '.json'); fs.writeFileSync(f, typeof value === 'string' ? value : JSON.stringify(value)); return f; };
 
 test('the release record holds the pair of each image (O.6.1 item 9)', () => {
-  assert.deepEqual(recordEntry(record, 'previous').kernelV1, { o11: '11.55.91', odc: '1.7.27', odcBridge: 'v96', odcBridgeAccepted: ['v48', 'v45'] });
-  assert.equal(recordEntry(record, 'previous').tag, 'prod-20261012-a857a1e');
+  assert.deepEqual(recordEntry(record, 'prod-20261012-a857a1e').kernelV1, { o11: '11.55.91', odc: '1.7.27', odcBridge: 'v96', odcBridgeAccepted: ['v48', 'v45'] });
+  // marco-a5 (2026-10-15): the previous image is the interim prod-20261013-479e16a, on the same pair as the released one
+  assert.equal(recordEntry(record, 'previous').tag, 'prod-20261013-479e16a');
+  assert.deepEqual(recordEntry(record, 'previous').kernelV1, recordEntry(record, 'released').kernelV1);
   assert.deepEqual(recordEntry(record, 'released').kernelV1, { o11: '11.55.92', odc: '1.7.28', odcBridge: 'v97', odcBridgeAccepted: ['v96', 'v48', 'v45'] });
-  assert.deepEqual(recordEntry(record, 'prod-20261012-a857a1e').kernelV1, recordEntry(record, 'previous').kernelV1);
+  assert.deepEqual(recordEntry(record, 'prod-20261013-479e16a').kernelV1, recordEntry(record, 'previous').kernelV1);
   assert.equal(recordEntry(record, 'prod-unknown'), null);
   const printed = run(['print', 'previous', path.join(deploy, 'release-record.json')]);
   assert.equal(printed.code, 0); assert.deepEqual(JSON.parse(printed.out), recordEntry(record, 'previous').kernelV1);
@@ -68,7 +70,7 @@ test('the release record holds the pair of each image (O.6.1 item 9)', () => {
 
 test('check: each image starts only with its own pair; the reverse pairs are refused (exit 2, refused-pair)', () => {
   const interim = studioRoot(INTERIM), a857 = studioRoot(A857);
-  const released = kernelFile(recordEntry(record, 'released').kernelV1), previous = kernelFile(recordEntry(record, 'previous').kernelV1);
+  const released = kernelFile(recordEntry(record, 'released').kernelV1), previous = kernelFile(recordEntry(record, 'prod-20261012-a857a1e').kernelV1);
   let r = run(['check', released], interim);
   assert.equal(r.code, 0); assert.deepEqual(JSON.parse(r.out), { ok: true, status: 'pair-ok', o11: { kernel: '11.55.92', image: ['11.55.92.65269'], ok: true }, odc: { kernel: '1.7.28', image: ['1.7.28.10850'], ok: true } });
   assert.equal(run(['check', previous], a857).code, 0);
